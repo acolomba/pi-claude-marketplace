@@ -1,7 +1,7 @@
 // edge/handlers/marketplace/add.ts
 //
-// Thin-shim handler factory for
-// `/claude:plugin marketplace add <source> [--scope user|project]`.
+// Thin-shim handler factory for `marketplace add`; its usage line comes from
+// `marketplaceUsage("add")`.
 // Delegates to `addMarketplace` orchestrator, threading deps.gitOps through.
 //
 // D-05: the orchestrator renders from the router's notification run, which
@@ -17,13 +17,14 @@
 // `EntityErrorRow` compact lines per CMC-34.
 
 import { addMarketplace } from "../../../orchestrators/marketplace/add.ts";
+import { marketplaceUsage } from "../../router.ts";
 
 import { openMarketplaceCommand } from "./shared.ts";
 
 import type { SubcommandHandler } from "../../router.ts";
 import type { EdgeDeps } from "../../types.ts";
 
-const USAGE = "Usage: /claude:plugin marketplace add <source> [--scope user|project] [--local]";
+const USAGE = marketplaceUsage("add");
 
 export function makeAddHandler(
   deps: Pick<EdgeDeps, "completionCache" | "gitOps">,
@@ -32,6 +33,7 @@ export function makeAddHandler(
     const opened = openMarketplaceCommand(args, ctx, run, {
       usage: USAGE,
       positionalName: "source",
+      positionalLabel: "Source",
     });
     if (opened === undefined) {
       return;

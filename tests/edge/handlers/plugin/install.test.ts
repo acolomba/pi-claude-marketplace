@@ -7,8 +7,7 @@
 // `parseMapModelArgs`'s own positional scan -- and each has its own rejection
 // channel.
 //
-// Which parser a module calls decides its arity and flag answers, so all of the
-// following were measured against the real module before a case was written:
+// Which parser a module calls decides its arity and flag answers, so the following holds:
 //   * the handler's own `nonFlagPositionals.length !== 1` guard rejects ZERO,
 //     TWO and THREE references with one sentence, so both halves of the arity
 //     obligation hold here;
@@ -20,7 +19,7 @@
 //   * a quoted long flag survives the FIRST scan (which splits on whitespace and
 //     sees a token opening with a quote character) and is claimed by the SECOND
 //     (which runs after `parseArgs`'s quote-stripping tokenizer). That is one of
-//     the two routes into `install.ts:57-59`; an unrecognised scope value is the
+//     the two routes into the handler's usage-error return; an unrecognised scope value is the
 //     other, because the tokenizer's throw is caught inside the same shared
 //     parse and surfaces as the same `undefined`.
 //
@@ -58,8 +57,7 @@
 // compares the whole notification list, and asserts an empty footprint beside
 // `verifyBoundary()`.
 //
-// Measured boundary counts, taken through a counting context before a case was
-// written:
+// Boundary reads:
 //   * a rejection reads `ctx.ui` once and `ctx.cwd` never --
 //     `notifyUsageError` writes straight to the channel;
 //   * a delegating command reads `ctx.ui` once and `ctx.cwd` once, whether it
@@ -107,8 +105,10 @@ import { loadState } from "../../../../extensions/pi-claude-marketplace/persiste
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
-import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { ScopeConfig } from "../../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
@@ -725,8 +725,29 @@ for (const { args, expectedMessage, label, summary } of [
     expectedMessage:
       'Invalid <plugin>@<marketplace> ref: "alpha@".\n\nUsage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]',
   },
+  {
+    args: "@",
+    label: "ref-lone-separator",
+    summary: "a reference holding only the separator",
+    expectedMessage:
+      'Invalid <plugin>@<marketplace> ref: "@".\n\nUsage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]',
+  },
+  {
+    args: '""',
+    label: "ref-empty",
+    summary: "an empty reference",
+    expectedMessage:
+      "Plugin name must not be empty.\n\nUsage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]",
+  },
+  {
+    args: "'   '",
+    label: "ref-blank",
+    summary: "a blank reference",
+    expectedMessage:
+      "Plugin name must not be empty.\n\nUsage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]",
+  },
 ]) {
-  test(`names ${summary} verbatim and never reaches the install workflow (PI-1)`, async (t) => {
+  test(`rejects ${summary} with its usage error and never reaches the install workflow (PI-1, USE-07)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);

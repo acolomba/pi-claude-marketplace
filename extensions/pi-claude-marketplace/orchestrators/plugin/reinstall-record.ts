@@ -1,7 +1,11 @@
 import {
   composeErrorWithCauseChain,
+  DependencyDeclarationsUnreadableError,
   findManualRecoveryError,
+  LayerConfigUnreadableError,
   ManualRecoveryError,
+  PluginInBaseLayerOnlyError,
+  PluginInLocalLayerOnlyError,
   PluginShapeError,
   StateLockHeldError,
 } from "../../shared/errors.ts";
@@ -104,6 +108,14 @@ export function reinstallReasonsFromError(error: unknown): readonly ContentReaso
     return ["lock held"] as const;
   }
 
+  if (isLayerRefusal(error)) {
+    return [layerRefusalReason(error)] as const;
+  }
+
+  if (error instanceof DependencyDeclarationsUnreadableError) {
+    return ["unreadable"] as const;
+  }
+
   if (error instanceof Error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "EACCES" || code === "EPERM") {
@@ -116,6 +128,35 @@ export function reinstallReasonsFromError(error: unknown): readonly ContentReaso
   }
 
   return undefined;
+}
+
+/**
+ * LAYER-04 / CFG-03: the refusals of a named reinstall's layer check. A
+ * marketplace manifest that failed to parse is not one of them: its message
+ * carries parser text from a cloned repository, which never reaches a cause
+ * line.
+ */
+type LayerRefusal =
+  PluginInLocalLayerOnlyError | PluginInBaseLayerOnlyError | LayerConfigUnreadableError;
+
+function isLayerRefusal(error: unknown): error is LayerRefusal {
+  return (
+    error instanceof PluginInLocalLayerOnlyError ||
+    error instanceof PluginInBaseLayerOnlyError ||
+    error instanceof LayerConfigUnreadableError
+  );
+}
+
+function layerRefusalReason(error: LayerRefusal): ContentReason {
+  if (error instanceof PluginInLocalLayerOnlyError) {
+    return "plugin in local layer only";
+  }
+
+  if (error instanceof PluginInBaseLayerOnlyError) {
+    return "plugin in base layer only";
+  }
+
+  return "invalid manifest";
 }
 
 function skippedOutcome(input: RecordSkippedOutcomeInput): ReinstallSkippedOutcome {
@@ -140,6 +181,7 @@ function failedOutcome(input: RecordFailedOutcomeInput): ReinstallFailedOutcome 
     notes: [message],
     ...(isManualRecovery && { failureClass: "manual-recovery" as const }),
     ...(typedReasons !== undefined && { reasons: typedReasons }),
+    ...(isLayerRefusal(input.error) && { cause: input.error }),
   };
 }
 

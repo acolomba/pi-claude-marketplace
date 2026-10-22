@@ -10,7 +10,10 @@ import {
   formatOrchestratedCause,
   PROMOTED_ROW_REASONS,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
-import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  InstallMarketplaceAddError,
+  PluginShapeError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import { resolveRows } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
@@ -554,13 +557,16 @@ describe("composeInstallFailureMessage", () => {
 
 describe("composePromotedRow", () => {
   test("D-04-07: composes an installed row carrying the promotion brace at info severity with no reload", () => {
-    // act
-    const row = composePromotedRow({
+    // arrange
+    const promotion = {
       plugin: "linter",
       version: "3.0.0",
       scope: "user",
       needsReload: false,
-    });
+    } satisfies Parameters<typeof composePromotedRow>[0];
+
+    // act
+    const row = composePromotedRow(promotion);
 
     // assert
     assert.deepStrictEqual(row, {
@@ -576,13 +582,16 @@ describe("composePromotedRow", () => {
   });
 
   test("D-04-07: stamps the reload hint the caller reports for a re-materialized record", () => {
-    // act
-    const row = composePromotedRow({
+    // arrange
+    const promotion = {
       plugin: "linter",
       version: "3.0.0",
       scope: "user",
       needsReload: true,
-    });
+    } satisfies Parameters<typeof composePromotedRow>[0];
+
+    // act
+    const row = composePromotedRow(promotion);
 
     // assert
     assert.deepStrictEqual(row, {
@@ -598,13 +607,16 @@ describe("composePromotedRow", () => {
   });
 
   test("D-04-07: carries the promotion brace both surfaces spell once", () => {
-    // act
-    const row = composePromotedRow({
+    // arrange
+    const promotion = {
       plugin: "linter",
       version: "3.0.0",
       scope: "user",
       needsReload: false,
-    });
+    } satisfies Parameters<typeof composePromotedRow>[0];
+
+    // act
+    const row = composePromotedRow(promotion);
 
     // assert: the very tuple import's promoted row reads, so the two surfaces
     // cannot drift apart in token set or order.
@@ -681,6 +693,28 @@ describe("classifyEntityShapeError", () => {
 
     // assert
     assert.strictEqual(entityErrorRow, undefined);
+  });
+
+  test("classifies a failed marketplace add on the requested subject with the add's reason", () => {
+    // arrange
+    const failure = new InstallMarketplaceAddError("stale clone", "stale source clone at mp");
+
+    // act
+    const entityErrorRow = classifyEntityShapeError(failure, {
+      plugin: "helper",
+      marketplace: "official",
+      scope: "project",
+    });
+
+    // assert
+    assert.deepStrictEqual(entityErrorRow, {
+      kind: "entity-error",
+      name: "helper",
+      marketplace: "official",
+      scope: "project",
+      status: "failed",
+      reasons: ["stale clone"],
+    });
   });
 
   test("classifies an already-installed plugin on the requested subject", () => {
@@ -1023,16 +1057,19 @@ describe("classifyInstallFailure", () => {
 });
 
 test("INSTALL_CONTEXT declares complete row policies", () => {
-  // act
-  const policies = INSTALL_CONTEXT.rowPolicies;
-
-  // assert
-  assert.deepStrictEqual(policies, {
+  // arrange
+  const expectedPolicies = {
     installed: { markers: true, contentReasons: true },
     "partially-installed": { markers: true, contentReasons: true },
     failed: { markers: false, contentReasons: true },
     unavailable: { markers: false, contentReasons: true },
     "partially-available": { markers: false, contentReasons: true },
     disabled: { markers: false, contentReasons: true },
-  });
+  };
+
+  // act
+  const policies = INSTALL_CONTEXT.rowPolicies;
+
+  // assert
+  assert.deepStrictEqual(policies, expectedPolicies);
 });

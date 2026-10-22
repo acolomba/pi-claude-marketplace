@@ -1,7 +1,7 @@
 // edge/handlers/marketplace/remove.ts
 //
-// Thin-shim handler factory for
-// `/claude:plugin marketplace <remove|rm> <name> [--scope user|project]`.
+// Thin-shim handler factory for `marketplace remove`; its usage line comes
+// from `marketplaceUsage("remove")`.
 // (Also reached via the `rm` alias -- routed through this same handler by
 // `routeMarketplace` in edge/router.ts.)
 //
@@ -14,20 +14,21 @@
 // positional/scope shape.
 
 import { removeMarketplace } from "../../../orchestrators/marketplace/remove.ts";
+import { marketplaceUsage } from "../../router.ts";
 
 import { openMarketplaceCommand } from "./shared.ts";
 
 import type { SubcommandHandler } from "../../router.ts";
 import type { EdgeDeps } from "../../types.ts";
 
-const USAGE =
-  "Usage: /claude:plugin marketplace <remove|rm> <name> [--scope user|project] [--local]";
+const USAGE = marketplaceUsage("remove");
 
 export function makeRemoveHandler(deps: Pick<EdgeDeps, "completionCache">): SubcommandHandler {
   return async (args, ctx, run): Promise<void> => {
     const opened = openMarketplaceCommand(args, ctx, run, {
       usage: USAGE,
       positionalName: "name",
+      positionalLabel: "Marketplace name",
     });
     if (opened === undefined) {
       return;

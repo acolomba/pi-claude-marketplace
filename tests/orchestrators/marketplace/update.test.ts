@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import lockfile from "proper-lockfile";
+
 import {
   createHooksRouting,
   createHooksRuntime,
@@ -15,6 +17,7 @@ import {
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { computeHashVersion } from "../../../extensions/pi-claude-marketplace/domain/version.ts";
+import { getMarketplaceInfo } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/info.ts";
 import {
   updateAllMarketplaces,
   updateMarketplace,
@@ -30,7 +33,10 @@ import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/pl
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   CrossOriginChallengeError,
+  FetchedUrlCause,
+  InvalidGitHubBaseUrlError,
   PluginShapeError,
+  StoredCredentialRejectedError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
@@ -40,6 +46,7 @@ import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
@@ -49,9 +56,25 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
-import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type {
+  ExtensionContext,
+  NotificationContext,
+} from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
+
+const VALID_MANIFEST_JSON = JSON.stringify({
+  name: "valid-marketplace",
+  owner: { name: "Phase 4 Tests" },
+  plugins: [
+    {
+      name: "hello",
+      source: "./plugins/hello",
+      description: "Hello plugin (test fixture)",
+      version: "1.0.0",
+    },
+  ],
+});
 
 function createUpdateSinglePlugin(): PluginUpdateFn {
   return createPluginUpdateOperations(
@@ -227,6 +250,8 @@ async function seedGithubMarketplace(opts: {
   autoupdate?: boolean;
   plugins?: Record<string, ExtensionState["marketplaces"][string]["plugins"][string]>;
   fixture?: "valid-marketplace" | "invalid-manifest";
+  legacy?: boolean;
+  lastSuccessfulManifest?: string;
 }): Promise<{ cloneDir: string }> {
   const locations = locationsFor("project", opts.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
@@ -247,6 +272,9 @@ async function seedGithubMarketplace(opts: {
         manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
         marketplaceRoot: cloneDir,
         plugins: opts.plugins ?? {},
+        ...(opts.legacy === true
+          ? {}
+          : { lastSuccessfulManifest: opts.lastSuccessfulManifest ?? VALID_MANIFEST_JSON }),
         ...(opts.autoupdate !== undefined && { autoupdate: opts.autoupdate }),
       },
     },
@@ -258,7 +286,7 @@ async function seedGithubMarketplace(opts: {
   // observe the autoupdate truth.
   if (opts.autoupdate !== undefined) {
     await saveConfig(
-      locations.configJsonPath,
+      locations.baseConfigJsonPath,
       {
         schemaVersion: 1,
         marketplaces: {
@@ -280,6 +308,7 @@ async function seedUrlMarketplace(opts: {
   name: string;
   ref?: string;
   host?: string;
+  lastSuccessfulManifest?: string;
 }): Promise<{ cloneDir: string }> {
   const locations = locationsFor("project", opts.cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
@@ -300,6 +329,9 @@ async function seedUrlMarketplace(opts: {
         manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
         marketplaceRoot: cloneDir,
         plugins: {},
+        ...(opts.lastSuccessfulManifest !== undefined && {
+          lastSuccessfulManifest: opts.lastSuccessfulManifest,
+        }),
       },
     },
   });
@@ -504,7 +536,7 @@ test("marketplace update transport: classifies a providerless HTTP 403 as authen
   });
 });
 
-test("marketplace update transport: classifies a providerless HTTP 500 as network unreachable", async () => {
+test("marketplace update transport: names the status and URL of a providerless HTTP 500 as a network error", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp-500", ref: "main" });
@@ -532,7 +564,7 @@ test("marketplace update transport: classifies a providerless HTTP 500 as networ
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Some operations have failed.\n\n⊘ urlmp-500 [project] (failed)\n  ⊘ urlmp-500 (failed) {network unreachable}\n    cause: Failed to update marketplace "urlmp-500". -> HTTP 500 from fetch',
+          "Some operations have failed.\n\n⊘ urlmp-500 [project] (failed)\n  ⊘ urlmp-500 (failed) {network error}\n    cause: 500 on https://gitlab.example.com/team/urlmp-500 -> HTTP 500 from fetch",
         severity: "error",
       },
     ]);
@@ -551,7 +583,47 @@ test("marketplace update transport: classifies a providerless HTTP 500 as networ
   });
 });
 
-test("marketplace update transport: folds a non-Error rejection into network unreachable", async () => {
+test("marketplace update transport: names a 404 answer as a network error with its URL credentials redacted", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedUrlMarketplace({
+      cwd,
+      name: "urlmp-404",
+      ref: "main",
+      host: "user:secret@gitlab.example.com",
+    });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const transportError = Object.assign(new Error("HTTP 404 from fetch"), {
+      code: "HttpError",
+      data: { statusCode: 404 },
+    });
+    const { gitOps } = createGitOps({ fetchThrows: transportError });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "urlmp-404",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n⊘ urlmp-404 [project] (failed)\n  ⊘ urlmp-404 (failed) {network error}\n    cause: 404 on https://***@gitlab.example.com/team/urlmp-404 -> HTTP 404 from fetch",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("marketplace update transport: renders a non-Error rejection with no reason", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     const { cloneDir } = await seedUrlMarketplace({ cwd, name: "urlmp-string", ref: "main" });
@@ -580,7 +652,7 @@ test("marketplace update transport: folds a non-Error rejection into network unr
     assert.deepStrictEqual(notifications, [
       {
         message:
-          'Some operations have failed.\n\n⊘ urlmp-string [project] (failed)\n  ⊘ urlmp-string (failed) {network unreachable}\n    cause: Failed to update marketplace "urlmp-string". -> transport exploded (string reject)',
+          'Some operations have failed.\n\n⊘ urlmp-string [project] (failed)\n  ⊘ urlmp-string (failed)\n    cause: Failed to update marketplace "urlmp-string". -> transport exploded (string reject)',
         severity: "error",
       },
     ]);
@@ -805,6 +877,44 @@ test("MURL-03 + D-14: url source refreshes via fetch+forceUpdateRef+checkout car
   });
 });
 
+test("GHB-04: updating a url marketplace ignores an invalid override", async (t) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+    await seedUrlMarketplace({ cwd, name: "urlmp", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const { gitOps, state } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000009" },
+    });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "urlmp",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● urlmp [project] (skipped) {up-to-date}" },
+    ]);
+    assert.deepStrictEqual(
+      state.forceUpdateRefCalls.map(({ ref, value }) => ({ ref, value })),
+      [{ ref: "refs/heads/main", value: "abcdef0000000000000000000000000000000009" }],
+    );
+    assert.deepStrictEqual(
+      state.fetchCalls.map(({ auth }) => auth),
+      [{ credentialOps, host: "gitlab.example.com", kind: "stored-credential" }],
+    );
+  });
+});
+
 test("MURL-03: unpinned url refresh follows the default-branch head-advance path (same as unpinned github)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
@@ -998,6 +1108,39 @@ test("Q-02: a challenge after a cross-origin redirect keeps its own cause withou
   });
 });
 
+test("GAUTH-04: a stored credential that a host with no Device Flow rejects renders {authentication required} without the stored-credential cause line", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedUrlMarketplace({ cwd, name: "urlmp-rejected", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const { gitOps } = createGitOps({
+      fetchThrows: new StoredCredentialRejectedError("gitlab.example.com"),
+    });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "urlmp-rejected",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          'Some operations have failed.\n\n⊘ urlmp-rejected [project] (failed)\n  ⊘ urlmp-rejected (failed) {authentication required}\n    cause: Failed to update marketplace "urlmp-rejected". -> gitlab.example.com rejected the stored credential',
+        severity: "error",
+      },
+    ]);
+  });
+});
+
 test("GAUTH-05: a cancelled Device Flow on a github.com url refresh renders {authentication required} with NO stored-credential cause line", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
@@ -1153,6 +1296,7 @@ test("UXG-05: path-source refresh whose local manifest is UNCHANGED renders the 
           manifestPath: path.join(localMpDir, ".claude-plugin", "marketplace.json"),
           marketplaceRoot: localMpDir,
           plugins: {},
+          lastSuccessfulManifest: VALID_MANIFEST_JSON,
         },
       },
     });
@@ -1377,10 +1521,7 @@ test("CR-05 / MU-5: pre-fetch failure (gitOps.fetch throws) does NOT append 'Ret
 test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.' retry hint", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    // Seed with a VALID manifest so the PRE-read content key resolves cleanly
-    // (WR-02: a malformed PRE manifest would now route to (failed) BEFORE the
-    // clone advances, which is a DIFFERENT diagnostic than this test asserts).
-    // The clone-advanced + POST-revalidation-fails path under test is reached
+    // Seed with a VALID manifest and its saved baseline. The clone-advanced + POST-revalidation-fails path under test is reached
     // by overwriting the manifest with INVALID content in the checkout override
     // (mirrors the UXG-05 "changed" test's checkout-rewrite pattern).
     const { cloneDir } = await seedGithubMarketplace({ cwd, name: "broken" });
@@ -1395,9 +1536,9 @@ test("MU-5: clone advances + manifest re-validation fails -- 'Retry the command.
       async checkout(opts): Promise<void> {
         await gitOps.checkout(opts);
         // After the clone advances (fetch + checkout), the working-tree
-        // manifest is INVALID, so the POST re-validation in
-        // validateManifestAtRoot throws -> MarketplaceUpdateError with the
-        // "clone advanced but manifest could not be persisted" diagnostic.
+        // manifest is INVALID, so the read of the recorded manifest throws ->
+        // MarketplaceUpdateError with the "clone advanced but manifest could
+        // not be persisted" diagnostic.
         await cp(fixtureMarketplaceDir("invalid-manifest"), cloneDir, { recursive: true });
       },
     };
@@ -1437,7 +1578,9 @@ test("CR-05 / MU-5: url-source pre-fetch failure (gitOps.fetch throws) does NOT 
     const { credOps: credentialOps } = createCredentialOps();
     // cloneAdvanced stays false because onFetchSucceeded never fires.
     const { gitOps } = createGitOps({
-      fetchThrows: new Error("mock: ENETUNREACH https://gitlab.example.com"),
+      fetchThrows: Object.assign(new Error("mock: ENETUNREACH https://gitlab.example.com"), {
+        code: "ENETUNREACH",
+      }),
     });
 
     // act
@@ -1508,16 +1651,16 @@ test("MU-5: url-source clone advances + manifest re-validation fails -- 'clone a
 test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no-op (UAT Test-3 robustness fold-in)", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    // Seed a valid clone, then overwrite the persisted PRE manifest with
-    // malformed JSON so manifestContentKey's PRE read throws a non-ENOENT
-    // SyntaxError. WR-02 narrows that catch so only ENOENT (no manifest yet)
-    // maps to the changed-safe default; a corrupt pre-existing manifest must
-    // re-throw and route to (failed) -- NOT silently read as a missing PRE key
-    // ("changed") and render (updated). The PRE read sits INSIDE refreshRecord's
-    // try (WR-01), so the throw wraps as MarketplaceUpdateError exactly like a
-    // POST-read failure. Guards against a regression back to
-    // `catch { return undefined; }` (the pre-WR-02 silent-(updated) bug).
-    const { cloneDir } = await seedGithubMarketplace({ cwd, name: "corrupt", ref: "main" });
+    // Seed a valid clone, then overwrite the manifest with malformed JSON that
+    // the fetch does not repair. The corrupt pre-fetch manifest gives no
+    // comparison, and the fetched manifest still fails validation, so the
+    // refresh routes to (failed) -- never a silent (updated) or up-to-date.
+    const { cloneDir } = await seedGithubMarketplace({
+      cwd,
+      name: "corrupt",
+      ref: "main",
+      legacy: true,
+    });
     await writeFile(
       path.join(cloneDir, ".claude-plugin", "marketplace.json"),
       "{ not valid json",
@@ -1551,16 +1694,171 @@ test("WR-02: corrupt pre-existing manifest routes to (failed), never a silent no
   });
 });
 
+test("a legacy git record whose manifest cannot be read fails the update instead of recovering", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const { cloneDir } = await seedGithubMarketplace({
+      cwd,
+      name: "unreadable",
+      ref: "main",
+      legacy: true,
+    });
+    const manifestPath = path.join(cloneDir, ".claude-plugin", "marketplace.json");
+    await rm(manifestPath);
+    await mkdir(manifestPath);
+    const { ctx, run, notifications } = makeCtx();
+    const git = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000123" },
+    });
+    let fetchCalls = 0;
+    const gitOps: GitOps = {
+      ...git.gitOps,
+      async fetch(fetchOptions): Promise<void> {
+        fetchCalls += 1;
+        await git.gitOps.fetch(fetchOptions);
+        await rm(manifestPath, { recursive: true });
+        await writeFile(manifestPath, VALID_MANIFEST_JSON, "utf8");
+      },
+    };
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "unreadable",
+      scope: "project",
+      cwd,
+      gitOps,
+    });
+
+    // assert
+    assert.strictEqual(fetchCalls, 0);
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]?.message ?? "", /^⊘ unreadable \[project\] \(failed\)/m);
+  });
+});
+
+test("a legacy git record with a corrupt on-disk manifest recovers once the fetch repairs it", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const { cloneDir } = await seedGithubMarketplace({
+      cwd,
+      name: "corrupt",
+      ref: "main",
+      legacy: true,
+    });
+    const manifestPath = path.join(cloneDir, ".claude-plugin", "marketplace.json");
+    await writeFile(manifestPath, "{ not valid json", "utf8");
+    const git = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000123" },
+    });
+    const gitOps: GitOps = {
+      ...git.gitOps,
+      async fetch(fetchOptions): Promise<void> {
+        await git.gitOps.fetch(fetchOptions);
+        await writeFile(manifestPath, VALID_MANIFEST_JSON, "utf8");
+      },
+    };
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "corrupt",
+      scope: "project",
+      cwd,
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● corrupt [project] (updated)" }]);
+    assert.strictEqual(
+      (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.corrupt
+        ?.lastSuccessfulManifest,
+      VALID_MANIFEST_JSON,
+    );
+  });
+});
+
+for (const { kind, seed } of [
+  {
+    kind: "path",
+    seed: async (cwd: string): Promise<void> => {
+      const marketplaceRoot = path.join(cwd, "tools-source");
+      await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+      await seedPathMarketplace({
+        cwd,
+        name: "tools",
+        marketplaceRoot,
+        lastSuccessfulManifest: "",
+      });
+    },
+  },
+  {
+    kind: "github",
+    seed: async (cwd: string): Promise<void> => {
+      await seedGithubMarketplace({ cwd, name: "tools", ref: "main", lastSuccessfulManifest: "" });
+    },
+  },
+  {
+    kind: "url",
+    seed: async (cwd: string): Promise<void> => {
+      await seedUrlMarketplace({ cwd, name: "tools", ref: "main", lastSuccessfulManifest: "" });
+    },
+  },
+]) {
+  test(`a ${kind} marketplace with an unparseable saved manifest fails as unreadable before any fetch`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      await seed(cwd);
+      const extensionRoot = locationsFor("project", cwd).extensionRoot;
+      const recordBefore = (await loadState(extensionRoot)).marketplaces.tools;
+      const { ctx, run, notifications } = makeCtx();
+      const { calls, gitOps } = makeForbiddenGitOps();
+      const { credOps: credentialOps } = createCredentialOps();
+      let parseMessage = "";
+      try {
+        JSON.parse("");
+      } catch (err) {
+        parseMessage = (err as Error).message;
+      }
+
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        name: "tools",
+        scope: "project",
+        cwd,
+        gitOps,
+        credentialOps,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {unreadable}\n    cause: Failed to update marketplace "tools". -> The saved manifest of marketplace "tools" in state.json is unreadable. -> ${parseMessage}`,
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(calls, []);
+      assert.deepStrictEqual((await loadState(extensionRoot)).marketplaces.tools, recordBefore);
+    });
+  });
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // ATTR-10 / D-48-B: a path-source marketplace.json that is malformed or
-// schema-invalid during `marketplace update` must render
-// `(failed) {invalid manifest}` on the synthetic-child failed row -- NEVER the
-// lying `{network unreachable}` default (NFR-5: path-source touches no network).
-// The reasonsFromCascadeError branch recognizes the typed
-// InvalidMarketplaceManifestError (thrown by loadMarketplaceManifest, wrapped in
-// MarketplaceUpdateError by refreshRecord) BEFORE the `?? network unreachable`
-// fallback fires. github-source no-errno failures KEEP `{network unreachable}`
-// as the catch-all (the path/github classification did not collapse).
+// schema-invalid during `marketplace update` renders
+// `(failed) {invalid manifest}` on the synthetic-child failed row. The refresh
+// classifier recognizes the typed InvalidMarketplaceManifestError, which
+// refreshRecord wraps in a MarketplaceUpdateError. A path-source refresh
+// touches no network (NFR-5), and a refresh failure that no rule classifies
+// renders the failed row with no reason.
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
@@ -1577,6 +1875,8 @@ async function seedPathMarketplace(opts: {
   scope?: Scope;
   autoupdate?: boolean;
   plugins?: Record<string, ExtensionState["marketplaces"][string]["plugins"][string]>;
+  legacy?: boolean;
+  lastSuccessfulManifest?: string;
 }): Promise<void> {
   const scope = opts.scope ?? "project";
   const locations = locationsFor(scope, opts.cwd);
@@ -1592,6 +1892,9 @@ async function seedPathMarketplace(opts: {
         manifestPath: path.join(opts.marketplaceRoot, ".claude-plugin", "marketplace.json"),
         marketplaceRoot: opts.marketplaceRoot,
         plugins: opts.plugins ?? {},
+        ...(opts.legacy === true
+          ? {}
+          : { lastSuccessfulManifest: opts.lastSuccessfulManifest ?? VALID_MANIFEST_JSON }),
         ...(opts.autoupdate !== undefined && { autoupdate: opts.autoupdate }),
       },
     },
@@ -1602,7 +1905,7 @@ async function seedPathMarketplace(opts: {
   // loadMergedScopeConfig. Mirror the github helper's paired config write.
   if (opts.autoupdate !== undefined) {
     await saveConfig(
-      locations.configJsonPath,
+      locations.baseConfigJsonPath,
       {
         schemaVersion: 1,
         marketplaces: {
@@ -1705,9 +2008,9 @@ test("ATTR-10: path-source SCHEMA-INVALID manifest renders `(failed) {invalid ma
 test("a pre-persistence manifest failure leaves cache rows intact and calls zero git operations", async (testContext) => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    // The failure path must not reach for the network either: the path branch of
-    // refreshRecord calls validateManifestAtRoot -> loadMarketplaceManifest (a
-    // readFile + parse) and NO gitOps. Sibling of the success-path NFR-5 test.
+    // The failure path must not reach for the network either: for a path source,
+    // refreshRecord only reads the recorded manifest (a readFile + parse), which
+    // throws, and calls NO gitOps. Sibling of the success-path NFR-5 test.
     const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-path-fail-nfr5-"));
     try {
       await mkdir(path.join(localMpDir, ".claude-plugin"), { recursive: true });
@@ -1753,19 +2056,168 @@ test("a pre-persistence manifest failure leaves cache rows intact and calls zero
   });
 });
 
-test("github-source no-errno refresh failure still renders `{network unreachable}` (classification did not collapse)", async () => {
+for (const { invalidBody, problem, failure } of [
+  {
+    problem: "malformed JSON",
+    invalidBody: '{"name":"valid-marketplace","plugins":[',
+    failure:
+      'Some operations have failed.\n\n⊘ malformed-JSON [project] (failed)\n  ⊘ malformed-JSON (failed) {invalid manifest}\n    cause: Failed to update marketplace "malformed-JSON". -> marketplace.json is not valid JSON: SyntaxError: Unexpected end of JSON input -> Unexpected end of JSON input',
+  },
+  {
+    problem: "an invalid schema",
+    invalidBody: '{"name":"valid-marketplace","plugins":"not-an-array"}',
+    failure:
+      'Some operations have failed.\n\n⊘ an-invalid-schema [project] (failed)\n  ⊘ an-invalid-schema (failed) {invalid manifest}\n    cause: Failed to update marketplace "an-invalid-schema". -> marketplace.json schema invalid: /plugins: must be array',
+  },
+]) {
+  test(`${problem} keeps durable update state until a repaired retry succeeds`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const name = problem.replaceAll(" ", "-");
+      const marketplaceRoot = path.join(cwd, name);
+      await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+      const installed = makePluginRecord();
+      await seedPathMarketplace({
+        cwd,
+        name,
+        marketplaceRoot,
+        autoupdate: true,
+        plugins: { hello: installed },
+      });
+      const locations = locationsFor("project", cwd);
+      const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+      await writeFile(manifestPath, invalidBody, "utf8");
+      const beforeState = await loadState(locations.extensionRoot);
+      const beforeConfig = await readFile(locations.baseConfigJsonPath, "utf8");
+      const cascadeCalls: string[] = [];
+      const pluginUpdate: PluginUpdateFn = (plugin) => {
+        cascadeCalls.push(plugin);
+        return Promise.resolve({
+          partition: "unchanged",
+          name: plugin,
+          fromVersion: installed.version,
+          toVersion: installed.version,
+          declaresAgents: false,
+          declaresMcp: false,
+          constraint: undefined,
+          declaresWorkflows: false,
+        });
+      };
+
+      const failed = makeCtx();
+      const failedGit = makeForbiddenGitOps();
+
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx: failed.ctx,
+        run: failed.run,
+        name,
+        scope: "project",
+        cwd,
+        gitOps: failedGit.gitOps,
+        pluginUpdate,
+      });
+      const stateAfterFailure = await loadState(locations.extensionRoot);
+      const callsAfterFailure = [...cascadeCalls];
+      const repairedManifest = JSON.stringify({
+        ...(JSON.parse(VALID_MANIFEST_JSON) as Record<string, unknown>),
+        description: "Valid after a failed update",
+      });
+      assert.notStrictEqual(Buffer.byteLength(repairedManifest), Buffer.byteLength(invalidBody));
+      await writeFile(manifestPath, repairedManifest, "utf8");
+      const retried = makeCtx();
+      const retryGit = makeForbiddenGitOps();
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx: retried.ctx,
+        run: retried.run,
+        name,
+        scope: "project",
+        cwd,
+        gitOps: retryGit.gitOps,
+        pluginUpdate,
+      });
+      const stateAfterRepair = await loadState(locations.extensionRoot);
+
+      // assert
+      assert.deepStrictEqual(failed.notifications, [{ message: failure, severity: "error" }]);
+      assert.deepStrictEqual(callsAfterFailure, []);
+      assert.deepStrictEqual(stateAfterFailure, beforeState);
+      assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), beforeConfig);
+      assert.deepStrictEqual(cascadeCalls, ["hello"]);
+      assert.deepStrictEqual(retried.notifications, [
+        { message: `● ${name} [project] (updated)\n  ⊘ hello (skipped) {up-to-date}` },
+      ]);
+      assert.strictEqual(
+        stateAfterRepair.marketplaces[name]?.lastSuccessfulManifest,
+        repairedManifest,
+      );
+      assert.deepStrictEqual(stateAfterRepair.marketplaces[name]?.plugins, { hello: installed });
+      assert.deepStrictEqual(failedGit.calls, []);
+      assert.deepStrictEqual(retryGit.calls, []);
+    });
+  });
+}
+
+test("a missing local source keeps its registration, baseline, config, and plugins", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    // A github fetch failure with NO errno code and NO typed manifest error is
-    // genuinely plausibly-network -> the `?? ["network unreachable"]` catch-all
-    // MUST still fire. This is the regression lock proving the ATTR-10 typed
-    // manifest branch did NOT swallow the github network default.
+    const marketplaceRoot = path.join(cwd, "missing-source");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+    const installed = makePluginRecord();
+    await seedPathMarketplace({
+      cwd,
+      name: "missing-source",
+      marketplaceRoot,
+      autoupdate: true,
+      plugins: { hello: installed },
+    });
+    const locations = locationsFor("project", cwd);
+    const beforeState = await loadState(locations.extensionRoot);
+    const beforeConfig = await readFile(locations.baseConfigJsonPath, "utf8");
+    await rm(marketplaceRoot, { recursive: true });
+    const cascadeCalls: string[] = [];
+    const { ctx, run, notifications } = makeCtx();
+    const git = makeForbiddenGitOps();
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "missing-source",
+      scope: "project",
+      cwd,
+      gitOps: git.gitOps,
+      pluginUpdate: (plugin) => {
+        cascadeCalls.push(plugin);
+        return Promise.reject(new Error("the missing source must prevent this call"));
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Some operations have failed.\n\n⊘ missing-source [project] (failed)\n  ⊘ missing-source (failed) {source missing}\n    cause: Failed to update marketplace "missing-source". -> ENOENT: no such file or directory, open '${path.join(marketplaceRoot, ".claude-plugin", "marketplace.json")}'`,
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), beforeState);
+    assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), beforeConfig);
+    assert.deepStrictEqual(cascadeCalls, []);
+    assert.deepStrictEqual(git.calls, []);
+  });
+});
+
+test("an unclassified github fetch failure renders a failed row with no reason", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
     await seedGithubMarketplace({ cwd, name: "ghnet", ref: "main" });
     const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
-      // Plain Error: message mentions ENETUNREACH but carries no `.code` errno,
-      // so reasonsFromCascadeError returns undefined and the network default
-      // fires for this github source.
+      // A plain Error carries no errno code and no HTTP status, so no rule
+      // names its cause and the row shows only the cause line.
       fetchThrows: new Error("mock: connection failed reaching github.com"),
     });
     // act
@@ -1780,26 +2232,27 @@ test("github-source no-errno refresh failure still renders `{network unreachable
     });
 
     // assert
-
-    assert.equal(notifications.length, 1);
-    const first = notifications[0];
-    assert.ok(first !== undefined);
-    assert.equal(first.severity, "error");
-    assert.match(first.message, /\(failed\) \{network unreachable\}/);
-    assert.doesNotMatch(first.message, /\{invalid manifest\}/);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          'Some operations have failed.\n\n⊘ ghnet [project] (failed)\n  ⊘ ghnet (failed)\n    cause: Failed to update marketplace "ghnet". -> mock: connection failed reaching github.com',
+        severity: "error",
+      },
+    ]);
   });
 });
 
-test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called once per state plugin (never for new-manifest entries)", async () => {
+test("autoupdate calls each installed plugin in record order", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
-    // Seed with autoupdate=true and one installed plugin.
+    // State order is the installation order. The refreshed manifest is not the
+    // source of cascade targets.
     await seedGithubMarketplace({
       cwd,
       name: "auto-mp",
       ref: "main",
       autoupdate: true,
-      plugins: { hello: makePluginRecord() },
+      plugins: { zeta: makePluginRecord(), alpha: makePluginRecord() },
     });
     const { ctx, run } = makeCtx();
     const { gitOps } = createGitOps({
@@ -1836,19 +2289,83 @@ test("MU-6 + MU-8: cascade runs ONLY when autoupdate=true; pluginUpdate called o
 
     // assert
 
-    // Exactly one cascade call -- for the installed plugin. MU-8: even
-    // though the manifest fixture lists `hello` as well, the cascade
-    // enumerates state.plugins keys, not manifest entries, so a manifest
-    // that grew new entries would NOT trigger spurious calls.
-    assert.equal(calls.length, 1);
-    const first = calls[0];
-    assert.ok(first !== undefined);
-    assert.equal(first.plugin, "hello");
-    assert.equal(first.marketplace, "auto-mp");
+    assert.deepStrictEqual(calls, [
+      { plugin: "zeta", marketplace: "auto-mp" },
+      { plugin: "alpha", marketplace: "auto-mp" },
+    ]);
   });
 });
 
-test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
+test("autoupdate ignores a newly declared plugin that has no installed record", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const marketplaceRoot = await mkdtemp(path.join(tmpdir(), "mp-new-offer-"));
+    try {
+      const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+      const baseline = JSON.stringify({
+        name: "offers",
+        plugins: [{ name: "existing", source: "./existing", version: "1.0.0" }],
+      });
+      const refreshed = JSON.stringify({
+        name: "offers",
+        plugins: [
+          { name: "existing", source: "./existing", version: "1.0.0" },
+          { name: "new", source: "./new", version: "1.0.0" },
+        ],
+      });
+      await mkdir(path.dirname(manifestPath), { recursive: true });
+      await writeFile(manifestPath, refreshed, "utf8");
+      const installed = makePluginRecord();
+      await seedPathMarketplace({
+        cwd,
+        name: "offers",
+        marketplaceRoot,
+        autoupdate: true,
+        plugins: { existing: installed },
+        lastSuccessfulManifest: baseline,
+      });
+      const calls: string[] = [];
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        name: "offers",
+        scope: "project",
+        cwd,
+        pluginUpdate: (plugin) => {
+          calls.push(plugin);
+          return Promise.resolve({
+            partition: "unchanged",
+            name: plugin,
+            fromVersion: installed.version,
+            toVersion: installed.version,
+            declaresAgents: false,
+            declaresMcp: false,
+            constraint: undefined,
+            declaresWorkflows: false,
+          });
+        },
+      });
+
+      // assert
+      assert.deepStrictEqual(calls, ["existing"]);
+      assert.deepStrictEqual(
+        (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.offers?.plugins,
+        { existing: installed },
+      );
+      assert.deepStrictEqual(notifications, [
+        { message: "● offers [project] (updated)\n  ⊘ existing (skipped) {up-to-date}" },
+      ]);
+    } finally {
+      await rm(marketplaceRoot, { recursive: true, force: true });
+    }
+  });
+});
+
+test("autoupdate off never invokes a plugin update", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     await seedGithubMarketplace({
@@ -1894,6 +2411,72 @@ test("MU-6: cascade skipped when autoupdate=false (default)", async () => {
     // assert
 
     assert.equal(pluginUpdateCalled, false);
+  });
+});
+
+test("autoupdate continues in installed order after an ordinary plugin failure", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const zeta = makePluginRecord();
+    const alpha = { ...makePluginRecord(), version: "1.0.0" };
+    await seedGithubMarketplace({
+      cwd,
+      name: "ordered",
+      ref: "main",
+      autoupdate: true,
+      plugins: { zeta, alpha },
+    });
+    const locations = locationsFor("project", cwd);
+    const before = await loadState(locations.extensionRoot);
+    const calls: string[] = [];
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000010" },
+    });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "ordered",
+      scope: "project",
+      cwd,
+      gitOps,
+      pluginUpdate: (plugin) => {
+        calls.push(plugin);
+        if (plugin === "zeta") {
+          return Promise.reject(new Error("zeta update failed"));
+        }
+
+        return Promise.resolve({
+          partition: "updated",
+          name: plugin,
+          fromVersion: "1.0.0",
+          toVersion: "1.1.0",
+          stagedAgentNames: [],
+          stagedMcpServerNames: [],
+          declaresAgents: false,
+          declaresMcp: false,
+          constraint: undefined,
+          declaresWorkflows: false,
+        });
+      },
+    });
+
+    // assert
+    assert.deepStrictEqual(calls, ["zeta", "alpha"]);
+    const first = notifications[0];
+    assert.ok(first !== undefined);
+    assert.strictEqual(first.severity, "error");
+    assert.ok(
+      first.message.indexOf("⊘ zeta (failed)") <
+        first.message.indexOf("● alpha v1.0.0 → v1.1.0 (updated)"),
+    );
+    assert.deepStrictEqual(
+      (await loadState(locations.extensionRoot)).marketplaces.ordered?.plugins,
+      before.marketplaces.ordered?.plugins,
+    );
   });
 });
 
@@ -1962,6 +2545,7 @@ test("LIFE-06: cascade mapper carries a preflight `not in manifest` skip through
 
     const first = notifications[0];
     assert.ok(first !== undefined);
+    assert.strictEqual(first.severity, "warning");
     assert.match(first.message, /^ {2}⊘ hello \(skipped\) \{not in manifest\}$/m);
 
     // A skipped plugin is a fixed point for the cascade: nothing is written, so
@@ -2344,6 +2928,9 @@ test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade a
       plugins: { p: makePluginRecord() },
     });
     const { ctx, run, notifications } = makeCtx();
+    const locations = locationsFor("project", cwd);
+    const before = await readPluginRecord(locations.extensionRoot, "noupd", "p");
+    assert.ok(before !== undefined);
     // The mock git ops advance the ref but do NOT rewrite the seeded
     // `valid-marketplace` fixture, so the refresh re-validates byte-identical
     // manifest content -> snapshot.changed === false.
@@ -2383,6 +2970,7 @@ test("UXG-05 (UAT Test-3 gap) + RH-1 + SNM-33 / D-22-01: autoupdate-ON cascade a
     assert.ok(first !== undefined);
     assert.equal(first.message, "● noupd [project] (skipped) {up-to-date}");
     assert.equal(first.severity, undefined);
+    assert.deepStrictEqual(await readPluginRecord(locations.extensionRoot, "noupd", "p"), before);
     // SNM-33 / D-22-01 (G-MIL-06): no plugin row carries a state-change token
     // (plugins:[]), and a marketplace record is not a Pi-visible resource, so
     // the trailer is suppressed -- shouldEmitReloadHint is plugin-row-driven.
@@ -2445,6 +3033,84 @@ test("UXG-05 (UAT Test-3 gap) regression guard: autoupdate-ON cascade where a pl
       `expected (updated) header, got: ${first.message}`,
     );
     assert.match(first.message, /\/reload to pick up changes/);
+  });
+});
+
+test("a repeated autoupdate collapses after the first run changes a plugin", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedGithubMarketplace({
+      cwd,
+      name: "repeat",
+      ref: "main",
+      autoupdate: true,
+      plugins: { demo: makePluginRecord() },
+    });
+    const calls: string[] = [];
+    const pluginUpdate: PluginUpdateFn = (plugin) => {
+      calls.push(plugin);
+      const firstRun = calls.length === 1;
+      return Promise.resolve(
+        firstRun
+          ? {
+              partition: "updated",
+              name: plugin,
+              fromVersion: "0.0.1",
+              toVersion: "0.0.2",
+              stagedAgentNames: [],
+              stagedMcpServerNames: [],
+              declaresAgents: false,
+              declaresMcp: false,
+              constraint: undefined,
+              declaresWorkflows: false,
+            }
+          : {
+              partition: "unchanged",
+              name: plugin,
+              fromVersion: "0.0.2",
+              toVersion: "0.0.2",
+              declaresAgents: false,
+              declaresMcp: false,
+              constraint: undefined,
+              declaresWorkflows: false,
+            },
+      );
+    };
+
+    const git = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000009" },
+    });
+    const first = makeCtx();
+    const second = makeCtx();
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx: first.ctx,
+      run: first.run,
+      name: "repeat",
+      scope: "project",
+      cwd,
+      gitOps: git.gitOps,
+      pluginUpdate,
+    });
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx: second.ctx,
+      run: second.run,
+      name: "repeat",
+      scope: "project",
+      cwd,
+      gitOps: git.gitOps,
+      pluginUpdate,
+    });
+
+    // assert
+    assert.deepStrictEqual(calls, ["demo", "demo"]);
+    assert.match(first.notifications[0]?.message ?? "", /^● repeat \[project\] \(updated\)/);
+    assert.deepStrictEqual(second.notifications, [
+      { message: "● repeat [project] (skipped) {up-to-date}" },
+    ]);
   });
 });
 
@@ -2582,6 +3248,522 @@ test("AFILE-04: a no-op marketplace update over a commented mcp-adapter.json sen
   });
 });
 
+const BARE_ORIGIN = {
+  kind: "command",
+  commandId: "marketplace update",
+  invocationId: "bare-run",
+} as const;
+
+const STALE_BASELINE = '{"name":"valid-marketplace","plugins":[]}';
+
+/** A JSON-mode context and run that capture every payload in emission order. */
+function bareUpdateRun(): {
+  capture: ReturnType<typeof createJsonCapture>;
+  ctx: NotificationContext;
+  run: NotificationRun;
+} {
+  const capture = createJsonCapture();
+  const ctx: NotificationContext = {
+    mode: "json",
+    get ui() {
+      return capture.ui;
+    },
+  };
+  const run = openNotificationRun(
+    { getAllTools: () => [], getCommands: () => [], appendEntry: capture.entrySink.appendEntry },
+    BARE_ORIGIN,
+  );
+  return { capture, ctx, run };
+}
+
+/** A path-source record whose source is `marketplaceRoot`, last refreshed as `baseline`. */
+function bareRecord(
+  cwd: string,
+  name: string,
+  scope: Scope,
+  baseline: string,
+  plugins: ExtensionState["marketplaces"][string]["plugins"] = {},
+  marketplaceRoot = fixtureMarketplaceDir("valid-marketplace"),
+): ExtensionState["marketplaces"][string] {
+  return {
+    name,
+    scope,
+    source: pathSource(marketplaceRoot),
+    addedFromCwd: cwd,
+    manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    marketplaceRoot,
+    plugins,
+    lastSuccessfulManifest: baseline,
+  };
+}
+
+/** Saves `marketplaces`, in insertion order, as the state of each scope. */
+async function seedScopes(
+  cwd: string,
+  marketplaces: Readonly<Record<Scope, ExtensionState["marketplaces"]>>,
+): Promise<void> {
+  for (const scope of ["project", "user"] as const) {
+    const { extensionRoot } = locationsFor(scope, cwd);
+    await mkdir(extensionRoot, { recursive: true });
+    await saveState(extensionRoot, { schemaVersion: 1, marketplaces: marketplaces[scope] });
+  }
+}
+
+/** Turns autoupdate on for the marketplace `name` of `scope`. */
+async function enableAutoupdate(cwd: string, scope: Scope, name: string): Promise<void> {
+  const locations = locationsFor(scope, cwd);
+  await saveConfig(
+    locations.baseConfigJsonPath,
+    {
+      schemaVersion: 1,
+      marketplaces: {
+        [name]: { source: fixtureMarketplaceDir("valid-marketplace"), autoupdate: true },
+      },
+    },
+    locations.scopeRoot,
+  );
+}
+
+/** One captured bare-update payload. */
+function bareEntry(payload: Readonly<Record<string, unknown>>): {
+  customType: string;
+  payload: Readonly<Record<string, unknown>>;
+} {
+  return {
+    customType: "claude-plugin",
+    payload: { schemaVersion: 1, origin: BARE_ORIGIN, ...payload },
+  };
+}
+
+/** The captured `(skipped) {up-to-date}` result of the marketplace `name`. */
+function upToDateEntry(name: string, scope: Scope): ReturnType<typeof bareEntry> {
+  return bareEntry({
+    kind: "cascade",
+    severity: "info",
+    needsReload: false,
+    tally: { label: "Marketplace update", failures: 0, warnings: 0, success: { count: 1 } },
+    marketplaces: [{ name, scope, status: "skipped", reasons: ["up-to-date"], plugins: [] }],
+  });
+}
+
+function unchangedOutcome(plugin: string): PluginUpdateOutcome {
+  return {
+    partition: "unchanged",
+    name: plugin,
+    fromVersion: "0.0.1",
+    toVersion: "0.0.1",
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+  };
+}
+
+test("a bare update emits each cascade's MCP notices before the next marketplace, project scope first", async (testContext) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange -- reverse-lexical insertion in both scopes, so a sort would
+    // reorder them; zeta and theta change and cascade, alpha and beta do not.
+    const now = new Date("2026-10-19T09:00:00.000Z");
+    testContext.mock.timers.enable({ apis: ["Date"], now });
+    await seedScopes(cwd, {
+      project: {
+        zeta: bareRecord(cwd, "zeta", "project", STALE_BASELINE, {
+          notes: makePluginRecord(),
+          broken: makePluginRecord(),
+        }),
+        alpha: bareRecord(cwd, "alpha", "project", VALID_MANIFEST_JSON),
+      },
+      user: {
+        theta: bareRecord(cwd, "theta", "user", STALE_BASELINE, { tasks: makePluginRecord() }),
+        beta: bareRecord(cwd, "beta", "user", VALID_MANIFEST_JSON),
+      },
+    });
+    await enableAutoupdate(cwd, "project", "zeta");
+    await enableAutoupdate(cwd, "user", "theta");
+    const { capture, ctx, run } = bareUpdateRun();
+    const git = makeForbiddenGitOps();
+    const calls: string[] = [];
+    const notice = (scope: Scope, file: "mcp-adapter.json" | "mcp.json") =>
+      ({ kind: "comments-dropped", scope, file }) as const;
+    const pluginUpdate: PluginUpdateFn = (plugin, marketplace, scope) => {
+      calls.push(`${plugin}@${marketplace} [${scope}]`);
+      if (plugin === "broken") {
+        return Promise.resolve({
+          partition: "failed",
+          name: plugin,
+          notes: ["plugin update failed after its MCP commit"],
+          reasons: ["permission denied"],
+          declaresAgents: false,
+          declaresMcp: false,
+          declaresWorkflows: false,
+          mcpConfigNotices: [notice(scope, "mcp.json")],
+        });
+      }
+
+      return Promise.resolve({
+        partition: "updated",
+        name: plugin,
+        fromVersion: "0.0.1",
+        toVersion: "0.0.2",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+        mcpConfigNotices: [notice(scope, "mcp-adapter.json")],
+      });
+    };
+
+    // act
+    await updateAllMarketplaces({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      cwd,
+      gitOps: git.gitOps,
+      pluginUpdate,
+    });
+
+    // assert
+    const updatedRow = (name: string, marketplace: string, scope: Scope) => ({
+      name,
+      id: `${name}@${marketplace}`,
+      scope,
+      status: "updated",
+      from: "0.0.1",
+      to: "0.0.2",
+      reasons: [],
+    });
+    const notices = (...items: Array<ReturnType<typeof notice>>) =>
+      bareEntry({
+        kind: "mcp-config-notices",
+        severity: "warning",
+        needsReload: false,
+        notices: items,
+      });
+    assert.deepStrictEqual(capture.entries, [
+      bareEntry({
+        kind: "cascade",
+        severity: "error",
+        needsReload: true,
+        summary: "A plugin operation has failed.",
+        tally: { label: "Marketplace update", failures: 1, warnings: 0, success: { count: 2 } },
+        marketplaces: [
+          {
+            name: "zeta",
+            scope: "project",
+            status: "updated",
+            plugins: [
+              updatedRow("notes", "zeta", "project"),
+              {
+                name: "broken",
+                id: "broken@zeta",
+                scope: "project",
+                status: "failed",
+                reasons: ["permission denied"],
+                leaks: [],
+                rollbackPartial: [],
+              },
+            ],
+          },
+        ],
+      }),
+      notices(notice("project", "mcp-adapter.json"), notice("project", "mcp.json")),
+      upToDateEntry("alpha", "project"),
+      bareEntry({
+        kind: "cascade",
+        severity: "info",
+        needsReload: true,
+        tally: { label: "Marketplace update", failures: 0, warnings: 0, success: { count: 2 } },
+        marketplaces: [
+          {
+            name: "theta",
+            scope: "user",
+            status: "updated",
+            plugins: [updatedRow("tasks", "theta", "user")],
+          },
+        ],
+      }),
+      notices(notice("user", "mcp-adapter.json")),
+      upToDateEntry("beta", "user"),
+    ]);
+    capture.assertValid();
+    assert.deepStrictEqual(git.calls, []);
+    assert.deepStrictEqual(calls, [
+      "notes@zeta [project]",
+      "broken@zeta [project]",
+      "tasks@theta [user]",
+    ]);
+    const refreshed = (record: ExtensionState["marketplaces"][string]) => ({
+      ...record,
+      lastSuccessfulManifest: VALID_MANIFEST_JSON,
+      lastUpdatedAt: now.toISOString(),
+    });
+    assert.deepStrictEqual(await loadState(locationsFor("project", cwd).extensionRoot), {
+      schemaVersion: 3,
+      marketplaces: {
+        zeta: refreshed(
+          bareRecord(cwd, "zeta", "project", STALE_BASELINE, {
+            notes: makePluginRecord(),
+            broken: makePluginRecord(),
+          }),
+        ),
+        alpha: refreshed(bareRecord(cwd, "alpha", "project", VALID_MANIFEST_JSON)),
+      },
+    });
+    assert.deepStrictEqual(await loadState(locationsFor("user", cwd).extensionRoot), {
+      schemaVersion: 3,
+      marketplaces: {
+        theta: refreshed(
+          bareRecord(cwd, "theta", "user", STALE_BASELINE, { tasks: makePluginRecord() }),
+        ),
+        beta: refreshed(bareRecord(cwd, "beta", "user", VALID_MANIFEST_JSON)),
+      },
+    });
+  });
+});
+
+test("a bare update keeps a failed marketplace registered and refreshes every later target", async (testContext) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange -- the first project marketplace has a schema-invalid manifest.
+    const now = new Date("2026-10-19T09:30:00.000Z");
+    testContext.mock.timers.enable({ apis: ["Date"], now });
+    const brokenRoot = path.join(cwd, "zeta-marketplace");
+    await mkdir(path.join(brokenRoot, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(brokenRoot, ".claude-plugin", "marketplace.json"),
+      JSON.stringify({ name: "zeta", owner: { name: "tests" }, plugins: "nope" }),
+    );
+    const zeta = bareRecord(cwd, "zeta", "project", VALID_MANIFEST_JSON, {}, brokenRoot);
+    await seedScopes(cwd, {
+      project: { zeta, alpha: bareRecord(cwd, "alpha", "project", VALID_MANIFEST_JSON) },
+      user: { beta: bareRecord(cwd, "beta", "user", VALID_MANIFEST_JSON) },
+    });
+    const { capture, ctx, run } = bareUpdateRun();
+    const git = makeForbiddenGitOps();
+
+    // act
+    await updateAllMarketplaces({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      cwd,
+      gitOps: git.gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      bareEntry({
+        kind: "cascade",
+        severity: "error",
+        needsReload: false,
+        summary: "Some operations have failed.",
+        tally: { label: "Marketplace update", failures: 2, warnings: 0 },
+        marketplaces: [
+          {
+            name: "zeta",
+            scope: "project",
+            status: "failed",
+            plugins: [
+              {
+                name: "zeta",
+                id: "zeta@zeta",
+                scope: "project",
+                status: "failed",
+                reasons: ["invalid manifest"],
+                cause: {
+                  causeChain: [
+                    'Failed to update marketplace "zeta".',
+                    "marketplace.json schema invalid: /plugins: must be array",
+                  ],
+                  truncated: false,
+                },
+                leaks: [],
+                rollbackPartial: [],
+              },
+            ],
+          },
+        ],
+      }),
+      upToDateEntry("alpha", "project"),
+      upToDateEntry("beta", "user"),
+    ]);
+    capture.assertValid();
+    assert.deepStrictEqual(git.calls, []);
+    assert.deepStrictEqual(await loadState(locationsFor("project", cwd).extensionRoot), {
+      schemaVersion: 3,
+      marketplaces: {
+        zeta,
+        alpha: {
+          ...bareRecord(cwd, "alpha", "project", VALID_MANIFEST_JSON),
+          lastUpdatedAt: now.toISOString(),
+        },
+      },
+    });
+    assert.deepStrictEqual(await loadState(locationsFor("user", cwd).extensionRoot), {
+      schemaVersion: 3,
+      marketplaces: {
+        beta: {
+          ...bareRecord(cwd, "beta", "user", VALID_MANIFEST_JSON),
+          lastUpdatedAt: now.toISOString(),
+        },
+      },
+    });
+  });
+});
+
+test("repeated bare updates with no marketplaces emit the same empty result and record nothing", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const first = bareUpdateRun();
+    const second = bareUpdateRun();
+    const git = makeForbiddenGitOps();
+
+    // act
+    for (const { ctx, run } of [first, second]) {
+      await updateAllMarketplaces({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        cwd,
+        gitOps: git.gitOps,
+      });
+    }
+
+    // assert
+    const empty = [
+      bareEntry({ kind: "cascade", severity: "info", needsReload: false, marketplaces: [] }),
+    ];
+    assert.deepStrictEqual(first.capture.entries, empty);
+    assert.deepStrictEqual(second.capture.entries, empty);
+    first.capture.assertValid();
+    second.capture.assertValid();
+    assert.deepStrictEqual(git.calls, []);
+    assert.deepStrictEqual(
+      await Promise.all(
+        (["project", "user"] as const).map(async (scope) =>
+          pathExists(locationsFor(scope, cwd).extensionRoot),
+        ),
+      ),
+      [false, false],
+    );
+  });
+});
+
+test("a bare update skips a marketplace removed after target selection and refreshes the rest", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange -- zeta's cascade removes alpha after both were selected, as a
+    // concurrent `marketplace remove` would.
+    await seedScopes(cwd, {
+      project: {
+        zeta: bareRecord(cwd, "zeta", "project", VALID_MANIFEST_JSON, {
+          notes: makePluginRecord(),
+        }),
+        alpha: bareRecord(cwd, "alpha", "project", VALID_MANIFEST_JSON),
+      },
+      user: { beta: bareRecord(cwd, "beta", "user", VALID_MANIFEST_JSON) },
+    });
+    await enableAutoupdate(cwd, "project", "zeta");
+    const projectRoot = locationsFor("project", cwd).extensionRoot;
+    const { capture, ctx, run } = bareUpdateRun();
+    const git = makeForbiddenGitOps();
+    const pluginUpdate: PluginUpdateFn = async (plugin) => {
+      const state = await loadState(projectRoot);
+      Reflect.deleteProperty(state.marketplaces, "alpha");
+      await saveState(projectRoot, state);
+      return unchangedOutcome(plugin);
+    };
+
+    // act
+    await updateAllMarketplaces({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      cwd,
+      gitOps: git.gitOps,
+      pluginUpdate,
+    });
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      upToDateEntry("zeta", "project"),
+      upToDateEntry("beta", "user"),
+    ]);
+    capture.assertValid();
+    assert.deepStrictEqual(git.calls, []);
+    assert.deepStrictEqual(Object.keys((await loadState(projectRoot)).marketplaces), ["zeta"]);
+  });
+});
+
+test("a marketplace added after target selection waits for the next bare update", async (testContext) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange -- zeta's cascade adds late after the targets were selected, as
+    // a concurrent `marketplace add` would.
+    const now = new Date("2026-10-19T10:00:00.000Z");
+    testContext.mock.timers.enable({ apis: ["Date"], now });
+    await seedScopes(cwd, {
+      project: {
+        zeta: bareRecord(cwd, "zeta", "project", VALID_MANIFEST_JSON, {
+          notes: makePluginRecord(),
+        }),
+        alpha: bareRecord(cwd, "alpha", "project", VALID_MANIFEST_JSON),
+      },
+      user: {},
+    });
+    await enableAutoupdate(cwd, "project", "zeta");
+    const projectRoot = locationsFor("project", cwd).extensionRoot;
+    const late = bareRecord(cwd, "late", "project", VALID_MANIFEST_JSON);
+    let added = false;
+    const pluginUpdate: PluginUpdateFn = async (plugin) => {
+      if (!added) {
+        added = true;
+        const state = await loadState(projectRoot);
+        state.marketplaces.late = late;
+        await saveState(projectRoot, state);
+      }
+
+      return unchangedOutcome(plugin);
+    };
+
+    const first = bareUpdateRun();
+    const second = bareUpdateRun();
+
+    // act
+    await updateAllMarketplaces({
+      completionCache: createCompletionCache(),
+      ctx: first.ctx,
+      run: first.run,
+      cwd,
+      gitOps: makeForbiddenGitOps().gitOps,
+      pluginUpdate,
+    });
+    const afterFirst = await loadState(projectRoot);
+    await updateAllMarketplaces({
+      completionCache: createCompletionCache(),
+      ctx: second.ctx,
+      run: second.run,
+      cwd,
+      gitOps: makeForbiddenGitOps().gitOps,
+      pluginUpdate,
+    });
+
+    // assert
+    assert.deepStrictEqual(first.capture.entries, [
+      upToDateEntry("zeta", "project"),
+      upToDateEntry("alpha", "project"),
+    ]);
+    assert.deepStrictEqual(afterFirst.marketplaces.late, late);
+    assert.deepStrictEqual(second.capture.entries, [
+      upToDateEntry("zeta", "project"),
+      upToDateEntry("alpha", "project"),
+      upToDateEntry("late", "project"),
+    ]);
+    first.capture.assertValid();
+    second.capture.assertValid();
+  });
+});
+
 test("NFR-5: path-source update calls zero gitOps methods", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
@@ -2631,6 +3813,435 @@ test("NFR-5: path-source update calls zero gitOps methods", async () => {
   });
 });
 
+test("semantic comparison ignores object key order", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "key-order-marketplace");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+    await seedPathMarketplace({ cwd, name: "key-order", marketplaceRoot });
+    const parsed = JSON.parse(VALID_MANIFEST_JSON) as {
+      name: string;
+      owner: { name: string };
+      plugins: readonly Record<string, unknown>[];
+    };
+    const [plugin] = parsed.plugins;
+    assert.ok(plugin !== undefined);
+    const reorderedPlugin = {
+      version: plugin.version,
+      description: plugin.description,
+      source: plugin.source,
+      name: plugin.name,
+    };
+    const reordered = JSON.stringify({
+      plugins: [reorderedPlugin],
+      owner: parsed.owner,
+      name: parsed.name,
+    });
+    assert.notStrictEqual(reordered, VALID_MANIFEST_JSON);
+    await writeFile(
+      path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+      `${reordered}\n`,
+      "utf8",
+    );
+    const { ctx, run, notifications } = makeCtx();
+    const git = makeForbiddenGitOps();
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "key-order",
+      scope: "project",
+      cwd,
+      gitOps: git.gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● key-order [project] (skipped) {up-to-date}" },
+    ]);
+    assert.deepStrictEqual(git.calls, []);
+  });
+});
+
+test("semantic comparison uses the saved baseline before reading changed source content", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "changed-marketplace");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+    await seedPathMarketplace({ cwd, name: "changed", marketplaceRoot });
+    const changedManifest = JSON.stringify({
+      ...(JSON.parse(VALID_MANIFEST_JSON) as Record<string, unknown>),
+      description: "A changed marketplace",
+    });
+    await writeFile(
+      path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+      changedManifest,
+      "utf8",
+    );
+    const { ctx, run, notifications } = makeCtx();
+    const git = makeForbiddenGitOps();
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "changed",
+      scope: "project",
+      cwd,
+      gitOps: git.gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● changed [project] (updated)" }]);
+    assert.strictEqual(
+      (await loadState(locationsFor("project", cwd).extensionRoot)).marketplaces.changed
+        ?.lastSuccessfulManifest,
+      changedManifest,
+    );
+    assert.deepStrictEqual(git.calls, []);
+  });
+});
+
+for (const { baseline, refreshed, title } of [
+  {
+    title: "a changed nested unknown field",
+    baseline: '{"name":"marketplace","plugins":[],"vendor":{"settings":{"revision":1}}}',
+    refreshed: '{ "name":"marketplace", "plugins":[], "vendor":{"settings":{"revision":2}} }\n',
+  },
+  {
+    title: "reordered plugins",
+    baseline:
+      '{"name":"marketplace","plugins":[{"name":"zebra","source":"./zebra"},{"name":"alpha","source":"./alpha"}]}',
+    refreshed:
+      '{ "name":"marketplace", "plugins":[{"name":"alpha","source":"./alpha"},{"name":"zebra","source":"./zebra"}] }\n',
+  },
+  {
+    title: "a reordered unknown array",
+    baseline: '{"name":"marketplace","plugins":[],"vendor":{"sequence":["zebra","alpha"]}}',
+    refreshed: '{ "name":"marketplace", "plugins":[], "vendor":{"sequence":["alpha", "zebra"]} }\n',
+  },
+]) {
+  test(`semantic comparison reports ${title} as updated`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const marketplaceRoot = path.join(cwd, "tools");
+      const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+      await mkdir(path.dirname(manifestPath), { recursive: true });
+      await writeFile(manifestPath, refreshed, "utf8");
+      await seedPathMarketplace({
+        cwd,
+        name: "tools",
+        marketplaceRoot,
+        lastSuccessfulManifest: baseline,
+      });
+      const { ctx, run, notifications } = makeCtx();
+      const git = makeForbiddenGitOps();
+
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        name: "tools",
+        scope: "project",
+        cwd,
+        gitOps: git.gitOps,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [{ message: "● tools [project] (updated)" }]);
+      assert.strictEqual(await readFile(manifestPath, "utf8"), refreshed);
+      assert.deepStrictEqual(git.calls, []);
+    });
+  });
+}
+
+test("a legacy local baseline is established once and survives a fresh state load", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "legacy-marketplace");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+    const installed = makePluginRecord();
+    await seedPathMarketplace({
+      cwd,
+      name: "legacy-local",
+      marketplaceRoot,
+      plugins: { hello: installed },
+      legacy: true,
+    });
+    const locations = locationsFor("project", cwd);
+    const beforeInfo = await loadState(locations.extensionRoot);
+    const info = makeCtx();
+
+    // act
+    await getMarketplaceInfo({
+      ctx: info.ctx as ExtensionContext,
+      run: info.run,
+      name: "legacy-local",
+      scope: "project",
+      cwd,
+    });
+    const afterInfo = await loadState(locations.extensionRoot);
+    const first = makeCtx();
+    const firstGit = makeForbiddenGitOps();
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx: first.ctx,
+      run: first.run,
+      name: "legacy-local",
+      scope: "project",
+      cwd,
+      gitOps: firstGit.gitOps,
+    });
+    const afterFirst = await loadState(locations.extensionRoot);
+    const second = makeCtx();
+    const secondGit = makeForbiddenGitOps();
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx: second.ctx,
+      run: second.run,
+      name: "legacy-local",
+      scope: "project",
+      cwd,
+      gitOps: secondGit.gitOps,
+    });
+    const afterSecond = await loadState(locations.extensionRoot);
+
+    // assert
+    assert.deepStrictEqual(afterInfo, beforeInfo);
+    assert.deepStrictEqual(info.notifications, [
+      { message: `● legacy-local [project] <no autoupdate>\npath: ${marketplaceRoot}` },
+    ]);
+    assert.deepStrictEqual(first.notifications, [
+      { message: "● legacy-local [project] (updated)" },
+    ]);
+    assert.deepStrictEqual(second.notifications, [
+      { message: "● legacy-local [project] (skipped) {up-to-date}" },
+    ]);
+    assert.strictEqual(
+      afterFirst.marketplaces["legacy-local"]?.lastSuccessfulManifest,
+      VALID_MANIFEST_JSON,
+    );
+    assert.strictEqual(
+      afterSecond.marketplaces["legacy-local"]?.lastSuccessfulManifest,
+      VALID_MANIFEST_JSON,
+    );
+    assert.deepStrictEqual(afterSecond.marketplaces["legacy-local"]?.plugins, {
+      hello: installed,
+    });
+    assert.deepStrictEqual(firstGit.calls, []);
+    assert.deepStrictEqual(secondGit.calls, []);
+  });
+});
+
+test("a failed state save retains the baseline and retries without cascading early", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "save-retry-marketplace");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+    const installed = makePluginRecord();
+    await seedPathMarketplace({
+      cwd,
+      name: "save-retry",
+      marketplaceRoot,
+      autoupdate: true,
+      plugins: { hello: installed },
+    });
+    const locations = locationsFor("project", cwd);
+    const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+    const changedManifest = JSON.stringify({
+      ...(JSON.parse(VALID_MANIFEST_JSON) as Record<string, unknown>),
+      description: "Changed before the failed save",
+    });
+    await writeFile(manifestPath, changedManifest, "utf8");
+    const beforeState = await loadState(locations.extensionRoot);
+    const configBytes = await readFile(locations.baseConfigJsonPath, "utf8");
+    const cascadeCalls: Array<{ marketplace: string; plugin: string; scope: Scope }> = [];
+    const pluginUpdate: PluginUpdateFn = (plugin, marketplace, scope) => {
+      cascadeCalls.push({ marketplace, plugin, scope });
+      return Promise.resolve({
+        partition: "unchanged",
+        name: plugin,
+        fromVersion: installed.version,
+        toVersion: installed.version,
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+      });
+    };
+
+    const failed = makeCtx();
+    const failedGit = makeForbiddenGitOps();
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx: failed.ctx,
+      run: failed.run,
+      name: "save-retry",
+      scope: "project",
+      cwd,
+      gitOps: failedGit.gitOps,
+      pluginUpdate,
+      stateTransaction: {
+        saveState: (): Promise<never> => Promise.reject(new Error("state save failed")),
+      },
+    });
+    const stateAfterFailure = await loadState(locations.extensionRoot);
+    const callsAfterFailure = [...cascadeCalls];
+    const retried = makeCtx();
+    const retryGit = makeForbiddenGitOps();
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx: retried.ctx,
+      run: retried.run,
+      name: "save-retry",
+      scope: "project",
+      cwd,
+      gitOps: retryGit.gitOps,
+      pluginUpdate,
+    });
+    const stateAfterRetry = await loadState(locations.extensionRoot);
+
+    // assert
+    assert.deepStrictEqual(stateAfterFailure, beforeState);
+    assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), configBytes);
+    assert.deepStrictEqual(cascadeCalls, [
+      { marketplace: "save-retry", plugin: "hello", scope: "project" },
+    ]);
+    assert.deepStrictEqual(callsAfterFailure, []);
+    assert.deepStrictEqual(failed.notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n⊘ save-retry [project] (failed)\n  ⊘ save-retry (failed)\n    cause: state save failed",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(retried.notifications, [
+      { message: "● save-retry [project] (updated)\n  ⊘ hello (skipped) {up-to-date}" },
+    ]);
+    assert.strictEqual(
+      stateAfterRetry.marketplaces["save-retry"]?.lastSuccessfulManifest,
+      changedManifest,
+    );
+    assert.deepStrictEqual(stateAfterRetry.marketplaces["save-retry"]?.plugins, {
+      hello: installed,
+    });
+    assert.deepStrictEqual(failedGit.calls, []);
+    assert.deepStrictEqual(retryGit.calls, []);
+  });
+});
+
+for (const { code, name } of [
+  { code: "EACCES", name: "save-eacces" },
+  { code: "EPERM", name: "save-eperm" },
+  { code: "ENOENT", name: "save-enoent" },
+  { code: "ENOTDIR", name: "save-enotdir" },
+] as const) {
+  test(`a state save failing with ${code} renders a failed row with no reason`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const marketplaceRoot = path.join(cwd, `${name}-marketplace`);
+      await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+      await seedPathMarketplace({ cwd, name, marketplaceRoot });
+      const locations = locationsFor("project", cwd);
+      const beforeState = await loadState(locations.extensionRoot);
+      const { ctx, run, notifications } = makeCtx();
+      const git = makeForbiddenGitOps();
+      const saveError = Object.assign(new Error(`${code}: state save failed`), { code });
+
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        name,
+        scope: "project",
+        cwd,
+        gitOps: git.gitOps,
+        stateTransaction: {
+          saveState: (): Promise<never> => Promise.reject(saveError),
+        },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `Some operations have failed.\n\n⊘ ${name} [project] (failed)\n  ⊘ ${name} (failed)\n    cause: ${code}: state save failed`,
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(await loadState(locations.extensionRoot), beforeState);
+      assert.deepStrictEqual(git.calls, []);
+    });
+  });
+}
+
+test("a held scope lock fails the update as lock held and a retry after release succeeds", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "locked-marketplace");
+    await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+    await seedPathMarketplace({ cwd, name: "locked", marketplaceRoot });
+    const locations = locationsFor("project", cwd);
+    const beforeState = await loadState(locations.extensionRoot);
+    const blocked = makeCtx();
+    const blockedGit = makeForbiddenGitOps();
+    const retried = makeCtx();
+    const retryGit = makeForbiddenGitOps();
+    const release = await lockfile.lock(locations.extensionRoot, {
+      lockfilePath: locations.stateLockFile,
+      realpath: false,
+    });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx: blocked.ctx,
+      run: blocked.run,
+      name: "locked",
+      scope: "project",
+      cwd,
+      gitOps: blockedGit.gitOps,
+    });
+    const stateWhileLocked = await loadState(locations.extensionRoot);
+    await release();
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx: retried.ctx,
+      run: retried.run,
+      name: "locked",
+      scope: "project",
+      cwd,
+      gitOps: retryGit.gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(blocked.notifications, [
+      {
+        message: [
+          "Some operations have failed.",
+          "",
+          "⊘ locked [project] (failed)",
+          "  ⊘ locked (failed) {lock held}",
+          `    cause: Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes. -> Lock file is already being held`,
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(stateWhileLocked, beforeState);
+    assert.deepStrictEqual(retried.notifications, [
+      { message: "● locked [project] (skipped) {up-to-date}" },
+    ]);
+    assert.deepStrictEqual(blockedGit.calls, []);
+    assert.deepStrictEqual(retryGit.calls, []);
+  });
+});
+
 test("drops a changed target after persistence and before its plugin cascade", async (testContext) => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
@@ -2656,7 +4267,7 @@ test("drops a changed target after persistence and before its plugin cascade", a
       throw new Error("the cache invalidation fixture has no target marketplace");
     }
 
-    record.manifestPath = path.join(cloneDir, ".claude-plugin", "before-update.json");
+    record.lastSuccessfulManifest = '{"name":"valid-marketplace","plugins":[]}';
     await saveState(locations.extensionRoot, state);
     const pluginCachePath = await locations.pluginCacheFile("official");
     let rebuildCount = 0;
@@ -2718,6 +4329,7 @@ test("drops a changed target after persistence and before its plugin cascade", a
           marketplaceRoot: cloneDir,
           plugins: { alpha: makePluginRecord() },
           lastUpdatedAt: now.toISOString(),
+          lastSuccessfulManifest: VALID_MANIFEST_JSON,
         },
       },
     };
@@ -3122,7 +4734,7 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
       plugins: { alpha: makePluginRecord() },
     });
     const locations = locationsFor("project", cwd);
-    const configBytes = await readFile(locations.configJsonPath, "utf8");
+    const configBytes = await readFile(locations.baseConfigJsonPath, "utf8");
     const { ctx, run, notifications } = makeCtx();
     const deviceFlow = createDeviceFlowHttp();
     const cascadeCalls: Array<{ marketplace: string; plugin: string; scope: Scope }> = [];
@@ -3173,10 +4785,11 @@ test("updateAllMarketplaces forwards optional Device Flow and plugin cascade por
           marketplaceRoot,
           plugins: { alpha: makePluginRecord() },
           lastUpdatedAt: now.toISOString(),
+          lastSuccessfulManifest: VALID_MANIFEST_JSON,
         },
       },
     });
-    assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), configBytes);
+    assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), configBytes);
   });
 });
 
@@ -3194,27 +4807,28 @@ test("all-target update drops changed rows in project-before-user order and isol
     const marketplaceRecord = (
       name: string,
       scope: Scope,
-      storedManifestPath: string,
+      baseline: string,
     ): ExtensionState["marketplaces"][string] => ({
       name,
       scope,
       source: pathSource(marketplaceRoot),
       addedFromCwd: cwd,
-      manifestPath: storedManifestPath,
+      manifestPath,
       marketplaceRoot,
       plugins: {},
+      lastSuccessfulManifest: baseline,
     });
     await saveState(projectLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
-        alpha: marketplaceRecord("alpha", "project", path.join(marketplaceRoot, "alpha-before")),
-        beta: marketplaceRecord("beta", "project", manifestPath),
+        alpha: marketplaceRecord("alpha", "project", '{"name":"valid-marketplace","plugins":[]}'),
+        beta: marketplaceRecord("beta", "project", VALID_MANIFEST_JSON),
       },
     });
     await saveState(userLocations.extensionRoot, {
       schemaVersion: 1,
       marketplaces: {
-        alpha: marketplaceRecord("alpha", "user", path.join(marketplaceRoot, "user-before")),
+        alpha: marketplaceRecord("alpha", "user", '{"name":"valid-marketplace","plugins":[]}'),
       },
     });
     const { ctx, run, notifications } = makeCtx();
@@ -3298,11 +4912,11 @@ test("all-target update drops changed rows in project-before-user order and isol
       schemaVersion: 3,
       marketplaces: {
         alpha: {
-          ...marketplaceRecord("alpha", "project", manifestPath),
+          ...marketplaceRecord("alpha", "project", VALID_MANIFEST_JSON),
           lastUpdatedAt: now.toISOString(),
         },
         beta: {
-          ...marketplaceRecord("beta", "project", manifestPath),
+          ...marketplaceRecord("beta", "project", VALID_MANIFEST_JSON),
           lastUpdatedAt: now.toISOString(),
         },
       },
@@ -3311,7 +4925,7 @@ test("all-target update drops changed rows in project-before-user order and isol
       schemaVersion: 3,
       marketplaces: {
         alpha: {
-          ...marketplaceRecord("alpha", "user", manifestPath),
+          ...marketplaceRecord("alpha", "user", VALID_MANIFEST_JSON),
           lastUpdatedAt: now.toISOString(),
         },
       },
@@ -3561,77 +5175,6 @@ test("updateMarketplace: bare-form missing marketplace -> bracketless {marketpla
   });
 });
 
-test("validateManifestAtRoot: stale manifestPath and marketplaceRoot are corrected (lines 382-388)", async () => {
-  // The conditional writes in validateManifestAtRoot update
-  // record.manifestPath and record.marketplaceRoot only when they differ
-  // from the canonical computed values.  Seed with stale paths, run
-  // update, then re-read state and assert both fields were corrected.
-  await withHermeticHome(async ({ cwd }) => {
-    // arrange
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-    const cloneDir = await locations.sourceCloneDir("stale-mp");
-    await cp(fixtureMarketplaceDir("valid-marketplace"), cloneDir, { recursive: true });
-
-    const staleManifestPath = path.join(cwd, "old-dir", ".claude-plugin", "marketplace.json");
-    const staleMarketplaceRoot = path.join(cwd, "old-dir");
-
-    await saveState(locations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        "stale-mp": {
-          name: "stale-mp",
-          scope: "project",
-          source: makeGithubSource("main"),
-          addedFromCwd: cwd,
-          manifestPath: staleManifestPath,
-          marketplaceRoot: staleMarketplaceRoot,
-          plugins: {},
-        },
-      },
-    });
-
-    const { ctx, run, notifications } = makeCtx();
-    const { gitOps } = createGitOps({
-      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000011" },
-    });
-
-    // act
-    await updateMarketplace({
-      completionCache: createCompletionCache(),
-      ctx,
-      run,
-      name: "stale-mp",
-      scope: "project",
-      cwd,
-      gitOps,
-    });
-
-    // assert
-
-    // No error -- update should have succeeded.
-    const errNotif = notifications.find((n) => n.severity === "error");
-    assert.equal(errNotif, undefined, `unexpected error: ${errNotif?.message}`);
-
-    // Re-read state and confirm both stale paths were corrected.
-    const afterState = await loadState(locations.extensionRoot);
-    const record = afterState.marketplaces["stale-mp"];
-    assert.ok(record !== undefined, "stale-mp record must still be in state");
-
-    const expectedManifestPath = path.join(cloneDir, ".claude-plugin", "marketplace.json");
-    assert.equal(
-      record.manifestPath,
-      expectedManifestPath,
-      `manifestPath not updated: got ${record.manifestPath}`,
-    );
-    assert.equal(
-      record.marketplaceRoot,
-      cloneDir,
-      `marketplaceRoot not updated: got ${record.marketplaceRoot}`,
-    );
-  });
-});
-
 // ───────────────────────────────────────────────────────────────────────────
 // AUTH-02: silent-reuse contract + auth bundle forwarding
 //
@@ -3739,6 +5282,334 @@ test("AUTH-02 update: the GitAuthBundle is forwarded by reference into refreshGi
     // proves no re-bundling occurred.
     assert.strictEqual(state.fetchCalls[0]?.auth?.credentialOps, credentialOps);
     assert.equal(state.fetchCalls[0]?.auth?.kind, "device-flow");
+  });
+});
+
+test("GHB-02: updating a GitHub marketplace under the override fetches with the override-host bundle", async (t) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+    await seedGithubMarketplace({ cwd, name: "ref-mp", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const { gitOps, state } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000021" },
+    });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "ref-mp",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● ref-mp [project] (skipped) {up-to-date}" },
+    ]);
+    assert.deepStrictEqual(
+      state.fetchCalls.map(({ auth }) => auth),
+      [{ credentialOps, host: "mirror.example:8443", kind: "stored-credential" }],
+    );
+  });
+});
+
+const OVERRIDE_WIRE_URL = "https://mirror.example:8443/git/anthropics/claude-plugins-official.git";
+
+test("UPD-12 / GHB-01: a cancelled credential lookup on a GitHub update under the override names git credential approve before the fetched URL", async (t) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+    await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const authError = Object.assign(new Error("cancelled"), {
+      code: "UserCanceledError",
+      cause: new FetchedUrlCause(OVERRIDE_WIRE_URL),
+    });
+    const { gitOps } = createGitOps({ fetchThrows: authError });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "mirror-mp",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> cancelled -> no credential was obtained for mirror.example:8443; store one with: printf 'protocol=https\\nhost=mirror.example:8443\\nusername=<user>\\npassword=<token>\\n\\n' | git credential approve -> fetched ${OVERRIDE_WIRE_URL}`,
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("UPD-12 / GHB-01: a GitHub update under the override that the host answers with 500 keeps its chain without the stored-credential line", async (t) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+    await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const httpErr = Object.assign(new Error("HTTP Error: 500 Internal Server Error"), {
+      code: "HttpError",
+      data: { statusCode: 500 },
+      cause: new FetchedUrlCause(OVERRIDE_WIRE_URL),
+    });
+    const { gitOps } = createGitOps({ fetchThrows: httpErr });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "mirror-mp",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed) {network error}\n    cause: 500 on ${OVERRIDE_WIRE_URL} -> HTTP Error: 500 Internal Server Error -> fetched ${OVERRIDE_WIRE_URL}`,
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("UPD-12 / GHB-01: a challenge after a cross-origin redirect on a GitHub update under the override keeps its chain without the stored-credential line", async (t) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+    await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const challenge = new CrossOriginChallengeError("https://sso.example.com");
+    challenge.cause = new FetchedUrlCause(OVERRIDE_WIRE_URL);
+    const { gitOps } = createGitOps({ fetchThrows: challenge });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "mirror-mp",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> redirected request to https://sso.example.com asked for credentials; a credential is not sent after a redirect to another origin -> fetched ${OVERRIDE_WIRE_URL}`,
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("UPD-12 / GHB-01: a stored credential that the override host rejects keeps its chain without the stored-credential line", async (t) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+    await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const rejection = new StoredCredentialRejectedError("mirror.example:8443");
+    rejection.cause = new FetchedUrlCause(OVERRIDE_WIRE_URL);
+    const { gitOps } = createGitOps({ fetchThrows: rejection });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "mirror-mp",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed) {authentication required}\n    cause: Failed to update marketplace "mirror-mp". -> mirror.example:8443 rejected the stored credential -> fetched ${OVERRIDE_WIRE_URL}`,
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("UPD-12: a non-Error fetch rejection on a GitHub update under the override reaches the failure row unchanged", async (t) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+    await seedGithubMarketplace({ cwd, name: "mirror-mp", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const gitOps: GitOps = {
+      ...createGitOps().gitOps,
+      // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the case is a non-Error rejection
+      fetch: () => Promise.reject("socket closed"),
+    };
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "mirror-mp",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          'Some operations have failed.\n\n⊘ mirror-mp [project] (failed)\n  ⊘ mirror-mp (failed)\n    cause: Failed to update marketplace "mirror-mp". -> socket closed',
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("GHB-04: a declined Device Flow on a GitHub update without the override keeps its chain without the stored-credential line", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedGithubMarketplace({ cwd, name: "declined", ref: "main" });
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const authError = Object.assign(new Error("cancelled"), { code: "UserCanceledError" });
+    const { gitOps } = createGitOps({ fetchThrows: authError });
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "declined",
+      scope: "project",
+      cwd,
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          'Some operations have failed.\n\n⊘ declined [project] (failed)\n  ⊘ declined (failed) {authentication required}\n    cause: Failed to update marketplace "declined". -> cancelled',
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("GHB-03: updating a GitHub marketplace on an invalid base fails the command instead of rendering a row", async (t) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+    await seedGithubMarketplace({ cwd, name: "ref-mp", ref: "main" });
+    const stateJsonPath = locationsFor("project", cwd).stateJsonPath;
+    const stateBefore = await readFile(stateJsonPath, "utf8");
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const { gitOps, state } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000021" },
+    });
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        updateMarketplace({
+          completionCache: createCompletionCache(),
+          ctx,
+          run,
+          name: "ref-mp",
+          scope: "project",
+          cwd,
+          gitOps,
+          credentialOps,
+        }),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
+    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(state.fetchCalls, []);
+    assert.strictEqual(await readFile(stateJsonPath, "utf8"), stateBefore);
+  });
+});
+
+test("GHB-03: an autoupdate cascade plugin failing on an invalid base fails the command", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedGithubMarketplace({
+      cwd,
+      name: "auto-mp",
+      ref: "main",
+      autoupdate: true,
+      plugins: { alpha: makePluginRecord(), beta: makePluginRecord() },
+    });
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000004" },
+    });
+    const invalid = new InvalidGitHubBaseUrlError(
+      "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+      "scheme",
+    );
+    const calls: string[] = [];
+    const pluginUpdate: PluginUpdateFn = async (plugin) => {
+      calls.push(plugin);
+      return Promise.reject(invalid);
+    };
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        updateMarketplace({
+          completionCache: createCompletionCache(),
+          ctx,
+          run,
+          name: "auto-mp",
+          scope: "project",
+          cwd,
+          gitOps,
+          pluginUpdate,
+        }),
+      (error: unknown) => {
+        assert.strictEqual(error, invalid);
+        return true;
+      },
+    );
+    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(calls, ["alpha"]);
   });
 });
 
@@ -3910,9 +5781,9 @@ test("silently retains a failed changed-target cache cleanup and preserves later
       throw new Error("the cache failure fixture has no target marketplace");
     }
 
-    record.manifestPath = path.join(marketplaceRoot, ".claude-plugin", "before-update.json");
+    record.lastSuccessfulManifest = '{"name":"valid-marketplace","plugins":[]}';
     await saveState(locations.extensionRoot, state);
-    const configBytes = await readFile(locations.configJsonPath, "utf8").catch(() => undefined);
+    const configBytes = await readFile(locations.baseConfigJsonPath, "utf8").catch(() => undefined);
     const pluginCachePath = await locations.pluginCacheFile("cache-mp");
     await mkdir(pluginCachePath, { recursive: true });
     const residuePath = path.join(pluginCachePath, "residue");
@@ -3958,6 +5829,7 @@ test("silently retains a failed changed-target cache cleanup and preserves later
           marketplaceRoot,
           plugins: {},
           lastUpdatedAt: now.toISOString(),
+          lastSuccessfulManifest: VALID_MANIFEST_JSON,
         },
       },
     };
@@ -3970,7 +5842,7 @@ test("silently retains a failed changed-target cache cleanup and preserves later
     assert.strictEqual(residueAfterFailure, "cache residue");
     assert.strictEqual(await pathExists(pluginCachePath), false);
     assert.strictEqual(
-      await readFile(locations.configJsonPath, "utf8").catch(() => undefined),
+      await readFile(locations.baseConfigJsonPath, "utf8").catch(() => undefined),
       configBytes,
     );
     assert.deepStrictEqual(git.calls, []);

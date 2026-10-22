@@ -2,12 +2,12 @@
 //
 // The shim runs the shared prelude, scans its positionals against the flag set
 // the catalog derives for this verb, and rejects three ways: an unrecognised
-// long flag, a positional count other than one, and a malformed reference.
+// long flag, a positional count other than one, and an empty or malformed
+// reference.
 //
 // Which parser this module calls decides its arity and flag answers, and this
 // one reaches `parseArgs` through `withParsedArgs` and never calls
-// `extractLocalFlag`. Measured consequences, taken against the real module
-// before a case was written:
+// `extractLocalFlag`. Consequences:
 //   * exactly one non-flag positional is accepted; zero IS rejected and two or
 //     three ARE rejected, both by the handler's own `!== 1` count guard and
 //     both with the same sentence;
@@ -30,8 +30,7 @@
 // `verifyBoundary()`: this read-only surface writes nothing at any time, so an
 // unchanged-tree assertion would pass whether or not the workflow ran.
 //
-// Measured boundary counts, taken through a counting context before a case was
-// written, because the two emission paths disagree:
+// Boundary reads, which differ between the two emission paths:
 //   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- `notifyUsageError`
 //     writes straight to the channel;
 //   * a delegating command reads `ctx.ui` once and `ctx.cwd` once.
@@ -77,8 +76,10 @@ import { makePluginInfoHandler } from "../../../../extensions/pi-claude-marketpl
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { noStatusSnapshot } from "../../../platform/mcp-status-seed.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
-import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -364,8 +365,29 @@ for (const { args, expectedMessage, label, summary } of [
     expectedMessage:
       'Invalid <plugin>@<marketplace> ref: "alpha@".\n\nUsage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]',
   },
+  {
+    args: "@",
+    label: "ref-lone-separator",
+    summary: "a reference holding only the separator",
+    expectedMessage:
+      'Invalid <plugin>@<marketplace> ref: "@".\n\nUsage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]',
+  },
+  {
+    args: '""',
+    label: "ref-empty",
+    summary: "an empty reference",
+    expectedMessage:
+      "Plugin name must not be empty.\n\nUsage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]",
+  },
+  {
+    args: "'   '",
+    label: "ref-blank",
+    summary: "a blank reference",
+    expectedMessage:
+      "Plugin name must not be empty.\n\nUsage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]",
+  },
 ]) {
-  test(`names ${summary} verbatim and never reaches the info workflow (PI-1)`, async (t) => {
+  test(`rejects ${summary} with its usage error and never reaches the info workflow (PI-1, USE-07)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);

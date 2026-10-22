@@ -20,25 +20,40 @@ import test, { type TestContext } from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import { NO_STORED_CREDENTIAL_CAUSE } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
-import { addMarketplace as addMarketplaceWithCache } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
+import {
+  addMarketplace as addMarketplaceWithCache,
+  addMarketplaceToState,
+  parseAddableSource,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import { loadConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
-import { loadState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import {
+  loadState,
+  saveState,
+} from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import { listRemotes } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
+  FetchedUrlCause,
+  InvalidGitHubBaseUrlError,
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
   UnremovableLeftoverCloneError,
   UnsupportedSourceError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import {
+  createRemovalOps,
+  pathExists,
+} from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { SymlinkRefusedError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type {
@@ -51,6 +66,8 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
 import type {
   GitCredentials,
   ListRemotesResult,
@@ -60,6 +77,19 @@ import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
 type FailedAddOutcome = Extract<AddMarketplaceOutcome, { status: "failed" }>;
+
+const VALID_MANIFEST_JSON = JSON.stringify({
+  name: "valid-marketplace",
+  owner: { name: "Phase 4 Tests" },
+  plugins: [
+    {
+      name: "hello",
+      source: "./plugins/hello",
+      description: "Hello plugin (test fixture)",
+      version: "1.0.0",
+    },
+  ],
+});
 
 void ({
   status: "failed",
@@ -366,6 +396,13 @@ function httpError(statusCode: number): Error {
   });
 }
 
+function refNotFoundError(ref: string): Error {
+  return Object.assign(new Error(`Could not find ${ref}.`), {
+    code: "NotFoundError",
+    name: "NotFoundError",
+  });
+}
+
 async function withTmpScope<T>(
   fn: (env: { cwd: string; locations: ScopedLocations }) => Promise<T>,
 ): Promise<T> {
@@ -576,6 +613,38 @@ for (const { rawSource, origin } of MA12_RECOGNIZED_ORIGINS) {
     });
   });
 }
+
+test("GHB-02 / D-02: an owned leftover with a canonical origin recovers under the override", async (t) => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+    const { ctx, run, notifications } = makeCtx();
+    const finalDir = await arrangeLeftover(locations, { owned: true });
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      listRemotesResult: {
+        kind: "origin",
+        url: "https://github.com/anthropics/claude-plugins-official.git",
+      },
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    const persisted = await loadState(locations.extensionRoot);
+    assert.strictEqual(persisted.marketplaces["valid-marketplace"]?.marketplaceRoot, finalDir);
+    assert.strictEqual(await pathExists(path.join(finalDir, ".leftover-sentinel")), false);
+  });
+});
 
 test("MA-13 / WR-03: a leftover without the ownership marker refuses as stale clone and stays on disk", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
@@ -989,22 +1058,20 @@ test("MA-8: a matching leftover still yields (failed) {duplicate name}, not {sta
     });
 
     const { ctx: ctx2, run: run2, notifications: n2 } = makeCtx();
-    // The second add's leftover origin MATCHES the source -- recognition
-    // would accept it -- but MA-8's duplicate-name check (step 3) runs BEFORE
-    // recognition (step 4), so a matching leftover never overrides it.
+    // A second source whose manifest declares the same name. The leftover's
+    // origin MATCHES that source -- recognition would accept it -- but MA-8's
+    // duplicate-name check (step 3) runs BEFORE recognition (step 4), so a
+    // matching leftover never overrides it.
     const { gitOps: gitOps2 } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-      listRemotesResult: {
-        kind: "origin",
-        url: "https://github.com/anthropics/claude-plugins-official.git",
-      },
+      listRemotesResult: { kind: "origin", url: "https://github.com/owner/repo.git" },
     });
     await addMarketplace({
       ctx: ctx2,
       run: run2,
       scope: "project",
       cwd,
-      rawSource: "anthropics/claude-plugins-official",
+      rawSource: "owner/repo",
       gitOps: gitOps2,
     });
 
@@ -1198,7 +1265,7 @@ test("MA-14: orchestrated mode joins both cleanup failures behind one Error.caus
   });
 });
 
-test("MA-8 / ATTR-07: duplicate name in same scope renders (failed) {duplicate name}", async () => {
+test("MA-8 / ATTR-07: a same-source add into the declaring layer renders (failed) {duplicate name} before any clone", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run } = makeCtx();
@@ -1217,7 +1284,7 @@ test("MA-8 / ATTR-07: duplicate name in same scope renders (failed) {duplicate n
     });
 
     const { ctx: ctx2, run: run2, notifications: n2 } = makeCtx();
-    const { gitOps: gitOps2 } = createGitOps({
+    const { gitOps: gitOps2, state: gitState2 } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
     // ATTR-07: second add for same name routes through notify, no raw throw.
@@ -1239,6 +1306,7 @@ test("MA-8 / ATTR-07: duplicate name in same scope renders (failed) {duplicate n
       "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {duplicate name}",
     );
     assert.equal(note.severity, "error");
+    assert.deepStrictEqual(gitState2.cloneCalls, []);
   });
 });
 
@@ -1658,7 +1726,20 @@ test("NFR-5: path-source add never calls gitOps", async () => {
 
       // State updated; success notification emitted.
       const persisted = await loadState(locations.extensionRoot);
-      assert.ok("valid-marketplace" in persisted.marketplaces);
+      const record = persisted.marketplaces["valid-marketplace"];
+      assert.ok(record);
+      const { lastUpdatedAt, ...stableRecord } = record;
+      assert.deepStrictEqual(stableRecord, {
+        name: "valid-marketplace",
+        scope: "project",
+        source: { kind: "path", raw: localMpDir, logical: localMpDir },
+        addedFromCwd: cwd,
+        manifestPath: path.join(localMpDir, ".claude-plugin", "marketplace.json"),
+        marketplaceRoot: localMpDir,
+        plugins: {},
+        lastSuccessfulManifest: VALID_MANIFEST_JSON,
+      });
+      assert.match(lastUpdatedAt ?? "", /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
       const note = notifications[0];
       assert.ok(note);
       // SNM-33 / D-22-01: a path-source add emits the same `(added)` shape
@@ -1707,7 +1788,7 @@ test("normalizes a non-Error config-write throw after a path mutation", async (t
     const { gitOps, state } = createGitOps();
     const originalDirname = path.dirname.bind(path);
     t.mock.method(path, "dirname", (value: string) => {
-      if (value === locations.configJsonPath) {
+      if (value === locations.baseConfigJsonPath) {
         // eslint-disable-next-line @typescript-eslint/only-throw-error -- the public boundary accepts unknown throws from persistence.
         throw "config writer stopped";
       }
@@ -1775,6 +1856,44 @@ test("MA-3: path source accepts a direct path to marketplace.json (not just the 
     }
   });
 });
+
+for (const manifestDirectory of [".claude-plugin", "catalog"]) {
+  test(`resolves a relative ${manifestDirectory} file against the supplied working directory`, async () => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const marketplaceRoot = path.join(cwd, "local");
+      const manifestPath = path.join(marketplaceRoot, manifestDirectory, "marketplace.json");
+      await mkdir(path.dirname(manifestPath), { recursive: true });
+      const comparisonJson = '{"name":"tools","plugins":[],"vendor":{"enabled":true}}';
+      await writeFile(manifestPath, comparisonJson);
+      const rawSource = `./local/${manifestDirectory}/marketplace.json`;
+      const { ctx, run, notifications } = makeCtx();
+      const gitOps = mock<GitOps>({ name: "unused git operations" });
+
+      // act
+      await addMarketplace({ ctx, run, scope: "project", cwd, rawSource, gitOps });
+      const persisted = await loadState(locations.extensionRoot);
+
+      // assert
+      const record = persisted.marketplaces.tools;
+      assert.ok(record);
+      const { lastUpdatedAt, ...stableRecord } = record;
+      assert.deepStrictEqual(stableRecord, {
+        name: "tools",
+        scope: "project",
+        source: { kind: "path", raw: rawSource, logical: rawSource },
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot,
+        plugins: {},
+        lastSuccessfulManifest: comparisonJson,
+      });
+      assert.match(lastUpdatedAt ?? "", /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+      assert.deepStrictEqual(notifications, [{ message: "● tools [project] (added)" }]);
+      verify(gitOps);
+    });
+  });
+}
 
 test("MA-4: tilde paths are preserved verbatim in stored source.raw", async () => {
   // We don't actually resolve the tilde to a real homedir -- just verify
@@ -1885,7 +2004,7 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
     const recorded = persisted.marketplaces["valid-marketplace"];
     assert.ok(recorded);
     const { lastUpdatedAt, ...stableRecord } = recorded;
-    const config = await loadConfig(locations.configJsonPath);
+    const config = await loadConfig(locations.baseConfigJsonPath);
     const tree = (await readdir(locations.scopeRoot, { recursive: true })).sort();
     const sourceRoot = await locations.sourceCloneDir("valid-marketplace");
 
@@ -1910,6 +2029,7 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
             manifestPath: path.join(sourceRoot, ".claude-plugin", "marketplace.json"),
             marketplaceRoot: sourceRoot,
             plugins: {},
+            lastSuccessfulManifest: VALID_MANIFEST_JSON,
           },
         },
       },
@@ -1917,7 +2037,7 @@ test("D-03-INV :: add invalidates marketplace-names cache for the new scope", as
     assert.match(lastUpdatedAt ?? "", /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
     assert.deepStrictEqual(config, {
       status: "valid",
-      filePath: locations.configJsonPath,
+      filePath: locations.baseConfigJsonPath,
       config: {
         schemaVersion: 1,
         marketplaces: {
@@ -1971,7 +2091,7 @@ test("invalidates names before the plugin index only after the add is durable", 
         }
 
         const persisted = await loadState(locations.extensionRoot);
-        const config = await loadConfig(locations.configJsonPath);
+        const config = await loadConfig(locations.baseConfigJsonPath);
         durableAtFirstInvalidation =
           persisted.marketplaces["valid-marketplace"] !== undefined &&
           config.status === "valid" &&
@@ -2034,7 +2154,7 @@ test("does not invalidate a duplicate no-effect add through the same cache owner
       });
       recorder.clearCalls();
       const stateBeforeDuplicate = await readFile(locations.stateJsonPath, "utf8");
-      const configBeforeDuplicate = await loadConfig(locations.configJsonPath);
+      const configBeforeDuplicate = await loadConfig(locations.baseConfigJsonPath);
       const treeBeforeDuplicate = (await readdir(locations.scopeRoot, { recursive: true })).sort();
 
       // act
@@ -2058,7 +2178,7 @@ test("does not invalidate a duplicate no-effect add through the same cache owner
 
       assert.deepStrictEqual(recorder.calls, []);
       assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBeforeDuplicate);
-      assert.deepStrictEqual(await loadConfig(locations.configJsonPath), configBeforeDuplicate);
+      assert.deepStrictEqual(await loadConfig(locations.baseConfigJsonPath), configBeforeDuplicate);
       assert.deepStrictEqual(
         (await readdir(locations.scopeRoot, { recursive: true })).sort(),
         treeBeforeDuplicate,
@@ -2102,7 +2222,7 @@ test("does not invalidate when source validation fails before commit", async () 
       schemaVersion: 3,
       marketplaces: {},
     });
-    assert.deepStrictEqual(await loadConfig(locations.configJsonPath), {
+    assert.deepStrictEqual(await loadConfig(locations.baseConfigJsonPath), {
       status: "absent",
     });
     assert.deepStrictEqual(notifications, []);
@@ -2129,7 +2249,7 @@ test("swallows each cache hygiene failure without rewriting the durable add", as
             }
 
             committedStateBytes = await readFile(locations.stateJsonPath, "utf8");
-            committedConfigBytes = await readFile(locations.configJsonPath, "utf8");
+            committedConfigBytes = await readFile(locations.baseConfigJsonPath, "utf8");
             committedTree = (await readdir(locations.scopeRoot, { recursive: true })).sort();
           },
         });
@@ -2151,7 +2271,10 @@ test("swallows each cache hygiene failure without rewriting the durable add", as
         assert.notStrictEqual(committedConfigBytes, undefined);
         assert.notStrictEqual(committedTree, undefined);
         assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), committedStateBytes);
-        assert.strictEqual(await readFile(locations.configJsonPath, "utf8"), committedConfigBytes);
+        assert.strictEqual(
+          await readFile(locations.baseConfigJsonPath, "utf8"),
+          committedConfigBytes,
+        );
         assert.deepStrictEqual(
           (await readdir(locations.scopeRoot, { recursive: true })).sort(),
           committedTree,
@@ -2694,7 +2817,7 @@ test("orchestrated mode normalizes a non-Error opaque failure without mutation",
     const { gitOps, state } = createGitOps();
     const originalBasename = path.basename.bind(path);
     t.mock.method(path, "basename", (value: string, suffix?: string) => {
-      if (value === locations.configJsonPath) {
+      if (value === locations.baseConfigJsonPath) {
         // eslint-disable-next-line @typescript-eslint/only-throw-error -- this case proves the public unknown-throw normalizer.
         throw "opaque add failure";
       }
@@ -2752,7 +2875,7 @@ test("normalizes a structurally classified exotic throw in orchestrated mode", a
     const { gitOps, state } = createGitOps();
     const originalBasename = path.basename.bind(path);
     t.mock.method(path, "basename", (value: string, suffix?: string) => {
-      if (value === locations.configJsonPath) {
+      if (value === locations.baseConfigJsonPath) {
         // eslint-disable-next-line @typescript-eslint/only-throw-error -- an exotic thenable-free value exercises unknown-throw normalization.
         throw exoticDuplicate;
       }
@@ -3004,7 +3127,7 @@ test("WB-01: standalone add writes the marketplace entry to claude-plugins.json 
 
     const { loadConfig } =
       await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-    const cfg = await loadConfig(locations.configJsonPath);
+    const cfg = await loadConfig(locations.baseConfigJsonPath);
     // assert
     assert.equal(cfg.status, "valid");
     if (cfg.status !== "valid") {
@@ -3019,13 +3142,13 @@ test("WB-01: standalone add writes the marketplace entry to claude-plugins.json 
       "anthropics/claude-plugins-official",
     );
 
-    // The local file MUST NOT have been touched on the base-target path.
-    const localCfg = await loadConfig(locations.configLocalJsonPath);
+    // The local config MUST NOT have been touched on the base-target path.
+    const localCfg = await loadConfig(locations.localConfigJsonPath);
     assert.equal(localCfg.status, "absent");
   });
 });
 
-test("WB-01: --local routes the write to claude-plugins.local.json and never touches the base file", async () => {
+test("WB-01: --local routes the write to claude-plugins.local.json and never touches the base config", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, run } = makeCtx();
@@ -3046,7 +3169,7 @@ test("WB-01: --local routes the write to claude-plugins.local.json and never tou
 
     const { loadConfig } =
       await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-    const localCfg = await loadConfig(locations.configLocalJsonPath);
+    const localCfg = await loadConfig(locations.localConfigJsonPath);
     // assert
     assert.equal(localCfg.status, "valid");
     if (localCfg.status === "valid") {
@@ -3056,13 +3179,259 @@ test("WB-01: --local routes the write to claude-plugins.local.json and never tou
       );
     }
 
-    // The base file MUST be untouched.
-    const baseCfg = await loadConfig(locations.configJsonPath);
+    // The base config MUST be untouched.
+    const baseCfg = await loadConfig(locations.baseConfigJsonPath);
     assert.equal(baseCfg.status, "absent");
   });
 });
 
-test("WR-09 / T-56-02-01: orchestrated-mode add SKIPS config write-back (neither base nor local file is created)", async () => {
+/** The bytes an add writes into a config file that declares only `name`. */
+function declaredMarketplaceBytes(name: string, source: string): string {
+  return `{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "${name}": {\n      "source": "${source}"\n    }\n  }\n}\n`;
+}
+
+for (const { declaredLayer, targetLayer, firstLocal, secondLocal } of [
+  { declaredLayer: "base", targetLayer: "local", firstLocal: false, secondLocal: true },
+  { declaredLayer: "local", targetLayer: "base", firstLocal: true, secondLocal: false },
+]) {
+  test(`LAYER-01: declares a path marketplace the ${declaredLayer} layer holds in the ${targetLayer} layer with no clone and no state write`, async () => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const marketplaceRoot = await writeNamedPathMarketplace(cwd, "tools");
+      const { gitOps, state: gitState } = createGitOps();
+      const first = makeCtx();
+      await addMarketplace({
+        ctx: first.ctx,
+        run: first.run,
+        scope: "project",
+        cwd,
+        rawSource: marketplaceRoot,
+        gitOps,
+        local: firstLocal,
+      });
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await addMarketplace({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        rawSource: marketplaceRoot,
+        gitOps,
+        local: secondLocal,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [{ message: "● tools [project] (added)" }]);
+      assert.strictEqual(
+        await readFile(locations.baseConfigJsonPath, "utf8"),
+        declaredMarketplaceBytes("tools", marketplaceRoot),
+      );
+      assert.strictEqual(
+        await readFile(locations.localConfigJsonPath, "utf8"),
+        declaredMarketplaceBytes("tools", marketplaceRoot),
+      );
+      assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+      assert.deepStrictEqual(gitState.cloneCalls, []);
+    });
+  });
+}
+
+test("LAYER-01 / WR-06: a relative path typed in another directory adds that directory, not the recorded marketplace", async (t) => {
+  // arrange: the user scope records `./named-marketplace` as typed in `first`.
+  const { root } = await createHermeticEnvironment(t, "mp-add-relative-");
+  const first = path.join(root, "first");
+  const second = path.join(root, "second");
+  await writeNamedPathMarketplace(first, "tools");
+  await mkdir(second, { recursive: true });
+  const startupCwd = process.cwd();
+  t.after(() => {
+    process.chdir(startupCwd);
+  });
+  process.chdir(first);
+  const firstAdd = makeCtx();
+  await addMarketplace({
+    ctx: firstAdd.ctx,
+    run: firstAdd.run,
+    scope: "user",
+    cwd: first,
+    rawSource: "./named-marketplace",
+  });
+  const userLocations = locationsFor("user", first);
+  const stateBefore = await readFile(userLocations.stateJsonPath, "utf8");
+  process.chdir(second);
+  const { ctx, run, notifications } = makeCtx();
+
+  // act
+  await addMarketplace({
+    ctx,
+    run,
+    scope: "user",
+    cwd: second,
+    rawSource: "./named-marketplace",
+    local: true,
+  });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A marketplace operation has failed.\n\n⊘ ./named-marketplace [user] (failed) {source missing}",
+      severity: "error",
+    },
+  ]);
+  assert.strictEqual(await pathExists(userLocations.localConfigJsonPath), false);
+  assert.strictEqual(await readFile(userLocations.stateJsonPath, "utf8"), stateBefore);
+});
+
+test("LAYER-01: declares a github marketplace in the local layer with only the clone of the first add", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { gitOps, state: gitState } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    const first = makeCtx();
+    await addMarketplace({
+      ctx: first.ctx,
+      run: first.run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+    const { ctx, run, notifications } = makeCtx();
+    const redeclareGitOps: GitOps = {
+      ...gitOps,
+      listRemotes: () => Promise.reject(new Error("the re-declaration inspects no clone")),
+    };
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps: redeclareGitOps,
+      local: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.strictEqual(
+      await readFile(locations.baseConfigJsonPath, "utf8"),
+      declaredMarketplaceBytes("valid-marketplace", "anthropics/claude-plugins-official"),
+    );
+    assert.strictEqual(
+      await readFile(locations.localConfigJsonPath, "utf8"),
+      declaredMarketplaceBytes("valid-marketplace", "anthropics/claude-plugins-official"),
+    );
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    assert.deepStrictEqual(
+      gitState.cloneCalls.map((call) => call.url),
+      ["https://github.com/anthropics/claude-plugins-official.git"],
+    );
+    assert.deepStrictEqual(
+      [
+        gitState.fetchCalls,
+        gitState.forceUpdateRefCalls,
+        gitState.checkoutCalls,
+        gitState.resolveRefCalls,
+      ],
+      [[], [], [], []],
+    );
+  });
+});
+
+test("LAYER-01: declares a marketplace the scope records but no layer declares, keeping its record", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = await writeNamedPathMarketplace(cwd, "tools");
+    await saveState(locations.extensionRoot, {
+      schemaVersion: 3,
+      marketplaces: {
+        tools: {
+          name: "tools",
+          scope: "project",
+          source: { kind: "path", raw: marketplaceRoot, logical: marketplaceRoot },
+          addedFromCwd: cwd,
+          manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot,
+          plugins: {},
+        },
+      },
+    });
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps, state: gitState } = createGitOps();
+
+    // act
+    await addMarketplace({ ctx, run, scope: "project", cwd, rawSource: marketplaceRoot, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● tools [project] (added)" }]);
+    assert.strictEqual(
+      await readFile(locations.baseConfigJsonPath, "utf8"),
+      declaredMarketplaceBytes("tools", marketplaceRoot),
+    );
+    assert.strictEqual(await pathExists(locations.localConfigJsonPath), false);
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    assert.deepStrictEqual(gitState.cloneCalls, []);
+  });
+});
+
+test("LAYER-01: a failed re-declaration write keeps the recorded clone and state", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+    const first = makeCtx();
+    await addMarketplace({
+      ctx: first.ctx,
+      run: first.run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+    const cloneDir = await locations.sourceCloneDir("valid-marketplace");
+    const cloneEntriesBefore = (await readdir(cloneDir, { recursive: true })).sort();
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+    const { ctx, run } = makeCtx(0);
+    // A read-only scope root refuses the atomic write of the absent local config.
+    await chmod(locations.scopeRoot, 0o500);
+
+    // act & assert
+    try {
+      await assert.rejects(
+        addMarketplace({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          rawSource: "anthropics/claude-plugins-official",
+          gitOps,
+          local: true,
+        }),
+        { code: "EACCES" },
+      );
+    } finally {
+      await chmod(locations.scopeRoot, 0o755);
+    }
+
+    assert.deepStrictEqual(
+      (await readdir(cloneDir, { recursive: true })).sort(),
+      cloneEntriesBefore,
+    );
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+  });
+});
+
+test("WR-09 / T-56-02-01: orchestrated-mode add SKIPS config write-back (neither base nor local config is created)", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, run } = makeCtx();
@@ -3085,8 +3454,8 @@ test("WR-09 / T-56-02-01: orchestrated-mode add SKIPS config write-back (neither
     assert.deepStrictEqual(outcome, { status: "added", name: "valid-marketplace" });
     const { loadConfig } =
       await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-    assert.equal((await loadConfig(locations.configJsonPath)).status, "absent");
-    assert.equal((await loadConfig(locations.configLocalJsonPath)).status, "absent");
+    assert.equal((await loadConfig(locations.baseConfigJsonPath)).status, "absent");
+    assert.equal((await loadConfig(locations.localConfigJsonPath)).status, "absent");
   });
 });
 
@@ -3095,7 +3464,7 @@ test("CFG-03 / T-56-02-05: --local path with an invalid config aborts the add; b
     // Seed an invalid claude-plugins.local.json (malformed JSON).
     // arrange
     const { writeFile } = await import("node:fs/promises");
-    await writeFile(locations.configLocalJsonPath, "{ not valid json", "utf8");
+    await writeFile(locations.localConfigJsonPath, "{ not valid json", "utf8");
 
     const { ctx, run, notifications } = makeCtx();
     const { gitOps } = createGitOps({
@@ -3123,8 +3492,8 @@ test("CFG-03 / T-56-02-05: --local path with an invalid config aborts the add; b
     );
     // T-56-02-05: the absolute path MUST NOT be leaked in the rendered cause.
     assert.ok(
-      !note.message.includes(locations.configLocalJsonPath),
-      `must NOT leak absolute configLocalJsonPath, got: ${note.message}`,
+      !note.message.includes(locations.localConfigJsonPath),
+      `must NOT leak absolute localConfigJsonPath, got: ${note.message}`,
     );
 
     // State was NOT mutated (the marketplace record was never recorded).
@@ -3144,7 +3513,7 @@ test("WR-07: config write failure after the clone rename cleans up the final clo
     // Valid pre-existing config so the CFG-03 pre-check passes -- the
     // failure must land AFTER addGithubInGuard renamed the clone into its
     // final sources/<name>/ path.
-    await writeFile(locations.configJsonPath, JSON.stringify({ schemaVersion: 1 }), "utf8");
+    await writeFile(locations.baseConfigJsonPath, JSON.stringify({ schemaVersion: 1 }), "utf8");
     // Read-only scope root: saveConfig's tmp+rename write into scopeRoot
     // fails with EACCES, while everything under extensionRoot (state lock,
     // sources/, sources-staging/) stays writable.
@@ -3213,7 +3582,7 @@ test("cleans a URL clone after state-save failure and a second invocation conver
       firstError = error;
     }
 
-    const configAfterFailure = await readFile(locations.configJsonPath, "utf8");
+    const configAfterFailure = await readFile(locations.baseConfigJsonPath, "utf8");
     const finalClone = await locations.sourceCloneDir("valid-marketplace");
     const finalCloneAfterFailure = await pathExists(finalClone);
     await rm(locations.stateJsonPath, { recursive: true, force: true });
@@ -3503,11 +3872,74 @@ test("D-76-09: a missing repository HttpError renders (failed) {source missing} 
   });
 });
 
-for (const { statusCode, reason } of [
-  { statusCode: 429, reason: "network unreachable" },
-  { statusCode: 500, reason: "network unreachable" },
-]) {
-  test(`D-76-09: a transient HTTP ${statusCode} clone failure renders (failed) {${reason}}`, async () => {
+test("ADD-09: a clone of a ref the remote lacks renders (failed) {source missing} named by the typed source", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-missing-ref-home-");
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: refNotFoundError("stable"),
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/mp#stable",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n" +
+          "⊘ https://gitlab.example.com/team/mp#stable [project] (failed) {source missing}",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("ADD-09 orchestrated mode -- a clone of a ref the remote lacks returns the source-missing outcome without notifying", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-missing-ref-orchestrated-home-");
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx(0);
+    const cloneThrows = refNotFoundError("stable");
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows,
+    });
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/mp#stable",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "source missing",
+      error: cloneThrows,
+      cause: "Could not find stable.",
+    });
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+for (const statusCode of [408, 429, 500, 503]) {
+  test(`ADD-10: a clone the host answers with HTTP ${statusCode} renders {network error} with the status on the fetched URL`, async (t) => {
+    await createHermeticEnvironment(t, "mp-add-host-http-home-");
     await withTmpScope(async ({ cwd }) => {
       // arrange
       const { ctx, run, notifications } = makeCtx();
@@ -3530,14 +3962,162 @@ for (const { statusCode, reason } of [
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A marketplace operation has failed.\n\n" +
-            `⊘ https://gitlab.example.com/team/flaky-mp [project] (failed) {${reason}}`,
+            "Some operations have failed.\n\n" +
+            "⊘ https://gitlab.example.com/team/flaky-mp [project] (failed)\n" +
+            "  ⊘ https://gitlab.example.com/team/flaky-mp (failed) {network error}\n" +
+            `    cause: ${statusCode} on https://gitlab.example.com/team/flaky-mp -> HTTP Error: ${statusCode}`,
           severity: "error",
         },
       ]);
     });
   });
 }
+
+test("ADD-10: a GitHub clone the host answers with HTTP 502 names the github.com wire URL", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-host-http-github-home-");
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: httpError(502),
+    });
+
+    // act
+    await addMarketplace({ ctx, run, scope: "project", cwd, rawSource: "acme/mp", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n" +
+          "⊘ acme/mp [project] (failed)\n" +
+          "  ⊘ acme/mp (failed) {network error}\n" +
+          "    cause: 502 on https://github.com/acme/mp.git -> HTTP Error: 502",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("ADD-10: a failed git add's JSON child row takes the source as typed as its id", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-host-http-json-home-");
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    when(() => ctx.mode)
+      .thenReturn("json")
+      .once();
+    const inventory = mock<
+      Pick<Parameters<typeof openNotificationRun>[0], "getAllTools" | "getCommands">
+    >({ exactParams: true, name: "inventory" });
+    when(() => inventory.getAllTools())
+      .thenReturn([])
+      .times(3);
+    when(() => inventory.getCommands())
+      .thenReturn([])
+      .once();
+    const run = openNotificationRun(
+      {
+        getAllTools: () => inventory.getAllTools(),
+        getCommands: () => inventory.getCommands(),
+        appendEntry: capture.entrySink.appendEntry,
+      },
+      { kind: "command", commandId: "plugin", invocationId: "test-run" },
+    );
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows: httpError(503),
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/flaky-mp",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+          kind: "cascade",
+          severity: "error",
+          needsReload: false,
+          summary: "Some operations have failed.",
+          marketplaces: [
+            {
+              name: "https://gitlab.example.com/team/flaky-mp",
+              scope: "project",
+              status: "failed",
+              plugins: [
+                {
+                  status: "failed",
+                  name: "https://gitlab.example.com/team/flaky-mp",
+                  id: "https://gitlab.example.com/team/flaky-mp",
+                  reasons: ["network error"],
+                  scope: "project",
+                  cause: {
+                    causeChain: [
+                      "503 on https://gitlab.example.com/team/flaky-mp",
+                      "HTTP Error: 503",
+                    ],
+                    truncated: false,
+                  },
+                  leaks: [],
+                  rollbackPartial: [],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ]);
+    capture.assertValid();
+    verify(inventory);
+    verify(ctx);
+  });
+});
+
+test("ADD-10 orchestrated mode -- a host HTTP 500 returns the network-error outcome without notifying", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-host-http-orchestrated-home-");
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx(0);
+    const cloneThrows = httpError(500);
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows,
+    });
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/flaky-mp",
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "network error",
+      error: cloneThrows,
+      cause: "HTTP Error: 500",
+    });
+    assert.deepStrictEqual(notifications, []);
+  });
+});
 
 test("D-76-09 orchestrated mode -- a gone repository returns the source-missing outcome without notifying", async () => {
   await withTmpScope(async ({ cwd }) => {
@@ -3676,14 +4256,197 @@ test("MURL-01 regression: github source is byte-identical -- Device Flow auth st
   });
 });
 
+test("GHB-02: a GitHub add under the override clones the canonical URL with the override-host stored credential", async (t) => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const { gitOps, state } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(
+      state.cloneCalls.map(({ url, auth }) => ({ url, auth })),
+      [
+        {
+          url: "https://github.com/anthropics/claude-plugins-official.git",
+          auth: { kind: "stored-credential", credentialOps, host: "mirror.example:8443" },
+        },
+      ],
+    );
+  });
+});
+
+test("GHB-03: a standalone GitHub add fails the command on an invalid base", async (t) => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const { ctx, run } = makeCtx(0);
+    const { gitOps, state } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        addMarketplace({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          rawSource: "anthropics/claude-plugins-official",
+          gitOps,
+        }),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
+    assert.deepStrictEqual(state.cloneCalls, []);
+    assert.equal(await pathExists(locations.stateJsonPath), false);
+  });
+});
+
+test("GHB-03: an orchestrated GitHub add rethrows an invalid base instead of returning unparseable", async (t) => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const { ctx, run } = makeCtx(0);
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        addMarketplace({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          rawSource: "anthropics/claude-plugins-official",
+          gitOps,
+          notifications: { mode: "orchestrated" },
+        }),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
+    assert.equal(await pathExists(locations.stateJsonPath), false);
+  });
+});
+
+test("GHB-01: a GitHub add failing under the override names the fetched URL on a failed child row", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-fetched-url-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example/git");
+    const { ctx, run, notifications } = makeCtx();
+    const { credOps: credentialOps } = createCredentialOps();
+    const cloneThrows = Object.assign(httpError(404), {
+      cause: new FetchedUrlCause(
+        "https://mirror.example/git/anthropics/claude-plugins-official.git",
+      ),
+    });
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows,
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n" +
+          "⊘ anthropics/claude-plugins-official [project] (failed)\n" +
+          "  ⊘ anthropics/claude-plugins-official (failed) {source missing}\n" +
+          "    cause: HTTP Error: 404 -> fetched https://mirror.example/git/anthropics/claude-plugins-official.git",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await pathExists(locations.stateJsonPath), false);
+  });
+});
+
+test("GHB-01: an orchestrated GitHub add failing under the override still classifies the clone failure", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-fetched-url-orchestrated-home-");
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example/git");
+    const { ctx, run } = makeCtx(0);
+    const { credOps: credentialOps } = createCredentialOps();
+    const cloneThrows = Object.assign(httpError(404), {
+      cause: new FetchedUrlCause(
+        "https://mirror.example/git/anthropics/claude-plugins-official.git",
+      ),
+    });
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      cloneThrows,
+    });
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+      credentialOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "source missing",
+      error: cloneThrows,
+      cause: "HTTP Error: 404",
+    });
+  });
+});
+
 test("D-79-03: a url add that 401s on a host with no Device Flow renders the bare (failed) {authentication required} row with NO cause line", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx, run, notifications } = makeCtx();
-    // D-79-03 (amended): marketplace add keeps its no-child-rows invariant
-    // (D-01/D-10), so the stored-credential cause line renders ONLY on the
-    // update path's cause-carrying child row -- the add row stays the bare
-    // closed-set token.
+    // D-79-03 (amended): a url add that the GitHub base override did not
+    // rewrite renders no child row (D-01/D-10, GHB-04), so the stored-credential
+    // cause line renders ONLY on the update path's cause-carrying child row --
+    // the add row stays the bare closed-set token.
     const { credOps: credentialOps } = createCredentialOps();
     const httpErr = Object.assign(new Error("HTTP 401 from clone"), {
       code: "HttpError",
@@ -3938,3 +4701,44 @@ test("MURL-09 / D-2-02: an add against a suffix-only port sends the verbatim URL
     assert.equal(state.cloneCalls[0]?.url, "https://gitlab.example.com/team/git-only-mp");
   });
 });
+
+for (const { rawSource, host } of [
+  { rawSource: "anthropics/claude-plugins-official", host: "github.com" },
+  { rawSource: "https://gitlab.com/team/mp", host: "gitlab.com" },
+]) {
+  test(`FTCH-06 / D-79-02: an add of ${rawSource} answers its auth challenge from the command's memo`, async () => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const { ctx, run } = makeCtx(0);
+      const { credOps: credentialOps } = createCredentialOps();
+      const { http: deviceFlowHttp, state: deviceFlowState } = createDeviceFlowHttp();
+      const { gitOps, state } = createGitOps({
+        fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      });
+      const remembered: AuthAttemptResult = { ok: false, reason: "declined earlier" };
+      const snapshot: ExtensionState = { schemaVersion: 2, marketplaces: {} };
+
+      // act
+      await addMarketplaceToState({
+        state: snapshot,
+        locations,
+        source: parseAddableSource(rawSource),
+        cwd,
+        ctx,
+        run,
+        removalOps: createRemovalOps(),
+        credentialOps,
+        deviceFlowHttp,
+        gitOps,
+        authMemo: new Map([[host, remembered]]),
+      });
+      const auth = state.cloneCalls[0]?.auth;
+      assert.ok(auth?.kind === "device-flow");
+      const attempt = await auth.onAuthRequired();
+
+      // assert
+      assert.equal(attempt, remembered);
+      assert.deepStrictEqual(deviceFlowState.requestCodeCalls, []);
+    });
+  });
+}

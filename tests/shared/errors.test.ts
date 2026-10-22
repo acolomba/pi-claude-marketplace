@@ -13,25 +13,39 @@ import {
   CrossOriginChallengeError,
   CrossPluginConflictError,
   DependencyCascadeError,
+  DependencyDeclarationsUnreadableError,
   DeviceFlowUnavailableError,
   errorMessage,
   errorWithCleanupFailures,
   errorWithManualRecovery,
+  FetchedUrlCause,
   findManualRecoveryError,
   formatCauseChain,
+  hasFetchedUrlCause,
+  InvalidGitHubBaseUrlError,
+  InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
   isErrnoException,
+  LayerConfigUnreadableError,
   ManualRecoveryError,
   manualRecoveryLeaks,
+  MarketplaceBaselineUnreadableError,
+  MarketplaceInBaseLayerOnlyError,
+  MarketplaceInLocalLayerOnlyError,
   MarketplaceDuplicateNameError,
   MarketplaceNotFoundError,
+  MarketplaceSourceUndeclarableError,
   MarketplaceUpdateError,
+  PluginInBaseLayerOnlyError,
+  PluginInLocalLayerOnlyError,
   PluginShapeError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
+  rethrowInvalidGitHubBaseUrl,
   serializeCauseChain,
   StaleSourceCloneError,
   StateLockHeldError,
+  StoredCredentialRejectedError,
   TooManyRedirectsError,
   UnreadableSourceCloneError,
   UnremovableLeftoverCloneError,
@@ -836,6 +850,213 @@ describe("MarketplaceNotFoundError", () => {
   });
 });
 
+describe("MarketplaceInLocalLayerOnlyError", () => {
+  test("names the marketplace and suggests --local in its message", () => {
+    // arrange
+    const marketplace = "mp";
+
+    // act
+    const error = new MarketplaceInLocalLayerOnlyError(marketplace);
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, marketplace: error.marketplace, message: error.message },
+      {
+        name: "MarketplaceInLocalLayerOnlyError",
+        marketplace: "mp",
+        message:
+          "The marketplace mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
+      },
+    );
+  });
+});
+
+describe("MarketplaceInBaseLayerOnlyError", () => {
+  test("names the marketplace and suggests dropping --local in its message", () => {
+    // arrange
+    const marketplace = "mp";
+
+    // act
+    const error = new MarketplaceInBaseLayerOnlyError(marketplace);
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, marketplace: error.marketplace, message: error.message },
+      {
+        name: "MarketplaceInBaseLayerOnlyError",
+        marketplace: "mp",
+        message:
+          "The marketplace mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
+      },
+    );
+  });
+});
+
+describe("DependencyDeclarationsUnreadableError", () => {
+  test("names the plugin whose dependencies it could not read and keeps the cause line as its message", () => {
+    // arrange
+    const message = "cannot read the dependencies of app@tools: not declared by its marketplace";
+
+    // act
+    const error = new DependencyDeclarationsUnreadableError("app@tools", message);
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, declarer: error.declarer, message: error.message, cause: error.cause },
+      {
+        name: "DependencyDeclarationsUnreadableError",
+        declarer: "app@tools",
+        message: "cannot read the dependencies of app@tools: not declared by its marketplace",
+        cause: undefined,
+      },
+    );
+  });
+});
+
+describe("LayerConfigUnreadableError", () => {
+  test("names the layer config by its basename and is an invalid manifest", () => {
+    // arrange
+    const basename = "claude-plugins.local.json";
+
+    // act
+    const error = new LayerConfigUnreadableError(basename);
+
+    // assert
+    assert.ok(error instanceof InvalidMarketplaceManifestError);
+    assert.deepStrictEqual(
+      { name: error.name, basename: error.basename, message: error.message },
+      {
+        name: "LayerConfigUnreadableError",
+        basename: "claude-plugins.local.json",
+        message: 'Config file "claude-plugins.local.json" failed schema validation.',
+      },
+    );
+  });
+});
+
+describe("MarketplaceSourceUndeclarableError", () => {
+  for (const { layer, message } of [
+    {
+      layer: "base",
+      message:
+        "The scope records the marketplace mp with no source that the base config (claude-plugins.json) can declare. Declare the marketplace in the base config, then run the command again.",
+    },
+    {
+      layer: "local",
+      message:
+        "The scope records the marketplace mp with no source that the local config (claude-plugins.local.json) can declare. Declare the marketplace in the local config, then run the command again.",
+    },
+  ] as const) {
+    test(`names the marketplace and the ${layer} config and asks for a declaration in its message`, () => {
+      // arrange
+      const marketplace = "mp";
+
+      // act
+      const error = new MarketplaceSourceUndeclarableError(marketplace, layer);
+
+      // assert
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          marketplace: error.marketplace,
+          layer: error.layer,
+          message: error.message,
+        },
+        {
+          name: "MarketplaceSourceUndeclarableError",
+          marketplace: "mp",
+          layer,
+          message,
+        },
+      );
+    });
+  }
+});
+
+describe("PluginInLocalLayerOnlyError", () => {
+  test("names the plugin and the local config and suggests --local in its message", () => {
+    // arrange
+    const plugin = "demo";
+    const marketplace = "mp";
+
+    // act
+    const error = new PluginInLocalLayerOnlyError(plugin, marketplace);
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        plugin: error.plugin,
+        marketplace: error.marketplace,
+        message: error.message,
+      },
+      {
+        name: "PluginInLocalLayerOnlyError",
+        plugin: "demo",
+        marketplace: "mp",
+        message:
+          "The plugin demo@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
+      },
+    );
+  });
+});
+
+describe("PluginInBaseLayerOnlyError", () => {
+  test("names the plugin and the base config and suggests dropping --local in its message", () => {
+    // arrange
+    const plugin = "demo";
+    const marketplace = "mp";
+
+    // act
+    const error = new PluginInBaseLayerOnlyError(plugin, marketplace);
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        plugin: error.plugin,
+        marketplace: error.marketplace,
+        message: error.message,
+      },
+      {
+        name: "PluginInBaseLayerOnlyError",
+        plugin: "demo",
+        marketplace: "mp",
+        message:
+          "The plugin demo@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
+      },
+    );
+  });
+});
+
+describe("InstallMarketplaceAddError", () => {
+  test("carries the add's reason and the message it was given, with no cause", () => {
+    // arrange
+    const reason = "stale clone";
+
+    // act
+    const error = new InstallMarketplaceAddError(reason, "stale source clone at mp");
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, reason: error.reason, message: error.message, cause: error.cause },
+      {
+        name: "InstallMarketplaceAddError",
+        reason: "stale clone",
+        message: "stale source clone at mp",
+        cause: undefined,
+      },
+    );
+  });
+});
+
 describe("MarketplaceUpdateError", () => {
   test("exposes the complete update failure with its cause and retry hint", () => {
     // arrange
@@ -891,6 +1112,28 @@ describe("MarketplaceUpdateError", () => {
   });
 });
 
+describe("MarketplaceBaselineUnreadableError", () => {
+  test("names the marketplace whose saved manifest is unreadable and keeps the parse cause", () => {
+    // arrange
+    const cause = new SyntaxError("Unexpected end of JSON input");
+
+    // act
+    const error = new MarketplaceBaselineUnreadableError("tools", { cause });
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, mpName: error.mpName, cause: error.cause },
+      {
+        name: "MarketplaceBaselineUnreadableError",
+        message: 'The saved manifest of marketplace "tools" in state.json is unreadable.',
+        mpName: "tools",
+        cause,
+      },
+    );
+  });
+});
+
 describe("CrossOriginChallengeError", () => {
   test("names the challenging origin and why no credential is sent", () => {
     // arrange
@@ -908,6 +1151,29 @@ describe("CrossOriginChallengeError", () => {
         name: "CrossOriginChallengeError",
         message:
           "redirected request to https://sso.example.com asked for credentials; a credential is not sent after a redirect to another origin",
+        cause: undefined,
+      },
+    );
+  });
+});
+
+describe("StoredCredentialRejectedError", () => {
+  test("names the host that rejected the stored credential", () => {
+    // arrange
+    const host = "git.example.com:8443";
+
+    // act
+    const error = new StoredCredentialRejectedError(host);
+
+    // assert
+    assert.ok(error instanceof StoredCredentialRejectedError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, host: error.host, cause: error.cause },
+      {
+        name: "StoredCredentialRejectedError",
+        message: "git.example.com:8443 rejected the stored credential",
+        host,
         cause: undefined,
       },
     );
@@ -934,6 +1200,103 @@ describe("TooManyRedirectsError", () => {
       expectedError,
     );
   });
+});
+
+describe("FetchedUrlCause", () => {
+  test("names the URL actually fetched", () => {
+    // arrange
+    const url = "https://mirror.example/git/owner/repo.git";
+
+    // act
+    const cause = new FetchedUrlCause(url);
+
+    // assert
+    assert.ok(cause instanceof Error);
+    assert.deepStrictEqual(
+      { name: cause.name, message: cause.message, url: cause.url, cause: cause.cause },
+      {
+        name: "FetchedUrlCause",
+        message: "fetched https://mirror.example/git/owner/repo.git",
+        url,
+        cause: undefined,
+      },
+    );
+  });
+});
+
+describe("hasFetchedUrlCause", () => {
+  for (const { title, err, expected } of [
+    {
+      title: "a fetched-URL cause under a wrapper",
+      err: new Error("outer", {
+        cause: new Error("HTTP Error: 404", {
+          cause: new FetchedUrlCause("https://mirror.example/o/r.git"),
+        }),
+      }),
+      expected: true,
+    },
+    {
+      title: "a chain whose cause only reads like a fetched URL",
+      err: new Error("HTTP Error: 404", {
+        cause: new Error("fetched https://mirror.example/o/r.git"),
+      }),
+      expected: false,
+    },
+    { title: "a thrown string", err: "fetched https://mirror.example/o/r.git", expected: false },
+  ]) {
+    test(`answers ${expected} for ${title}`, () => {
+      // act
+      const found = hasFetchedUrlCause(err);
+
+      // assert
+      assert.strictEqual(found, expected);
+    });
+  }
+});
+
+describe("InvalidGitHubBaseUrlError", () => {
+  for (const { problem, message } of [
+    {
+      problem: "not-a-url",
+      message: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is not a valid URL.",
+    },
+    {
+      problem: "scheme",
+      message: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme.",
+    },
+    {
+      problem: "userinfo",
+      message: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must not contain a user name or password.",
+    },
+    {
+      problem: "query",
+      message: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must not contain a query.",
+    },
+    {
+      problem: "fragment",
+      message: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must not contain a fragment.",
+    },
+  ] as const) {
+    test(`names the variable and the ${problem} rule`, () => {
+      // arrange
+      const variable = "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL";
+
+      // act
+      const error = new InvalidGitHubBaseUrlError(variable, problem);
+
+      // assert
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        {
+          name: error.name,
+          variable: error.variable,
+          problem: error.problem,
+          message: error.message,
+        },
+        { name: "InvalidGitHubBaseUrlError", variable, problem, message },
+      );
+    });
+  }
 });
 
 describe("InvalidMarketplaceManifestError", () => {
@@ -1631,6 +1994,69 @@ describe("findManualRecoveryError", () => {
 
     // assert
     assert.strictEqual(found, undefined);
+  });
+});
+
+describe("rethrowInvalidGitHubBaseUrl", () => {
+  test("returns for an unrelated error", () => {
+    // arrange
+    const error = new Error("outer", { cause: new Error("inner") });
+
+    // act & assert
+    assert.doesNotThrow(() => {
+      rethrowInvalidGitHubBaseUrl(error);
+    });
+  });
+
+  test("returns for a thrown string", () => {
+    // arrange
+    const thrown = "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme.";
+
+    // act & assert
+    assert.doesNotThrow(() => {
+      rethrowInvalidGitHubBaseUrl(thrown);
+    });
+  });
+
+  test("rethrows the invalid base error itself", () => {
+    // arrange
+    const invalid = new InvalidGitHubBaseUrlError(
+      "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+      "scheme",
+    );
+
+    // act & assert
+    assert.throws(
+      () => {
+        rethrowInvalidGitHubBaseUrl(invalid);
+      },
+      (error: unknown) => {
+        assert.strictEqual(error, invalid);
+        return true;
+      },
+    );
+  });
+
+  test("rethrows the invalid base error from under a marketplace update wrapper", () => {
+    // arrange
+    const invalid = new InvalidGitHubBaseUrlError(
+      "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+      "scheme",
+    );
+    const wrapped = new MarketplaceUpdateError('Failed to update marketplace "mp".', {
+      cause: invalid,
+    });
+
+    // act & assert
+    assert.throws(
+      () => {
+        rethrowInvalidGitHubBaseUrl(wrapped);
+      },
+      (error: unknown) => {
+        assert.strictEqual(error, invalid);
+        return true;
+      },
+    );
   });
 });
 

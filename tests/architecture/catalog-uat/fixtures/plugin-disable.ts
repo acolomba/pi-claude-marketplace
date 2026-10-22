@@ -7,12 +7,12 @@ export const PLUGIN_DISABLE_FIXTURES: FixtureMap = {
   "/claude:plugin disable <plugin>@<marketplace>": {
     "disable-fresh": {
       pi: piWithBothLoaded(),
-      // UAT-03: the fresh-disable
-      // row carries the closed-set `(disabled)` token -- same glyph + token
-      // as the disabled-inventory row, version slot kept. RLD-05 / D-07: the
-      // reload-hint fires via the row's `needsReload: true` stamp (RLD-02
-      // OR-reduce), not a cascade kind; list/info inventory `disabled` rows
-      // stamp `needsReload: false` and stay hint-free.
+      // UAT-03: the fresh-disable row carries the closed-set `(disabled)` token,
+      // with the same glyph and token as the disabled-inventory row and the
+      // version slot kept. RLD-05 / D-07: the reload hint fires via the row's
+      // `needsReload: true` stamp (RLD-02 OR-reduce), not a cascade kind;
+      // list/info inventory `disabled` rows stamp `needsReload: false` and stay
+      // hint-free.
       message: {
         marketplaces: [
           {
@@ -111,6 +111,31 @@ export const PLUGIN_DISABLE_FIXTURES: FixtureMap = {
                 name: "shared-lib",
                 reasons: ["dependents remain"],
                 cause: new Error("Disable helper@official first, then shared-lib@official."),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LAYER-04: the mirror of the enable refusal, for a plugin the local
+    // layer enables.
+    "disable-enabled-in-local-layer": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "claude-plugins-official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "foo-plugin",
+                reasons: ["enabled in local layer"],
+                cause: new Error("Run the command again with --local to disable it."),
               },
             ],
           },

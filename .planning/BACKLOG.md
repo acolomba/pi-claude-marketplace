@@ -3935,3 +3935,80 @@ Scope when picked up: decide which verdict an invalid root name should get,
 check what Claude Code's `/plugin install` prints for such a name first, then
 either run the resolver before the closure root check or give the root check
 its own cause, and update the catalog and the pinned case together.
+
+## MKTPAR-01: three Claude Code marketplace behaviors are missing
+
+Found by the marketplace-features research (2026-10-15,
+`.planning/research/FEATURES.md`). Claude Code's `/plugin marketplace`:
+
+- refuses reserved official marketplace names; this extension accepts them;
+- adds a marketplace from a plain https URL to a hosted `marketplace.json`;
+  here that URL parses as a git `url` source and the clone fails;
+- accepts `market` as an alias of `marketplace`; here it is
+  `Unknown subcommand`.
+
+The marketplace-features milestone keeps them out of scope. Scope when picked
+up: confirm each against the upstream docs and binary first, then implement it
+with a behavioral scenario under `features/marketplace/`.
+
+## GITERR-01: a git host's HTTP answer is classified per caller, not in one place
+
+Found during marketplace-features (2026-10-20), after quick task 261019-fvd
+(`d430aca1`) made `marketplace add` report a host's HTTP answer as
+`{network error}`. That fix moved the status helpers into
+`shared/git-failure-classifiers.ts` (`hostHttpStatus`, `hostHttpFailureFrame`)
+and added `classifyGitSourceAccessFailure`: errno -> `network unreachable`,
+401/403 -> `authentication required`, 404/410 -> `source missing`, any other
+status -> `network error`. Each operation still composes these pieces itself:
+
+| Remote git access | Classifier | Host 5xx reports |
+|---|---|---|
+| `marketplace add` | `classifyGitSourceAccessFailure` | `{network error}` + status/URL cause frame |
+| `marketplace update` (and the autoupdate cascade) | `classifyGitTransportFailure` + `hostHttpStatus` in `update.ts` | `{network error}` + frame (404 is `network error` here by design, UPD-11) |
+| git-source plugin `install` (`install.messaging.ts`) | only extracts `authentication required` | the generic cause chain |
+| plugin `update` (`update-flow.ts`, `update-preflight.ts`), `fetch`, `info`, the dependency tag probe, `marketplace/shared.ts` | `classifyGitTransportFailure` only | not `{network error}` |
+
+Scope when picked up: research Claude Code's behavior for plugin git-source
+failures first (claude-code-compat-research), then route every remote git
+access through one classification entry point with an explicit per-operation
+404/410 rule, so plugin install/update/fetch/info report a host's HTTP answer
+the way marketplace add and update do. Paired unit tests at 100% direct
+coverage, the output-catalog entries, and a CHANGELOG line. Related:
+`GAUTH-01` (the auth-hint cause line has the same one-call-site-at-a-time
+shape).
+
+## ROWID-01: marketplace-level failure rows carry a plugin-shaped JSON id
+
+Found during marketplace-features (2026-10-21), when D-19 fixed the id of a
+failed git `marketplace add` child row. `marketplaceFailureRows` in
+`orchestrators/marketplace/shared.ts` names its synthetic failed child row
+after the marketplace, so the wire id reads `<mp>@<mp>` (`tools@tools`) on the
+failure rows of `marketplace remove`, `update`, `autoupdate`, and `info`, as if
+a plugin of that name existed. Scenarios in `remove.feature`, `update.feature`,
+`autoupdate.feature`, `info.feature`, and `file-source-update.feature` pin it.
+
+What exists: a failed `marketplace add` child row sets `marketplaceSubject` on
+its `PluginFailedMessage`, and `rowId` in `shared/notification-json.ts` then
+uses the row name alone, so its id is the bare source (marketplace-features,
+D-19). The user kept the other rows out of D-19's scope.
+
+Scope when picked up: set the same marker in `marketplaceFailureRows`, change
+the pinned cells and any unit case that pins `<mp>@<mp>`, update
+`docs/json-output.md`, and add a CHANGELOG line, because it changes the
+published payload. WINDOWS entry 98 was waived to this entry.
+
+## SHORTREF-01: the `owner/repo@ref` shorthand splits at the last `@`, upstream at the first
+
+Found during marketplace-features (2026-10-21), in the review of the `#ref`
+shorthand fix (D-12, review finding IN-04). Pi's `parseShorthandSourceForm`
+in `domain/source.ts` splits `owner/repo@ref` at the LAST `@` (D-76-04).
+Claude Code 2.1.296 parses the shorthand with `/^([^#@]+)(?:[#@](.+))?$/`,
+which splits at the FIRST `@` or `#`. So `acme/tools@a@b` is repo `tools`,
+ref `a@b` upstream, but repo `tools@a`, ref `b` in Pi. Only sources with two
+or more `@` differ. The user chose to record it as a follow-up rather than
+reverse D-76-04 inside the suite close.
+
+Scope when picked up: decide parity (switch to the first-`@` split and retire
+D-76-04) or record D-76-04 as a divergence with an ID. A switch is test-first
+in `tests/domain/source.test.ts`, keeps the `#` arm's rule (D-12, D-MF-07),
+and adds a CHANGELOG line, because it changes which sources parse.

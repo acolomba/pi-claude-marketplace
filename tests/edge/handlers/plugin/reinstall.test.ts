@@ -2,8 +2,8 @@
 //
 // This shim accepts zero or one positional and maps it onto the three target
 // forms the reinstall workflow takes: no positional is the all form, a leading
-// separator followed by a name is the marketplace form, and anything else is
-// split into a plugin reference. RINST-01 / D-67-03 make the overwrite of
+// separator is the marketplace form, and anything else is split into a plugin
+// reference. RINST-01 / D-67-03 make the overwrite of
 // collisions and foreign content unconditional, so there is no command-local
 // overwrite flag; passing one fails as an unknown flag.
 //
@@ -28,25 +28,26 @@
 //     too-many-arguments sentence. There is no arity below zero, so only the
 //     surplus half of the arity obligation has a target here;
 //   * the scope-target flag is ACCEPTED. It reaches the shared scanner, which
-//     consumes it and strips it from the residual, and it discriminates: the
-//     write-back lands in the override config layer instead of the base one;
+//     consumes it and strips it from the residual, and it discriminates: a form
+//     naming no plugin reinstalls only the plugins the local layer declares;
 //   * a scope flag and the scope-target flag driven TOGETHER are ACCEPTED and
-//     both honoured -- the user scope's override layer takes the write-back --
-//     so the inherited "mutually exclusive selectors are rejected" claim has no
-//     target on this module;
-//   * a lone separator is NOT the marketplace form. That branch demands a length
-//     beyond the separator, so a bare separator falls through to the reference
-//     split and takes the malformed-reference sentence.
+//     both honoured -- only the plugins the user scope's local layer declares
+//     are reinstalled -- so the inherited "mutually exclusive selectors are
+//     rejected" claim has no target on this module;
+//   * a lone separator, or one followed only by blanks, is the marketplace form
+//     with an empty name, so it is rejected with the empty-marketplace-name
+//     sentence before any workflow call (USE-07).
 //
 // D-116-05 (O3) places this handler in Group C: `reinstallPlugins` is reached by
 // direct import with no injection point, so a delegating case cannot state an
 // exact argument list against it. That exact-argument gap is this owner's
 // recorded scope. Delegation is observed instead as the minimal on-disk effect a
 // reinstall leaves: which skill directories each scope root carries afterwards,
-// and which config layer the write-back landed in. Each seeded plugin owns a
-// DIFFERENTLY NAMED skill directory and each scope a different marketplace, so a
-// command that reached the wrong form, the wrong marketplace, or the wrong scope
-// materialises the wrong name rather than merely materialising nothing.
+// and each layer config, which no reinstall writes (LAYER-04). Each seeded plugin
+// owns a DIFFERENTLY NAMED skill directory and each scope a different
+// marketplace, so a command that reached the wrong form, the wrong marketplace,
+// or the wrong scope materialises the wrong name rather than merely
+// materialising nothing.
 //
 // The negative half of D-116-06 is proven in full. A rejecting case sizes the
 // boundary at one emission and NO stated working directory, and also reads back
@@ -342,17 +343,7 @@ const MARKETPLACE_FORM_MESSAGE =
 const PLUGIN_FORM_MESSAGE =
   "● mp [project]\n  ● alpha v1.0.0 (reinstalled)\n\n/reload to pick up changes";
 
-const ALL_PLUGINS_DECLARED = {
-  schemaVersion: 1,
-  plugins: { "alpha@mp": {}, "beta@mp": {}, "gamma@other": {} },
-};
-
 const USER_PLUGIN_DECLARED = { schemaVersion: 1, plugins: { "delta@umkt": {} } };
-
-const MARKETPLACE_FORM_DECLARED = {
-  schemaVersion: 1,
-  plugins: { "alpha@mp": {}, "beta@mp": {} },
-};
 
 // ---------------------------------------------------------------------------
 // The three target forms. Each narrower form must leave the names the wider one
@@ -377,9 +368,9 @@ test("re-materialises every installed plugin in both scopes when no positional i
   assert.deepStrictEqual(await readFootprint(workspace), {
     projectSkills: ["alpha-tool", "beta-tool", "gamma-tool"],
     userSkills: ["delta-tool"],
-    projectBase: ALL_PLUGINS_DECLARED,
+    projectBase: undefined,
     projectLocal: undefined,
-    userBase: USER_PLUGIN_DECLARED,
+    userBase: undefined,
     userLocal: undefined,
   });
   assert.strictEqual(workspace.transportCalls(), 0);
@@ -404,7 +395,7 @@ test("re-materialises only the named marketplace when a bare marketplace referen
   assert.deepStrictEqual(await readFootprint(workspace), {
     projectSkills: ["alpha-tool", "beta-tool"],
     userSkills: [],
-    projectBase: MARKETPLACE_FORM_DECLARED,
+    projectBase: undefined,
     projectLocal: undefined,
     userBase: undefined,
     userLocal: undefined,
@@ -438,7 +429,7 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
   assert.deepStrictEqual(await readFootprint(workspace), {
     projectSkills: ["alpha-tool"],
     userSkills: [],
-    projectBase: { schemaVersion: 1, plugins: { "alpha@mp": {} } },
+    projectBase: undefined,
     projectLocal: undefined,
     userBase: undefined,
     userLocal: undefined,
@@ -471,7 +462,7 @@ for (const { expectedFootprint, expectedMessage, scopeValue } of [
     expectedFootprint: {
       projectSkills: ["alpha-tool", "beta-tool", "gamma-tool"],
       userSkills: [],
-      projectBase: ALL_PLUGINS_DECLARED,
+      projectBase: undefined,
       projectLocal: undefined,
       userBase: undefined,
       userLocal: undefined,
@@ -485,7 +476,7 @@ for (const { expectedFootprint, expectedMessage, scopeValue } of [
       userSkills: ["delta-tool"],
       projectBase: undefined,
       projectLocal: undefined,
-      userBase: USER_PLUGIN_DECLARED,
+      userBase: undefined,
       userLocal: undefined,
     },
   },
@@ -537,7 +528,7 @@ for (const { args, placement } of [
     assert.deepStrictEqual(await readFootprint(workspace), {
       projectSkills: ["alpha-tool", "beta-tool"],
       userSkills: [],
-      projectBase: MARKETPLACE_FORM_DECLARED,
+      projectBase: undefined,
       projectLocal: undefined,
       userBase: undefined,
       userLocal: undefined,
@@ -549,19 +540,31 @@ for (const { args, placement } of [
 
 // ---------------------------------------------------------------------------
 // The scope-target flag. It is ACCEPTED here, and it discriminates: the same
-// reference without it declares the write-back in the base layer above, and with
-// it in the override layer. Both placements are driven because the shared
-// scanner promises position independence (WR-02).
+// reference without it reinstalls both plugins of the marketplace above, and
+// with it only the one the local layer declares (LAYER-04). Both placements are
+// driven because the shared scanner promises position independence (WR-02).
 // ---------------------------------------------------------------------------
+
+const LOCAL_ALPHA_DECLARED = { schemaVersion: 1, plugins: { "alpha@mp": {} } };
+
+const LOCAL_ALPHA_MESSAGE =
+  "● mp [project]\n" +
+  "  ● alpha v1.0.0 (reinstalled)\n\n" +
+  "Plugin reinstall: 1 success\n\n" +
+  "/reload to pick up changes";
 
 for (const { args, placement } of [
   { args: "--local @mp", placement: "before the positional" },
   { args: "@mp --local", placement: "after the positional" },
 ]) {
-  test(`declares the write-back in the override layer when the scope-target flag appears ${placement} (WB-01)`, async (t) => {
+  test(`reinstalls only the plugins the local layer declares when the scope-target flag appears ${placement} (LAYER-04)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, "scope-target-position");
     await seedBothScopes(workspace);
+    await writeUnder(
+      path.join(workspace.projectRoot, "claude-plugins.local.json"),
+      JSON.stringify(LOCAL_ALPHA_DECLARED),
+    );
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
@@ -572,12 +575,12 @@ for (const { args, placement } of [
     await reinstallHandler(args, ctx, runWithNothingLoaded());
 
     // assert
-    assert.deepStrictEqual(notifications, [{ message: MARKETPLACE_FORM_MESSAGE }]);
+    assert.deepStrictEqual(notifications, [{ message: LOCAL_ALPHA_MESSAGE }]);
     assert.deepStrictEqual(await readFootprint(workspace), {
-      projectSkills: ["alpha-tool", "beta-tool"],
+      projectSkills: ["alpha-tool"],
       userSkills: [],
       projectBase: undefined,
-      projectLocal: MARKETPLACE_FORM_DECLARED,
+      projectLocal: LOCAL_ALPHA_DECLARED,
       userBase: undefined,
       userLocal: undefined,
     });
@@ -590,6 +593,15 @@ test("honours a scope flag and the scope-target flag driven together (WB-02)", a
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
+  await seedMarketplace(workspace, "user", "extra", ["epsilon"]);
+  await writeUnder(
+    path.join(workspace.projectRoot, "claude-plugins.local.json"),
+    JSON.stringify(LOCAL_ALPHA_DECLARED),
+  );
+  await writeUnder(
+    path.join(workspace.userRoot, "claude-plugins.local.json"),
+    JSON.stringify(USER_PLUGIN_DECLARED),
+  );
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
@@ -605,7 +617,7 @@ test("honours a scope flag and the scope-target flag driven together (WB-02)", a
     projectSkills: [],
     userSkills: ["delta-tool"],
     projectBase: undefined,
-    projectLocal: undefined,
+    projectLocal: LOCAL_ALPHA_DECLARED,
     userBase: undefined,
     userLocal: USER_PLUGIN_DECLARED,
   });
@@ -707,17 +719,38 @@ for (const { args, label, summary } of [
 }
 
 // ---------------------------------------------------------------------------
-// Malformed references. The lone separator belongs here rather than with the
-// marketplace form: that branch demands a length beyond the separator, so a bare
-// separator falls through to the reference split.
+// Malformed references. A lone separator, or one followed only by blanks, is
+// the marketplace form with an empty name, so it belongs here too: it names the
+// empty marketplace name instead of reaching the workflow (USE-07).
 // ---------------------------------------------------------------------------
 
-for (const { label, reference, summary } of [
-  { label: "no-separator", reference: "noseparator", summary: "carries no separator" },
-  { label: "trailing-separator", reference: "alpha@", summary: "ends at the separator" },
-  { label: "lone-separator", reference: "@", summary: "is the separator alone" },
+for (const { expectedSentence, label, reference, summary } of [
+  {
+    expectedSentence: 'Invalid <plugin>@<marketplace> ref: "noseparator".',
+    label: "no-separator",
+    reference: "noseparator",
+    summary: "carries no separator",
+  },
+  {
+    expectedSentence: 'Invalid <plugin>@<marketplace> ref: "alpha@".',
+    label: "trailing-separator",
+    reference: "alpha@",
+    summary: "ends at the separator",
+  },
+  {
+    expectedSentence: "Marketplace name must not be empty.",
+    label: "lone-separator",
+    reference: "@",
+    summary: "is the separator alone",
+  },
+  {
+    expectedSentence: "Marketplace name must not be empty.",
+    label: "blank-marketplace",
+    reference: "'@   '",
+    summary: "is the separator followed only by blanks",
+  },
 ]) {
-  test(`rejects a reference that ${summary} and re-materialises nothing (MSG-NC-2)`, async (t) => {
+  test(`rejects a reference that ${summary} and re-materialises nothing (MSG-NC-2, USE-07)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
@@ -729,10 +762,7 @@ for (const { label, reference, summary } of [
 
     // assert
     assert.deepStrictEqual(notifications, [
-      {
-        message: `Invalid <plugin>@<marketplace> ref: "${reference}".\n\n${REINSTALL_USAGE}`,
-        severity: "error",
-      },
+      { message: `${expectedSentence}\n\n${REINSTALL_USAGE}`, severity: "error" },
     ]);
     assert.deepStrictEqual(await readFootprint(workspace), NOTHING_REINSTALLED);
     assert.strictEqual(workspace.transportCalls(), 0);
@@ -896,10 +926,7 @@ for (const args of ['""', "''", '--local ""', "'' --local"]) {
 
     // assert
     assert.deepStrictEqual(notifications, [
-      {
-        message: `Invalid <plugin>@<marketplace> ref: "".\n\n${REINSTALL_USAGE}`,
-        severity: "error",
-      },
+      { message: `Plugin name must not be empty.\n\n${REINSTALL_USAGE}`, severity: "error" },
     ]);
     assert.deepStrictEqual(await readFootprint(workspace), NOTHING_REINSTALLED);
     assert.strictEqual(workspace.transportCalls(), 0);

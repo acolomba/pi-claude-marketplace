@@ -21,6 +21,7 @@ import {
   type PluginNotificationMessage,
   type PluginPathSkippedSurface,
   type PluginSkippedMessage,
+  type PluginUninstallSkippedMessage,
   type PluginUpdateSkippedMessage,
   type PluginStatus,
   type Reason,
@@ -146,6 +147,17 @@ const EXPECTED_REASONS = [
   "requires pi-dynamic-workflows",
   "components now supported",
   "unsupported mcp",
+  "marketplace in local layer only",
+  "marketplace in base layer only",
+  "plugin in local layer only",
+  "plugin in base layer only",
+  "already installed in base layer",
+  "already installed in local layer",
+  "still installed in base layer",
+  "still installed in local layer",
+  "disabled in local layer",
+  "enabled in local layer",
+  "network error",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [
@@ -382,9 +394,9 @@ void ({
   // @ts-expect-error skipped messages require reasons
 } satisfies PluginSkippedMessage);
 
-// UPDT-02 / D-10-11: the cause trailer is update's alone. The base skipped
-// row has no slot for one, so no other producer can grow a trailer on a
-// byte-frozen row.
+// UPDT-02 / D-10-11 / LAYER-05: only the update and uninstall skipped rows
+// carry a cause trailer. The base skipped row has no slot for one, so no other
+// producer can grow a trailer on a byte-frozen row.
 const updateSkippedMessage = {
   status: "skipped",
   name: "alpha",
@@ -392,6 +404,14 @@ const updateSkippedMessage = {
   cause: new Error('the declared ranges admit no version in common -- required by "beta@mp"'),
 } satisfies PluginUpdateSkippedMessage;
 void updateSkippedMessage;
+
+const uninstallSkippedMessage = {
+  status: "skipped",
+  name: "alpha",
+  reasons: ["still installed in base layer"],
+  cause: new Error("Run the command again without --local to uninstall it."),
+} satisfies PluginUninstallSkippedMessage;
+void uninstallSkippedMessage;
 
 void ({
   status: "skipped",

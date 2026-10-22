@@ -8,7 +8,8 @@
 // to --scope and one optional positional. The shim:
 //   1. parses raw args via `parseArgs` to validate --scope and tokenize,
 //   2. scans `positional` to extract the three boolean flags, leaving
-//      whatever non-flag positionals remain (must be 0 or 1),
+//      whatever non-flag positionals remain (must be 0 or 1, and not empty
+//      or blank),
 //   3. delegates to `listPlugins` with the parsed bag.
 
 import { listPlugins } from "../../../orchestrators/plugin/list-flow.ts";
@@ -57,6 +58,14 @@ export function makeListHandler(): SubcommandHandler {
 
     if (nonFlagPositionals.length > 1) {
       notifyUsageError(ctx, run, { message: "Too many arguments.", usage: USAGE });
+      return;
+    }
+
+    if (nonFlagPositionals[0]?.trim() === "") {
+      notifyUsageError(ctx, run, {
+        message: "Marketplace name must not be empty.",
+        usage: USAGE,
+      });
       return;
     }
 

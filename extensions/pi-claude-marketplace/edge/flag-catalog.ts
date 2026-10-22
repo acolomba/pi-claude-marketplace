@@ -75,18 +75,18 @@ export type CatalogVerb =
   | "marketplace noautoupdate";
 
 // The write-target flag, shared by install/update/uninstall/reinstall/enable/
-// disable. It selects the PHYSICAL config file within a scope
-// (`claude-plugins.local.json` instead of the shared `claude-plugins.json`), so
-// a change can stay out of a git-tracked config. It is orthogonal to `--scope`,
-// which selects the scope's state tree rather than the file inside it, and it is
-// valid at both scopes.
+// disable. It selects the PHYSICAL config file within a scope: the local
+// config `claude-plugins.local.json` instead of the base config
+// `claude-plugins.json`, so a change can stay out of a git-tracked config. It
+// is orthogonal to `--scope`, which selects the scope's state tree rather than
+// the file inside it, and it is valid at both scopes.
 //
 // Completion offers it because every one of those six verbs documents
 // `[--local]` in its `USAGE` string.
 const WRITE_TARGET_FLAG_ENTRY: FlagEntry = {
   name: "--local",
   description:
-    "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json",
+    "Write to the local config (claude-plugins.local.json), not the base config (claude-plugins.json)",
   parse: true,
   complete: true,
 };

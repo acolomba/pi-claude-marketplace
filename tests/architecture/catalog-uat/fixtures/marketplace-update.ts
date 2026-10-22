@@ -318,6 +318,39 @@ export const MARKETPLACE_UPDATE_FIXTURES: FixtureMap = {
       },
     },
 
+    // UPD-11: the git host answered the refresh with an HTTP status other than
+    // 401/403, so the synthetic child carries `{network error}`. The first frame
+    // of the cause line names the status and the URL the refresh fetched.
+    "update-host-http-error": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Marketplace update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            status: "failed",
+            severity: "error",
+            needsReload: false,
+            plugins: [
+              {
+                status: "failed",
+                name: "official",
+                reasons: ["network error"],
+                cause: new Error("404 on https://git.example.com/acme/official.git", {
+                  cause: new Error("HTTP Error: 404 Not Found"),
+                }),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "update-all-empty": {
       pi: piWithBothLoaded(),
       message: {

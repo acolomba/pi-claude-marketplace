@@ -139,6 +139,39 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
       },
     },
 
+    // LAYER-06: the local layer declares a plugin whose marketplace only the
+    // base layer declares. The scope's reload stops as it does for an
+    // invalid layer config, and the cause names the repair. The file heads its
+    // block with no status, so the one failed row is the one error the tally
+    // counts, as in the pending diff.
+    "reload-layer-marketplace-undeclared": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "claude-plugins.local.json",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "claude-plugins.local.json",
+                reasons: ["invalid manifest"],
+                cause: new Error(
+                  "The local config (claude-plugins.local.json) declares helper@official, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config.",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // I1 / PR #51: reconcile-driven `marketplace remove` whose cascade
     // unstaged some plugins and failed others. Bare `(failed)` mp header +
     // one row per unstaged plugin (○ uninstalled) + one row per failed

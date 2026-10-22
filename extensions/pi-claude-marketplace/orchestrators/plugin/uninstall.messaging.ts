@@ -1,8 +1,9 @@
-import { isRenderablePluginKey } from "../../domain/dependencies.ts";
+import { isRenderablePluginKey, renderDependentKeys } from "../../domain/dependencies.ts";
 import {
   type ContentReason,
   type PluginFailedMessage,
   type PluginUninstalledMessage,
+  type PluginUninstallSkippedMessage,
 } from "../../shared/notification-types.ts";
 
 import type { CommandContext, MarketplaceRows } from "../../shared/notify-context.ts";
@@ -16,17 +17,12 @@ import type { Scope } from "../../shared/types.ts";
 // `satisfies readonly ContentReason[]`, so a typo is a compile error.
 
 /**
- * uninstall's private status set: a success `uninstalled` row or a `failed`
- * row. NO soft-dep marker ever appears on either row (MSG-SD-3) -- neither row
- * declares `dependencies`, and the marker policy is off for both.
+ * uninstall's private status set: a success `uninstalled` row, a `failed` row,
+ * or the LAYER-05 `skipped` row for a plugin the other layer still declares.
+ * NO soft-dep marker ever appears on any of them (MSG-SD-3) -- no row declares
+ * `dependencies`, and the marker policy is off for all three.
  */
-type UninstallStatus = "uninstalled" | "failed";
-
-/**
- * uninstall's row message union -- the subset of central plugin shapes whose
- * status uninstall emits.
- */
-type UninstallMsg = PluginUninstalledMessage | PluginFailedMessage;
+type UninstallStatus = "uninstalled" | "failed" | "skipped";
 
 /** The command label and complete per-status reason policy. */
 export const UNINSTALL_CONTEXT = {
@@ -34,6 +30,7 @@ export const UNINSTALL_CONTEXT = {
   rowPolicies: {
     uninstalled: { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
   },
 } as const satisfies CommandContext<UninstallStatus>;
 
@@ -198,6 +195,82 @@ export function composeUninstalledRow(args: {
 }
 
 /**
+ * LAYER-05 / D-MF-03: the row of an uninstall that dropped only its target
+ * layer's declaration, because the other layer still declares the plugin and
+ * the plugin stays installed. It is a `warning`: the plugin the user asked to
+ * uninstall is still there. Nothing left disk, so there is no reload. The
+ * cause line is fixed text that names the flag to type to uninstall it from
+ * the other layer.
+ */
+export function composeKeptInstalledRow(args: {
+  readonly plugin: string;
+  readonly version?: string | undefined;
+  readonly otherLayer: "base" | "local";
+}): PluginUninstallSkippedMessage {
+  const base = args.otherLayer === "base";
+  return {
+    status: "skipped",
+    name: args.plugin,
+    ...(args.version !== undefined && { version: args.version }),
+    reasons: [base ? "still installed in base layer" : "still installed in local layer"],
+    cause: new Error(
+      base
+        ? "Run the command again without --local to uninstall it."
+        : "Run the command again with --local to uninstall it.",
+    ),
+    severity: "warning",
+    needsReload: false,
+  };
+}
+
+/**
+ * LAYER-08 / D-MF-03: the cause line of an uninstall refused because plugins
+ * the target layer declares still need the plugin. It names them and the order
+ * that unblocks the uninstall. T-06-02: `renderDependentKeys` counts the
+ * needers when a key could forge the sentence.
+ */
+export function composeDependencyRefusalCause(args: {
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly needers: readonly string[];
+}): string {
+  return `Uninstall ${renderDependentKeys(args.needers)} first, then ${args.plugin}@${args.marketplace}.`;
+}
+
+/**
+ * LAYER-08 / D-MF-03: the row of an uninstall that removed nothing, because
+ * only plugins the other layer declares still need the plugin. It is a
+ * `warning`: the plugin the user asked to uninstall is still there, and
+ * nothing left disk, so there is no reload. The cause line names the needers
+ * and the config that declares them (T-06-02: through
+ * `renderDependentKeys`).
+ */
+export function composeNeededElsewhereRow(args: {
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly version?: string | undefined;
+  readonly needers: readonly string[];
+  readonly otherLayer: "base" | "local";
+}): PluginUninstallSkippedMessage {
+  const layer =
+    args.otherLayer === "base"
+      ? "The base config (claude-plugins.json)"
+      : "The local config (claude-plugins.local.json)";
+  const verb = args.needers.length === 1 ? "needs" : "need";
+  return {
+    status: "skipped",
+    name: args.plugin,
+    ...(args.version !== undefined && { version: args.version }),
+    reasons: ["dependents remain"],
+    cause: new Error(
+      `${layer} declares ${renderDependentKeys(args.needers)}, which ${verb} ${args.plugin}@${args.marketplace}.`,
+    ),
+    severity: "warning",
+    needsReload: false,
+  };
+}
+
+/**
  * PRUNE-04: the standalone report's blocks. The named plugin's marketplace
  * comes first with its row first; every pruned member joins the block of its
  * own marketplace, and a marketplace that only lost members gets a block of
@@ -213,7 +286,9 @@ export function composeRemovalBlocks(args: {
   }[];
   readonly scope: Scope;
 }): readonly MarketplaceRows<PluginUninstalledMessage | PluginFailedMessage>[] {
-  const blocks = new Map<string, UninstallMsg[]>([[args.primary.marketplace, [args.primary.row]]]);
+  const blocks = new Map<string, (PluginUninstalledMessage | PluginFailedMessage)[]>([
+    [args.primary.marketplace, [args.primary.row]],
+  ]);
   for (const member of args.members) {
     const rows = blocks.get(member.marketplace);
     if (rows === undefined) {

@@ -291,6 +291,26 @@ const EXPECTED_REASONS = [
   "components now supported",
   // ANAME-07: a server needs a Claude Code MCP feature pi-mcp-adapter lacks.
   "unsupported mcp",
+  // FIX-03: a declaration in the base layer would name a marketplace only the local
+  // config declares.
+  "marketplace in local layer only",
+  // LAYER-02: a `--local` command names a marketplace only the base config declares.
+  "marketplace in base layer only",
+  // LAYER-04: a flagless plugin command names a plugin only the local layer declares.
+  "plugin in local layer only",
+  // LAYER-04: a `--local` plugin command names a plugin only the base layer declares.
+  "plugin in base layer only",
+  // LAYER-05: an install adds a declaration of a plugin the other layer installed.
+  "already installed in base layer",
+  "already installed in local layer",
+  // LAYER-05: an uninstall keeps a plugin the other layer still declares.
+  "still installed in base layer",
+  "still installed in local layer",
+  // LAYER-04: a flagless enable or disable the local layer overrides is refused.
+  "disabled in local layer",
+  "enabled in local layer",
+  // UPD-11: an update's git host answered with an HTTP status other than 401/403.
+  "network error",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [
@@ -447,31 +467,39 @@ test("COMPAT-01: every row glyph constant holds its inherited code point", () =>
 
   // act
   const glyphs = {
-    ICON_AVAILABLE: composePluginLines(
-      { status: "available", name: "alpha", reasons: [] },
-      "user",
-    )[0]!.slice(2, 3),
-    ICON_DISABLED: composePluginLines(
-      { status: "disabled", name: "alpha", reasons: [], severity: "info", needsReload: false },
-      "user",
-    )[0]!.slice(2, 3),
-    ICON_INSTALLED: composePluginLines(
-      { status: "installed", name: "alpha", reasons: [], severity: "info", needsReload: false },
-      "user",
-    )[0]!.slice(2, 3),
-    ICON_PARTIALLY_INSTALLED: composePluginLines(
-      { status: "partially-installed", name: "alpha", reasons: [] },
-      "user",
-    )[0]!.slice(2, 3),
-    ICON_UNINSTALLABLE: composePluginLines(
-      { status: "unavailable", name: "alpha", reasons: [] },
-      "user",
-    )[0]!.slice(2, 3),
+    ICON_AVAILABLE: firstRow(
+      composePluginLines({ status: "available", name: "alpha", reasons: [] }, "user"),
+    ).slice(2, 3),
+    ICON_DISABLED: firstRow(
+      composePluginLines(
+        { status: "disabled", name: "alpha", reasons: [], severity: "info", needsReload: false },
+        "user",
+      ),
+    ).slice(2, 3),
+    ICON_INSTALLED: firstRow(
+      composePluginLines(
+        { status: "installed", name: "alpha", reasons: [], severity: "info", needsReload: false },
+        "user",
+      ),
+    ).slice(2, 3),
+    ICON_PARTIALLY_INSTALLED: firstRow(
+      composePluginLines({ status: "partially-installed", name: "alpha", reasons: [] }, "user"),
+    ).slice(2, 3),
+    ICON_UNINSTALLABLE: firstRow(
+      composePluginLines({ status: "unavailable", name: "alpha", reasons: [] }, "user"),
+    ).slice(2, 3),
   };
 
   // assert
   assert.deepStrictEqual(glyphs, expected, "COMPAT-01: every row glyph keeps its named code point");
 });
+
+/** The first rendered row of a plugin, which the glyph clauses read the glyph from. */
+function firstRow(rows: readonly string[]): string {
+  const row = rows[0];
+  assert.ok(row !== undefined, "COMPAT-01: the plugin rendered no row.");
+  return row;
+}
 
 /** The unresolved `info` message one status renders, with no optional field set. */
 function infoMessageFor(status: "remote" | "partially-available"): PluginInfoMessage {
@@ -496,14 +524,18 @@ test("COMPAT-01: the two module-private glyphs reach the output on their own row
 
   // act
   const rows = [
-    composePluginLines(
-      { status: "remote", name: "alpha", version: "1.0.0", reasons: [] },
-      "user",
-    )[0]!.slice(2),
-    composePluginLines(
-      { status: "partially-available", name: "alpha", version: "1.0.0", reasons: ["lsp"] },
-      "user",
-    )[0]!.slice(2),
+    firstRow(
+      composePluginLines(
+        { status: "remote", name: "alpha", version: "1.0.0", reasons: [] },
+        "user",
+      ),
+    ).slice(2),
+    firstRow(
+      composePluginLines(
+        { status: "partially-available", name: "alpha", version: "1.0.0", reasons: ["lsp"] },
+        "user",
+      ),
+    ).slice(2),
   ];
 
   // assert

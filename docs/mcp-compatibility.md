@@ -297,7 +297,7 @@ If a withheld variable in `url` or `headers` is set at install time, the install
 
 ### Warnings and info
 
-Each command that writes the entries of a plugin shows the two warnings after its own rows (AVAR-04). These commands are `install`, `update`, `reinstall`, `enable`, `import`, and the install that `/reload` runs for a plugin that a configuration file declares. For the exact text, see [MCP server variables not set](output-catalog.md#mcp-server-variables-not-set-avar-04) and [MCP server credentials withheld](output-catalog.md#mcp-server-credentials-withheld-avar-05).
+Each command that writes the entries of a plugin shows the two warnings after its own rows (AVAR-04). These commands are `install`, `update`, `reinstall`, `enable`, `import`, and the install that `/reload` runs for a plugin that a layer declares. For the exact text, see [MCP server variables not set](output-catalog.md#mcp-server-variables-not-set-avar-04) and [MCP server credentials withheld](output-catalog.md#mcp-server-credentials-withheld-avar-05).
 
 `/claude:plugin info` shows the same facts for the current environment. Its `mcp:` line lists, for each server, the variables that are not set and have no default, and the credentials that it withholds. An example is `plugin:analytics:api (unset ANALYTICS_TOKEN; withheld ANTHROPIC_API_KEY)`. The line shows names only.
 

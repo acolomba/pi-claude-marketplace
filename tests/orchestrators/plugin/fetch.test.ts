@@ -24,10 +24,12 @@ import {
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
+import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { MarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
@@ -236,7 +238,7 @@ function cacheBoundary(gitOps: GitOps): CacheBoundary {
     },
     async materializePluginClone(args) {
       calls.push(
-        `clone ${args.cloneUrl} pin=${args.pin} ref=${args.ref ?? "-"} auth=${args.auth?.host ?? "-"}`,
+        `clone ${args.cloneUrl} pin=${args.pin} ref=${args.ref ?? "-"} auth=${args.resolveAuth().host}`,
       );
       return materializePluginClone({ ...args, gitOps });
     },
@@ -831,7 +833,7 @@ test("reuses a stored GitHub credential without Device Flow", async () => {
         return Promise.reject(new Error("unexpected mirror call"));
       },
       async materializePluginClone(args) {
-        const callbacks = buildAuthCallbacks(requiredAuth(args.auth));
+        const callbacks = buildAuthCallbacks(requiredAuth(args.resolveAuth()));
         assert.deepStrictEqual(await callbacks.onAuth(`${cloneUrl}.git`), storedCredential);
         return path.join(cwd, "not-written");
       },
@@ -903,7 +905,7 @@ test("memoizes one accepted Device Flow result across a same-host sweep", async 
         return Promise.reject(new Error("unexpected mirror call"));
       },
       async materializePluginClone(args) {
-        const auth = requiredAuth(args.auth);
+        const auth = requiredAuth(args.resolveAuth());
         assert.ok(auth.kind === "device-flow");
         authResults.push(await auth.onAuthRequired());
         return path.join(cwd, "not-written");
@@ -1868,7 +1870,7 @@ test("classifies a denied Device Flow as authentication required", async () => {
         return Promise.reject(new Error("unexpected mirror call"));
       },
       async materializePluginClone(args) {
-        const callbacks = buildAuthCallbacks(requiredAuth(args.auth));
+        const callbacks = buildAuthCallbacks(requiredAuth(args.resolveAuth()));
         assert.deepStrictEqual(await callbacks.onAuth(`${cloneUrl}.git`), { cancel: true });
         throw Object.assign(new Error("The operation was canceled."), {
           code: "UserCanceledError",
@@ -1916,6 +1918,52 @@ test("classifies a denied Device Flow as authentication required", async () => {
   });
 });
 
+test("GHB-03: fetching a GitHub-source plugin on an invalid base fails the command instead of rendering a failed row", async (t) => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [
+        { name: "first", source: { source: "github", repo: "acme/first" } },
+        { name: "second", source: { source: "github", repo: "acme/second" } },
+      ],
+      name: "marketplace",
+      scope: "project",
+    });
+    await saveMarketplaces(cwd, "project", [marketplace]);
+    const git = gitBoundary({ allowedRemoteUrls: [] });
+    const cache = cacheBoundary(git.gitOps);
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "invalid base context" });
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        fetchPlugins({
+          cloneCacheSeam: cache.seam,
+          credentialOps: credentials.credentialOps,
+          ctx,
+          cwd,
+          run: runWithNothingLoaded(),
+          scope: "project",
+          target: { kind: "marketplace", marketplace: "marketplace" },
+        }),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
+    assert.deepStrictEqual(cache.calls, []);
+    assert.deepStrictEqual(git.schedule, []);
+    assert.deepStrictEqual(credentials.calls, { approve: [], fill: [], reject: [] });
+    verify(ctx);
+  });
+});
+
 test("fails cleanly when Device Flow credential approval rejects", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange
@@ -1957,7 +2005,7 @@ test("fails cleanly when Device Flow credential approval rejects", async () => {
         return Promise.reject(new Error("unexpected mirror call"));
       },
       async materializePluginClone(args) {
-        const callbacks = buildAuthCallbacks(requiredAuth(args.auth));
+        const callbacks = buildAuthCallbacks(requiredAuth(args.resolveAuth()));
         assert.deepStrictEqual(await callbacks.onAuth(`${cloneUrl}.git`), { cancel: true });
         throw Object.assign(new Error("The operation was canceled."), {
           code: "UserCanceledError",
@@ -2034,7 +2082,7 @@ test("rejects a stale credential and contains a reject failure", async () => {
         return Promise.reject(new Error("unexpected mirror call"));
       },
       async materializePluginClone(args) {
-        const callbacks = buildAuthCallbacks(requiredAuth(args.auth));
+        const callbacks = buildAuthCallbacks(requiredAuth(args.resolveAuth()));
         assert.deepStrictEqual(await callbacks.onAuthFailure(`${cloneUrl}.git`, staleCredential), {
           cancel: true,
         });

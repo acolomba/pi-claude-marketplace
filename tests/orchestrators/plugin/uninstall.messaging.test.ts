@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  composeDependencyRefusalCause,
+  composeKeptInstalledRow,
+  composeNeededElsewhereRow,
   composePrunedRow,
   composeRemovalBlocks,
   composeUninstalledRow,
@@ -11,13 +14,14 @@ import { composePluginLines } from "../../../extensions/pi-claude-marketplace/sh
 import { resolveRows } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 import { type PluginFailedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { type PluginUninstalledMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
+import { type PluginUninstallSkippedMessage } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
 
 test("exports the complete uninstall command context", () => {
   // arrange
-  const expectedRenderKeys = ["uninstalled", "failed"];
+  const expectedRenderKeys = ["uninstalled", "failed", "skipped"];
 
   // act
   const contextKeys = Object.keys(UNINSTALL_CONTEXT);
@@ -42,10 +46,10 @@ test("renders a complete cross-scope uninstalled transition row", () => {
   } as const satisfies ResolvedRow<PluginUninstalledMessage>;
 
   // act
-  const actual = composePluginLines(row, "user")[0]!.slice(2);
+  const renderedLine = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
-  assert.equal(actual, "○ alpha [project] v1.2.3 (uninstalled)");
+  assert.equal(renderedLine, "○ alpha [project] v1.2.3 (uninstalled)");
   assert.deepEqual(row, {
     status: "uninstalled",
     severity: "info",
@@ -77,10 +81,10 @@ test("renders a failed uninstall row without leaking its failure detail into the
   } as const satisfies ResolvedRow<PluginFailedMessage>;
 
   // act
-  const actual = composePluginLines(row, "user")[0]!.slice(2);
+  const renderedLine = composePluginLines(row, "user")[0]!.slice(2);
 
   // assert
-  assert.equal(actual, "⊘ beta v2.0.0 (failed) {permission denied, rollback partial}");
+  assert.equal(renderedLine, "⊘ beta v2.0.0 (failed) {permission denied, rollback partial}");
   assert.deepEqual(row, {
     status: "failed",
     severity: "error",
@@ -101,6 +105,7 @@ test("UNINSTALL_CONTEXT declares complete row policies", () => {
   assert.deepStrictEqual(policies, {
     uninstalled: { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
   });
 });
 
@@ -358,6 +363,150 @@ test("LOAD-03: composeUninstalledRow omits the version slot when the removed rec
   // assert
   assert.equal(Object.hasOwn(row, "version"), false);
 });
+
+for (const { otherLayer, reason, hint } of [
+  {
+    otherLayer: "base",
+    reason: "still installed in base layer",
+    hint: "Run the command again without --local to uninstall it.",
+  },
+  {
+    otherLayer: "local",
+    reason: "still installed in local layer",
+    hint: "Run the command again with --local to uninstall it.",
+  },
+] as const) {
+  test(`LAYER-05: composeKeptInstalledRow for a plugin the ${otherLayer} layer still declares is a warning skipped row with the hint`, () => {
+    // arrange
+    const expectedRow: PluginUninstallSkippedMessage = {
+      status: "skipped",
+      name: "demo",
+      version: "1.0.0",
+      reasons: [reason],
+      cause: new Error(hint),
+      severity: "warning",
+      needsReload: false,
+    };
+
+    // act
+    const row = composeKeptInstalledRow({ plugin: "demo", version: "1.0.0", otherLayer });
+
+    // assert
+    assert.deepStrictEqual(row, expectedRow);
+  });
+}
+
+test("LAYER-05: composeKeptInstalledRow omits the version slot when the record carried none", () => {
+  // act
+  const row = composeKeptInstalledRow({ plugin: "demo", otherLayer: "base" });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "skipped",
+    name: "demo",
+    reasons: ["still installed in base layer"],
+    cause: new Error("Run the command again without --local to uninstall it."),
+    severity: "warning",
+    needsReload: false,
+  });
+});
+
+for (const { title, needers, expected } of [
+  {
+    title: "names the one plugin the target layer declares that needs it",
+    needers: ["app@tools"],
+    expected: "Uninstall app@tools first, then lib@tools.",
+  },
+  {
+    title: "names every needer in the order given",
+    needers: ["alpha@tools", "zeta@up"],
+    expected: "Uninstall alpha@tools, zeta@up first, then lib@tools.",
+  },
+  {
+    title: "counts the needers when one key could forge the sentence",
+    needers: ['app@tools", then x@y', "zeta@up"],
+    expected: "Uninstall 2 other plugins first, then lib@tools.",
+  },
+]) {
+  test(`LAYER-08: composeDependencyRefusalCause ${title}`, () => {
+    // act
+    const cause = composeDependencyRefusalCause({
+      plugin: "lib",
+      marketplace: "tools",
+      needers,
+    });
+
+    // assert
+    assert.equal(cause, expected);
+  });
+}
+
+for (const { title, otherLayer, needers, version, expected } of [
+  {
+    title: "names the one needer the base layer declares",
+    otherLayer: "base",
+    needers: ["app@tools"],
+    version: "1.0.0",
+    expected: {
+      status: "skipped",
+      name: "lib",
+      version: "1.0.0",
+      reasons: ["dependents remain"],
+      cause: new Error(
+        "The base config (claude-plugins.json) declares app@tools, which needs lib@tools.",
+      ),
+      severity: "warning",
+      needsReload: false,
+    },
+  },
+  {
+    title: "names the needers the local layer declares and omits a missing version",
+    otherLayer: "local",
+    needers: ["alpha@tools", "zeta@up"],
+    version: undefined,
+    expected: {
+      status: "skipped",
+      name: "lib",
+      reasons: ["dependents remain"],
+      cause: new Error(
+        "The local config (claude-plugins.local.json) declares alpha@tools, zeta@up, which need lib@tools.",
+      ),
+      severity: "warning",
+      needsReload: false,
+    },
+  },
+  {
+    title: "counts the one needer whose key could forge the sentence",
+    otherLayer: "base",
+    needers: ['app@tools", which x@y'],
+    version: "1.0.0",
+    expected: {
+      status: "skipped",
+      name: "lib",
+      version: "1.0.0",
+      reasons: ["dependents remain"],
+      cause: new Error(
+        "The base config (claude-plugins.json) declares 1 other plugin, which needs lib@tools.",
+      ),
+      severity: "warning",
+      needsReload: false,
+    },
+  },
+] as const) {
+  test(`LAYER-08: composeNeededElsewhereRow ${title}`, () => {
+    // act
+    const row = composeNeededElsewhereRow({
+      plugin: "lib",
+      marketplace: "tools",
+      version,
+      needers,
+      otherLayer,
+    });
+
+    // assert
+    assert.deepStrictEqual(row, expected satisfies PluginUninstallSkippedMessage);
+  });
+}
 
 test("D-05-12: composeRemovalBlocks with no members is the primary's single block", () => {
   // arrange

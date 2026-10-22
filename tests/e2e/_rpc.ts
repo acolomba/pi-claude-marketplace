@@ -10,6 +10,7 @@
 // The child environment is an allowlist built from scratch. A prompt that is
 // not an extension command falls through to Pi's model path, and inherited
 // provider credentials would let it reach a real provider over the network.
+// The cucumber run adds a typed git and trust environment and nothing else.
 // `--no-extensions` is never passed, because it also removes `builtin:mcp`.
 import { spawn } from "node:child_process";
 import { realpath } from "node:fs/promises";
@@ -20,7 +21,7 @@ import { fileURLToPath } from "node:url";
 
 import { resolvePiRuntime } from "../pi-runtime.ts";
 
-import type { ChildProcessByStdio } from "node:child_process";
+import type { ChildProcess, ChildProcessByStdio } from "node:child_process";
 import type { Readable, Writable } from "node:stream";
 
 const REPO_ROOT = fileURLToPath(new URL("../..", import.meta.url));
@@ -38,6 +39,20 @@ export interface RpcSandbox {
   readonly home: string;
   readonly agentDir: string;
   readonly cwd: string;
+}
+
+/**
+ * The trust and git settings the cucumber run adds to Pi's allowlist: the CA
+ * file of its loopback git host, and git config that skips the system file and
+ * reads a global file under the sandbox HOME (DRV-03, HOST-01). The run also
+ * points the GitHub base override at its git host, so GitHub sources clone
+ * from it (GHB-01, D-MF-01).
+ */
+export interface RpcGitEnvironment {
+  readonly NODE_EXTRA_CA_CERTS: string;
+  readonly GIT_CONFIG_NOSYSTEM: "1";
+  readonly GIT_CONFIG_GLOBAL: string;
+  readonly PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: string;
 }
 
 /** What one RPC session runs: the sandbox, the steps in order, and extra extensions. */
@@ -164,13 +179,25 @@ async function resolveSandbox(sandbox: RpcSandbox): Promise<RpcSandbox> {
   };
 }
 
-function childEnvironment(sandbox: RpcSandbox): NodeJS.ProcessEnv {
-  return {
+/** Returns the allowlist environment of every Pi child, plus `git` when given. */
+export function rpcChildEnvironment(
+  sandbox: RpcSandbox,
+  git?: RpcGitEnvironment,
+): NodeJS.ProcessEnv {
+  const environment: NodeJS.ProcessEnv = {
     HOME: sandbox.home,
     PI_CODING_AGENT_DIR: sandbox.agentDir,
     PI_OFFLINE: "1",
     PATH: process.env.PATH ?? "",
   };
+  if (git !== undefined) {
+    environment.NODE_EXTRA_CA_CERTS = git.NODE_EXTRA_CA_CERTS;
+    environment.GIT_CONFIG_NOSYSTEM = git.GIT_CONFIG_NOSYSTEM;
+    environment.GIT_CONFIG_GLOBAL = git.GIT_CONFIG_GLOBAL;
+    environment.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL = git.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL;
+  }
+
+  return environment;
 }
 
 function piArguments(extraExtensions: readonly string[]): string[] {
@@ -284,7 +311,7 @@ function resultOf(state: SessionState, exitCode: number | null): RpcSessionResul
 // the children Pi starts in that group. Pi starts each stdio MCP server in a
 // group of its own and stops it on shutdown, so the group kill does not reach
 // those servers.
-function killProcessGroup(child: SessionState["child"]): void {
+export function killProcessGroup(child: ChildProcess): void {
   if (child.pid === undefined) {
     child.kill("SIGKILL");
     return;
@@ -346,15 +373,23 @@ function collect(state: SessionState, options: RpcSessionOptions): Promise<RpcSe
   });
 }
 
-function startSession(options: RpcSessionOptions, sandbox: RpcSandbox): SessionState {
-  const child = spawn(process.execPath, piArguments(options.extraExtensions ?? []), {
+function spawnPi(
+  sandbox: RpcSandbox,
+  extraExtensions: readonly string[],
+  git?: RpcGitEnvironment,
+): ChildProcessByStdio<Writable, Readable, Readable> {
+  return spawn(process.execPath, piArguments(extraExtensions), {
     cwd: sandbox.cwd,
     // Its own process group, so the stops can kill Pi's children too. A dead
     // parent closes stdin, and Pi exits on that.
     detached: true,
-    env: childEnvironment(sandbox),
+    env: rpcChildEnvironment(sandbox, git),
     stdio: ["pipe", "pipe", "pipe"],
   });
+}
+
+function startSession(options: RpcSessionOptions, sandbox: RpcSandbox): SessionState {
+  const child = spawnPi(sandbox, options.extraExtensions ?? []);
   return {
     child,
     steps: options.steps,
@@ -382,6 +417,20 @@ export async function runRpcSession(options: RpcSessionOptions): Promise<RpcSess
   const sandbox = await resolveSandbox(options.sandbox);
   options.signal?.throwIfAborted();
   return collect(startSession(options, sandbox), options);
+}
+
+/**
+ * Starts the repository's own Pi CLI in RPC mode in `sandbox` and returns the
+ * child, which stays up until its stdin closes. The child also gets `git` on
+ * top of the allowlist. The caller owns the JSONL exchange and the stop.
+ * Rejects as `runRpcSession` does for a sandbox location outside the temp
+ * directory or inside the repository.
+ */
+export async function startRpcPi(
+  sandbox: RpcSandbox,
+  git: RpcGitEnvironment,
+): Promise<ChildProcessByStdio<Writable, Readable, Readable>> {
+  return spawnPi(await resolveSandbox(sandbox), [], git);
 }
 
 /** Returns `data.disposition` of a successful prompt response. */

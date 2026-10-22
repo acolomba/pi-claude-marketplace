@@ -2,12 +2,13 @@
 //
 // The module is one factory returning the shared single-name marketplace
 // handler, so its whole promise is three things: the usage block it supplies,
-// the delegate it supplies, and the notification run it forwards. The parse itself,
-// the collapse of the duplicated usage block, the surplus-token drop, and the
-// options-bag shape belong to `tests/edge/handlers/marketplace/shared.test.ts`,
-// which drives `makeSingleNameMarketplaceHandler` with an injected collaborator
-// (D-116-07). Nothing here restates that mechanism; what is asserted is WHICH
-// constant and WHICH workflow this factory wires into it, observed end to end.
+// the delegate it supplies, and the notification run it forwards. The parse
+// itself, the collapse of the duplicated usage block, the surplus-argument
+// rejection, and the options-bag shape belong to
+// `tests/edge/handlers/marketplace/shared.test.ts`, which drives
+// `makeSingleNameMarketplaceHandler` with an injected collaborator (D-116-07).
+// Nothing here restates that mechanism; what is asserted is WHICH constant and
+// WHICH workflow this factory wires into it, observed end to end.
 //
 // D-116-05 (O3) places this handler in Group C: `getMarketplaceInfo` is reached
 // by direct import at the factory call site with no injection point, so a
@@ -57,8 +58,10 @@ import { makeMarketplaceInfoHandler } from "../../../../extensions/pi-claude-mar
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
-import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -276,20 +279,20 @@ for (const { name, autoupdate } of [
     await seedMarketplace(cwd, "project", "local", "/repo/local");
     await seedMarketplace(cwd, "project", "overlap", "/repo/overlap");
     const locations = locationsFor("project", cwd);
-    const sharedBytes =
+    const baseBytes =
       '{ "marketplaces": { "shared": { "source": "./shared", "autoupdate": true }, "overlap": { "source": "./overlap", "autoupdate": true } } }\n';
     const localBytes =
       '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
-    await writeFile(locations.configJsonPath, sharedBytes);
-    await writeFile(locations.configLocalJsonPath, localBytes);
+    await writeFile(locations.baseConfigJsonPath, baseBytes);
+    await writeFile(locations.localConfigJsonPath, localBytes);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
     });
-    const handler = makeMarketplaceInfoHandler();
+    const infoHandler = makeMarketplaceInfoHandler();
 
     // act
-    await handler(`${name} --scope project`, ctx, runWithNothingLoaded());
+    await infoHandler(`${name} --scope project`, ctx, runWithNothingLoaded());
 
     // assert
     assert.deepStrictEqual(notifications, [
@@ -297,10 +300,10 @@ for (const { name, autoupdate } of [
     ]);
     assert.deepStrictEqual(
       [
-        await readFile(locations.configJsonPath, "utf8"),
-        await readFile(locations.configLocalJsonPath, "utf8"),
+        await readFile(locations.baseConfigJsonPath, "utf8"),
+        await readFile(locations.localConfigJsonPath, "utf8"),
       ],
-      [sharedBytes, localBytes],
+      [baseBytes, localBytes],
     );
     verifyBoundary();
   });
@@ -322,7 +325,7 @@ for (const mode of ["json", "rpc"] as const) {
     },
     {
       args: '""',
-      message: "Missing required argument.",
+      message: "Marketplace name must not be empty.",
     },
     {
       args: "alpha@official beta@official",
@@ -349,7 +352,7 @@ for (const mode of ["json", "rpc"] as const) {
             severity: "error",
             needsReload: false,
             message,
-            usage: "Usage: /claude:plugin marketplace info <name> [--scope user|project]",
+            usage: INFO_USAGE,
           },
         },
       ]);

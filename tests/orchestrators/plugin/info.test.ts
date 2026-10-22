@@ -39,7 +39,10 @@ import test from "node:test";
 import * as git from "isomorphic-git";
 import { mock, verify, when } from "strong-mock";
 
-import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
+import {
+  pluginCloneKey,
+  pluginMirrorKey,
+} from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import {
   githubSource,
   pathSource,
@@ -59,6 +62,7 @@ import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistenc
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { softDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   buildInstalledPluginRecord,
   materializeMarketplaceTree,
@@ -74,7 +78,8 @@ import {
   builtinMcpCommand,
   builtinMcpTool,
 } from "../../platform/pi-inventory-seed.ts";
-import { runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
+import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type * as InfoOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/info.ts";
@@ -5945,6 +5950,223 @@ test("D-78-04 / D-81-04: info --fetch on an INSTALLED git plugin with a missing 
   });
 });
 
+test("GHB-03: info --fetch on a not-installed GitHub plugin fails the command on an invalid base", async (t) => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          { name: "gplug", source: { source: "github", repo: "owner/gh-mp" }, version: "1.0.0" },
+        ],
+      },
+    });
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps } = createCredentialOps();
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "invalid base context" });
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        getPluginInfo({
+          ctx,
+          run: runWithNothingLoaded(),
+          marketplace: "mp",
+          plugin: "gplug",
+          scope: "user",
+          cwd,
+          fetch: true,
+          cloneCacheSeam: fetchSeamWith(gitOps),
+          credentialOps,
+        }),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(gitState.cloneCalls, []);
+    assert.deepStrictEqual(gitState.fetchCalls, []);
+    verify(ctx);
+  });
+});
+
+test("GHB-03: info --fetch on an installed GitHub plugin fails the command on an invalid base", async (t) => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          { name: "gplug", source: "https://github.com/owner/gh-mp#main", version: "1.0.0" },
+        ],
+      },
+      installed: { gplug: { version: "1.0.0" } },
+    });
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps } = createCredentialOps();
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "invalid base context" });
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        getPluginInfo({
+          ctx,
+          run: runWithNothingLoaded(),
+          marketplace: "mp",
+          plugin: "gplug",
+          scope: "user",
+          cwd,
+          fetch: true,
+          cloneCacheSeam: fetchSeamWith(gitOps),
+          credentialOps,
+        }),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(gitState.cloneCalls, []);
+    assert.deepStrictEqual(gitState.fetchCalls, []);
+    verify(ctx);
+  });
+});
+
+test("GHB-04 / NFR-5: bare info on a GitHub plugin ignores an invalid base", async (t) => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          { name: "gplug", source: { source: "github", repo: "owner/gh-mp" }, version: "1.0.0" },
+        ],
+      },
+    });
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const { gitOps, state: gitState } = createGitOps({});
+    const { credOps: credentialOps } = createCredentialOps();
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({
+      ctx,
+      run,
+      marketplace: "mp",
+      plugin: "gplug",
+      scope: "user",
+      cwd,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ◌ gplug v1.0.0 (remote)",
+          "    components: not resolved",
+        ].join("\n"),
+      },
+    ]);
+    assert.deepStrictEqual(gitState.cloneCalls, []);
+    assert.deepStrictEqual(gitState.fetchCalls, []);
+  });
+});
+
+test("NFR-5: info --fetch on an installed pinned GitHub plugin with a warm clone ignores an invalid base", async (t) => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const GIT_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "gplug",
+            source: { source: "github", repo: "owner/gh-mp", sha: GIT_SHA },
+            version: "1.0.0",
+          },
+        ],
+      },
+      installed: { gplug: { version: "1.0.0" } },
+    });
+    const cloneRoot = await locationsFor("user", cwd).pluginCloneDir(
+      pluginCloneKey("https://github.com/owner/gh-mp", GIT_SHA),
+    );
+    await mkdir(path.join(cloneRoot, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(cloneRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "gplug" }),
+    );
+    await mkdir(path.join(cloneRoot, "skills", "warm-skill"), { recursive: true });
+    await writeFile(
+      path.join(cloneRoot, "skills", "warm-skill", "SKILL.md"),
+      `---\nname: warm-skill\n---\n\nHello.\n`,
+    );
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const { gitOps, state: gitState } = createGitOps({
+      cloneThrows: new Error("network unreachable: clone"),
+    });
+    const { credOps: credentialOps } = createCredentialOps();
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({
+      ctx,
+      run,
+      marketplace: "mp",
+      plugin: "gplug",
+      scope: "user",
+      cwd,
+      fetch: true,
+      cloneCacheSeam: fetchSeamWith(gitOps),
+      credentialOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [user] <no autoupdate>",
+          "  ● gplug v1.0.0 (installed)",
+          "    skills: warm-skill",
+        ].join("\n"),
+      },
+    ]);
+    assert.deepStrictEqual(gitState.cloneCalls, []);
+    assert.deepStrictEqual(gitState.fetchCalls, []);
+  });
+});
+
 test("FTCH-03 / D-78-04: info --fetch on an installed git plugin with a missing clone materializes it and upgrades to resolved components", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
@@ -6309,7 +6531,7 @@ test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs di
     // the state in which a candidate row is read.
     const locations = locationsFor("user", cwd);
     await saveConfig(
-      locations.configJsonPath,
+      locations.baseConfigJsonPath,
       {
         schemaVersion: 1,
         plugins: { "yes@mp": { enabled: true }, "no@mp": { enabled: false } },

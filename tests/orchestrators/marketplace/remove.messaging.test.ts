@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  composeHeldRemovalCause,
   REMOVE_CONTEXT,
   type RemoveRowMsg,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.messaging.ts";
@@ -45,6 +46,17 @@ const failedWithInfoSeverity: RemoveRowMsg = {
   needsReload: false,
 };
 void failedWithInfoSeverity;
+
+test("names the plugins that still need a plugin and the order that unblocks the remove", () => {
+  // act
+  const cause = composeHeldRemovalCause("tools", ["beta@tools", "gamma@extras"]);
+
+  // assert
+  assert.strictEqual(
+    cause,
+    "Uninstall beta@tools, gamma@extras first, then remove the marketplace tools again.",
+  );
+});
 
 test("exports the complete marketplace-remove command context", () => {
   // arrange

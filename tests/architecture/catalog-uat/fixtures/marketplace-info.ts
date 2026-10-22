@@ -127,16 +127,14 @@ export const MARKETPLACE_INFO_FIXTURES: FixtureMap = {
       // TYPE-01: the dedicated `marketplace-not-added` variant. `scope` is
       // OMITTED so the renderer emits no `[scope]` token -- absent-from-both
       // states have no bracket because the marketplace is in NEITHER scope.
-      // Byte form is unchanged (`⊘ ghost-mp (failed) {marketplace not added}`).
+      // Byte form: `⊘ ghost-mp (failed) {marketplace not added}`.
       message: {
         kind: "marketplace-not-added",
         name: "ghost-mp",
       },
     },
 
-    // Byte form preserved byte-identical (`⊘ my-mp [user] (failed) {marketplace not added}`).
-    // The fixture shape is re-keyed to the TYPE-01 variant; the rendered BYTES
-    // are unchanged.
+    // TYPE-01: the requested scope and other-scope signal select the qualified reason.
     "scope-mismatch-not-added": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
@@ -144,6 +142,7 @@ export const MARKETPLACE_INFO_FIXTURES: FixtureMap = {
         kind: "marketplace-not-added",
         name: "my-mp",
         scope: "user",
+        presentInOtherScope: true,
       },
     },
 

@@ -31,7 +31,7 @@ This extension installs plugins from Claude plugin marketplaces that contain the
 
 Plugins that contain unsupported components can be partially installed. A partially installed plugin may fail to work as intended.
 
-The `/claude:plugin` command manages Claude marketplaces and plugins, like Claude Code's `/plugin`. A desired-state configuration in `[~/].pi/agent/claude-plugins[.local].json` files makes plugin installations automatic and repeatable. You can share these files across machines or team members.
+The `/claude:plugin` command manages Claude marketplaces and plugins, like Claude Code's `/plugin`. Desired-state configs in `[~/].pi/agent/claude-plugins[.local].json` make plugin installations automatic and repeatable. You can share these configs across machines or team members.
 
 ## Prerequisites
 
@@ -154,44 +154,43 @@ Install a partially available plugin. Put `--partial` first to enable argument c
 
 ## Configuration files
 
-Each scope stores its declarative configuration for marketplaces and plugins in `claude-plugins.json`, under the scope root.
+Each scope declares its marketplaces and plugins in two layers: the base layer and the local layer. The file of a layer is its config. The base config, `claude-plugins.json`, is under the scope root.
 
 | Scope     | File path                         |
 | --------- | --------------------------------- |
 | `user`    | `~/.pi/agent/claude-plugins.json` |
 | `project` | `<cwd>/.pi/claude-plugins.json`   |
 
-These files are the authoritative record of the installed marketplaces and plugins. Pi applies their contents at extension load (`/reload`).
+The configs of a scope are the authoritative record of its installed marketplaces and plugins. Pi applies their contents at extension load (`/reload`).
 
 Whether Pi applies a declared plugin's components depends on the entry's optional `enabled` key and on the install-time default the plugin author declares. For more information, see [Plugin enablement](docs/plugin-enablement.md).
 
-### Local configuration files
+### The local config
 
-Each scope can also have a `claude-plugins.local.json` file alongside the base file.
+The local config, `claude-plugins.local.json`, is next to the base config.
 
 | Scope     | File path                               |
 | --------- | --------------------------------------- |
 | `user`    | `~/.pi/agent/claude-plugins.local.json` |
 | `project` | `<cwd>/.pi/claude-plugins.local.json`   |
 
-The local file overrides individual entries from the base file. An entry in `claude-plugins.local.json` replaces the same-keyed entry in `claude-plugins.json` completely.
-
-For commands that write configuration, `--local` selects `claude-plugins.local.json`. Reads always combine both configuration files. Marketplace `update` still refreshes cached sources and installed-plugin state.
+The local config overrides entries from the base config. To write to the local config, add `--local`:
 
 ```text
+/claude:plugin marketplace add upstash/context7 --local
 /claude:plugin install context7-plugin@context7-marketplace --local
 /claude:plugin marketplace autoupdate context7-marketplace --local
 ```
 
 ### Gitignore convention
 
-In the project scope, commit `claude-plugins.json`. Then your collaborators install the same marketplaces and plugins. Keep `claude-plugins.local.json` out of version control. Add this line to your project's `.gitignore`:
+In the project scope, commit the base config, `claude-plugins.json`. Then your collaborators install the same marketplaces and plugins. Keep the local config, `claude-plugins.local.json`, out of version control. Add this line to your project's `.gitignore`:
 
 ```text
 .pi/claude-plugins.local.json
 ```
 
-User-scope files live in your home directory. They are personal and never shared.
+User-scope configs live in your home directory. They are personal and never shared.
 
 ## Command reference
 
@@ -263,7 +262,7 @@ Update one marketplace. If you omit the name, the command updates all marketplac
 /claude:plugin marketplace update
 ```
 
-Remove a marketplace and all plugins installed from it.
+Remove a marketplace and uninstall its plugins. A dependency that another plugin still needs stays installed.
 
 ```text
 /claude:plugin marketplace remove context7-marketplace

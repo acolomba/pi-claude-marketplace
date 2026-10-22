@@ -1,5 +1,7 @@
 import { redactCredentials } from "./redact-credentials.ts";
 
+import type { ContentReason } from "./notification-types.ts";
+
 /** Refuses a new device flow when print mode cannot show its authorization prompt. */
 export class DeviceFlowUnavailableError extends Error {
   constructor() {
@@ -372,6 +374,143 @@ export class MarketplaceNotFoundError extends Error {
   }
 }
 
+/**
+ * FIX-03 / D-MF-02: the refusal of a command that would write a plugin
+ * declaration into the base config (`claude-plugins.json`) while only the local
+ * layer declares the plugin's marketplace.
+ *
+ * The message IS the failed row's cause line. It is built from fixed text and a
+ * marketplace name that passed `assertSafeName`, so it carries no path. One
+ * exported class lets `instanceof` agree across the plugin verbs, as with
+ * `MarketplaceNotAddedSignal`. It lives here because the marketplace verbs
+ * refuse with it too (LAYER-02), and `orchestrators/marketplace/shared.ts`
+ * cannot import `orchestrators/plugin/shared.ts`, which already imports
+ * `orchestrators/marketplace/shared.ts`.
+ */
+export class MarketplaceInLocalLayerOnlyError extends Error {
+  readonly marketplace: string;
+  constructor(marketplace: string) {
+    super(
+      `The marketplace ${marketplace} is declared only in the local config (claude-plugins.local.json). Run the command again with --local.`,
+    );
+    this.name = "MarketplaceInLocalLayerOnlyError";
+    this.marketplace = marketplace;
+  }
+}
+
+// How the undeclarable-source cause names each layer's config: with its file
+// at the first mention, and by the config alone after that.
+const UNDECLARABLE_CONFIG_NAMES = {
+  base: { first: "the base config (claude-plugins.json)", later: "the base config" },
+  local: { first: "the local config (claude-plugins.local.json)", later: "the local config" },
+} as const;
+
+/**
+ * LAYER-06 / D-MF-03: the refusal of a command that would declare a plugin in
+ * a layer that lacks the plugin's marketplace, when no source is known to
+ * declare that marketplace with. The scope's record holds no string source (a
+ * forward-compatible source kind, NFR-12) and the other layer does not declare
+ * the marketplace either. Writing the plugin key alone would leave the layer
+ * declaring a plugin without its marketplace.
+ *
+ * The message IS the failed row's cause line. It is built from fixed text, a
+ * marketplace name that passed `assertSafeName`, and the config of the layer
+ * the refused write targets, so it carries no path.
+ */
+export class MarketplaceSourceUndeclarableError extends Error {
+  readonly marketplace: string;
+  readonly layer: "base" | "local";
+  constructor(marketplace: string, layer: "base" | "local") {
+    const config = UNDECLARABLE_CONFIG_NAMES[layer];
+    super(
+      `The scope records the marketplace ${marketplace} with no source that ${config.first} can declare. Declare the marketplace in ${config.later}, then run the command again.`,
+    );
+    this.name = "MarketplaceSourceUndeclarableError";
+    this.marketplace = marketplace;
+    this.layer = layer;
+  }
+}
+
+/**
+ * LAYER-02 / D-MF-03: the refusal of a `--local` command that names a
+ * marketplace only the base layer declares. A named command changes only its
+ * target layer, so it cannot act on a declaration in the other one.
+ *
+ * The message IS the failed row's cause line. It is built from fixed text and a
+ * marketplace name that passed `assertSafeName`, so it carries no path.
+ */
+export class MarketplaceInBaseLayerOnlyError extends Error {
+  readonly marketplace: string;
+  constructor(marketplace: string) {
+    super(
+      `The marketplace ${marketplace} is declared only in the base config (claude-plugins.json). Run the command again without --local.`,
+    );
+    this.name = "MarketplaceInBaseLayerOnlyError";
+    this.marketplace = marketplace;
+  }
+}
+
+/**
+ * LAYER-04 / D-MF-03: the refusal of a named plugin command without `--local`
+ * when only the local layer declares the plugin. A named command changes only
+ * its target layer, so it cannot act on a declaration in the other one.
+ *
+ * The message IS the failed row's cause line. It is built from fixed text and
+ * names that passed `assertSafeName`, so it carries no path.
+ */
+export class PluginInLocalLayerOnlyError extends Error {
+  readonly plugin: string;
+  readonly marketplace: string;
+  constructor(plugin: string, marketplace: string) {
+    super(
+      `The plugin ${plugin}@${marketplace} is declared only in the local config (claude-plugins.local.json). Run the command again with --local.`,
+    );
+    this.name = "PluginInLocalLayerOnlyError";
+    this.plugin = plugin;
+    this.marketplace = marketplace;
+  }
+}
+
+/**
+ * LAYER-04 / D-MF-03: the refusal of a named plugin command with `--local`
+ * when only the base layer declares the plugin.
+ *
+ * The message IS the failed row's cause line. It is built from fixed text and
+ * names that passed `assertSafeName`, so it carries no path.
+ */
+export class PluginInBaseLayerOnlyError extends Error {
+  readonly plugin: string;
+  readonly marketplace: string;
+  constructor(plugin: string, marketplace: string) {
+    super(
+      `The plugin ${plugin}@${marketplace} is declared only in the base config (claude-plugins.json). Run the command again without --local.`,
+    );
+    this.name = "PluginInBaseLayerOnlyError";
+    this.plugin = plugin;
+    this.marketplace = marketplace;
+  }
+}
+
+/**
+ * WR-04 / LAYER-07: the `marketplace add` that a project install runs for a
+ * marketplace only the user scope records failed. `reason` is the token
+ * `marketplace add` reports for the same failure, so the install row carries
+ * it too.
+ *
+ * The install row prints the message as its cause line, so the caller passes
+ * text whose absolute paths are already reduced to their last segment (NFR-9).
+ * The add's own error is not kept as `cause`: the cause-chain trailer would
+ * print its unreduced message.
+ */
+export class InstallMarketplaceAddError extends Error {
+  readonly reason: ContentReason;
+  constructor(reason: ContentReason, message: string) {
+    super(message);
+    this.name = "InstallMarketplaceAddError";
+    this.reason = reason;
+  }
+}
+
 /** D-14 / MU-5: marketplace update failure preserves the retry-hint slot per MU-5. */
 export class MarketplaceUpdateError extends Error {
   readonly retryHint: string;
@@ -379,6 +518,22 @@ export class MarketplaceUpdateError extends Error {
     super(message, opts.cause === undefined ? undefined : { cause: opts.cause });
     this.name = "MarketplaceUpdateError";
     this.retryHint = opts.retryHint ?? "";
+  }
+}
+
+/**
+ * D-04 / D-07: the manifest text that `state.json` saved from the last
+ * successful add or refresh of a marketplace does not parse, so `marketplace
+ * update` cannot tell whether a refresh changed the marketplace. The refresh
+ * refuses with `{unreadable}` before it reads or fetches the source, and the
+ * record stays as it was.
+ */
+export class MarketplaceBaselineUnreadableError extends Error {
+  readonly mpName: string;
+  constructor(mpName: string, options?: ErrorOptions) {
+    super(`The saved manifest of marketplace "${mpName}" in state.json is unreadable.`, options);
+    this.name = "MarketplaceBaselineUnreadableError";
+    this.mpName = mpName;
   }
 }
 
@@ -403,11 +558,86 @@ export class CrossOriginChallengeError extends Error {
   }
 }
 
+/**
+ * GAUTH-04: the host answered a stored credential with a second challenge, so
+ * the credential was found and sent, and the host refused it. The keychain
+ * keeps it, because nothing can mint a replacement (D-1-01). Classified as
+ * `{authentication required}`.
+ *
+ * AUTH-09: the message names the host and nothing else.
+ */
+export class StoredCredentialRejectedError extends Error {
+  readonly host: string;
+  constructor(host: string) {
+    super(`${host} rejected the stored credential`);
+    this.name = "StoredCredentialRejectedError";
+    this.host = host;
+  }
+}
+
 /** IN-03: the HTTP client in `platform/git.ts` met an eleventh consecutive redirect. */
 export class TooManyRedirectsError extends Error {
   constructor() {
     super("too many redirects");
     this.name = "TooManyRedirectsError";
+  }
+}
+
+/**
+ * GHB-01: the cause `platform/git.ts` attaches to a failed network call whose
+ * URL the GitHub base override rewrote. `url` is the URL actually fetched.
+ */
+export class FetchedUrlCause extends Error {
+  readonly url: string;
+  constructor(url: string) {
+    super(`fetched ${url}`);
+    this.name = "FetchedUrlCause";
+    this.url = url;
+  }
+}
+
+/**
+ * GHB-01 / GHB-04: whether the cause chain holds a `FetchedUrlCause`, which is
+ * true only when the GitHub base override rewrote the failed call's URL.
+ */
+export function hasFetchedUrlCause(err: unknown): boolean {
+  for (const link of causeChain(err)) {
+    if (link instanceof FetchedUrlCause) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+const INVALID_GITHUB_BASE_URL_RULES = {
+  "not-a-url": "is not a valid URL.",
+  scheme: "must use the https scheme.",
+  userinfo: "must not contain a user name or password.",
+  query: "must not contain a query.",
+  fragment: "must not contain a fragment.",
+} as const;
+
+/**
+ * GHB-03: the GitHub base URL variable is set to a value the override refuses.
+ * `problem` names the first rule the value breaks.
+ *
+ * AUTH-09: the message names the variable and the rule, never the value, which
+ * can carry a token. It contains no slash, because json and rpc command-failure
+ * output treats a slash outside a complete URL as a local path and replaces the
+ * message.
+ */
+export class InvalidGitHubBaseUrlError extends Error {
+  readonly variable: string;
+  readonly problem: "not-a-url" | "scheme" | "userinfo" | "query" | "fragment";
+  constructor(
+    variable: string,
+    problem: "not-a-url" | "scheme" | "userinfo" | "query" | "fragment",
+  ) {
+    super(`${variable} ${INVALID_GITHUB_BASE_URL_RULES[problem]}`);
+    this.name = "InvalidGitHubBaseUrlError";
+    this.variable = variable;
+    this.problem = problem;
   }
 }
 
@@ -434,6 +664,45 @@ export class InvalidMarketplaceManifestError extends Error {
   constructor(message: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "InvalidMarketplaceManifestError";
+  }
+}
+
+/**
+ * CFG-03 / LAYER-04: a layer config that a named plugin command must read could
+ * not be read: an EACCES, a truncated mid-save file, or a schema violation. It
+ * is an invalid manifest, so every narrowing that maps one to
+ * `{invalid manifest}` keeps doing so. Its own class lets a caller tell this
+ * refusal from a marketplace manifest that failed to parse, whose message
+ * carries parser text from a cloned repository.
+ *
+ * The message IS the failed row's cause line. It names the file by its
+ * basename only, so it carries no path.
+ */
+export class LayerConfigUnreadableError extends InvalidMarketplaceManifestError {
+  readonly basename: string;
+  constructor(basename: string) {
+    super(`Config file "${basename}" failed schema validation.`);
+    this.name = "LayerConfigUnreadableError";
+    this.basename = basename;
+  }
+}
+
+/**
+ * LAYER-04 / D-05-07: a nameless `update` or `reinstall` with `--local` could
+ * not read the dependencies of a plugin it covers, so it cannot tell which
+ * dependencies to cover. The whole command refuses with `{unreadable}` and
+ * changes nothing, as `uninstall` and `marketplace remove` refuse.
+ *
+ * The message IS the failed row's cause line. It names the plugin by its
+ * `<plugin>@<marketplace>` key and at most a fixed reason, never the text of a
+ * manifest that failed to load, so no `{ cause }` is chained behind it.
+ */
+export class DependencyDeclarationsUnreadableError extends Error {
+  readonly declarer: string;
+  constructor(declarer: string, message: string) {
+    super(message);
+    this.name = "DependencyDeclarationsUnreadableError";
+    this.declarer = declarer;
   }
 }
 
@@ -702,6 +971,25 @@ export function findManualRecoveryError(err: unknown): ManualRecoveryError | und
   }
 
   return undefined;
+}
+
+/**
+ * GHB-03: rethrow an `InvalidGitHubBaseUrlError` found anywhere in the cause
+ * chain, so an invalid variable fails the whole command instead of becoming
+ * one target's failed row. Every per-target catch on a GitHub network path
+ * calls this before it composes a row that would hide the variable.
+ *
+ * The walk finds the error under wrappers such as `MarketplaceUpdateError`
+ * and the lock wrapper that `withScopeLock` adds when the release also fails.
+ * It throws the typed error itself, so the command failure names the
+ * variable. For any other value it returns.
+ */
+export function rethrowInvalidGitHubBaseUrl(err: unknown): void {
+  for (const link of causeChain(err)) {
+    if (link instanceof InvalidGitHubBaseUrlError) {
+      throw link;
+    }
+  }
 }
 
 /**

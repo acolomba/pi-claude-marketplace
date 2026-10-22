@@ -51,14 +51,8 @@
 // claim. A deleted arm is a behavior change, not a compiler diagnostic, and a
 // missing-arm plant has no target here.
 //
-// This pair reads COMPLETE: `branches 78/78, functions 19/19, lines 340/340`.
-// It used to carry one uncovered branch, the `description === undefined` arm of
-// an `optionalDescription` conditional that existed because the declared element
-// type kept `description` optional while nothing reachable could omit it. The
-// conditional is gone: `flagCompletions` now builds its entry list as
-// `{ name: string; description: string }[]`, with `description` required, so the
-// arm the paragraph justified has no source left.
-//
+// `flagCompletions` builds its entry list as `{ name: string; description: string }[]`
+// with `description` required, so no conditional arm handles a missing description.
 
 import assert from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
@@ -494,7 +488,7 @@ test("TC-3 prepends the global scope flag before a verb's own completable flags"
       label: "--local",
       value: "install --local ",
       description:
-        "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json",
+        "Write to the local config (claude-plugins.local.json), not the base config (claude-plugins.json)",
     },
   ]);
 });
@@ -888,7 +882,7 @@ for (const verb of ["add", "remove", "rm", "autoupdate", "noautoupdate"]) {
     // arrange
     const { resolver, completionCache } = await seedResolver(t, "marketplace-flag");
     const description =
-      "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json";
+      "Write to the local config (claude-plugins.local.json), not the base config (claude-plugins.json)";
 
     // act
     const suggestions = await getArgumentCompletions(

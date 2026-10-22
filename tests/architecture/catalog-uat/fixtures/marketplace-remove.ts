@@ -51,7 +51,7 @@ export const MARKETPLACE_REMOVE_FIXTURES: FixtureMap = {
       },
     },
 
-    // ATTR-06 / S3 / D-48-C Shape 1: explicit-scope remove of a name not added
+    // ATTR-06 / D-48-C Shape 1: explicit-scope remove of a name not added
     // in the requested scope -> standalone `marketplace-not-added` `{marketplace not added}`
     // variant carrying the requested scope bracket (pre-guard miss; no raw
     // MarketplaceNotFoundError escapes the orchestrator).
@@ -65,7 +65,7 @@ export const MARKETPLACE_REMOVE_FIXTURES: FixtureMap = {
       },
     },
 
-    // ATTR-06 / S4: bare-form remove of a name absent from BOTH scopes -> the
+    // ATTR-06: bare-form remove of a name absent from BOTH scopes -> the
     // SAME standalone variant with NO bracket (resolveScopeFromState's
     // MarketplaceNotFoundError caught at the entrypoint, absent-from-both form).
     "remove-missing-not-added-bare": {
@@ -74,6 +74,152 @@ export const MARKETPLACE_REMOVE_FIXTURES: FixtureMap = {
       message: {
         kind: "marketplace-not-added",
         name: "ghost-mp",
+      },
+    },
+
+    // LAYER-02: a command without --local names a marketplace only the local config declares.
+    "remove-marketplace-in-local-layer-only": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Marketplace remove",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "tools",
+            scope: "project",
+            status: "failed",
+            severity: "error",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "tools",
+                reasons: ["marketplace in local layer only"],
+                cause: new Error(
+                  "The marketplace tools is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LAYER-02: a --local command names a marketplace only the base config declares.
+    "remove-marketplace-in-base-layer-only": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Marketplace remove",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "tools",
+            scope: "project",
+            status: "failed",
+            severity: "error",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "tools",
+                reasons: ["marketplace in base layer only"],
+                cause: new Error(
+                  "The marketplace tools is declared only in the base config (claude-plugins.json). Run the command again without --local.",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LAYER-03: the remove of a marketplace holding a dependency cannot read a declaration.
+    "remove-dependency-declarations-unreadable": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Marketplace remove",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "tools",
+            scope: "project",
+            status: "failed",
+            severity: "error",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "tools",
+                reasons: ["unreadable"],
+                cause: new Error(
+                  "cannot read the dependencies of lib@tools: its marketplace manifest is invalid",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+    "remove-dependents-remain": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Marketplace remove",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "tools",
+            scope: "project",
+            status: "failed",
+            severity: "error",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "alpha",
+                reasons: ["dependents remain"],
+                cause: new Error(
+                  "Uninstall beta@tools first, then remove the marketplace tools again.",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+    "remove-other-config-file-invalid": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Marketplace remove",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "tools",
+            scope: "project",
+            status: "failed",
+            severity: "error",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "tools",
+                reasons: ["invalid manifest"],
+                cause: new Error(
+                  'Config file "claude-plugins.local.json" failed schema validation.',
+                ),
+              },
+            ],
+          },
+        ],
       },
     },
   },

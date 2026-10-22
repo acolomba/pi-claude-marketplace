@@ -63,7 +63,7 @@ The planner and the apply path coordinate via one structural sentinel, plus two 
 1. **Read pass** under `withLockedStateTransaction` with NO `tx.save()` (WR-05 write-free):
 
    - Pristine-scope gate (no `state.json` AND no `claude-plugins.{,local.}json`) skips before taking the lock -- no mkdir, no lock file, no generated config.
-   - `migrateFirstRunConfig` fires first (MIG-01 first-load: generate `claude-plugins.json` from existing `state.json`; idempotent).
+   - `migrateFirstRunConfig` fires first (MIG-01 first-load: generate `claude-plugins.json` from existing `state.json`, leaving out whatever `claude-plugins.local.json` declares (FIX-02); an unreadable `claude-plugins.local.json` makes it write nothing; idempotent).
    - `loadMergedScopeConfig` produces the merged view + the per-file `ConfigLoadResult`s.
    - CFG-03 invalid-config arms surface as structured `(failed) {invalid manifest}` rows with the file BASENAME (paths redacted per T-55-02-01) -- the planner is SKIPPED for that scope (invalid input is never coerced to an empty desired-state diff).
    - Otherwise the pure `planReconcile` runs.

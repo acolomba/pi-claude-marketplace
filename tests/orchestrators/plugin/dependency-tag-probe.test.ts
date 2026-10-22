@@ -6,6 +6,7 @@ import {
   type DependencyTagListingSeam,
   type DependencyTagProbeOptions,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts";
+import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
@@ -344,6 +345,24 @@ test("returns the failure arm for an unclassifiable listing throw instead of rej
     cause: transportFailure,
     classification: undefined,
   });
+});
+
+test("rethrows an invalid GitHub base URL instead of returning the failure arm", async () => {
+  // arrange
+  const invalid = new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme");
+  const seam = failingWith(new Error("listing failed", { cause: invalid }), []);
+
+  // act
+  const probing = probeDependencyTags({
+    pluginName: "formatter",
+    source: pluginSource(),
+    range: "^1.0.0",
+    seam,
+    auth: auth(),
+  });
+
+  // assert
+  await assert.rejects(probing, (error: unknown) => error === invalid);
 });
 
 test("classifies an unreachable host on the failure arm", async () => {

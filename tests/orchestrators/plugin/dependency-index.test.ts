@@ -458,14 +458,32 @@ interface LoadFailureCase {
 
 const LOAD_FAILURES: readonly LoadFailureCase[] = [
   {
-    title: "D-05-07: a missing marketplace manifest ends the walk naming the record",
+    title:
+      "D-05-07: a missing marketplace manifest ends the walk naming the record and the missing manifest",
     thrown: errno("ENOENT"),
-    message: "cannot read the dependencies of app@mp: ENOENT: open 'mp'",
+    message: "cannot read the dependencies of app@mp: its marketplace manifest is missing",
   },
   {
-    title: "D-05-07: a malformed marketplace manifest ends the walk naming the record",
+    title: "D-05-07: a marketplace manifest under a file instead of a directory reads as missing",
+    thrown: errno("ENOTDIR"),
+    message: "cannot read the dependencies of app@mp: its marketplace manifest is missing",
+  },
+  {
+    title:
+      "D-05-07: a malformed marketplace manifest ends the walk naming the record and the invalid manifest",
     thrown: new InvalidMarketplaceManifestError("bad json", { cause: new SyntaxError("x") }),
-    message: "cannot read the dependencies of app@mp: bad json",
+    message: "cannot read the dependencies of app@mp: its marketplace manifest is invalid",
+  },
+  {
+    title:
+      "D-05-07: a marketplace manifest the process may not read ends the walk naming the record and the unreadable manifest",
+    thrown: errno("EACCES"),
+    message: "cannot read the dependencies of app@mp: its marketplace manifest cannot be read",
+  },
+  {
+    title: "D-05-07: a manifest load failure with no errno code reads as an unreadable manifest",
+    thrown: new Error("lib@mp: marketplace text"),
+    message: "cannot read the dependencies of app@mp: its marketplace manifest cannot be read",
   },
 ];
 
@@ -493,10 +511,14 @@ for (const { title, thrown, message } of LOAD_FAILURES) {
   });
 }
 
-test("T-05-04: the load-failure cause line redacts the absolute path and chains no cause", async () => {
+test("T-05-04: the load-failure cause line carries no text of the thrown error and chains no cause", async () => {
   // arrange
   const mp = mpRecord();
-  const loadManifest = manifestLoader({ [mp.manifestPath]: errno("EACCES") });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: new InvalidMarketplaceManifestError(
+      "marketplace.json schema invalid: /plugins/0/name: repository text",
+    ),
+  });
 
   // act
   const walk = await buildScopeDeclarationIndex({
@@ -511,7 +533,10 @@ test("T-05-04: the load-failure cause line redacts the absolute path and chains 
   assert.equal(walk.ok, false);
   assert.deepStrictEqual(
     walk.ok ? undefined : { message: walk.cause.message, cause: walk.cause.cause },
-    { message: "cannot read the dependencies of app@mp: EACCES: open 'mp'", cause: undefined },
+    {
+      message: "cannot read the dependencies of app@mp: its marketplace manifest is invalid",
+      cause: undefined,
+    },
   );
 });
 

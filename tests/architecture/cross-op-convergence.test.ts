@@ -26,13 +26,10 @@
 //   - bare/bracketless: `⊘ ghost-mp (failed) {marketplace not added}`
 // Both at severity "error", one emission per invocation (IL-2).
 //
-// SCOPE-BRACKET ASYMMETRY: `install` ALWAYS carries a resolved scope, so it has
-// NO bracketless variant. `autoupdate`'s bare form is ALSO not bracketless -- it
-// reports the first-observed scope's bracket (ATTR-05), so it converges on the
-// EXPLICIT row. The explicit-scope matrix includes install + autoupdate; the
-// bracketless-bare matrix excludes BOTH (info / uninstall / reinstall /
-// plugin-update / marketplace-remove / marketplace-update keep a bracketless
-// bare form).
+// SCOPE-BRACKET ASYMMETRY: `install` ALWAYS carries a resolved scope, so it is
+// the only op with NO bracketless bare form. Every other op, autoupdate
+// included, keeps one. The explicit-scope matrix includes every op; the
+// bracketless-bare matrix excludes install only.
 //
 // NO network: every op is invoked against an empty hermetic state. The
 // not-added precondition short-circuits BEFORE any clone/fetch (NFR-5 by
@@ -68,7 +65,7 @@ import type { NotificationRun } from "../../extensions/pi-claude-marketplace/sha
 
 // ---------------------------------------------------------------------------
 // Hermetic harness -- mirrors the per-op orchestrator test idiom
-// (makeCtx + withHermeticHome). No seeded state -> the marketplace is absent in
+// (makeCtx + withHermeticEnvironment). No seeded state -> the marketplace is absent in
 // BOTH scopes, which drives every op onto the converged `{marketplace not added}` row.
 // ---------------------------------------------------------------------------
 
@@ -109,10 +106,6 @@ function makeCtx(): {
     },
   };
   return { ctx, notifications };
-}
-
-async function withHermeticHome<T>(fn: (env: { cwd: string }) => Promise<T>): Promise<T> {
-  return withHermeticEnvironment("xop-", ({ cwd }) => fn({ cwd }));
 }
 
 const NAME = "ghost-mp";
@@ -236,7 +229,7 @@ const INVOKERS: Record<string, Invoker> = {
 };
 
 async function captureOp(op: string, mode: "explicit" | "bare"): Promise<Emission> {
-  return withHermeticHome(async ({ cwd }) => {
+  return withHermeticEnvironment("xop-", async ({ cwd }) => {
     const { ctx, notifications } = makeCtx();
     const invoke = INVOKERS[op];
     assert.ok(invoke !== undefined, `no invoker registered for op "${op}"`);
@@ -263,21 +256,16 @@ const OPS_EXPLICIT_SCOPE = [
 ] as const;
 
 // Ops that support a truly BRACKETLESS bare form (absent from BOTH scopes, no
-// requested scope to report) -- TWO ops are excluded:
-//   - install: always carries a resolved scope (the edge defaults it), so it has
-//     no bracketless variant.
-//   - autoupdate: its bare form is NOT bracketless. When the name is absent from
-//     BOTH scopes, setMarketplaceAutoupdate reports the FIRST-observed scope's
-//     bracket (SC-6 iterates project-before-user -> `[project]`), so it converges
-//     on the EXPLICIT-scope canonical row, not the bracketless one. This is the
-//     documented ATTR-05 contract (autoupdate.test.ts) and autoupdate is asserted
-//     in the explicit-scope matrix above.
+// requested scope to report). Install is the only op left out: it always
+// carries a resolved scope (the edge defaults it), so it has no bracketless
+// variant.
 const OPS_BARE = [
   "info",
   "uninstall",
   "reinstall",
   "update (plugin)",
   "marketplace remove",
+  "autoupdate",
   "marketplace update",
 ] as const;
 
@@ -312,10 +300,16 @@ for (const op of OPS_BARE) {
 }
 
 test("SC#1 cross-op convergence: the explicit-scope and bare canonical rows stay distinct byte forms", () => {
-  // act & assert
-  assert.notEqual(
-    CANONICAL_EXPLICIT,
-    CANONICAL_BARE,
+  // arrange
+  const canonicalRows = [CANONICAL_EXPLICIT, CANONICAL_BARE];
+
+  // act
+  const distinctRows = new Set(canonicalRows);
+
+  // assert
+  assert.strictEqual(
+    distinctRows.size,
+    canonicalRows.length,
     "explicit-scope and bare rows must remain distinct byte forms",
   );
 });

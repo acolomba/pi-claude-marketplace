@@ -5,20 +5,26 @@ import { describe, test } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
-import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
+import {
+  githubSource,
+  pathSource,
+} from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   applyPartialCascadeFold,
   assertNoCrossPluginConflicts,
-  cloneMarketplaceRecordForTargetScope,
   collectInstallReachableMarketplaces,
   absentTargetReasons,
   emitMarketplaceNotAdded,
   emitMarketplaceNotAddedSignal,
   enableRowDependencies,
+  keepLocalLayerTargets,
+  loadTargetLayers,
+  localOnlyMarketplaceRefusal,
   MarketplaceNotAddedSignal,
   missIsNotInstalled,
-  maybeWritePluginConfigBack,
+  namedPluginLayerRefusal,
   overwriteDisabledMemberEntries,
+  pluginLayerVerdict,
   removePluginRecord,
   resolveCrossScopePluginTarget,
   resolveInstalledMarketplaceTarget,
@@ -26,9 +32,9 @@ import {
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
   retiresWorkflowCommand,
-  selectDeclaringConfigWriteTarget,
   splitStagingWarnings,
   surfaceDiscoveryWarnings,
+  undeclarableMarketplaceRefusal,
   writeAdoptingConfigEntries,
   type CrossPluginGeneratedNames,
   type CrossScopePluginResolution,
@@ -37,7 +43,13 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
   CrossPluginConflictError,
+  DependencyDeclarationsUnreadableError,
+  LayerConfigUnreadableError,
+  MarketplaceInLocalLayerOnlyError,
   MarketplaceNotFoundError,
+  MarketplaceSourceUndeclarableError,
+  PluginInBaseLayerOnlyError,
+  PluginInLocalLayerOnlyError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -120,6 +132,17 @@ function makeState(
   };
 }
 
+/** A scope that records `mp` with a source of a kind this version does not know, and no `raw`. */
+function unknownSourceState(): ExtensionState {
+  const record = makeMarketplaceRecord("mp", "project", {});
+  return {
+    schemaVersion: 1,
+    marketplaces: {
+      mp: { ...record, source: { kind: "unknown", reason: "a future source kind" } },
+    },
+  };
+}
+
 function makeMaterializablePlugin(
   pluginRoot: string,
   agents: readonly string[] = [],
@@ -140,6 +163,50 @@ function makeMaterializablePlugin(
 
 async function withTempScopes<T>(run: (scopes: TempScopes) => Promise<T>): Promise<T> {
   return withHermeticEnvironment("plugin-shared-", ({ cwd, root }) => run({ cwd, root }));
+}
+
+/**
+ * Records the marketplace `tools` in the project scope with the given plugins,
+ * and writes its manifest under `root` listing each entry with its dependencies.
+ */
+async function saveToolsScope(args: {
+  readonly cwd: string;
+  readonly root: string;
+  readonly records: Readonly<Record<string, PluginRecord["provenance"]>>;
+  readonly entries: Readonly<Record<string, readonly string[]>>;
+}): Promise<void> {
+  const marketplaceRoot = path.join(args.root, "tools");
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: "tools",
+      plugins: Object.entries(args.entries).map(([name, dependencies]) => ({
+        name,
+        source: `./plugins/${name}`,
+        dependencies,
+      })),
+    }),
+  );
+  const locations = locationsFor("project", args.cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  const plugins = Object.fromEntries(
+    Object.entries(args.records).map(([name, provenance]) => [
+      name,
+      { ...makePluginRecord({}), provenance },
+    ]),
+  );
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 1,
+    marketplaces: {
+      tools: {
+        ...makeMarketplaceRecord("tools", "project", plugins),
+        manifestPath,
+        marketplaceRoot,
+      },
+    },
+  });
 }
 
 async function saveScopedState(
@@ -183,6 +250,26 @@ async function writeConfig(filePath: string, config: ScopeConfig): Promise<void>
   await writeFile(filePath, JSON.stringify(config));
 }
 
+/** Write `content` to `filePath`, or leave the file absent when there is none. */
+async function writeOptionalFile(filePath: string, content: string | undefined): Promise<void> {
+  if (content !== undefined) {
+    await writeFile(filePath, content);
+  }
+}
+
+/** The file's bytes, or `undefined` when it does not exist. */
+async function readOptionalFile(filePath: string): Promise<string | undefined> {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return undefined;
+    }
+
+    throw error;
+  }
+}
+
 function assertLocationsEquivalent(
   locations: ScopedLocations,
   expectedLocations: ScopedLocations,
@@ -199,8 +286,8 @@ function assertLocationsEquivalent(
       agentsStagingDir: locations.agentsStagingDir,
       cacheDir: locations.cacheDir,
       commandsStagingDir: locations.commandsStagingDir,
-      configJsonPath: locations.configJsonPath,
-      configLocalJsonPath: locations.configLocalJsonPath,
+      baseConfigJsonPath: locations.baseConfigJsonPath,
+      localConfigJsonPath: locations.localConfigJsonPath,
       dataRoot: locations.dataRoot,
       extensionRoot: locations.extensionRoot,
       hooksDir: locations.hooksDir,
@@ -223,8 +310,8 @@ function assertLocationsEquivalent(
       agentsStagingDir: expectedLocations.agentsStagingDir,
       cacheDir: expectedLocations.cacheDir,
       commandsStagingDir: expectedLocations.commandsStagingDir,
-      configJsonPath: expectedLocations.configJsonPath,
-      configLocalJsonPath: expectedLocations.configLocalJsonPath,
+      baseConfigJsonPath: expectedLocations.baseConfigJsonPath,
+      localConfigJsonPath: expectedLocations.localConfigJsonPath,
       dataRoot: expectedLocations.dataRoot,
       extensionRoot: expectedLocations.extensionRoot,
       hooksDir: expectedLocations.hooksDir,
@@ -840,80 +927,8 @@ describe("collectInstallReachableMarketplaces", () => {
   });
 });
 
-describe("cloneMarketplaceRecordForTargetScope", () => {
-  test("clones metadata into the target scope with no plugin installs", () => {
-    // arrange
-    const sourceRecord = makeMarketplaceRecord("mp", "user", {
-      alpha: makePluginRecord({ skills: ["alpha-skill"] }),
-    });
-
-    // act
-    const clonedRecord = cloneMarketplaceRecordForTargetScope(sourceRecord, "project");
-
-    // assert
-    assert.deepStrictEqual(clonedRecord, {
-      name: "mp",
-      scope: "project",
-      source: { kind: "path", raw: "./mp-source", logical: "./mp-source" },
-      addedFromCwd: "/workspace",
-      manifestPath: "/workspace/mp/.claude-plugin/marketplace.json",
-      marketplaceRoot: "/workspace/mp",
-      plugins: {},
-    });
-    assert.deepStrictEqual(sourceRecord.plugins, {
-      alpha: makePluginRecord({ skills: ["alpha-skill"] }),
-    });
-    assert.notEqual(clonedRecord, sourceRecord);
-    assert.notEqual(clonedRecord.plugins, sourceRecord.plugins);
-  });
-});
-
-describe("selectDeclaringConfigWriteTarget", () => {
-  test("reports an unreadable local determinant when no locality was requested", async () => {
-    // arrange
-    await withTempScopes(async ({ cwd }) => {
-      const locations = locationsFor("project", cwd);
-      await mkdir(path.dirname(locations.configLocalJsonPath), { recursive: true });
-      await writeFile(locations.configLocalJsonPath, "{");
-
-      // act
-      const target = await selectDeclaringConfigWriteTarget({
-        locations,
-        local: undefined,
-        key: "alpha@mp",
-      });
-
-      // assert
-      assert.deepStrictEqual(target, {
-        kind: "unreadable",
-        filePath: locations.configLocalJsonPath,
-      });
-    });
-  });
-
-  test("reports an unreadable explicitly selected local file", async () => {
-    // arrange
-    await withTempScopes(async ({ cwd }) => {
-      const locations = locationsFor("project", cwd);
-      await mkdir(path.dirname(locations.configLocalJsonPath), { recursive: true });
-      await writeFile(locations.configLocalJsonPath, "{");
-
-      // act
-      const target = await selectDeclaringConfigWriteTarget({
-        locations,
-        local: true,
-        key: "alpha@mp",
-      });
-
-      // assert
-      assert.deepStrictEqual(target, {
-        kind: "unreadable",
-        filePath: locations.configLocalJsonPath,
-      });
-    });
-  });
-
-  test("selects the local file that already declares the plugin key", async () => {
+describe("loadTargetLayers", () => {
+  test("targets the base layer without --local even when only the local layer declares the plugin", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
@@ -921,97 +936,839 @@ describe("selectDeclaringConfigWriteTarget", () => {
         schemaVersion: 1,
         plugins: { "alpha@mp": { enabled: false } },
       };
-      await writeConfig(locations.configLocalJsonPath, localConfig);
+      await writeConfig(locations.localConfigJsonPath, localConfig);
 
       // act
-      const target = await selectDeclaringConfigWriteTarget({
-        locations,
-        local: undefined,
-        key: "alpha@mp",
-      });
+      const target = await loadTargetLayers({ locations, local: undefined });
 
       // assert
       assert.deepStrictEqual(target, {
-        kind: "selected",
-        targetConfigPath: locations.configLocalJsonPath,
-        targetIsLocal: true,
-        current: localConfig,
-        sibling: { schemaVersion: 1 },
+        kind: "loaded",
+        targetConfigPath: locations.baseConfigJsonPath,
+        targetIsLocal: false,
+        current: { schemaVersion: 1 },
+        other: localConfig,
       });
     });
   });
 
-  test("selects the base file when a readable local file lacks the plugin key", async () => {
+  test("targets the local layer with --local even when only the base layer declares the plugin", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
       const baseConfig: ScopeConfig = {
         schemaVersion: 1,
         marketplaces: { mp: { source: "./mp" } },
+        plugins: { "alpha@mp": {} },
       };
-      const localConfig: ScopeConfig = { schemaVersion: 1, plugins: {} };
-      await writeConfig(locations.configJsonPath, baseConfig);
-      await writeConfig(locations.configLocalJsonPath, localConfig);
+      await writeConfig(locations.baseConfigJsonPath, baseConfig);
 
       // act
-      const target = await selectDeclaringConfigWriteTarget({
-        locations,
-        local: undefined,
-        key: "alpha@mp",
-      });
+      const target = await loadTargetLayers({ locations, local: true });
 
       // assert
       assert.deepStrictEqual(target, {
-        kind: "selected",
-        targetConfigPath: locations.configJsonPath,
-        targetIsLocal: false,
-        current: baseConfig,
-        sibling: localConfig,
-      });
-    });
-  });
-
-  test("treats an absent local target as empty and preserves unreadable sibling uncertainty", async () => {
-    // arrange
-    await withTempScopes(async ({ cwd }) => {
-      const locations = locationsFor("project", cwd);
-      await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
-      await writeFile(locations.configJsonPath, "{");
-
-      // act
-      const target = await selectDeclaringConfigWriteTarget({
-        locations,
-        local: true,
-        key: "alpha@mp",
-      });
-
-      // assert
-      assert.deepStrictEqual(target, {
-        kind: "selected",
-        targetConfigPath: locations.configLocalJsonPath,
+        kind: "loaded",
+        targetConfigPath: locations.localConfigJsonPath,
         targetIsLocal: true,
         current: { schemaVersion: 1 },
-        sibling: undefined,
+        other: baseConfig,
       });
     });
   });
 
-  test("reports an unreadable explicitly selected base file", async () => {
+  test("reads absent layers as layers that declare nothing", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
-      await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
-      await writeFile(locations.configJsonPath, "{");
 
       // act
-      const target = await selectDeclaringConfigWriteTarget({
-        locations,
-        local: false,
-        key: "alpha@mp",
+      const target = await loadTargetLayers({ locations, local: false });
+
+      // assert
+      assert.deepStrictEqual(target, {
+        kind: "loaded",
+        targetConfigPath: locations.baseConfigJsonPath,
+        targetIsLocal: false,
+        current: { schemaVersion: 1 },
+        other: { schemaVersion: 1 },
+      });
+    });
+  });
+
+  for (const { invalid, file, local, layer } of [
+    { invalid: "local", file: "localConfigJsonPath", local: undefined, layer: "the other layer" },
+    { invalid: "local", file: "localConfigJsonPath", local: true, layer: "the target layer" },
+    { invalid: "base", file: "baseConfigJsonPath", local: false, layer: "the target layer" },
+    { invalid: "base", file: "baseConfigJsonPath", local: true, layer: "the other layer" },
+  ] satisfies readonly {
+    invalid: string;
+    file: "baseConfigJsonPath" | "localConfigJsonPath";
+    local: boolean | undefined;
+    layer: string;
+  }[]) {
+    test(`CFG-03: reports an invalid ${invalid} layer that is ${layer} (local ${local})`, async () => {
+      // arrange
+      await withTempScopes(async ({ cwd }) => {
+        const locations = locationsFor("project", cwd);
+        const invalidPath = locations[file];
+        await mkdir(path.dirname(invalidPath), { recursive: true });
+        await writeFile(invalidPath, "{");
+
+        // act
+        const target = await loadTargetLayers({ locations, local });
+
+        // assert
+        assert.deepStrictEqual(target, { kind: "unreadable", filePath: invalidPath });
+      });
+    });
+  }
+
+  test("CFG-03: names the target layer first when both layers are invalid", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await mkdir(path.dirname(locations.baseConfigJsonPath), { recursive: true });
+      await writeFile(locations.baseConfigJsonPath, "{");
+      await writeFile(locations.localConfigJsonPath, "{");
+
+      // act
+      const target = await loadTargetLayers({ locations, local: true });
+
+      // assert
+      assert.deepStrictEqual(target, {
+        kind: "unreadable",
+        filePath: locations.localConfigJsonPath,
+      });
+    });
+  });
+});
+
+describe("undeclarableMarketplaceRefusal", () => {
+  for (const { targetIsLocal, layer } of [
+    { targetIsLocal: true, layer: "local" },
+    { targetIsLocal: false, layer: "base" },
+  ] as const) {
+    test(`refuses a ${layer}-layer target when no layer declares the marketplace and its record holds no string source`, () => {
+      // arrange
+      const selection = {
+        targetIsLocal,
+        current: { schemaVersion: 1 },
+        other: { schemaVersion: 1, marketplaces: { other: { source: "./other-src" } } },
+      } satisfies Parameters<typeof undeclarableMarketplaceRefusal>[0];
+
+      // act
+      const refusal = undeclarableMarketplaceRefusal(selection, unknownSourceState(), "mp");
+
+      // assert
+      assert.ok(refusal instanceof MarketplaceSourceUndeclarableError);
+      assert.deepStrictEqual(
+        { marketplace: refusal.marketplace, layer: refusal.layer },
+        { marketplace: "mp", layer },
+      );
+    });
+  }
+
+  for (const { layout, state, selection } of [
+    {
+      layout: "a marketplace the target layer declares",
+      state: unknownSourceState(),
+      selection: {
+        targetIsLocal: false,
+        current: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
+        other: { schemaVersion: 1 },
+      },
+    },
+    {
+      layout: "a marketplace only the other layer declares",
+      state: unknownSourceState(),
+      selection: {
+        targetIsLocal: true,
+        current: { schemaVersion: 1 },
+        other: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
+      },
+    },
+    {
+      layout: "a marketplace whose record holds a string source",
+      state: makeState({ mp: { scope: "project", plugins: {} } }),
+      selection: {
+        targetIsLocal: false,
+        current: { schemaVersion: 1 },
+        other: { schemaVersion: 1 },
+      },
+    },
+    {
+      layout: "a marketplace the scope does not record yet",
+      state: makeState({}),
+      selection: {
+        targetIsLocal: false,
+        current: { schemaVersion: 1 },
+        other: { schemaVersion: 1 },
+      },
+    },
+  ] satisfies readonly {
+    layout: string;
+    state: ExtensionState;
+    selection: Parameters<typeof undeclarableMarketplaceRefusal>[0];
+  }[]) {
+    test(`does not refuse ${layout}`, () => {
+      // arrange
+      const expectedRefusal = undefined;
+
+      // act
+      const refusal = undeclarableMarketplaceRefusal(selection, state, "mp");
+
+      // assert
+      assert.strictEqual(refusal, expectedRefusal);
+    });
+  }
+});
+
+describe("localOnlyMarketplaceRefusal", () => {
+  test("refuses a base-config target when only the local config declares the marketplace", () => {
+    // arrange
+    const selection = {
+      targetIsLocal: false,
+      current: { schemaVersion: 1 },
+      other: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
+    } satisfies Parameters<typeof localOnlyMarketplaceRefusal>[0];
+
+    // act
+    const refusal = localOnlyMarketplaceRefusal(selection, "mp");
+
+    // assert
+    assert.ok(refusal instanceof MarketplaceInLocalLayerOnlyError);
+    assert.deepStrictEqual(
+      { marketplace: refusal.marketplace, message: refusal.message },
+      {
+        marketplace: "mp",
+        message:
+          "The marketplace mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
+      },
+    );
+  });
+
+  for (const { layout, marketplace, selection } of [
+    {
+      layout: "a local-config target",
+      marketplace: "mp",
+      selection: {
+        targetIsLocal: true,
+        current: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
+        other: { schemaVersion: 1 },
+      },
+    },
+    {
+      layout: "a marketplace both files declare",
+      marketplace: "mp",
+      selection: {
+        targetIsLocal: false,
+        current: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
+        other: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
+      },
+    },
+    {
+      layout: "a marketplace only the base config declares",
+      marketplace: "mp",
+      selection: {
+        targetIsLocal: false,
+        current: { schemaVersion: 1, marketplaces: { mp: { source: "./mp-src" } } },
+        other: { schemaVersion: 1 },
+      },
+    },
+    {
+      layout: "a marketplace neither file declares",
+      marketplace: "mp",
+      selection: {
+        targetIsLocal: false,
+        current: { schemaVersion: 1 },
+        other: { schemaVersion: 1, marketplaces: { other: { source: "./other-src" } } },
+      },
+    },
+    {
+      layout: "a prototype-named marketplace neither file owns",
+      marketplace: "constructor",
+      selection: {
+        targetIsLocal: false,
+        current: { schemaVersion: 1 },
+        other: { schemaVersion: 1, marketplaces: {} },
+      },
+    },
+  ] satisfies readonly {
+    layout: string;
+    marketplace: string;
+    selection: Parameters<typeof localOnlyMarketplaceRefusal>[0];
+  }[]) {
+    test(`does not refuse ${layout}`, () => {
+      // arrange
+      const expectedRefusal = undefined;
+
+      // act
+      const refusal = localOnlyMarketplaceRefusal(selection, marketplace);
+
+      // assert
+      assert.strictEqual(refusal, expectedRefusal);
+    });
+  }
+});
+
+describe("pluginLayerVerdict", () => {
+  for (const { layout, target, other, kind } of [
+    {
+      layout: "only the target layer declares the plugin",
+      target: { schemaVersion: 1, plugins: { "demo@mp": {} } },
+      other: { schemaVersion: 1 },
+      kind: "target-only",
+    },
+    {
+      layout: "both layers declare the plugin",
+      target: { schemaVersion: 1, plugins: { "demo@mp": {} } },
+      other: { schemaVersion: 1, plugins: { "demo@mp": { enabled: false } } },
+      kind: "both",
+    },
+    {
+      layout: "neither layer declares the plugin",
+      target: { schemaVersion: 1, plugins: { "other@mp": {} } },
+      other: { schemaVersion: 1, plugins: { "demo@other-mp": {} } },
+      kind: "neither",
+    },
+  ] satisfies readonly {
+    layout: string;
+    target: ScopeConfig;
+    other: ScopeConfig;
+    kind: "target-only" | "both" | "neither";
+  }[]) {
+    test(`answers ${kind} when ${layout}`, () => {
+      // arrange
+      const expectedVerdict = { kind };
+
+      // act
+      const verdict = pluginLayerVerdict({
+        target,
+        other,
+        targetIsLocal: false,
+        marketplace: "mp",
+        plugin: "demo",
       });
 
       // assert
-      assert.deepStrictEqual(target, { kind: "unreadable", filePath: locations.configJsonPath });
+      assert.deepStrictEqual(verdict, expectedVerdict);
+    });
+  }
+
+  test("refuses as plugin in local layer only when only the local layer declares a base-layer target", () => {
+    // arrange
+    const target: ScopeConfig = { schemaVersion: 1 };
+    const other: ScopeConfig = { schemaVersion: 1, plugins: { "demo@mp": {} } };
+
+    // act
+    const verdict = pluginLayerVerdict({
+      target,
+      other,
+      targetIsLocal: false,
+      marketplace: "mp",
+      plugin: "demo",
+    });
+
+    // assert
+    assert.ok(verdict.kind === "other-only");
+    assert.ok(verdict.refusal instanceof PluginInLocalLayerOnlyError);
+    assert.deepStrictEqual(
+      {
+        kind: verdict.kind,
+        reason: verdict.reason,
+        plugin: verdict.refusal.plugin,
+        marketplace: verdict.refusal.marketplace,
+        message: verdict.refusal.message,
+      },
+      {
+        kind: "other-only",
+        reason: "plugin in local layer only",
+        plugin: "demo",
+        marketplace: "mp",
+        message:
+          "The plugin demo@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
+      },
+    );
+  });
+
+  test("refuses as plugin in base layer only when only the base layer declares a local-layer target", () => {
+    // arrange
+    const target: ScopeConfig = { schemaVersion: 1, plugins: {} };
+    const other: ScopeConfig = { schemaVersion: 1, plugins: { "demo@mp": { enabled: true } } };
+
+    // act
+    const verdict = pluginLayerVerdict({
+      target,
+      other,
+      targetIsLocal: true,
+      marketplace: "mp",
+      plugin: "demo",
+    });
+
+    // assert
+    assert.ok(verdict.kind === "other-only");
+    assert.ok(verdict.refusal instanceof PluginInBaseLayerOnlyError);
+    assert.deepStrictEqual(
+      {
+        kind: verdict.kind,
+        reason: verdict.reason,
+        plugin: verdict.refusal.plugin,
+        marketplace: verdict.refusal.marketplace,
+        message: verdict.refusal.message,
+      },
+      {
+        kind: "other-only",
+        reason: "plugin in base layer only",
+        plugin: "demo",
+        marketplace: "mp",
+        message:
+          "The plugin demo@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
+      },
+    );
+  });
+
+  test("does not count a plugin key the other layer holds only through its prototype", () => {
+    // arrange
+    const inherited: ScopeConfig["plugins"] = Object.create({ "demo@mp": {} }) as Record<
+      string,
+      { enabled?: boolean }
+    >;
+    const target: ScopeConfig = { schemaVersion: 1 };
+    const other: ScopeConfig = { schemaVersion: 1, plugins: inherited };
+
+    // act
+    const verdict = pluginLayerVerdict({
+      target,
+      other,
+      targetIsLocal: false,
+      marketplace: "mp",
+      plugin: "demo",
+    });
+
+    // assert
+    assert.deepStrictEqual(verdict, { kind: "neither" });
+  });
+});
+
+describe("namedPluginLayerRefusal", () => {
+  for (const { layout, local, baseConfig, localConfig } of [
+    {
+      layout: "the target layer declares the plugin",
+      local: false,
+      baseConfig: '{"schemaVersion":1,"plugins":{"demo@mp":{}}}',
+      localConfig: undefined,
+    },
+    {
+      layout: "both layers declare the plugin",
+      local: true,
+      baseConfig: '{"schemaVersion":1,"plugins":{"demo@mp":{}}}',
+      localConfig: '{"schemaVersion":1,"plugins":{"demo@mp":{"enabled":false}}}',
+    },
+    {
+      layout: "no layer declares the plugin",
+      local: true,
+      baseConfig: undefined,
+      localConfig: undefined,
+    },
+  ] satisfies readonly {
+    layout: string;
+    local: boolean;
+    baseConfig: string | undefined;
+    localConfig: string | undefined;
+  }[]) {
+    test(`LAYER-04: does not refuse when ${layout} (local ${local})`, async () => {
+      // arrange
+      await withTempScopes(async ({ cwd }) => {
+        const locations = locationsFor("project", cwd);
+        await mkdir(path.dirname(locations.baseConfigJsonPath), { recursive: true });
+        await writeOptionalFile(locations.baseConfigJsonPath, baseConfig);
+        await writeOptionalFile(locations.localConfigJsonPath, localConfig);
+
+        // act
+        const refusal = await namedPluginLayerRefusal({
+          locations,
+          local,
+          marketplace: "mp",
+          plugin: "demo",
+        });
+
+        // assert
+        assert.equal(refusal, undefined);
+      });
+    });
+  }
+
+  test("LAYER-04: refuses as plugin in local layer only a base-layer target only the local layer declares", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await writeConfig(locations.localConfigJsonPath, {
+        schemaVersion: 1,
+        plugins: { "demo@mp": {} },
+      });
+
+      // act
+      const refusal = await namedPluginLayerRefusal({
+        locations,
+        local: false,
+        marketplace: "mp",
+        plugin: "demo",
+      });
+
+      // assert
+      assert.ok(refusal instanceof PluginInLocalLayerOnlyError);
+      assert.deepStrictEqual(
+        { plugin: refusal.plugin, marketplace: refusal.marketplace, message: refusal.message },
+        {
+          plugin: "demo",
+          marketplace: "mp",
+          message:
+            "The plugin demo@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
+        },
+      );
+    });
+  });
+
+  test("LAYER-04: refuses as plugin in base layer only a local-layer target only the base layer declares", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await writeConfig(locations.baseConfigJsonPath, {
+        schemaVersion: 1,
+        plugins: { "demo@mp": {} },
+      });
+
+      // act
+      const refusal = await namedPluginLayerRefusal({
+        locations,
+        local: true,
+        marketplace: "mp",
+        plugin: "demo",
+      });
+
+      // assert
+      assert.ok(refusal instanceof PluginInBaseLayerOnlyError);
+      assert.deepStrictEqual(
+        { plugin: refusal.plugin, marketplace: refusal.marketplace, message: refusal.message },
+        {
+          plugin: "demo",
+          marketplace: "mp",
+          message:
+            "The plugin demo@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
+        },
+      );
+    });
+  });
+
+  for (const { file, basename, local, layer } of [
+    {
+      file: "baseConfigJsonPath",
+      basename: "claude-plugins.json",
+      local: false,
+      layer: "the target layer",
+    },
+    {
+      file: "localConfigJsonPath",
+      basename: "claude-plugins.local.json",
+      local: false,
+      layer: "the other layer",
+    },
+    {
+      file: "localConfigJsonPath",
+      basename: "claude-plugins.local.json",
+      local: true,
+      layer: "the target layer",
+    },
+    {
+      file: "baseConfigJsonPath",
+      basename: "claude-plugins.json",
+      local: true,
+      layer: "the other layer",
+    },
+  ] satisfies readonly {
+    file: "baseConfigJsonPath" | "localConfigJsonPath";
+    basename: string;
+    local: boolean;
+    layer: string;
+  }[]) {
+    test(`CFG-03: an unreadable ${basename} that is ${layer} (local ${local}) is an invalid manifest naming it`, async () => {
+      // arrange
+      await withTempScopes(async ({ cwd }) => {
+        const locations = locationsFor("project", cwd);
+        await mkdir(path.dirname(locations[file]), { recursive: true });
+        await writeFile(locations[file], "{");
+
+        // act
+        const refusal = await namedPluginLayerRefusal({
+          locations,
+          local,
+          marketplace: "mp",
+          plugin: "demo",
+        });
+
+        // assert
+        assert.ok(refusal instanceof LayerConfigUnreadableError);
+        assert.deepStrictEqual(
+          { basename: refusal.basename, message: refusal.message },
+          { basename, message: `Config file "${basename}" failed schema validation.` },
+        );
+      });
+    });
+  }
+});
+
+describe("keepLocalLayerTargets", () => {
+  test("LAYER-04: keeps, in order, the targets whose key the scope's local layer declares", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await writeConfig(locations.localConfigJsonPath, {
+        schemaVersion: 1,
+        plugins: { "alpha@mp": {}, "gamma@mp": {} },
+      });
+      const targets = [
+        { plugin: "gamma", marketplace: "mp", scope: "project" },
+        { plugin: "beta", marketplace: "mp", scope: "project" },
+        { plugin: "alpha", marketplace: "mp", scope: "project" },
+      ] as const;
+
+      // act
+      const kept = await keepLocalLayerTargets(targets, cwd);
+
+      // assert
+      assert.deepStrictEqual(kept, [
+        { plugin: "gamma", marketplace: "mp", scope: "project" },
+        { plugin: "alpha", marketplace: "mp", scope: "project" },
+      ]);
+    });
+  });
+
+  test("LAYER-04: keeps no target when the local layer is absent", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      await writeConfig(locationsFor("project", cwd).baseConfigJsonPath, {
+        schemaVersion: 1,
+        plugins: { "alpha@mp": {} },
+      });
+
+      // act
+      const kept = await keepLocalLayerTargets(
+        [{ plugin: "alpha", marketplace: "mp", scope: "project" }],
+        cwd,
+      );
+
+      // assert
+      assert.deepStrictEqual(kept, []);
+    });
+  });
+
+  test("LAYER-04: reads each scope's own local layer", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      await writeConfig(locationsFor("project", cwd).localConfigJsonPath, {
+        schemaVersion: 1,
+        plugins: { "alpha@mp": {} },
+      });
+      await writeConfig(locationsFor("user", cwd).localConfigJsonPath, {
+        schemaVersion: 1,
+        plugins: { "beta@mp": {} },
+      });
+      const targets = [
+        { plugin: "alpha", marketplace: "mp", scope: "project" },
+        { plugin: "alpha", marketplace: "mp", scope: "user" },
+        { plugin: "beta", marketplace: "mp", scope: "project" },
+        { plugin: "beta", marketplace: "mp", scope: "user" },
+      ] as const;
+
+      // act
+      const kept = await keepLocalLayerTargets(targets, cwd);
+
+      // assert
+      assert.deepStrictEqual(kept, [
+        { plugin: "alpha", marketplace: "mp", scope: "project" },
+        { plugin: "beta", marketplace: "mp", scope: "user" },
+      ]);
+    });
+  });
+
+  test("CFG-03: an unreadable local layer is an invalid manifest naming claude-plugins.local.json", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await mkdir(path.dirname(locations.localConfigJsonPath), { recursive: true });
+      await writeFile(locations.localConfigJsonPath, "{");
+
+      // act & assert
+      await assert.rejects(
+        keepLocalLayerTargets([{ plugin: "alpha", marketplace: "mp", scope: "project" }], cwd),
+        (error: unknown) => {
+          assert.ok(error instanceof LayerConfigUnreadableError);
+          assert.deepStrictEqual(
+            { basename: error.basename, message: error.message },
+            {
+              basename: "claude-plugins.local.json",
+              message: 'Config file "claude-plugins.local.json" failed schema validation.',
+            },
+          );
+          return true;
+        },
+      );
+    });
+  });
+
+  test("LAYER-04: a plugins entry named __proto__ declares nothing it holds", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await mkdir(path.dirname(locations.localConfigJsonPath), { recursive: true });
+      await writeFile(
+        locations.localConfigJsonPath,
+        '{"schemaVersion":1,"plugins":{"__proto__":{"alpha@mp":{}}}}',
+      );
+
+      // act
+      const kept = await keepLocalLayerTargets(
+        [{ plugin: "alpha", marketplace: "mp", scope: "project" }],
+        cwd,
+      );
+
+      // assert
+      assert.deepStrictEqual(kept, []);
+    });
+  });
+
+  test("LAYER-04: keeps the dependencies the local layer's plugins need, through plugins no layer declares", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd, root }) => {
+      const locations = locationsFor("project", cwd);
+      await writeConfig(locations.localConfigJsonPath, {
+        schemaVersion: 1,
+        plugins: { "app@tools": {} },
+      });
+      await writeConfig(locations.baseConfigJsonPath, {
+        schemaVersion: 1,
+        plugins: { "svc@tools": {} },
+      });
+      await saveToolsScope({
+        cwd,
+        root,
+        records: {
+          app: "explicit",
+          lib: "dependency",
+          base: "dependency",
+          svc: "explicit",
+          core: "dependency",
+        },
+        entries: { app: ["lib", "base"], lib: ["base"], base: [], svc: ["core", "lib"], core: [] },
+      });
+      const targets = [
+        { plugin: "svc", marketplace: "tools", scope: "project" },
+        { plugin: "core", marketplace: "tools", scope: "project" },
+        { plugin: "base", marketplace: "tools", scope: "project" },
+        { plugin: "lib", marketplace: "tools", scope: "project" },
+        { plugin: "app", marketplace: "tools", scope: "project" },
+      ] as const;
+
+      // act
+      const kept = await keepLocalLayerTargets(targets, cwd);
+
+      // assert
+      assert.deepStrictEqual(kept, [
+        { plugin: "base", marketplace: "tools", scope: "project" },
+        { plugin: "lib", marketplace: "tools", scope: "project" },
+        { plugin: "app", marketplace: "tools", scope: "project" },
+      ]);
+    });
+  });
+
+  test("LAYER-04: keeps no dependency past a plugin the base layer declares", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd, root }) => {
+      const locations = locationsFor("project", cwd);
+      await writeConfig(locations.localConfigJsonPath, {
+        schemaVersion: 1,
+        plugins: { "app@tools": {} },
+      });
+      await writeConfig(locations.baseConfigJsonPath, {
+        schemaVersion: 1,
+        plugins: { "kit@tools": {} },
+      });
+      await saveToolsScope({
+        cwd,
+        root,
+        records: { app: "explicit", kit: "explicit", gear: "dependency" },
+        entries: { app: ["kit"], kit: ["gear"], gear: [] },
+      });
+      const targets = [
+        { plugin: "app", marketplace: "tools", scope: "project" },
+        { plugin: "gear", marketplace: "tools", scope: "project" },
+        { plugin: "kit", marketplace: "tools", scope: "project" },
+      ] as const;
+
+      // act
+      const kept = await keepLocalLayerTargets(targets, cwd);
+
+      // assert
+      assert.deepStrictEqual(kept, [{ plugin: "app", marketplace: "tools", scope: "project" }]);
+    });
+  });
+
+  test("LAYER-04: a local plugin whose dependencies cannot be read refuses the selection, naming it", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd, root }) => {
+      await writeConfig(locationsFor("project", cwd).localConfigJsonPath, {
+        schemaVersion: 1,
+        plugins: { "app@tools": {} },
+      });
+      await saveToolsScope({
+        cwd,
+        root,
+        records: { app: "explicit", lib: "dependency" },
+        entries: { lib: [] },
+      });
+      const targets = [
+        { plugin: "app", marketplace: "tools", scope: "project" },
+        { plugin: "lib", marketplace: "tools", scope: "project" },
+      ] as const;
+
+      // act & assert
+      await assert.rejects(keepLocalLayerTargets(targets, cwd), (error: unknown) => {
+        assert.ok(error instanceof DependencyDeclarationsUnreadableError);
+        assert.deepStrictEqual(
+          { declarer: error.declarer, message: error.message },
+          {
+            declarer: "app@tools",
+            message: "cannot read the dependencies of app@tools: not declared by its marketplace",
+          },
+        );
+        return true;
+      });
+    });
+  });
+
+  test("CFG-03: an unreadable base layer is an invalid manifest naming claude-plugins.json", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      await mkdir(path.dirname(locations.baseConfigJsonPath), { recursive: true });
+      await writeFile(locations.baseConfigJsonPath, "{");
+
+      // act & assert
+      await assert.rejects(
+        keepLocalLayerTargets([{ plugin: "alpha", marketplace: "mp", scope: "project" }], cwd),
+        (error: unknown) => {
+          assert.ok(error instanceof LayerConfigUnreadableError);
+          assert.deepStrictEqual(
+            { basename: error.basename, message: error.message },
+            {
+              basename: "claude-plugins.json",
+              message: 'Config file "claude-plugins.json" failed schema validation.',
+            },
+          );
+          return true;
+        },
+      );
     });
   });
 });
@@ -1022,28 +1779,28 @@ describe("writeAdoptingConfigEntries", () => {
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
       const current: ScopeConfig = { schemaVersion: 1 };
-      const sibling: ScopeConfig = { schemaVersion: 1 };
+      const other: ScopeConfig = { schemaVersion: 1 };
       const state = makeState({ mp: { scope: "project", plugins: {} } });
 
       // act
       await writeAdoptingConfigEntries({
         current,
-        sibling,
+        other,
         state,
         marketplace: "mp",
         plugin: "alpha",
-        targetConfigPath: locations.configJsonPath,
-        scopeRoot: locations.scopeRoot,
+        locations,
+        targetIsLocal: false,
         pluginPatch: { enabled: false },
       });
 
       // assert
       assert.equal(
-        await readFile(locations.configJsonPath, "utf8"),
+        await readFile(locations.baseConfigJsonPath, "utf8"),
         '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-source"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {\n      "enabled": false\n    }\n  }\n}\n',
       );
       assert.deepStrictEqual(current, { schemaVersion: 1 });
-      assert.deepStrictEqual(sibling, { schemaVersion: 1 });
+      assert.deepStrictEqual(other, { schemaVersion: 1 });
     });
   });
 
@@ -1055,35 +1812,35 @@ describe("writeAdoptingConfigEntries", () => {
         schemaVersion: 1,
         marketplaces: { mp: { source: "./declared", autoupdate: false } },
       };
-      const sibling: ScopeConfig = { schemaVersion: 1 };
+      const other: ScopeConfig = { schemaVersion: 1 };
       const state = makeState({ mp: { scope: "project", plugins: {} } });
 
       // act
       await writeAdoptingConfigEntries({
         current,
-        sibling,
+        other,
         state,
         marketplace: "mp",
         plugin: "alpha",
-        targetConfigPath: locations.configJsonPath,
-        scopeRoot: locations.scopeRoot,
+        locations,
+        targetIsLocal: false,
         pluginPatch: {},
       });
 
       // assert
       assert.equal(
-        await readFile(locations.configJsonPath, "utf8"),
+        await readFile(locations.baseConfigJsonPath, "utf8"),
         '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./declared",\n      "autoupdate": false\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
       );
     });
   });
 
-  test("does not shadow a marketplace declaration found only in the sibling config", async () => {
+  test("LAYER-06: declares the plugin's marketplace in the target layer even when only the other layer declares it", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
       const current: ScopeConfig = { schemaVersion: 1 };
-      const sibling: ScopeConfig = {
+      const other: ScopeConfig = {
         schemaVersion: 1,
         marketplaces: { mp: { source: "./sibling", autoupdate: false } },
       };
@@ -1092,128 +1849,276 @@ describe("writeAdoptingConfigEntries", () => {
       // act
       await writeAdoptingConfigEntries({
         current,
-        sibling,
+        other,
         state,
         marketplace: "mp",
         plugin: "alpha",
-        targetConfigPath: locations.configLocalJsonPath,
-        scopeRoot: locations.scopeRoot,
+        locations,
+        targetIsLocal: true,
         pluginPatch: { enabled: true },
       });
 
       // assert
       assert.equal(
-        await readFile(locations.configLocalJsonPath, "utf8"),
-        '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {\n    "alpha@mp": {\n      "enabled": true\n    }\n  }\n}\n',
+        await readFile(locations.localConfigJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-source"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {\n      "enabled": true\n    }\n  }\n}\n',
       );
     });
   });
 
-  test("writes only the plugin declaration when the sibling config is unreadable", async () => {
+  test("LAYER-06: declares a github marketplace with the raw source its record holds", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
       const current: ScopeConfig = { schemaVersion: 1 };
-      const state = makeState({ mp: { scope: "project", plugins: {} } });
-
-      // act
-      await writeAdoptingConfigEntries({
-        current,
-        sibling: undefined,
-        state,
-        marketplace: "mp",
-        plugin: "alpha",
-        targetConfigPath: locations.configJsonPath,
-        scopeRoot: locations.scopeRoot,
-        pluginPatch: {},
-      });
-
-      // assert
-      assert.equal(
-        await readFile(locations.configJsonPath, "utf8"),
-        '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
-      );
-    });
-  });
-
-  test("writes only the plugin declaration when legacy state has no string source", async () => {
-    // arrange
-    await withTempScopes(async ({ cwd }) => {
-      const locations = locationsFor("project", cwd);
-      const current: ScopeConfig = { schemaVersion: 1 };
-      const sibling: ScopeConfig = { schemaVersion: 1 };
-      const marketplace = makeMarketplaceRecord("mp", "project", {});
+      const other: ScopeConfig = {
+        schemaVersion: 1,
+        marketplaces: { mp: { source: "acme/mp" } },
+      };
+      const record = makeMarketplaceRecord("mp", "project", {});
       const state: ExtensionState = {
         schemaVersion: 1,
-        marketplaces: { mp: { ...marketplace, source: { raw: 23 } } },
+        marketplaces: { mp: { ...record, source: githubSource("acme/mp") } },
       };
 
       // act
       await writeAdoptingConfigEntries({
         current,
-        sibling,
+        other,
         state,
         marketplace: "mp",
         plugin: "alpha",
-        targetConfigPath: locations.configJsonPath,
-        scopeRoot: locations.scopeRoot,
+        locations,
+        targetIsLocal: true,
         pluginPatch: {},
       });
 
       // assert
       assert.equal(
-        await readFile(locations.configJsonPath, "utf8"),
-        '{\n  "schemaVersion": 1,\n  "marketplaces": {},\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
+        await readFile(locations.localConfigJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "acme/mp"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
       );
     });
   });
+
+  test("LAYER-06: declares the marketplace with the other layer's source when the record holds no string source", async () => {
+    // arrange
+    await withTempScopes(async ({ cwd }) => {
+      const locations = locationsFor("project", cwd);
+      const current: ScopeConfig = { schemaVersion: 1 };
+      const other: ScopeConfig = {
+        schemaVersion: 1,
+        marketplaces: { mp: { source: "./sibling" } },
+      };
+
+      // act
+      await writeAdoptingConfigEntries({
+        current,
+        other,
+        state: unknownSourceState(),
+        marketplace: "mp",
+        plugin: "alpha",
+        locations,
+        targetIsLocal: true,
+        pluginPatch: {},
+      });
+
+      // assert
+      assert.equal(
+        await readFile(locations.localConfigJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./sibling"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
+      );
+    });
+  });
+
+  for (const { targetIsLocal, layer } of [
+    { targetIsLocal: false, layer: "base" },
+    { targetIsLocal: true, layer: "local" },
+  ] as const) {
+    test(`LAYER-06: refuses a plugin declaration in the ${layer} layer whose marketplace no source can declare and writes nothing`, async () => {
+      // arrange
+      await withTempScopes(async ({ cwd }) => {
+        const locations = locationsFor("project", cwd);
+        const targetConfigPath = targetIsLocal
+          ? locations.localConfigJsonPath
+          : locations.baseConfigJsonPath;
+        const current: ScopeConfig = { schemaVersion: 1 };
+        const other: ScopeConfig = { schemaVersion: 1 };
+
+        // act & assert
+        await assert.rejects(
+          writeAdoptingConfigEntries({
+            current,
+            other,
+            state: unknownSourceState(),
+            marketplace: "mp",
+            plugin: "alpha",
+            locations,
+            targetIsLocal,
+            pluginPatch: {},
+          }),
+          (error: unknown) => {
+            assert.ok(error instanceof MarketplaceSourceUndeclarableError);
+            assert.deepStrictEqual(
+              { marketplace: error.marketplace, layer: error.layer },
+              { marketplace: "mp", layer },
+            );
+            return true;
+          },
+        );
+        await assert.rejects(readFile(targetConfigPath, "utf8"), { code: "ENOENT" });
+      });
+    });
+  }
+
+  for (const { behavior, current, other, addedMarketplaces, config } of [
+    {
+      behavior: "declares each added marketplace beside the root's in the one write",
+      current: { schemaVersion: 1 },
+      other: { schemaVersion: 1 },
+      addedMarketplaces: ["tools"],
+      config:
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-source"\n    },\n    "tools": {\n      "source": "./tools-source"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
+    },
+    {
+      behavior: "declares no added marketplace that either config file declares",
+      current: { schemaVersion: 1, marketplaces: { tools: { source: "./declared" } } },
+      other: { schemaVersion: 1, marketplaces: { extra: { source: "./sibling" } } },
+      addedMarketplaces: ["tools", "extra"],
+      config:
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "tools": {\n      "source": "./declared"\n    },\n    "mp": {\n      "source": "./mp-source"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
+    },
+    {
+      behavior: "declares the root's marketplace once when it is also an added one",
+      current: { schemaVersion: 1 },
+      other: { schemaVersion: 1 },
+      addedMarketplaces: ["mp"],
+      config:
+        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp-source"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
+    },
+  ] satisfies readonly {
+    behavior: string;
+    current: ScopeConfig;
+    other: ScopeConfig;
+    addedMarketplaces: readonly string[];
+    config: string;
+  }[]) {
+    test(`LAYER-07 / UAT-05: ${behavior}`, async () => {
+      // arrange
+      await withTempScopes(async ({ cwd }) => {
+        const locations = locationsFor("project", cwd);
+        const state = makeState({
+          mp: { scope: "project", plugins: {} },
+          tools: { scope: "project", plugins: {} },
+          extra: { scope: "project", plugins: {} },
+        });
+
+        // act
+        await writeAdoptingConfigEntries({
+          current,
+          other,
+          state,
+          marketplace: "mp",
+          plugin: "alpha",
+          locations,
+          targetIsLocal: false,
+          pluginPatch: {},
+          addedMarketplaces,
+        });
+
+        // assert
+        assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), config);
+      });
+    });
+  }
 });
 
 describe("overwriteDisabledMemberEntries", () => {
-  test("overwrites an existing enabled: false entry for a discovered key", async () => {
-    // arrange
-    await withTempScopes(async ({ cwd }) => {
-      const locations = locationsFor("project", cwd);
-      await writeConfig(locations.configJsonPath, {
-        schemaVersion: 1,
-        plugins: { "b@mp": { enabled: false } },
-      });
-      const state = makeState({ mp: { scope: "project", plugins: {} } });
+  const disabledB = '{"schemaVersion":1,"plugins":{"b@mp":{"enabled":false}}}';
+  const enabledB =
+    '{\n  "schemaVersion": 1,\n  "plugins": {\n    "b@mp": {\n      "enabled": true\n    }\n  }\n}\n';
 
-      // act
-      await overwriteDisabledMemberEntries({
-        locations,
-        state,
-        keys: ["b@mp"],
-        select: selectDeclaringConfigWriteTarget,
-        write: writeAdoptingConfigEntries,
-      });
+  for (const { layout, base, local, expectedBase, expectedLocal } of [
+    {
+      layout: "the base layer",
+      base: disabledB,
+      local: undefined,
+      expectedBase: enabledB,
+      expectedLocal: undefined,
+    },
+    {
+      layout: "the local layer",
+      base: undefined,
+      local: disabledB,
+      expectedBase: undefined,
+      expectedLocal: enabledB,
+    },
+    {
+      layout: "both layers",
+      base: disabledB,
+      local: disabledB,
+      expectedBase: enabledB,
+      expectedLocal: enabledB,
+    },
+    {
+      layout: "the base layer beside an invalid local layer",
+      base: disabledB,
+      local: "{",
+      expectedBase: enabledB,
+      expectedLocal: "{",
+    },
+  ] satisfies readonly {
+    layout: string;
+    base: string | undefined;
+    local: string | undefined;
+    expectedBase: string | undefined;
+    expectedLocal: string | undefined;
+  }[]) {
+    test(`CR-06: overwrites a member disabled in ${layout} where it is disabled`, async () => {
+      // arrange
+      await withTempScopes(async ({ cwd }) => {
+        const locations = locationsFor("project", cwd);
+        await mkdir(locations.scopeRoot, { recursive: true });
+        await writeOptionalFile(locations.baseConfigJsonPath, base);
+        await writeOptionalFile(locations.localConfigJsonPath, local);
 
-      // assert
-      const cfg = JSON.parse(await readFile(locations.configJsonPath, "utf8")) as {
-        plugins?: Record<string, unknown>;
-      };
-      assert.deepStrictEqual(cfg.plugins?.["b@mp"], { enabled: true });
+        // act
+        await overwriteDisabledMemberEntries({
+          locations,
+          keys: ["b@mp"],
+        });
+
+        // assert
+        assert.deepStrictEqual(
+          {
+            base: await readOptionalFile(locations.baseConfigJsonPath),
+            local: await readOptionalFile(locations.localConfigJsonPath),
+          },
+          { base: expectedBase, local: expectedLocal },
+        );
+      });
     });
-  });
+  }
 
-  test("leaves a key the config does not mention untouched -- no file is created", async () => {
+  test("D-04-02: creates no file for a member no layer declares", async () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
-      const state = makeState({ mp: { scope: "project", plugins: {} } });
 
       // act
       await overwriteDisabledMemberEntries({
         locations,
-        state,
         keys: ["b@mp"],
-        select: selectDeclaringConfigWriteTarget,
-        write: writeAdoptingConfigEntries,
       });
 
       // assert
-      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
+      assert.deepStrictEqual(
+        {
+          base: await readOptionalFile(locations.baseConfigJsonPath),
+          local: await readOptionalFile(locations.localConfigJsonPath),
+        },
+        { base: undefined, local: undefined },
+      );
     });
   });
 
@@ -1221,44 +2126,18 @@ describe("overwriteDisabledMemberEntries", () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
-      const seeded: ScopeConfig = { schemaVersion: 1, plugins: { "b@mp": { enabled: true } } };
-      await writeConfig(locations.configJsonPath, seeded);
-      const state = makeState({ mp: { scope: "project", plugins: {} } });
+      const seeded = '{"schemaVersion":1,"plugins":{"b@mp":{"enabled":true}}}';
+      await mkdir(locations.scopeRoot, { recursive: true });
+      await writeFile(locations.localConfigJsonPath, seeded);
 
       // act
       await overwriteDisabledMemberEntries({
         locations,
-        state,
         keys: ["b@mp"],
-        select: selectDeclaringConfigWriteTarget,
-        write: writeAdoptingConfigEntries,
       });
 
       // assert
-      assert.deepStrictEqual(
-        JSON.parse(await readFile(locations.configJsonPath, "utf8")) as unknown,
-        seeded,
-      );
-    });
-  });
-
-  test("skips a key whose declaring file is unreadable", async () => {
-    // arrange
-    await withTempScopes(async ({ cwd }) => {
-      const locations = locationsFor("project", cwd);
-      await mkdir(path.dirname(locations.configLocalJsonPath), { recursive: true });
-      await writeFile(locations.configLocalJsonPath, "{");
-      const state = makeState({ mp: { scope: "project", plugins: {} } });
-
-      // act & assert: does not throw, and the base file is never created
-      await overwriteDisabledMemberEntries({
-        locations,
-        state,
-        keys: ["b@mp"],
-        select: selectDeclaringConfigWriteTarget,
-        write: writeAdoptingConfigEntries,
-      });
-      await assert.rejects(readFile(locations.configJsonPath, "utf8"), { code: "ENOENT" });
+      assert.strictEqual(await readFile(locations.localConfigJsonPath, "utf8"), seeded);
     });
   });
 
@@ -1266,27 +2145,23 @@ describe("overwriteDisabledMemberEntries", () => {
     // arrange
     await withTempScopes(async ({ cwd }) => {
       const locations = locationsFor("project", cwd);
-      await writeConfig(locations.configJsonPath, {
-        schemaVersion: 1,
-        plugins: { "b@mp": { enabled: false }, "c@mp": { enabled: false } },
-      });
-      const state = makeState({ mp: { scope: "project", plugins: {} } });
+      await mkdir(locations.scopeRoot, { recursive: true });
+      await writeFile(
+        locations.baseConfigJsonPath,
+        '{"schemaVersion":1,"plugins":{"b@mp":{"enabled":false},"c@mp":{"enabled":false}}}',
+      );
 
       // act
       await overwriteDisabledMemberEntries({
         locations,
-        state,
         keys: ["b@mp", "c@mp"],
-        select: selectDeclaringConfigWriteTarget,
-        write: writeAdoptingConfigEntries,
       });
 
       // assert
-      const cfg = JSON.parse(await readFile(locations.configJsonPath, "utf8")) as {
-        plugins?: Record<string, unknown>;
-      };
-      assert.deepStrictEqual(cfg.plugins?.["b@mp"], { enabled: true });
-      assert.deepStrictEqual(cfg.plugins?.["c@mp"], { enabled: true });
+      assert.strictEqual(
+        await readFile(locations.baseConfigJsonPath, "utf8"),
+        '{\n  "schemaVersion": 1,\n  "plugins": {\n    "b@mp": {\n      "enabled": true\n    },\n    "c@mp": {\n      "enabled": true\n    }\n  }\n}\n',
+      );
     });
   });
 });
@@ -1901,99 +2776,6 @@ describe("removePluginRecord", () => {
     assert.notEqual(stateWithoutPlugin.marketplaces, state.marketplaces);
     assert.notEqual(stateWithoutPlugin.marketplaces.mp, state.marketplaces.mp);
     assert.notEqual(stateWithoutPlugin.marketplaces.mp?.plugins, state.marketplaces.mp?.plugins);
-  });
-});
-
-describe("maybeWritePluginConfigBack", () => {
-  test("reports an invalid target config without rewriting it", async () => {
-    // arrange
-    await withTempScopes(async ({ cwd }) => {
-      const locations = locationsFor("project", cwd);
-      await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
-      await writeFile(locations.configJsonPath, "{");
-
-      // act
-      const writeBack = await maybeWritePluginConfigBack({
-        locations,
-        marketplace: "mp",
-        plugin: "alpha",
-        local: false,
-      });
-
-      // assert
-      assert.deepStrictEqual(writeBack, { invalidConfig: true });
-      assert.equal(await readFile(locations.configJsonPath, "utf8"), "{");
-    });
-  });
-
-  test("leaves an existing plugin declaration byte-identical", async () => {
-    // arrange
-    await withTempScopes(async ({ cwd }) => {
-      const locations = locationsFor("project", cwd);
-      const original = '{"schemaVersion":1,"plugins":{"alpha@mp":{"enabled":false}}}';
-      await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
-      await writeFile(locations.configJsonPath, original);
-
-      // act
-      const writeBack = await maybeWritePluginConfigBack({
-        locations,
-        marketplace: "mp",
-        plugin: "alpha",
-        local: false,
-      });
-
-      // assert
-      assert.deepStrictEqual(writeBack, { invalidConfig: false });
-      assert.equal(await readFile(locations.configJsonPath, "utf8"), original);
-    });
-  });
-
-  test("adds a missing plugin declaration to a valid base config", async () => {
-    // arrange
-    await withTempScopes(async ({ cwd }) => {
-      const locations = locationsFor("project", cwd);
-      await writeConfig(locations.configJsonPath, {
-        schemaVersion: 1,
-        marketplaces: { mp: { source: "./mp" } },
-      });
-
-      // act
-      const writeBack = await maybeWritePluginConfigBack({
-        locations,
-        marketplace: "mp",
-        plugin: "alpha",
-        local: false,
-      });
-
-      // assert
-      assert.deepStrictEqual(writeBack, { invalidConfig: false });
-      assert.equal(
-        await readFile(locations.configJsonPath, "utf8"),
-        '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "mp": {\n      "source": "./mp"\n    }\n  },\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
-      );
-    });
-  });
-
-  test("creates the local config when the selected local file is absent", async () => {
-    // arrange
-    await withTempScopes(async ({ cwd }) => {
-      const locations = locationsFor("project", cwd);
-
-      // act
-      const writeBack = await maybeWritePluginConfigBack({
-        locations,
-        marketplace: "mp",
-        plugin: "alpha",
-        local: true,
-      });
-
-      // assert
-      assert.deepStrictEqual(writeBack, { invalidConfig: false });
-      assert.equal(
-        await readFile(locations.configLocalJsonPath, "utf8"),
-        '{\n  "schemaVersion": 1,\n  "plugins": {\n    "alpha@mp": {}\n  }\n}\n',
-      );
-    });
   });
 });
 

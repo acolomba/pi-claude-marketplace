@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   isRenderableDependencyToken,
   isRenderablePluginKey,
+  renderDependentKeys,
   parseDeclaredDependencies,
   type DeclaredDependency,
 } from "../../extensions/pi-claude-marketplace/domain/dependencies.ts";
@@ -44,6 +45,37 @@ describe("isRenderableDependencyToken", () => {
   }
 });
 
+describe("renderDependentKeys", () => {
+  for (const { label, dependents, expected } of [
+    {
+      label: "renderable keys as a comma-joined list",
+      dependents: ["alpha@mp", "zeta@mp"],
+      expected: "alpha@mp, zeta@mp",
+    },
+    {
+      label: "one unrenderable key as a count of one",
+      dependents: ['x" or y@mp'],
+      expected: "1 other plugin",
+    },
+    {
+      label: "keys of which one is unrenderable as their count",
+      dependents: ["alpha@mp", "helper@utils@mp"],
+      expected: "2 other plugins",
+    },
+  ]) {
+    test(`names ${label}`, () => {
+      // arrange
+      const keys = dependents;
+
+      // act
+      const rendered = renderDependentKeys(keys);
+
+      // assert
+      assert.equal(rendered, expected);
+    });
+  }
+});
+
 describe("isRenderablePluginKey", () => {
   for (const { label, key, expected } of [
     { label: "a key whose halves are both tokens", key: "helper@utils-mp", expected: true },
@@ -61,8 +93,11 @@ describe("isRenderablePluginKey", () => {
     },
   ]) {
     test(`${label} is ${expected ? "" : "not "}a renderable plugin key`, () => {
+      // arrange
+      const pluginKey = key;
+
       // act
-      const renderable = isRenderablePluginKey(key);
+      const renderable = isRenderablePluginKey(pluginKey);
 
       // assert
       assert.equal(renderable, expected);

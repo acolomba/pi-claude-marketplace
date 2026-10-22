@@ -27,7 +27,7 @@ import {
   EXTENSION_ROOT_REL,
   PRESENTATION_SINK_TARGETS,
 } from "./gate-targets.ts";
-import { filesMatching, REPO_ROOT } from "./source-scan.ts";
+import { filesMatching, REPO_ROOT, stripComments } from "./source-scan.ts";
 
 import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { NotificationPresentation } from "../../extensions/pi-claude-marketplace/shared/notification-present.ts";
@@ -132,10 +132,6 @@ const CREDENTIAL_CAPTURING_ORCHESTRATORS: ReadonlyArray<string> = [
   MARKETPLACE_ADD_FILE,
   MARKETPLACE_UPDATE_FILE,
 ];
-
-function stripComments(src: string): string {
-  return src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
-}
 
 /**
  * Finds every occurrence of `marker` (a global regex whose capture group 1
@@ -995,6 +991,29 @@ const PLANTED_CREDENTIAL_SITES: ReadonlyArray<{
               status: "failed",
               name: SPLIT_KEY_PLUGIN,
               reasons: ["dangling reference"],
+              severity: "error",
+              needsReload: false,
+            },
+          ],
+        },
+      ]),
+  },
+  {
+    site: "the id of a failed row whose subject is a marketplace",
+    planted: USERINFO,
+    probe: () =>
+      probeReconcileAppliedSubject([
+        {
+          name: USERINFO_URL,
+          scope: "project",
+          status: "failed",
+          severity: "error",
+          plugins: [
+            {
+              status: "failed",
+              name: USERINFO_URL,
+              reasons: ["network error"],
+              marketplaceSubject: true,
               severity: "error",
               needsReload: false,
             },

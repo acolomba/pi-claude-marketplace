@@ -8,7 +8,7 @@ import type { ScopeConfig } from "../../../extensions/pi-claude-marketplace/pers
 interface DeclaredEnabledCase {
   readonly title: string;
   readonly current: ScopeConfig;
-  readonly sibling: ScopeConfig | undefined;
+  readonly other: ScopeConfig | undefined;
   readonly targetIsLocal: boolean;
   readonly expected: boolean | undefined;
 }
@@ -19,35 +19,42 @@ const CASES: readonly DeclaredEnabledCase[] = [
   {
     title: "returns true from a selected local declaration",
     current: { schemaVersion: 1, plugins: { [KEY]: { enabled: true } } },
-    sibling: { schemaVersion: 1, plugins: { [KEY]: { enabled: false } } },
+    other: { schemaVersion: 1, plugins: { [KEY]: { enabled: false } } },
     targetIsLocal: true,
     expected: true,
   },
   {
-    title: "preserves an absent local enabled field over a base opinion",
+    title: "returns the base false under a local entry without enabled",
     current: { schemaVersion: 1, plugins: { [KEY]: {} } },
-    sibling: { schemaVersion: 1, plugins: { [KEY]: { enabled: false } } },
+    other: { schemaVersion: 1, plugins: { [KEY]: { enabled: false } } },
     targetIsLocal: true,
-    expected: undefined,
+    expected: false,
   },
   {
-    title: "returns false from the local sibling of a selected base file",
+    title: "returns the base true under a local entry without enabled",
     current: { schemaVersion: 1, plugins: { [KEY]: { enabled: true } } },
-    sibling: { schemaVersion: 1, plugins: { [KEY]: { enabled: false } } },
+    other: { schemaVersion: 1, plugins: { [KEY]: {} } },
+    targetIsLocal: false,
+    expected: true,
+  },
+  {
+    title: "returns false from the local layer when the base layer is the target",
+    current: { schemaVersion: 1, plugins: { [KEY]: { enabled: true } } },
+    other: { schemaVersion: 1, plugins: { [KEY]: { enabled: false } } },
     targetIsLocal: false,
     expected: false,
   },
   {
     title: "falls back to the selected base declaration when local is absent",
     current: { schemaVersion: 1, plugins: { [KEY]: { enabled: true } } },
-    sibling: { schemaVersion: 1 },
+    other: { schemaVersion: 1 },
     targetIsLocal: false,
     expected: true,
   },
   {
     title: "returns undefined when neither physical file declares the plugin",
     current: { schemaVersion: 1 },
-    sibling: undefined,
+    other: undefined,
     targetIsLocal: false,
     expected: undefined,
   },
@@ -58,7 +65,7 @@ for (const row of CASES) {
     // arrange
     const options = {
       current: row.current,
-      sibling: row.sibling,
+      other: row.other,
       targetIsLocal: row.targetIsLocal,
       key: KEY,
     };

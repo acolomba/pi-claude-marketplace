@@ -7,7 +7,11 @@
 // `architecture/notify-chokepoint` forbids direct notify on the Pi context
 // outside of shared/notification-dispatch.ts.
 //
-// `TOP_LEVEL_USAGE` and `MARKETPLACE_USAGE` are PRD-stable strings.
+// `TOP_LEVEL_USAGE` is a PRD-stable string. `MARKETPLACE_USAGE` is built from
+// one signature row per marketplace verb (USE-01). The same row also builds
+// that verb's own usage line through `marketplaceUsage`, and the rows supply
+// the marketplace spelling list in both help texts and the `MarketplaceVerb`
+// type.
 //
 // `routeClaudePlugin` accepts `ls` as an alias for `list`; `routeMarketplace`
 // accepts `rm` and `ls` as aliases for `remove` and `list`.
@@ -107,6 +111,29 @@ export const MARKETPLACE_SUBCOMMANDS = [
   "help",
 ] as const;
 
+interface MarketplaceVerbSignature {
+  readonly alias?: string;
+  readonly args: string;
+}
+
+const MARKETPLACE_VERB_SIGNATURES = {
+  add: { args: "<source> [--scope user|project] [--local]" },
+  remove: { alias: "rm", args: "<name> [--scope user|project] [--local]" },
+  list: { alias: "ls", args: "[--scope user|project]" },
+  info: { args: "<name> [--scope user|project]" },
+  update: { args: "[<name>] [--scope user|project]" },
+  autoupdate: { args: "[<name>] [--scope user|project] [--local]" },
+  noautoupdate: { args: "[<name>] [--scope user|project] [--local]" },
+} as const satisfies Record<string, MarketplaceVerbSignature>;
+
+export type MarketplaceVerb = keyof typeof MARKETPLACE_VERB_SIGNATURES;
+
+const MARKETPLACE_VERB_ROWS = Object.entries<MarketplaceVerbSignature>(MARKETPLACE_VERB_SIGNATURES);
+
+const MARKETPLACE_SPELLINGS = MARKETPLACE_VERB_ROWS.flatMap(([verb, { alias }]) =>
+  alias === undefined ? [verb] : [verb, alias],
+).join("|");
+
 export const TOP_LEVEL_USAGE =
   "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
@@ -123,18 +150,34 @@ export const TOP_LEVEL_USAGE =
   "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  import [--scope user|project]\n" +
   "  browse\n" +
-  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
+  `  marketplace <${MARKETPLACE_SPELLINGS}> ...\n` +
   "  help [marketplace]";
 
-export const MARKETPLACE_USAGE =
-  "Usage: /claude:plugin marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
-  "  add <source> [--scope user|project]\n" +
-  "  remove <name> [--scope user|project]   (alias: rm)\n" +
-  "  list [--scope user|project]            (alias: ls)\n" +
-  "  info <name> [--scope user|project]\n" +
-  "  update [<name>] [--scope user|project]\n" +
-  "  autoupdate [<name>] [--scope user|project]\n" +
-  "  noautoupdate [<name>] [--scope user|project]";
+/** The usage line of one marketplace verb, built from its signature row. */
+export function marketplaceUsage(verb: MarketplaceVerb): string {
+  const { alias, args }: MarketplaceVerbSignature = MARKETPLACE_VERB_SIGNATURES[verb];
+  const spelling = alias === undefined ? verb : `<${verb}|${alias}>`;
+  return `Usage: /claude:plugin marketplace ${spelling} ${args}`;
+}
+
+// The alias notes share one column, three spaces past the longest line that
+// carries one.
+function marketplaceHelp(): string {
+  const rows = MARKETPLACE_VERB_ROWS.map(([verb, { alias, args }]) => ({
+    line: `  ${verb} ${args}`,
+    alias,
+  }));
+  const aliasColumn =
+    Math.max(...rows.filter((row) => row.alias !== undefined).map((row) => row.line.length)) + 3;
+  return [
+    `Usage: /claude:plugin marketplace <${MARKETPLACE_SPELLINGS}> ...`,
+    ...rows.map(({ line, alias }) =>
+      alias === undefined ? line : `${line.padEnd(aliasColumn)}(alias: ${alias})`,
+    ),
+  ].join("\n");
+}
+
+export const MARKETPLACE_USAGE = marketplaceHelp();
 
 /**
  * Peel off the first whitespace-delimited token from `args`. Returns

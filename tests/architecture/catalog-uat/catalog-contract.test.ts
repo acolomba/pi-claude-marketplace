@@ -18,8 +18,8 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 const CATALOG_PATH = path.join(REPO_ROOT, "docs/output-catalog.md");
 const EXPECTED_MODULE_COUNT = 21;
 const EXPECTED_SECTION_COUNT = 21;
-const EXPECTED_STATE_COUNT = 270;
-const EXPECTED_UTF8_BYTES = 41_915;
+const EXPECTED_STATE_COUNT = 290;
+const EXPECTED_UTF8_BYTES = 46_623;
 
 const FIXTURE_SECTION_ORDER = [
   "/claude:plugin list",
@@ -268,19 +268,13 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 21 fixture modules to 270 exact documented states", async () => {
+test("catalog contract matches all 21 fixture modules to 290 exact documented states", async () => {
   // arrange
-  assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
-  assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);
-  assert.equal(countFixtureStates(fixtures), EXPECTED_STATE_COUNT);
-
-  const catalog = await readFile(CATALOG_PATH, "utf8");
-  const examples = loadCatalogExamples(catalog);
-  assert.equal(examples.length, EXPECTED_STATE_COUNT);
-  assert.equal(
-    examples.reduce((bytes, example) => bytes + Buffer.byteLength(example.expected, "utf8"), 0),
-    EXPECTED_UTF8_BYTES,
+  const examples = loadCatalogExamples(await readFile(CATALOG_PATH, "utf8"));
+  const exampleBytes = examples.reduce(
+    (bytes, example) => bytes + Buffer.byteLength(example.expected, "utf8"),
+    0,
   );
 
   // act
@@ -291,6 +285,11 @@ test("catalog contract matches all 21 fixture modules to 270 exact documented st
   }
 
   // assert
+  assert.equal(FIXTURE_MAPS.length, EXPECTED_MODULE_COUNT);
+  assert.equal(Object.keys(fixtures).length, EXPECTED_SECTION_COUNT);
+  assert.equal(countFixtureStates(fixtures), EXPECTED_STATE_COUNT);
+  assert.equal(examples.length, EXPECTED_STATE_COUNT);
+  assert.equal(exampleBytes, EXPECTED_UTF8_BYTES);
   assert.deepStrictEqual(completeness, []);
   assertSameTupleOrder(fixtureTupleKeys(fixtures).sort(), catalogTupleKeys(examples).sort());
   assert.equal(renderFailures.length, 0, renderFailures.map(formatFailure).join("\n\n"));

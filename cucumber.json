@@ -1,0 +1,8 @@
+{
+  "default": {
+    "import": ["features/support/**/*.ts", "features/step_definitions/**/*.steps.ts"],
+    "format": ["summary"],
+    "order": "random",
+    "parallel": 8
+  }
+}

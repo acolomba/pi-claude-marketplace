@@ -6,7 +6,12 @@ import {
   reinstallReasonsFromError,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-record.ts";
 import {
+  DependencyDeclarationsUnreadableError,
+  InvalidMarketplaceManifestError,
+  LayerConfigUnreadableError,
   ManualRecoveryError,
+  PluginInBaseLayerOnlyError,
+  PluginInLocalLayerOnlyError,
   PluginShapeError,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -514,4 +519,92 @@ test("composes ordinary, typed, errno, and manual-recovery failures", () => {
       notes: ["broken\n\ncause: broken"],
     },
   );
+});
+
+const LOCAL_CAUSE =
+  "The plugin hello@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.";
+const BASE_CAUSE =
+  "The plugin hello@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.";
+const INVALID_CAUSE = 'Config file "claude-plugins.local.json" failed schema validation.';
+
+for (const { refusal, reason, note } of [
+  {
+    refusal: new PluginInLocalLayerOnlyError("hello", "mp"),
+    reason: "plugin in local layer only",
+    note: `${LOCAL_CAUSE}\n\ncause: ${LOCAL_CAUSE}`,
+  },
+  {
+    refusal: new PluginInBaseLayerOnlyError("hello", "mp"),
+    reason: "plugin in base layer only",
+    note: `${BASE_CAUSE}\n\ncause: ${BASE_CAUSE}`,
+  },
+  {
+    refusal: new LayerConfigUnreadableError("claude-plugins.local.json"),
+    reason: "invalid manifest",
+    note: `${INVALID_CAUSE}\n\ncause: ${INVALID_CAUSE}`,
+  },
+] as const) {
+  test(`LAYER-04: the ${reason} refusal carries its reason and its cause`, () => {
+    // act
+    const outcome = recordReinstallOutcome({
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      error: refusal,
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      notes: [note],
+      reasons: [reason],
+      cause: refusal,
+    });
+    assert.strictEqual(outcome.cause, refusal);
+  });
+}
+
+test("a manifest parse failure carries no cause and no layer reason", () => {
+  // arrange
+  const error = new InvalidMarketplaceManifestError(
+    'marketplace.json is not valid JSON: SyntaxError: "{ broken" is not valid JSON',
+  );
+
+  // act
+  const outcome = recordReinstallOutcome({
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    error,
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    notes: [
+      'marketplace.json is not valid JSON: SyntaxError: "{ broken" is not valid JSON\n\ncause: marketplace.json is not valid JSON: SyntaxError: "{ broken" is not valid JSON',
+    ],
+  });
+});
+
+test("LAYER-04: an unreadable dependency declaration narrows to unreadable", () => {
+  // arrange
+  const error = new DependencyDeclarationsUnreadableError(
+    "app@tools",
+    "cannot read the dependencies of app@tools: not declared by its marketplace",
+  );
+
+  // act
+  const reasons = reinstallReasonsFromError(error);
+
+  // assert
+  assert.deepStrictEqual(reasons, ["unreadable"]);
 });

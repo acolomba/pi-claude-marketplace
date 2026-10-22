@@ -12,6 +12,8 @@ import {
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -56,9 +58,10 @@ for (const mode of ["json", "rpc"]) {
         resolvePluginPin: () =>
           Promise.resolve({ cloneUrl: "https://github.com/owner/repo", pin: SHA }),
         async materializePluginClone(options) {
-          assert.strictEqual(options.auth?.kind, "device-flow");
-          assert.ok(options.auth?.kind === "device-flow");
-          await options.auth.onAuthRequired();
+          const auth = options.resolveAuth();
+          assert.strictEqual(auth.kind, "device-flow");
+          assert.ok(auth.kind === "device-flow");
+          await auth.onAuthRequired();
           return root;
         },
         async materializeOrRefreshPluginMirror(options) {
@@ -167,7 +170,7 @@ test("returns a materialized pinned cache result and its resolved sha", async (t
     },
     materializePluginClone(options) {
       calls.push("materialize");
-      assert.ok(options.auth !== undefined);
+      assert.ok(options.resolveAuth() !== undefined);
       return Promise.resolve(cloneRoot);
     },
     materializeOrRefreshPluginMirror() {
@@ -184,6 +187,42 @@ test("returns a materialized pinned cache result and its resolved sha", async (t
     resolvedSha: SHA,
   });
   assert.deepStrictEqual(calls, ["resolve", "materialize"]);
+});
+
+test("NFR-5: a pinned GitHub source the seam finds warm never reads an invalid base", async (testContext) => {
+  // arrange
+  await createHermeticEnvironment(testContext, "install-clone-probe-warm-home-");
+  const { locations, root } = await freshLocations(testContext);
+  setGitHubBaseUrl(testContext, "http://mirror.example");
+  const cloneRoot = path.join(root, "warm-clone");
+  await mkdir(cloneRoot, { recursive: true });
+  const source: GitBackedSource = {
+    kind: "github",
+    raw: "owner/repo",
+    owner: "owner",
+    repo: "repo",
+    sha: SHA,
+  };
+  const seam: InstallCloneCacheSeam = {
+    resolvePluginPin() {
+      return Promise.resolve({ cloneUrl: "https://github.com/owner/repo", pin: SHA });
+    },
+    materializePluginClone() {
+      return Promise.resolve(cloneRoot);
+    },
+    materializeOrRefreshPluginMirror() {
+      return Promise.reject(new Error("unexpected mirror materialization"));
+    },
+  };
+
+  // act
+  const outcome = await probeInstallClone({ source, seam, locations, auth: auth() });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    result: { kind: "materialized", pluginRoot: cloneRoot, resolvedSha: SHA },
+    resolvedSha: SHA,
+  });
 });
 
 // D-2-01 / D-2-03: both seam calls take the identity `cloneUrl` AND the wire
@@ -206,10 +245,11 @@ test("sends the pinned clone the identity url and the typed wire url", async (te
     },
     // The bundle carries closures, so the recorded call keeps only the two
     // comparable fields: the bound host and the injected credential ops.
-    materializePluginClone({ auth: bundle, ...cloneOptions }) {
+    materializePluginClone({ resolveAuth, ...cloneOptions }) {
+      const bundle = resolveAuth();
       calls.push({
         ...cloneOptions,
-        auth: { credentialOps: bundle?.credentialOps, host: bundle?.host },
+        auth: { credentialOps: bundle.credentialOps, host: bundle.host },
       });
       return Promise.resolve(cloneRoot);
     },
@@ -353,7 +393,7 @@ test("returns a missing-subdir result without exposing the resolved sha", async 
     materializePluginClone(options) {
       assert.strictEqual(options.ref, "main");
       assert.deepStrictEqual(
-        { credentialOps: options.auth?.credentialOps, host: options.auth?.host },
+        { credentialOps: options.resolveAuth().credentialOps, host: options.resolveAuth().host },
         { credentialOps: pluginAuth.credentialOps, host: "example.com" },
       );
       return Promise.resolve(cloneRoot);

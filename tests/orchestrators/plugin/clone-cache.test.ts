@@ -204,7 +204,7 @@ void test("PURL-02: a warm cache uses the default git surface without making a g
 
   // act
   const materialized = await materializePluginClone({
-    auth: publicCloneAuth(),
+    resolveAuth: publicCloneAuth,
     locations,
     cloneUrl,
     networkUrl: cloneUrl,
@@ -240,7 +240,7 @@ void test("PURL-02/04: materializePluginClone clones into staging, checks out th
   const { gitOps, state } = createGitOps();
 
   const cloneRoot = await materializePluginClone({
-    auth: publicCloneAuth(),
+    resolveAuth: publicCloneAuth,
     locations,
     cloneUrl: "https://example.com/repo",
     networkUrl: "https://example.com/repo",
@@ -263,7 +263,7 @@ void test("PURL-04: a second materialize of the same url+sha triggers zero addit
   const { gitOps, state } = createGitOps();
 
   const first = await materializePluginClone({
-    auth: publicCloneAuth(),
+    resolveAuth: publicCloneAuth,
     locations,
     cloneUrl: "https://example.com/repo",
     networkUrl: "https://example.com/repo",
@@ -271,7 +271,7 @@ void test("PURL-04: a second materialize of the same url+sha triggers zero addit
     gitOps,
   });
   const second = await materializePluginClone({
-    auth: publicCloneAuth(),
+    resolveAuth: publicCloneAuth,
     locations,
     cloneUrl: "https://example.com/repo",
     networkUrl: "https://example.com/repo",
@@ -300,7 +300,7 @@ void test("PURL-02: a warm cache returns offline even when gitOps.clone throws",
   await writeFile(path.join(keyDir, "marker"), "warm");
 
   const cloneRoot = await materializePluginClone({
-    auth: publicCloneAuth(),
+    resolveAuth: publicCloneAuth,
     locations,
     cloneUrl: "https://example.com/repo",
     networkUrl: "https://example.com/repo",
@@ -311,12 +311,59 @@ void test("PURL-02: a warm cache returns offline even when gitOps.clone throws",
   assert.equal(cloneRoot, keyDir, "returns the warm cache dir");
 });
 
+void test("NFR-5: a warm cache returns without building the auth bundle", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const { gitOps, state } = createGitOps();
+  const keyDir = await locations.pluginCloneDir(pluginCloneKey("https://example.com/repo", PIN_40));
+  await mkdir(keyDir, { recursive: true });
+
+  // act
+  const cloneRoot = await materializePluginClone({
+    resolveAuth: () => {
+      throw new Error("a warm cache never builds the auth bundle");
+    },
+    locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    pin: PIN_40,
+    gitOps,
+  });
+
+  // assert
+  assert.strictEqual(cloneRoot, keyDir);
+  assert.deepStrictEqual(state.cloneCalls, []);
+});
+
+void test("a cold key whose auth bundle cannot be built fails before any clone", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const { gitOps, state } = createGitOps();
+  const refusal = new Error("the auth bundle cannot be built");
+
+  // act & assert
+  await assert.rejects(
+    materializePluginClone({
+      resolveAuth: () => {
+        throw refusal;
+      },
+      locations,
+      cloneUrl: "https://example.com/repo",
+      networkUrl: "https://example.com/repo",
+      pin: PIN_40,
+      gitOps,
+    }),
+    (error: unknown) => error === refusal,
+  );
+  assert.deepStrictEqual(state.cloneCalls, []);
+});
+
 void test("Pitfall: sha wins over ref -- checkout pins the sha, clone singleBranch uses the ref", async (t) => {
   const locations = await freshLocations(t);
   const { gitOps, state } = createGitOps();
 
   await materializePluginClone({
-    auth: publicCloneAuth(),
+    resolveAuth: publicCloneAuth,
     locations,
     cloneUrl: "https://example.com/repo",
     networkUrl: "https://example.com/repo",
@@ -370,7 +417,7 @@ void test("PURL-04: a pin outside the ref-hint closure triggers ONE full fetch t
   };
 
   const cloneRoot = await materializePluginClone({
-    auth: publicCloneAuth(),
+    resolveAuth: publicCloneAuth,
     locations,
     cloneUrl: "https://example.com/repo",
     networkUrl: "https://example.com/repo",
@@ -401,7 +448,7 @@ void test("PURL-04: a pin reachable within the ref-hint closure stays on the fas
   const { gitOps, state } = createGitOps();
 
   await materializePluginClone({
-    auth: publicCloneAuth(),
+    resolveAuth: publicCloneAuth,
     locations,
     cloneUrl: "https://example.com/repo",
     networkUrl: "https://example.com/repo",
@@ -433,7 +480,7 @@ void test("PURL-04: a still-unreachable pin fails clean after the retry (fetch d
   await assert.rejects(
     () =>
       materializePluginClone({
-        auth: publicCloneAuth(),
+        resolveAuth: publicCloneAuth,
         locations,
         cloneUrl: "https://example.com/repo",
         networkUrl: "https://example.com/repo",
@@ -463,7 +510,7 @@ void test("PURL-04: a NO-ref clone whose checkout throws CommitNotFetchedError f
   await assert.rejects(
     () =>
       materializePluginClone({
-        auth: publicCloneAuth(),
+        resolveAuth: publicCloneAuth,
         locations,
         cloneUrl: "https://example.com/repo",
         networkUrl: "https://example.com/repo",
@@ -498,7 +545,7 @@ void test("PURL-04: a ref-hint clone whose checkout throws a NON-CommitNotFetche
   await assert.rejects(
     () =>
       materializePluginClone({
-        auth: publicCloneAuth(),
+        resolveAuth: publicCloneAuth,
         locations,
         cloneUrl: "https://example.com/repo",
         networkUrl: "https://example.com/repo",
@@ -559,7 +606,7 @@ void test("PROV-03: the recovery fetch threads the auth bundle so a private pin 
     pin: PIN_OUTSIDE_CLOSURE,
     ref: "v1.5.5",
     gitOps,
-    auth,
+    resolveAuth: () => auth,
   });
 
   assert.equal(base.state.fetchCalls.length, 1, "exactly one recovery fetch");
@@ -590,7 +637,7 @@ void test("PROV-03: materializePluginClone with an auth bundle threads it to git
     networkUrl: "https://gitlab.example.com/o/r",
     pin: PIN_40,
     gitOps,
-    auth,
+    resolveAuth: () => auth,
   });
 
   assert.equal(state.cloneCalls.length, 1, "exactly one clone");
@@ -621,7 +668,7 @@ void test("Pitfall: an EEXIST/ENOTEMPTY rename is a warm-cache win (no rethrow)"
   };
 
   const cloneRoot = await materializePluginClone({
-    auth: publicCloneAuth(),
+    resolveAuth: publicCloneAuth,
     locations,
     cloneUrl: "https://example.com/repo",
     networkUrl: "https://example.com/repo",
@@ -648,7 +695,7 @@ void test("MA-9: a non-race promotion failure cleans staging and preserves the r
   // act
   try {
     await materializePluginClone({
-      auth: publicCloneAuth(),
+      resolveAuth: publicCloneAuth,
       locations,
       cloneUrl: "https://example.com/repo",
       networkUrl: "https://example.com/repo",
@@ -672,7 +719,7 @@ void test("MA-9: a clone failure cleans staging and rethrows with the leak suffi
   await assert.rejects(
     () =>
       materializePluginClone({
-        auth: publicCloneAuth(),
+        resolveAuth: publicCloneAuth,
         locations,
         cloneUrl: "https://example.com/repo",
         networkUrl: "https://example.com/repo",
@@ -928,7 +975,7 @@ void test("MURL-08 / PURL-04: materializePluginClone forwards the caller's wire 
   const wireUrl = "https://gitlab.example.com/o/r.git";
 
   const cloneRoot = await materializePluginClone({
-    auth: publicCloneAuth(),
+    resolveAuth: publicCloneAuth,
     locations,
     cloneUrl,
     networkUrl: wireUrl,
@@ -955,7 +1002,7 @@ void test("MURL-09: materializePluginClone makes exactly one clone attempt and a
   await assert.rejects(
     () =>
       materializePluginClone({
-        auth: publicCloneAuth(),
+        resolveAuth: publicCloneAuth,
         locations,
         cloneUrl: "https://example.com/repo",
         networkUrl: "https://example.com/repo",

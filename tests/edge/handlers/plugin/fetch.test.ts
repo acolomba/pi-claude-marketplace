@@ -1,16 +1,17 @@
 // Owner for edge/handlers/plugin/fetch.ts (MOD-09).
 //
-// Target parsing is private. Successful forms are observed through the complete
-// scoped fetch notification; rejected forms retain their exact sentence and
-// severity and prove that validation precedes every workflow interaction.
+// The shared `parsePluginTarget`, which shared.test.ts owns, maps the target, so
+// this file observes the forms only through the notifications. Successful forms
+// are observed through the complete scoped fetch notification; rejected forms
+// retain their exact sentence and severity and prove that validation precedes
+// every workflow interaction.
 //
 // D-81-01 gives the three accepted positional shapes and the three target forms
 // they select: no positional yields the all form, `@<marketplace>` yields the
 // marketplace form, and `<plugin>@<marketplace>` yields the plugin form.
 //
 // Which parser this module calls decides its arity and flag answers, and this
-// one calls `parseArgs` DIRECTLY and never reaches `extractLocalFlag`. Measured
-// consequences, taken against the real module before a case was written:
+// one calls `parseArgs` DIRECTLY and never reaches `extractLocalFlag`. Consequences:
 //   * zero positionals is an ACCEPTED arity (the all form), so nothing lies
 //     below it; two positionals is one above and IS rejected, by the handler's
 //     own `nonFlagPositionals.length > 1` guard rather than by the parser;
@@ -35,8 +36,7 @@
 // this workflow writes nothing at any time, so an empty-tree assertion would
 // pass whether or not the workflow ran.
 //
-// Measured boundary counts, taken through a counting context before a case was
-// written, because the two emission paths disagree:
+// Boundary reads, which differ between the two emission paths:
 //   * a rejection reads `ctx.ui` once and `ctx.cwd` never -- `notifyUsageError`
 //     writes straight to the channel;
 //   * a delegating command reads `ctx.ui` once and `ctx.cwd` once.
@@ -67,8 +67,10 @@ import { test, type TestContext } from "node:test";
 import { makeFetchHandler } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/fetch.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
-import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -153,7 +155,7 @@ for (const { args, expectedMessage, summary } of [
     args: "@",
     summary: "a lone separator with no marketplace after it",
     expectedMessage:
-      'Invalid <plugin>@<marketplace> ref: "@".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
+      "Marketplace name must not be empty.\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]",
   },
   {
     args: "foo@",
@@ -161,8 +163,14 @@ for (const { args, expectedMessage, summary } of [
     expectedMessage:
       'Invalid <plugin>@<marketplace> ref: "foo@".\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]',
   },
+  {
+    args: '""',
+    summary: "an empty reference",
+    expectedMessage:
+      "Plugin name must not be empty.\n\nUsage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]",
+  },
 ]) {
-  test(`names ${summary} verbatim and returns no target (FTCH-01)`, async (t) => {
+  test(`rejects ${summary} with its usage error and returns no target (FTCH-01, USE-07)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, "validation");
     await seedBothScopes(workspace);

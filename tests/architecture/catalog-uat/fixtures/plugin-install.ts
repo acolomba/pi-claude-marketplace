@@ -498,6 +498,85 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
       } satisfies NotificationMessage,
     },
 
+    // FIX-03: a declaration in the base layer under a marketplace only the local config
+    // declares.
+    "failure-marketplace-in-local-layer-only": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "helper",
+                reasons: ["marketplace in local layer only"],
+                cause: new Error(
+                  "The marketplace official is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LAYER-06: the target layer lacks the marketplace, and neither the
+    // scope's record nor the other layer gives a source to declare it with.
+    "failure-marketplace-source-undeclarable": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "helper",
+                reasons: ["unsupported source"],
+                cause: new Error(
+                  "The scope records the marketplace official with no source that the base config (claude-plugins.json) can declare. Declare the marketplace in the base config, then run the command again.",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LAYER-05: the base layer declares and installed the plugin, so an
+    // install with --local only adds the local declaration. Nothing is
+    // installed, so the row is info with no reload-hint.
+    "install-already-installed-in-other-layer": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                severity: "info",
+                needsReload: false,
+                name: "helper",
+                version: "1.0.0",
+                reasons: ["already installed in base layer"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // RESV-01 / RESV-06: the dependency cascade's success block. One row per
     // closure member beside the requesting plugin's own row, in the canonical
     // name-then-scope order. A dependency renders by its full `<plugin>@<mp>`

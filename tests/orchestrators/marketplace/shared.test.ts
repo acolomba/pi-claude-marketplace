@@ -6,16 +6,20 @@ import { test, type TestContext } from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import { GENERATED_AGENT_MARKER } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   AgentsUnstageFailureError,
   DEFAULT_GIT_OPS,
   cascadeUnstagePlugin,
-  classifyAutoupdateFlip,
   loadVisibleMarketplaces,
   crossScopeFlag,
   foldUnstageNotices,
+  lacksStoredCredential,
+  marketplaceFailureRows,
   marketplaceInOtherScope,
+  marketplaceLayerVerdict,
   narrowCascadeFailure,
+  recordedManifestPath,
   refreshGitHubClone,
   refreshUrlClone,
   resolveScopeOrNotifyNotAdded,
@@ -29,8 +33,11 @@ import { McpConfigFileError } from "../../../extensions/pi-claude-marketplace/sh
 import {
   CrossOriginChallengeError,
   InvalidMarketplaceManifestError,
+  MarketplaceInBaseLayerOnlyError,
+  MarketplaceInLocalLayerOnlyError,
   MarketplaceNotFoundError,
   PluginShapeError,
+  StoredCredentialRejectedError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
@@ -39,12 +46,16 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { UrlSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type {
-  AutoupdateFlipResult,
   GitAuthBundle,
   GitOps,
+  MarketplaceLayerVerdict,
   UnstageOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
+import type {
+  ConfigLoadResult,
+  ScopeConfig,
+} from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
@@ -86,7 +97,6 @@ interface NotificationExpectation {
 }
 
 void (DEFAULT_GIT_OPS satisfies GitOps);
-void ({ changed: [], unchanged: [] } satisfies AutoupdateFlipResult);
 void ({
   ok: true,
   dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [], workflows: [] },
@@ -189,14 +199,6 @@ function marketplaceRecord(name: string, scope: Scope, cwd: string): Marketplace
     marketplaceRoot: path.join(cwd, name),
     plugins: {},
   };
-}
-
-function legacyAutoupdateRecord(
-  name: string,
-  autoupdate: boolean | undefined,
-): MarketplaceRecord & { readonly autoupdate?: boolean } {
-  const record = marketplaceRecord(name, "project", "/work/project");
-  return autoupdate === undefined ? record : Object.assign(record, { autoupdate });
 }
 
 async function createProjectScope(
@@ -751,6 +753,12 @@ for (const { title, url, makeError, expectedCause } of [
     expectedCause: undefined,
   },
   {
+    title: "adds no cause line to a stored credential the host rejected",
+    url: "https://gitlab.example.com/team/mp.git",
+    makeError: (): Error => new StoredCredentialRejectedError("gitlab.example.com"),
+    expectedCause: undefined,
+  },
+  {
     title: "adds no cause line to a network failure",
     url: "https://gitlab.example.com/team/mp.git",
     makeError: (): Error => Object.assign(new Error("getaddrinfo"), { code: "ENOTFOUND" }),
@@ -812,6 +820,72 @@ test("refreshUrlClone rethrows a non-Error fetch rejection unchanged", async () 
   await assert.rejects(refresh, (error: unknown) => error === "socket closed");
   boundary.verifyAll();
 });
+
+function storedCredentialAuth(): GitAuthBundle {
+  const { credentialOps } = createCredentialOpsFake({ boundary: "memory" });
+  return { kind: "stored-credential", credentialOps, host: "gitlab.example.com" };
+}
+
+function deviceFlowAuth(): GitAuthBundle {
+  const { credentialOps } = createCredentialOpsFake({ boundary: "memory" });
+  return {
+    kind: "device-flow",
+    credentialOps,
+    host: "gitlab.com",
+    onAuthRequired: () => Promise.resolve({ ok: false, reason: "declined" }),
+  };
+}
+
+for (const { title, makeError, makeAuth, lacks } of [
+  {
+    title: "reports an auth failure on a stored-credential host",
+    makeError: (): unknown => unauthorized(),
+    makeAuth: storedCredentialAuth,
+    lacks: true,
+  },
+  {
+    title: "does not report a stored credential the host rejected",
+    makeError: (): unknown => new StoredCredentialRejectedError("gitlab.example.com"),
+    makeAuth: storedCredentialAuth,
+    lacks: false,
+  },
+  {
+    title: "does not report a cross-origin challenge",
+    makeError: (): unknown => new CrossOriginChallengeError("https://sso.example.com"),
+    makeAuth: storedCredentialAuth,
+    lacks: false,
+  },
+  {
+    title: "does not report a network failure",
+    makeError: (): unknown => Object.assign(new Error("getaddrinfo"), { code: "ENOTFOUND" }),
+    makeAuth: storedCredentialAuth,
+    lacks: false,
+  },
+  {
+    title: "does not report a non-Error rejection",
+    makeError: (): unknown => "socket closed",
+    makeAuth: storedCredentialAuth,
+    lacks: false,
+  },
+  {
+    title: "does not report an auth failure on a Device Flow host",
+    makeError: (): unknown => unauthorized(),
+    makeAuth: deviceFlowAuth,
+    lacks: false,
+  },
+]) {
+  test(`lacksStoredCredential ${title}`, () => {
+    // arrange
+    const failure = makeError();
+    const auth = makeAuth();
+
+    // act
+    const reported = lacksStoredCredential(failure, auth);
+
+    // assert
+    assert.strictEqual(reported, lacks);
+  });
+}
 
 for (const { title, scenario, storedRef, expectedCalls } of [
   {
@@ -1652,106 +1726,6 @@ test("cascadeUnstagePlugin reports hook partial when malformed MCP JSON fails la
   );
 });
 
-for (const { title, state, name, enable, expected } of [
-  {
-    title: "changes a named legacy-disabled marketplace when enabling",
-    state: {
-      schemaVersion: 2,
-      marketplaces: { alpha: legacyAutoupdateRecord("alpha", false) },
-    },
-    name: "alpha",
-    enable: true,
-    expected: { changed: ["alpha"], unchanged: [] },
-  },
-  {
-    title: "keeps a named legacy-enabled marketplace unchanged when enabling",
-    state: {
-      schemaVersion: 2,
-      marketplaces: { alpha: legacyAutoupdateRecord("alpha", true) },
-    },
-    name: "alpha",
-    enable: true,
-    expected: { changed: [], unchanged: ["alpha"] },
-  },
-  {
-    title: "reads an absent legacy flag as disabled when disabling",
-    state: {
-      schemaVersion: 2,
-      marketplaces: { alpha: legacyAutoupdateRecord("alpha", undefined) },
-    },
-    name: "alpha",
-    enable: false,
-    expected: { changed: [], unchanged: ["alpha"] },
-  },
-  {
-    title: "reads an absent legacy flag as disabled when enabling",
-    state: {
-      schemaVersion: 2,
-      marketplaces: { alpha: legacyAutoupdateRecord("alpha", undefined) },
-    },
-    name: "alpha",
-    enable: true,
-    expected: { changed: ["alpha"], unchanged: [] },
-  },
-] satisfies readonly {
-  readonly title: string;
-  readonly state: ExtensionState;
-  readonly name: string;
-  readonly enable: boolean;
-  readonly expected: AutoupdateFlipResult;
-}[]) {
-  test(`classifyAutoupdateFlip ${title}`, () => {
-    // arrange
-    const expectedResult = expected;
-
-    // act
-    const flipResult = classifyAutoupdateFlip(state, name, enable);
-
-    // assert
-    assert.deepStrictEqual(flipResult, expectedResult);
-  });
-}
-
-test("classifyAutoupdateFlip partitions every marketplace in stored order", () => {
-  // arrange
-  const state: ExtensionState = {
-    schemaVersion: 2,
-    marketplaces: {
-      alpha: legacyAutoupdateRecord("alpha", true),
-      bravo: legacyAutoupdateRecord("bravo", false),
-      charlie: legacyAutoupdateRecord("charlie", true),
-    },
-  };
-  const expected: AutoupdateFlipResult = {
-    changed: ["bravo"],
-    unchanged: ["alpha", "charlie"],
-  };
-
-  // act
-  const flipResult = classifyAutoupdateFlip(state, undefined, true);
-
-  // assert
-  assert.deepStrictEqual(flipResult, expected);
-});
-
-test("classifyAutoupdateFlip throws the complete missing-marketplace error", () => {
-  // arrange
-  const state: ExtensionState = { schemaVersion: 2, marketplaces: {} };
-
-  // act & assert
-  assert.throws(
-    () => classifyAutoupdateFlip(state, "missing", true),
-    (error: unknown) => {
-      assert.ok(error instanceof MarketplaceNotFoundError);
-      assert.equal(error.name, "MarketplaceNotFoundError");
-      assert.equal(error.message, 'Marketplace "missing" not found in any scopes.');
-      assert.equal(error.mpName, "missing");
-      assert.deepStrictEqual(error.scopes, []);
-      return true;
-    },
-  );
-});
-
 test("resolveScopeOrNotifyNotAdded gives project scope precedence when both scopes contain the name", async (t) => {
   // arrange
   const user = await createProjectScope(t, "resolve-both-user");
@@ -2061,22 +2035,6 @@ test("D-08-07: resolveScopeOrNotifyNotAdded finds no marketplace named toString 
   boundary.verifyAll();
 });
 
-test("D-08-07: classifyAutoupdateFlip throws not found for a marketplace named constructor", () => {
-  // arrange
-  const state: ExtensionState = { schemaVersion: 2, marketplaces: {} };
-
-  // act & assert
-  assert.throws(
-    () => classifyAutoupdateFlip(state, "constructor", true),
-    (error: unknown) => {
-      assert.ok(error instanceof MarketplaceNotFoundError);
-      assert.equal(error.mpName, "constructor");
-      assert.deepStrictEqual(error.scopes, []);
-      return true;
-    },
-  );
-});
-
 for (const scope of ["user", "project"] satisfies readonly Scope[]) {
   test(`marketplaceInOtherScope finds a container recorded opposite an explicit ${scope} scope`, async (t) => {
     // arrange
@@ -2364,3 +2322,191 @@ for (const { title, cause, expected } of [
     assert.equal(reason, expectedReason);
   });
 }
+
+test("marketplaceFailureRows puts the reason and the cause on one failed child of the failed header", () => {
+  // arrange
+  const cause = new Error("lock is held");
+
+  // act
+  const rows = marketplaceFailureRows("tools", "project", "lock held", cause);
+
+  // assert
+  assert.deepStrictEqual(rows, [
+    {
+      name: "tools",
+      scope: "project",
+      status: "failed",
+      severity: "error",
+      plugins: [
+        {
+          status: "failed",
+          name: "tools",
+          reasons: ["lock held"],
+          cause,
+          severity: "error",
+          needsReload: false,
+        },
+      ],
+    },
+  ]);
+});
+
+const LOCAL_CONFIG_PATH = "/scope/.pi/claude-plugins.local.json";
+const BASE_CONFIG_PATH = "/scope/.pi/claude-plugins.json";
+
+function declaring(...marketplaces: readonly string[]): ScopeConfig {
+  return {
+    schemaVersion: 1,
+    marketplaces: Object.fromEntries(marketplaces.map((name) => [name, { source: `./${name}` }])),
+  };
+}
+
+for (const { title, target, other, targetIsLocal, marketplace, expectedVerdict } of [
+  {
+    title: "a marketplace only the target layer declares, with the other file absent, as declared",
+    target: declaring("tools"),
+    other: { status: "absent" },
+    targetIsLocal: false,
+    marketplace: "tools",
+    expectedVerdict: { kind: "declared", other: "silent" },
+  },
+  {
+    title: "a marketplace only the target layer declares, with the other file silent, as declared",
+    target: declaring("tools"),
+    other: { status: "valid", filePath: LOCAL_CONFIG_PATH, config: declaring("extras") },
+    targetIsLocal: false,
+    marketplace: "tools",
+    expectedVerdict: { kind: "declared", other: "silent" },
+  },
+  {
+    title: "a marketplace both layers declare as declared by the other layer too",
+    target: declaring("tools"),
+    other: { status: "valid", filePath: BASE_CONFIG_PATH, config: declaring("tools") },
+    targetIsLocal: true,
+    marketplace: "tools",
+    expectedVerdict: { kind: "declared", other: "declares" },
+  },
+  {
+    title:
+      "a marketplace the target layer declares beside an invalid other file as possibly declared there",
+    target: declaring("tools"),
+    other: { status: "invalid", filePath: LOCAL_CONFIG_PATH, error: "bad json" },
+    targetIsLocal: false,
+    marketplace: "tools",
+    expectedVerdict: { kind: "declared", other: "unreadable" },
+  },
+  {
+    title:
+      "a base-config target whose marketplace only the local config declares as marketplace in local layer only",
+    target: declaring("extras"),
+    other: { status: "valid", filePath: LOCAL_CONFIG_PATH, config: declaring("tools") },
+    targetIsLocal: false,
+    marketplace: "tools",
+    expectedVerdict: {
+      kind: "refused",
+      reason: "marketplace in local layer only",
+      refusal: new MarketplaceInLocalLayerOnlyError("tools"),
+    },
+  },
+  {
+    title:
+      "a local-config target whose marketplace only the base config declares as marketplace in base layer only",
+    target: { schemaVersion: 1 },
+    other: { status: "valid", filePath: BASE_CONFIG_PATH, config: declaring("tools") },
+    targetIsLocal: true,
+    marketplace: "tools",
+    expectedVerdict: {
+      kind: "refused",
+      reason: "marketplace in base layer only",
+      refusal: new MarketplaceInBaseLayerOnlyError("tools"),
+    },
+  },
+  {
+    title: "a marketplace neither layer declares, with the other file absent, as undeclared",
+    target: { schemaVersion: 1 },
+    other: { status: "absent" },
+    targetIsLocal: true,
+    marketplace: "tools",
+    expectedVerdict: { kind: "undeclared" },
+  },
+  {
+    title: "a marketplace neither layer declares, with the other file silent, as undeclared",
+    target: declaring("extras"),
+    other: { status: "valid", filePath: LOCAL_CONFIG_PATH, config: declaring("base") },
+    targetIsLocal: false,
+    marketplace: "tools",
+    expectedVerdict: { kind: "undeclared" },
+  },
+  {
+    title: "a target silent beside an invalid other file as unreadable, naming its basename only",
+    target: declaring("extras"),
+    other: { status: "invalid", filePath: BASE_CONFIG_PATH, error: "bad json" },
+    targetIsLocal: true,
+    marketplace: "tools",
+    expectedVerdict: { kind: "other-unreadable", otherBasename: "claude-plugins.json" },
+  },
+  {
+    title: "a marketplace named constructor that no file owns as undeclared",
+    target: declaring("extras"),
+    other: { status: "valid", filePath: LOCAL_CONFIG_PATH, config: declaring("base") },
+    targetIsLocal: false,
+    marketplace: "constructor",
+    expectedVerdict: { kind: "undeclared" },
+  },
+  {
+    title:
+      "a marketplace named __proto__ that only the local config owns as marketplace in local layer only",
+    target: { schemaVersion: 1, marketplaces: {} },
+    other: {
+      status: "valid",
+      filePath: LOCAL_CONFIG_PATH,
+      config: JSON.parse(
+        '{ "schemaVersion": 1, "marketplaces": { "__proto__": { "source": "./proto" } } }',
+      ) as ScopeConfig,
+    },
+    targetIsLocal: false,
+    marketplace: "__proto__",
+    expectedVerdict: {
+      kind: "refused",
+      reason: "marketplace in local layer only",
+      refusal: new MarketplaceInLocalLayerOnlyError("__proto__"),
+    },
+  },
+] satisfies readonly {
+  readonly title: string;
+  readonly target: ScopeConfig;
+  readonly other: ConfigLoadResult;
+  readonly targetIsLocal: boolean;
+  readonly marketplace: string;
+  readonly expectedVerdict: MarketplaceLayerVerdict;
+}[]) {
+  test(`marketplaceLayerVerdict classifies ${title}`, () => {
+    // arrange
+    const layers = { target, other, targetIsLocal, marketplace };
+
+    // act
+    const verdict = marketplaceLayerVerdict(layers);
+
+    // assert
+    assert.deepStrictEqual(verdict, expectedVerdict);
+  });
+}
+
+test("recordedManifestPath returns the manifest path the record holds", () => {
+  // arrange
+  const record = {
+    name: "tools",
+    scope: "project",
+    source: pathSource("./elsewhere/.claude-plugin/marketplace.json"),
+    addedFromCwd: "/work",
+    manifestPath: "/marketplaces/tools/catalog/marketplace.json",
+    marketplaceRoot: "/marketplaces/tools",
+    plugins: {},
+  } satisfies MarketplaceRecord;
+
+  // act
+  const manifestPath = recordedManifestPath(record);
+
+  // assert
+  assert.strictEqual(manifestPath, "/marketplaces/tools/catalog/marketplace.json");
+});

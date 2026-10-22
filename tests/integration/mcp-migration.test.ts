@@ -326,7 +326,7 @@ test("AMIG-04: when claude-plugins.json declares the owner, the reload installs 
     await writeProjectLegacyEntry(cwd);
     const locations = locationsFor("project", cwd);
     await saveConfig(
-      locations.configJsonPath,
+      locations.baseConfigJsonPath,
       {
         marketplaces: { mp: { source: "./mp-src" } },
         plugins: { "hello@mp": { enabled: true } },
@@ -506,8 +506,12 @@ test("AMIG-01: /reload removes an undeclared server, drops an unsupported one an
     assert.deepStrictEqual(await markedLegacyNames(cwd), []);
     const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
     assert.deepStrictEqual(record?.resources.mcpServers, ["srv"]);
-    assert.strictEqual(record.compatibility.installable, false);
-    assert.ok(record.compatibility.unsupported.includes("mcpServers"));
+    assert.deepStrictEqual(record.compatibility, {
+      installable: false,
+      notes: [],
+      supported: [],
+      unsupported: ["mcpServers"],
+    });
     assert.deepStrictEqual(notifications, [
       {
         message: [

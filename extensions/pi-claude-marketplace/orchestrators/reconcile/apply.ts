@@ -46,7 +46,11 @@
 //     another process is mid-write reaches this boundary; the add, install
 //     and toggle loops need it as defense-in-depth even though their three
 //     entrypoints are documented to handle every throw internally and always
-//     answer with a typed outcome -- see the note above each loop.
+//     answer with a typed outcome, except an InvalidGitHubBaseUrlError, which
+//     ends the pass (GHB-03). An install or enable that fails on it after
+//     leaving a rollback partial or an MCP config rewrite (AFILE-04) answers
+//     with its failed outcome instead; the pass continues, and a later target
+//     that reads the base ends it -- see the note above each loop.
 //   - AMIG-01 MCP MOVE per scope, after the read pass and before the apply
 //     pass, also when the config is invalid and never after a read pass that
 //     threw (`mcp-migration.ts`). It takes its own scope lock; a throw out of
@@ -69,7 +73,7 @@
 
 import path from "node:path";
 
-import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
+import { findLayerMarketplaceGaps, loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
@@ -108,7 +112,7 @@ import { buildScopeSatisfactionVerdict } from "./dependency-verdict.ts";
 import { migrateLegacyMcpEntries } from "./mcp-migration.ts";
 import { buildReconcileAppliedCascade } from "./notify.ts";
 import { planReconcile } from "./plan.ts";
-import { RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
+import { composeLayerMarketplaceCause, RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type {
@@ -118,6 +122,9 @@ import type {
   ReconcilePlan,
   ScopeReadResult,
 } from "./types.ts";
+import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
+import type { ScopeLoadOutcome } from "../../persistence/config-merge.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { loadState } from "../../persistence/state-io.ts";
 import type { McpConfigNotice, McpMigrationRow } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -130,6 +137,36 @@ import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
 /** Reads the one state snapshot selected by the reconcile read pass. */
 export interface ReconcileStateReader {
   readonly loadState: typeof loadState;
+}
+
+// An absent or invalid layer declares nothing.
+function declaredConfig(result: ConfigLoadResult): ScopeConfig {
+  return result.status === "valid" ? result.config : {};
+}
+
+/**
+ * LAYER-06 / D-MF-03: one outcome per layer that declares a plugin whose
+ * marketplace only the other layer declares. Like an invalid layer config, it
+ * stops the scope's reload; the plugins the scope installed keep loading from
+ * state, and no file is repaired.
+ */
+function layerMarketplaceGapOutcomes(
+  outcome: ScopeLoadOutcome,
+  loc: ScopedLocations,
+  scope: Scope,
+): PerEntryOutcome[] {
+  const gaps = findLayerMarketplaceGaps(
+    declaredConfig(outcome.base),
+    declaredConfig(outcome.local),
+  );
+  return gaps.map((gap) => ({
+    kind: "layer-marketplace-gap",
+    scope,
+    basename: path.basename(
+      gap.layer === "base" ? loc.baseConfigJsonPath : loc.localConfigJsonPath,
+    ),
+    cause: new Error(composeLayerMarketplaceCause(gap, scope)),
+  }));
 }
 
 /**
@@ -161,7 +198,7 @@ async function readPassForScope(
 
   const stateExists = await pathExists(loc.stateJsonPath);
   const configExists =
-    (await pathExists(loc.configJsonPath)) || (await pathExists(loc.configLocalJsonPath));
+    (await pathExists(loc.baseConfigJsonPath)) || (await pathExists(loc.localConfigJsonPath));
   if (!stateExists && !configExists) {
     // Pristine scope: nothing recorded, nothing declared -- no-op without
     // touching the disk.
@@ -190,7 +227,7 @@ async function readPassForScope(
       try {
         await migrateFirstRunConfig(loc, state);
       } catch (err) {
-        throw new MigrateConfigSaveError(loc.configJsonPath, err);
+        throw new MigrateConfigSaveError(loc.baseConfigJsonPath, err);
       }
 
       // (2) Load the merged scope config (base + local).
@@ -226,6 +263,9 @@ async function readPassForScope(
         });
       }
 
+      // LAYER-06 / D-MF-03: an invalid layer reads as declaring nothing, so it
+      // never also reports a missing marketplace.
+      invalidOutcomes.push(...layerMarketplaceGapOutcomes(outcome, loc, scope));
       if (invalidOutcomes.length > 0) {
         return { plan: undefined, invalidOutcomes, stateExisted: stateExists };
       }
@@ -381,10 +421,13 @@ function foldRemoveOutcome(
  * RECON-03 note: `addMarketplace` resolves its locations and parses its
  * source with two total functions and then enters one try whose catch routes
  * every classified AND unclassified error through `handleAddFailure`, which in
- * orchestrated mode always returns a typed outcome; the post-guard cache and
+ * orchestrated mode returns a typed outcome; the post-guard cache and
  * mirror-seeding steps swallow their own failures. The orchestrated overload
  * carries that contract in its return type, so this loop reads the outcome
- * without a guard of its own.
+ * without a guard of its own. The exception is an `InvalidGitHubBaseUrlError`,
+ * which `handleAddFailure` rethrows: it ends the reconcile pass, and the
+ * resources_discover handler reports it as reconcile-aborted, so the throw
+ * never leaves the Pi event (NFR-2, GHB-03).
  */
 async function applyMarketplaceAdds(
   opts: ApplyReconcileOptions,
@@ -573,7 +616,13 @@ function redactedDependencyCascadeError(error: DependencyCascadeError): Dependen
  * orchestrated mode, and the only awaited statement after that catch collects
  * post-commit warnings behind its own swallowing guards. The orchestrated
  * overload carries that contract in its return type, so this loop reads the
- * outcome without a guard of its own.
+ * outcome without a guard of its own. The exception is an
+ * `InvalidGitHubBaseUrlError`, which the catch rethrows: it ends the reconcile
+ * pass, and the resources_discover handler reports it as reconcile-aborted,
+ * so the throw never leaves the Pi event (NFR-2, GHB-03). An install that
+ * fails on it after leaving a rollback partial or an MCP config rewrite
+ * (AFILE-04) returns its failed outcome instead: the pass continues past that
+ * plugin, and a later target that reads the base ends it.
  */
 async function applyPluginInstalls(
   opts: ApplyReconcileOptions,
@@ -914,7 +963,14 @@ function installedRowDegradation(
  * cross-scope resolution and its transaction each sit inside a try whose
  * catch returns a typed failed outcome in orchestrated mode, and what follows
  * is a pure mapping. The orchestrated overload carries that contract in its
- * return type, so this loop reads the outcome without a guard of its own.
+ * return type, so this loop reads the outcome without a guard of its own. The
+ * exception is an enable that fails on an `InvalidGitHubBaseUrlError`, which
+ * the mapping rethrows: it ends the reconcile pass, and the resources_discover
+ * handler reports it as reconcile-aborted, so the throw never leaves the Pi
+ * event (NFR-2, GHB-03). An enable that fails on it after leaving a rollback
+ * partial or an MCP config rewrite (AFILE-04) returns its failed outcome
+ * instead: the pass continues past that plugin, and a later target that reads
+ * the base ends it.
  */
 async function applyPluginToggles(
   opts: ApplyReconcileOptions,
@@ -1581,7 +1637,7 @@ function surfacePostCommitWarnings(
  * AFILE-04: one `notifyMcpConfigNotices` call over every outcome's notices, in
  * outcome order. The seam collapses repeats of one `(kind, scope, file)`, so
  * several operations rewriting the same file produce one line. The read-pass
- * rows (invalid blocks, source mismatches) come from no orchestrated
+ * rows (invalid blocks, layer gaps, source mismatches) come from no orchestrated
  * operation and carry none.
  */
 function surfaceMcpConfigNotices(
@@ -1592,7 +1648,9 @@ function surfaceMcpConfigNotices(
     opts.ctx,
     opts.run,
     outcomes.flatMap((outcome) =>
-      outcome.kind === "invalid-block" || outcome.kind === "source-mismatch"
+      outcome.kind === "invalid-block" ||
+      outcome.kind === "layer-marketplace-gap" ||
+      outcome.kind === "source-mismatch"
         ? []
         : (outcome.mcpConfigNotices ?? []),
     ),

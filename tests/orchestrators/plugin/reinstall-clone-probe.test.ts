@@ -13,6 +13,8 @@ import {
   type ReinstallCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-clone-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -65,6 +67,43 @@ test("uses the production seam for a warm pinned clone", async (testContext) => 
     source,
     locations,
     recordedSha: SHA,
+    auth: auth(),
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    kind: "materialized",
+    pluginRoot: cloneRoot,
+    resolvedSha: SHA,
+  });
+});
+
+test("NFR-5: a pinned GitHub source the seam finds warm never reads an invalid base", async (testContext) => {
+  // arrange
+  await createHermeticEnvironment(testContext, "reinstall-clone-probe-warm-home-");
+  const { locations, root } = await freshLocations(testContext);
+  setGitHubBaseUrl(testContext, "http://mirror.example");
+  const cloneRoot = path.join(root, "warm-clone");
+  await mkdir(cloneRoot, { recursive: true });
+  const source: GitBackedSource = {
+    kind: "github",
+    raw: "owner/repo",
+    owner: "owner",
+    repo: "repo",
+    sha: SHA,
+  };
+  const seam: ReinstallCloneCacheSeam = {
+    materializePluginClone() {
+      return Promise.resolve(cloneRoot);
+    },
+  };
+
+  // act
+  const outcome = await probeReinstallClone({
+    source,
+    locations,
+    recordedSha: SHA,
+    seam,
     auth: auth(),
   });
 
@@ -192,10 +231,11 @@ test("falls back from an absent unpinned mirror to the recorded sha", async (tes
   const seam: ReinstallCloneCacheSeam = {
     // The bundle carries closures, so the recorded call keeps only the two
     // comparable fields: the bound host and the injected credential ops.
-    materializePluginClone({ auth: bundle, ...cloneOptions }) {
+    materializePluginClone({ resolveAuth, ...cloneOptions }) {
+      const bundle = resolveAuth();
       calls.push({
         ...cloneOptions,
-        auth: { credentialOps: bundle?.credentialOps, host: bundle?.host },
+        auth: { credentialOps: bundle.credentialOps, host: bundle.host },
       });
       return Promise.resolve(cloneRoot);
     },
@@ -238,7 +278,7 @@ test("D-08-05: falls back from a headless unpinned mirror to the recorded sha", 
   const source: GitBackedSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
   const calls: unknown[] = [];
   const seam: ReinstallCloneCacheSeam = {
-    materializePluginClone({ auth: _bundle, ...cloneOptions }) {
+    materializePluginClone({ resolveAuth: _resolveAuth, ...cloneOptions }) {
       calls.push(cloneOptions);
       return Promise.resolve(cloneRoot);
     },
@@ -282,7 +322,7 @@ test("D-08-05: resolves a git-subdir under the recorded-sha clone behind a headl
   };
   const calls: unknown[] = [];
   const seam: ReinstallCloneCacheSeam = {
-    materializePluginClone({ auth: _bundle, ...cloneOptions }) {
+    materializePluginClone({ resolveAuth: _resolveAuth, ...cloneOptions }) {
       calls.push(cloneOptions);
       return Promise.resolve(cloneRoot);
     },
@@ -322,7 +362,7 @@ test("threads provider auth while resolving a pinned git-subdir", async (testCon
   const calls: unknown[] = [];
   const seam: ReinstallCloneCacheSeam = {
     materializePluginClone(options) {
-      calls.push(options);
+      calls.push({ auth: options.resolveAuth() });
       return Promise.resolve(cloneRoot);
     },
   };

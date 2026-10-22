@@ -59,6 +59,7 @@ import {
   composeErrorWithCauseChain,
   errorMessage,
   errorWithManualRecovery,
+  rethrowInvalidGitHubBaseUrl,
 } from "../../shared/errors.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -92,8 +93,9 @@ import {
 import {
   assertNoCrossPluginConflicts,
   emitMarketplaceNotAddedSignal,
+  keepLocalLayerTargets,
   MarketplaceNotAddedSignal,
-  maybeWritePluginConfigBack,
+  namedPluginLayerRefusal,
   removePluginRecord,
   surfaceDiscoveryWarnings,
 } from "./shared.ts";
@@ -117,7 +119,7 @@ import type {
   ReinstallTransaction,
   RemoveDataDirFn,
 } from "./reinstall-replace.ts";
-import type { ReinstallPluginsTarget, SelectedReinstallTarget } from "./reinstall-targets.ts";
+import type { ReinstallPluginsTarget, ReinstallTargetSelection } from "./reinstall-targets.ts";
 
 /** Hook-routing capabilities consumed by committed reinstall finalization. */
 export type ReinstallHooksRouting = Pick<
@@ -136,6 +138,13 @@ export interface ReinstallPluginOptions {
   readonly plugin: string;
   readonly render?: "default" | "none";
   readonly local?: boolean;
+  /**
+   * LAYER-04 / D-MF-03: the command named this plugin
+   * (`<plugin>@<marketplace>`), so it acts on its target layer and is refused
+   * when only the other layer declares the plugin. A nameless form, the
+   * reconcile backfill, and any other caller that omits it are never refused.
+   */
+  readonly named?: boolean;
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
@@ -271,14 +280,6 @@ interface LockedSuccess {
   readonly bridgeWarnings: readonly string[];
   /** AFILE-04: the MCP replace's file notices; empty for a skipped reinstall. */
   readonly mcpConfigNotices: readonly McpConfigNotice[];
-  /**
-   * S5: when the config-back loadConfig returned `invalid`, the write-back
-   * was skipped while the success notify proceeded. The single-plugin caller
-   * surfaces this as a separate warning row AFTER the reinstall success row
-   * so the user knows the on-disk artifacts were reinstalled but the config
-   * entry was not written.
-   */
-  readonly invalidConfigWriteBack?: boolean;
 }
 
 // ATTR-03 / D-47-A: the structural marketplace-not-added signal thrown by the
@@ -308,6 +309,7 @@ async function reinstallPluginWithTransaction(
       opts.stateTransaction,
     );
   } catch (err) {
+    rethrowInvalidGitHubBaseUrl(err);
     return handleSinglePluginFailure(owners, opts, err as Error, render);
   }
 
@@ -403,41 +405,6 @@ async function reinstallPluginWithTransaction(
   // AFILE-04: this arm renders its own row, so it shows the MCP config file
   // notices after it.
   notifyMcpConfigNotices(ctx, run, locked.mcpConfigNotices);
-
-  // S5: when the config write-back loadConfig returned `invalid`, emit a
-  // separate warning row so the user sees that the on-disk artifacts were
-  // reinstalled but the config entry was not written. Pre-S5 this arm
-  // silently dropped the warning while the success notify proceeded.
-  if (locked.invalidConfigWriteBack === true) {
-    const targetBasename = path.basename(
-      opts.local === true ? locations.configLocalJsonPath : locations.configJsonPath,
-    );
-    notifyWithContext(
-      ctx,
-      run,
-      REINSTALL_CONTEXT,
-      [
-        {
-          name: marketplace,
-          scope,
-          plugins: [
-            {
-              status: "failed",
-              name: plugin,
-              reasons: ["invalid manifest"] as const,
-              cause: new Error(`Config file "${targetBasename}" failed schema validation.`),
-              // D-03/D-06: invalid config write-back -> error, no reload.
-              severity: "error" as const,
-              needsReload: false,
-            },
-          ],
-        },
-      ],
-      undefined,
-      "single",
-    );
-  }
-
   return locked.outcome;
 }
 
@@ -529,16 +496,9 @@ async function reinstallPluginsWith(
   reinstallPlugin: ReinstallPluginFn,
 ): Promise<readonly ReinstallPluginOutcome[]> {
   const { ctx, run, cwd } = opts;
-  let selection: {
-    readonly cardinality: "single" | "plural";
-    readonly targets: readonly SelectedReinstallTarget[];
-  };
+  let selection: ReinstallTargetSelection;
   try {
-    selection = await owners.selectReinstallTargets({
-      cwd,
-      target: opts.target,
-      ...(opts.scope !== undefined && { scope: opts.scope }),
-    });
+    selection = await selectTargets(owners, opts);
   } catch (err) {
     // Enumeration failures occur before the selector can return, so preserve
     // invocation-form cardinality at this error-projection boundary.
@@ -579,6 +539,7 @@ async function reinstallPluginsWith(
         plugin: target.plugin,
         render: "none",
         ...(opts.local === true && { local: true }),
+        ...(opts.target.kind === "plugin" && { named: true }),
         ...(opts.credentialOps !== undefined && { credentialOps: opts.credentialOps }),
         ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
         authMemo,
@@ -593,6 +554,30 @@ async function reinstallPluginsWith(
   surfaceReinstallDiscoveryWarnings(ctx, run, outcomes);
   surfaceReinstallMcpConfigNotices(ctx, run, outcomes);
   return Object.freeze(outcomes);
+}
+
+/**
+ * LAYER-04 / D-MF-03: a nameless reinstall with `--local` covers the plugins the
+ * local layer declares and the dependencies those plugins need; without the
+ * flag it covers every installed plugin of the scope.
+ */
+async function selectTargets(
+  owners: ReinstallFlowOwners,
+  opts: ReinstallPluginsOptions,
+): Promise<ReinstallTargetSelection> {
+  const selection = await owners.selectReinstallTargets({
+    cwd: opts.cwd,
+    target: opts.target,
+    ...(opts.scope !== undefined && { scope: opts.scope }),
+  });
+  if (opts.local !== true || opts.target.kind === "plugin") {
+    return selection;
+  }
+
+  return {
+    cardinality: selection.cardinality,
+    targets: await keepLocalLayerTargets(selection.targets, opts.cwd),
+  };
 }
 
 /**
@@ -770,6 +755,7 @@ async function runLockedReinstall(
     };
   }
 
+  await refuseOtherLayerReinstall(locations, opts);
   const oldSnapshot = clonePluginRecord(oldRecord);
   const entry = await loadCachedEntry(mp.manifestPath, marketplace, plugin);
   const installable = await resolveInstallable(owners, {
@@ -813,7 +799,6 @@ async function runLockedReinstall(
   );
 
   const sourceKind = parsePluginSource(entry.source).kind;
-  let invalidConfigWriteBack: boolean;
   let outcome: ReinstallPluginOutcome;
   try {
     outcome = owners.recordReinstallOutcome({
@@ -837,21 +822,8 @@ async function runLockedReinstall(
       placedWorkflowNames: replacement.placedWorkflowNames,
     });
 
-    // WB-01 / A7: deep-equal short-circuit preserves RECON-05
-    // mtime invariant. Reinstall is invoked by the user (both standalone and
-    // bulk-cascade paths are user-initiated); there is no orchestrated /
-    // reconcile-driven caller today. The deep-equal gate compares the
-    // prospective `{...existing, ...patch}` shape against the existing
-    // entry; a byte-stable patch (the common reinstall case -- entry shape
-    // unchanged) leaves the config file untouched.
-    const writeResult = await maybeWritePluginConfigBack({
-      locations,
-      marketplace,
-      plugin,
-      local: opts.local === true,
-    });
-    invalidConfigWriteBack = writeResult.invalidConfig;
-
+    // LAYER-04 / D-MF-03: a reinstall changes the installation and its record,
+    // never a layer config, so a dependency it reinstalls stays undeclared.
     await tx.save();
   } catch (err) {
     throw errorWithManualRecovery(err, await transaction.rollbackReinstalledPlugin(replacement));
@@ -866,10 +838,10 @@ async function runLockedReinstall(
   // just-installed `hooks.json` (when present), then rebuild the
   // routing table once.
   //
-  // Moved AFTER `tx.save()` so a write-back throw or a tx.save throw
-  // aborts BEFORE the cache mutates -- otherwise a phantom routing
-  // entry survives a closure throw and the next dispatch fires against
-  // a record state.json never wrote.  Post-save semantics are safe:
+  // Moved AFTER `tx.save()` so a tx.save throw aborts BEFORE the cache
+  // mutates -- otherwise a phantom routing entry survives a closure throw and
+  // the next dispatch fires against a record state.json never wrote.
+  // Post-save semantics are safe:
   // state.json now matches in-memory state, and the next `/reload`'s
   // factory-time hydrate (D-59-03) rebuilds the cache from disk.
   // Synchronous + zero disk I/O per DISP-02; the readFile/parse path
@@ -915,8 +887,32 @@ async function runLockedReinstall(
     discoveryWarnings: replacement.discoveryWarnings,
     bridgeWarnings,
     mcpConfigNotices: replacement.mcpConfigNotices,
-    ...(invalidConfigWriteBack && { invalidConfigWriteBack: true }),
   };
+}
+
+/**
+ * LAYER-04 / D-MF-03: refuse a named reinstall of a plugin only the other
+ * layer declares, or one whose layer config cannot be read (CFG-03). It runs
+ * before anything is resolved or replaced, so the rollback path is never
+ * reached and the locked closure leaves without a save (NFR-3).
+ */
+async function refuseOtherLayerReinstall(
+  locations: ScopedLocations,
+  opts: ReinstallPluginOptions,
+): Promise<void> {
+  if (opts.named !== true) {
+    return;
+  }
+
+  const refusal = await namedPluginLayerRefusal({
+    locations,
+    local: opts.local === true,
+    marketplace: opts.marketplace,
+    plugin: opts.plugin,
+  });
+  if (refusal !== undefined) {
+    throw refusal;
+  }
 }
 
 async function loadCachedEntry(

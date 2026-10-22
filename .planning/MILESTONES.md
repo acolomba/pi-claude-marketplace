@@ -1,6 +1,58 @@
 # Milestones: pi-claude-marketplace
 
-## json-output -- Mode-Keyed Presentation Strategies (Completed: 2026-10-11; branch `features/json`, not yet merged, not yet in an npm release)
+## marketplace-features -- Marketplace Behavioral Tests (Completed: 2026-10-21 on `features/cucumber-behavioral-tests`; PR #271, not yet merged or released)
+
+**Phases completed:** 14 phases (1-10, with 3.1-3.4 inserted), 82 plans, 183 tasks; 97/97 requirements
+
+**Delivered:** a cucumber suite drives every `/claude:plugin marketplace`
+lifecycle command (`add`, `remove`/`rm`, `list`/`ls`, `info`, `update`,
+`autoupdate`/`noautoupdate`, `help`, and every usage error) through a real
+headless Pi, against local stand-ins for all four source kinds: a directory,
+a `marketplace.json` path, an https git URL, and GitHub. 433 scenarios run
+with no tag excluded, on Node 24 and Node 26.
+
+**Key accomplishments:**
+
+- A payload driver that returns and schema-validates every `claude-plugin`
+  entry, run tokens (`{home}`, `{scenario time}`, `{git host}`), kind-neutral
+  publishing steps, and a `check:features` gate against unused, undefined, or
+  ambiguous steps.
+- `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` (D-MF-01): one seam rewrites the
+  github.com clone base for clone, origin matching, update, and the auth host;
+  unset changes nothing, an invalid value is a typed error.
+- A loopback HTTPS git stand-in (`node:https` around `git http-backend`) that
+  records requests and can answer 401, 404, 5xx, or drop the connection; Pi
+  and fixture git run hermetic, and a hostile git config changes no result.
+- Config layers: a scope's base (`claude-plugins.json`) and local
+  (`claude-plugins.local.json`) layers are partitioned for every marketplace
+  and plugin mutation, merge field by field, and a `--local` declaration no
+  longer leaks into the base layer on the first-run migration (FIX-02, D-MF-03).
+- A project install that needs a user-scope marketplace adds it to the
+  project scope with its own record and clone (D-MF-04); marketplace remove
+  and info act per scope, project first (D-MF-05, D-MF-06).
+- Product fixes found by scenarios: `update` re-reads a manifest added from
+  outside `.claude-plugin/` (C-10), `owner/repo#ref` parses the ref
+  (D-MF-07), a 401 on update names `git credential approve` for the host, and
+  a rejected stored credential reads `<host> rejected the stored credential`.
+
+**Closeout:** override close. The audit reads `tech_debt` with no blockers:
+97/97 requirements, 14/14 phases verified (phases 1-7 and 9 re-verified at
+HEAD after later phases made them stale), integration 9/9, flows 5/6 (no
+file-kind `list` row). One pending todo acknowledged as deferred
+(cucumber-rules trial on another repository). Known verification overrides:
+0 newly acknowledged phases; 1 todo newly acknowledged, 17 items carried
+forward.
+
+**Carried:** WINDOWS #93, #94, #100-#109; BACKLOG ROWID-01 and SHORTREF-01;
+16 open review info items in phases 01 and 06; CI proof of the git host and
+the behavioral job's duration are read at PR time (D-08).
+
+**Archive:** [roadmap](milestones/marketplace-features-ROADMAP.md),
+[requirements](milestones/marketplace-features-REQUIREMENTS.md),
+[audit](milestones/marketplace-features-MILESTONE-AUDIT.md), phase records
+under [marketplace-features-phases](milestones/marketplace-features-phases/).
+
+## json-output -- Mode-Keyed Presentation Strategies (Completed: 2026-10-11; merged to main 2026-10-11 as PR #251, squash `0e45ffd9`, not yet in an npm release)
 
 **Phases completed:** 9 phases (1-9), 50 plans, 72 tasks; 36/36 requirements
 

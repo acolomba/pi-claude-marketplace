@@ -313,11 +313,11 @@ test("prune --dry-run previews the orphan without writing current state", async 
     await seedScope("user", cwd);
     const locations = locationsFor("user", cwd);
     const statePath = path.join(locations.extensionRoot, "state.json");
-    await writeFile(locations.configJsonPath, '{"plugins":{}}');
+    await writeFile(locations.baseConfigJsonPath, '{"plugins":{}}');
     const bytesBefore = await readFile(statePath);
     const mtimeBefore = (await stat(statePath, { bigint: true })).mtimeNs;
-    const configBefore = await readFile(locations.configJsonPath);
-    const configMtimeBefore = (await stat(locations.configJsonPath, { bigint: true })).mtimeNs;
+    const configBefore = await readFile(locations.baseConfigJsonPath);
+    const configMtimeBefore = (await stat(locations.baseConfigJsonPath, { bigint: true })).mtimeNs;
     const treeBefore = await scopeTree("user", cwd);
     const { command, ctx, notifications, gitCalls } = registeredCommand(cwd);
 
@@ -330,9 +330,9 @@ test("prune --dry-run previews the orphan without writing current state", async 
     ]);
     assert.deepStrictEqual(await readFile(statePath), bytesBefore);
     assert.equal((await stat(statePath, { bigint: true })).mtimeNs, mtimeBefore);
-    assert.deepStrictEqual(await readFile(locations.configJsonPath), configBefore);
+    assert.deepStrictEqual(await readFile(locations.baseConfigJsonPath), configBefore);
     assert.equal(
-      (await stat(locations.configJsonPath, { bigint: true })).mtimeNs,
+      (await stat(locations.baseConfigJsonPath, { bigint: true })).mtimeNs,
       configMtimeBefore,
     );
     assert.deepStrictEqual(await scopeTree("user", cwd), treeBefore);
@@ -631,10 +631,10 @@ test("repeated legacy previews normalize in memory without writing the scope", a
       },
     };
     await writeFile(locations.stateJsonPath, JSON.stringify(legacy));
-    await writeFile(locations.configJsonPath, '{"plugins":{}}');
+    await writeFile(locations.baseConfigJsonPath, '{"plugins":{}}');
     const stateBefore = await readFile(locations.stateJsonPath);
     const stateMtimeBefore = (await stat(locations.stateJsonPath, { bigint: true })).mtimeNs;
-    const configMtimeBefore = (await stat(locations.configJsonPath, { bigint: true })).mtimeNs;
+    const configMtimeBefore = (await stat(locations.baseConfigJsonPath, { bigint: true })).mtimeNs;
     const orphanSkill = path.join(locations.skillsTargetDir, "orphan-skill", "SKILL.md");
     const skillMtimeBefore = (await stat(orphanSkill, { bigint: true })).mtimeNs;
     const treeBefore = await scopeTree("user", cwd);
@@ -650,7 +650,7 @@ test("repeated legacy previews normalize in memory without writing the scope", a
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
     assert.equal((await stat(locations.stateJsonPath, { bigint: true })).mtimeNs, stateMtimeBefore);
     assert.equal(
-      (await stat(locations.configJsonPath, { bigint: true })).mtimeNs,
+      (await stat(locations.baseConfigJsonPath, { bigint: true })).mtimeNs,
       configMtimeBefore,
     );
     assert.equal((await stat(orphanSkill, { bigint: true })).mtimeNs, skillMtimeBefore);
@@ -678,7 +678,7 @@ test("preview of a missing project state leaves both scope trees unchanged", asy
     for (const missing of [
       project.extensionRoot,
       project.stateJsonPath,
-      project.configJsonPath,
+      project.baseConfigJsonPath,
       project.stateLockFile,
     ]) {
       await assert.rejects(stat(missing), { code: "ENOENT" });
@@ -721,11 +721,12 @@ for (const { scope, args } of [
           },
         },
       });
-      await writeFile(locations.configJsonPath, '{"plugins":{}}');
+      await writeFile(locations.baseConfigJsonPath, '{"plugins":{}}');
       const stateBefore = await readFile(locations.stateJsonPath);
       const stateMtimeBefore = (await stat(locations.stateJsonPath, { bigint: true })).mtimeNs;
-      const configBefore = await readFile(locations.configJsonPath);
-      const configMtimeBefore = (await stat(locations.configJsonPath, { bigint: true })).mtimeNs;
+      const configBefore = await readFile(locations.baseConfigJsonPath);
+      const configMtimeBefore = (await stat(locations.baseConfigJsonPath, { bigint: true }))
+        .mtimeNs;
       const treeBefore = await scopeTree(scope, cwd);
       const { command, ctx, notifications, gitCalls } = registeredCommand(cwd);
 
@@ -743,9 +744,9 @@ for (const { scope, args } of [
         (await stat(locations.stateJsonPath, { bigint: true })).mtimeNs,
         stateMtimeBefore,
       );
-      assert.deepStrictEqual(await readFile(locations.configJsonPath), configBefore);
+      assert.deepStrictEqual(await readFile(locations.baseConfigJsonPath), configBefore);
       assert.equal(
-        (await stat(locations.configJsonPath, { bigint: true })).mtimeNs,
+        (await stat(locations.baseConfigJsonPath, { bigint: true })).mtimeNs,
         configMtimeBefore,
       );
       assert.deepStrictEqual(await scopeTree(scope, cwd), treeBefore);

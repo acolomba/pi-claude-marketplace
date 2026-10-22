@@ -56,7 +56,6 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
   const seam = options.seam ?? REAL_INSTALL_CLONE_CACHE_SEAM;
   const { source, locations } = options;
   const cloneUrl = canonicalCloneUrl(source);
-  const auth = buildCloneAuth(cloneUrl, source.kind, options.auth);
 
   if (source.sha === undefined) {
     const materialized = await seam.materializeOrRefreshPluginMirror({
@@ -64,7 +63,7 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
       cloneUrl,
       networkUrl: networkCloneUrl(source),
       ...(source.ref !== undefined && { ref: source.ref }),
-      auth,
+      auth: buildCloneAuth(cloneUrl, source.kind, options.auth),
     });
     const result = await resolveGitPluginRootWithSubdir(
       source,
@@ -84,7 +83,7 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
     networkUrl: networkCloneUrl(source),
     pin: pin.pin,
     ...(pin.ref !== undefined && { ref: pin.ref }),
-    auth,
+    resolveAuth: () => buildCloneAuth(cloneUrl, source.kind, options.auth),
   });
   const result = await resolveGitPluginRootWithSubdir(source, cloneRoot, pin.pin);
   return { result, resolvedSha: result.kind === "materialized" ? pin.pin : undefined };

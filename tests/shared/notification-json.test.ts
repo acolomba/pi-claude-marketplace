@@ -1080,6 +1080,135 @@ test("joins an scp-style marketplace name into the id verbatim", () => {
   );
 });
 
+test("keeps a cascade row named by its plugin key as the id instead of appending the block name", () => {
+  // arrange
+  const presentation = presentationOf([
+    {
+      name: "upstream",
+      scope: "user",
+      plugins: [{ status: "available", name: "lib@tools", reasons: [] }],
+    },
+  ]);
+
+  // act
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    payload,
+    expectedInfoPayload([
+      {
+        name: "upstream",
+        scope: "user",
+        plugins: [{ status: "available", name: "lib@tools", id: "lib@tools", reasons: [] }],
+      },
+    ]),
+  );
+});
+
+test("gives a failed row whose subject is a marketplace its name alone as the id", () => {
+  // arrange
+  const presentation = presentationOf([
+    {
+      name: "https://git.example/acme/tools.git",
+      scope: "project",
+      status: "failed",
+      severity: "error",
+      plugins: [
+        {
+          status: "failed",
+          name: "https://git.example/acme/tools.git",
+          reasons: ["network error"],
+          marketplaceSubject: true,
+          severity: "error",
+          needsReload: false,
+        },
+      ],
+    },
+  ]);
+
+  // act
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    payload,
+    expectedInfoPayload([
+      {
+        name: "https://git.example/acme/tools.git",
+        scope: "project",
+        status: "failed",
+        plugins: [
+          {
+            status: "failed",
+            name: "https://git.example/acme/tools.git",
+            id: "https://git.example/acme/tools.git",
+            reasons: ["network error"],
+            scope: "project",
+          },
+        ],
+      },
+    ]),
+  );
+});
+
+test("appends the block name to a failed row named like its block without the marketplace marker", () => {
+  // arrange
+  const presentation = presentationOf([
+    {
+      name: "https://git.example/acme/tools.git",
+      scope: "project",
+      status: "failed",
+      severity: "error",
+      plugins: [
+        {
+          status: "failed",
+          name: "https://git.example/acme/tools.git",
+          reasons: ["network error"],
+          severity: "error",
+          needsReload: false,
+        },
+      ],
+    },
+  ]);
+
+  // act
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    payload,
+    expectedInfoPayload([
+      {
+        name: "https://git.example/acme/tools.git",
+        scope: "project",
+        status: "failed",
+        plugins: [
+          {
+            status: "failed",
+            name: "https://git.example/acme/tools.git",
+            id: "https://git.example/acme/tools.git@https://git.example/acme/tools.git",
+            reasons: ["network error"],
+            scope: "project",
+          },
+        ],
+      },
+    ]),
+  );
+});
+
 test("keeps content reasons before markers, one multi-word token per element", () => {
   // arrange
   const presentation = presentationOf([

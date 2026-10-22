@@ -105,6 +105,47 @@ const NETWORK_FREE_SYNTAX_SELECTORS = [
   },
 ];
 
+const GITHUB_LITERAL = /github\.com/i;
+
+/**
+ * GHB-02 / D-MF-01: a github.com URL belongs in shared/github-base-url.ts.
+ * That module is the one place the clone-base override reads, so a github.com
+ * literal anywhere else in the extension would send bytes or credentials
+ * around the override. The rule reports string literals, template text after
+ * escapes are resolved, and regular expression literals with their `\.`
+ * escapes read as dots. Comments are not AST nodes, so a comment never
+ * matches.
+ */
+const LOCAL_PLUGIN = {
+  rules: {
+    "no-github-literal": {
+      meta: {
+        type: "problem",
+        schema: [],
+        messages: {
+          found:
+            "GHB-02: a github.com literal belongs in shared/github-base-url.ts. Disable this line with a reason only at a parser host comparison, user-facing reason text, the github.com display string, or a Device Flow endpoint.",
+        },
+      },
+      create(context) {
+        return {
+          Literal(node) {
+            const text = typeof node.value === "string" ? node.value : node.regex?.pattern;
+            if (text !== undefined && GITHUB_LITERAL.test(text.replaceAll("\\.", "."))) {
+              context.report({ node, messageId: "found" });
+            }
+          },
+          TemplateElement(node) {
+            if (GITHUB_LITERAL.test(node.value.cooked ?? node.value.raw)) {
+              context.report({ node, messageId: "found" });
+            }
+          },
+        };
+      },
+    },
+  },
+};
+
 const APPEND_ENTRY_SYNTAX_SELECTORS = [
   {
     selector:
@@ -212,6 +253,128 @@ export default tseslint.config(
       "sonarjs/no-nested-conditional": "error",
       "sonarjs/no-nested-template-literals": "error",
       curly: ["error", "all"],
+    },
+  },
+  {
+    // The cucumber skill's steps.md: a step module exports nothing, and its step text is a
+    // Cucumber expression written as a string literal, never a regular expression. A literal
+    // is required so a pattern held in a variable cannot hide a regex. The text checks match
+    // the callee by name, so a step module registers through `Given`, `When`, and `Then`
+    // imported under their own names: no `defineStep`, no renamed import, and no namespace
+    // import whose member calls the checks would miss. A local alias still escapes them, so
+    // scripts/check-features.mjs also rejects every registered pattern that is not a Cucumber
+    // expression. Hooks, parameter types, and the world belong to support modules (layout.md).
+    files: ["features/step_definitions/**/*.steps.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@cucumber/cucumber",
+              importNames: ["defineStep"],
+              message: "A step module registers steps through Given, When, and Then.",
+            },
+            {
+              name: "@cucumber/cucumber",
+              importNames: [
+                "Before",
+                "After",
+                "BeforeAll",
+                "AfterAll",
+                "BeforeStep",
+                "AfterStep",
+                "defineParameterType",
+                "setWorldConstructor",
+                "setDefaultTimeout",
+                "setDefinitionFunctionWrapper",
+                "setParallelCanAssign",
+              ],
+              message: "A step module registers steps only; support modules register the rest.",
+            },
+          ],
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "ExportNamedDeclaration, ExportDefaultDeclaration, ExportAllDeclaration, TSExportAssignment",
+          message: "A step module exports nothing.",
+        },
+        {
+          selector:
+            "CallExpression[callee.name=/^(Given|When|Then)$/][arguments.0.type!='Literal']",
+          message: "Step text is a string literal Cucumber expression.",
+        },
+        {
+          selector: "CallExpression[callee.name=/^(Given|When|Then)$/] > Literal.arguments[regex]",
+          message: "Step text uses Cucumber expressions, never regular expressions.",
+        },
+        {
+          selector:
+            "ImportSpecifier[imported.name='Given'][local.name!='Given'], ImportSpecifier[imported.name='When'][local.name!='When'], ImportSpecifier[imported.name='Then'][local.name!='Then']",
+          message: "Import Given, When, and Then under their own names.",
+        },
+        {
+          selector:
+            "ImportDeclaration[source.value='@cucumber/cucumber'] > :matches(ImportNamespaceSpecifier, ImportDefaultSpecifier)",
+          message: "Import the Cucumber functions by name.",
+        },
+      ],
+    },
+  },
+  {
+    // The cucumber skill's layout.md: only step modules call Given, When, or Then.
+    files: ["features/support/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@cucumber/cucumber",
+              importNames: ["Given", "When", "Then", "defineStep"],
+              message: "Only step modules register steps.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // The cucumber skill's layout.md: a library module registers nothing. Only step modules
+    // register steps and only support modules register hooks, parameter types, or the world.
+    files: ["features/lib/**/*.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@cucumber/cucumber",
+              importNames: [
+                "Given",
+                "When",
+                "Then",
+                "Before",
+                "After",
+                "BeforeAll",
+                "AfterAll",
+                "BeforeStep",
+                "AfterStep",
+                "defineStep",
+                "defineParameterType",
+                "setWorldConstructor",
+                "setDefaultTimeout",
+                "setDefinitionFunctionWrapper",
+                "setParallelCanAssign",
+              ],
+              message: "A library module registers nothing.",
+            },
+          ],
+        },
+      ],
     },
   },
   {
@@ -388,6 +551,28 @@ export default tseslint.config(
         ...APPEND_ENTRY_SYNTAX_SELECTORS,
         ...NETWORK_FREE_SYNTAX_SELECTORS,
       ],
+    },
+  },
+  {
+    // GHB-02: a github.com literal outside the seam fails lint at its line.
+    // A disable covers one line, so a new literal fails even in a file that
+    // already carries disables. The rule has its own name because a
+    // no-restricted-syntax disable would also mute the NFR-5 and JOUT-01
+    // selectors on that line. A run over the real tree is the proof; no
+    // planted violation is committed.
+    files: ["extensions/pi-claude-marketplace/**/*.ts"],
+    plugins: { local: LOCAL_PLUGIN },
+    rules: {
+      "local/no-github-literal": "error",
+    },
+  },
+  {
+    // GHB-02: the seam holds the github.com origin. The rule is turned off
+    // here rather than ignored above, so the plugin stays registered for this
+    // file and a directive that names the rule still resolves.
+    files: ["extensions/pi-claude-marketplace/shared/github-base-url.ts"],
+    rules: {
+      "local/no-github-literal": "off",
     },
   },
   {

@@ -13,6 +13,7 @@ import {
   type SamePlannedSourceResult,
   type UrlSource,
 } from "../../extensions/pi-claude-marketplace/domain/source.ts";
+import { setGitHubBaseUrl } from "../shared/github-base-url-environment.ts";
 
 interface ParseCase {
   readonly name: string;
@@ -81,6 +82,32 @@ const PARSE_CASES: readonly ParseCase[] = [
       repo: "tools",
       ref: "v2.0",
     },
+  },
+  {
+    name: "parses an owner and repository shorthand with a # reference",
+    raw: "acme/tools#stable",
+    source: {
+      kind: "github",
+      raw: "acme/tools#stable",
+      owner: "acme",
+      repo: "tools",
+      ref: "stable",
+    },
+  },
+  {
+    name: "reads an empty # reference on the shorthand as no reference",
+    raw: "acme/tools#",
+    source: { kind: "github", raw: "acme/tools#", owner: "acme", repo: "tools" },
+  },
+  {
+    name: "keeps an @ after the first # in the shorthand reference",
+    raw: "acme/tools#x@y",
+    source: { kind: "github", raw: "acme/tools#x@y", owner: "acme", repo: "tools", ref: "x@y" },
+  },
+  {
+    name: "keeps a # after the first @ in the shorthand reference",
+    raw: "acme/tools@v1#x",
+    source: { kind: "github", raw: "acme/tools@v1#x", owner: "acme", repo: "tools", ref: "v1#x" },
   },
   {
     name: "parses a GitHub URL",
@@ -454,6 +481,24 @@ const UNKNOWN_PARSE_CASES: readonly ParseCase[] = [
       kind: "unknown",
       raw: "foo@v1.0",
       reason: "non-relative string source foo@v1.0 cannot be classified",
+    },
+  },
+  {
+    name: "rejects a # reference without an owner and repository pair",
+    raw: "acme#x",
+    source: {
+      kind: "unknown",
+      raw: "acme#x",
+      reason: "non-relative string source acme#x cannot be classified",
+    },
+  },
+  {
+    name: "rejects an empty @ reference on the shorthand",
+    raw: "acme/tools@",
+    source: {
+      kind: "unknown",
+      raw: "acme/tools@",
+      reason: "non-relative string source acme/tools@ cannot be classified",
     },
   },
   {
@@ -1522,6 +1567,24 @@ describe("sourceLogical", () => {
       assert.strictEqual(sourceLabel, expectedLogical);
     });
   }
+
+  test("GHB-04: keeps github.com terms with the override set", (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "https://mirror.example/git");
+    const source = {
+      kind: "github",
+      raw: "acme/tools#main",
+      owner: "acme",
+      repo: "tools",
+      ref: "main",
+    } as const satisfies ParsedSource;
+
+    // act
+    const sourceLabel = sourceLogical(source);
+
+    // assert
+    assert.strictEqual(sourceLabel, "https://github.com/acme/tools#main");
+  });
 });
 
 describe("ensureGitSuffix", () => {

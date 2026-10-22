@@ -21,7 +21,9 @@ import {
   ConcurrentInstallError,
   DependencyCascadeError,
   errorMessage,
+  hasFetchedUrlCause,
   PluginShapeError,
+  rethrowInvalidGitHubBaseUrl,
 } from "../../shared/errors.ts";
 import { notifyDiagnostic, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -142,6 +144,13 @@ export interface MarketplaceFailureOutcome {
   readonly marketplace: string;
   readonly reason: "add-failed";
   readonly cause: string;
+  /**
+   * GHB-01 / GHB-04: the redacted, rebuilt onward cause chain beyond `cause`'s
+   * head, present only when the GitHub base override rewrote the URL the add
+   * fetched, so the rendered cause line ends with that URL. Omitted for every
+   * other failure, whose row renders `cause` alone.
+   */
+  readonly causeChain?: Error;
 }
 
 export interface SourceMismatchOutcome {
@@ -380,7 +389,7 @@ interface MarketplaceBlock {
    * classify) -- undefined otherwise, e.g. for a source-mismatch failure,
    * whose per-plugin child rows already carry the mismatch reason.
    */
-  cause?: string;
+  cause?: Error;
 }
 
 function setMarketplaceStatus(
@@ -388,7 +397,7 @@ function setMarketplaceStatus(
   scope: Scope,
   marketplaceName: string,
   status: ImportBlockStatus,
-  cause?: string,
+  cause?: Error,
 ): void {
   const key = `${scope}:${marketplaceName}`;
   const existing = byMp.get(key);
@@ -444,15 +453,17 @@ function importWarningReason(reason: RenderedWarningReason): ContentReason {
 }
 
 /**
- * WR-03: the row's cause as one Error. `UnexpectedPluginFailureOutcome.cause`
- * carries the redacted head text, always populated; wrapping it in an Error
- * lets the depth-5 cause-chain trailer emit a diagnostic line instead of
- * discarding the message. T-55-02-02 / T-53-02-02: `causeChain` (when
- * present) becomes that Error's OWN `.cause` rather than being re-embedded in
- * the head text, so the trailer walker renders the onward chain exactly once
- * instead of a second time over a pre-flattened string.
+ * WR-03: the row's cause as one Error. The outcome's `cause` carries the head
+ * text, always populated; wrapping it in an Error lets the depth-5 cause-chain
+ * trailer emit a diagnostic line instead of discarding the message.
+ * T-55-02-02 / T-53-02-02: `causeChain` (when present) becomes that Error's
+ * OWN `.cause` rather than being re-embedded in the head text, so the trailer
+ * walker renders the onward chain exactly once instead of a second time over a
+ * pre-flattened string.
  */
-function unexpectedFailureCause(outcome: UnexpectedPluginFailureOutcome): Error {
+function failureCause(
+  outcome: Pick<UnexpectedPluginFailureOutcome | MarketplaceFailureOutcome, "cause" | "causeChain">,
+): Error {
   return outcome.causeChain === undefined
     ? new Error(outcome.cause)
     : new Error(outcome.cause, { cause: outcome.causeChain });
@@ -524,7 +535,7 @@ function buildImportNotificationMarketplaces(
   }
 
   for (const o of result.marketplaceFailures) {
-    setMarketplaceStatus(byMp, o.scope, o.marketplace, "failed", o.cause);
+    setMarketplaceStatus(byMp, o.scope, o.marketplace, "failed", failureCause(o));
   }
 
   // Source-mismatch supersedes any prior status (the import for that
@@ -586,7 +597,7 @@ function buildImportNotificationMarketplaces(
       status: "failed",
       name: o.plugin,
       reasons: [unexpectedFailureReason(o.reason)],
-      cause: unexpectedFailureCause(o),
+      cause: failureCause(o),
       // D-03/D-06: an unexpected import failure -> error, no reload.
       severity: "error",
       needsReload: false,
@@ -678,7 +689,7 @@ function blockToMarketplaceMessage(
         status: "failed",
         name,
         reasons: [],
-        cause: new Error(block.cause),
+        cause: block.cause,
         severity: "error",
         needsReload: false,
       };
@@ -718,6 +729,7 @@ function recordMarketplaceAddFailure(
   scopePlan: ScopedImportPlan,
   marketplace: ScopedImportPlan["marketplacesToEnsure"][number],
   cause: string,
+  causeChain?: Error,
 ): void {
   blockedMarketplaces.add(marketplace.marketplace);
   result.marketplaceFailures.push({
@@ -726,6 +738,7 @@ function recordMarketplaceAddFailure(
     marketplace: marketplace.marketplace,
     reason: "add-failed",
     cause,
+    ...(causeChain !== undefined && { causeChain }),
   });
   for (const plugin of pluginsForMarketplace(scopePlan.pluginsToInstall, marketplace.marketplace)) {
     pushPluginWarning(result, plugin, "marketplace-failed", cause);
@@ -869,7 +882,13 @@ async function installOnePlannedPlugin(
       ...(promoting !== undefined && !promoting.compatibility.installable && { partial: true }),
     });
   } catch (err) {
-    // The orchestrated install never re-throws by contract, so this is a
+    rethrowInvalidGitHubBaseUrl(err);
+    // The orchestrated install returns a typed outcome for every failure
+    // except an invalid GitHub base override, which the line above rethrows so
+    // the whole import fails (GHB-03). An install that fails on it after
+    // leaving a rollback partial or an MCP config rewrite (AFILE-04) returns
+    // its failed outcome instead, so the import continues past that plugin,
+    // and a later target that reads the base ends it. Anything else is a
     // defensive arm; it takes the same redacted head-plus-chain route as a
     // returned failure so no path can leak through it either.
     pushUnexpectedFailure(
@@ -971,10 +990,14 @@ async function addOnePlannedMarketplace(
       scopePlan,
       marketplace,
       outcome?.cause ?? "addMarketplace returned no outcome in orchestrated mode",
+      outcome === undefined ? undefined : fetchedUrlCauseChain(outcome.error),
     );
   } catch (err) {
+    rethrowInvalidGitHubBaseUrl(err);
     // Defensive: orchestrated mode coerces classified failures into typed
-    // outcomes, so only a genuinely unexpected throw lands here.
+    // outcomes, and the line above rethrows an invalid GitHub base override so
+    // the whole import fails (GHB-03). Only a genuinely unexpected throw is
+    // recorded here.
     recordMarketplaceAddFailure(
       result,
       blockedMarketplaces,
@@ -983,6 +1006,16 @@ async function addOnePlannedMarketplace(
       errorMessage(err),
     );
   }
+}
+
+/**
+ * GHB-01 / GHB-04: the onward cause chain of a failed add, redacted like
+ * `pushUnexpectedFailure`'s, when the GitHub base override rewrote the URL the
+ * add fetched. Any other failure yields `undefined`, so its row keeps the head
+ * cause alone.
+ */
+function fetchedUrlCauseChain(error: Error): Error | undefined {
+  return hasFetchedUrlCause(error) ? redactCauseChain(error.cause) : undefined;
 }
 
 // The import workflow is intentionally linear: ensure marketplaces, record
@@ -1102,12 +1135,12 @@ async function executeScopedPlan(
  * constructively on the next import run instead of leaving
  * recorded-but-undeclared entries the reconcile planner would tear down.
  *
- * Target: import does NOT support `--local` (per RESEARCH project structure;
- * the flag is per-command and not on the import surface), so the batch
- * targets `locations.configJsonPath`. The one exception is a re-enabled
- * promotion whose key the local file declares: its `{ enabled: true }` goes
- * to the local file (`stampReenabledWhereLocalDeclares`) and the batch keeps
- * the bare key.
+ * Target: import does NOT support `--local` (the flag is per-command and not
+ * on the import surface), so the batch targets `locations.baseConfigJsonPath`.
+ * The one exception is a re-enabled
+ * promotion whose key the local config declares: its `{ enabled: true }` goes
+ * to the local config (`stampReenabledWhereLocalDeclares`) and the batch
+ * keeps the bare key.
  *
  * Source: verbatim `rawSource` from `scopePlan.marketplacesToEnsure` keyed by
  * marketplace name, preserving the `samePlannedSource` contract.
@@ -1131,7 +1164,7 @@ async function writeBatchedConfigForScope(
   }
 
   const locations = locationsFor(scope, opts.cwd);
-  const targetConfigPath = locations.configJsonPath;
+  const targetConfigPath = locations.baseConfigJsonPath;
 
   try {
     await withLockedStateTransaction(locations, async () => {
@@ -1179,17 +1212,17 @@ async function writeBatchedConfigForScope(
 }
 
 /**
- * D-04-07 / D-103-16: the enable path writes `{ enabled: true }` to the file
+ * D-04-07 / D-103-16: the enable path writes `{ enabled: true }` to the config
  * that declares the key, and the disable verb's `{ enabled: false }` may live
- * in the local file, whose entry shadows the base entry wholesale (CFG-02) --
- * a stamp in the base file alone would leave the merged view disabled. So a
- * re-enabled entry the local file declares is stamped there, through the
- * single-entry writer (which adds no `marketplaces` key to a file that
- * declares none), and its base patch drops to the bare key so the base
- * declaration still exists. The local file is re-read per stamp so each write
- * sees the one before it; an absent, invalid, or non-declaring local file
- * leaves the base patch as built. Runs under the scope lock, before the base
- * batch is written.
+ * in the local config, whose explicit `enabled` wins over the base entry's
+ * (LAYER-09) -- a stamp in the base config alone would leave the merged view
+ * disabled. So a re-enabled entry the local config declares is stamped there,
+ * through the single-entry writer (which adds no `marketplaces` key to a
+ * config that declares none), and its base patch drops to the bare key so the
+ * base declaration still exists. The local config is re-read per stamp so each
+ * write sees the one before it; an absent, invalid, or non-declaring local
+ * config leaves the base patch as built. Runs under the scope lock, before
+ * the base batch is written.
  */
 async function stampReenabledWhereLocalDeclares(
   locations: ScopedLocations,
@@ -1204,7 +1237,7 @@ async function stampReenabledWhereLocalDeclares(
 
     const key = `${installed.plugin}@${installed.marketplace}`;
     // eslint-disable-next-line no-await-in-loop -- each stamp reads the previous stamp's write
-    const localCfg = await loadConfig(locations.configLocalJsonPath);
+    const localCfg = await loadConfig(locations.localConfigJsonPath);
     if (localCfg.status !== "valid" || ownValue(localCfg.config.plugins, key) === undefined) {
       continue;
     }
@@ -1212,7 +1245,7 @@ async function stampReenabledWhereLocalDeclares(
     // eslint-disable-next-line no-await-in-loop -- read-modify-write of the local config file
     await writePluginConfigEntry(
       localCfg.config,
-      locations.configLocalJsonPath,
+      locations.localConfigJsonPath,
       locations.scopeRoot,
       installed.plugin,
       installed.marketplace,
@@ -1308,6 +1341,30 @@ function buildRepairPatchForScope(
   return { marketplaces, plugins };
 }
 
+interface LoadedConfig {
+  marketplaces?: Record<string, unknown>;
+  plugins?: Record<string, unknown>;
+}
+
+/**
+ * LAYER-06 / D-MF-03: a layer never declares a plugin without its
+ * marketplace, so a repaired plugin key is written only when the batch or the
+ * loaded file declares the marketplace (the part after the key's last `@`). A
+ * repair that cannot name the marketplace is dropped, and the next import or
+ * load reports the record as it stands.
+ */
+function declaresMarketplaceOf(
+  key: string,
+  batchMarketplaces: ImportConfigPatch["marketplaces"],
+  current: LoadedConfig,
+): boolean {
+  const marketplace = key.slice(key.lastIndexOf("@") + 1);
+  return (
+    ownValue(batchMarketplaces, marketplace) !== undefined ||
+    ownValue(current.marketplaces, marketplace) !== undefined
+  );
+}
+
 /**
  * WR-01: merge the always-written `ensure` patch with the subset of `repair`
  * entries whose keys are ABSENT from the loaded config. Already-declared
@@ -1318,7 +1375,7 @@ function buildRepairPatchForScope(
 function mergeEnsureAndRepairs(
   ensure: ImportConfigPatch,
   repair: ImportConfigPatch,
-  current: { marketplaces?: Record<string, unknown>; plugins?: Record<string, unknown> },
+  current: LoadedConfig,
 ): ImportConfigPatch {
   const marketplaces = { ...ensure.marketplaces };
   for (const [name, patch] of Object.entries(repair.marketplaces)) {
@@ -1332,7 +1389,11 @@ function mergeEnsureAndRepairs(
 
   const plugins = { ...ensure.plugins };
   for (const [key, patch] of Object.entries(repair.plugins)) {
-    if (ownValue(current.plugins, key) === undefined && ownValue(plugins, key) === undefined) {
+    if (
+      ownValue(current.plugins, key) === undefined &&
+      ownValue(plugins, key) === undefined &&
+      declaresMarketplaceOf(key, marketplaces, current)
+    ) {
       setOwn(plugins, key, patch);
     }
   }

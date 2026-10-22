@@ -83,16 +83,14 @@ function ensureMarketplacePaths(
  * Gating policy (D-13 ORDERING RAIL): this helper is invoked from
  * `migrateLegacyMarketplaceRecords` ONLY when the caller passed
  * `scrubAutoupdate: true` -- the caller (loadState) derives that flag from
- * the on-disk existence of the scope's `configJsonPath`, preserving the
+ * the on-disk existence of the scope's `baseConfigJsonPath`, preserving the
  * legacy `autoupdate` intent on the FIRST load (pre-config-migration) so
  * the first-run migration can capture it before the field is destroyed.
  * Subsequent loads (after `claude-plugins.json` has been materialized) see
  * the config file and scrub.
  *
- * D-13 is implemented via Mechanism A (existsSync-gated). The alternative
- * (Mechanism B: pre-read legacy autoupdate via a separate entry point) is
- * documented in research as equally valid; Mechanism A is the simpler
- * diff and the locked choice.
+ * D-13 gates the scrub on the config file's existence rather than on a
+ * separate entry point that pre-reads the legacy `autoupdate` field.
  */
 function ensureNoLegacyAutoupdate(mp: Record<string, unknown>): boolean {
   if (mp.autoupdate === undefined) {

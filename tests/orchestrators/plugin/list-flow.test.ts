@@ -850,7 +850,7 @@ test("DFEN-04 / DFEN-05: a config `enabled` declaration SUPPRESSES `{installs di
     // the state in which a candidate row is read.
     const locations = locationsFor("user", cwd);
     await saveConfig(
-      locations.configJsonPath,
+      locations.baseConfigJsonPath,
       {
         schemaVersion: 1,
         plugins: { "alpha@mp1": { enabled: true }, "beta@mp1": { enabled: false } },
@@ -2104,11 +2104,10 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
   // Regression for CR-01 (the orphan-fold filter
   // gap). Setup: seed a user-scope marketplace `mp1` AND a project-scope
   // marketplace `mp1` whose state record points at the SAME
-  // `marketplaceRoot` directory -- this is the on-disk shape produced by
-  // the install orchestrator's `cloneMarketplaceRecordForTargetScope`
-  // path when a project-scope install runs against a user-scope
-  // marketplace. `isCloneOfUserMarketplace` returns true on
-  // `marketplaceRoot` equality, which routes the project-side
+  // `marketplaceRoot` directory -- this is the on-disk shape a
+  // project-scope install produces when it adds a user-scope path
+  // marketplace to the project (LAYER-07). `isCloneOfUserMarketplace`
+  // returns true on `marketplaceRoot` equality, which routes the project-side
   // enumeration through the orphan-fold filter at
   // `loadPluginListPayload`. That filter discriminates on
   // `"present"` (plus the `"upgradable"` arm), so the folded row appears

@@ -5,6 +5,7 @@ import path from "node:path";
 import { describe, test } from "node:test";
 
 import {
+  findLayerMarketplaceGaps,
   loadMergedScopeConfig,
   mergeScopeConfigs,
 } from "../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
@@ -12,6 +13,7 @@ import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence
 
 import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import type {
+  LayerMarketplaceGap,
   MergedConfig,
   ScopeLoadOutcome,
 } from "../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
@@ -23,6 +25,13 @@ interface MergeCase {
   readonly baseConfig: ScopeConfig;
   readonly localConfig: ScopeConfig;
   readonly expectedConfig: MergedConfig;
+}
+
+interface GapCase {
+  readonly name: string;
+  readonly base: ScopeConfig;
+  readonly local: ScopeConfig;
+  readonly expectedGaps: readonly LayerMarketplaceGap[];
 }
 
 interface LoadCase {
@@ -119,13 +128,13 @@ const mergeCases = [
     expectedConfig: {
       marketplaces: {
         zebra: { entry: { source: "base/zebra" }, source: "base" },
-        shared: { entry: { source: "local/shared" }, source: "local" },
+        shared: { entry: { source: "local/shared", autoupdate: true }, source: "local" },
         alpha: { entry: { source: "base/alpha" }, source: "base" },
         omega: { entry: { source: "local/omega" }, source: "local" },
       },
       plugins: {
         "zebra@zebra": { entry: { enabled: true }, source: "base" },
-        "shared@shared": { entry: {}, source: "local" },
+        "shared@shared": { entry: { enabled: false }, source: "local" },
         "alpha@alpha": { entry: {}, source: "base" },
         "omega@omega": { entry: { enabled: false }, source: "local" },
       },
@@ -149,6 +158,160 @@ const mergeCases = [
       },
     },
   },
+  {
+    name: "gives a local marketplace entry without autoupdate the base autoupdate",
+    baseConfig: {
+      marketplaces: {
+        tools: { source: "./tools", autoupdate: true },
+      },
+    },
+    localConfig: {
+      marketplaces: {
+        tools: { source: "./tools" },
+      },
+    },
+    expectedConfig: {
+      marketplaces: {
+        tools: { entry: { source: "./tools", autoupdate: true }, source: "local" },
+      },
+      plugins: {},
+    },
+  },
+  {
+    name: "lets the local autoupdate of a marketplace win over the base one",
+    baseConfig: {
+      marketplaces: {
+        tools: { source: "./tools", autoupdate: true },
+      },
+    },
+    localConfig: {
+      marketplaces: {
+        tools: { source: "./tools", autoupdate: false },
+      },
+    },
+    expectedConfig: {
+      marketplaces: {
+        tools: { entry: { source: "./tools", autoupdate: false }, source: "local" },
+      },
+      plugins: {},
+    },
+  },
+  {
+    name: "lets a local marketplace source spelled another way win over the base one",
+    baseConfig: {
+      marketplaces: {
+        tools: { source: "~/marketplaces/tools", autoupdate: true },
+      },
+    },
+    localConfig: {
+      marketplaces: {
+        tools: { source: "/home/user/marketplaces/tools" },
+      },
+    },
+    expectedConfig: {
+      marketplaces: {
+        tools: {
+          entry: { source: "/home/user/marketplaces/tools", autoupdate: true },
+          source: "local",
+        },
+      },
+      plugins: {},
+    },
+  },
+  {
+    name: "keeps the unknown fields of both marketplace entries with the local value winning",
+    baseConfig: JSON.parse(
+      '{"marketplaces":{"tools":{"source":"./tools","channel":"stable","mirror":"base"}}}',
+    ) as ScopeConfig,
+    localConfig: JSON.parse(
+      '{"marketplaces":{"tools":{"source":"./tools","mirror":"local","pinned":true}}}',
+    ) as ScopeConfig,
+    expectedConfig: JSON.parse(
+      '{"marketplaces":{"tools":{"entry":{"source":"./tools","channel":"stable","mirror":"local","pinned":true},"source":"local"}},"plugins":{}}',
+    ) as MergedConfig,
+  },
+  {
+    name: "gives a local plugin entry without enabled the base enabled",
+    baseConfig: {
+      plugins: {
+        "formatter@tools": { enabled: false },
+      },
+    },
+    localConfig: {
+      plugins: {
+        "formatter@tools": {},
+      },
+    },
+    expectedConfig: {
+      marketplaces: {},
+      plugins: {
+        "formatter@tools": { entry: { enabled: false }, source: "local" },
+      },
+    },
+  },
+  {
+    name: "lets the local enabled of a plugin win over the base one",
+    baseConfig: {
+      plugins: {
+        "formatter@tools": { enabled: false },
+      },
+    },
+    localConfig: {
+      plugins: {
+        "formatter@tools": { enabled: true },
+      },
+    },
+    expectedConfig: {
+      marketplaces: {},
+      plugins: {
+        "formatter@tools": { entry: { enabled: true }, source: "local" },
+      },
+    },
+  },
+  {
+    name: "keeps the unknown fields of both plugin entries with the local value winning",
+    baseConfig: JSON.parse(
+      '{"plugins":{"formatter@tools":{"enabled":false,"channel":"stable","mirror":"base"}}}',
+    ) as ScopeConfig,
+    localConfig: JSON.parse(
+      '{"plugins":{"formatter@tools":{"mirror":"local","pinned":true}}}',
+    ) as ScopeConfig,
+    expectedConfig: JSON.parse(
+      '{"marketplaces":{},"plugins":{"formatter@tools":{"entry":{"enabled":false,"channel":"stable","mirror":"local","pinned":true},"source":"local"}}}',
+    ) as MergedConfig,
+  },
+  {
+    name: "merges a prototype-named plugin both layers declare into an own entry",
+    baseConfig: JSON.parse(
+      '{"plugins":{"__proto__":{"enabled":false,"channel":"stable"}}}',
+    ) as ScopeConfig,
+    localConfig: JSON.parse('{"plugins":{"__proto__":{"channel":"beta"}}}') as ScopeConfig,
+    expectedConfig: {
+      marketplaces: {},
+      plugins: Object.fromEntries([
+        ["__proto__", { entry: { enabled: false, channel: "beta" }, source: "local" }],
+      ]),
+    },
+  },
+  {
+    name: "merges prototype-named marketplaces both files declare into own entries",
+    baseConfig: JSON.parse(
+      '{"marketplaces":{"__proto__":{"source":"base/proto","autoupdate":true},"constructor":{"source":"base/constructor","autoupdate":false}}}',
+    ) as ScopeConfig,
+    localConfig: JSON.parse(
+      '{"marketplaces":{"__proto__":{"source":"local/proto"},"constructor":{"source":"base/constructor","autoupdate":true}}}',
+    ) as ScopeConfig,
+    expectedConfig: {
+      marketplaces: Object.fromEntries([
+        ["__proto__", { entry: { source: "local/proto", autoupdate: true }, source: "local" }],
+        [
+          "constructor",
+          { entry: { source: "base/constructor", autoupdate: true }, source: "local" },
+        ],
+      ]),
+      plugins: {},
+    },
+  },
 ] satisfies readonly MergeCase[];
 
 const loadCases = [
@@ -165,7 +328,7 @@ const loadCases = [
     name: "preserves a valid base outcome beside an absent local outcome",
     prepare: async (locations) => {
       await writeFile(
-        locations.configJsonPath,
+        locations.baseConfigJsonPath,
         '{"schemaVersion":1,"marketplaces":{"base":{"source":"base/repository","autoupdate":true}},"plugins":{"tool@base":{"enabled":true}}}',
         "utf8",
       );
@@ -184,7 +347,7 @@ const loadCases = [
       },
       base: {
         status: "valid",
-        filePath: locations.configJsonPath,
+        filePath: locations.baseConfigJsonPath,
         config: {
           schemaVersion: 1,
           marketplaces: {
@@ -202,7 +365,7 @@ const loadCases = [
     name: "preserves an absent base outcome beside a valid local outcome",
     prepare: async (locations) => {
       await writeFile(
-        locations.configLocalJsonPath,
+        locations.localConfigJsonPath,
         '{"schemaVersion":1,"marketplaces":{"local":{"source":"local/repository"}},"plugins":{"tool@local":{"enabled":false}}}',
         "utf8",
       );
@@ -219,7 +382,7 @@ const loadCases = [
       base: { status: "absent" },
       local: {
         status: "valid",
-        filePath: locations.configLocalJsonPath,
+        filePath: locations.localConfigJsonPath,
         config: {
           schemaVersion: 1,
           marketplaces: {
@@ -235,13 +398,13 @@ const loadCases = [
   {
     name: "preserves an invalid base outcome beside an absent local outcome",
     prepare: async (locations) => {
-      await writeFile(locations.configJsonPath, "", "utf8");
+      await writeFile(locations.baseConfigJsonPath, "", "utf8");
     },
     expectedOutcome: (locations) => ({
       merged: { marketplaces: {}, plugins: {} },
       base: {
         status: "invalid",
-        filePath: locations.configJsonPath,
+        filePath: locations.baseConfigJsonPath,
         error: invalidJsonError,
       },
       local: { status: "absent" },
@@ -250,14 +413,14 @@ const loadCases = [
   {
     name: "preserves an absent base outcome beside an invalid local outcome",
     prepare: async (locations) => {
-      await writeFile(locations.configLocalJsonPath, "", "utf8");
+      await writeFile(locations.localConfigJsonPath, "", "utf8");
     },
     expectedOutcome: (locations) => ({
       merged: { marketplaces: {}, plugins: {} },
       base: { status: "absent" },
       local: {
         status: "invalid",
-        filePath: locations.configLocalJsonPath,
+        filePath: locations.localConfigJsonPath,
         error: invalidJsonError,
       },
     }),
@@ -266,12 +429,12 @@ const loadCases = [
     name: "preserves two valid outcomes beside the stable merged view",
     prepare: async (locations) => {
       await writeFile(
-        locations.configJsonPath,
+        locations.baseConfigJsonPath,
         '{"schemaVersion":1,"marketplaces":{"zebra":{"source":"base/zebra"},"shared":{"source":"base/shared","autoupdate":true}},"plugins":{"zebra@zebra":{"enabled":true},"shared@shared":{"enabled":false}}}',
         "utf8",
       );
       await writeFile(
-        locations.configLocalJsonPath,
+        locations.localConfigJsonPath,
         '{"schemaVersion":1,"marketplaces":{"shared":{"source":"local/shared"},"alpha":{"source":"local/alpha"}},"plugins":{"shared@shared":{},"alpha@alpha":{"enabled":true}}}',
         "utf8",
       );
@@ -280,18 +443,18 @@ const loadCases = [
       merged: {
         marketplaces: {
           zebra: { entry: { source: "base/zebra" }, source: "base" },
-          shared: { entry: { source: "local/shared" }, source: "local" },
+          shared: { entry: { source: "local/shared", autoupdate: true }, source: "local" },
           alpha: { entry: { source: "local/alpha" }, source: "local" },
         },
         plugins: {
           "zebra@zebra": { entry: { enabled: true }, source: "base" },
-          "shared@shared": { entry: {}, source: "local" },
+          "shared@shared": { entry: { enabled: false }, source: "local" },
           "alpha@alpha": { entry: { enabled: true }, source: "local" },
         },
       },
       base: {
         status: "valid",
-        filePath: locations.configJsonPath,
+        filePath: locations.baseConfigJsonPath,
         config: {
           schemaVersion: 1,
           marketplaces: {
@@ -306,7 +469,7 @@ const loadCases = [
       },
       local: {
         status: "valid",
-        filePath: locations.configLocalJsonPath,
+        filePath: locations.localConfigJsonPath,
         config: {
           schemaVersion: 1,
           marketplaces: {
@@ -324,9 +487,9 @@ const loadCases = [
   {
     name: "preserves an invalid base outcome beside a valid local fallback",
     prepare: async (locations) => {
-      await writeFile(locations.configJsonPath, "", "utf8");
+      await writeFile(locations.baseConfigJsonPath, "", "utf8");
       await writeFile(
-        locations.configLocalJsonPath,
+        locations.localConfigJsonPath,
         '{"marketplaces":{"local":{"source":"local/fallback"}},"plugins":{"tool@local":{}}}',
         "utf8",
       );
@@ -342,12 +505,12 @@ const loadCases = [
       },
       base: {
         status: "invalid",
-        filePath: locations.configJsonPath,
+        filePath: locations.baseConfigJsonPath,
         error: invalidJsonError,
       },
       local: {
         status: "valid",
-        filePath: locations.configLocalJsonPath,
+        filePath: locations.localConfigJsonPath,
         config: {
           marketplaces: {
             local: { source: "local/fallback" },
@@ -363,11 +526,11 @@ const loadCases = [
     name: "preserves a valid base fallback beside an invalid local outcome",
     prepare: async (locations) => {
       await writeFile(
-        locations.configJsonPath,
+        locations.baseConfigJsonPath,
         '{"marketplaces":{"base":{"source":"base/fallback"}},"plugins":{"tool@base":{"enabled":false}}}',
         "utf8",
       );
-      await writeFile(locations.configLocalJsonPath, "", "utf8");
+      await writeFile(locations.localConfigJsonPath, "", "utf8");
     },
     expectedOutcome: (locations) => ({
       merged: {
@@ -380,7 +543,7 @@ const loadCases = [
       },
       base: {
         status: "valid",
-        filePath: locations.configJsonPath,
+        filePath: locations.baseConfigJsonPath,
         config: {
           marketplaces: {
             base: { source: "base/fallback" },
@@ -392,7 +555,7 @@ const loadCases = [
       },
       local: {
         status: "invalid",
-        filePath: locations.configLocalJsonPath,
+        filePath: locations.localConfigJsonPath,
         error: invalidJsonError,
       },
     }),
@@ -400,19 +563,19 @@ const loadCases = [
   {
     name: "preserves two invalid outcomes beside an empty merged view",
     prepare: async (locations) => {
-      await writeFile(locations.configJsonPath, "", "utf8");
-      await writeFile(locations.configLocalJsonPath, "", "utf8");
+      await writeFile(locations.baseConfigJsonPath, "", "utf8");
+      await writeFile(locations.localConfigJsonPath, "", "utf8");
     },
     expectedOutcome: (locations) => ({
       merged: { marketplaces: {}, plugins: {} },
       base: {
         status: "invalid",
-        filePath: locations.configJsonPath,
+        filePath: locations.baseConfigJsonPath,
         error: invalidJsonError,
       },
       local: {
         status: "invalid",
-        filePath: locations.configLocalJsonPath,
+        filePath: locations.localConfigJsonPath,
         error: invalidJsonError,
       },
     }),
@@ -423,51 +586,11 @@ async function createConfigMergeLocations(t: TestContext): Promise<ScopedLocatio
   const directory = await mkdtemp(path.join(tmpdir(), "config-merge-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const locations = locationsFor("project", directory);
-  await mkdir(path.dirname(locations.configJsonPath), { recursive: true });
+  await mkdir(path.dirname(locations.baseConfigJsonPath), { recursive: true });
   return locations;
 }
 
 describe("mergeScopeConfigs", () => {
-  test("replaces complete base entries with local entries", () => {
-    // arrange
-    const baseConfig = {
-      marketplaces: {
-        tools: { source: "base/tools", autoupdate: true },
-      },
-      plugins: {
-        "formatter@tools": { enabled: true },
-      },
-    } satisfies ScopeConfig;
-    const localConfig = {
-      marketplaces: {
-        tools: { source: "local/tools" },
-      },
-      plugins: {
-        "formatter@tools": {},
-      },
-    } satisfies ScopeConfig;
-    const expectedConfig = {
-      marketplaces: {
-        tools: {
-          entry: { source: "local/tools" },
-          source: "local",
-        },
-      },
-      plugins: {
-        "formatter@tools": {
-          entry: {},
-          source: "local",
-        },
-      },
-    } satisfies MergedConfig;
-
-    // act
-    const mergedConfig = mergeScopeConfigs(baseConfig, localConfig);
-
-    // assert
-    assert.deepStrictEqual(mergedConfig, expectedConfig);
-  });
-
   test("keeps JSON-derived prototype-named base entries as own merged values", () => {
     // arrange
     const baseConfig = JSON.parse(
@@ -541,6 +664,104 @@ describe("loadMergedScopeConfig", () => {
         expectedMarketplaceKeys,
       );
       assert.deepStrictEqual(Object.keys(scopeOutcome.merged.plugins), expectedPluginKeys);
+    });
+  }
+});
+
+const gapCases: readonly GapCase[] = [
+  {
+    name: "reports a local plugin whose marketplace only the base layer declares",
+    base: { marketplaces: { mp: { source: "./mp" } } },
+    local: { plugins: { "demo@mp": {} } },
+    expectedGaps: [{ layer: "local", keys: ["demo@mp"] }],
+  },
+  {
+    name: "reports a base-layer plugin whose marketplace only the local layer declares",
+    base: { plugins: { "demo@mp": { enabled: true } } },
+    local: { marketplaces: { mp: { source: "./mp" } } },
+    expectedGaps: [{ layer: "base", keys: ["demo@mp"] }],
+  },
+  {
+    name: "reports both layers, the base layer first",
+    base: { marketplaces: { a: { source: "./a" } }, plugins: { "one@b": {} } },
+    local: { marketplaces: { b: { source: "./b" } }, plugins: { "two@a": {} } },
+    expectedGaps: [
+      { layer: "base", keys: ["one@b"] },
+      { layer: "local", keys: ["two@a"] },
+    ],
+  },
+  {
+    name: "reports nothing when the layer declares the marketplace of its plugin",
+    base: {},
+    local: { marketplaces: { mp: { source: "./mp" } }, plugins: { "demo@mp": {} } },
+    expectedGaps: [],
+  },
+  {
+    name: "reports nothing when both layers declare the marketplace",
+    base: { marketplaces: { mp: { source: "./mp" } }, plugins: { "demo@mp": {} } },
+    local: { marketplaces: { mp: { source: "./mp" } }, plugins: { "demo@mp": {} } },
+    expectedGaps: [],
+  },
+  {
+    name: "leaves a marketplace no layer declares to the dangling reference row",
+    base: { plugins: { "demo@mp": {} } },
+    local: { plugins: { "other@mp": {} } },
+    expectedGaps: [],
+  },
+  {
+    name: "skips a malformed plugin key",
+    base: { marketplaces: { mp: { source: "./mp" } } },
+    local: { plugins: { "@mp": {}, "demo@": {}, mp: {} } },
+    expectedGaps: [],
+  },
+  {
+    name: "splits a plugin key on its last @",
+    base: { marketplaces: { mp: { source: "./mp" } } },
+    local: { plugins: { "a@b@mp": {} } },
+    expectedGaps: [{ layer: "local", keys: ["a@b@mp"] }],
+  },
+  {
+    name: "sorts the keys of a layer",
+    base: { marketplaces: { mp: { source: "./mp" } } },
+    local: { plugins: { "zeta@mp": {}, "alpha@mp": {}, "mid@mp": {} } },
+    expectedGaps: [{ layer: "local", keys: ["alpha@mp", "mid@mp", "zeta@mp"] }],
+  },
+];
+
+describe("findLayerMarketplaceGaps", () => {
+  test("does not read a marketplace the other layer holds only through Object.prototype", () => {
+    // arrange
+    const base = JSON.parse('{"marketplaces":{}}') as ScopeConfig;
+    const local = JSON.parse(
+      '{"plugins":{"demo@toString":{},"demo@constructor":{}}}',
+    ) as ScopeConfig;
+
+    // act
+    const gaps = findLayerMarketplaceGaps(base, local);
+
+    // assert
+    assert.deepStrictEqual(gaps, []);
+  });
+
+  test("reads a JSON-derived __proto__ marketplace as an own declaration", () => {
+    // arrange
+    const base = JSON.parse('{"marketplaces":{"__proto__":{"source":"./p"}}}') as ScopeConfig;
+    const local = JSON.parse('{"plugins":{"demo@__proto__":{}}}') as ScopeConfig;
+
+    // act
+    const gaps = findLayerMarketplaceGaps(base, local);
+
+    // assert
+    assert.deepStrictEqual(gaps, [{ layer: "local", keys: ["demo@__proto__"] }]);
+  });
+
+  for (const { name, base, local, expectedGaps } of gapCases) {
+    test(name, () => {
+      // act
+      const gaps = findLayerMarketplaceGaps(base, local);
+
+      // assert
+      assert.deepStrictEqual(gaps, expectedGaps);
     });
   }
 });

@@ -270,10 +270,16 @@ test("local config overrides base config and renders the exact autoupdate marker
         source: pathSource("./auto-marketplace"),
       },
     ]);
-    await seedAutoupdate(locations, locations.configJsonPath, "auto", "./auto-marketplace", false);
     await seedAutoupdate(
       locations,
-      locations.configLocalJsonPath,
+      locations.baseConfigJsonPath,
+      "auto",
+      "./auto-marketplace",
+      false,
+    );
+    await seedAutoupdate(
+      locations,
+      locations.localConfigJsonPath,
       "auto",
       "./auto-marketplace",
       true,
@@ -479,12 +485,12 @@ test("invalid local config is ignored while the valid base autoupdate value rend
     ]);
     await seedAutoupdate(
       locations,
-      locations.configJsonPath,
+      locations.baseConfigJsonPath,
       "fallback",
       "./fallback-marketplace",
       true,
     );
-    await writeFile(locations.configLocalJsonPath, "{ invalid local config", "utf8");
+    await writeFile(locations.localConfigJsonPath, "{ invalid local config", "utf8");
     const boundary = notificationBoundary("invalid local config list", true);
     const options = {
       ctx: boundary.ctx,
@@ -616,7 +622,7 @@ describe("loadMarketplaceListEntries", () => {
       // arrange
       const locations = locationsFor("project", cwd);
       await seedMarketplaces(locations, [pathRecord(cwd, "auto", "project")]);
-      await seedAutoupdate(locations, locations.configJsonPath, "auto", "./auto", true);
+      await seedAutoupdate(locations, locations.baseConfigJsonPath, "auto", "./auto", true);
 
       // act
       const blocks = (await loadMarketplaceListEntries({ cwd, scope: "project" })).map(
@@ -643,7 +649,7 @@ describe("loadMarketplaceListEntries", () => {
       await seedMarketplaces(locations, [
         pathRecord(cwd, "dated", "project", "2026-05-25T00:00:00Z"),
       ]);
-      await seedAutoupdate(locations, locations.configJsonPath, "dated", "./dated", false);
+      await seedAutoupdate(locations, locations.baseConfigJsonPath, "dated", "./dated", false);
 
       // act
       const blocks = (await loadMarketplaceListEntries({ cwd, scope: "project" })).map(
@@ -668,7 +674,7 @@ describe("loadMarketplaceListEntries", () => {
       // arrange
       const locations = locationsFor("project", cwd);
       await seedMarketplaces(locations, [pathRecord(cwd, "plain", "project")]);
-      await seedAutoupdate(locations, locations.configJsonPath, "plain", "./plain", false);
+      await seedAutoupdate(locations, locations.baseConfigJsonPath, "plain", "./plain", false);
 
       // act
       const blocks = (await loadMarketplaceListEntries({ cwd, scope: "project" })).map(

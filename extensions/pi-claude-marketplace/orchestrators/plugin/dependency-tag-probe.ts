@@ -32,6 +32,7 @@
 import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
 import { RELEASE_TAG_SEPARATOR, selectHighestSatisfyingTag } from "../../domain/release-tag.ts";
 import { listRemoteTags } from "../../platform/git.ts";
+import { rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { buildCloneAuth } from "../auth-host.ts";
 
@@ -129,6 +130,7 @@ async function listCandidateTags(request: TagListingRequest): Promise<TagListing
     request.memo?.set(request.url, tags);
     return { kind: "listed", tags };
   } catch (err) {
+    rethrowInvalidGitHubBaseUrl(err);
     return {
       kind: "tag-listing-failed",
       cause: err instanceof Error ? err : new Error(String(err)),

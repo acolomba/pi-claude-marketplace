@@ -280,7 +280,7 @@ test("D-08-07: a plugin named constructor updates, and removing its marketplace 
       },
     ]);
     assert.deepStrictEqual(afterUpdate, [["constructor", "1.1.0", true]]);
-    assert.deepStrictEqual(refreshed, [{ message: "● mp [project] (skipped) {up-to-date}" }]);
+    assert.deepStrictEqual(refreshed, [{ message: "● mp [project] (updated)" }]);
     assert.deepStrictEqual(removed, [
       {
         message:

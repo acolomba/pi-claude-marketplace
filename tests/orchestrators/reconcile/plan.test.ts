@@ -1761,7 +1761,7 @@ describe("planReconcile", () => {
     const verdict: ScopeSatisfactionVerdict = {
       ok: false,
       declarer: "deploy-kit@keep",
-      cause: new Error("cannot read the dependencies of deploy-kit@keep: unusable"),
+      cause: new Error("cannot read the dependencies of deploy-kit@keep"),
     };
 
     // act

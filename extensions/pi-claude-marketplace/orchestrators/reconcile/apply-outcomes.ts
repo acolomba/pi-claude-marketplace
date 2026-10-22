@@ -12,6 +12,7 @@
 //   - plugin:      install / uninstall / enable / disable
 //   - planner-only:    source-mismatch (report-only)
 //   - planner-only:    invalid-block (CFG-03 from the read pass)
+//   - planner-only:    layer-marketplace-gap (LAYER-06 from the read pass)
 //
 // Failure variants carry `reason: Reason` (broader than ContentReason so the
 // structural `"marketplace not added"` sentinel can flow through; mirrors the orchestrator
@@ -237,9 +238,9 @@ export interface PluginUninstallFailedOutcome extends PluginOutcomeBase {
    * carriage is live rather than dead.
    *
    * No `redactAbsolutePaths` pass is applied here, on purpose: the refusal's
-   * message is composed from `name@marketplace` keys, field paths and text the
-   * declaration-index leaf already redacted, and it chains no `cause` behind
-   * it, so there is no path left for the depth-5 cause-chain walker to print.
+   * message is composed from `name@marketplace` keys, field paths and fixed
+   * phrases, and it chains no `cause` behind it, so there is no path left for
+   * the depth-5 cause-chain walker to print.
    */
   readonly cause?: UninstallRefusedError;
 }
@@ -540,6 +541,21 @@ export interface InvalidBlockOutcome {
 }
 
 /**
+ * LAYER-06 / D-MF-03: a layer that declares a plugin whose marketplace only the
+ * other layer declares, from the per-scope read pass. It stops the scope's
+ * reload as an invalid layer config does. `basename` is the layer config's
+ * BASENAME (T-55-02-01), and `cause` names the plugins and the repair. The
+ * projection renders the file as a block header with no status and one failed
+ * row under it, so the tally counts the one error once, as `pending` does.
+ */
+export interface LayerMarketplaceGapOutcome {
+  readonly kind: "layer-marketplace-gap";
+  readonly scope: Scope;
+  readonly basename: string;
+  readonly cause: Error;
+}
+
+/**
  * RECON-04: the per-entry outcome union consumed by
  * `buildReconcileAppliedCascade`. Single source of truth for the apply-time
  * outcomes the projection knows how to fold.
@@ -561,7 +577,8 @@ export type PerEntryOutcome =
   | PluginDependencyDisabledOutcome
   | PluginDisableFailedOutcome
   | SourceMismatchOutcome
-  | InvalidBlockOutcome;
+  | InvalidBlockOutcome
+  | LayerMarketplaceGapOutcome;
 
 // ───────────────────────────────────────────────────────────────────────────
 // Throw classification and the install-outcome dependency derivation, moved

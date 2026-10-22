@@ -31,7 +31,7 @@ Esta extensión instala complementos desde los mercados de complementos de Claud
 
 Los complementos que contienen componentes no compatibles pueden instalarse parcialmente. Un complemento instalado parcialmente puede no funcionar según lo previsto.
 
-El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como `/plugin` de Claude Code. Una configuración de estado deseado en los archivos `[~/].pi/agent/claude-plugins[.local].json` hace que las instalaciones de complementos sean automáticas y repetibles. Puedes compartir estos archivos entre máquinas o miembros del equipo.
+El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como `/plugin` de Claude Code. Las configuraciones de estado deseado en `[~/].pi/agent/claude-plugins[.local].json` hacen que las instalaciones de complementos sean automáticas y repetibles. Puedes compartir estas configuraciones entre máquinas o miembros del equipo.
 
 ## Requisitos previos
 
@@ -152,44 +152,43 @@ Instala un complemento parcialmente disponible. Coloca `--partial` primero para 
 
 ## Archivos de configuración
 
-Cada ámbito almacena su configuración declarativa de mercados y complementos en `claude-plugins.json`, bajo la raíz del ámbito.
+Cada ámbito declara sus mercados y complementos en dos capas: la capa base y la capa local. El archivo de una capa es su configuración. La configuración base, `claude-plugins.json`, está bajo la raíz del ámbito.
 
 | Ámbito    | Ruta del archivo                  |
 | --------- | --------------------------------- |
 | `user`    | `~/.pi/agent/claude-plugins.json` |
 | `project` | `<cwd>/.pi/claude-plugins.json`   |
 
-Estos archivos son el registro definitivo de los mercados y complementos instalados. Pi aplica su contenido al cargar la extensión (`/reload`).
+Las configuraciones de un ámbito son el registro definitivo de sus mercados y complementos instalados. Pi aplica su contenido al cargar la extensión (`/reload`).
 
 Que Pi aplique los componentes de un complemento declarado depende de la clave opcional `enabled` de la entrada y del valor predeterminado de instalación que declara el autor del complemento. Para más información, consulta [Activación de complementos](docs/plugin-enablement.md).
 
-### Archivos de configuración local
+### La configuración local
 
-Cada ámbito también puede tener un archivo `claude-plugins.local.json` junto al archivo base.
+La configuración local, `claude-plugins.local.json`, está junto a la configuración base.
 
 | Ámbito    | Ruta del archivo                        |
 | --------- | --------------------------------------- |
 | `user`    | `~/.pi/agent/claude-plugins.local.json` |
 | `project` | `<cwd>/.pi/claude-plugins.local.json`   |
 
-El archivo local anula las entradas individuales del archivo base. Una entrada en `claude-plugins.local.json` reemplaza por completo la entrada con la misma clave en `claude-plugins.json`.
-
-Pasa `--local` a cualquier comando de modificación para dirigirse únicamente al archivo local.
+La configuración local anula entradas de la configuración base. Para escribir en la configuración local, agrega `--local`:
 
 ```text
+/claude:plugin marketplace add upstash/context7 --local
 /claude:plugin install context7-plugin@context7-marketplace --local
 /claude:plugin marketplace autoupdate context7-marketplace --local
 ```
 
 ### Convención de Gitignore
 
-En el ámbito del proyecto, confirma (`commit`) `claude-plugins.json`. Así, tus colaboradores instalan los mismos mercados y complementos. Mantén `claude-plugins.local.json` fuera del control de versiones. Agrega esta línea al `.gitignore` de tu proyecto:
+En el ámbito del proyecto, confirma (`commit`) la configuración base, `claude-plugins.json`. Así, tus colaboradores instalan los mismos mercados y complementos. Mantén la configuración local, `claude-plugins.local.json`, fuera del control de versiones. Agrega esta línea al `.gitignore` de tu proyecto:
 
 ```text
 .pi/claude-plugins.local.json
 ```
 
-Los archivos de ámbito de usuario se encuentran en tu directorio de inicio. Son personales y nunca se comparten.
+Las configuraciones de ámbito de usuario se encuentran en tu directorio de inicio. Son personales y nunca se comparten.
 
 ## Referencia de comandos
 
@@ -252,7 +251,7 @@ Actualiza un mercado. Si omites el nombre, el comando actualiza todos los mercad
 /claude:plugin marketplace update
 ```
 
-Elimina un mercado y todos los complementos instalados desde él.
+Elimina un mercado y desinstala sus complementos. Una dependencia que otro complemento todavía necesita sigue instalada.
 
 ```text
 /claude:plugin marketplace remove context7-marketplace
@@ -310,7 +309,7 @@ Instala en el ámbito del proyecto en lugar del ámbito de usuario.
 /claude:plugin install context7-plugin@context7-marketplace --scope project
 ```
 
-Un complemento puede declarar los otros complementos que necesita. La instalación también los agrega, en el mismo ámbito y en el mismo archivo de configuración. Para más información, consulta [Resolución de dependencias](docs/dependency-resolution.md).
+Un complemento puede declarar los otros complementos que necesita. La instalación también los agrega, en el mismo ámbito. Para más información, consulta [Resolución de dependencias](docs/dependency-resolution.md).
 
 Actualiza un complemento instalado, todos los complementos instalados de un mercado, o todos los complementos instalados.
 

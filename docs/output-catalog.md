@@ -239,6 +239,8 @@ Plugin list: 2 successes
 
 `official [project]` does not exist; the project-scoped `alpha` is folded under the user-scope marketplace header. Its row carries the explicit `[project]` bracket because `plugin.scope !== marketplace.scope` (Phase 16 D-16-17). The user-scoped `alpha` row omits the bracket because `plugin.scope === marketplace.scope` -- the orphan-fold rule applies symmetrically.
 
+The fold applies only when the project record and the user record share the marketplace root, which happens for a path marketplace. A project install from a user-scope git marketplace gives the project its own record and its own clone, so its plugins list under the project's own `official [project]` header.
+
 ### Soft-dep markers on installed rows when companion extensions are unloaded
 
 <!-- catalog-state: soft-dep-on-installed -->
@@ -819,7 +821,7 @@ A marketplace operation has failed.
 ⊘ mp [user] (failed) {marketplace not added to user scope}
 ```
 
-**Project target, container at user.** Reachable from every verb EXCEPT `install`: the CMP-3 fallback lets a project-target install source a user-scope marketplace and adopt it into project scope, so `install` never renders this row. `info`, `update`, `reinstall`, `uninstall`, `enable`, `disable`, `marketplace info`, `marketplace update` and `marketplace remove` carry no such fallback and miss.
+**Project target, container at user.** Reachable from every verb EXCEPT `install`: the CMP-3 fallback adds the user-scope marketplace to the project scope, as `marketplace add --scope project` does, so `install` never renders this row. `info`, `update`, `reinstall`, `uninstall`, `enable`, `disable`, `marketplace info`, `marketplace update` and `marketplace remove` carry no such fallback and miss.
 
 <!-- catalog-state: missing-marketplace-not-added-cross-scope-project -->
 
@@ -827,6 +829,49 @@ A marketplace operation has failed.
 A marketplace operation has failed.
 
 ⊘ mp [project] (failed) {marketplace not added to project scope}
+```
+
+### Failure -- the marketplace is declared only in the local layer (FIX-03 / D-MF-02)
+
+A standalone install without `--local` writes the plugin's declaration into `claude-plugins.json`. If only `claude-plugins.local.json` declares the plugin's marketplace, a teammate who reads the base config cannot resolve that declaration. Thus the command is refused before anything is written. The `cause:` line carries the remedy.
+
+`enable` and `disable` render the same row. `update` and `reinstall` write no declaration, so they never meet this rule. A reload and an import are never refused. An `enable` or `disable` that writes nothing keeps its `(skipped) {already enabled}` or `(skipped) {already disabled}` row. Severity `error`; no reload-hint (nothing landed).
+
+<!-- catalog-state: failure-marketplace-in-local-layer-only -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ helper (failed) {marketplace in local layer only}
+    cause: The marketplace official is declared only in the local config (claude-plugins.local.json). Run the command again with --local.
+```
+
+### Failure -- no source can declare the marketplace in the target layer (LAYER-06)
+
+A layer that declares a plugin also declares the plugin's marketplace, so an install writes the marketplace into the target layer when that layer lacks it. The source comes from the scope's record of the marketplace. When the record holds no source this version can write, such as a source kind from a newer version, the other layer's declaration supplies it. When neither is available, the install is refused before anything is written, because the target layer would declare the plugin without its marketplace. The `cause:` line names the layer config to declare the marketplace in.
+
+`enable` and `disable` render the same row when they would write. A reload and an import are never refused. Severity `error`; no reload-hint (nothing landed).
+
+<!-- catalog-state: failure-marketplace-source-undeclarable -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ helper (failed) {unsupported source}
+    cause: The scope records the marketplace official with no source that the base config (claude-plugins.json) can declare. Declare the marketplace in the base config, then run the command again.
+```
+
+### Declared only -- the other layer already installed the plugin (LAYER-05)
+
+Both layers of a scope may declare the same plugin, and the scope installs it once. An install into one layer of a plugin that the other layer declares and the scope has installed adds the declaration to the target layer and installs nothing. When the target layer does not declare the plugin's marketplace, the install declares it there too (LAYER-06). An install with `--local` renders `{already installed in base layer}`; a flagless install renders the mirror token `{already installed in local layer}`. A plugin that the other layer declares but the scope has not installed is installed as usual. An install with a version pin keeps the `{already installed}` failure. Severity `info`, because the plugin is now declared where the user asked; no reload-hint (nothing was installed).
+
+<!-- catalog-state: install-already-installed-in-other-layer -->
+
+```text
+● official [user]
+  ⊘ helper v1.0.0 (skipped) {already installed in base layer}
 ```
 
 ### Failure -- a name a DISABLED plugin still owns (ENBL-18)
@@ -876,7 +921,7 @@ A plugin that declares `dependencies` installs as a CASCADE: the requesting plug
 /reload to pick up changes
 ```
 
-`linter` was already present in the target scope but its record was DISABLED. Instead of leaving it exactly as it was, this command re-materializes it through that same record -- the same `runInstallLedger` re-enable machinery `enable`'s own cascade member row already uses (`pinVersionOverride` + `allowExistingRecord: true`) -- so its artifacts return to disk. The desired-state configuration is not touched: no config file gains a key for `linter` (D-04-02), the write reaches the state record alone, and `linter`'s `provenance` stays `"dependency"` -- only a by-name install promotes a record (A2). The row is `installed`, not `skipped`, because state changed and something was materialized; the brace carries both facts this command is responsible for, `{already installed, dependency enabled}`, on the same split the promotion row's own `{already installed, dependency promoted}` pair already sets out. Severity `info`, and the reload-hint fires because artifacts were re-materialized. A cascade failure anywhere puts `linter` back to disabled rather than deleting its record (D-03-07): the record is what still owns those artifacts.
+`linter` was already present in the target scope but its record was DISABLED. Instead of leaving it exactly as it was, this command re-materializes it through that same record -- the same `runInstallLedger` re-enable machinery `enable`'s own cascade member row already uses (`pinVersionOverride` + `allowExistingRecord: true`) -- so its artifacts return to disk. The desired-state configuration is not touched: no config gains a key for `linter` (D-04-02), the write reaches the state record alone, and `linter`'s `provenance` stays `"dependency"` -- only a by-name install promotes a record (A2). The row is `installed`, not `skipped`, because state changed and something was materialized; the brace carries both facts this command is responsible for, `{already installed, dependency enabled}`, on the same split the promotion row's own `{already installed, dependency promoted}` pair already sets out. Severity `info`, and the reload-hint fires because artifacts were re-materialized. A cascade failure anywhere puts `linter` back to disabled rather than deleting its record (D-03-07): the record is what still owns those artifacts.
 
 ### Dependency cascade -- a path-source dependency falls back to the marketplace's current copy (TAGS-02 / D-07-03)
 
@@ -1092,7 +1137,7 @@ ______________________________________________________________________
 
 Single-plugin command in v2 still renders the always-marketplace-header form; the marketplace appears as a bare header and the plugin row indents underneath.
 
-The command takes `[--scope user|project] [--keep-data] [--local] [--prune]`. `--keep-data` preserves the plugin's persistent data directory (DATA-01 / D-02-03); the plugin's artifacts and its installation record are removed either way. The flag adds the `data kept` reason to the row and changes nothing else -- there is no retained-data report and no retained-path trailer (D-02-01). Omitting `--keep-data` deletes that data directory with no confirmation prompt (DATA-02 / D-02-04), and the load-time reconcile that uninstalls a plugin dropped from `claude-plugins.json` takes the same deletion default, because it has no command line to carry the flag (DATA-03). `--delete-data`, `-y` and `--yes` are rejected as unknown flags before any state changes (D-02-05): there is no prompt to answer, and the default needs no second spelling. `--local` keeps its shared write-target meaning, selecting `claude-plugins.local.json` for the config write. An uninstall is refused while another installed plugin in the same scope still declares the target as a dependency (PRUNE-05 / D-05-14): nothing is removed and the row names the dependents. `--prune` also removes, after the named plugin, every dependency-installed plugin in the scope that no remaining installed plugin declares (PRUNE-01 / D-05-01): never a plugin installed by name, never one something still needs, and never anything unless the named plugin was actually removed.
+The command takes `[--scope user|project] [--keep-data] [--local] [--prune]`. `--keep-data` preserves the plugin's persistent data directory (DATA-01 / D-02-03); the plugin's artifacts and its installation record are removed either way. The flag adds the `data kept` reason to the row and changes nothing else -- there is no retained-data report and no retained-path trailer (D-02-01). Omitting `--keep-data` deletes that data directory with no confirmation prompt (DATA-02 / D-02-04), and the load-time reconcile that uninstalls a plugin dropped from `claude-plugins.json` takes the same deletion default, because it has no command line to carry the flag (DATA-03). `--delete-data`, `-y` and `--yes` are rejected as unknown flags before any state changes (D-02-05): there is no prompt to answer, and the default needs no second spelling. A named uninstall acts on one layer: the base layer, or the local layer with `--local`. It removes the declaration from that layer only, and it refuses a plugin that only the other layer declares (LAYER-04). A plugin that a layer declares is uninstalled even while another installed plugin in the same scope still declares it as a dependency, and the row names the dependents (LOAD-03). A plugin that no layer declares is refused while a plugin of the target layer needs it, and skipped while only plugins of the other layer need it (LAYER-08). `--prune` also removes, after the named plugin, every dependency-installed plugin in the scope that no remaining installed plugin declares (PRUNE-01 / D-05-01): never a plugin installed by name, never one something still needs, and never anything unless the named plugin was actually removed.
 
 ### Success
 
@@ -1238,7 +1283,7 @@ Triggered when `uninstall <plugin>@<marketplace>` names a plugin that another in
 
 ### Failure -- refused, a declarer could not be read (D-05-07)
 
-Triggered when some OTHER installed record in the scope has declarations the guard cannot establish: its marketplace manifest fails to load, that manifest does not list it, its declaration parses as unusable, or its own manifest is present but cannot be read. The rule is fail-closed -- an unreadable record is never read as "declares nothing", because deleting on incomplete information is the one outcome the guard must never produce -- so the uninstall is refused rather than risked. The brace carries `unreadable` -- the "could not read on-disk state" default -- and NOT the declarer's own read-failure token: the row's subject is the plugin the user named, whose manifest is fine, and the brace states a fact about the row's subject. The `cause:` trailer names which record could not be read and why (not declared by its marketplace, an unusable declaration, the marketplace manifest's load error, or an own manifest that is present but cannot be read), never an absolute path. The first remedy is `uninstall <unreadable-plugin>@<marketplace>` on the record the cause names: the target of an uninstall is never indexed, so that command passes the guard, and the guard then passes for everything else. When the record should stay, repair its own manifest or its marketplace (`marketplace update`); when the marketplace is stale, remove it (`marketplace remove`). Severity: `error`. No reload-hint.
+Triggered when some OTHER installed record in the scope has declarations the guard cannot establish: its marketplace manifest fails to load, that manifest does not list it, its declaration parses as unusable, or its own manifest is present but cannot be read. The rule is fail-closed -- an unreadable record is never read as "declares nothing", because deleting on incomplete information is the one outcome the guard must never produce -- so the uninstall is refused rather than risked. The brace carries `unreadable` -- the "could not read on-disk state" default -- and NOT the declarer's own read-failure token: the row's subject is the plugin the user named, whose manifest is fine, and the brace states a fact about the row's subject. The `cause:` trailer names the record that could not be read. It says why in words that this extension writes: not declared by its marketplace, a marketplace manifest that is missing, cannot be read, or is invalid, an unusable declaration, or an own manifest that is present but cannot be read. It leaves out the error text of a manifest that fails to load, because that text can come from the marketplace's own files. The first remedy is `uninstall <unreadable-plugin>@<marketplace>` on the record the cause names: the target of an uninstall is never indexed, so that command passes the guard, and the guard then passes for everything else. When the record should stay, repair its own manifest or its marketplace (`marketplace update`); when the marketplace is stale, remove it (`marketplace remove`). Severity: `error`. No reload-hint.
 
 <!-- catalog-state: refused-declarer-unreadable -->
 
@@ -1248,6 +1293,78 @@ A plugin operation has failed.
 ● official [user]
   ⊘ helper v1.0.0 (failed) {unreadable}
     cause: cannot read the dependencies of other@official: not declared by its marketplace
+```
+
+### Failure -- the plugin is declared in the local layer only (LAYER-04 / D-MF-03)
+
+A named uninstall acts on the base layer, or on the local layer with `--local`. It reads both layers. When only the local layer declares the plugin, an uninstall without `--local` is refused before anything changes. The `cause:` line names the local config (`claude-plugins.local.json`) and the remedy: run the command again with `--local`.
+
+`enable`, `disable`, `update <plugin>@<marketplace>`, and `reinstall <plugin>@<marketplace>` render the same row under their own labels, without the version. A refused named `update` does not look for a new version first, because that check can need the network, so an up-to-date plugin is refused too. A reload, an import, and the `update` and `reinstall` forms that name no plugin are never refused. When either layer config cannot be read, each of these named verbs is refused with the `{invalid manifest}` row instead, and its `cause:` line names that file by its basename: `Config file "claude-plugins.local.json" failed schema validation.` Severity `error`; no reload-hint (nothing changed).
+
+<!-- catalog-state: uninstall-plugin-in-local-layer-only -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ helper v1.0.0 (failed) {plugin in local layer only}
+    cause: The plugin helper@official is declared only in the local config (claude-plugins.local.json). Run the command again with --local.
+```
+
+### Failure -- the plugin is declared in the base layer only (LAYER-04 / D-MF-03)
+
+The mirror refusal. An uninstall with `--local` acts on the local layer, so a plugin that only the base layer declares is refused before anything changes, and the `cause:` line says to run the command again without `--local`. The other named verbs render the same row under their own labels, as above. Severity `error`; no reload-hint.
+
+<!-- catalog-state: uninstall-plugin-in-base-layer-only -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ helper v1.0.0 (failed) {plugin in base layer only}
+    cause: The plugin helper@official is declared only in the base config (claude-plugins.json). Run the command again without --local.
+```
+
+### Kept installed -- the other layer still declares the plugin (LAYER-05)
+
+Both layers of a scope may declare the same plugin, and the scope installs it once. An uninstall from one layer then removes only that layer's declaration and keeps the installation, because the other layer still declares the plugin. The row is `(skipped)` with `{still installed in local layer}`, and the `cause:` line says to repeat the command with `--local` to uninstall the plugin. An uninstall with `--local` renders the mirror row: `{still installed in base layer}`, with the cause `Run the command again without --local to uninstall it.` `--keep-data` and `--prune` change nothing here. Severity `warning`, because the plugin that the user asked to uninstall is still installed; no reload-hint (nothing left the disk).
+
+<!-- catalog-state: uninstall-still-installed-in-other-layer -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ⊘ helper v1.0.0 (skipped) {still installed in local layer}
+    cause: Run the command again with --local to uninstall it.
+```
+
+### Refused -- a plugin of the target layer needs this dependency (LAYER-08 / D-MF-03)
+
+An installed plugin that no layer declares is a dependency: the scope installed it because another plugin needs it. A named uninstall of a dependency is refused while a plugin that the target layer declares still needs it, directly or through another dependency. The `cause:` line names those plugins and the order that unblocks the uninstall. When a name could forge the sentence, the line gives a count instead (`Uninstall 2 other plugins first, then shared-lib@official.`). Claude Code uninstalls such a plugin and reports its dependents; this extension refuses instead (D-MF-03). A dependency that nothing needs is uninstalled as usual, and a plugin that a layer declares is uninstalled even when other plugins need it, as the LOAD-03 state above shows. Severity `error`; no reload-hint.
+
+<!-- catalog-state: uninstall-dependency-needed-in-layer -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ shared-lib v1.0.0 (failed) {dependents remain}
+    cause: Uninstall helper@official first, then shared-lib@official.
+```
+
+### Kept installed -- only a plugin of the other layer needs this dependency (LAYER-08)
+
+When only plugins that the other layer declares need the dependency, the uninstall removes nothing. The row is `(skipped)` with the same `{dependents remain}` token, and the `cause:` line names the other layer's file and the plugins that need the dependency. Severity `warning`; no reload-hint.
+
+<!-- catalog-state: uninstall-dependency-needed-in-other-layer -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ⊘ shared-lib v1.0.0 (skipped) {dependents remain}
+    cause: The local config (claude-plugins.local.json) declares helper@official, which needs shared-lib@official.
 ```
 
 ### Success with `--prune` (PRUNE-01..04 / D-05-01 / D-05-02 / D-05-11)
@@ -1434,7 +1551,7 @@ A plugin operation has failed.
     cause: cannot read the dependencies of other@official: not declared by its marketplace
 ```
 
-The failure names the declarer and a redacted cause. The command removes nothing and emits no reload hint.
+The failure names the declarer and, for a reason this extension writes, why. The command removes nothing and emits no reload hint.
 
 ### Malformed state refuses the sweep or preview
 
@@ -1517,6 +1634,8 @@ ______________________________________________________________________
 ## `/claude:plugin reinstall`
 
 Multi-plugin cascade. One marketplace header per affected marketplace; plugin rows indent two spaces underneath.
+
+A reinstall changes the installation and its record only. It writes no declaration to either layer, so a reinstalled dependency stays undeclared (LAYER-04 / D-MF-03). A named `reinstall <plugin>@<marketplace>` acts on the base layer, or on the local layer with `--local`. It refuses a plugin that only the other layer declares, and a layer config it cannot read, with the rows of the `uninstall-plugin-in-local-layer-only` state under `/claude:plugin uninstall`. The forms that name no plugin cover the plugins of both layers. With `--local`, they cover the plugins the local layer declares and the dependencies those plugins need, but not a dependency that only base-layer plugins need. When they cannot read the dependencies of one of those plugins, they change nothing and fail with one `{unreadable}` row whose cause names that plugin.
 
 ### Single marketplace, all reinstalled
 
@@ -1748,6 +1867,8 @@ ______________________________________________________________________
 ## `/claude:plugin update`
 
 Multi-plugin cascade. Same shape as `reinstall` with version-arrow rows (`v<from> → v<to>`) per D-15-04 / Phase 16 `composeVersionArrow`.
+
+An update changes the installation and its record only. It writes no declaration to either layer, so an updated dependency stays undeclared (LAYER-04 / D-MF-03). A named `update <plugin>@<marketplace>` acts on the base layer, or on the local layer with `--local`. It refuses a plugin that only the other layer declares, and a layer config it cannot read, with the rows of the `uninstall-plugin-in-local-layer-only` state under `/claude:plugin uninstall`, before it looks for a new version. The forms that name no plugin cover the plugins of both layers. With `--local`, they cover the plugins the local layer declares and the dependencies those plugins need, but not a dependency that only base-layer plugins need. When they cannot read the dependencies of one of those plugins, they change nothing and fail with one `{unreadable}` row whose cause names that plugin.
 
 ### Single marketplace, mixed
 
@@ -2309,7 +2430,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin marketplace add <source>`
 
-Single-marketplace command. The marketplace header alone is the body -- no plugin children.
+Single-marketplace command. The marketplace header alone is the body -- no plugin children, except under the GitHub base override (see _Failure -- fetched URL under the GitHub base override_).
 
 D-48-A / ATTR-07: the `failed` marketplace header MAY now carry a closed-set reason brace (`(failed) {<reason>}`) when a precondition fails and there is no plugin child row to carry the cause. The five `marketplace add` preconditions -- duplicate name, stale clone, unsupported source, missing path source, invalid manifest -- each render their matching closed-set `REASONS` member on the marketplace subject instead of throwing raw past the orchestrator. The `failure-unreachable` state below carries NO reason brace (`reasons` omitted -> `composeReasons` returns `""` -> the brace collapses to a bare `(failed)`), so its byte form is unchanged. Post-manifest failures (duplicate name, stale clone) render the derived marketplace name as the subject; pre-clone/pre-manifest failures (unsupported source, source missing, invalid manifest) render the user-typed source string as the subject (A2).
 
@@ -2346,6 +2467,20 @@ A marketplace operation has failed.
 Bare `failed` marketplace header at column 0; no plugin children. Severity: `error`. No reload-hint per D-16-12 (failed marketplace status does not trigger).
 
 > Note: the v2 `notify()` renderer's `composeMarketplaceBlock` does not emit a marketplace-level cause-chain trailer below the failed header. The v2 type model places `cause?: Error` on plugin variants only; orchestrators wanting to surface the diagnostic must construct the payload as a per-plugin failed/manual-recovery row with `cause?: Error`. This catalog state is the bare failed-marketplace header byte form. D-48-A: this bare-`(failed)` form (reasons omitted) is byte-unchanged by the ATTR-07 reason-brace addition.
+
+### Failure -- fetched URL under the GitHub base override (GHB-01)
+
+Triggered when `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` rewrote the clone URL and the clone fails. The marketplace header is a bare `(failed)`, and one failed child row carries the reason and a cause line that names the fetched URL (D-03), the same shape `marketplace update` uses (SNM-10). With the variable unset, the failure renders as the reason-brace header above, byte-unchanged (GHB-04). Severity `error`; no reload-hint.
+
+<!-- catalog-state: add-fetched-url -->
+
+```text
+Some operations have failed.
+
+⊘ anthropics/claude-plugins-official [project] (failed)
+  ⊘ anthropics/claude-plugins-official (failed) {source missing}
+    cause: HTTP Error: 404 -> fetched https://mirror.example/git/anthropics/claude-plugins-official.git
+```
 
 ### Failure -- duplicate name (ATTR-07)
 
@@ -2399,7 +2534,7 @@ A marketplace operation has failed.
 
 ### Failure -- source missing (ATTR-07)
 
-Triggered when a path `marketplace add` points at a path that does not exist (ENOENT) or exists but is neither a file nor a directory (e.g. a socket; tagged ENOTDIR). Pre-name failure (no readable manifest): the subject is the user-typed source string. NFR-5: a path source never touches the network. Severity `error`; no reload-hint.
+Triggered when a path `marketplace add` points at a path that does not exist (ENOENT) or exists but is neither a file nor a directory (e.g. a socket; tagged ENOTDIR). The same row renders when a git `marketplace add` finds no repository (the host answers 404 or 410) or no `#ref` the repository has. Pre-name failure (no readable manifest): the subject is the user-typed source string. NFR-5: a path source never touches the network. Severity `error`; no reload-hint.
 
 <!-- catalog-state: add-source-missing -->
 
@@ -2433,6 +2568,20 @@ Some operations have failed.
 ⊘ https://gitlab.com/acme/private-mp [user] (failed)
   ⊘ https://gitlab.com/acme/private-mp (failed) {authentication required}
     cause: HTTP Error: 401 Unauthorized
+```
+
+### Failure -- git host HTTP error (ADD-10)
+
+Triggered when a github or url `marketplace add` clones and the git host answers with an HTTP status other than the 401/403 auth challenge and the 404/410 repository-absence answers (ADD-09 keeps those as `{source missing}`): a 5xx, a 408, a 429, or any other status. The reason is `{network error}`, because the host was reached and refused. `{network unreachable}` stays for connection failures, meaning the network errno codes. The first frame of the cause line names the status and the URL the clone fetched, as `{status} on {url}`, with URL credentials redacted, and the transport's own message follows. This is the same frame `marketplace update` renders (`update-host-http-error`). The reason and the cause ride a synthetic-child failed row, as in `add-authentication-required`. Pre-name failure: the subject is the user-typed source. Severity `error`; no reload-hint.
+
+<!-- catalog-state: add-host-http-error -->
+
+```text
+Some operations have failed.
+
+⊘ https://git.example.com/acme/flaky-mp [user] (failed)
+  ⊘ https://git.example.com/acme/flaky-mp (failed) {network error}
+    cause: 503 on https://git.example.com/acme/flaky-mp -> HTTP Error: 503 Service Unavailable
 ```
 
 ______________________________________________________________________
@@ -2529,7 +2678,7 @@ description: Local development marketplace; experimental plugins.
 
 ### Multi-scope fan-out -- both scopes hold the marketplace name
 
-Triggered by `marketplace info <name>` with NO `--scope` filter when the requested marketplace name is present in BOTH the project scope AND the user scope (Phase 43 / INFO-03). The orchestrator emits a `MarketplaceInfoCascadeMessage` whose `blocks` array carries the per-scope `MarketplaceInfoMessage` payloads in project-first order (matches the existing list-surface row-order policy via MSG-GR-3 / Phase 18's `compareByNameThenScope` project-before-user tie-break). The renderer joins per-block bodies with `\n\n` (one blank line). Each block is byte-identical to what the same payload would produce as a standalone `marketplace-info` render -- the wrapper does not add any per-block decoration. Severity `info`.
+Triggered by `marketplace info <name>` with NO `--scope` filter when the requested marketplace name is present in BOTH the project scope AND the user scope (Phase 43 / INFO-03). The orchestrator emits a `MarketplaceInfoCascadeMessage` whose `blocks` array carries the per-scope `MarketplaceInfoMessage` payloads in project-first order (matches the existing list-surface row-order policy via MSG-GR-3 / Phase 18's `compareByNameThenScope` project-before-user tie-break). The renderer joins per-block bodies with `\n\n` (one blank line). Each block is byte-identical to what the same payload would produce as a standalone `marketplace-info` render -- the wrapper does not add any per-block decoration. If one scope's manifest is invalid, the command instead emits the existing standalone `plugin-info` failed row for that scope and the healthy `marketplace-info` result for the other scope, still in project-first order. Severity `info` when both blocks succeed; mixed results retain each standalone result's severity.
 
 <!-- catalog-state: both-scopes-fan-out -->
 
@@ -2567,16 +2716,16 @@ A marketplace operation has failed.
 ⊘ ghost-mp (failed) {marketplace not added}
 ```
 
-### Failure -- `--scope` mismatch (`{marketplace not added}`)
+### Failure -- `--scope` mismatch (`{marketplace not added to <scope> scope}`)
 
-Surfaced when `marketplace info <name> --scope <wrong-scope>` is invoked against a marketplace present only in the OTHER scope (e.g., requesting `--scope user` when `my-mp` lives only in `project`). The standalone `MarketplaceNotAddedMessage` variant (`kind: "marketplace-not-added"`) distinguishes this from a truly-absent marketplace name and uniquely identifies the scope-mismatch surface. The renderer emits a bare row at column 0 (no marketplace header above it -- the marketplace IS the thing that is not added in the requested scope). The `[user]` bracket is present because the user explicitly asked for a specific scope; the `absent-from-both` state above omits the bracket to avoid misleading the user when the marketplace is in NEITHER scope. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02). Severity `error`; no reload-hint (info surfaces are read-only per SNM-33).
+Surfaced when `marketplace info <name> --scope <wrong-scope>` is invoked against a marketplace present only in the OTHER scope (e.g., requesting `--scope user` when `my-mp` lives only in `project`). The standalone `MarketplaceNotAddedMessage` variant (`kind: "marketplace-not-added"`) distinguishes this from a truly-absent marketplace name and uniquely identifies the scope-mismatch surface. The renderer emits a bare row at column 0 (no marketplace header above it -- the marketplace IS the thing that is not added in the requested scope). The `[user]` bracket and `{marketplace not added to user scope}` reason name the requested scope that missed; requesting the missing project scope correspondingly renders `[project]` and `{marketplace not added to project scope}`. The `absent-from-both` state above omits the bracket and keeps the unqualified reason because the marketplace is in NEITHER scope. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02). Severity `error`; no reload-hint (info surfaces are read-only per SNM-33).
 
 <!-- catalog-state: scope-mismatch-not-added -->
 
 ```text
 A marketplace operation has failed.
 
-⊘ my-mp [user] (failed) {marketplace not added}
+⊘ my-mp [user] (failed) {marketplace not added to user scope}
 ```
 
 ______________________________________________________________________
@@ -3253,6 +3402,22 @@ A marketplace operation has failed.
 ⊘ claude-plugins.json [project] (failed) {invalid manifest}
 ```
 
+### A layer declares a plugin without its marketplace (LAYER-06)
+
+The layer error the next reload stops on (see `reload-layer-marketplace-undeclared` under `reconcile-applied-cascade`), so `pending` shows it before the reload. The pending diff plans nothing for the scope. The layer config heads its block with no status, and one failed row under it carries the `{invalid manifest}` reason and the cause, so the tally counts the one error once. Before the first-run migration writes the base config (`claude-plugins.json`) from state (MIG-01), the check reads the base config that the migration would write, as the reload does.
+
+<!-- catalog-state: pending-layer-marketplace-undeclared -->
+
+```text
+A plugin operation has failed.
+
+● claude-plugins.local.json [project]
+  ⊘ claude-plugins.local.json (failed) {invalid manifest}
+    cause: The local config (claude-plugins.local.json) declares helper@official, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config.
+
+Reconcile pending: 1 failure
+```
+
 ______________________________________________________________________
 
 ## reconcile-applied-cascade
@@ -3325,6 +3490,22 @@ Reconcile: 2 failures
 ```
 
 OUT-03/D-04: both the mp-level failed row and its synthetic failed child are counted, so the plural tally reports `2 failures`.
+
+### A layer declares a plugin without its marketplace (LAYER-06 / D-MF-03)
+
+A layer that declares a plugin must also declare the plugin's marketplace. When the other layer of the scope declares that marketplace and this layer does not, the reload stops for the scope as it does for an invalid layer config (CFG-03). The row names the layer config, and the `cause:` line names the plugins and the repair: add the marketplace to the same layer, or remove the plugin from it. The repair command names the scope with `--scope`, because `marketplace add` adds to the user scope when the flag is absent. A base layer missing a marketplace that only the local layer declares renders the same row for the base config (`claude-plugins.json`), with the repair `marketplace add <source> --scope <scope>` without `--local`. The plugins the scope already installed stay installed and keep loading, and no file is changed. A plugin whose marketplace no layer declares keeps its own `{dangling reference}` row instead. The layer config heads its block with no status, and one failed row under it carries the `{invalid manifest}` reason and the cause, so the tally counts the one error once, as `pending` does.
+
+<!-- catalog-state: reload-layer-marketplace-undeclared -->
+
+```text
+A plugin operation has failed.
+
+● claude-plugins.local.json [project]
+  ⊘ claude-plugins.local.json (failed) {invalid manifest}
+    cause: The local config (claude-plugins.local.json) declares helper@official, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config.
+
+Reconcile: 1 failure
+```
 
 ### Partial marketplace remove -- per-plugin children (I1 / PR #51)
 
@@ -3559,6 +3740,8 @@ Single-marketplace command that cascades plugin unstaging.
 
 Clean (no-failure) removal carries one `PluginUninstalledMessage` row (`○` glyph, `(uninstalled)` token) per successfully unstaged plugin (D-22-02). The name-only row has no `v<version>` token because the `successfullyUnstaged` accumulator is a `string[]` of plugin names. The reload-hint fires because at least one plugin row carries the `uninstalled` state-change token (SNM-33 / D-22-01). An empty `marketplace remove` (no plugins were staged) renders the header alone with no trailer (G-MIL-02).
 
+A named remove changes only its target layer: the base config (`claude-plugins.json`), or the local config (`claude-plugins.local.json`) with `--local` (LAYER-02). When the other layer still declares the marketplace, the remove renders this same `(removed)` row with one `(uninstalled)` child for each plugin that only the target layer declares. The marketplace then stays recorded and listed, because the other layer still declares it (LAYER-03). A remove that keeps a dependency another plugin still needs also renders this row, and the marketplace stays recorded and listed while it holds that dependency (LAYER-03). A dependency that the remove takes renders as a plain `(uninstalled)` row, the same as any other plugin.
+
 ### Partial removal (some plugins unstaged, others failed)
 
 <!-- catalog-state: partial -->
@@ -3600,6 +3783,76 @@ Triggered when `marketplace remove <name>` (no `--scope`) targets a name absent 
 A marketplace operation has failed.
 
 ⊘ ghost-mp (failed) {marketplace not added}
+```
+
+### Failure -- the marketplace is declared only in the local layer (LAYER-02 / D-MF-03)
+
+A named command without `--local` acts only on `claude-plugins.json`. When only `claude-plugins.local.json` declares the marketplace, the command is refused before anything changes. A marketplace row carries no cause (SNM-10), so one failed child row under it carries the reason and the `cause:` line, which names the remedy: run the command again with `--local`. `marketplace autoupdate` and `marketplace noautoupdate` render the same row. Severity `error`; no reload-hint.
+
+<!-- catalog-state: remove-marketplace-in-local-layer-only -->
+
+```text
+Some operations have failed.
+
+⊘ tools [project] (failed)
+  ⊘ tools (failed) {marketplace in local layer only}
+    cause: The marketplace tools is declared only in the local config (claude-plugins.local.json). Run the command again with --local.
+```
+
+### Failure -- the marketplace is declared only in the base layer (LAYER-02 / D-MF-03)
+
+A named command with `--local` acts only on `claude-plugins.local.json`. When only `claude-plugins.json` declares the marketplace, the command is refused before anything changes. As above, one failed child row carries the reason and the `cause:` line, which names the remedy: run the command again without `--local`. `marketplace autoupdate --local` and `marketplace noautoupdate --local` render the same row. Severity `error`; no reload-hint.
+
+<!-- catalog-state: remove-marketplace-in-base-layer-only -->
+
+```text
+Some operations have failed.
+
+⊘ tools [project] (failed)
+  ⊘ tools (failed) {marketplace in base layer only}
+    cause: The marketplace tools is declared only in the base config (claude-plugins.json). Run the command again without --local.
+```
+
+### Failure -- a plugin that stays still needs a plugin the remove would uninstall (LAYER-03)
+
+A remove from one layer never uninstalls a plugin that a plugin it leaves installed still declares: a plugin of the other layer, or a plugin of another marketplace. The remove is refused before anything changes. Each such plugin gets one failed child row carrying `{dependents remain}`, the reason `disable` uses for the same refusal, and its `cause:` line names the plugins that declare it, sorted, or their count when a name cannot be shown safely. Uninstall those plugins first, or remove the marketplace from the other layer too, then run the remove again. The full remove applies no such rule. Severity `error`; no reload-hint.
+
+<!-- catalog-state: remove-dependents-remain -->
+
+```text
+Some operations have failed.
+
+⊘ tools [project] (failed)
+  ⊘ alpha (failed) {dependents remain}
+    cause: Uninstall beta@tools first, then remove the marketplace tools again.
+```
+
+### Failure -- the config of the other layer cannot be read (LAYER-02)
+
+A named remove changes only its target layer. When the config of the other layer fails schema validation, the remove is refused before anything changes, whether or not the target layer declares the marketplace: the unreadable config may declare the marketplace or any of its plugins, so the remove cannot tell which plugins it would leave without a declaration. The `cause:` line names that config by its basename. Repair the config, then run the remove again. Severity `error`; no reload-hint.
+
+<!-- catalog-state: remove-other-config-file-invalid -->
+
+```text
+Some operations have failed.
+
+⊘ tools [project] (failed)
+  ⊘ tools (failed) {invalid manifest}
+    cause: Config file "claude-plugins.local.json" failed schema validation.
+```
+
+### Failure -- a dependency declaration cannot be read (LAYER-03 / D-05-07)
+
+When the marketplace holds a plugin that was installed as a dependency, the remove reads what every installed plugin of the scope declares, so that it never removes a dependency another plugin still needs. If one of those declarations cannot be read, the whole remove is refused before anything changes: a needed dependency must never be removed on incomplete information. The remove reads no declarations when the marketplace holds no dependency. The `cause:` line names the first plugin, in state order, whose declaration could not be read. It says why in words that this extension writes, such as `not declared by its marketplace` or `its marketplace manifest is invalid`. It leaves out the error text of a manifest that fails to load, because that text can come from the marketplace's own files. To repair it, update that plugin's marketplace (`marketplace update`), or fix the manifest of a path marketplace, then run the remove again. Severity `error`; no reload-hint.
+
+<!-- catalog-state: remove-dependency-declarations-unreadable -->
+
+```text
+Some operations have failed.
+
+⊘ tools [project] (failed)
+  ⊘ tools (failed) {unreadable}
+    cause: cannot read the dependencies of lib@tools: its marketplace manifest is invalid
 ```
 
 ______________________________________________________________________
@@ -3779,7 +4032,7 @@ Marketplace-level failure with no plugin children evaluated. No reload-hint (fai
 
 ### Marketplace update failed (path-source invalid manifest)
 
-Triggered when `marketplace update <name>` refreshes a PATH-source marketplace whose `marketplace.json` is malformed JSON or schema-invalid (ATTR-10 / D-48-B). `loadMarketplaceManifest` throws the typed `InvalidMarketplaceManifestError`; `refreshRecord` wraps it as `MarketplaceUpdateError`, and the `refreshOneMarketplace` catch classifies it via `reasonsFromCascadeError` (which now recognizes the typed manifest error before the `?? ["network unreachable"]` default) to `{invalid manifest}` -- carried on the synthetic-child failed row (the marketplace header has no `reasons` field for this recipe; the reason rides the child, mirroring `mp-failure-network`). A path-source refresh touches ZERO network (NFR-5), so the former lying `{network unreachable}` default MUST NOT fire here. github-source no-errno failures KEEP `{network unreachable}` as the catch-all (the classification did not collapse). No reload-hint (failed marketplace does not trigger per D-16-12). Severity: `error`. The summary prefix counts the synthetic child as one plugin operation.
+Triggered when `marketplace update <name>` refreshes a PATH-source marketplace whose `marketplace.json` is malformed JSON or schema-invalid (ATTR-10 / D-48-B). `loadMarketplaceManifest` throws the typed `InvalidMarketplaceManifestError`; `refreshRecord` wraps it as `MarketplaceUpdateError`, and the `refreshOneMarketplace` catch classifies it via `reasonsFromCascadeError` to `{invalid manifest}` -- carried on the synthetic-child failed row (the marketplace header has no `reasons` field for this recipe; the reason rides the child, mirroring `mp-failure-network`). A path-source refresh touches ZERO network (NFR-5). Only a refresh failure is classified. A held state lock renders `{lock held}`. An HTTP answer from the git host renders `{network error}` (see `update-host-http-error`). A refresh failure that no rule names, and any other failure outside the refresh, such as a failed state save, renders the child row with no reason, followed by its cause chain. No reload-hint (failed marketplace does not trigger per D-16-12). Severity: `error`. The summary prefix counts the synthetic child as one plugin operation.
 
 <!-- catalog-state: update-path-invalid-manifest -->
 
@@ -3788,6 +4041,20 @@ Some operations have failed.
 
 ⊘ official [user] (failed)
   ⊘ official (failed) {invalid manifest}
+```
+
+### Marketplace update failed (git host HTTP error)
+
+Triggered when `marketplace update <name>` fetches a github or url marketplace and the git host answers with an HTTP status other than the 401/403 auth challenge: a 5xx, a 404, or any other status (UPD-11). The reason is `{network error}`, because the host was reached and refused. `{network unreachable}` stays for connection failures, meaning the network errno codes. The first frame of the cause line names the status and the URL the refresh fetched, as `{status} on {url}`, with URL credentials redacted, and the transport's own message follows. The reason rides the synthetic child, as in `update-path-invalid-manifest`. Severity `error`; no reload-hint.
+
+<!-- catalog-state: update-host-http-error -->
+
+```text
+Some operations have failed.
+
+⊘ official [user] (failed)
+  ⊘ official (failed) {network error}
+    cause: 404 on https://git.example.com/acme/official.git -> HTTP Error: 404 Not Found
 ```
 
 ### Failure -- marketplace not added, explicit scope (SC#1 / ATTR-06 / D-48-C)
@@ -3818,7 +4085,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin enable <plugin>@<marketplace>`
 
-D-54-01 / ENBL-01 / ENBL-03. Re-materializes a previously-disabled plugin from the cached marketplace clone -- the orchestrator reads `marketplace.json` from disk (PI-2 cached read; NFR-5: no network), reuses the install ledger's 7-phase sequence with `version: installed.version` (the pinned version from the state record), and writes `enabled: true` back to the config file at the resolved scope. A `--local` flag targets `claude-plugins.local.json` (Pitfall 54-5: the base `claude-plugins.json` mtime is unchanged). The cascade renders the BARE always-marketplace-header form (`mp.status === undefined`, no `(added)` token -- that header belongs to `marketplace add`; v1.12 milestone UAT-04 decision, 2026-06-11) with the existing `(installed)` PluginStatus row token (state-changer; reload-hint fires).
+D-54-01 / ENBL-01 / ENBL-03. Re-materializes a previously-disabled plugin from the cached marketplace clone -- the orchestrator reads `marketplace.json` from disk (PI-2 cached read; NFR-5: no network), reuses the install ledger's 7-phase sequence with `version: installed.version` (the pinned version from the state record), and writes `enabled: true` to the config of one layer of the resolved scope: the base config (`claude-plugins.json`), or the local config (`claude-plugins.local.json`) with `--local`. The config of the other layer keeps its bytes, and a plugin that only the other layer declares is refused (LAYER-04). The cascade renders the BARE always-marketplace-header form (`mp.status === undefined`, no `(added)` token -- that header belongs to `marketplace add`; v1.12 milestone UAT-04 decision, 2026-06-11) with the existing `(installed)` PluginStatus row token (state-changer; reload-hint fires).
 
 ### Fresh enable
 
@@ -3984,6 +4251,20 @@ A marketplace operation has failed.
 
 Triggered when the requested marketplace is not added in EITHER scope. Routes through the standalone `MarketplaceNotAddedMessage` variant (`{marketplace not added}` on the marketplace subject) -- same pattern as install (ATTR-01..04). SCOPE-01: a marketplace present only in the OTHER scope does NOT reach this state; nothing is installed at the requested scope, so the row's subject is the PLUGIN and it renders the `enable-not-installed` state. Severity `error`; no reload-hint.
 
+### Refused -- the local layer disables the plugin (LAYER-04)
+
+Both layers declare the plugin, and the local layer sets `enabled: false`. A flagless enable writes the base layer, but the local value wins when the two layers merge at the next load, so the plugin would stay disabled. The enable is refused before anything changes, and the `cause:` line says to run the command again with `--local`. An enable with `--local` writes the local layer and is never refused by a value of the base layer. A local entry without `enabled` refuses nothing. Severity `error`; no reload-hint.
+
+<!-- catalog-state: enable-disabled-in-local-layer -->
+
+```text
+A plugin operation has failed.
+
+● claude-plugins-official [user]
+  ⊘ foo-plugin (failed) {disabled in local layer}
+    cause: Run the command again with --local to enable it.
+```
+
 ### Invalid config (CFG-03)
 
 <!-- catalog-state: enable-invalid-config -->
@@ -3995,13 +4276,13 @@ A plugin operation has failed.
   ⊘ foo-plugin (failed) {invalid manifest}
 ```
 
-Triggered when the target config file (`claude-plugins.json` or, with `--local`, `claude-plugins.local.json`) fails CFG-03 validation (0-byte, malformed JSON, or schema-invalid). The orchestrator aborts BEFORE entering the cascade -- state.json mtime is UNCHANGED. The `cause:` summary cites `path.basename(targetConfigPath)` (the file basename only, never the absolute path; T-53-02-02 information-disclosure mitigation reused from Phase 53). Severity `error`; no reload-hint.
+Triggered when either layer config of the scope (`claude-plugins.json` or `claude-plugins.local.json`) fails CFG-03 validation (0-byte, malformed JSON, or schema-invalid), because a named enable reads both layers (LAYER-04). The orchestrator aborts BEFORE entering the cascade -- state.json mtime is UNCHANGED. The `cause:` summary cites that file's basename (the file basename only, never the absolute path; T-53-02-02 information-disclosure mitigation reused from Phase 53). Severity `error`; no reload-hint.
 
 ______________________________________________________________________
 
 ## `/claude:plugin disable <plugin>@<marketplace>`
 
-D-54-01 / ENBL-02. Removes a plugin's materialized artifacts (skills/commands/agents/MCP entries) via the existing uninstall cascade while PRESERVING the state record's `version` / `resolvedSource` / `compatibility` / `installedAt` fields. Every `resources.*` array is PRESERVED exactly, and the `compatibility` block is carried over unchanged (ENBL-18 / D-100-10: disable changes `enabled` and `updatedAt` and nothing else, so the record keeps describing what the plugin installed). The load-bearing "currently disabled" marker is the explicit `enabled: false` boolean alone (`persistence/state-io.ts::isRecordedButDisabled`); the retained arrays are no part of the marker, and availability is an orthogonal axis. The config file gains `enabled: false` for the entry; `--local` targets the local file. The cascade-row form uses the closed-set `(disabled)` PluginStatus token -- the SAME glyph + token as the list/info `disabled-inventory` row, version slot kept (v1.12 milestone UAT-03 decision, 2026-06-11, superseding the original `(uninstalled)`-token choice: a disable is not an uninstall, and the row should name the state the plugin entered). The reload-hint still fires: the orchestrator dispatches the cascade with the `disable-cascade` kind, the SNM-33 carve-out under which a `(disabled)` row counts as a realized transition; kind-less list/info inventory surfaces stay hint-free.
+D-54-01 / ENBL-02. Removes a plugin's materialized artifacts (skills/commands/agents/MCP entries) via the existing uninstall cascade while PRESERVING the state record's `version` / `resolvedSource` / `compatibility` / `installedAt` fields. Every `resources.*` array is PRESERVED exactly, and the `compatibility` block is carried over unchanged (ENBL-18 / D-100-10: disable changes `enabled` and `updatedAt` and nothing else, so the record keeps describing what the plugin installed). The load-bearing "currently disabled" marker is the explicit `enabled: false` boolean alone (`persistence/state-io.ts::isRecordedButDisabled`); the retained arrays are no part of the marker, and availability is an orthogonal axis. The target layer gains `enabled: false` for the entry: the base layer, or the local layer with `--local`. A plugin that only the other layer declares is refused (LAYER-04). The cascade-row form uses the closed-set `(disabled)` PluginStatus token -- the SAME glyph + token as the list/info `disabled-inventory` row, version slot kept (v1.12 milestone UAT-03 decision, 2026-06-11, superseding the original `(uninstalled)`-token choice: a disable is not an uninstall, and the row should name the state the plugin entered). The reload-hint still fires: the orchestrator dispatches the cascade with the `disable-cascade` kind, the SNM-33 carve-out under which a `(disabled)` row counts as a realized transition; kind-less list/info inventory surfaces stay hint-free.
 
 ### Fresh disable
 
@@ -4060,6 +4341,20 @@ A plugin operation has failed.
 
 Triggered when `disable <plugin>@<marketplace>` names a plugin that another installed AND ENABLED plugin in the SAME scope still declares as a dependency. Unlike `uninstall` (LOAD-03 / D-06-06), the disable is REFUSED -- nothing is unstaged, `tx.save` is never called, and state.json's mtime is unchanged. The declarer set is the scope's own (D-05-05): only installed records whose OWN record is currently enabled count (`persistence/state-io.ts::isRecordedButDisabled` narrows `buildScopeDeclarationIndex`'s D-05-04 disabled-declarers-included index down to the ENABLED ones), because a disabled declarer holds its declaration (D-05-04) but is not active, so the condition this guard asks about -- an ENABLED installed plugin still needs this one -- is false for it. A declarer one scope over never blocks (D-05-05): only the target scope's own state is consulted. The row carries the new `{dependents remain}` reason and `error` severity with no reload-hint -- the operation was NOT carried out, which is what keeps this token out of the `dependents unsatisfied` group (that token's subject is a removal that WENT THROUGH, on a success row). The `cause:` trailer is a plain-English instruction naming the target and the sorted dependents and stating the order (D-08-01): `disable` accepts exactly one `<plugin>@<marketplace>` target, so upstream's chained-command template is not available here. Two or more dependents are named sorted and comma-joined (`Disable alpha@official, zeta@official first, then shared-lib@official.`); an unrenderable name (T-08-06: a plugin name may carry a quote, comma, space or bidi control per `domain/name.ts::assertSafeName`) collapses the list to a count (`Disable 2 other plugins first, then shared-lib@official.`) rather than let a hostile name forge the sentence. A record whose declarations cannot be established refuses with `{unreadable}` instead, fail-closed exactly as the uninstall guard does (D-05-07) -- the cause line names the declarer and never an absolute path. A disabled declarer, an other-scope declarer, or no declarer at all leaves the disable proceeding exactly as the `disable-fresh` state above, byte for byte.
 
+### Refused -- the local layer enables the plugin (LAYER-04)
+
+The mirror of the enable refusal. Both layers declare the plugin, and the local layer sets `enabled: true`, so a flagless disable would be undone when the layers merge at the next load. The disable is refused before anything changes, and the `cause:` line says to run the command again with `--local`. Severity `error`; no reload-hint.
+
+<!-- catalog-state: disable-enabled-in-local-layer -->
+
+```text
+A plugin operation has failed.
+
+● claude-plugins-official [user]
+  ⊘ foo-plugin (failed) {enabled in local layer}
+    cause: Run the command again with --local to disable it.
+```
+
 ### Marketplace not added
 
 <!-- catalog-state: disable-marketplace-not-added -->
@@ -4083,7 +4378,7 @@ A plugin operation has failed.
   ⊘ foo-plugin (failed) {invalid manifest}
 ```
 
-Triggered when the target config file fails CFG-03 validation. The orchestrator aborts BEFORE entering the cascade -- state.json mtime is UNCHANGED. The `cause:` summary cites `path.basename(targetConfigPath)` (basename only; T-53-02-02 mitigation). Severity `error`.
+Triggered when either layer config of the scope fails CFG-03 validation, because a named disable reads both layers (LAYER-04). The orchestrator aborts BEFORE entering the cascade -- state.json mtime is UNCHANGED. The `cause:` summary cites that file's basename (basename only; T-53-02-02 mitigation). Severity `error`.
 
 ______________________________________________________________________
 
@@ -4167,6 +4462,12 @@ Marketplace autoupdate: 2 successes
 
 Changed and already-correct rows both count as successful plural outcomes.
 
+### Config files
+
+A named flip changes only its target layer: the base config (`claude-plugins.json`), or the local config (`claude-plugins.local.json`) with `--local` (LAYER-02). When only the other layer declares the marketplace, the flip is refused before anything changes, with the `{marketplace in local layer only}` or `{marketplace in base layer only}` rows documented under [`## /claude:plugin marketplace remove <name>`](#claudeplugin-marketplace-remove-name). A flip row reports the outcome in the target layer. A local entry without an `autoupdate` value has the value it inherits: the base entry's value, or off when the base config does not declare the marketplace or sets no value (MAU-4). So `{already autoupdate}` means the target layer already has the value, its own or inherited, and a flip writes a local value only when it changes the value that applies. When a local entry without a value needs the inherited value and the base config cannot be read, the flip fails with `{invalid manifest}` and writes nothing in that scope. `marketplace list` and `marketplace info` show the value that the two layers merge to, where a local entry's `autoupdate` wins over the base one (D-07). A flip without a name sets the value in the base config of each marketplace that config declares. It writes a local entry only when the value that applies to the entry still differs, so a local entry without a value takes the new base value when the base config declares the marketplace. With `--local`, it changes only the local config.
+
+A flip that fails after it has written something reports both in one emission: the rows of the marketplaces it flipped in an earlier scope, or in an earlier file of the same scope, then the failed header with its failed child. A marketplace whose files were only partly written gets no row of its own; the failed row covers it. The failed child carries `{lock held}` for a held state lock, `{invalid manifest}` for an invalid config file, `{permission denied}` when the file system refuses a write, and `{unreadable}` for any other failure, such as a config file the writer refuses to replace.
+
 ### Failure -- missing marketplace (explicit `--scope`)
 
 Triggered when `marketplace autoupdate <name> --scope <scope>` (or `noautoupdate`) targets a name NOT added in the requested scope (ATTR-05 / S1). The explicit-scope `MarketplaceNotFoundError` raised by `applyAutoupdateFlipInPlace` is a missing-marketplace precondition, NOT a flip failure -- the orchestrator routes it to the standalone `MarketplaceNotAddedMessage` `{marketplace not added}` variant (`kind: "marketplace-not-added"`, `name`, `scope`) carrying the requested `[scope]` bracket (D-48-C Shape 1). This supersedes the former reason-less / synthetic-child `{not found}` byte form: the reason is now the truthful `{marketplace not added}`. Routed via `isInfoKind` -> `error` severity, no reload-hint. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02). A `StateLockHeldError` is NOT a missing-marketplace and keeps its separate synthetic-child `(failed) {lock held}` routing (unchanged by ATTR-05).
@@ -4181,14 +4482,14 @@ A marketplace operation has failed.
 
 ### Failure -- missing marketplace (bare form, absent from both scopes)
 
-Triggered when `marketplace autoupdate <name>` (no `--scope`) targets a name absent from EVERY iterated scope (ATTR-05 / S2). The former byte form was a reason-LESS bare `(failed)` row; it is superseded by the SAME standalone `MarketplaceNotAddedMessage` `{marketplace not added}` variant. The bare form carries `first.scope` -- the scope where the first not-found was observed; SC-6 iterates project-before-user, so the bracket is `[project]`. Severity `error`; no reload-hint. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02).
+Triggered when `marketplace autoupdate <name>` (no `--scope`) targets a name absent from EVERY iterated scope (ATTR-05 / S2, AU-08). The miss routes to the SAME standalone `MarketplaceNotAddedMessage` `{marketplace not added}` variant with no `scope`, so the renderer drops the `[scope]` token, as the bare forms of `marketplace remove`, `marketplace info`, and `marketplace update` do. Severity `error`; no reload-hint. Two-block form: the `A marketplace operation has failed.` summary on the host `Error:` label line, then the bare detail row as its own block (GRAM-01 / GRAM-02).
 
 <!-- catalog-state: autoupdate-missing-not-added-bare -->
 
 ```text
 A marketplace operation has failed.
 
-⊘ missing-mp [project] (failed) {marketplace not added}
+⊘ missing-mp (failed) {marketplace not added}
 ```
 
 The blocks above span two ladders. The severity ladder runs fresh → info, benign skipped → info, failed (and the `{marketplace not added}` precondition miss) → error (per D-16-11 + Phase 17.1's mp-level skipped extension, refined by UXG-02 / D-28-06: the two idempotent autoupdate no-ops carry benign reasons -- `already autoupdate` / `already no autoupdate` -- so they compute info, not warning; an mp-level `skipped` with non-benign or missing reasons would still route to warning). The reload-hint ladder is uniform here: every autoupdate flag flip suppresses the trailer (per SNM-33 / D-22-01 / D-22-03). The autoupdate flag lives on a marketplace record, not on any Pi-visible resource, so neither a fresh flip nor an idempotent no-op nor a missing-marketplace `{marketplace not added}` failure contributes to "/reload to pick up changes" -- only a plugin row state change does.
@@ -4444,7 +4745,7 @@ Left in mcp.json:
   srv (hello) [project] The new entries are written, but mcp.json could not be updated: permission denied. The next /reload finishes the move.
 ```
 
-Emitted by `notifyMcpMigration` when the step wrote a plugin's servers to `mcp-adapter.json` but could not remove the old entries from `mcp.json`, for example because the file could not be written. The step writes `mcp-adapter.json` first, then `state.json`, then `mcp.json`, so a fault between the writes loses no server: both files hold it for one session. The next `/reload` finds the old entries again, leaves `mcp-adapter.json` unchanged, removes the old entries and reports the move once. A user-scope move also removes the plugin's old-name disable stubs from the project `mcp-adapter.json` before it removes the old entries. When that write fails, for example because a project-scope operation holds the lock, the old entries and the stubs stay, and the row names the `project-scope mcp-adapter.json` in place of `mcp.json`. The row lists the plugin's old names in file order and a detail with no absolute path and no final period of its own. It sorts with the other rows left in `mcp.json`. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-migration-notice.test.ts`.
+Emitted by `notifyMcpMigration` when the step wrote a plugin's servers to `mcp-adapter.json` but could not remove the old entries from `mcp.json`, for example because the file could not be written. The step writes `mcp-adapter.json` first, then `state.json`, then `mcp.json`, so a fault between the writes loses no server: `mcp-adapter.json` and `mcp.json` both hold it for one session. The next `/reload` finds the old entries again, leaves `mcp-adapter.json` unchanged, removes the old entries and reports the move once. A user-scope move also removes the plugin's old-name disable stubs from the project `mcp-adapter.json` before it removes the old entries. When that write fails, for example because a project-scope operation holds the lock, the old entries and the stubs stay, and the row names the `project-scope mcp-adapter.json` in place of `mcp.json`. The row lists the plugin's old names in file order and a detail with no absolute path and no final period of its own. It sorts with the other rows left in `mcp.json`. Severity: `warning`. The byte form is locked by `tests/architecture/mcp-migration-notice.test.ts`.
 
 ______________________________________________________________________
 

@@ -11,8 +11,8 @@ test("parseCommandArgs returns each required positional under its declared name"
   const usageErrors: string[] = [];
   const schema = {
     positional: [
-      { name: "marketplace" },
-      { name: "plugin" },
+      { name: "marketplace", label: "Marketplace name" },
+      { name: "plugin", label: "Plugin name" },
     ] as const satisfies readonly PositionalSpec[],
     usage: "Usage: /claude:plugin install <marketplace> <plugin> [--scope user|project]",
   };
@@ -31,7 +31,9 @@ test("parseCommandArgs rejects a positional the schema does not declare", () => 
   // arrange
   const usageErrors: string[] = [];
   const schema = {
-    positional: [{ name: "marketplace" }] as const satisfies readonly PositionalSpec[],
+    positional: [
+      { name: "marketplace", label: "Marketplace name" },
+    ] as const satisfies readonly PositionalSpec[],
     usage: "Usage: /claude:plugin marketplace info <name> [--scope user|project]",
   };
 
@@ -55,8 +57,8 @@ for (const { args, placement } of [
     const usageErrors: string[] = [];
     const schema = {
       positional: [
-        { name: "marketplace" },
-        { name: "plugin" },
+        { name: "marketplace", label: "Marketplace name" },
+        { name: "plugin", label: "Plugin name" },
       ] as const satisfies readonly PositionalSpec[],
       usage: "Usage: /claude:plugin install <marketplace> <plugin> [--scope user|project]",
     };
@@ -81,8 +83,8 @@ test("parseCommandArgs sets an optional tail positional the caller supplied", ()
   const usageErrors: string[] = [];
   const schema = {
     positional: [
-      { name: "marketplace" },
-      { name: "plugin", required: false },
+      { name: "marketplace", label: "Marketplace name" },
+      { name: "plugin", label: "Plugin name", required: false },
     ] as const satisfies readonly PositionalSpec[],
     usage: "Usage: /claude:plugin update <marketplace> [<plugin>]",
   };
@@ -102,8 +104,8 @@ test("parseCommandArgs omits an absent optional tail positional instead of setti
   const usageErrors: string[] = [];
   const schema = {
     positional: [
-      { name: "marketplace" },
-      { name: "plugin", required: false },
+      { name: "marketplace", label: "Marketplace name" },
+      { name: "plugin", label: "Plugin name", required: false },
     ] as const satisfies readonly PositionalSpec[],
     usage: "Usage: /claude:plugin update <marketplace> [<plugin>]",
   };
@@ -118,13 +120,13 @@ test("parseCommandArgs omits an absent optional tail positional instead of setti
   assert.deepStrictEqual(usageErrors, []);
 });
 
-test("parseCommandArgs rejects a supplied blank optional tail positional", () => {
+test("parseCommandArgs names a supplied blank optional tail positional by its label", () => {
   // arrange
   const usageErrors: string[] = [];
   const schema = {
     positional: [
-      { name: "marketplace" },
-      { name: "plugin", required: false },
+      { name: "marketplace", label: "Marketplace name" },
+      { name: "plugin", label: "Plugin name", required: false },
     ] as const satisfies readonly PositionalSpec[],
     usage: "Usage: /claude:plugin update <marketplace> [<plugin>]",
   };
@@ -136,7 +138,7 @@ test("parseCommandArgs rejects a supplied blank optional tail positional", () =>
 
   // assert
   assert.strictEqual(parsedArgs, undefined);
-  assert.deepStrictEqual(usageErrors, ["Argument must not be empty."]);
+  assert.deepStrictEqual(usageErrors, ["Plugin name must not be empty."]);
 });
 
 test("parseCommandArgs reports usage and yields nothing when a required positional is absent", () => {
@@ -144,8 +146,8 @@ test("parseCommandArgs reports usage and yields nothing when a required position
   const usageErrors: string[] = [];
   const schema = {
     positional: [
-      { name: "marketplace" },
-      { name: "plugin" },
+      { name: "marketplace", label: "Marketplace name" },
+      { name: "plugin", label: "Plugin name" },
     ] as const satisfies readonly PositionalSpec[],
     usage: "Usage: /claude:plugin install <marketplace> <plugin> [--scope user|project]",
   };
@@ -162,13 +164,13 @@ test("parseCommandArgs reports usage and yields nothing when a required position
   ]);
 });
 
-test("parseCommandArgs reports usage and yields nothing when a required positional is blank", () => {
+test("parseCommandArgs names a blank required positional by its label rather than reporting usage", () => {
   // arrange
   const usageErrors: string[] = [];
   const schema = {
     positional: [
-      { name: "marketplace" },
-      { name: "plugin" },
+      { name: "marketplace", label: "Marketplace name" },
+      { name: "plugin", label: "Plugin name" },
     ] as const satisfies readonly PositionalSpec[],
     usage: "Usage: /claude:plugin install <marketplace> <plugin> [--scope user|project]",
   };
@@ -180,9 +182,7 @@ test("parseCommandArgs reports usage and yields nothing when a required position
 
   // assert
   assert.deepStrictEqual(parsedArgs, undefined);
-  assert.deepStrictEqual(usageErrors, [
-    "Usage: /claude:plugin install <marketplace> <plugin> [--scope user|project]",
-  ]);
+  assert.deepStrictEqual(usageErrors, ["Plugin name must not be empty."]);
 });
 
 for (const { args, shape } of [
@@ -193,7 +193,9 @@ for (const { args, shape } of [
     // arrange
     const usageErrors: string[] = [];
     const schema = {
-      positional: [{ name: "marketplace" }] as const satisfies readonly PositionalSpec[],
+      positional: [
+        { name: "marketplace", label: "Marketplace name" },
+      ] as const satisfies readonly PositionalSpec[],
       usage: "Usage: /claude:plugin marketplace remove <marketplace>",
     };
 
@@ -230,7 +232,9 @@ test("parseCommandArgs reports the tokenizer diagnostic and never reaches positi
   // arrange
   const usageErrors: string[] = [];
   const schema = {
-    positional: [{ name: "marketplace" }] as const satisfies readonly PositionalSpec[],
+    positional: [
+      { name: "marketplace", label: "Marketplace name" },
+    ] as const satisfies readonly PositionalSpec[],
     usage: "Usage: /claude:plugin marketplace remove <marketplace>",
   };
 
@@ -262,7 +266,9 @@ for (const { args, form, diagnostic } of [
     // arrange
     const usageErrors: string[] = [];
     const schema = {
-      positional: [{ name: "marketplace" }] as const satisfies readonly PositionalSpec[],
+      positional: [
+        { name: "marketplace", label: "Marketplace name" },
+      ] as const satisfies readonly PositionalSpec[],
       usage: "Usage: /claude:plugin marketplace remove <marketplace>",
     };
 
@@ -281,18 +287,18 @@ for (const { args, positional, diagnostic } of [
   { args: "surplus", positional: [], diagnostic: "Too many arguments." },
   {
     args: "official surplus",
-    positional: [{ name: "marketplace", required: false }],
+    positional: [{ name: "marketplace", label: "Marketplace name", required: false }],
     diagnostic: "Too many arguments.",
   },
   { args: "--bogus", positional: [], diagnostic: 'Unknown flag: "--bogus".' },
   {
     args: "--bogus official",
-    positional: [{ name: "marketplace" }],
+    positional: [{ name: "marketplace", label: "Marketplace name" }],
     diagnostic: 'Unknown flag: "--bogus".',
   },
   {
     args: "official --bogus",
-    positional: [{ name: "marketplace" }],
+    positional: [{ name: "marketplace", label: "Marketplace name" }],
     diagnostic: 'Unknown flag: "--bogus".',
   },
 ]) {
@@ -312,12 +318,17 @@ for (const { args, positional, diagnostic } of [
   });
 }
 
-for (const args of ['""', "''"]) {
-  test(`parseCommandArgs rejects a supplied empty optional operand ${args}`, () => {
+for (const { args, required, presence } of [
+  { args: '""', required: false, presence: "optional" },
+  { args: "''", required: false, presence: "optional" },
+  { args: '""', required: true, presence: "required" },
+  { args: "''", required: true, presence: "required" },
+]) {
+  test(`parseCommandArgs names an explicitly empty ${presence} positional ${args} by its label`, () => {
     // arrange
     const usageErrors: string[] = [];
     const schema = {
-      positional: [{ name: "marketplace", required: false }] as const,
+      positional: [{ name: "marketplace", label: "Marketplace name", required }],
       usage: "Usage: test",
     };
 
@@ -328,6 +339,6 @@ for (const args of ['""', "''"]) {
 
     // assert
     assert.strictEqual(parsedArgs, undefined);
-    assert.deepStrictEqual(usageErrors, ["Argument must not be empty."]);
+    assert.deepStrictEqual(usageErrors, ["Marketplace name must not be empty."]);
   });
 }

@@ -39,20 +39,17 @@
 // ledger via `loadMarketplaceManifest` -- the cached PI-2 read, never the
 // network.
 //
-// --local file isolation: when `opts.local === true`,
-// `targetConfigPath = locations.configLocalJsonPath` UNCONDITIONALLY -- the
-// orchestrator NEVER falls back to the base file on ENOENT (`loadConfig`'s
+// --local config isolation: when `opts.local === true`,
+// `targetConfigPath = locations.localConfigJsonPath` UNCONDITIONALLY -- the
+// orchestrator NEVER falls back to the base config on ENOENT (`loadConfig`'s
 // absent arm yields an empty starting shape that `saveConfig` writes back to
-// the local file, creating it fresh).
+// the local config, creating it fresh).
 //
-// D-103-13: absent the flag the target follows the DECLARATION -- the local
-// file when the plugin key is declared there, the base file otherwise. The flag
-// names the file the user wants written; it cannot name the file a declaration
-// already lives in. CFG-02 replaces a same-keyed base entry wholesale, so a
-// flagless flip written to the base file under a local declaration moves no
-// merged value: the verb reports success and the next reconcile pass plans the
-// opposite of the command. Selection therefore happens INSIDE the lock (it
-// reads a config file) -- see `selectDeclaringConfigWriteTarget`.
+// LAYER-04 / D-MF-03: the flag alone picks the layer -- the base layer
+// without `--local`, the local layer with it. A standalone call whose plugin
+// only the other layer declares is refused and changes nothing
+// (`refuseOtherLayerDeclaration`). Both layers are read INSIDE the lock -- see
+// `loadTargetLayers`.
 //
 // T-53-02-02 / T-54-02-02 information disclosure mitigation: the CFG-03
 // abort row carries `path.basename(targetConfigPath)` -- never the absolute
@@ -65,7 +62,11 @@ import { findDependents } from "../../domain/dependency-orphans.ts";
 import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { errorMessage, StateLockHeldError } from "../../shared/errors.ts";
+import {
+  errorMessage,
+  rethrowInvalidGitHubBaseUrl,
+  StateLockHeldError,
+} from "../../shared/errors.ts";
 import { createRemovalOps } from "../../shared/fs-utils.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -97,13 +98,16 @@ import {
   emitMarketplaceNotAdded,
   missIsNotInstalled,
   enableRowDependencies,
+  localOnlyMarketplaceRefusal,
   overwriteDisabledMemberEntries,
+  pluginLayerVerdict,
   resolveCrossScopePluginTarget,
   retiresWorkflowCommand,
-  type selectDeclaringConfigWriteTarget,
+  undeclarableMarketplaceRefusal,
   type CrossScopePluginResolution,
-  type DeclaringConfigWriteTarget,
   type LedgerDegradationSignals,
+  type loadTargetLayers,
+  type TargetLayers,
   type writeAdoptingConfigEntries,
 } from "./shared.ts";
 
@@ -228,7 +232,7 @@ export interface EnableDisableSubject {
 /**
  * D-54-01 options bundle for `setPluginEnabled`. Mirrors
  * `UninstallPluginOptions` + `enable: boolean` + an opt-in `local?: boolean`
- * for the per-machine override file.
+ * that targets the local config.
  */
 export interface EnableDisablePluginOptions {
   readonly ctx: NotificationContext;
@@ -246,8 +250,9 @@ export interface EnableDisablePluginOptions {
   /** When undefined, resolves the scope via project-then-user precedence (CMP-5). */
   readonly scope?: Scope;
   /**
-   * When true, target `claude-plugins.local.json` instead of
-   * `claude-plugins.json`. The base file is NEVER touched on the --local path.
+   * When true, target the local config (`claude-plugins.local.json`) instead
+   * of the base config (`claude-plugins.json`). The base config is NEVER
+   * touched on the --local path.
    */
   readonly local?: boolean;
   /**
@@ -270,7 +275,7 @@ interface SetEnabledRunOptions extends EnableDisablePluginOptions {
 export interface EnableDisableTransaction {
   readonly cascadeUnstagePlugin: typeof cascadeUnstagePlugin;
   readonly runInstallLedger: typeof runInstallLedger;
-  readonly selectConfigWriteTarget: typeof selectDeclaringConfigWriteTarget;
+  readonly loadTargetLayers: typeof loadTargetLayers;
   readonly withLockedStateTransaction: typeof withLockedStateTransaction;
   readonly writeConfigEntries: typeof writeAdoptingConfigEntries;
 }
@@ -531,8 +536,12 @@ async function runEnableBranch(
  * record's declarations could not be established, or the declared graph
  * closes on itself. On the disable branch (EDEP-02, `readEnabledDependents`),
  * an installed and ENABLED plugin in the same scope still declares the
- * target. Mirrors `uninstall.ts::UninstallRefusedError` exactly: the reason
- * is a closed-set token and `message` IS the rendered cause line, so it
+ * target. On either branch (`refuseMarketplaceDeclarationWrite`), a
+ * standalone call would write its flag into `claude-plugins.json` under a
+ * marketplace only `claude-plugins.local.json` declares (FIX-03), or into a
+ * layer that cannot declare the marketplace (LAYER-06). Mirrors
+ * `uninstall.ts::UninstallRefusedError` exactly: the reason is a closed-set
+ * token and `message` IS the rendered cause line, so it
  * carries only `name@marketplace` keys, field paths or already-redacted
  * text -- never an absolute path -- with no `{ cause }` chained behind it.
  * Widened for the disable guard rather than paired with a second class,
@@ -1159,7 +1168,7 @@ function buildEnableCascadeConfigPhase(
   state: ExtensionState,
   rootWrite?: {
     readonly write: EnabledFlagWriteTarget;
-    readonly selection: SelectedConfigWriteTarget;
+    readonly selection: LoadedTargetLayers;
   },
 ): Phase<EnableCascadeRun> {
   return {
@@ -1172,7 +1181,7 @@ function buildEnableCascadeConfigPhase(
       const reEnabledMemberKeys = run.rows
         .filter((row) => row.status === "installed")
         .map((row) => row.name);
-      await writeReEnabledMemberConfigEntries(transaction, locations, state, reEnabledMemberKeys);
+      await writeReEnabledMemberConfigEntries(locations, reEnabledMemberKeys);
     },
   };
 }
@@ -1258,7 +1267,7 @@ async function runEnableCascadeWithRoot(args: {
   readonly members: readonly EnableCascadeMember[];
   readonly rootKey: string;
   readonly write: EnabledFlagWriteTarget;
-  readonly selection: SelectedConfigWriteTarget;
+  readonly selection: LoadedTargetLayers;
 }): Promise<
   | {
       readonly ok: true;
@@ -1353,27 +1362,19 @@ function assertFailedPhasesHasError(
  * dependency), so both writes land; leaving `B`'s entry at `enabled: false`
  * after `enable A` re-enables `B` through its record hands the reload the
  * row asks for a `disable B` to plan (`plan.ts::classifyDeclaredPlugin`
- * reads the config truth). `overwriteDisabledMemberEntries` selects each
- * member's file by DECLARATION ALONE, not by the flag the caller typed for
- * the root, so a base-file entry is found even under `--local`. Called only
+ * reads the config truth). `overwriteDisabledMemberEntries` overwrites the
+ * entry in every layer that holds it, whatever flag the caller typed for the
+ * root, so a base-layer entry is found even under `--local`. Called only
  * once BOTH the members' ledger AND the root's own branch have succeeded,
  * alongside the root's own `writeEnabledFlagBack` -- a config write is not
  * undone by `runPhases`, so patching it any earlier would leave the file
  * changed under a state.json the root's own failure then leaves unsaved.
  */
 async function writeReEnabledMemberConfigEntries(
-  transaction: EnableDisableTransaction,
   locations: ScopedLocations,
-  state: ExtensionState,
   reEnabledKeys: readonly string[],
 ): Promise<void> {
-  await overwriteDisabledMemberEntries({
-    locations,
-    state,
-    keys: reEnabledKeys,
-    select: transaction.selectConfigWriteTarget,
-    write: transaction.writeConfigEntries,
-  });
+  await overwriteDisabledMemberEntries({ locations, keys: reEnabledKeys });
 }
 
 /** The EDEP-01 cascade step's outcome, for the transaction closure to act on. */
@@ -1563,6 +1564,108 @@ async function readEnabledDependents(args: {
   );
   if (dependents.length > 0) {
     throw new EnableRefusedError("dependents remain", composeDisableRefusalCause(key, dependents));
+  }
+}
+
+/**
+ * LAYER-04 / D-MF-03: refuse a standalone enable or disable whose plugin only
+ * the other layer declares, before anything is resolved, materialized, or
+ * saved. It refuses an idempotent call too, because the user named a layer
+ * that does not declare the plugin. A plugin no layer declares is a dependency
+ * and is acted on (LAYER-08). An orchestrated call reads its input from the
+ * configuration and is never refused (WR-09).
+ *
+ * When both layers declare the plugin and the command targets the base
+ * layer, the local layer's own `enabled` is checked too (`refuseLocalOverride`).
+ */
+function refuseOtherLayerDeclaration(
+  selection: LoadedTargetLayers,
+  write: EnabledFlagWriteTarget,
+): void {
+  if (write.orchestrated) {
+    return;
+  }
+
+  const verdict = pluginLayerVerdict({
+    target: selection.current,
+    other: selection.other,
+    targetIsLocal: selection.targetIsLocal,
+    marketplace: write.marketplace,
+    plugin: write.plugin,
+  });
+  if (verdict.kind === "other-only") {
+    throw new EnableRefusedError(verdict.reason, verdict.refusal.message);
+  }
+
+  if (verdict.kind === "both" && !selection.targetIsLocal) {
+    refuseLocalOverride(selection.other, write);
+  }
+}
+
+/**
+ * LAYER-04 / D-MF-03: refuse a write to the base layer that the local
+ * layer's opposite `enabled` overrides. The local value wins the field merge,
+ * so the next load would undo the write. Claude Code refuses the same write as
+ * governed by another settings file. The refusal applies even when the record
+ * already matches the request, because the write still loses at the next load.
+ * A local entry that sets no `enabled` leaves the base value in force, so it
+ * is not refused.
+ */
+function refuseLocalOverride(
+  local: LoadedTargetLayers["other"],
+  write: EnabledFlagWriteTarget,
+): void {
+  const localEnabled = ownValue(local.plugins, `${write.plugin}@${write.marketplace}`)?.enabled;
+  if (localEnabled !== !write.enable) {
+    return;
+  }
+
+  throw write.enable
+    ? new EnableRefusedError(
+        "disabled in local layer",
+        "Run the command again with --local to enable it.",
+      )
+    : new EnableRefusedError(
+        "enabled in local layer",
+        "Run the command again with --local to disable it.",
+      );
+}
+
+/**
+ * Refuse a standalone enable or disable whose flag write cannot declare the
+ * plugin's marketplace correctly. It runs before anything is resolved,
+ * materialized, or saved. An orchestrated call reads its input from the
+ * configuration and is never refused. D-06 scopes the refusal to a call that
+ * would write: an idempotent call that writes no flag (`idempotentWritesFlag`)
+ * is not refused and keeps its `(skipped)` row.
+ *
+ * - FIX-03 / D-MF-02: the flag would land in the base config
+ *   (`claude-plugins.json`) while only the local config
+ *   (`claude-plugins.local.json`) declares the marketplace, so a teammate who
+ *   reads the base config cannot resolve it.
+ * - LAYER-06 / D-MF-03: the target layer lacks the marketplace and no source
+ *   is known to declare it there with.
+ */
+function refuseMarketplaceDeclarationWrite(args: {
+  readonly selection: LoadedTargetLayers;
+  readonly write: EnabledFlagWriteTarget;
+  readonly installed: InstalledPluginRecord;
+  readonly state: ExtensionState;
+}): void {
+  const { selection, write, installed } = args;
+  const idempotent = isRecordedButDisabled(installed) === !write.enable;
+  if (write.orchestrated || (idempotent && !idempotentWritesFlag(write, selection))) {
+    return;
+  }
+
+  const refusal = localOnlyMarketplaceRefusal(selection, write.marketplace);
+  if (refusal !== undefined) {
+    throw new EnableRefusedError("marketplace in local layer only", refusal.message);
+  }
+
+  const undeclarable = undeclarableMarketplaceRefusal(selection, args.state, write.marketplace);
+  if (undeclarable !== undefined) {
+    throw new EnableRefusedError("unsupported source", undeclarable.message);
   }
 }
 
@@ -1848,7 +1951,7 @@ type InstalledPluginRecord = ExtensionState["marketplaces"][string]["plugins"][s
 /**
  * The plugin identity a config write-back needs, resolved once before the lock
  * so the write helpers stay pure module functions rather than closures over the
- * orchestrator body. The FILES are not part of it: D-103-13 chooses those
+ * orchestrator body. The FILES are not part of it: LAYER-04 chooses those
  * inside the lock, and both parses travel together in the selection.
  */
 interface EnabledFlagWriteTarget {
@@ -1856,48 +1959,43 @@ interface EnabledFlagWriteTarget {
   readonly plugin: string;
   readonly enable: boolean;
   readonly orchestrated: boolean;
-  readonly scopeRoot: string;
+  readonly locations: ScopedLocations;
 }
 
-/** D-103-13: the selection arm that actually names a write target. */
-type SelectedConfigWriteTarget = Extract<DeclaringConfigWriteTarget, { kind: "selected" }>;
+/** LAYER-04: the loaded arm, both layers' parses with the target marked. */
+type LoadedTargetLayers = Extract<TargetLayers, { kind: "loaded" }>;
 
 /**
  * Write the plugin's `enabled` flag back through the SOLE sanctioned
  * saveConfig seam (SPLIT-02).
  *
- * CMP-3: when the scope's MERGED config view does not declare the
- * marketplace (clone-adoption legacy, or a hand-pruned config), declare it in
- * the SAME batched patch -- a bare plugin key would otherwise be a dangling
- * declaration the planner converts into a marketplace removal plus a
- * perpetual failed row.
+ * CMP-3 / LAYER-06: when the target layer does not declare the marketplace
+ * (clone-adoption legacy, a hand-pruned config, or a marketplace only the
+ * other layer declares), declare it in the SAME batched patch. A layer that
+ * declares a plugin also declares its marketplace (D-MF-03); a bare plugin key
+ * would otherwise be a dangling declaration the planner converts into a
+ * marketplace removal plus a perpetual failed row. Both parses arrive from
+ * the caller's in-lock selection, so no arm here re-reads a file another arm
+ * already read.
  *
- * UAT-05: the membership gate considers BOTH physical files (base union
- * local) so a `--local` flip never re-declares a base-declared marketplace
- * (CFG-02 wholesale shadowing). Both parses arrive from the caller's
- * in-lock selection, so no arm here re-reads a file another arm already read.
- * An UNREADABLE sibling skips the adoption write instead of counting as a file
- * that declares nothing.
- *
- * S4 (PR #51, CONTEXT.md S4): the shared helper's `adoptedSource === undefined`
- * arms collapse -- benign (already declared) and dangerous (no string
- * `source.raw`). The dangerous arm seals a dangling plugin declaration; an
- * acknowledged trade-off pending a return-type widen.
+ * A marketplace that no known source can declare is refused before this
+ * write (`refuseMarketplaceDeclarationWrite`), so the plugin key never lands
+ * without its marketplace.
  */
 async function writeEnabledFlagBack(
   transaction: EnableDisableTransaction,
   write: EnabledFlagWriteTarget,
-  selection: SelectedConfigWriteTarget,
+  selection: LoadedTargetLayers,
   state: ExtensionState,
 ): Promise<void> {
   await transaction.writeConfigEntries({
     current: selection.current,
-    sibling: selection.sibling,
+    other: selection.other,
     state,
     marketplace: write.marketplace,
     plugin: write.plugin,
-    targetConfigPath: selection.targetConfigPath,
-    scopeRoot: write.scopeRoot,
+    locations: write.locations,
+    targetIsLocal: selection.targetIsLocal,
     pluginPatch: { enabled: write.enable },
   });
 }
@@ -1919,18 +2017,29 @@ async function writeEnabledFlagBack(
 async function resolveIdempotentOutcome(
   transaction: EnableDisableTransaction,
   write: EnabledFlagWriteTarget,
-  selection: SelectedConfigWriteTarget,
+  selection: LoadedTargetLayers,
   state: ExtensionState,
   installed: { readonly version: string },
 ): Promise<SetEnabledOutcome> {
-  const { marketplace, plugin, enable, orchestrated } = write;
-  const configEnabled = ownValue(selection.current.plugins, `${plugin}@${marketplace}`)?.enabled;
-  if (orchestrated || configEnabled === undefined || configEnabled === enable) {
+  if (write.orchestrated || !idempotentWritesFlag(write, selection)) {
     return { kind: "idempotent" };
   }
 
   await writeEnabledFlagBack(transaction, write, selection, state);
   return { kind: "fresh", version: installed.version };
+}
+
+/**
+ * ENBL-05: whether an idempotent call still writes its flag, because the
+ * targeted config carries the OPPOSITE explicit `enabled` value.
+ */
+function idempotentWritesFlag(
+  write: EnabledFlagWriteTarget,
+  selection: LoadedTargetLayers,
+): boolean {
+  const key = `${write.plugin}@${write.marketplace}`;
+  const configEnabled = ownValue(selection.current.plugins, key)?.enabled;
+  return configEnabled !== undefined && configEnabled !== write.enable;
 }
 
 /**
@@ -2007,7 +2116,7 @@ async function settleIdempotentEnableCascade(args: {
   readonly state: ExtensionState;
   readonly installed: InstalledPluginRecord;
   readonly write: EnabledFlagWriteTarget;
-  readonly selection: SelectedConfigWriteTarget;
+  readonly selection: LoadedTargetLayers;
   readonly cascadeMembers: readonly EnableCascadeMember[];
   readonly tx: { readonly save: () => Promise<void> };
   readonly sink: McpConfigNoticeSink;
@@ -2091,7 +2200,7 @@ async function runFreshEnableCascadeWithRoot(args: {
   readonly state: ExtensionState;
   readonly installed: InstalledPluginRecord;
   readonly write: EnabledFlagWriteTarget;
-  readonly selection: SelectedConfigWriteTarget;
+  readonly selection: LoadedTargetLayers;
   readonly cascadeMembers: readonly EnableCascadeMember[];
   readonly rootKey: string;
   readonly tx: { readonly save: () => Promise<void> };
@@ -2151,7 +2260,11 @@ async function runFreshEnableCascadeWithRoot(args: {
 /**
  * D-54-01 entrypoint. Never re-throws -- every failure surfaces through a
  * single `notify()` call per IL-2 (standalone) OR a typed outcome per
- * RECON-03 (orchestrated).
+ * RECON-03 (orchestrated). GHB-03: the one exception is an enable that fails
+ * on an `InvalidGitHubBaseUrlError`, which it rethrows in both modes so the
+ * whole command fails, unless the failure left a rollback partial or an MCP
+ * config rewrite (AFILE-04). Then it is this plugin's failed outcome, whose
+ * cause names the variable.
  *
  * Y3 (PR #51): overload pair so the orchestrated-mode return is narrowed to
  * `Promise<EnableDisablePluginOutcome>` (no `| undefined`) at the call site.
@@ -2202,7 +2315,8 @@ async function runSetEnabledOutcome(
 
   // C1: `resolveCrossScopePluginTarget` calls `loadState`, which throws on a
   // corrupt/unparseable state.json in either scope. The throw must NOT escape
-  // setPluginEnabled (the doc above promises "never re-throws") -- route it
+  // setPluginEnabled (the doc above promises "never re-throws", except for an
+  // invalid GitHub base override, GHB-03) -- route it
   // through the same classifyTransactionThrow taxonomy the lower try/catch
   // uses. Mirrors the read-only `listPlugins` containment in pending.ts.
   let resolution;
@@ -2248,12 +2362,12 @@ async function runSetEnabledOutcome(
   }
 
   const { scope, locations } = resolution;
-  // T-53-02-02: the CFG-03 abort row carries the TARGETED file's basename, and
-  // the row is rendered after the lock closes. The target is now chosen inside
-  // the lock, so the basename escapes the closure through this `let`. It starts
-  // at the base file -- the value the no-flag, no-declaration arm yields -- so
-  // the pre-assignment value is never wrong and the type stays definite.
-  let configBasename = path.basename(locations.configJsonPath);
+  // T-53-02-02: the CFG-03 abort row carries the basename of the layer that
+  // could not be read, and the row is rendered after the lock closes, so the
+  // basename escapes the closure through this `let`. It starts at the base
+  // layer's basename, the target the no-flag call selects, so the type stays
+  // definite.
+  let configBasename = path.basename(locations.baseConfigJsonPath);
   // EDEP-01: the enable cascade's classified member rows, threaded out of the
   // locked closure below for the standalone renderer. Stays empty for
   // `disable`, for orchestrated mode (a reconcile-driven enable is a
@@ -2270,47 +2384,42 @@ async function runSetEnabledOutcome(
     plugin,
     enable,
     orchestrated,
-    scopeRoot: locations.scopeRoot,
+    locations,
   };
 
   try {
     // A single per-scope lock owns the whole critical section. The closure
-    // sequences the D-103-13 write-target selection, ENBL-02 idempotency, the
+    // sequences the LAYER-04 write-target selection, ENBL-02 idempotency, the
     // enable/disable branch dispatch, the I3 shrunken-record save, and the
-    // UAT-05 config write-back; keeping that order visible here is what makes
+    // config write-back; keeping that order visible here is what makes
     // the save-vs-throw discipline auditable.
     outcome = await transaction.withLockedStateTransaction(
       locations,
       async (tx): Promise<SetEnabledOutcome> => {
-        // D-103-13: ONE selection, made before anything reads a config path, so
+        // LAYER-04: ONE selection, made before anything reads a config path, so
         // the ordinary write-back and the config-truth promotion below cannot
-        // drift onto different files. It runs inside the lock because it READS
-        // the local config -- the WB-01 discipline that sibling reads happen
-        // fresh under the lock the write also holds. UAT-05: the sibling path is
-        // the scope's OTHER file, for the merged-view membership test only.
-        const selection = await transaction.selectConfigWriteTarget({
+        // drift onto different files. It reads both layers inside the lock --
+        // the WB-01 discipline that reads of the other layer happen fresh under
+        // the lock the write also holds.
+        const selection = await transaction.loadTargetLayers({
           locations,
           local: opts.local,
-          key: `${plugin}@${marketplace}`,
         });
 
         const state = tx.state;
-        // CFG-03: the arm covers the TARGETED file being unreadable and, on the
-        // flagless path, the local file being unreadable while the base file is
-        // fine -- the local file is what DECIDES the destination there, so an
-        // unreadable one leaves the destination unknown. The row names the file
-        // that could not be read; writing to the file CFG-02 would then shadow
-        // would report a flip that moves no merged value.
+        // CFG-03: either layer being unreadable stops the command, because the
+        // other layer may declare the plugin. The row names the file that could
+        // not be read.
         if (selection.kind === "unreadable") {
           configBasename = path.basename(selection.filePath);
           return { kind: "invalid-config" };
         }
 
-        // Both physical files were parsed ONCE by the selector, and the whole
-        // selection travels to the write arms below: the target config steers
-        // every one of them, the sibling serves the UAT-05 membership gate, and
-        // no two decisions in this closure rest on different bytes of the same
-        // file.
+        // Both layers were parsed ONCE by the selector, and the whole selection
+        // travels to the checks and write arms below: the target config steers
+        // every write, the other layer serves the layer verdict and the FIX-03
+        // check, and no two decisions in this closure rest on different bytes
+        // of the same file.
         configBasename = path.basename(selection.targetConfigPath);
 
         const mp = ownValue(state.marketplaces, marketplace);
@@ -2318,6 +2427,9 @@ async function runSetEnabledOutcome(
         if (mp === undefined || installed === undefined) {
           return { kind: "not-recorded" };
         }
+
+        refuseOtherLayerDeclaration(selection, write);
+        refuseMarketplaceDeclarationWrite({ selection, write, installed, state });
 
         // EDEP-01 / EDEP-03: resolve (never materialize yet) the enable
         // cascade BEFORE the root's own idempotency is decided (D-08-03), so
@@ -2423,9 +2535,9 @@ async function runSetEnabledOutcome(
         // RECON-03: the write-back is SKIPPED in orchestrated mode. A
         // reconcile-driven call derives the desired state FROM the merged
         // config (base + local), so the declaration already exists by
-        // construction -- possibly ONLY in `claude-plugins.local.json`, the
-        // per-machine override. Writing it back here would copy the local
-        // override's `enabled` flag into the shared BASE file and clobber a
+        // construction -- possibly ONLY in the local config
+        // (`claude-plugins.local.json`). Writing it back here would copy the
+        // local override's `enabled` flag into the base config and clobber a
         // user-authored base declaration. The config is the reconcile's INPUT;
         // only standalone commands author declarations. This arm is reached
         // only by `disable` or an orchestrated enable -- the standalone,
@@ -2446,8 +2558,9 @@ async function runSetEnabledOutcome(
     if (!orchestrated) {
       // D-04: the `failed` row's bytes are identical across both verbs; emit it
       // through the active verb's CommandContext for naming consistency.
-      // EDEP-01: an `EnableRefusedError` (cycle / unreadable declarer) is the
-      // one transaction throw this catch classifies for standalone mode -- its
+      // EDEP-01 / EDEP-02 / FIX-03: an `EnableRefusedError` (cycle, unreadable
+      // declarer, enabled dependents, or a local-only marketplace) is the one
+      // transaction throw this catch classifies for standalone mode -- its
       // reason names the fact the cause line states. Every other transaction
       // throw keeps the pre-existing brace-less `(failed)` row.
       emitEnableDisableFailedRow({
@@ -2481,6 +2594,7 @@ async function runSetEnabledOutcome(
     };
   }
 
+  rethrowInvalidGitHubBaseUrlUnlessLeftBehind(outcome, sink.mcpConfigNotices);
   if (!orchestrated) {
     dispatchOutcome({
       ctx,
@@ -2710,6 +2824,26 @@ function freshOutcomeToTypedResult(
     ...(outcome.stagedMcpServers === true && { stagedMcpServers: true }),
     ...(outcome.stagedWorkflows === true && { stagedWorkflows: true }),
   };
+}
+
+/**
+ * GHB-03: an enable that failed on an invalid GitHub base override
+ * fails the whole command, unless it left something behind that only its
+ * failed row reports: a rollback partial, or an MCP config rewrite
+ * (AFILE-04). Then the row is the report, and its cause line still names the
+ * variable.
+ */
+function rethrowInvalidGitHubBaseUrlUnlessLeftBehind(
+  outcome: SetEnabledOutcome,
+  mcpConfigNotices: readonly McpConfigNotice[],
+): void {
+  if (
+    outcome.kind === "enable-failed" &&
+    (outcome.rollbackPartials ?? []).length === 0 &&
+    mcpConfigNotices.length === 0
+  ) {
+    rethrowInvalidGitHubBaseUrl(outcome.cause);
+  }
 }
 
 /**

@@ -237,7 +237,53 @@ export type Reason =
   // A typed kind, not a note, as `unsupported hooks` is: the aggregate token
   // rides the row, and each server with its blocking feature rides the info
   // breakdown.
-  | "unsupported mcp";
+  | "unsupported mcp"
+  // FIX-03 / D-MF-02: the command would write a plugin declaration into the
+  // base layer while only the local layer declares the plugin's marketplace,
+  // so a teammate who reads the base config could not resolve it. The refusal
+  // rides a `failed` row, and the remedy, running the command again with
+  // `--local`, rides the cause line. `dangling reference` cannot carry it:
+  // there the merged configuration lacks the marketplace, and here it declares
+  // it, in the per-machine local layer only.
+  | "marketplace in local layer only"
+  // LAYER-02 / D-MF-03: a command run with `--local` names a marketplace that
+  // only the base layer declares. The refusal rides a `failed` row, and the
+  // remedy, running the command again without `--local`, rides the cause line.
+  | "marketplace in base layer only"
+  // LAYER-04 / D-MF-03: a named plugin command without `--local` targets the
+  // base layer, and only the local layer declares the plugin. The refusal
+  // rides a `failed` row, and the remedy, running the command again with
+  // `--local`, rides the cause line.
+  | "plugin in local layer only"
+  // LAYER-04 / D-MF-03: the mirror refusal: a named plugin command with
+  // `--local` targets the local layer, and only the base layer declares the
+  // plugin. The remedy, running the command again without `--local`, rides the
+  // cause line.
+  | "plugin in base layer only"
+  // LAYER-05 / D-MF-03: an install into one layer of a plugin the other layer
+  // declares and the scope already installed. The install adds the declaration
+  // to the target layer and installs nothing; the token names the other layer.
+  | "already installed in base layer"
+  | "already installed in local layer"
+  // LAYER-05 / D-MF-03: an uninstall from one layer of a plugin the other layer
+  // still declares. The uninstall drops the target layer's declaration and
+  // uninstalls nothing; the token names the other layer, and the remedy rides
+  // the cause line.
+  | "still installed in base layer"
+  | "still installed in local layer"
+  // LAYER-04 / D-MF-03: an enable or disable without `--local` targets the
+  // base layer, and the local layer sets `enabled` to the opposite value.
+  // The local value wins the field merge, so the write would be undone at the
+  // next load. The refusal rides a `failed` row, and the remedy, running the
+  // command again with `--local`, rides the cause line.
+  | "disabled in local layer"
+  | "enabled in local layer"
+  // UPD-11 / ADD-10: the git host answered a marketplace refresh or add clone
+  // with an HTTP status other than the 401/403 auth challenge (and, for add,
+  // the 404/410 `source missing` answers), so the host was reached and it
+  // refused. `network unreachable` stays for connection failures. A token
+  // cannot interpolate, so the status and the URL ride the row's cause line.
+  | "network error";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<
@@ -525,6 +571,12 @@ export interface PluginFailedMessage extends MessageBase {
     readonly phase: string;
     readonly cause?: Error;
   }[];
+  /**
+   * ADD-10: the row's subject is a marketplace, or the source a failed
+   * `marketplace add` was typed with, not a plugin, so its JSON id is its name
+   * alone.
+   */
+  readonly marketplaceSubject?: true;
 }
 
 /** Skipped plugin row. */
@@ -537,7 +589,8 @@ export interface PluginSkippedMessage extends MessageBase {
 }
 
 /**
- * The one `skipped` row that carries a cause trailer: update's.
+ * A `skipped` row that carries a cause trailer: update's. Uninstall's
+ * `PluginUninstallSkippedMessage` is the other one.
  *
  * UPDT-02 / D-10-11: the held-update remedy names the constraining plugins
  * and marks which of them are currently disabled, and D-10-13's ceiling
@@ -556,6 +609,16 @@ export interface PluginSkippedMessage extends MessageBase {
  * rows at the dispatcher type today.
  */
 export interface PluginUpdateSkippedMessage extends PluginSkippedMessage {
+  readonly cause?: Error;
+}
+
+/**
+ * LAYER-05: uninstall's `skipped` row, for a plugin the other layer still
+ * declares. The cause line carries the remedy: run the command again with or
+ * without `--local`. It is a sibling of `PluginUpdateSkippedMessage` for the
+ * same reason that variant exists: the base row has no cause slot.
+ */
+export interface PluginUninstallSkippedMessage extends PluginSkippedMessage {
   readonly cause?: Error;
 }
 
@@ -613,6 +676,7 @@ export type PluginNotificationMessage =
   | PluginFailedMessage
   | PluginSkippedMessage
   | PluginUpdateSkippedMessage
+  | PluginUninstallSkippedMessage
   | PluginManualRecoveryMessage
   | PluginWillInstallMessage
   | PluginWillUninstallMessage

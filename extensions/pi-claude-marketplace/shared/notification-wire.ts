@@ -146,6 +146,17 @@ const REASONS = {
   "requires pi-dynamic-workflows": true,
   "components now supported": true,
   "unsupported mcp": true,
+  "marketplace in local layer only": true,
+  "marketplace in base layer only": true,
+  "plugin in local layer only": true,
+  "plugin in base layer only": true,
+  "already installed in base layer": true,
+  "already installed in local layer": true,
+  "still installed in base layer": true,
+  "still installed in local layer": true,
+  "disabled in local layer": true,
+  "enabled in local layer": true,
+  "network error": true,
 } as const satisfies Record<Reason, true>;
 
 const SEVERITIES = {
@@ -264,9 +275,10 @@ const ROLLBACK_PHASE = Type.Object(
 );
 
 /**
- * WIRE-04 / WIRE-06: one plugin row. `id` is `<name>@<marketplace>`. `reasons`
- * is always present; every other optional field is absent when the row has no
- * value for it.
+ * WIRE-04 / WIRE-06: one plugin row. `id` is `<name>@<marketplace>`, a
+ * dependency row's own `<plugin>@<marketplace>` key, or the name alone for a
+ * row whose subject is a marketplace. `reasons` is always present; every other
+ * optional field is absent when the row has no value for it.
  */
 const PLUGIN_ROW = Type.Object(
   {

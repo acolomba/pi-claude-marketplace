@@ -24,7 +24,10 @@ type CompleteProjection = ScopeConfig & {
   readonly plugins: NonNullable<ScopeConfig["plugins"]>;
 };
 
-void (buildConfigFromState satisfies (state: ExtensionState) => CompleteProjection);
+void (buildConfigFromState satisfies (
+  state: ExtensionState,
+  local: ScopeConfig,
+) => CompleteProjection);
 
 const existingValidResult = {
   migrated: false,
@@ -59,6 +62,39 @@ function populatedState(): ExtensionState {
   };
 }
 
+function recordedPlugin(): PluginInstallRecord {
+  return {
+    version: "1.0.0",
+    resolvedSource: "/plugins/recorded",
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    enabled: true,
+    provenance: "explicit",
+    installedAt: "2026-08-29T12:00:00.000Z",
+    updatedAt: "2026-08-29T12:00:00.000Z",
+  };
+}
+
+function stateRecording(pluginsByMarketplace: Readonly<Record<string, readonly string[]>>) {
+  const marketplaces = Object.fromEntries(
+    Object.entries(pluginsByMarketplace).map(([name, pluginNames]) => [
+      name,
+      {
+        name,
+        scope: "project" as const,
+        source: { kind: "path", raw: `./${name}`, logical: `./${name}` },
+        addedFromCwd: "/project",
+        manifestPath: `/${name}/marketplace.json`,
+        marketplaceRoot: `/${name}`,
+        plugins: Object.fromEntries(
+          pluginNames.map((pluginName) => [pluginName, recordedPlugin()]),
+        ),
+      },
+    ]),
+  );
+  return { schemaVersion: 2, marketplaces } satisfies ExtensionState;
+}
+
 test("projects an empty state as a complete version-one config", () => {
   // arrange
   const state = { schemaVersion: 2, marketplaces: {} } satisfies ExtensionState;
@@ -69,7 +105,7 @@ test("projects an empty state as a complete version-one config", () => {
   } satisfies CompleteProjection;
 
   // act
-  const config = buildConfigFromState(state);
+  const config = buildConfigFromState(state, {});
 
   // assert
   assert.deepStrictEqual(config, expectedConfig);
@@ -186,7 +222,7 @@ test("projects complete marketplaces, plugins, legacy flags, and nullish sources
   } satisfies CompleteProjection;
 
   // act
-  const config = buildConfigFromState(state);
+  const config = buildConfigFromState(state, {});
 
   // assert
   assert.deepStrictEqual(config, expectedConfig);
@@ -208,7 +244,7 @@ test("projects JSON-derived prototype-named marketplaces as own config entries",
   } satisfies CompleteProjection;
 
   // act
-  const config = buildConfigFromState(state);
+  const config = buildConfigFromState(state, { schemaVersion: 1, marketplaces: {}, plugins: {} });
 
   // assert
   assert.deepStrictEqual(config, expectedConfig);
@@ -219,22 +255,54 @@ test("projects JSON-derived prototype-named marketplaces as own config entries",
   ]);
 });
 
+test("FIX-02: leaves out a marketplace the local config declares and every plugin recorded under it, and projects the other marketplace", () => {
+  // arrange
+  const state = stateRecording({ base: ["alpha"], personal: ["beta", "gamma"] });
+  const local = { marketplaces: { personal: { source: "./personal" } } } satisfies ScopeConfig;
+
+  // act
+  const config = buildConfigFromState(state, local);
+
+  // assert
+  assert.deepStrictEqual(config, {
+    schemaVersion: 1,
+    marketplaces: { base: { source: "./base" } },
+    plugins: { "alpha@base": {} },
+  });
+});
+
+test("FIX-02: leaves out a plugin key the local config declares under a projected marketplace", () => {
+  // arrange
+  const state = stateRecording({ base: ["alpha", "beta"] });
+  const local = { plugins: { "beta@base": {} } } satisfies ScopeConfig;
+
+  // act
+  const config = buildConfigFromState(state, local);
+
+  // assert
+  assert.deepStrictEqual(config, {
+    schemaVersion: 1,
+    marketplaces: { base: { source: "./base" } },
+    plugins: { "alpha@base": {} },
+  });
+});
+
 test("preserves an existing valid config without rewriting its bytes", async (t) => {
   // arrange
   const { locations } = await createCaseLocations(t);
   const configBytes = '{"schemaVersion":1,"marketplaces":{"kept":{"source":"manual"}}}\n';
-  await writeFile(locations.configJsonPath, configBytes);
+  await writeFile(locations.baseConfigJsonPath, configBytes);
   const state = populatedState();
 
   // act
   const migration = await migrateFirstRunConfig(locations, state);
-  const storedBytes = await readFile(locations.configJsonPath, "utf8");
+  const storedBytes = await readFile(locations.baseConfigJsonPath, "utf8");
 
   // assert
   assert.deepStrictEqual(migration, {
     migrated: false,
     reason: "existing-valid",
-    filePath: locations.configJsonPath,
+    filePath: locations.baseConfigJsonPath,
   });
   assert.strictEqual(storedBytes, configBytes);
 });
@@ -243,19 +311,19 @@ test("preserves an existing invalid config and returns its complete validation f
   // arrange
   const { locations } = await createCaseLocations(t);
   const configBytes = "null\n";
-  await writeFile(locations.configJsonPath, configBytes);
+  await writeFile(locations.baseConfigJsonPath, configBytes);
   const state = populatedState();
 
   // act
   const migration = await migrateFirstRunConfig(locations, state);
-  const storedBytes = await readFile(locations.configJsonPath, "utf8");
+  const storedBytes = await readFile(locations.baseConfigJsonPath, "utf8");
 
   // assert
   assert.deepStrictEqual(migration, {
     migrated: false,
     reason: "existing-invalid",
     error: "schema validation failed: <root>: must be object",
-    filePath: locations.configJsonPath,
+    filePath: locations.baseConfigJsonPath,
   });
   assert.strictEqual(storedBytes, configBytes);
 });
@@ -273,7 +341,7 @@ test("leaves an absent config absent when state has no entries", async (t) => {
   assert.deepStrictEqual(migration, {
     migrated: false,
     reason: "empty-state",
-    filePath: locations.configJsonPath,
+    filePath: locations.baseConfigJsonPath,
   });
   assert.deepStrictEqual(scopeEntries, []);
 });
@@ -287,23 +355,23 @@ test("writes exact first-run bytes and replays as a byte-identical no-op", async
 
   // act
   const migration = await migrateFirstRunConfig(locations, state);
-  const firstBytes = await readFile(locations.configJsonPath, "utf8");
-  const firstStat = await stat(locations.configJsonPath, { bigint: true });
+  const firstBytes = await readFile(locations.baseConfigJsonPath, "utf8");
+  const firstStat = await stat(locations.baseConfigJsonPath, { bigint: true });
   const replay = await migrateFirstRunConfig(locations, state);
-  const replayBytes = await readFile(locations.configJsonPath, "utf8");
-  const replayStat = await stat(locations.configJsonPath, { bigint: true });
+  const replayBytes = await readFile(locations.baseConfigJsonPath, "utf8");
+  const replayStat = await stat(locations.baseConfigJsonPath, { bigint: true });
 
   // assert
   assert.deepStrictEqual(migration, {
     migrated: true,
     entryCount: 1,
-    filePath: locations.configJsonPath,
+    filePath: locations.baseConfigJsonPath,
   });
   assert.strictEqual(firstBytes, expectedBytes);
   assert.deepStrictEqual(replay, {
     migrated: false,
     reason: "existing-valid",
-    filePath: locations.configJsonPath,
+    filePath: locations.baseConfigJsonPath,
   });
   assert.strictEqual(replayBytes, expectedBytes);
   assert.deepStrictEqual(
@@ -322,11 +390,82 @@ test("writes exact first-run bytes and replays as a byte-identical no-op", async
   );
 });
 
+test("FIX-02: writes only the non-local records on a first load", async (t) => {
+  // arrange
+  const { locations } = await createCaseLocations(t);
+  const localBytes = '{"schemaVersion":1,"marketplaces":{"personal":{"source":"./personal"}}}\n';
+  await writeFile(locations.localConfigJsonPath, localBytes);
+  const state = stateRecording({ base: ["alpha"], personal: ["beta", "gamma"] });
+  const expectedBytes =
+    '{\n  "schemaVersion": 1,\n  "marketplaces": {\n    "base": {\n      "source": "./base"\n    }\n  },\n  "plugins": {\n    "alpha@base": {}\n  }\n}\n';
+
+  // act
+  const migration = await migrateFirstRunConfig(locations, state);
+  const configBytes = await readFile(locations.baseConfigJsonPath, "utf8");
+  const storedLocalBytes = await readFile(locations.localConfigJsonPath, "utf8");
+
+  // assert
+  assert.deepStrictEqual(migration, {
+    migrated: true,
+    entryCount: 2,
+    filePath: locations.baseConfigJsonPath,
+  });
+  assert.strictEqual(configBytes, expectedBytes);
+  assert.strictEqual(storedLocalBytes, localBytes);
+});
+
+test("FIX-02: writes no base config when the local config declares every record", async (t) => {
+  // arrange
+  const { locations } = await createCaseLocations(t);
+  await writeFile(
+    locations.localConfigJsonPath,
+    '{"schemaVersion":1,"marketplaces":{"base":{"source":"./base"},"personal":{"source":"./personal"}}}\n',
+  );
+  const state = stateRecording({ base: ["alpha"], personal: ["beta"] });
+  const expectedMigration = {
+    migrated: false,
+    reason: "empty-state",
+    filePath: locations.baseConfigJsonPath,
+  };
+
+  // act
+  const migration = await migrateFirstRunConfig(locations, state);
+  const replay = await migrateFirstRunConfig(locations, state);
+  const scopeEntries = await readdir(locations.scopeRoot);
+
+  // assert
+  assert.deepStrictEqual(migration, expectedMigration);
+  assert.deepStrictEqual(replay, expectedMigration);
+  assert.deepStrictEqual(scopeEntries, ["claude-plugins.local.json"]);
+});
+
+test("FIX-02: declines on an unreadable local config and writes nothing", async (t) => {
+  // arrange
+  const { locations } = await createCaseLocations(t);
+  const localBytes = "{ not json";
+  await writeFile(locations.localConfigJsonPath, localBytes);
+  const state = populatedState();
+
+  // act
+  const migration = await migrateFirstRunConfig(locations, state);
+  const scopeEntries = await readdir(locations.scopeRoot);
+  const storedLocalBytes = await readFile(locations.localConfigJsonPath, "utf8");
+
+  // assert
+  assert.deepStrictEqual(migration, {
+    migrated: false,
+    reason: "local-invalid",
+    filePath: locations.baseConfigJsonPath,
+  });
+  assert.deepStrictEqual(scopeEntries, ["claude-plugins.local.json"]);
+  assert.strictEqual(storedLocalBytes, localBytes);
+});
+
 test("propagates containment failure without creating config bytes", async (t) => {
   // arrange
   const { directory, locations } = await createCaseLocations(t);
   const escapedConfigPath = path.join(directory, "escaped.json");
-  const escapedLocations = { ...locations, configJsonPath: escapedConfigPath };
+  const escapedLocations = { ...locations, baseConfigJsonPath: escapedConfigPath };
   const state = populatedState();
 
   // act

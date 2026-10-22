@@ -39,8 +39,10 @@ import {
   openMarketplaceCommand,
 } from "../../../../extensions/pi-claude-marketplace/edge/handlers/marketplace/shared.ts";
 import { runWithAllLoaded, runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
-import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 
 type MarketplaceOperation = Parameters<typeof makeSingleNameMarketplaceHandler>[1];
 type MarketplaceOperationOptions = Parameters<MarketplaceOperation>[0];
@@ -122,6 +124,27 @@ describe("makeSingleNameMarketplaceHandler", () => {
           "Missing required argument.\n\nUsage: /claude:plugin marketplace info <name> [--scope user|project]",
         severity: "error",
       },
+    ]);
+    verifyBoundary();
+    verify(operation);
+  });
+
+  test("names an explicitly empty name by its label and never reaches the operation (USE-07)", async () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const run = runWithNothingLoaded();
+    const operation = mock<MarketplaceOperation>({
+      exactParams: true,
+      name: "marketplace operation",
+    });
+    const handler = makeSingleNameMarketplaceHandler(INFO_USAGE, operation);
+
+    // act
+    await handler('""', ctx, run);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: `Marketplace name must not be empty.\n\n${INFO_USAGE}`, severity: "error" },
     ]);
     verifyBoundary();
     verify(operation);
@@ -253,9 +276,17 @@ describe("makeSingleNameMarketplaceHandler", () => {
 });
 
 describe("openMarketplaceCommand", () => {
-  for (const { expectedCommand, positionalName } of [
-    { expectedCommand: { local: true, source: "official" }, positionalName: "source" },
-    { expectedCommand: { local: true, name: "official" }, positionalName: "name" },
+  for (const { expectedCommand, positionalName, positionalLabel } of [
+    {
+      expectedCommand: { local: true, source: "official" },
+      positionalName: "source",
+      positionalLabel: "Source",
+    },
+    {
+      expectedCommand: { local: true, name: "official" },
+      positionalName: "name",
+      positionalLabel: "Marketplace name",
+    },
   ] as const) {
     test(`returns the positional under the caller-supplied name "${positionalName}"`, () => {
       // arrange
@@ -264,6 +295,7 @@ describe("openMarketplaceCommand", () => {
       // act
       const command = openMarketplaceCommand("official --local", ctx, runWithNothingLoaded(), {
         positionalName,
+        positionalLabel,
         usage: ADD_USAGE,
       });
 
@@ -285,6 +317,7 @@ describe("openMarketplaceCommand", () => {
       // act
       const command = openMarketplaceCommand(args, ctx, runWithNothingLoaded(), {
         positionalName: "source",
+        positionalLabel: "Source",
         usage: ADD_USAGE,
       });
 
@@ -306,6 +339,7 @@ describe("openMarketplaceCommand", () => {
       runWithNothingLoaded(),
       {
         positionalName: "source",
+        positionalLabel: "Source",
         usage: ADD_USAGE,
       },
     );
@@ -323,6 +357,7 @@ describe("openMarketplaceCommand", () => {
     // act
     const command = openMarketplaceCommand("--local", ctx, runWithNothingLoaded(), {
       positionalName: "source",
+      positionalLabel: "Source",
       usage: ADD_USAGE,
     });
 
@@ -345,6 +380,7 @@ describe("openMarketplaceCommand", () => {
     // act
     const command = openMarketplaceCommand("official --bogus", ctx, runWithNothingLoaded(), {
       positionalName: "source",
+      positionalLabel: "Source",
       usage: ADD_USAGE,
     });
 
@@ -371,6 +407,7 @@ describe("openMarketplaceCommand", () => {
       runWithNothingLoaded(),
       {
         positionalName: "source",
+        positionalLabel: "Source",
         usage: ADD_USAGE,
       },
     );
@@ -387,13 +424,42 @@ describe("openMarketplaceCommand", () => {
     verifyBoundary();
   });
 
-  test("rejects empty arguments with the collapsed sentence (MSG-NC-2)", () => {
+  for (const { positionalName, positionalLabel, message } of [
+    { positionalName: "source", positionalLabel: "Source", message: "Source must not be empty." },
+    {
+      positionalName: "name",
+      positionalLabel: "Marketplace name",
+      message: "Marketplace name must not be empty.",
+    },
+  ] as const) {
+    test(`names an explicitly empty "${positionalName}" positional by the label "${positionalLabel}" (USE-07)`, () => {
+      // arrange
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+      // act
+      const command = openMarketplaceCommand('""', ctx, runWithNothingLoaded(), {
+        positionalName,
+        positionalLabel,
+        usage: ADD_USAGE,
+      });
+
+      // assert
+      assert.strictEqual(command, undefined);
+      assert.deepStrictEqual(notifications, [
+        { message: `${message}\n\n${ADD_USAGE}`, severity: "error" },
+      ]);
+      verifyBoundary();
+    });
+  }
+
+  test("rejects an omitted positional with the collapsed sentence (MSG-NC-2)", () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
 
     // act
     const command = openMarketplaceCommand("", ctx, runWithNothingLoaded(), {
       positionalName: "source",
+      positionalLabel: "Source",
       usage: ADD_USAGE,
     });
 
@@ -408,42 +474,46 @@ describe("openMarketplaceCommand", () => {
     ]);
     verifyBoundary();
   });
-});
 
-for (const mode of ["json", "rpc"] as const) {
-  for (const { args, message } of [
-    { args: "--scope bad", message: 'Invalid --scope value: "bad". Must be "user" or "project".' },
-    { args: "--bogus", message: 'Unknown flag: "--bogus".' },
-    { args: "", message: "Missing required argument." },
-  ]) {
-    test(`appends marketplace parse rejection for ${args} in ${mode}`, () => {
-      // arrange
-      const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
+  for (const mode of ["json", "rpc"] as const) {
+    for (const { args, message } of [
+      {
+        args: "--scope bad",
+        message: 'Invalid --scope value: "bad". Must be "user" or "project".',
+      },
+      { args: "--bogus", message: 'Unknown flag: "--bogus".' },
+      { args: "", message: "Missing required argument." },
+    ]) {
+      test(`appends marketplace parse rejection for ${args} in ${mode}`, () => {
+        // arrange
+        const { ctx, run, capture, verifyBoundary } = createMachineNotificationBoundary(mode);
 
-      // act
-      const parsed = openMarketplaceCommand(args, ctx, run, {
-        usage: "Usage: marketplace name",
-        positionalName: "name",
-      });
+        // act
+        const parsed = openMarketplaceCommand(args, ctx, run, {
+          usage: "Usage: marketplace name",
+          positionalName: "name",
+          positionalLabel: "Marketplace name",
+        });
 
-      // assert
-      assert.strictEqual(parsed, undefined);
-      assert.deepStrictEqual(capture.entries, [
-        {
-          customType: "claude-plugin",
-          payload: {
-            schemaVersion: 1,
-            origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
-            kind: "usage-error",
-            severity: "error",
-            needsReload: false,
-            message,
-            usage: "Usage: marketplace name",
+        // assert
+        assert.strictEqual(parsed, undefined);
+        assert.deepStrictEqual(capture.entries, [
+          {
+            customType: "claude-plugin",
+            payload: {
+              schemaVersion: 1,
+              origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+              kind: "usage-error",
+              severity: "error",
+              needsReload: false,
+              message,
+              usage: "Usage: marketplace name",
+            },
           },
-        },
-      ]);
-      capture.assertValid();
-      verifyBoundary();
-    });
+        ]);
+        capture.assertValid();
+        verifyBoundary();
+      });
+    }
   }
-}
+});

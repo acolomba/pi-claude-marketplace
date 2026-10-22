@@ -155,15 +155,11 @@ const USER_UNINSTALLED_DATA_KEPT = {
     "● alpha [user]\n  ○ demo v1.0.0 (uninstalled) {data kept}\n\n/reload to pick up changes",
 };
 
-const PROJECT_OVERRIDE_REJECTED = {
+// LAYER-04: the row of a flagless uninstall that names a plugin only the local
+// layer declares.
+const PROJECT_IN_LOCAL_LAYER_ONLY = {
   message:
-    'A plugin operation has failed.\n\n● alpha [project]\n  ⊘ demo (failed) {invalid manifest}\n    cause: Config file "claude-plugins.local.json" failed schema validation.',
-  severity: "error",
-};
-
-const USER_OVERRIDE_REJECTED = {
-  message:
-    'A plugin operation has failed.\n\n● alpha [user]\n  ⊘ demo (failed) {invalid manifest}\n    cause: Config file "claude-plugins.local.json" failed schema validation.',
+    "A plugin operation has failed.\n\n● alpha [project]\n  ⊘ demo v1.0.0 (failed) {plugin in local layer only}\n    cause: The plugin demo@alpha is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
   severity: "error",
 };
 
@@ -369,16 +365,17 @@ async function seedOrphanedDependency(workspace: HermeticWorkspace): Promise<voi
 }
 
 /**
- * An override layer whose `schemaVersion` is a string: `loadConfig` reports it
- * invalid, which is the CFG-03 precondition the scope-target flag selects. The
- * base layer of the same scope stays absent, so the flag decides between a file
- * that aborts the command and a file that does not exist.
+ * A local layer that declares `demo@alpha` while the base layer of the same
+ * scope stays absent. LAYER-04 makes the scope-target flag decide the outcome:
+ * with the flag the uninstall acts on the local layer, and without it the
+ * command is refused, because only the layer it does not target declares the
+ * plugin.
  */
-async function seedInvalidOverrideLayer(scopeRoot: string): Promise<void> {
+async function seedLocalLayerDeclaration(scopeRoot: string): Promise<void> {
   await mkdir(scopeRoot, { recursive: true });
   await writeFile(
     path.join(scopeRoot, "claude-plugins.local.json"),
-    '{"schemaVersion":"nope"}\n',
+    '{"schemaVersion":1,"plugins":{"demo@alpha":{}}}\n',
     "utf8",
   );
 }
@@ -615,11 +612,11 @@ for (const { expectedEffects, expectedNotification, scopeValue } of [
   });
 }
 
-test("preservation leaves the scope-target flag selecting the override layer", async (t) => {
+test("preservation leaves the scope-target flag selecting the local layer", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "keep-data-write-target");
   await seedBothScopes(workspace);
-  await seedInvalidOverrideLayer(workspace.projectRoot);
+  await seedLocalLayerDeclaration(workspace.projectRoot);
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
@@ -630,8 +627,8 @@ test("preservation leaves the scope-target flag selecting the override layer", a
   await uninstallHandler("demo@alpha --keep-data --local", ctx, runWithNothingLoaded());
 
   // assert
-  assert.deepStrictEqual(notifications, [PROJECT_OVERRIDE_REJECTED]);
-  assert.deepStrictEqual(await readObservedEffects(workspace), BOTH_RECORDS_INTACT);
+  assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED_DATA_KEPT]);
+  assert.deepStrictEqual(await readObservedEffects(workspace), PROJECT_RECORD_REMOVED_DATA_KEPT);
   verifyBoundary();
 });
 
@@ -756,11 +753,11 @@ for (const { args, placement } of [
   { args: "demo@alpha --local --scope project", placement: "between the two other tokens" },
   { args: "demo@alpha --scope project --local", placement: "last" },
 ]) {
-  test(`reads the override layer when the scope-target flag appears ${placement}`, async (t) => {
+  test(`acts on the local layer when the scope-target flag appears ${placement}`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, "scope-target-position");
     await seedBothScopes(workspace);
-    await seedInvalidOverrideLayer(workspace.projectRoot);
+    await seedLocalLayerDeclaration(workspace.projectRoot);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: workspace.cwd,
       reads: 1,
@@ -771,17 +768,17 @@ for (const { args, placement } of [
     await uninstallHandler(args, ctx, runWithNothingLoaded());
 
     // assert
-    assert.deepStrictEqual(notifications, [PROJECT_OVERRIDE_REJECTED]);
-    assert.deepStrictEqual(await readObservedEffects(workspace), BOTH_RECORDS_INTACT);
+    assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED]);
+    assert.deepStrictEqual(await readObservedEffects(workspace), PROJECT_RECORD_REMOVED);
     verifyBoundary();
   });
 }
 
-test("reads the base layer and removes the record when the scope-target flag is omitted", async (t) => {
+test("refuses a plugin only the local layer declares when the scope-target flag is omitted", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "scope-target-omitted");
   await seedBothScopes(workspace);
-  await seedInvalidOverrideLayer(workspace.projectRoot);
+  await seedLocalLayerDeclaration(workspace.projectRoot);
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
@@ -792,8 +789,8 @@ test("reads the base layer and removes the record when the scope-target flag is 
   await uninstallHandler("demo@alpha --scope project", ctx, runWithNothingLoaded());
 
   // assert
-  assert.deepStrictEqual(notifications, [PROJECT_UNINSTALLED]);
-  assert.deepStrictEqual(await readObservedEffects(workspace), PROJECT_RECORD_REMOVED);
+  assert.deepStrictEqual(notifications, [PROJECT_IN_LOCAL_LAYER_ONLY]);
+  assert.deepStrictEqual(await readObservedEffects(workspace), BOTH_RECORDS_INTACT);
   verifyBoundary();
 });
 
@@ -801,7 +798,7 @@ test("honors the scope flag and the scope-target flag together", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "both-selectors");
   await seedBothScopes(workspace);
-  await seedInvalidOverrideLayer(workspace.userRoot);
+  await seedLocalLayerDeclaration(workspace.userRoot);
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: workspace.cwd,
     reads: 1,
@@ -812,8 +809,8 @@ test("honors the scope flag and the scope-target flag together", async (t) => {
   await uninstallHandler("demo@alpha --scope user --local", ctx, runWithNothingLoaded());
 
   // assert
-  assert.deepStrictEqual(notifications, [USER_OVERRIDE_REJECTED]);
-  assert.deepStrictEqual(await readObservedEffects(workspace), BOTH_RECORDS_INTACT);
+  assert.deepStrictEqual(notifications, [USER_UNINSTALLED]);
+  assert.deepStrictEqual(await readObservedEffects(workspace), USER_RECORD_REMOVED);
   verifyBoundary();
 });
 

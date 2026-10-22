@@ -30,6 +30,8 @@ import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/typ
  */
 
 type AppliedCascade = ReturnType<typeof buildReconcileAppliedCascade>;
+
+const LAYER_GAP_CAUSE = new Error("the local layer declares alpha@mp without its marketplace");
 type PlannedActions = Partial<Omit<ReconcilePlan, "scope">>;
 
 function reconcilePlan(scope: Scope, actions: PlannedActions = {}): ReconcilePlan {
@@ -447,6 +449,33 @@ function appliedOutcomeRows(): AppliedOutcomeRows {
             severity: "error",
             plugins: [],
             reasons: ["invalid manifest"],
+          },
+        ],
+      },
+    },
+    "layer-marketplace-gap": {
+      outcome: {
+        kind: "layer-marketplace-gap",
+        scope: "project",
+        basename: "claude-plugins.local.json",
+        cause: LAYER_GAP_CAUSE,
+      },
+      expected: {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "claude-plugins.local.json",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "claude-plugins.local.json",
+                reasons: ["invalid manifest"],
+                cause: LAYER_GAP_CAUSE,
+                severity: "error",
+                needsReload: false,
+              },
+            ],
           },
         ],
       },

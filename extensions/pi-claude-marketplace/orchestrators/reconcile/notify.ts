@@ -769,7 +769,8 @@ function applyMarketplaceOutcomeToBlock(
         | "mp-remove-failed"
         | "mp-remove-partial"
         | "source-mismatch"
-        | "invalid-block";
+        | "invalid-block"
+        | "layer-marketplace-gap";
     }
   >,
 ): MarketplaceBlock<ReconcileAppliedMsg> {
@@ -839,6 +840,20 @@ function applyMarketplaceOutcomeToBlock(
         });
       }
 
+      return block;
+    case "layer-marketplace-gap":
+      // LAYER-06: the file heads its block with no status, so the one failed
+      // row that carries the cause is the one error the tally counts, as in
+      // the pending diff (T-55-02-01: the row is named by the basename).
+      block.plugins.push({
+        status: "failed",
+        name: outcome.basename,
+        reasons: ["invalid manifest"],
+        cause: outcome.cause,
+        // D-03/D-06: the layer error -> error, no reload.
+        severity: "error",
+        needsReload: false,
+      });
       return block;
   }
 }
@@ -1021,6 +1036,7 @@ function applyOutcomeToBlock(
     case "mp-remove-partial":
     case "source-mismatch":
     case "invalid-block":
+    case "layer-marketplace-gap":
       return applyMarketplaceOutcomeToBlock(block, outcome);
     case "plugin-installed":
     case "plugin-backfilled":
@@ -1040,7 +1056,8 @@ function applyOutcomeToBlock(
  * Derive the renderable block-key subject from a per-entry outcome. Most
  * variants carry `marketplace`; the Y2 / Y4 cuts moved two subjects off
  * that field:
- *   - `invalid-block` carries `basename` (the file basename, T-55-02-01).
+ *   - `invalid-block` and `layer-marketplace-gap` carry `basename` (the
+ *     file basename, T-55-02-01).
  *   - `source-mismatch` of cause `"malformed-plugin-key"` carries `rawKey`
  *     (the raw user-typed config key, NOT a marketplace name).
  *
@@ -1049,7 +1066,7 @@ function applyOutcomeToBlock(
  * invalid-block rename.
  */
 function outcomeSubject(outcome: PerEntryOutcome): string {
-  if (outcome.kind === "invalid-block") {
+  if (outcome.kind === "invalid-block" || outcome.kind === "layer-marketplace-gap") {
     return outcome.basename;
   }
 
@@ -1107,9 +1124,10 @@ export function buildReconcileAppliedCascade(
 
   for (const outcome of outcomes) {
     // Block keying derives the renderable subject per outcome variant: most
-    // outcomes carry `marketplace`; `invalid-block` carries `basename` (the
-    // file basename so distinct invalid files render as distinct rows); a
-    // `source-mismatch` of cause `"malformed-plugin-key"` carries `rawKey`.
+    // outcomes carry `marketplace`; `invalid-block` and `layer-marketplace-gap`
+    // carry `basename` (the file basename so distinct files render as distinct
+    // rows); a `source-mismatch` of cause `"malformed-plugin-key"` carries
+    // `rawKey`.
     // Every variant routes through ensureMarketplaceBlock so the
     // (scope, name) key is the single accumulation seam.
     const block = ensureMarketplaceBlock(byMp, outcome.scope, outcomeSubject(outcome));

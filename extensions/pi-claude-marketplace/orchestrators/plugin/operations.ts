@@ -34,7 +34,7 @@ import { runInstallLedger } from "./install-outcome.ts";
 import { createPrunePlugin } from "./prune.ts";
 import { createReinstallPlugin } from "./reinstall-flow.ts";
 import { REAL_REINSTALL_TRANSACTION } from "./reinstall-replace.ts";
-import { selectDeclaringConfigWriteTarget, writeAdoptingConfigEntries } from "./shared.ts";
+import { loadTargetLayers, writeAdoptingConfigEntries } from "./shared.ts";
 import { createUninstallPlugin, REAL_UNINSTALL_TRANSACTION } from "./uninstall.ts";
 
 import type {
@@ -76,7 +76,7 @@ const INSTALL_TRANSACTION: InstallTransaction = {
 const ENABLE_DISABLE_TRANSACTION: EnableDisableTransaction = {
   cascadeUnstagePlugin,
   runInstallLedger,
-  selectConfigWriteTarget: selectDeclaringConfigWriteTarget,
+  loadTargetLayers,
   withLockedStateTransaction,
   writeConfigEntries: writeAdoptingConfigEntries,
 };

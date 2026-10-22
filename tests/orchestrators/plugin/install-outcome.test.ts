@@ -23,11 +23,18 @@ import {
   McpConfigFileError,
   McpServerKeyCollisionError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
-import { PluginShapeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  InstallMarketplaceAddError,
+  InvalidMarketplaceManifestError,
+  PluginShapeError,
+  StaleSourceCloneError,
+  UnsupportedSourceError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 import { runPhases } from "../../../extensions/pi-claude-marketplace/transaction/phase-ledger.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
+import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { createRemovalOpsFake } from "../../platform/removal-ops-fake.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
@@ -35,6 +42,7 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
   InstallFailureCapture,
+  InstallLedgerOptions,
   InstallLedgerSummary,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -136,6 +144,8 @@ interface SeedOptions {
   readonly gitSource?: unknown;
   /** The marketplace's own name; defaults to `marketplace`. */
   readonly marketplaceName?: string;
+  /** The marketplace record's stored source; defaults to `./marketplace`. */
+  readonly marketplaceSource?: ExtensionState["marketplaces"][string]["source"];
 }
 
 async function seedPlugin(
@@ -184,7 +194,7 @@ async function seedPlugin(
       [marketplaceName]: {
         name: marketplaceName,
         scope: options.marketplaceScope ?? "project",
-        source: pathSource("./marketplace"),
+        source: options.marketplaceSource ?? pathSource("./marketplace"),
         addedFromCwd: cwd,
         manifestPath,
         marketplaceRoot,
@@ -444,7 +454,7 @@ test("unwinds when the marketplace disappears before state commit", async (t) =>
         // The workflows phase's previous-names lookup adds one read ahead of
         // the state commit's, so the marketplace must survive one read
         // longer than it did with five phases.
-        return marketplaceReads >= 5 ? undefined : marketplace;
+        return marketplaceReads >= 4 ? undefined : marketplace;
       }
 
       return Reflect.get(target, property, receiver) as unknown;
@@ -474,7 +484,7 @@ test("unwinds when the marketplace disappears before state commit", async (t) =>
     message: 'Marketplace "marketplace" disappeared from state during install of "empty".',
     name: "Error",
   });
-  assert.equal(marketplaceReads, 5);
+  assert.equal(marketplaceReads, 4);
   assert.deepStrictEqual(capture, { rollbackPartials: [], version: "0.0.1" });
 });
 
@@ -880,34 +890,311 @@ test("throws not-in-manifest for a plugin the cached manifest does not carry", a
   assert.deepStrictEqual(seeded.state.marketplaces.marketplace?.plugins, {});
 });
 
-test("CMP-3: a project-target install adopts a clone of the user-scope marketplace record", async (t) => {
-  // arrange
-  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-");
-  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
-  const locations = locationsFor("project", environment.cwd);
-  assert.deepStrictEqual(seeded.state.marketplaces, {});
+/** The add seam's `record`, as a case stubs it. */
+type RecordMarketplace = NonNullable<InstallLedgerOptions["marketplaceAdd"]>["record"];
 
-  // act
-  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+/**
+ * A `marketplaceAdd` seam around a stubbed `record`. Its `settle` belongs to
+ * the lock owner after a save, so the ledger body must never call it.
+ */
+function marketplaceAddSeam(
+  record: RecordMarketplace,
+): NonNullable<InstallLedgerOptions["marketplaceAdd"]> {
+  return { record, settle: () => Promise.reject(new Error("the ledger body never settles")) };
+}
+
+/** The ledger options of a project-target install of `empty@marketplace`. */
+function projectInstallOptions(cwd: string): InstallLedgerOptions {
+  return {
     ctx: notificationContext(),
     run: runWithNothingLoaded(),
-    cwd: environment.cwd,
+    cwd,
     marketplace: "marketplace",
     plugin: "empty",
     scope: "project",
     removalOps: createRemovalOps(),
     env: {},
+  };
+}
+
+test("CMP-3 / LAYER-07: a project install adds the user-scope marketplace to the project and installs from the project record", async (t) => {
+  // arrange: the user record's tree carries version 0.0.1, and the project
+  // record the add writes points at a second tree carrying 0.0.2.
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const projectTree = await seedPlugin(path.join(environment.cwd, "project-tree"), {
+    pluginJson: { version: "0.0.2" },
+  });
+  const projectRecord = projectTree.state.marketplaces.marketplace;
+  assert.ok(projectRecord !== undefined, "the fixture records the marketplace it seeds");
+  const userLocations = locationsFor("user", environment.cwd);
+  const userStateBefore = await loadState(userLocations.extensionRoot);
+  const locations = locationsFor("project", environment.cwd);
+  const cloneDir = path.join(locations.extensionRoot, "sources", "marketplace");
+  const recordCalls: Array<Parameters<RecordMarketplace>[0]> = [];
+  const addedMarketplaces: NonNullable<InstallLedgerOptions["addedMarketplaces"]> = [];
+  const options = projectInstallOptions(environment.cwd);
+  const credentials = createCredentialOpsFake({ boundary: "memory" });
+  const authMemo = new Map<string, AuthAttemptResult>();
+  const deviceFlow = createDeviceFlowFake({
+    boundary: "memory",
+    network: "disabled",
+    deviceCode: {
+      device_code: "MOCK_DEVICE_CODE",
+      expires_in: 900,
+      interval: 0,
+      user_code: "ABCD-1234",
+      verification_uri: "https://github.com/login/device",
+    },
+  });
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ...options,
+    credentialOps: credentials.credentialOps,
+    deviceFlowHttp: deviceFlow.http,
+    authMemo,
+    addedMarketplaces,
+    marketplaceAdd: marketplaceAddSeam((args) => {
+      recordCalls.push(args);
+      args.state.marketplaces.marketplace = { ...projectRecord, plugins: {} };
+      return Promise.resolve({ name: "marketplace", cloneDir });
+    }),
   });
 
   // assert
-  assert.equal(ledgerOutcome.kind, "installed");
-  const adopted = seeded.state.marketplaces.marketplace;
-  assert.ok(adopted !== undefined);
-  // The adopted container keeps the source record's paths and takes the TARGET
-  // scope, and the install it carries is the first one in it.
-  assert.equal(adopted.scope, "project");
-  assert.equal(adopted.marketplaceRoot, path.join(environment.cwd, "marketplace"));
-  assert.deepStrictEqual(Object.keys(adopted.plugins), ["empty"]);
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.version, "0.0.2");
+  assert.equal(ledgerOutcome.summary.resolved.pluginRoot, projectTree.pluginRoot);
+  assert.deepStrictEqual(recordCalls, [
+    {
+      state: seeded.state,
+      locations,
+      source: { kind: "path", raw: "./marketplace", logical: "./marketplace" },
+      cwd: environment.cwd,
+      ctx: options.ctx,
+      run: options.run,
+      removalOps: options.removalOps,
+      credentialOps: credentials.credentialOps,
+      deviceFlowHttp: deviceFlow.http,
+      authMemo,
+    },
+  ]);
+  assert.deepStrictEqual(addedMarketplaces, [{ marketplace: "marketplace", cloneDir }]);
+  assert.equal(
+    seeded.state.marketplaces.marketplace?.marketplaceRoot,
+    projectRecord.marketplaceRoot,
+  );
+  assert.deepStrictEqual(Object.keys(seeded.state.marketplaces.marketplace?.plugins ?? {}), [
+    "empty",
+  ]);
+  assert.deepStrictEqual(await loadState(userLocations.extensionRoot), userStateBefore);
+});
+
+test("CMP-3 / LAYER-07: an add that records another marketplace name fails before any phase and keeps the clone listed", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-name-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const locations = locationsFor("project", environment.cwd);
+  const cloneDir = path.join(locations.extensionRoot, "sources", "renamed");
+  const addedMarketplaces: NonNullable<InstallLedgerOptions["addedMarketplaces"]> = [];
+  const transaction = { runPhases: t.mock.fn(runPhases) };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ...projectInstallOptions(environment.cwd),
+      addedMarketplaces,
+      marketplaceAdd: marketplaceAddSeam((args) => {
+        args.state.marketplaces.renamed = {
+          name: "renamed",
+          scope: "project",
+          source: pathSource("./marketplace"),
+          addedFromCwd: environment.cwd,
+          manifestPath: path.join(cloneDir, ".claude-plugin", "marketplace.json"),
+          marketplaceRoot: cloneDir,
+          plugins: {},
+        };
+        return Promise.resolve({ name: "renamed", cloneDir });
+      }),
+    },
+    undefined,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof InvalidMarketplaceManifestError);
+    assert.equal(
+      error.message,
+      'Marketplace source "./marketplace" declares the marketplace "renamed", not "marketplace".',
+    );
+    return true;
+  });
+  assert.deepStrictEqual(addedMarketplaces, [{ marketplace: "renamed", cloneDir }]);
+  assert.deepStrictEqual(Object.keys(seeded.state.marketplaces), ["renamed"]);
+  assert.equal(transaction.runPhases.mock.callCount(), 0);
+});
+
+test("CMP-3 / LAYER-07: an add that throws propagates its error and writes no project record", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-throw-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const locations = locationsFor("project", environment.cwd);
+  const addedMarketplaces: NonNullable<InstallLedgerOptions["addedMarketplaces"]> = [];
+  const transaction = { runPhases: t.mock.fn(runPhases) };
+  const addError = new Error("clone failed");
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ...projectInstallOptions(environment.cwd),
+      addedMarketplaces,
+      marketplaceAdd: marketplaceAddSeam(() => Promise.reject(addError)),
+    },
+    undefined,
+    transaction,
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => error === addError);
+  assert.deepStrictEqual(seeded.state, { marketplaces: {}, schemaVersion: 2 });
+  assert.deepStrictEqual(addedMarketplaces, []);
+  assert.equal(transaction.runPhases.mock.callCount(), 0);
+});
+
+test("CMP-3 / WR-04: an add failure the add classifies carries its reason and a path-free cause", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-stale-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const locations = locationsFor("project", environment.cwd);
+  const cloneDir = path.join(locations.extensionRoot, "sources", "marketplace");
+
+  // act
+  const operation = runInstallLedger(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    marketplaceAdd: marketplaceAddSeam(() =>
+      Promise.reject(new StaleSourceCloneError(cloneDir, "marketplace")),
+    ),
+  });
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof InstallMarketplaceAddError);
+    assert.deepStrictEqual(
+      { reason: error.reason, message: error.message },
+      { reason: "stale clone", message: "stale source clone at marketplace" },
+    );
+    return true;
+  });
+  assert.deepStrictEqual(seeded.state, { marketplaces: {}, schemaVersion: 2 });
+});
+
+test("CMP-3 / D-79-03: an add that meets an authentication challenge keeps its own error", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-auth-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const locations = locationsFor("project", environment.cwd);
+  const challenge = Object.assign(new Error("HTTP Error: 401"), {
+    code: "HttpError",
+    data: { statusCode: 401 },
+  });
+
+  // act
+  const operation = runInstallLedger(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    marketplaceAdd: marketplaceAddSeam(() => Promise.reject(challenge)),
+  });
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => error === challenge);
+});
+
+test("CMP-3 / LAYER-07: a user record whose source the add refuses fails as an unsupported source", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-unsupported-");
+  const seeded = await seedPlugin(environment.cwd, {
+    marketplaceScope: "user",
+    marketplaceSource: { kind: "unknown", raw: "not a source", reason: "unclassified" },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const operation = runInstallLedger(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    marketplaceAdd: marketplaceAddSeam(() =>
+      Promise.reject(new Error("a refused source is never recorded")),
+    ),
+  });
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof UnsupportedSourceError);
+    assert.equal(
+      error.message,
+      'Cannot add marketplace from "not a source": non-relative string source not a source cannot be classified',
+    );
+    return true;
+  });
+  assert.deepStrictEqual(seeded.state, { marketplaces: {}, schemaVersion: 2 });
+});
+
+test("CMP-3 / LAYER-07: a plugin the user record's manifest does not list fails before the add", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-unlisted-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const operation = runInstallLedger(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    plugin: "ghost",
+    marketplaceAdd: marketplaceAddSeam(() =>
+      Promise.reject(new Error("an unlisted plugin adds no marketplace")),
+    ),
+  });
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof PluginShapeError);
+    assert.deepStrictEqual(error.shape, {
+      kind: "not-in-manifest",
+      plugin: "ghost",
+      marketplace: "marketplace",
+    });
+    return true;
+  });
+  assert.deepStrictEqual(seeded.state, { marketplaces: {}, schemaVersion: 2 });
+});
+
+test("CMP-3 / LAYER-07: an install with no list of added marketplaces still installs through the add", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-cmp3-nolist-");
+  const seeded = await seedPlugin(environment.cwd, { marketplaceScope: "user" });
+  const userRecord = (await loadState(locationsFor("user", environment.cwd).extensionRoot))
+    .marketplaces.marketplace;
+  assert.ok(userRecord !== undefined, "the fixture records the marketplace it seeds");
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    marketplaceAdd: marketplaceAddSeam((args) => {
+      args.state.marketplaces.marketplace = { ...userRecord, scope: "project" };
+      return Promise.resolve({ name: "marketplace" });
+    }),
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.version, "0.0.1");
+  assert.deepStrictEqual(Object.keys(seeded.state.marketplaces.marketplace?.plugins ?? {}), [
+    "empty",
+  ]);
 });
 
 test("flags binaries as unsupported when the marketplace is an official one", async (t) => {
@@ -1741,6 +2028,8 @@ test("AFILE-02: a plugin with MCP servers refuses an unparseable mcp-adapter.jso
       return true;
     },
   );
+
+  // assert
   assert.equal(await readFile(locations.mcpAdapterJsonPath, "utf8"), "{");
   assert.deepStrictEqual(capture.rollbackPartials, []);
 });
@@ -1781,6 +2070,8 @@ test("ANAME-03: an install whose two servers share one key refuses before any wr
       return true;
     },
   );
+
+  // assert
   await assert.rejects(stat(locations.mcpAdapterJsonPath), { code: "ENOENT" });
   assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
 });

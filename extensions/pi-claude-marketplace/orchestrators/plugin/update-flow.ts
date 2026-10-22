@@ -4,7 +4,8 @@
 // NFR-2 + NFR-3.
 //
 // Two exported entrypoints (D-09 corollary):
-//  1. updateSinglePlugin: PluginUpdateFn -- cascade-safe; NEVER throws
+//  1. updateSinglePlugin: PluginUpdateFn -- cascade-safe; throws only an
+//     invalid GitHub base override (GHB-03)
 //  2. updatePlugins(opts) -- direct entrypoint; PUP-1 three forms
 //
 // Both share the per-plugin 3-phase swap implementation (D-03 HAND-ROLLED,
@@ -65,10 +66,14 @@ import {
   CleanupContextError,
   cleanupFailuresFromError,
   composeErrorWithCauseChain,
+  DependencyDeclarationsUnreadableError,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
+  PluginInBaseLayerOnlyError,
+  PluginInLocalLayerOnlyError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
+  rethrowInvalidGitHubBaseUrl,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
@@ -76,14 +81,16 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
-import { DEFAULT_CREDENTIAL_OPS, GITHUB_HOST, buildAuthForHost } from "../auth-host.ts";
+import { DEFAULT_CREDENTIAL_OPS, buildGitHubAuth } from "../auth-host.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, refreshUrlClone } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
 import {
   emitMarketplaceNotAddedSignal,
+  keepLocalLayerTargets,
   MarketplaceNotAddedSignal,
+  namedPluginLayerRefusal,
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,
   surfaceDiscoveryWarnings,
@@ -135,9 +142,11 @@ type UpdateCascadeComposer = (
  * does. Throws on git-side failures.
  *
  * AUTH-02: the fetch carries the same host-keyed auth bundle as `marketplace
- * update` (github.com for GitHub sources, the clone URL's host for url
- * sources), plus the run's `authMemo`, so a private marketplace reaches the
- * credential helper and, on a miss, the Device Flow. `updatePluginsWith`
+ * update` (github.com or the GitHub override host for GitHub sources, the
+ * clone URL's host for url sources), plus the run's `authMemo`, so a private
+ * marketplace reaches the credential helper and, on a miss, the Device Flow.
+ * The GitHub bundle is built inside the github arm, so a path-only run never
+ * reads PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL (GHB-02). `updatePluginsWith`
  * allocates the `authMemo` when the caller supplies none and passes it here
  * (D-79-02), so that flow runs at most once per host across the marketplace
  * syncs and the plugin clones.
@@ -147,14 +156,6 @@ function makeSyncCloneOnce(
 ): (scope: Scope, mpName: string, locations: ScopedLocations) => Promise<void> {
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
   const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
-  const auth = buildAuthForHost({
-    host: GITHUB_HOST,
-    credentialOps,
-    ctx: opts.ctx,
-    run: opts.run,
-    ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-    ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
-  });
   const synced = new Set<string>();
   return async (scope, mpName, locations) => {
     const key = `${scope}/${mpName}`;
@@ -173,6 +174,13 @@ function makeSyncCloneOnce(
     const source = mp.source as ParsedSource;
     if (source.kind === "github") {
       const cloneDir = await locations.sourceCloneDir(mpName);
+      const auth = buildGitHubAuth({
+        credentialOps,
+        ctx: opts.ctx,
+        run: opts.run,
+        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+        ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+      });
       await refreshGitHubClone(cloneDir, source.ref, gitOps, undefined, auth);
     } else if (source.kind === "url") {
       await refreshUrlClone({
@@ -228,7 +236,7 @@ function buildDirectThreePhaseArgs(
     // The cascade entrypoint never sets it, so cascade re-installs keep the
     // `requireInstallable` block.
     partial: opts.partial ?? false,
-    // WB-01: `--local` selects the direct-path write-back target.
+    // LAYER-04: `--local` selects the layer a named update acts on.
     ...(opts.local === true && { local: true }),
     // PURL-06: the test-only clone-cache seam for the git-source candidate
     // probe. Undefined in production, which selects the real imports.
@@ -328,6 +336,8 @@ async function updatePluginsWith(
       // eslint-disable-next-line no-await-in-loop -- syncs each marketplace once; a sync failure aborts the batch
       await syncCloneOnce(t.scope, t.marketplace, t.locations);
     } catch (err) {
+      // GHB-03: an invalid GitHub base override fails the whole command.
+      rethrowInvalidGitHubBaseUrl(err);
       // Pre-3-phase error (D-14 step failure or marketplace-missing): surface
       // via a single notify with a synthetic PluginFailedMessage carrying
       // the typed cause (Option B). Abort the whole
@@ -366,6 +376,8 @@ async function updatePluginsWith(
         ),
       );
     } catch (err) {
+      // GHB-03: an invalid GitHub base override fails the whole command.
+      rethrowInvalidGitHubBaseUrl(err);
       // PUP-9 direct path: phase-2-or-earlier throws (including PI-14
       // PathContainmentError, ST-9 stale-version, prep-phase errors) surface
       // via a single notify with a synthetic PluginFailedMessage
@@ -589,16 +601,18 @@ function abortUpdateBatch(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// updateSinglePlugin -- PluginUpdateFn impl (cascade-safe; NEVER throws)
+// updateSinglePlugin -- PluginUpdateFn impl (cascade-safe)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
  * D-09 corollary: the `PluginUpdateFn` impl (D-05). The marketplace
  * autoupdate cascade wires this in.
  *
- * Cascade-safe contract: this function NEVER throws. All errors (including
- * PathContainmentError, ST-9 stale-version, prep failures, phase-3a aggregate
- * failures) are captured into `partition='failed'` outcomes. PUP-9.
+ * Cascade-safe contract: errors (including PathContainmentError, ST-9
+ * stale-version, prep failures, phase-3a aggregate failures) are captured into
+ * `partition='failed'` outcomes. PUP-9. The one error it rethrows is an invalid
+ * GitHub base override, which fails the marketplace command that runs the
+ * cascade (GHB-03).
  */
 async function updateSinglePluginWith(
   bindings: UpdateBindings,
@@ -646,9 +660,12 @@ async function updateSinglePluginWith(
       cleanupClones: garbageCollectPluginClones,
     });
   } catch (err) {
-    // Cascade-safe: capture throws into a partition='failed' outcome so the
-    // marketplace cascade can continue aggregating outcomes across plugins
-    // without aborting the whole batch. `notes` is consumed outside the
+    // GHB-03: an invalid GitHub base override fails the marketplace command
+    // that runs the cascade.
+    rethrowInvalidGitHubBaseUrl(err);
+    // Cascade-safe: capture every other throw into a partition='failed' outcome
+    // so the marketplace cascade can continue aggregating outcomes across
+    // plugins without aborting the whole batch. `notes` is consumed outside the
     // notify path so the MSG-CC-1 trailer is composed inline here.
     //
     // Pre-narrow to a closed-set `Reason` so the cascade consumer reads the
@@ -816,6 +833,18 @@ function narrowDirectFailReason(err: Error): ContentReason {
     return "invalid manifest";
   }
 
+  if (primary instanceof PluginInLocalLayerOnlyError) {
+    return "plugin in local layer only";
+  }
+
+  if (primary instanceof PluginInBaseLayerOnlyError) {
+    return "plugin in base layer only";
+  }
+
+  if (primary instanceof DependencyDeclarationsUnreadableError) {
+    return "unreadable";
+  }
+
   const transportReason = classifyGitTransportFailure(primary);
   if (transportReason !== undefined) {
     return transportReason;
@@ -910,7 +939,21 @@ interface ResolvedTarget {
   readonly locations: ScopedLocations;
 }
 
+/**
+ * LAYER-04 / D-MF-03: a nameless update with `--local` covers the plugins the
+ * local layer declares and the dependencies those plugins need; without the
+ * flag it covers every installed plugin of the scope.
+ */
 async function enumerateTargets(opts: UpdatePluginsOptions): Promise<readonly ResolvedTarget[]> {
+  const targets = await enumerateScopeTargets(opts);
+  return opts.local === true && opts.target.kind !== "plugin"
+    ? keepLocalLayerTargets(targets, opts.cwd)
+    : targets;
+}
+
+async function enumerateScopeTargets(
+  opts: UpdatePluginsOptions,
+): Promise<readonly ResolvedTarget[]> {
   const { cwd, target } = opts;
   const explicitScope = opts.scope;
 
@@ -1087,6 +1130,7 @@ export interface PluginUpdateOperations {
  * exactly that gap.
  */
 async function runPluginUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> {
+  await refuseOtherLayerUpdate(args);
   const preflight = await preparePluginUpdate({
     ...args,
     ...(!args.cascade && { notification: { ctx: args.ctx, run: args.run } }),
@@ -1096,6 +1140,34 @@ async function runPluginUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> 
   }
 
   return swapPluginUpdate(args, preflight);
+}
+
+/**
+ * LAYER-04 / D-MF-03: a named update acts on its target layer, so it is
+ * refused when only the other layer declares the plugin, and when a layer
+ * file cannot be read (CFG-03). The `single` cardinality is the
+ * `<plugin>@<marketplace>` invocation form (OUT-04); the `@<marketplace>` and
+ * bare forms and the autoupdate cascade name no plugin.
+ *
+ * NFR-5: the check reads only the two layer configs, and it runs before the
+ * preflight. So a refused update builds no credentials, lists no tags, and
+ * clones nothing. An up-to-date plugin is refused too, because knowing that a
+ * git-source plugin is up to date needs the network.
+ */
+async function refuseOtherLayerUpdate(args: ThreePhaseArgs): Promise<void> {
+  if (args.cascade || args.cardinality !== "single") {
+    return;
+  }
+
+  const refusal = await namedPluginLayerRefusal({
+    locations: args.locations,
+    local: args.local === true,
+    marketplace: args.marketplace,
+    plugin: args.plugin,
+  });
+  if (refusal !== undefined) {
+    throw refusal;
+  }
 }
 
 /**

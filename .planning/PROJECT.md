@@ -10,7 +10,56 @@
 
 A Pi user can run `/claude:plugin install <plugin>@<marketplace>` and, after `/reload`, have every supported Claude plugin component appear as a working Pi-native artifact -- atomically, recoverably, and with soft-dependency degradation that never blocks the install.
 
-## Previous Milestone: json-output -- Mode-Keyed Presentation Strategies (branch: features/json, started 2026-09-28, completed 2026-10-11, not yet merged, no npm release)
+## Terminology: Scope and Layer
+
+Use these terms in code, messages, docs, and planning (user decisions 2026-10-17):
+
+- **Scope:** `user` (`~/.pi/agent/`) or `project` (`<cwd>/.pi/`). A scope owns its `state.json`, its marketplace clones (one copy per marketplace), and its installed plugins.
+- **Layer:** one of a scope's two declaration levels: the **base layer** and the **local layer**. Like a scope, a layer is a level, not a file. Layers declare desired state; they own no clones and no installations.
+- **Config:** the file that holds a layer's declarations. The **base config** is `claude-plugins.json` (committed for the team); the **local config** is `claude-plugins.local.json` (per machine). In prose say "the local config" or "the local layer config" for the file and "the local layer" for the level.
+- **Code:** use `base` and `local` everywhere (`baseConfigJsonPath`, `localConfigJsonPath`, and so on); never `shared` for the base layer.
+- **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
+- **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
+
+## Previous Milestone: marketplace-features -- Marketplace Behavioral Tests (branch: features/cucumber-behavioral-tests, started 2026-10-15, completed 2026-10-21, PR #271, not yet merged, no npm release)
+
+**Goal:** A cucumber suite drives every `/claude:plugin marketplace` lifecycle
+command through a real headless Pi, against local stand-ins for every source
+kind, so a regression in marketplace behavior fails a scenario named after it.
+
+**Target features:**
+
+- Feature files under `features/marketplace/` for `add`, `remove`, `list`,
+  `info`, `update`, `autoupdate`/`noautoupdate`, and their usage errors.
+- Every supported source kind: a local directory, a direct `marketplace.json`
+  path, an https git URL, and GitHub (`owner/repo`, `https://github.com/...`).
+  Refused forms (`http://`, `ssh://`, `git@`, `/tree/` URLs, bad shorthand)
+  are covered at parse level.
+- A loopback HTTPS git stand-in in `features/lib/`: a `node:https` CGI wrapper
+  around `git http-backend` with a run-time openssl certificate trusted through
+  `NODE_EXTRA_CA_CERTS`. It records requests and can be armed to answer 401,
+  404, 5xx, or to drop the connection.
+- `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`: an environment variable that, when
+  set, replaces `https://github.com` as the clone base for GitHub sources, so
+  the suite can serve them from the stand-in. One seam covers the clone URL,
+  origin matching, update, and the auth host. Unset, behavior is unchanged; an
+  invalid value fails with a typed error.
+- Fix C-10: `update` of a marketplace added from a `marketplace.json` outside
+  `.claude-plugin/` re-reads the manifest the user added.
+- Driver support for the non-cascade payload kinds marketplace commands emit
+  (`marketplace-info`, `marketplace-info-cascade`, `marketplace-not-added`,
+  `usage-error`) and for one payload per marketplace from a bare `update`.
+
+**Key context:** Plugin install, uninstall, and update flows stay out of scope,
+except where `marketplace remove` and `marketplace update` cascade onto plugins
+already installed. A spike on 2026-10-15 proved the CGI wrapper serves
+isomorphic-git clone and fetch over HTTPS on 127.0.0.1 in about 25 lines;
+`git-http-mock-server` (HTTP only), `mockttp` (about 40 dependencies) and
+`node-git-server` were considered and not adopted. Claude Code's reserved
+official names, hosted `marketplace.json` URLs, and `/plugin market` alias are
+out of scope (BACKLOG `MKTPAR-01`).
+
+## Previous Milestone: json-output -- Mode-Keyed Presentation Strategies (branch: features/json, started 2026-09-28, completed 2026-10-11, merged 2026-10-11 as PR #251, no npm release)
 
 **Goal:** `/claude:plugin` output is produced by one of two architecturally
 uniform presentation strategies selected by Pi's `ctx.mode` -- text for `tui` and
@@ -531,6 +580,19 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
+**Completed on a branch, unmerged:** milestone `marketplace-features`
+(2026-10-21, Phases 1-10 with 3.1-3.4 inserted, 82 plans, 183 tasks, 97/97
+requirements; archived to `.planning/milestones/marketplace-features-*`). A
+cucumber suite of 433 scenarios drives every `/claude:plugin marketplace` verb
+through a real headless Pi against local stand-ins for directory, file, https
+git URL, and GitHub sources, with no tag excluded, on Node 24 and Node 26.
+Product changes it carried: the GitHub base override (D-MF-01), config-layer
+partition and field merge (D-MF-02, D-MF-03), per-scope marketplace records
+for project installs (D-MF-04), project-first remove and info (D-MF-05,
+D-MF-06), the `#ref` shorthand (D-MF-07), C-10, and clearer git
+authentication causes. The audit reads `tech_debt` with no blockers; CI
+portability of the git host is read at PR time.
+
 **Completed on a branch, unmerged:** milestone `json-output` (2026-10-11, Phases 1-9,
 50 plans, 72 tasks, 36/36 requirements; archived to `.planning/milestones/json-output-*`).
 `/claude:plugin` output comes from a text or a JSON presentation strategy chosen
@@ -539,7 +601,7 @@ by `ctx.mode`. JSON and RPC consumers receive versioned, schema-valid
 is unchanged. Credentials are redacted at every serialization site, including
 LLM tool text. The re-audit reads `tech_debt` with no blockers; it is an
 override close (phases 1-7 digests stale by decision 08 D-12). The milestone
-lives on `features/json` and is not yet merged to `main`.
+merged to `main` as PR #251 on 2026-10-11.
 
 **Merged and released:** mcp-4 closed 2026-10-10 on `features/mcp-4` (Phases 1-8, 73 plans;
 archived to `.planning/milestones/mcp-4-*`), merged to main via PR #250 on 2026-10-10 and
@@ -619,8 +681,8 @@ been declared in `package.json` and invoked by nothing, now run: the three fast 
 
 **Shipped:** url-source URL Sources (2026-07-13, Phases 76-79). Arbitrary public HTTPS git URLs are first-class sources for both marketplaces and plugins: `marketplace add/update/remove/info` clone `source.url` directly (no github.com reconstruction); the resolver classifies `url` / `git-subdir` / `github`-object plugin sources installable through a source-addressed refcounted clone cache (`plugin-clones/<urlhash12>-<sha12>/`, one external-monorepo clone serving every referencing plugin, warm-cache operations offline); the full plugin lifecycle works for git sources (sha-change atomic swaps, last-reference clone GC on uninstall/update/marketplace-remove, network-free list/info + install-completion parity); and the GitHub-only Device Flow generalized into a `GitAuthProvider` registry (public repos on any host clone unauthenticated, registered hosts run their flow host-keyed via `CredentialOps`, no-provider hosts fail clean, no-credential-leak gate covers every provider file). `npm run check` GREEN (2739 unit + 16 integration).
 
-**Next:** merge `features/json` into main through PR #251, then define the next
-milestone (`/gsd-new-milestone`). The live credential
+**Next:** define the next milestone (`/gsd-new-milestone`); json-output merged
+to main as PR #251 on 2026-10-11. The live credential
 challenge deferred in the v1.20 audit passed on 2026-09-30. Earlier context carried forward, all
 deliberate: **two** accepted direct-coverage shortfalls, down from seven
 (`bridges/commands/discover.ts` and `orchestrators/plugin/install-outcome.ts`, both pinned
@@ -637,12 +699,97 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active
 
-No milestone is active. All 36 json-output requirements are validated and
-archived in [milestones/json-output-REQUIREMENTS.md](milestones/json-output-REQUIREMENTS.md).
-The completed mcp-4 requirements are in
-[milestones/mcp-4-REQUIREMENTS.md](milestones/mcp-4-REQUIREMENTS.md).
+No milestone is active; start the next one with `/new-gsd-milestone`. The 97
+marketplace-features requirements are validated and archived in
+[milestones/marketplace-features-REQUIREMENTS.md](milestones/marketplace-features-REQUIREMENTS.md);
+the 36 json-output requirements in
+[milestones/json-output-REQUIREMENTS.md](milestones/json-output-REQUIREMENTS.md).
 
 ### Validated
+
+- ✓ GitHub sources run end to end against the loopback git host through
+  `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, and no tag is excluded from the
+  cucumber profile any more (433 scenarios, 48 `@github`). The five github.com
+  spellings resolve to one source; `owner/repo@ref`, `owner/repo#ref`, and a
+  URL `#ref` clone that ref, proven by a `stable` branch with its own content.
+  401 is pinned on url and github sources without a credential, with a stored
+  one, with a rejected one, and on update with the `git credential approve`
+  remedy for the host. Product fixes, test-first: the shorthand `#ref` parse
+  (D-MF-07), the remedy line on a github update, and a rejected stored
+  credential named as a rejection. The suite passes on Node 24 and Node 26 and
+  under a hostile git config — marketplace-features Phase 10, 2026-10-21
+  (ADD-11, UPD-12, SRC-02, SRC-03).
+
+- ✓ A loopback HTTPS git stand-in (`node:https` around `git http-backend`,
+  a run-time openssl certificate trusted only through `NODE_EXTRA_CA_CERTS`)
+  lives for each cucumber worker's run, resets before every scenario, and
+  serves every url row the verb phases wrote: `@url` left the `cucumber.json`
+  exclusion (373 scenarios). Pi, the stand-in, and fixture git run hermetic
+  (`GIT_CONFIG_NOSYSTEM=1`, sandbox global config, no inherited `GIT_*`). Url
+  scenarios pin 401 with and without a stored credential, 404, 5xx, dropped
+  connections on add and update, the verbatim URL, refused forms and offline
+  verbs that make no request (asserted from the request log), and git re-add.
+  Two product fixes, test-first: a url add at a missing `#ref` fails as
+  `source missing`, and a failed git add's child row id is the bare source —
+  marketplace-features Phase 9, 2026-10-21 (HOST-01..04, DRV-03, ADD-08..10,
+  ADD-12, RM-09, LS-05, INFO-07, UPD-11, SRC-01).
+
+- ✓ `marketplace help`, `help marketplace`, and every marketplace usage
+  rejection have scenarios that compare the whole `usage-info` or `usage-error`
+  payload: missing and surplus arguments, unknown flags, and bad or missing
+  `--scope` values in every position. The help now shows `[--local]` for
+  `add`, `remove`, `autoupdate`, and `noautoupdate`, and one signature table
+  builds the help and every marketplace usage line. An explicitly empty or
+  blank argument is rejected with `<Field> must not be empty.` on the
+  marketplace verbs and every plugin verb, and a blank half of
+  `<plugin>@<marketplace>` gets the invalid-reference message; all written
+  test-first — marketplace-features Phase 8, 2026-10-20 (USE-01..USE-08).
+
+- ✓ `marketplace autoupdate` and `noautoupdate` scenarios cover named and
+  nameless flips over both scopes, the changed-first row order, the off default
+  of a new marketplace for every source kind, the setting in `list` and `info`
+  across a new session, unscoped flips that change both scopes, and scoped and
+  unscoped misses. A local entry without a value now takes the value it inherits
+  (the base entry's value, or off), so a flip writes a local value only when the
+  value that applies changes, and an unscoped miss names no scope; both written
+  test-first — marketplace-features Phase 7, 2026-10-20 (AU-01..AU-09).
+
+- ✓ `marketplace update` scenarios cover single and bare updates, semantic
+  manifest comparison, autoupdate off and on with new-session versions, catalog
+  membership, ordered plugin-failure continuation, project-first bare order with
+  adjacent MCP notices, empty runs, scoped and Unicode misses, and invalid or
+  missing path sources. The C-10 fix re-reads a manifest added from outside
+  `.claude-plugin/`, written test-first — marketplace-features Phase 6,
+  2026-10-19 (UPD-01..UPD-10, UPD-13, UPD-14, FIX-01).
+
+- ✓ `marketplace info` scenarios cover directory and file source details,
+  project-first independent scope fan-out, scoped and unscoped misses, the
+  shipped invalid-manifest failed row, and manifest-order dependency
+  allowances. URL and GitHub examples are fully bound but remain runtime
+  deferred to their loopback phases — marketplace-features Phase 5, 2026-10-18
+  (INFO-01..INFO-06, INFO-08, INFO-09).
+
+- ✓ `marketplace remove`/`rm` and `marketplace list`/`ls` scenarios cover both
+  scopes, clean and partial cascades, scope precedence, persistence, filtering,
+  ordering, effective autoupdate values, aliases, and complete JSON results;
+  the four local source-kind rows pass while tagged remote rows await their
+  dedicated stand-ins — marketplace-features Phase 4, 2026-10-18
+  (RM-01..RM-08, LS-01..LS-04).
+
+- ✓ `marketplace add` scenarios: every add behavior, with multi-kind behaviors as
+  Outlines whose dir and file rows pass and whose `@url`/`@github` rows wait for the
+  stand-ins: the chosen and default scope, both scopes, duplicate name (keyed on the
+  manifest name, record left intact), source missing named as typed, invalid manifest
+  (malformed and schema-invalid), and the `--local` round trip in a new
+  `remove.feature`. Discussion found a `--local` declaration leak into
+  `claude-plugins.json` on the first-run migration, now FIX-02 in inserted Phase 3.1
+  — marketplace-features Phase 3, 2026-10-16 (ADD-01..ADD-07, ADD-13, ADD-14).
+
+- ✓ The cucumber suite's shared foundation: a driver that returns and schema-validates every
+  payload a command emits, `{home}` and `{scenario time}` run tokens compared in both directions,
+  kind-neutral publishing, adding, result and read-only config steps, the `@url`/`@github`
+  exclusion, and `npm run check:features` failing on an unused, undefined, or ambiguous step
+  over every row — marketplace-features Phase 1, 2026-10-15 (DRV-01, DRV-02, DRV-04).
 
 - ✓ Both LLM tools redact credentials in every text they return to the model,
   and neither lets a thrown error reach Pi; the phase 04 deferred item is
@@ -1056,7 +1203,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 - **Pi API:** `@earendil-works/pi-coding-agent` peer dependency, pinned to `>=1.0.0` (dev `^1.0.0`); the NFR-11 floor-pinning SHOULD is now satisfied
 - **File operations:** All disk mutations atomic (tmp + rename or atomic JSON write) -- NFR-1
 - **Recovery model:** No fix may require a Pi process restart; `Run /reload` must suffice (NFR-2). All operations must be safe to retry -- idempotent or fail-clean (NFR-3)
-- **Network policy (NFR-5, amended by url-source and by D-03-03):** Network is required only for git-source `marketplace add`/`update`, and for `install`/`update`/`reinstall` of git-source plugins **on cache miss only** -- warm sha-pinned cache operations stay offline. Resolving a dependency that carries a version constraint may additionally read that dependency's source repository tag list over the network, even when a cached or otherwise resolvable copy of that dependency already exists, because the constraint can demand a different tag than the cached one (D-03-03). `list`, `info`, `uninstall`, `marketplace remove`, and path-source operations MUST NOT touch the network
+- **Network policy (NFR-5, amended by url-source, by D-03-03, and by D-MF-04):** Network is required only for git-source `marketplace add`/`update`, and for `install`/`update`/`reinstall` of git-source plugins **on cache miss only** -- warm sha-pinned cache operations stay offline. Resolving a dependency that carries a version constraint may additionally read that dependency's source repository tag list over the network, even when a cached or otherwise resolvable copy of that dependency already exists, because the constraint can demand a different tag than the cached one (D-03-03). A project-scope install that needs a marketplace only the user scope records adds it to the project through the `marketplace add` code, so a git-source marketplace is cloned once from the network on that install (D-MF-04). `list`, `info`, `uninstall`, `marketplace remove`, and path-source operations MUST NOT touch the network
 - **Containment (NFR-10, re-anchored by url-source):** Refuse to write outside `<scopeRoot>/pi-claude-marketplace/`, `<scopeRoot>/agents/`, `<scopeRoot>/mcp-adapter.json`, or `<scopeRoot>/mcp.json` (kept for legacy entries); plugin roots must resolve inside their **owning clone root** (marketplace clone for `path` sources, `plugin-clones/<key>/` for git sources)
 - **Quality bar:** `npm run check` must stay green -- typecheck + ESLint + `fallow` (dead code, health, duplication) + Prettier + unit tests + integration tests (NFR-6)
 - **Output channel:** All user-visible messages MUST go through `ctx.ui.notify(message, severity)`; direct `process.stdout`/`process.stderr` writes forbidden in command/bridge code (IL-2). Single sanctioned `console.warn` is the load-time legacy migration save failure (IL-3). Amended by milestone json-output: in `json`/`rpc` modes the JSON strategy emits through `pi.appendEntry`; direct stdout/stderr writes stay forbidden
@@ -1187,6 +1334,13 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **D-06-01/06a/09 (mcp-4, Phase 6): status in Claude Code's words from the adapter's status events** — nine closed tokens, an explicit unknown, and `overridden by project scope` for a user row shadowed by a project install | Parity with Claude Code's `/mcp` wording; never import the adapter | ✓ Good |
 | **D-07-02/07/11 (mcp-4, Phase 7): operator-run live canary, adapter floor `>=5.2.0 <6`, 0.20.0 bump offered at PR time** | A real Pi 1.0 plus adapter run proves the whole path; 5.2.0 fixes GHSA-6qxp-vccf-f47h | ✓ Good; bump still to offer |
 | **D-08-02/05/07 (mcp-4, Phase 8): choices survive uninstall and disable; remedies must clear their cause; state maps are read by own key** — choices move to `_piClaudeMarketplace.serverChoices`; `reinstall` falls back to the recorded-sha clone; `constructor`/`__proto__` names behave like any other | The first audit's `tech_debt`: a remedy that cannot fix its cause breaks NFR-3, and inherited keys misread records | ✓ Good; ROOTKEY-01 carried |
+| **D-MF-01 (marketplace-features): `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` overrides the github.com clone base for GitHub sources** — read per call; one seam covers the clone URL, origin matching, update and the auth host (bound to the override host, so Device Flow never fires); unset is byte-identical; an invalid value is a typed error. Amended 2026-10-15 from `GITHUB_BASE_URL`, which the Terraform GitHub provider reads as an API URL | Lets the behavioral suite serve `owner/repo` sources from a loopback stand-in; Claude Code has no such override, so this is a recorded divergence that changes nothing for a user who never sets it | ✓ Good |
+| **D-MF-02 (marketplace-features): a plugin may not be declared in `claude-plugins.json` while its marketplace is declared only in `claude-plugins.local.json`** — install, enable, and disable refuse that write and suggest `--local` (FIX-03, user decision 2026-10-16); update and reinstall write no declaration, so they never meet the rule (Phase 3.3) | A shared file must not depend on a per-machine declaration a teammate cannot see; also makes the first-run migration's local exclusion safe | ✓ Good |
+| **D-MF-03 (marketplace-features): mutations are partitioned between a scope's base and local layers** — a command naming a marketplace or plugin acts on the base layer, or the local layer with `--local`, and fails when only the other layer declares the entry; the same marketplace or plugin may be declared in both layers and is cloned or installed once per scope; installing into a layer while the other declares the plugin only adds the declaration, and uninstalling from a layer while the other declares it only drops the declaration; a plugin's marketplace must be declared in the same layer, and a violation is a configuration error on load; plugin and marketplace entries merge field by field, local winning (LAYER-01..06, LAYER-08, user decisions 2026-10-16/17); a named uninstall of a dependency that plugins still need is refused, a recorded divergence from Claude Code, which uninstalls it and reports the dependents | Each layer stays self-consistent so the base layer never depends on per-machine state; Claude Code declares marketplaces per settings file (user, project, local) and removes one declaration per scope, but does not refuse a command whose layer lacks the entry, so the refusals are a project decision | ✓ Good |
+| **D-MF-04 (marketplace-features): each scope owns its marketplace records and clones** — a project-scope install that uses a user-scope marketplace declares that marketplace in the project config (desired state, the plugin's target layer) and gives the project a real record with its own clone, as if the marketplace had been added to the project scope; the install adds it through the same `marketplace add` code, so leftovers, cleanup, and record shape match an explicit add, and a git source is cloned once from the network (NFR-5 amended); marketplaces adopted for dependencies are treated the same; every marketplace verb then acts per scope (user decision 2026-10-16) | A user-scope remove must never break a project scope; extends D-29. Claude Code keeps one machine-global clone (`~/.claude/plugins/marketplaces/`), so the per-scope clone is a divergence licensed by this decision | ✓ Good |
+| **D-MF-05 (marketplace-features): unscoped marketplace removal selects project before user** — when both scopes hold the name it changes only the project copy and reports only that selected scope; when only user holds the name it falls back to user; scope before layer means a project-local-only match refuses flagless removal without falling through to the user base layer (user decisions 2026-10-18) | This is an explicit divergence from Claude Code 2.1.296, whose `claude plugin marketplace remove --help` and official command reference said on 2026-10-18 that omitting `--scope` removes the marketplace from every scope. Project-first selection preserves this project's independently owned per-scope records and clones, while scope-before-layer preserves D-MF-03's mutation boundary. | ✓ Good |
+| **D-MF-06 (marketplace-features): marketplace info composes scopes independently in project-first order** — an invalid manifest keeps the shipped failed `plugin-info` row without suppressing a healthy scope; an explicit scope miss reports that requested scope without fallback; `allowCrossMarketplaceDependenciesOn` preserves manifest declaration order (user decisions 2026-10-18) | Claude Code 2.1.296 has no marketplace `info` command, so this Pi-only surface follows the project's established notification grammar and independently owned scope model while retaining upstream source field concepts. | ✓ Good |
+| **D-MF-07 (marketplace-features): the `owner/repo` shorthand takes a ref after `#`, as after `@`** — the split matches Claude Code 2.1.296's shorthand split; a `#` that an `@` comes before stays part of the `@` ref (D-76-04); an empty ref after `#` adds `owner/repo` with no ref (user decision 2026-10-21) | Restores upstream parity for `#`. Claude Code refuses `owner/repo#`, so reading it as no ref is a recorded divergence that matches how the URL form drops an empty fragment. | ✓ Good |
 
 ## Evolution
 
@@ -1208,6 +1362,56 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
+
+_Last updated: 2026-10-21 after the marketplace-features milestone was completed and archived. 97/97 requirements validated; audit `tech_debt`, no blockers; carried items are in BACKLOG.md and WINDOWS.md. Prior updates follow._
+
+_Last updated: 2026-10-21 after marketplace-features Phase 10 completed. All
+5 success criteria and ADD-11, UPD-12, SRC-02, SRC-03 pass (5/5); the source-
+walk check of SC4 was dropped by D-07. The code review fix loop closed all 13
+findings (4 warnings, 9 info) except IN-04, deferred to BACKLOG SHORTREF-01
+(the shorthand splits at the last `@`, upstream at the first). Carry-overs:
+ROWID-01, WINDOWS #100-109, and the CI proof of the git host, read at PR time
+(D-08). Every milestone phase is complete; the milestone audit is next. Prior
+updates follow._
+
+_Last updated: 2026-10-21 after marketplace-features Phase 9 completed. All
+6 success criteria and its 14 requirements pass; both manual controls (the
+credential-isolation check and the LAYER-07 remove red proof) were reproduced
+by the verifier. The code review fix loop closed all 3 warnings in 2 passes
+(a github info row at a ref the fixture lacks, stale feature descriptions, and
+a git-host error path that could kill a worker); 11 info items stay open in
+09-REVIEW-DISPOSITION.md. CI portability of the stand-in (OpenSSL 3, Node 24)
+is first proven when the branch is pushed. Phase 10 (GitHub Source Kind and
+Suite Close) is next. Prior updates follow._
+
+_Last updated: 2026-10-20 after marketplace-features Phase 8 completed. All
+3 success criteria and USE-01..USE-08 pass (12/12 must-haves). The code
+review fix loop closed all 7 findings in 3 passes (2 warnings: a hand-copied
+verb list and a blank reference half; 5 info: comments and docs), with
+`open: 0`. Phase 9 (URL Source Kind and HTTPS Git Stand-In) is next. Prior
+updates follow._
+
+_Last updated: 2026-10-20 after marketplace-features Phase 7 completed. All
+4 success criteria and AU-01..AU-09 pass. The code review fix loop closed all
+5 warnings (missing scenarios on the inheritance matrix) and 2 of 3 info
+findings; IN-01 (an unreadable base config reported as `{invalid manifest}`)
+stays by design. Phase 8 (Marketplace Help and Usage Errors) is next. Prior
+updates follow._
+
+_Last updated: 2026-10-19 after marketplace-features Phase 6 completed. All
+5 success criteria and UPD-01..UPD-10 / UPD-13 / UPD-14 / FIX-01 pass. The
+code review left 19 findings open in `06-REVIEW-DISPOSITION.md`, including a
+test-strength blocker (CR-01) and unrepaired legacy path records (WR-02).
+Phase 7 (Marketplace Autoupdate) is next. Prior updates follow._
+
+_Last updated: 2026-10-18 after marketplace-features Phase 5 completed. All
+11 verification truths and INFO-01..INFO-06 / INFO-08 / INFO-09 pass; D-MF-06
+is validated. URL and GitHub rows remain binding-only until Phases 9 and 10.
+Phase 6 (Marketplace Update and C-10 Fix) is next. Prior updates follow._
+
+_Last updated: 2026-10-18 after marketplace-features Phase 4 completed. All
+17 verification truths and RM-01..RM-08 / LS-01..LS-04 pass; D-MF-05 is
+validated. Phase 5 (Marketplace Info) is next. Prior updates follow._
 
 _Last updated: 2026-10-11 after main (mcp-4 through PR #250, and PR #248) was merged
 into `features/json`. Both milestones' records are kept; json-output stays
@@ -1384,3 +1588,5 @@ _Last updated: 2026-10-11 after the json-output milestone: 9 phases and
 36/36 requirements complete, re-audit `tech_debt` with no blockers, archived
 under `.planning/milestones/json-output-*`. Merge of `features/json` and the
 next milestone remain._
+
+_Last updated: 2026-10-16 after marketplace-features Phase 3 (Marketplace Add)._

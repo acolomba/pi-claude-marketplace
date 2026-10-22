@@ -399,15 +399,14 @@ function wireBlock(mp: ResolvedMarketplace) {
 }
 
 /**
- * WIRE-04 / WIRE-06: one row. `id` is the row name, `@`, and the block name,
- * verbatim. `reasons` is always present. `missingPolicy` is resolve-internal
- * and has no wire field.
+ * WIRE-04 / WIRE-06: one row. `id` comes from `rowId`. `reasons` is always
+ * present. `missingPolicy` is resolve-internal and has no wire field.
  */
 function wireRow(row: ResolvedRow, mp: ResolvedMarketplace) {
   return {
     status: row.status,
     name: row.name,
-    id: `${row.name}@${mp.name}`,
+    id: rowId(row, mp),
     reasons: [...row.reasons],
     ...wireScope(row, mp.scope),
     ...wireVersion(row),
@@ -416,6 +415,23 @@ function wireRow(row: ResolvedRow, mp: ResolvedMarketplace) {
     ...(row.hint === undefined ? {} : { hint: row.hint }),
     ...(row.failure === undefined ? {} : wireFailure(row.failure)),
   };
+}
+
+/**
+ * WIRE-04 / WIRE-06: a row's id, in one of three forms. A row whose subject is
+ * a marketplace (ADD-10: the child row of a failed `marketplace add`) uses its
+ * name alone, because it names no plugin. A cascade member row is named by its
+ * `<plugin>@<marketplace>` key (RESV-06), which names a dependency's own
+ * marketplace, so a name that carries an `@` is already the id. Any other row
+ * joins its name, `@`, and the block name, verbatim. The name is the redacted
+ * one `resolveRows` gave the row.
+ */
+function rowId(row: ResolvedRow, mp: ResolvedMarketplace): string {
+  if ("marketplaceSubject" in row || row.name.includes("@")) {
+    return row.name;
+  }
+
+  return `${row.name}@${mp.name}`;
 }
 
 /** WIRE-04: a marketplace's details; `lastUpdatedAt` whenever the model has it. */

@@ -52,7 +52,7 @@ export const MARKETPLACE_ADD_FIXTURES: FixtureMap = {
     // ATTR-07 / D-48-A: the five marketplace-add precondition reasons render on
     // the marketplace subject via the MpFailed.reasons brace. Post-manifest
     // failures carry the derived name; pre-manifest failures carry the raw
-    // source string (A2). All route to `error` severity (failed-bearing).
+    // source string. All route to `error` severity (failed-bearing).
     "add-duplicate-name": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
@@ -179,6 +179,40 @@ export const MARKETPLACE_ADD_FIXTURES: FixtureMap = {
       },
     },
 
+    // GHB-01 / D-03: under the GitHub base override, a failed add names the
+    // fetched URL on a synthetic-child failed row (SNM-10).
+    "add-fetched-url": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Marketplace add",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "anthropics/claude-plugins-official",
+            scope: "project",
+            status: "failed",
+            severity: "error",
+            needsReload: false,
+            plugins: [
+              {
+                status: "failed",
+                name: "anthropics/claude-plugins-official",
+                reasons: ["source missing"],
+                cause: new Error("HTTP Error: 404", {
+                  cause: new Error(
+                    "fetched https://mirror.example/git/anthropics/claude-plugins-official.git",
+                  ),
+                }),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // D-76-08: a url-source `marketplace add` whose clone hits an HTTP auth
     // challenge (401/403). Truthful attribution -- `{authentication required}`,
     // NOT `{network unreachable}`. The reason + HTTP cause chain ride a
@@ -204,6 +238,40 @@ export const MARKETPLACE_ADD_FIXTURES: FixtureMap = {
                 name: "https://gitlab.com/acme/private-mp",
                 reasons: ["authentication required"],
                 cause: new Error("HTTP Error: 401 Unauthorized"),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // ADD-10: the git host answered the clone with an HTTP status outside the
+    // 401/403 auth challenge and the 404/410 absence answers, so the synthetic
+    // child carries `{network error}`. The first frame of the cause line names
+    // the status and the URL the clone fetched, as on `update-host-http-error`.
+    "add-host-http-error": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Marketplace add",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "https://git.example.com/acme/flaky-mp",
+            scope: "user",
+            status: "failed",
+            severity: "error",
+            needsReload: false,
+            plugins: [
+              {
+                status: "failed",
+                name: "https://git.example.com/acme/flaky-mp",
+                reasons: ["network error"],
+                cause: new Error("503 on https://git.example.com/acme/flaky-mp", {
+                  cause: new Error("HTTP Error: 503 Service Unavailable"),
+                }),
                 severity: "error",
                 needsReload: false,
               },

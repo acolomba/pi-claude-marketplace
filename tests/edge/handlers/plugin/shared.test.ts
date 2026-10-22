@@ -34,11 +34,13 @@ import { mock, verify, when } from "strong-mock";
 
 import {
   parseMapModelArgs,
+  parsePluginRef,
+  parsePluginTarget,
   parseRequiredPluginMarketplaceRef,
-  splitPluginMarketplaceRef,
   withParsedArgs,
   type ParsedMapModelArgs,
   type ParsedPluginMarketplaceRef,
+  type PluginCommandTarget,
   type PluginMarketplaceRef,
 } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/shared.ts";
 import { runWithAllLoaded, runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
@@ -52,55 +54,8 @@ const INSTALL_USAGE =
   "Usage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]";
 const UNINSTALL_USAGE =
   "Usage: /claude:plugin uninstall <plugin>@<marketplace> [--scope user|project] [--local]";
-
-describe("splitPluginMarketplaceRef", () => {
-  test("splits a ref at its interior separator into the plugin and the marketplace halves", () => {
-    // arrange
-    const ref = "alpha@official";
-
-    // act
-    const split = splitPluginMarketplaceRef(ref);
-
-    // assert
-    assert.deepStrictEqual(split, {
-      marketplace: "official",
-      plugin: "alpha",
-    } satisfies PluginMarketplaceRef);
-  });
-
-  test("keeps every separator after the first one inside the marketplace half", () => {
-    // arrange
-    const ref = "alpha@official@mirror";
-
-    // act
-    const split = splitPluginMarketplaceRef(ref);
-
-    // assert
-    assert.deepStrictEqual(split, {
-      marketplace: "official@mirror",
-      plugin: "alpha",
-    } satisfies PluginMarketplaceRef);
-  });
-
-  for (const { ref, shape } of [
-    { ref: "alpha", shape: "no separator" },
-    { ref: "@official", shape: "a leading separator" },
-    { ref: "alpha@", shape: "a trailing separator" },
-    { ref: "@", shape: "nothing but the separator" },
-    { ref: "", shape: "no characters at all" },
-  ]) {
-    test(`rejects a ref with ${shape}`, () => {
-      // arrange
-      const rejectedRef = ref;
-
-      // act
-      const split = splitPluginMarketplaceRef(rejectedRef);
-
-      // assert
-      assert.strictEqual(split, undefined);
-    });
-  }
-});
+const FETCH_USAGE =
+  "Usage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]";
 
 describe("parseMapModelArgs", () => {
   test("reports both downstream flags off and omits the scope member when none is supplied", () => {
@@ -359,6 +314,26 @@ describe("parseRequiredPluginMarketplaceRef", () => {
     verifyBoundary();
   });
 
+  test("names an explicitly empty ref as an empty plugin name (USE-07)", () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    const parsed = parseRequiredPluginMarketplaceRef(
+      '""',
+      ctx,
+      runWithNothingLoaded(),
+      UNINSTALL_USAGE,
+    );
+
+    // assert
+    assert.strictEqual(parsed, undefined);
+    assert.deepStrictEqual(notifications, [
+      { message: `Plugin name must not be empty.\n\n${UNINSTALL_USAGE}`, severity: "error" },
+    ]);
+    verifyBoundary();
+  });
+
   test("shows a parse diagnostic other than the usage string verbatim (MSG-NC-2)", () => {
     // arrange
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -407,6 +382,129 @@ describe("parseRequiredPluginMarketplaceRef", () => {
           message: `Invalid <plugin>@<marketplace> ref: "${malformedRef}".\n\nUsage: /claude:plugin uninstall <plugin>@<marketplace> [--scope user|project] [--local]`,
           severity: "error",
         },
+      ]);
+      verifyBoundary();
+    });
+  }
+});
+
+describe("parsePluginRef", () => {
+  for (const { acceptedRef, expectedRef, shape } of [
+    {
+      acceptedRef: "alpha@official",
+      expectedRef: { marketplace: "official", plugin: "alpha" },
+      shape: "at its interior separator",
+    },
+    {
+      acceptedRef: "alpha@official@mirror",
+      expectedRef: { marketplace: "official@mirror", plugin: "alpha" },
+      shape: "at its first separator and keeps every later one in the marketplace half",
+    },
+  ] satisfies readonly {
+    acceptedRef: string;
+    expectedRef: PluginMarketplaceRef;
+    shape: string;
+  }[]) {
+    test(`splits the ref "${acceptedRef}" ${shape} and notifies nothing`, () => {
+      // arrange
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+
+      // act
+      const ref = parsePluginRef(acceptedRef, ctx, runWithNothingLoaded(), INSTALL_USAGE);
+
+      // assert
+      assert.deepStrictEqual(ref, expectedRef);
+      assert.deepStrictEqual(notifications, []);
+      verifyBoundary();
+    });
+  }
+
+  for (const { rejectedRef, sentence } of [
+    { rejectedRef: "", sentence: "Plugin name must not be empty." },
+    { rejectedRef: "   ", sentence: "Plugin name must not be empty." },
+    { rejectedRef: "@", sentence: 'Invalid <plugin>@<marketplace> ref: "@".' },
+    { rejectedRef: "alpha@", sentence: 'Invalid <plugin>@<marketplace> ref: "alpha@".' },
+    { rejectedRef: "@official", sentence: 'Invalid <plugin>@<marketplace> ref: "@official".' },
+    { rejectedRef: " @official", sentence: 'Invalid <plugin>@<marketplace> ref: " @official".' },
+    { rejectedRef: "alpha@  ", sentence: 'Invalid <plugin>@<marketplace> ref: "alpha@  ".' },
+    { rejectedRef: "alpha", sentence: 'Invalid <plugin>@<marketplace> ref: "alpha".' },
+  ]) {
+    test(`rejects the ref "${rejectedRef}" with "${sentence}" (PI-1, USE-07)`, () => {
+      // arrange
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+      // act
+      const ref = parsePluginRef(rejectedRef, ctx, runWithNothingLoaded(), INSTALL_USAGE);
+
+      // assert
+      assert.strictEqual(ref, undefined);
+      assert.deepStrictEqual(notifications, [
+        { message: `${sentence}\n\n${INSTALL_USAGE}`, severity: "error" },
+      ]);
+      verifyBoundary();
+    });
+  }
+});
+
+describe("parsePluginTarget", () => {
+  for (const { expectedTarget, form, ref, supplied } of [
+    {
+      expectedTarget: { kind: "all" },
+      form: "every plugin",
+      ref: undefined,
+      supplied: "no target",
+    },
+    {
+      expectedTarget: { kind: "marketplace", marketplace: "mp" },
+      form: "one marketplace",
+      ref: "@mp",
+      supplied: 'the target "@mp"',
+    },
+    {
+      expectedTarget: { kind: "plugin", marketplace: "mp", plugin: "alpha" },
+      form: "one plugin",
+      ref: "alpha@mp",
+      supplied: 'the target "alpha@mp"',
+    },
+  ] satisfies readonly {
+    expectedTarget: PluginCommandTarget;
+    form: string;
+    ref: string | undefined;
+    supplied: string;
+  }[]) {
+    test(`maps ${supplied} to ${form} and notifies nothing (D-81-01)`, () => {
+      // arrange
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+
+      // act
+      const target = parsePluginTarget(ref, ctx, runWithNothingLoaded(), FETCH_USAGE);
+
+      // assert
+      assert.deepStrictEqual(target, expectedTarget);
+      assert.deepStrictEqual(notifications, []);
+      verifyBoundary();
+    });
+  }
+
+  for (const { rejectedRef, sentence } of [
+    { rejectedRef: "@", sentence: "Marketplace name must not be empty." },
+    { rejectedRef: "@   ", sentence: "Marketplace name must not be empty." },
+    { rejectedRef: "", sentence: "Plugin name must not be empty." },
+    { rejectedRef: "alpha@", sentence: 'Invalid <plugin>@<marketplace> ref: "alpha@".' },
+    { rejectedRef: "alpha@  ", sentence: 'Invalid <plugin>@<marketplace> ref: "alpha@  ".' },
+    { rejectedRef: " @official", sentence: 'Invalid <plugin>@<marketplace> ref: " @official".' },
+  ]) {
+    test(`rejects the target "${rejectedRef}" with "${sentence}" (PI-1, USE-07)`, () => {
+      // arrange
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+      // act
+      const target = parsePluginTarget(rejectedRef, ctx, runWithNothingLoaded(), FETCH_USAGE);
+
+      // assert
+      assert.strictEqual(target, undefined);
+      assert.deepStrictEqual(notifications, [
+        { message: `${sentence}\n\n${FETCH_USAGE}`, severity: "error" },
       ]);
       verifyBoundary();
     });

@@ -57,6 +57,8 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import {
   ConcurrentInstallError,
   DependencyCascadeError,
+  FetchedUrlCause,
+  InvalidGitHubBaseUrlError,
   PluginShapeError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
@@ -1515,6 +1517,152 @@ for (const { cause, installPlugin, order, title } of [
   });
 }
 
+test("GHB-03: an installer failing on an invalid base fails the whole import", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "install-invalid-base");
+  const { ctx, verifyBoundary } = createNotificationBoundary(0);
+  const invalid = new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme");
+  const attempted: string[] = [];
+
+  // act & assert
+  await assert.rejects(
+    () =>
+      importClaudeSettings({
+        ctx,
+        run: runWithNothingLoaded(),
+        cwd,
+        deps: collaborators({
+          addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+          installPlugin: (options) => {
+            attempted.push(options.plugin);
+            return Promise.reject(invalid);
+          },
+          loadSettings: () =>
+            Promise.resolve(
+              claudeSettings({
+                enabledPlugins: { "target@mp": true, "after@mp": true },
+                extraKnownMarketplaces: { mp: { directory: "./mp" } },
+              }),
+            ),
+          loadState: () => Promise.resolve(recordedState([])),
+        }),
+        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        selectedScopes: ["user"],
+      }),
+    (error: unknown) => {
+      assert.strictEqual(error, invalid);
+      return true;
+    },
+  );
+  assert.deepStrictEqual(attempted, ["target"]);
+  verifyBoundary();
+});
+
+test("GHB-01: a marketplace add failing under the GitHub base override names the fetched URL", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "add-fetched-url");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const error = Object.assign(new Error("HTTP Error: 404"), {
+    code: "HttpError",
+    data: { statusCode: 404 },
+    cause: new FetchedUrlCause("https://mirror.example/git/owner/mp.git"),
+  });
+  const expectedResult: ClaudeImportExecutionResult = {
+    ...emptyImportResult(),
+    marketplaceFailures: [
+      {
+        ...addFailed("mp", "user", "HTTP Error: 404"),
+        causeChain: new Error("fetched https://mirror.example/git/owner/mp.git"),
+      },
+    ],
+    warnings: [warned("p", "mp", "user", "marketplace-failed", "HTTP Error: 404")],
+  };
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () =>
+        Promise.resolve({
+          status: "failed",
+          reason: "source missing",
+          error,
+          cause: "HTTP Error: 404",
+        }),
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "p@mp": true },
+            extraKnownMarketplaces: { mp: { github: { repo: "owner/mp" } } },
+          }),
+        ),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, expectedResult);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some operations have failed.\n\n" +
+        "⊘ mp [user] (failed)\n" +
+        "  ⊘ mp (failed)\n" +
+        "    cause: HTTP Error: 404 -> fetched https://mirror.example/git/owner/mp.git\n\n" +
+        "Import: 2 failures",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("GHB-03: a marketplace add failing on an invalid base fails the whole import", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "add-invalid-base");
+  const { ctx, verifyBoundary } = createNotificationBoundary(0);
+  const invalid = new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme");
+  const attempted: string[] = [];
+
+  // act & assert
+  await assert.rejects(
+    () =>
+      importClaudeSettings({
+        ctx,
+        run: runWithNothingLoaded(),
+        cwd,
+        deps: collaborators({
+          addMarketplace: (options) => {
+            attempted.push(options.rawSource);
+            return Promise.reject(invalid);
+          },
+          loadSettings: () =>
+            Promise.resolve(
+              claudeSettings({
+                enabledPlugins: { "a@mp-a": true, "b@mp-b": true },
+                extraKnownMarketplaces: {
+                  "mp-a": { directory: "./a" },
+                  "mp-b": { directory: "./b" },
+                },
+              }),
+            ),
+          loadState: () => Promise.resolve(recordedState([])),
+        }),
+        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        selectedScopes: ["user"],
+      }),
+    (error: unknown) => {
+      assert.strictEqual(error, invalid);
+      return true;
+    },
+  );
+  assert.deepStrictEqual(attempted, ["./a"]);
+  verifyBoundary();
+});
+
 // A `DependencyCascadeError` thrown by a dependency cascade (closure,
 // constraint, or a dependency member's own ledger, RESV-06) must not read as
 // the generic `{not in manifest}` unexpected-failure row: the requesting
@@ -2478,7 +2626,7 @@ test("declares every added marketplace and installed plugin in the persisted con
   });
 
   // assert
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), expectedBytes);
   verifyBoundary();
 });
 
@@ -2488,7 +2636,7 @@ test("leaves the config byte-identical when the batch carries nothing to declare
   const { ctx, verifyBoundary } = createNotificationBoundary(1);
   await createScopeRoots(project);
   const seededBytes = `${JSON.stringify({ schemaVersion: 1, futureKey: "preserved" }, null, 2)}\n`;
-  await writeFile(project.configJsonPath, seededBytes, "utf8");
+  await writeFile(project.baseConfigJsonPath, seededBytes, "utf8");
 
   // act
   await importClaudeSettings({
@@ -2511,7 +2659,7 @@ test("leaves the config byte-identical when the batch carries nothing to declare
   });
 
   // assert
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), seededBytes);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), seededBytes);
   verifyBoundary();
 });
 
@@ -2550,7 +2698,7 @@ test("declares only the entries whose marketplace and install both succeeded", a
   });
 
   // assert
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), expectedBytes);
   verifyBoundary();
 });
 
@@ -2560,7 +2708,7 @@ test("abandons the post-pass for a scope whose config is invalid and still write
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
   await createScopeRoots(project, user);
   const invalidBytes = "{ not valid json";
-  await writeFile(user.configJsonPath, invalidBytes, "utf8");
+  await writeFile(user.baseConfigJsonPath, invalidBytes, "utf8");
   const expectedProjectBytes = configBytes({
     marketplaces: { "mp-project": { source: "owner/mp-project" } },
     plugins: { "p@mp-project": {} },
@@ -2603,8 +2751,8 @@ test("abandons the post-pass for a scope whose config is invalid and still write
 
   // assert
   assert.deepStrictEqual(importResult, expectedResult);
-  assert.strictEqual(await readFile(user.configJsonPath, "utf8"), invalidBytes);
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedProjectBytes);
+  assert.strictEqual(await readFile(user.baseConfigJsonPath, "utf8"), invalidBytes);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), expectedProjectBytes);
   assert.deepStrictEqual(notifications, [
     {
       message:
@@ -2662,7 +2810,70 @@ test("declares a missing config entry for a marketplace and plugin the state alr
   });
 
   // assert
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), expectedBytes);
+  verifyBoundary();
+});
+
+// LAYER-06: the second scope plan repairs the plugin the first plan skipped,
+// but by then a hand edit has removed the first plan's declarations, and the
+// second plan names no source for that plugin's marketplace. A repaired plugin
+// key without its marketplace would make the base layer fail its next load.
+test("LAYER-06: writes no repaired plugin key whose marketplace neither the batch nor the file declares", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "repair-no-marketplace");
+  const { ctx, verifyBoundary } = createNotificationBoundary(1);
+  const editedBytes = configBytes({ marketplaces: {}, plugins: {} });
+  const expectedBytes = configBytes({
+    marketplaces: { "mp-b": { source: "./b" } },
+    plugins: { "b@mp-b": {} },
+  });
+  const state = recordedState([
+    recordedMarketplace({
+      name: "mp-a",
+      plugins: ["a"],
+      scope: "project",
+      source: pathSource("./a"),
+    }),
+    recordedMarketplace({
+      name: "mp-b",
+      plugins: ["b"],
+      scope: "project",
+      source: pathSource("./b"),
+    }),
+  ]);
+  let stateReads = 0;
+
+  // act
+  await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      loadSettings: settingsSequence([
+        claudeSettings({
+          enabledPlugins: { "a@mp-a": true },
+          extraKnownMarketplaces: { "mp-a": { directory: "./a" } },
+        }),
+        claudeSettings({
+          enabledPlugins: { "b@mp-b": true },
+          extraKnownMarketplaces: { "mp-b": { directory: "./b" } },
+        }),
+      ]),
+      loadState: async () => {
+        stateReads += 1;
+        if (stateReads === 2) {
+          await writeFile(project.baseConfigJsonPath, editedBytes, "utf8");
+        }
+
+        return state;
+      },
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project", "project"],
+  });
+
+  // assert
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), expectedBytes);
   verifyBoundary();
 });
 
@@ -2675,7 +2886,7 @@ test("leaves an already-declared config byte-identical when every entry was a sk
     marketplaces: { mp: { source: "./mp" } },
     plugins: { "plugin@mp": {} },
   });
-  await writeFile(project.configJsonPath, seededBytes, "utf8");
+  await writeFile(project.baseConfigJsonPath, seededBytes, "utf8");
 
   // act
   await importClaudeSettings({
@@ -2707,7 +2918,7 @@ test("leaves an already-declared config byte-identical when every entry was a sk
   });
 
   // assert
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), seededBytes);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), seededBytes);
   verifyBoundary();
 });
 
@@ -2754,8 +2965,8 @@ test("repairs each scope's own config and never leaks the other scope's recorded
   });
 
   // assert
-  assert.strictEqual(await readFile(user.configJsonPath, "utf8"), expectedUserBytes);
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedProjectBytes);
+  assert.strictEqual(await readFile(user.baseConfigJsonPath, "utf8"), expectedUserBytes);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), expectedProjectBytes);
   verifyBoundary();
 });
 
@@ -2794,7 +3005,7 @@ test("skips a recorded marketplace the later scope plan never declared when buil
   });
 
   // assert
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), expectedBytes);
   assert.deepStrictEqual(notifications, [
     {
       message:
@@ -2861,7 +3072,7 @@ test("skips a repair for a marketplace the later scope plan never declared", asy
   });
 
   // assert
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), expectedBytes);
   assert.deepStrictEqual(notifications, [
     {
       message:
@@ -3073,7 +3284,7 @@ test("resolves every collaborator from production when the caller supplies no de
   // assert
   assert.deepStrictEqual(firstResult, expectedFirstResult);
   assert.deepStrictEqual(secondResult, expectedSecondResult);
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), expectedBytes);
   assert.deepStrictEqual(preToolUseRoutes(ownerRuntime), [
     {
       command: "echo imported",
@@ -3187,7 +3398,7 @@ test("D-04-07: promotes a recorded dependency the imported settings name instead
     (await loadState(project.extensionRoot)).marketplaces["fixture-mp"]?.plugins["dep"]?.provenance,
     "explicit",
   );
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), expectedBytes);
   // The promoted row carries the standalone promotion row's brace. It moved
   // nothing on disk, so it carries no reload hint where a fresh install's row
   // always does.
@@ -3310,7 +3521,7 @@ test("D-04-07: promotes a partially installed dependency the imported settings n
     (await loadState(project.extensionRoot)).marketplaces["fixture-mp"]?.plugins["dep"],
     { ...dependencyBefore, provenance: "explicit" },
   );
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), expectedBytes);
   assert.deepStrictEqual(notifications[2], {
     message:
       "● fixture-mp [project] (updated)\n" +
@@ -3424,7 +3635,7 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
     skillDir,
   });
   await writeUnder(
-    project.configJsonPath,
+    project.baseConfigJsonPath,
     configBytes({
       marketplaces: { "fixture-mp": { source: marketplaceRoot } },
       plugins: { "sample@fixture-mp": {}, "dep@fixture-mp": { enabled: false } },
@@ -3435,12 +3646,12 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
   assert.strictEqual(dependencyBefore?.provenance, "dependency");
   assert.strictEqual(dependencyBefore.enabled, false, "the seeded record is disabled");
   assert.strictEqual(
-    await readFile(project.configJsonPath, "utf8"),
+    await readFile(project.baseConfigJsonPath, "utf8"),
     configBytes({
       marketplaces: { "fixture-mp": { source: marketplaceRoot } },
       plugins: { "sample@fixture-mp": {}, "dep@fixture-mp": { enabled: false } },
     }),
-    "and declared the disable in the base file",
+    "and declared the disable in the base config",
   );
   await assert.rejects(stat(skillDir), { code: "ENOENT" }, "and took its skill off disk");
 
@@ -3469,7 +3680,7 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
     updatedAt: promoted.updatedAt,
   });
   await stat(skillDir);
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), expectedBytes);
   assert.deepStrictEqual(
     planReconcile((await loadMergedScopeConfig(project)).merged, stateAfter, "project"),
     emptyReconcilePlan("project"),
@@ -3485,16 +3696,16 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
   verifyBoundary();
 });
 
-test("D-04-07: declares a promoted dependency enabled in the local file when the disable verb declared it there", async (t) => {
+test("D-04-07: declares a promoted dependency enabled in the local config when the disable verb declared it there", async (t) => {
   // arrange
   // The first import's cascade records `dep`. `seedDisabledDependencyRecord`
   // then takes it off disk, and the local config file is seeded directly with
   // `{ enabled: false }` for it -- the state a `disable --local` declares in the
-  // local file, whose entry shadows the base entry wholesale (CFG-02). The
+  // local config, whose entry shadows the base entry wholesale (CFG-02). The
   // second import names `dep`: the promotion re-materializes the record, and
   // the post-pass writes the enable path's `{ enabled: true }` to the file
-  // that declares the key (D-103-16), leaving the base file the bare key. A
-  // stamp in the base file alone would leave the merged view disabled and
+  // that declares the key (D-103-16), leaving the base config the bare key. A
+  // stamp in the base config alone would leave the merged view disabled and
   // hand the reload the row asks for a disable to plan.
   const { cwd, project } = await createHermeticScopes(t, "promotes-disabled-dependency-local");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
@@ -3568,7 +3779,7 @@ test("D-04-07: declares a promoted dependency enabled in the local file when the
     skillDir,
   });
   await writeUnder(
-    project.configLocalJsonPath,
+    project.localConfigJsonPath,
     configBytes({ marketplaces: {}, plugins: { "dep@fixture-mp": { enabled: false } } }),
   );
   const dependencyBefore = (await loadState(project.extensionRoot)).marketplaces["fixture-mp"]
@@ -3576,9 +3787,9 @@ test("D-04-07: declares a promoted dependency enabled in the local file when the
   assert.strictEqual(dependencyBefore?.provenance, "dependency");
   assert.strictEqual(dependencyBefore.enabled, false, "the seeded record is disabled");
   assert.strictEqual(
-    await readFile(project.configLocalJsonPath, "utf8"),
+    await readFile(project.localConfigJsonPath, "utf8"),
     configBytes({ marketplaces: {}, plugins: { "dep@fixture-mp": { enabled: false } } }),
-    "and declared the disable in the local file",
+    "and declared the disable in the local config",
   );
   await assert.rejects(stat(skillDir), { code: "ENOENT" }, "and took its skill off disk");
 
@@ -3591,8 +3802,8 @@ test("D-04-07: declares a promoted dependency enabled in the local file when the
 
   // assert
   // The record is enabled again and promoted; the skill is back on
-  // disk; the local file carries the enable path's own declaration and the base
-  // file the bare key; the merged view reads the local entry; and the reload the
+  // disk; the local config carries the enable path's own declaration and the base
+  // config the bare key; the merged view reads the local entry; and the reload the
   // row asks for finds nothing to plan.
   assert.deepStrictEqual(secondResult, expectedSecondResult);
   const stateAfter = await loadState(project.extensionRoot);
@@ -3605,8 +3816,8 @@ test("D-04-07: declares a promoted dependency enabled in the local file when the
     updatedAt: promoted.updatedAt,
   });
   await stat(skillDir);
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBaseBytes);
-  assert.strictEqual(await readFile(project.configLocalJsonPath, "utf8"), expectedLocalBytes);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), expectedBaseBytes);
+  assert.strictEqual(await readFile(project.localConfigJsonPath, "utf8"), expectedLocalBytes);
   const { merged } = await loadMergedScopeConfig(project);
   assert.deepStrictEqual(merged.plugins["dep@fixture-mp"], {
     entry: { enabled: true },
@@ -3627,17 +3838,17 @@ test("D-04-07: declares a promoted dependency enabled in the local file when the
   verifyBoundary();
 });
 
-test("D-04-07: keeps the enabled declaration in the base file when the local file declares only other keys", async (t) => {
+test("D-04-07: keeps the enabled declaration in the base config when the local config declares only other keys", async (t) => {
   // arrange
   // A disabled dependency record, its `{ enabled: false }` in the base
-  // file, and a local file that declares a different key. The file that
-  // declares the promoted key takes the stamp (D-103-16); a local file that
+  // config, and a local config that declares a different key. The file that
+  // declares the promoted key takes the stamp (D-103-16); a local config that
   // merely exists does not.
   const { cwd, project } = await createHermeticScopes(t, "reenable-local-other-key");
   const { ctx, verifyBoundary } = createNotificationBoundary(1);
   await createScopeRoots(project);
   await writeFile(
-    project.configJsonPath,
+    project.baseConfigJsonPath,
     configBytes({
       marketplaces: { mp: { source: "./mp" } },
       plugins: { "plugin@mp": { enabled: false } },
@@ -3645,7 +3856,7 @@ test("D-04-07: keeps the enabled declaration in the base file when the local fil
     "utf8",
   );
   const localBytes = configBytes({ marketplaces: {}, plugins: { "other@mp": {} } });
-  await writeFile(project.configLocalJsonPath, localBytes, "utf8");
+  await writeFile(project.localConfigJsonPath, localBytes, "utf8");
   const expectedBaseBytes = configBytes({
     marketplaces: { mp: { source: "./mp" } },
     plugins: { "plugin@mp": { enabled: true } },
@@ -3686,8 +3897,8 @@ test("D-04-07: keeps the enabled declaration in the base file when the local fil
   // assert
   assert.deepStrictEqual(
     {
-      base: await readFile(project.configJsonPath, "utf8"),
-      local: await readFile(project.configLocalJsonPath, "utf8"),
+      base: await readFile(project.baseConfigJsonPath, "utf8"),
+      local: await readFile(project.localConfigJsonPath, "utf8"),
     },
     { base: expectedBaseBytes, local: localBytes },
   );
@@ -3769,7 +3980,7 @@ test("D-04-07: marks a dependency promoted at lock time by the same import's ear
     (await loadState(project.extensionRoot)).marketplaces["fixture-mp"]?.plugins["dep"]?.provenance,
     "explicit",
   );
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), expectedBytes);
   assert.deepStrictEqual(notifications, [
     {
       message:
@@ -3820,7 +4031,7 @@ test("declares a marketplace whose only plugin failed to install", async (t) => 
   });
 
   // assert
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), expectedBytes);
   verifyBoundary();
 });
 
@@ -3859,7 +4070,7 @@ test("declares a freshly installed plugin under a recorded marketplace that reco
   });
 
   // assert
-  assert.strictEqual(await readFile(project.configJsonPath, "utf8"), expectedBytes);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), expectedBytes);
   verifyBoundary();
 });
 

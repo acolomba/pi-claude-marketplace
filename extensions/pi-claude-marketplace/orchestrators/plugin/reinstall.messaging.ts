@@ -220,6 +220,7 @@ export function reinstalledRowFromOutcome(
  *  (2) typed `outcome.reasons` (set at the catch site via
  *  `reasonsFromTypedError(err)`) -> verbatim
  *  (3) substring parse on `notes` via `narrowReasons` -> legacy fallback
+ * A plain failed outcome that carries `cause` renders it as the cause line.
  *
  * Orphan-fold scope-bracket suppression: the row carries no `scope?`. The sole
  * caller groups outcomes by `(scope, marketplace)`, so a row's scope always
@@ -288,6 +289,7 @@ function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
         status: "failed",
         name: outcome.name,
         reasons,
+        ...(outcome.cause !== undefined && { cause: outcome.cause }),
         // D-03/D-06: a failed reinstall -> error, no reload.
         severity: "error",
         needsReload: false,

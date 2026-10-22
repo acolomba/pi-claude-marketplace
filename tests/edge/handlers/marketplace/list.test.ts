@@ -1,10 +1,8 @@
 // Owner for edge/handlers/marketplace/list.ts (MOD-09).
 //
-// The shim declares an EMPTY positional schema, so its arity contract is "zero
-// positionals accepted", and the interesting question is what the schema loop
-// does with a surplus token. That loop walks the SCHEMA, not the input, so a
-// surplus token is dropped and the listing still runs; two rows state the
-// outcome at one and at two surplus tokens. Nothing here is a rejection.
+// The shim declares an EMPTY positional schema, so it accepts zero positionals
+// and rejects a surplus token with `Too many arguments.` before any scope is
+// listed; two rows state that at one and at two surplus tokens.
 //
 // D-116-05 (O3) places this handler in Group C: `listMarketplaces` is reached by
 // direct import with no injection point, so the delegation is observed as one
@@ -49,8 +47,10 @@ import { makeMarketplaceListHandler } from "../../../../extensions/pi-claude-mar
 import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
-import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -219,41 +219,41 @@ test("reports an unrecognised scope value with the list usage block and never li
   verifyBoundary();
 });
 
-test("list --scope project keeps shared, local, and overridden entries with unchanged config bytes", async (t) => {
+test("list --scope project keeps base, local, and overridden entries with unchanged config bytes", async (t) => {
   // arrange
   const { cwd } = await createHermeticScope(t, "merged-config");
-  await seedMarketplace(cwd, "project", "shared");
+  await seedMarketplace(cwd, "project", "base");
   await seedMarketplace(cwd, "project", "local");
   await seedMarketplace(cwd, "project", "overlap");
   const locations = locationsFor("project", cwd);
-  const sharedBytes =
-    '{ "marketplaces": { "shared": { "source": "./shared", "autoupdate": true }, "overlap": { "source": "./overlap", "autoupdate": true } } }\n';
+  const baseBytes =
+    '{ "marketplaces": { "base": { "source": "./base", "autoupdate": true }, "overlap": { "source": "./overlap", "autoupdate": true } } }\n';
   const localBytes =
     '{ "marketplaces": { "local": { "source": "./local", "autoupdate": true }, "overlap": { "source": "./override", "autoupdate": false } } }\n';
-  await writeFile(locations.configJsonPath, sharedBytes);
-  await writeFile(locations.configLocalJsonPath, localBytes);
+  await writeFile(locations.baseConfigJsonPath, baseBytes);
+  await writeFile(locations.localConfigJsonPath, localBytes);
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
     value: cwd,
     reads: 1,
   });
-  const handler = makeMarketplaceListHandler();
+  const marketplaceListHandler = makeMarketplaceListHandler();
 
   // act
-  await handler("--scope project", ctx, runWithNothingLoaded());
+  await marketplaceListHandler("--scope project", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● shared [project] <autoupdate>\n\n● local [project] <autoupdate>\n\n● overlap [project]\n\nMarketplace list: 3 successes",
+        "● base [project] <autoupdate>\n\n● local [project] <autoupdate>\n\n● overlap [project]\n\nMarketplace list: 3 successes",
     },
   ]);
   assert.deepStrictEqual(
     [
-      await readFile(locations.configJsonPath, "utf8"),
-      await readFile(locations.configLocalJsonPath, "utf8"),
+      await readFile(locations.baseConfigJsonPath, "utf8"),
+      await readFile(locations.localConfigJsonPath, "utf8"),
     ],
-    [sharedBytes, localBytes],
+    [baseBytes, localBytes],
   );
   verifyBoundary();
 });
@@ -263,10 +263,10 @@ test("list rejects unknown flags before reading state", async (t) => {
   const { cwd } = await createHermeticScope(t, "unknown-flag");
   await seedBothScopes(cwd);
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-  const handler = makeMarketplaceListHandler();
+  const marketplaceListHandler = makeMarketplaceListHandler();
 
   // act
-  await handler("--bogus", ctx, runWithNothingLoaded());
+  await marketplaceListHandler("--bogus", ctx, runWithNothingLoaded());
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -310,7 +310,7 @@ for (const mode of ["json", "rpc"] as const) {
             severity: "error",
             needsReload: false,
             message,
-            usage: "Usage: /claude:plugin marketplace <list|ls> [--scope user|project]",
+            usage: USAGE,
           },
         },
       ]);

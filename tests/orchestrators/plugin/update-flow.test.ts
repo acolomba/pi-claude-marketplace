@@ -51,6 +51,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   CleanupContextError,
+  InvalidGitHubBaseUrlError,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
   PluginUpdateConcurrencyError,
@@ -63,6 +64,7 @@ import { createNotificationBoundary } from "../../edge/notification-boundary.ts"
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
 import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -392,7 +394,7 @@ function capturingUpdateSeam(gitOps: GitOps): {
       return resolvePluginPin({ ...args, gitOps });
     },
     materializePluginClone: (args) => {
-      captured.cloneAuth = args.auth;
+      captured.cloneAuth = args.resolveAuth();
       return materializePluginClone({ ...args, gitOps });
     },
     materializeOrRefreshPluginMirror: (args) => {
@@ -1496,6 +1498,81 @@ test("PUP-2 / AUTH-02: the github marketplace sync fetch carries the github.com 
   });
 });
 
+test("GHB-02: the GitHub marketplace sync under the override binds the override host", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-override-");
+    try {
+      // arrange
+      setGitHubBaseUrl(t, "https://mirror.example:8443/git");
+      await seedGithubMarketplaceForSync(cwd);
+      const { gitOps, state } = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const credentialOps = makeCredentialOps();
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "official" },
+        gitOps,
+        credentialOps,
+        deviceFlowHttp: makeDeviceFlowHttp(),
+        authMemo: new Map<string, AuthAttemptResult>(),
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        state.fetchCalls.map(({ auth }) => auth),
+        [{ kind: "stored-credential", credentialOps, host: "mirror.example:8443" }],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GHB-03: a GitHub marketplace sync on an invalid base fails the update command", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-invalid-base-");
+    try {
+      // arrange
+      setGitHubBaseUrl(t, "http://mirror.example");
+      await seedGithubMarketplaceForSync(cwd);
+      const { gitOps, state } = createGitOps();
+      const { ctx, verifyBoundary } = createNotificationBoundary(0);
+
+      // act & assert
+      await assert.rejects(
+        () =>
+          updatePlugins({
+            ctx,
+            run: runWithNothingLoaded(),
+            scope: "project",
+            cwd,
+            target: { kind: "marketplace", marketplace: "official" },
+            gitOps,
+            credentialOps: makeCredentialOps(),
+          }),
+        (error: unknown) => {
+          assert.deepStrictEqual(
+            error,
+            new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+          );
+          return true;
+        },
+      );
+      assert.deepStrictEqual(state.fetchCalls, []);
+      verifyBoundary();
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("PUP-2 / D-79-02: two marketplaces on one Device Flow host without a supplied authMemo request one device code", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-sync-memo-");
@@ -1700,6 +1777,49 @@ test("NFR-5: path-source marketplace update calls zero gitOps primitives", async
       assert.equal(state.forceUpdateRefCalls.length, 0);
       assert.equal(state.checkoutCalls.length, 0);
       assert.equal(state.resolveRefCalls.length, 0);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GHB-04: a path-only update ignores an invalid override", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-path-override-");
+    try {
+      // arrange
+      setGitHubBaseUrl(t, "http://mirror.example");
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const { ctx, run, notifications } = makeCtx();
+      const { gitOps, state } = createGitOps();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+        gitOps,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [{ message: "Plugin update: nothing to update" }]);
+      assert.deepStrictEqual(
+        {
+          fetch: state.fetchCalls.length,
+          forceUpdateRef: state.forceUpdateRefCalls.length,
+          checkout: state.checkoutCalls.length,
+          resolveRef: state.resolveRefCalls.length,
+        },
+        { fetch: 0, forceUpdateRef: 0, checkout: 0, resolveRef: 0 },
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -3592,6 +3712,7 @@ test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> (skippe
 // searches both scopes and finds nothing, so the fallback fires to locate the marketplace scope.
 test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback resolution; partition='skipped'", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-pup1-noscope-fallback-");
     try {
       await seedPathMarketplace({
@@ -3603,6 +3724,8 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -3612,6 +3735,7 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
+      // assert
       const body = notifications[0]?.message ?? "";
       // V2 byte form mirrors the pl@mp not-installed shape (PUP-1 above).
       // Plugin-row `[<scope>]` bracket suppressed by orphan-fold. D-01:
@@ -3627,10 +3751,11 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
   });
 });
 
-// ─── syncCloneOnce fetch failure -> notifyError (lines 207-213) ───────────────
+// ─── syncCloneOnce fetch failure -> notifyError ────────────────────────────────
 
 test("syncClone-fail: gitOps.fetch throws -> notifyError fired and updatePlugins returns early", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-syncfail-");
     try {
       const locations = locationsFor("project", cwd);
@@ -3657,12 +3782,13 @@ test("syncClone-fail: gitOps.fetch throws -> notifyError fired and updatePlugins
 
       const { ctx, run, notifications } = makeCtx();
       // fetchThrows causes refreshGitHubClone -> gitOps.fetch to throw,
-      // which propagates through syncCloneOnce and is caught at lines 207-213.
+      // which propagates through syncCloneOnce and is caught there.
       const { gitOps } = createGitOps({
         fetchThrows: new Error("network: connection refused"),
         remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
       });
 
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -3672,6 +3798,7 @@ test("syncClone-fail: gitOps.fetch throws -> notifyError fired and updatePlugins
         gitOps,
       });
 
+      // assert
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.severity, "error");
       assert.match(notifications[0]?.message ?? "", /network/);
@@ -3854,18 +3981,19 @@ for (const { title, makeFailure, reason } of [
 }
 
 // ─── invalid manifest -> loadMarketplaceManifest throws (covers preflightUpdate
-//     path where manifest load fails; lines 374-379 PLUGIN_ENTRY_VALIDATOR.Check
+//     path where manifest load fails; the PLUGIN_ENTRY_VALIDATOR.Check
 //     is structurally unreachable because MARKETPLACE_VALIDATOR embeds the same
 //     PLUGIN_ENTRY_SCHEMA -- the outer check always catches it first) ───────────
 
 test("manifest-load-fail: manifest with invalid entry name type -> notifyError on direct path", async () => {
   // When loadMarketplaceManifest throws (MARKETPLACE_VALIDATOR rejects an
   // entry with name=number), the error propagates out of preflightUpdate
-  // and is caught by the direct path's catch at lines 232-239 -> notifyError.
-  // Lines 374-379 (PLUGIN_ENTRY_VALIDATOR.Check) are structurally
+  // and is caught by the direct path's catch -> notifyError.
+  // The PLUGIN_ENTRY_VALIDATOR.Check is structurally
   // unreachable: MARKETPLACE_VALIDATOR uses the same PLUGIN_ENTRY_SCHEMA, so
   // any entry that passes MARKETPLACE_VALIDATOR also passes PLUGIN_ENTRY_VALIDATOR.
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-manifest-fail-");
     try {
       const seeded = await seedPathMarketplace({
@@ -3889,6 +4017,8 @@ test("manifest-load-fail: manifest with invalid entry name type -> notifyError o
       );
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -3897,6 +4027,7 @@ test("manifest-load-fail: manifest with invalid entry name type -> notifyError o
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
+      // assert
       // The direct path fires notifyError (not a skipped outcome, because
       // loadMarketplaceManifest threw before PLUGIN_ENTRY_VALIDATOR.Check).
       assert.equal(notifications.length, 1);
@@ -3925,6 +4056,7 @@ test("prepare-handles-fail: MCP collision aborts partial handles, outcome=failed
   // prepareStageMcpServers then reads the scoped mcp-adapter.json, finds the
   // key in `theirs`, and throws McpServerCollisionError.
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-prepare-mcp-fail-");
     try {
       const marketplaceRoot = path.join(cwd, "mp-src");
@@ -3962,26 +4094,31 @@ test("prepare-handles-fail: MCP collision aborts partial handles, outcome=failed
         }),
       );
 
-      // Cascade path: updateSinglePlugin must return failed (not throw).
       const prevCwd = process.cwd();
       process.chdir(cwd);
+
+      // act
+      // Cascade path: updateSinglePlugin must return failed (not throw).
+      let outcome: Awaited<ReturnType<typeof updateSinglePlugin>>;
       try {
-        const outcome = await updateSinglePlugin("hello", "mp", "project");
-        assert.equal(outcome.partition, "failed", `expected failed, got ${outcome.partition}`);
-        assert.equal(outcome.name, "hello");
-        assert.deepEqual(outcome.reasons, ["not in manifest"]);
-        assert.ok((outcome.notes ?? []).length > 0, "failed outcome must carry error notes");
-        for (const stagingRoot of [
-          locations.skillsStagingDir,
-          locations.commandsStagingDir,
-          locations.agentsStagingDir,
-        ]) {
-          if (await pathExists(stagingRoot)) {
-            assert.deepStrictEqual(await readdir(stagingRoot), []);
-          }
-        }
+        outcome = await updateSinglePlugin("hello", "mp", "project");
       } finally {
         process.chdir(prevCwd);
+      }
+
+      // assert
+      assert.equal(outcome.partition, "failed", `expected failed, got ${outcome.partition}`);
+      assert.equal(outcome.name, "hello");
+      assert.deepEqual(outcome.reasons, ["not in manifest"]);
+      assert.ok((outcome.notes ?? []).length > 0, "failed outcome must carry error notes");
+      for (const stagingRoot of [
+        locations.skillsStagingDir,
+        locations.commandsStagingDir,
+        locations.agentsStagingDir,
+      ]) {
+        if (await pathExists(stagingRoot)) {
+          assert.deepStrictEqual(await readdir(stagingRoot), []);
+        }
       }
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -3989,10 +4126,11 @@ test("prepare-handles-fail: MCP collision aborts partial handles, outcome=failed
   });
 });
 
-// ─── bare form: enumerates both user and project scopes (lines 816-819) ───────
+// ─── bare form: enumerates both user and project scopes ───────────────────────
 
 test("bare-form both-scopes: changed plugins render marketplace groups in presentation order", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-bare-both-");
     try {
       // Seed project scope with plugin alpha.
@@ -4049,8 +4187,10 @@ test("bare-form both-scopes: changed plugins render marketplace groups in presen
         },
       });
 
-      // bare form with no explicit scope -> enumerates both scopes (lines 816-819)
+      // bare form with no explicit scope -> enumerates both scopes
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -4059,6 +4199,7 @@ test("bare-form both-scopes: changed plugins render marketplace groups in presen
         // No scope -> bare form enumerates both user and project scopes
       });
 
+      // assert
       // Both scopes are enumerated and both changed rows survive grouping. Static
       // marketplace presentation is alphabetical; the plugin rows retain their
       // public enumeration order inside each group.
@@ -4314,6 +4455,7 @@ test("swapState-mp-gone: marketplace removed via gitOps.fetch side-effect -> gra
   // absent -> returns partition='skipped' (notes: marketplace not found).
   // No unhandled throw; no error notification.
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-swap-mp-gone-");
     try {
       const locations = locationsFor("project", cwd);
@@ -4355,6 +4497,8 @@ test("swapState-mp-gone: marketplace removed via gitOps.fetch side-effect -> gra
       };
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -4364,6 +4508,7 @@ test("swapState-mp-gone: marketplace removed via gitOps.fetch side-effect -> gra
         gitOps: mutatingGitOps,
       });
 
+      // assert
       // enumerateTargets ran with original state (hello in official).
       // syncCloneOnce ran, modified state.json to remove official.
       // preflightUpdate reads modified state -> marketplace not found ->
@@ -4379,7 +4524,7 @@ test("swapState-mp-gone: marketplace removed via gitOps.fetch side-effect -> gra
   });
 });
 
-// ─── swapStateRecord: plugin concurrently uninstalled (lines 511-514) ─────────
+// ─── swapStateRecord: plugin concurrently uninstalled ──────────────────────────
 
 test("swapState-plugin-gone: plugin removed from state between enumerateTargets and preflight -> error (not installed)", async () => {
   // gitOps.fetch removes the plugin record from state.json after
@@ -4477,6 +4622,7 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
   // fromVersion==0.0.10 matches state.version==0.0.10 -> no ST-9 error.
   // The update proceeds successfully.
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-swap-ver-advanced-");
     try {
       const locations = locationsFor("project", cwd);
@@ -4533,6 +4679,8 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
       };
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -4542,6 +4690,7 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
         gitOps: mutatingGitOps,
       });
 
+      // assert
       // No error: version advanced from 0.0.9 to 0.0.10, manifest has 1.0.0.
       // preflightUpdate uses 0.0.10 as fromVersion; withStateGuard finds 0.0.10
       // -> they match -> update proceeds.
@@ -4554,18 +4703,19 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
   });
 });
 
-// ─── phase 3a commands commit failure (lines 618-619) ─────────────────────────
+// ─── phase 3a commands commit failure ──────────────────────────────────────────
 
 test("phase3a-commands-fail: command target occupied by directory -> phase3aFailures includes commands", async () => {
   // commitPreparedCommands calls rename(stagedFile.md, targetFile.md).
   // On Linux, rename(regular_file, existing_directory) fails with EISDIR.
   // Pre-creating the command target path as a DIRECTORY forces this error.
-  // This exercises lines 618-619 in runThreePhaseUpdate's phase 3a aggregation.
+  // This exercises runThreePhaseUpdate's phase 3a aggregation.
   //
   // We also pre-create the skills target as a FILE (as in the PUP-6 test) to
   // force skills commit failure too, ensuring the phase3aFailures array has
   // multiple entries and the recovery hint includes the command failure.
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-phase3a-cmd-");
     try {
       const locations = locationsFor("project", cwd);
@@ -4589,6 +4739,8 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
       await mkdir(path.join(locations.promptsTargetDir, "hello:deploy.md"), { recursive: true });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -4597,6 +4749,7 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
+      // assert
       // Both skills and commands commit should fail; the aggregate recovery
       // hint should appear in the notifications.
       const allText = notifications.map((n) => n.message).join("\n");
@@ -4631,17 +4784,18 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
   });
 });
 
-// ─── phase 3a agents commit failure (lines 631-632) ──────────────────────────
+// ─── phase 3a agents commit failure ──────────────────────────────────────────
 
 test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAgents throws", async () => {
   // commitPreparedAgents calls rename(stagedFile.md, targetFile.md) for each
   // agent. On Linux, rename(regular_file, existing_directory) fails with
   // EISDIR. Pre-creating the agent target path as a DIRECTORY forces this.
-  // This exercises lines 631-632 in runThreePhaseUpdate's phase 3a aggregation.
+  // This exercises runThreePhaseUpdate's phase 3a aggregation.
   //
   // Also pre-create the skills obstacle so the test also verifies that
   // phase 3a continues across multiple bridge failures (D-03 discipline).
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-phase3a-agents-");
     try {
       const locations = locationsFor("project", cwd);
@@ -4668,6 +4822,8 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
       });
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -4676,6 +4832,7 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
+      // assert
       // Both skills and agents commit should fail; recovery hint appears.
       const allText = notifications.map((n) => n.message).join("\n");
       assert.match(
@@ -4995,104 +5152,10 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
   });
 });
 
-// ──────────────────────────────────────────────────────────────────────────
-// WB-01/WB-02 deep-equal short-circuit + --local
-// ──────────────────────────────────────────────────────────────────────────
-
-test("WB-01 / A7: CHANGED update with ABSENT entry writes the implicit declaration", async () => {
+test("RECON-05: an up-to-date named update leaves the base layer unchanged", async () => {
   await withHermeticHome(async () => {
-    const cwd = await createCaseDir("update-wb01-write-");
-    try {
-      const locations = locationsFor("project", cwd);
-      await seedPathMarketplace({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        marketplaceName: "mp",
-        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
-        installedVersions: { hello: "1.0.0" },
-      });
-
-      // Pre-existing config has NO entry for hello@mp -> write-back fires
-      // to add the implicit declaration.
-      const { ctx, run } = makeCtx();
-      await updatePlugins({
-        ctx,
-        run,
-        scope: "project",
-        cwd,
-        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-      });
-
-      const { loadConfig } =
-        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-      const cfg = await loadConfig(locations.configJsonPath);
-      assert.equal(cfg.status, "valid");
-      if (cfg.status === "valid") {
-        assert.deepEqual(cfg.config.plugins?.["hello@mp"], {});
-      }
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
-test("WB-01 / A7: changed update with a DIFFERENT existing entry writes back (preserves D-09 unknown keys)", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await createCaseDir("update-wb01-diff-");
-    try {
-      const locations = locationsFor("project", cwd);
-      await seedPathMarketplace({
-        cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        marketplaceName: "mp",
-        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
-        installedVersions: { hello: "1.0.0" },
-      });
-
-      // Seed the config with an existing entry that carries a forward-compat
-      // key. The patched shape `{...existing, ...{}} === existing`, so the
-      // deep-equal short-circuit fires and the file stays byte-stable.
-      const { saveConfig, loadConfig } =
-        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-      await saveConfig(
-        locations.configJsonPath,
-        {
-          schemaVersion: 1,
-          plugins: { "hello@mp": { enabled: false, futureKey: "x" } as never },
-        },
-        locations.scopeRoot,
-      );
-      const bytesBefore = await readFile(locations.configJsonPath);
-
-      const { ctx, run } = makeCtx();
-      await updatePlugins({
-        ctx,
-        run,
-        scope: "project",
-        cwd,
-        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-      });
-
-      const bytesAfter = await readFile(locations.configJsonPath);
-      assert.deepEqual(bytesAfter, bytesBefore, "RECON-05: no-op patch -> byte-stable config");
-
-      // Unknown forward-compat key preserved.
-      const after = await loadConfig(locations.configJsonPath);
-      assert.equal(after.status, "valid");
-      if (after.status === "valid") {
-        const entry = after.config.plugins?.["hello@mp"] as Record<string, unknown> | undefined;
-        assert.equal(entry?.enabled, false);
-        assert.equal(entry?.futureKey, "x");
-      }
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
-  });
-});
-
-test("WB-01: up-to-date update does NOT write the config (RECON-05 fixed-point preserved)", async () => {
-  await withHermeticHome(async () => {
-    const cwd = await createCaseDir("update-wb01-uptodate-");
+    // arrange
+    const cwd = await createCaseDir("update-uptodate-layer-");
     try {
       const locations = locationsFor("project", cwd);
       await seedPathMarketplace({
@@ -5103,17 +5166,18 @@ test("WB-01: up-to-date update does NOT write the config (RECON-05 fixed-point p
         installedVersions: { hello: "1.0.0" },
       });
 
-      // Seed config with the entry so we can assert it's untouched.
       const { saveConfig } =
         await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
       await saveConfig(
-        locations.configJsonPath,
+        locations.baseConfigJsonPath,
         { schemaVersion: 1, plugins: { "hello@mp": {} } },
         locations.scopeRoot,
       );
-      const bytesBefore = await readFile(locations.configJsonPath);
+      const bytesBefore = await readFile(locations.baseConfigJsonPath);
 
       const { ctx, run } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -5122,9 +5186,8 @@ test("WB-01: up-to-date update does NOT write the config (RECON-05 fixed-point p
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
-      // Up-to-date short-circuits BEFORE the 3-phase swap; finalizeUpdateRecord
-      // never runs, so no write-back fires.
-      const bytesAfter = await readFile(locations.configJsonPath);
+      // assert
+      const bytesAfter = await readFile(locations.baseConfigJsonPath);
       assert.deepEqual(bytesAfter, bytesBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -5132,31 +5195,544 @@ test("WB-01: up-to-date update does NOT write the config (RECON-05 fixed-point p
   });
 });
 
-test("WB-01: --local update targets the local file; base file untouched", async () => {
+/**
+ * Seed `hello` 1.0.0 installed in the project scope with 1.0.1 offered, and
+ * write each given layer's bytes; a layer without bytes stays absent.
+ */
+async function seedLayeredUpdate(
+  cwd: string,
+  layers: { readonly base?: string; readonly local?: string },
+  offeredVersion = "1.0.1",
+): Promise<ReturnType<typeof locationsFor>> {
+  const locations = locationsFor("project", cwd);
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: offeredVersion, hasSkill: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  if (layers.base !== undefined) {
+    await writeFile(locations.baseConfigJsonPath, layers.base, "utf8");
+  }
+
+  if (layers.local !== undefined) {
+    await writeFile(locations.localConfigJsonPath, layers.local, "utf8");
+  }
+
+  return locations;
+}
+
+/** The bytes of both layer configs and of `state.json`, with the state mtime. */
+async function updateFileSnapshot(locations: ReturnType<typeof locationsFor>): Promise<{
+  readonly base: string | undefined;
+  readonly local: string | undefined;
+  readonly state: string;
+  readonly stateMtimeMs: number;
+}> {
+  const readIfPresent = async (filePath: string): Promise<string | undefined> =>
+    (await pathExists(filePath)) ? readFile(filePath, "utf8") : undefined;
+  return {
+    base: await readIfPresent(locations.baseConfigJsonPath),
+    local: await readIfPresent(locations.localConfigJsonPath),
+    state: await readFile(locations.stateJsonPath, "utf8"),
+    stateMtimeMs: (await stat(locations.stateJsonPath)).mtimeMs,
+  };
+}
+
+/** The single failed-row notification a refused named update of `plugin` renders. */
+function refusedUpdateNotification(
+  plugin: string,
+  reason: string,
+  cause: string,
+): { readonly message: string; readonly severity: "error" } {
+  return {
+    message: [
+      "A plugin operation has failed.",
+      "",
+      "● mp [project]",
+      `  ⊘ ${plugin} (failed) {${reason}}`,
+      `    cause: ${cause}`,
+    ].join("\n"),
+    severity: "error",
+  };
+}
+
+const HELLO_DECLARED = JSON.stringify({ schemaVersion: 1, plugins: { "hello@mp": {} } });
+
+for (const { direction, layers, local, reason, cause } of [
+  {
+    direction: "without --local a plugin only the local layer declares",
+    layers: { local: HELLO_DECLARED },
+    local: false,
+    reason: "plugin in local layer only",
+    cause:
+      "The plugin hello@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
+  },
+  {
+    direction: "with --local a plugin only the base layer declares",
+    layers: { base: HELLO_DECLARED },
+    local: true,
+    reason: "plugin in base layer only",
+    cause:
+      "The plugin hello@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
+  },
+] as const) {
+  test(`LAYER-04: a named update ${direction} is refused and changes nothing`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("update-layer-refusal-");
+      try {
+        // arrange
+        const locations = await seedLayeredUpdate(cwd, layers);
+        const filesBefore = await updateFileSnapshot(locations);
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+          local,
+        });
+
+        // assert
+        assert.deepEqual(notifications, [refusedUpdateNotification("hello", reason, cause)]);
+        assert.deepEqual(await updateFileSnapshot(locations), filesBefore);
+        assert.equal(await recordedHelloVersion(locations), "1.0.0");
+        assert.equal(await pathExists(locations.skillsTargetDir), false);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+async function recordedHelloVersion(
+  locations: ReturnType<typeof locationsFor>,
+): Promise<string | undefined> {
+  return (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello?.version;
+}
+
+interface LayerConfig {
+  readonly bytes: string;
+  readonly mtimeMs: number;
+}
+
+async function readLayerConfig(filePath: string): Promise<LayerConfig | undefined> {
+  return (await pathExists(filePath))
+    ? { bytes: await readFile(filePath, "utf8"), mtimeMs: (await stat(filePath)).mtimeMs }
+    : undefined;
+}
+
+/** The bytes and mtime of each layer config; an absent file reads as undefined. */
+async function layerConfigs(locations: ReturnType<typeof locationsFor>): Promise<{
+  readonly base: LayerConfig | undefined;
+  readonly local: LayerConfig | undefined;
+}> {
+  return {
+    base: await readLayerConfig(locations.baseConfigJsonPath),
+    local: await readLayerConfig(locations.localConfigJsonPath),
+  };
+}
+
+test("LAYER-04: a changed named update of a plugin the base layer declares leaves both layer configs unchanged", async () => {
   await withHermeticHome(async () => {
-    const cwd = await createCaseDir("update-wb01-local-");
+    const cwd = await createCaseDir("update-declared-layers-");
     try {
-      const locations = locationsFor("project", cwd);
-      await seedPathMarketplace({
+      // arrange
+      const locations = await seedLayeredUpdate(cwd, {
+        base: JSON.stringify({ schemaVersion: 1, plugins: { "hello@mp": { futureKey: "x" } } }),
+        local: JSON.stringify({ schemaVersion: 1, plugins: { "other@mp": {} } }),
+      });
+      const layersBefore = await layerConfigs(locations);
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
         cwd,
-        marketplaceRoot: path.join(cwd, "mp-src"),
-        marketplaceName: "mp",
-        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
-        installedVersions: { hello: "1.0.0" },
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
-      // Seed BASE config with a forward-compat key; --local update MUST NOT
-      // touch it. Local file starts absent; the no-op patch keeps it absent.
-      const { saveConfig } =
-        await import("../../../extensions/pi-claude-marketplace/persistence/config-io.ts");
-      await saveConfig(
-        locations.configJsonPath,
-        { schemaVersion: 1, plugins: { "hello@mp": { futureKey: "x" } as never } },
-        locations.scopeRoot,
-      );
-      const baseBytesBefore = await readFile(locations.configJsonPath);
+      // assert
+      assert.equal(await recordedHelloVersion(locations), "1.0.1");
+      assert.deepEqual(await layerConfigs(locations), layersBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
+test("LAYER-08: a named update of a dependency updates it and writes no layer config", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-dependency-");
+    try {
+      // arrange
+      const locations = await seedLayeredUpdate(cwd, {});
+      const seededState = await loadState(locations.extensionRoot);
+      const seededRecord = seededState.marketplaces.mp?.plugins.hello;
+      assert.ok(seededRecord !== undefined);
+      seededRecord.provenance = "dependency";
+      await saveState(locations.extensionRoot, seededState);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.equal(await recordedHelloVersion(locations), "1.0.1");
+      assert.deepEqual(await layerConfigs(locations), { base: undefined, local: undefined });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/**
+ * Seed `hello` and `other` 1.0.0 installed in the project scope with 1.0.1
+ * offered, and write `localBytes` into the local layer.
+ */
+async function seedTwoPluginUpdate(
+  cwd: string,
+  localBytes: string,
+): Promise<ReturnType<typeof locationsFor>> {
+  const locations = locationsFor("project", cwd);
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: {
+      hello: { version: "1.0.1", hasSkill: true },
+      other: { version: "1.0.1", hasSkill: true },
+    },
+    installedVersions: { hello: "1.0.0", other: "1.0.0" },
+  });
+  await writeFile(locations.localConfigJsonPath, localBytes, "utf8");
+  return locations;
+}
+
+async function recordedVersions(
+  locations: ReturnType<typeof locationsFor>,
+): Promise<Record<string, string | undefined>> {
+  const plugins = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins;
+  return { hello: plugins?.hello?.version, other: plugins?.other?.version };
+}
+
+test("LAYER-04: a bare update writes no layer config for any record", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-bare-no-layer-");
+    try {
+      // arrange
+      const locations = await seedTwoPluginUpdate(cwd, HELLO_DECLARED);
+      const layersBefore = await layerConfigs(locations);
       const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({ ctx, run, scope: "project", cwd, target: { kind: "all" } });
+
+      // assert
+      assert.deepEqual(await recordedVersions(locations), { hello: "1.0.1", other: "1.0.1" });
+      assert.deepEqual(await layerConfigs(locations), layersBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const { form, target } of [
+  { form: "bare", target: { kind: "all" } },
+  { form: "@marketplace", target: { kind: "marketplace", marketplace: "mp" } },
+] as const) {
+  test(`LAYER-04: the ${form} update with --local updates only the plugins the local layer declares`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("update-nameless-local-");
+      try {
+        // arrange
+        const locations = await seedTwoPluginUpdate(cwd, HELLO_DECLARED);
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        await updatePlugins({ ctx, run, scope: "project", cwd, target, local: true });
+
+        // assert
+        assert.deepEqual(await recordedVersions(locations), { hello: "1.0.1", other: "1.0.0" });
+        assert.deepEqual(notifications, [
+          {
+            message:
+              "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n\nPlugin update: 1 updated\n\n/reload to pick up changes",
+          },
+        ]);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+
+  test(`LAYER-04: the ${form} update without --local updates every installed plugin of the scope`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("update-nameless-flagless-");
+      try {
+        // arrange
+        const locations = await seedTwoPluginUpdate(cwd, HELLO_DECLARED);
+        const { ctx, run } = makeCtx();
+
+        // act
+        await updatePlugins({ ctx, run, scope: "project", cwd, target });
+
+        // assert
+        assert.deepEqual(await recordedVersions(locations), { hello: "1.0.1", other: "1.0.1" });
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+for (const { form, target, rowName, blockName } of [
+  { form: "bare", target: { kind: "all" }, rowName: "(update)", blockName: "(update)" },
+  {
+    form: "@marketplace",
+    target: { kind: "marketplace", marketplace: "mp" },
+    rowName: "(mp)",
+    blockName: "mp",
+  },
+] as const) {
+  test(`CFG-03: the ${form} update with --local fails naming an unreadable local layer and touches no plugin`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("update-nameless-local-invalid-");
+      try {
+        // arrange
+        const locations = await seedTwoPluginUpdate(cwd, "{ not json");
+        const filesBefore = await updateFileSnapshot(locations);
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        await updatePlugins({ ctx, run, scope: "project", cwd, target, local: true });
+
+        // assert
+        assert.deepEqual(notifications, [
+          {
+            message: [
+              "A plugin operation has failed.",
+              "",
+              `● ${blockName} [project]`,
+              `  ⊘ ${rowName} (failed) {invalid manifest}`,
+              '    cause: Config file "claude-plugins.local.json" failed schema validation.',
+              "",
+              "Plugin update: 1 failure",
+            ].join("\n"),
+            severity: "error",
+          },
+        ]);
+        assert.deepEqual(await updateFileSnapshot(locations), filesBefore);
+        assert.deepEqual(await recordedVersions(locations), { hello: "1.0.0", other: "1.0.0" });
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+/**
+ * Install `hello`, `other`, and `gone` from marketplace `mp` in the project
+ * scope, with `gone` no longer in the marketplace, and declare `hello` and
+ * `gone` in the local layer.
+ */
+async function seedUnreadableLocalDeclaration(
+  cwd: string,
+): Promise<ReturnType<typeof locationsFor>> {
+  const locations = locationsFor("project", cwd);
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: {
+      hello: { version: "1.0.1", hasSkill: true },
+      other: { version: "1.0.1", hasSkill: true },
+    },
+    installedVersions: { hello: "1.0.0", other: "1.0.0", gone: "1.0.0" },
+  });
+  await writeFile(
+    locations.localConfigJsonPath,
+    JSON.stringify({ schemaVersion: 1, plugins: { "hello@mp": {}, "gone@mp": {} } }),
+    "utf8",
+  );
+  return locations;
+}
+
+for (const { form, target, rowName, blockName } of [
+  { form: "bare", target: { kind: "all" }, rowName: "(update)", blockName: "(update)" },
+  {
+    form: "@marketplace",
+    target: { kind: "marketplace", marketplace: "mp" },
+    rowName: "(mp)",
+    blockName: "mp",
+  },
+] as const) {
+  test(`LAYER-04: the ${form} update with --local fails as unreadable when a local plugin's dependencies cannot be read, and changes nothing`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("update-nameless-local-unreadable-");
+      try {
+        // arrange
+        const locations = await seedUnreadableLocalDeclaration(cwd);
+        const filesBefore = await updateFileSnapshot(locations);
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        await updatePlugins({ ctx, run, scope: "project", cwd, target, local: true });
+
+        // assert
+        assert.deepEqual(notifications, [
+          {
+            message: [
+              "A plugin operation has failed.",
+              "",
+              `● ${blockName} [project]`,
+              `  ⊘ ${rowName} (failed) {unreadable}`,
+              "    cause: cannot read the dependencies of gone@mp: not declared by its marketplace",
+              "",
+              "Plugin update: 1 failure",
+            ].join("\n"),
+            severity: "error",
+          },
+        ]);
+        assert.deepEqual(await updateFileSnapshot(locations), filesBefore);
+        assert.deepEqual(await recordedVersions(locations), { hello: "1.0.0", other: "1.0.0" });
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("FIX-03: a bare update under a marketplace only the local config declares updates and writes no declaration", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-local-mp-");
+    try {
+      // arrange
+      const localBytes = JSON.stringify({
+        schemaVersion: 1,
+        marketplaces: { mp: { source: path.join(cwd, "mp-src") } },
+      });
+      const locations = await seedLayeredUpdate(cwd, { local: localBytes });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({ ctx, run, scope: "project", cwd, target: { kind: "all" } });
+
+      // assert
+      assert.equal(await recordedHelloVersion(locations), "1.0.1");
+      assert.equal(await pathExists(locations.baseConfigJsonPath), false);
+      assert.equal(await readFile(locations.localConfigJsonPath, "utf8"), localBytes);
+      assert.deepEqual(
+        notifications.filter((n) => n.message.includes("(failed)")),
+        [],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("CFG-03: a named flagless update whose local layer cannot be read is refused before the preflight", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-local-invalid-");
+    try {
+      // arrange
+      const locations = await seedLayeredUpdate(cwd, { local: "{ not json" });
+      const filesBefore = await updateFileSnapshot(locations);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepEqual(notifications, [
+        refusedUpdateNotification(
+          "hello",
+          "invalid manifest",
+          'Config file "claude-plugins.local.json" failed schema validation.',
+        ),
+      ]);
+      assert.deepEqual(await updateFileSnapshot(locations), filesBefore);
+      assert.equal(await recordedHelloVersion(locations), "1.0.0");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+function localOnlyMarketplaceBytes(cwd: string): string {
+  return JSON.stringify({
+    schemaVersion: 1,
+    marketplaces: { mp: { source: path.join(cwd, "mp-src") } },
+  });
+}
+
+test("LAYER-08: a named update of a plugin no layer declares, under a marketplace only the local layer declares, updates it", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-local-mp-named-");
+    try {
+      // arrange
+      const localBytes = localOnlyMarketplaceBytes(cwd);
+      const locations = await seedLayeredUpdate(cwd, { local: localBytes });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.equal(await recordedHelloVersion(locations), "1.0.1");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("LAYER-04: a named update with --local under a marketplace only the local layer declares updates the plugin and writes no layer config", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-local-mp-flag-");
+    try {
+      // arrange
+      const locations = await seedLayeredUpdate(cwd, { local: localOnlyMarketplaceBytes(cwd) });
+      const layersBefore = await layerConfigs(locations);
+      const { ctx, run } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -5166,9 +5742,40 @@ test("WB-01: --local update targets the local file; base file untouched", async 
         local: true,
       });
 
-      // Base bytes UNCHANGED (--local NEVER touches the base file).
-      const baseBytesAfter = await readFile(locations.configJsonPath);
-      assert.deepEqual(baseBytesAfter, baseBytesBefore);
+      // assert
+      assert.equal(await recordedHelloVersion(locations), "1.0.1");
+      assert.deepEqual(await layerConfigs(locations), layersBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("LAYER-04: an up-to-date named update of a plugin only the local layer declares is refused before the version check", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-local-key-current-");
+    try {
+      // arrange
+      await seedLayeredUpdate(cwd, { local: HELLO_DECLARED }, "1.0.0");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepEqual(notifications, [
+        refusedUpdateNotification(
+          "hello",
+          "plugin in local layer only",
+          "The plugin hello@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
+        ),
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -6314,6 +6921,7 @@ test("D-99-05a: an unsupported kind gained under an unchanged version degrades t
 
 test("D-99-05a counter-case: an unsupported kind LOST under an unchanged version promotes the refreshed record", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-d9905a-promote-");
     try {
       const locations = locationsFor("project", cwd);
@@ -6333,6 +6941,8 @@ test("D-99-05a counter-case: an unsupported kind LOST under an unchanged version
       await saveState(locations.extensionRoot, state);
 
       const { ctx, run, notifications } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -6341,6 +6951,7 @@ test("D-99-05a counter-case: an unsupported kind LOST under an unchanged version
         target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
       });
 
+      // assert
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.message, "● mp [project]\n  ⊘ hello (skipped) {up-to-date}");
 
@@ -6361,28 +6972,29 @@ test("D-99-05a counter-case: an unsupported kind LOST under an unchanged version
   });
 });
 
-// ─── S5: invalid config write-back surfaces a named warning ────────────────
+// ─── CFG-03: an unreadable target layer refuses a named update ─────────────
 
-for (const { title, local } of [
-  { title: "base config", local: false },
-  { title: "local config", local: true },
+for (const { layer, layers, local, basename } of [
+  {
+    layer: "base",
+    layers: { base: "{ not json " },
+    local: false,
+    basename: "claude-plugins.json",
+  },
+  {
+    layer: "local",
+    layers: { local: "{ not json " },
+    local: true,
+    basename: "claude-plugins.local.json",
+  },
 ] as const) {
-  test(`S5: update success + invalid ${title} write-back names only its basename`, async () => {
+  test(`CFG-03: a named update whose ${layer} target layer cannot be read is refused naming only ${basename}`, async () => {
     await withHermeticHome(async () => {
-      const cwd = await createCaseDir("update-s5-");
+      const cwd = await createCaseDir("update-cfg03-");
       try {
         // arrange
-        const locations = locationsFor("project", cwd);
-        await seedPathMarketplace({
-          cwd,
-          marketplaceRoot: path.join(cwd, "mp-src"),
-          marketplaceName: "mp",
-          manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
-          installedVersions: { hello: "1.0.0" },
-        });
-        const configPath = local ? locations.configLocalJsonPath : locations.configJsonPath;
-        const configBasename = local ? "claude-plugins.local.json" : "claude-plugins.json";
-        await writeFile(configPath, "{ not json ", "utf8");
+        const locations = await seedLayeredUpdate(cwd, layers, "1.1.0");
+        const filesBefore = await updateFileSnapshot(locations);
         const { ctx, run, notifications } = makeCtx();
 
         // act
@@ -6392,21 +7004,19 @@ for (const { title, local } of [
           scope: "project",
           cwd,
           target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-          ...(local && { local: true }),
+          local,
         });
 
         // assert
-        assert.ok(
-          notifications.length >= 2,
-          `expected >= 2 notifications (success + S5 warning); got ${notifications.length}: ${notifications
-            .map((n) => n.message)
-            .join("\n---\n")}`,
-        );
-        const allText = notifications.map((n) => n.message).join("\n");
-        assert.match(allText, /\(updated\)/, "success row still emitted");
-        assert.match(allText, /\(failed\) \{invalid manifest\}/, "S5 warning row emitted");
-        assert.ok(allText.includes(configBasename), allText);
-        assert.ok(!allText.includes(configPath), `absolute config path must not leak: ${allText}`);
+        assert.deepEqual(notifications, [
+          refusedUpdateNotification(
+            "hello",
+            "invalid manifest",
+            `Config file "${basename}" failed schema validation.`,
+          ),
+        ]);
+        assert.deepEqual(await updateFileSnapshot(locations), filesBefore);
+        assert.equal(await recordedHelloVersion(locations), "1.0.0");
       } finally {
         await rm(cwd, { recursive: true, force: true });
       }
@@ -7268,6 +7878,7 @@ async function seedGitPluginMarketplace(opts: {
 
 test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded -> swap; resolvedSha + shaVersion updated, old clone GC'd, new clone present", async () => {
   await withHermeticHome(async () => {
+    // arrange
     const cwd = await createCaseDir("update-git-pinned-swap-");
     try {
       const cloneUrl = "https://example.com/org/repo";
@@ -7288,6 +7899,8 @@ test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded ->
 
       const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const { ctx, run } = makeCtx();
+
+      // act
       await updatePlugins({
         ctx,
         run,
@@ -7297,6 +7910,7 @@ test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded ->
         cloneCacheSeam: seamWith(gitOps),
       });
 
+      // assert
       const locations = locationsFor("project", cwd);
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
@@ -7327,6 +7941,89 @@ test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded ->
     }
   });
 });
+
+const GP_DECLARED = JSON.stringify({ schemaVersion: 1, plugins: { "gp@mp": {} } });
+
+for (const { direction, file, local, reason, cause } of [
+  {
+    direction: "without --local a plugin only the local layer declares",
+    file: "localConfigJsonPath",
+    local: false,
+    reason: "plugin in local layer only",
+    cause:
+      "The plugin gp@mp is declared only in the local config (claude-plugins.local.json). Run the command again with --local.",
+  },
+  {
+    direction: "with --local a plugin only the base layer declares",
+    file: "baseConfigJsonPath",
+    local: true,
+    reason: "plugin in base layer only",
+    cause:
+      "The plugin gp@mp is declared only in the base config (claude-plugins.json). Run the command again without --local.",
+  },
+] as const) {
+  test(`NFR-5: a refused named git-source update ${direction} builds no credentials and clones, fetches, and lists nothing`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("update-layer-refusal-git-");
+      try {
+        // arrange
+        const cloneUrl = "https://example.com/org/repo";
+        const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
+        await seedGitPluginMarketplace({
+          cwd,
+          cloneUrl,
+          fixtureRepoDir,
+          versionTag: "9.9.9",
+          entrySource: { source: "url", url: cloneUrl, sha: SHA_NEW },
+          recordedSha: SHA_OLD,
+        });
+        const locations = locationsFor("project", cwd);
+        await writeFile(locations[file], GP_DECLARED, "utf8");
+        const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+        const { gitOps, state: gitState } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+        const credentials = createCredentialOpsFake({ boundary: "memory" });
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+          local,
+          gitOps,
+          credentialOps: credentials.credentialOps,
+          cloneCacheSeam: seamWith(gitOps),
+        });
+
+        // assert
+        assert.deepEqual(notifications, [refusedUpdateNotification("gp", reason, cause)]);
+        assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
+        assert.equal(
+          await pathExists(await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA_NEW))),
+          false,
+        );
+        assert.deepEqual(
+          {
+            clone: gitState.cloneCalls,
+            fetch: gitState.fetchCalls,
+            resolveRemoteRef: gitState.resolveRemoteRefCalls,
+            credentials: credentials.calls,
+          },
+          {
+            clone: [],
+            fetch: [],
+            resolveRemoteRef: [],
+            credentials: { fill: [], approve: [], reject: [] },
+          },
+        );
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
 
 test("a post-commit clone cleanup failure preserves the successful update", async () => {
   await withHermeticHome(async () => {
@@ -8670,8 +9367,9 @@ test("plugin update authentication: a run without a supplied authMemo shares one
       const clonePullSeam: UpdateCloneCacheSeam = {
         ...seam,
         materializePluginClone: async (args) => {
-          if (args.auth?.kind === "device-flow") {
-            await args.auth.onAuthRequired();
+          const auth = args.resolveAuth();
+          if (auth.kind === "device-flow") {
+            await auth.onAuthRequired();
           }
 
           return seam.materializePluginClone(args);
@@ -8791,6 +9489,85 @@ test("updateSinglePlugin keeps a recorded provider SHA offline without an auth c
       constraint: undefined,
       declaresWorkflows: false,
     });
+  });
+});
+
+test("GHB-03: a GitHub-source plugin update on an invalid base fails the update command", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-plugin-invalid-base-");
+    try {
+      // arrange
+      await seedGitUpdateMarketplace({
+        cwd,
+        cloneUrl: "https://github.com/org/repo",
+        entrySource: { source: "github", repo: "org/repo" },
+        recordedSha: SHA_OLD,
+        versionTag: "9.9.9",
+      });
+      setGitHubBaseUrl(t, "http://mirror.example");
+      const { gitOps } = createGitOps({ fixtureSourceDir: path.join(cwd, "repo-fixture") });
+      const { seam, captured } = capturingUpdateSeam(gitOps);
+      const { ctx, verifyBoundary } = createNotificationBoundary(0);
+
+      // act & assert
+      await assert.rejects(
+        () =>
+          updatePlugins({
+            ctx,
+            run: runWithNothingLoaded(),
+            scope: "project",
+            cwd,
+            target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+            cloneCacheSeam: seam,
+            credentialOps: makeCredentialOps(),
+            deviceFlowHttp: makeDeviceFlowHttp(),
+          }),
+        (error: unknown) => {
+          assert.deepStrictEqual(
+            error,
+            new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+          );
+          return true;
+        },
+      );
+      assert.deepStrictEqual(captured, { pinAuth: undefined, cloneAuth: undefined });
+      verifyBoundary();
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GHB-03: the cascade's single-plugin update rethrows an invalid base", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-cascade-invalid-base-");
+    const previousCwd = process.cwd();
+    t.after(async () => {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    });
+    await seedGitUpdateMarketplace({
+      cwd,
+      cloneUrl: "https://github.com/org/repo",
+      entrySource: { source: "github", repo: "org/repo" },
+      recordedSha: SHA_OLD,
+      versionTag: "9.9.9",
+    });
+    setGitHubBaseUrl(t, "http://mirror.example");
+    process.chdir(cwd);
+
+    // act & assert
+    await assert.rejects(
+      () => createUpdateOperations().beginPluginUpdateRun()("gp", "mp", "project"),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
   });
 });
 

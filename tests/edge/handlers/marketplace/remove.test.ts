@@ -1,7 +1,7 @@
 // Owner for edge/handlers/marketplace/remove.ts (MOD-09).
 //
 // The module is one factory that opens the command through the shared
-// marketplace opener and forwards four members to the remove workflow: the
+// marketplace opener and forwards five members to the remove workflow: the
 // parsed name, the working directory, the optional scope, the optional
 // scope-target flag, and the required lifecycle completion cache. Its whole
 // promise is therefore the usage block it supplies plus those five forwards.
@@ -26,12 +26,11 @@
 // case states one emission and one working-directory read; D-05 has the
 // workflow render from the run the handler receives.
 //
-// The scope-target flag is observable ONLY through which config layer the
-// CFG-03 precondition validates: the removal's config write-back sweeps both
-// layers regardless, so a valid-config workspace cannot tell the flag apart
-// from its absence. The rows that drive it therefore run against a workspace
-// whose `claude-plugins.local.json` fails schema validation, where supplying
-// the flag aborts the removal and omitting it does not.
+// The scope-target flag is observed through which config layer the remove
+// targets. The rows that drive it run against a workspace whose
+// `claude-plugins.json` alone declares the marketplace, where omitting the flag
+// removes it and supplying the flag is refused because the local layer does not
+// declare it (LAYER-02).
 //
 // Every case also installs a fail-fast replacement of `https.request`, the door
 // the git transport opens. NO CASE ASSERTS A CALL COUNT AGAINST IT. The git
@@ -65,8 +64,10 @@ import { locationsFor } from "../../../../extensions/pi-claude-marketplace/persi
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
-import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState } from "../marketplace-seed.ts";
 
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
@@ -81,9 +82,9 @@ const PROJECT_ALPHA_REMOVED = "● alpha [project] (removed)";
 /** The row a successful user-scope removal renders as. */
 const USER_ALPHA_REMOVED = "● alpha [user] (removed)";
 
-/** The row an aborted project-scope removal renders as. */
-const PROJECT_ALPHA_ABORTED =
-  "A marketplace operation has failed.\n\n⊘ alpha [project] (failed) {invalid manifest}";
+/** The row a `--local` removal of a marketplace only the base layer declares renders as. */
+const PROJECT_ALPHA_REFUSED =
+  "Some operations have failed.\n\n⊘ alpha [project] (failed)\n  ⊘ alpha (failed) {marketplace in base layer only}\n    cause: The marketplace alpha is declared only in the base config (claude-plugins.json). Run the command again without --local.";
 
 /** Marketplace names recorded per scope, the effect a removal is observed by. */
 interface MarketplaceFootprint {
@@ -170,14 +171,18 @@ async function seedBothScopes(workspace: HermeticWorkspace): Promise<void> {
   await seedMarketplace(workspace.cwd, "user", "beta");
 }
 
-/**
- * Write a `claude-plugins.local.json` that fails schema validation, so the
- * CFG-03 precondition aborts whenever that layer is the selected target.
- */
-async function seedInvalidLocalConfig(cwd: string, scope: Scope): Promise<void> {
+/** Write a `claude-plugins.json` that declares the path-source marketplace `name`. */
+async function seedBaseConfigDeclaring(cwd: string, scope: Scope, name: string): Promise<void> {
   const locations = locationsFor(scope, cwd);
   await mkdir(locations.scopeRoot, { recursive: true });
-  await writeFile(locations.configLocalJsonPath, '{"schemaVersion": "not-a-number"}', "utf8");
+  await writeFile(
+    locations.baseConfigJsonPath,
+    JSON.stringify({
+      schemaVersion: 1,
+      marketplaces: { [name]: { source: `/seeded/${scope}/${name}` } },
+    }),
+    "utf8",
+  );
 }
 
 /** Read the marketplace names each scope records, absent files reading empty. */
@@ -286,21 +291,21 @@ for (const { args, expectedFootprint, expectedNotification, placement } of [
   {
     args: "alpha --local",
     expectedFootprint: { project: ["alpha"], user: [] },
-    expectedNotification: { message: PROJECT_ALPHA_ABORTED, severity: "error" },
+    expectedNotification: { message: PROJECT_ALPHA_REFUSED, severity: "error" },
     placement: "supplied after the positional",
   },
   {
     args: "--local alpha",
     expectedFootprint: { project: ["alpha"], user: [] },
-    expectedNotification: { message: PROJECT_ALPHA_ABORTED, severity: "error" },
+    expectedNotification: { message: PROJECT_ALPHA_REFUSED, severity: "error" },
     placement: "supplied before the positional",
   },
 ] as const) {
-  test(`selects the override config layer as the removal precondition when the scope-target flag is ${placement} (WB-01)`, async (t) => {
+  test(`selects the config layer the removal targets when the scope-target flag is ${placement} (WB-01)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, "scope-target");
     await seedMarketplace(workspace.cwd, "project", "alpha");
-    await seedInvalidLocalConfig(workspace.cwd, "project");
+    await seedBaseConfigDeclaring(workspace.cwd, "project", "alpha");
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       reads: 1,
       value: workspace.cwd,
@@ -391,7 +396,7 @@ for (const mode of ["json", "rpc"] as const) {
     },
     {
       args: '""',
-      message: "Missing required argument.",
+      message: "Marketplace name must not be empty.",
     },
     {
       args: "alpha@official beta@official",

@@ -33,7 +33,11 @@
 import path from "node:path";
 
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { loadMergedScopeConfig, mergeScopeConfigs } from "../../persistence/config-merge.ts";
+import {
+  findLayerMarketplaceGaps,
+  loadMergedScopeConfig,
+  mergeScopeConfigs,
+} from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { buildConfigFromState } from "../../persistence/migrate-config.ts";
 import { loadState } from "../../persistence/state-io.ts";
@@ -55,10 +59,15 @@ import {
   type PendingInstallCandidate,
 } from "./notify.ts";
 import { planReconcile } from "./plan.ts";
-import { PENDING_CONTEXT, type PendingMsg } from "./reconcile.messaging.ts";
+import {
+  composeLayerMarketplaceCause,
+  PENDING_CONTEXT,
+  type PendingMsg,
+} from "./reconcile.messaging.ts";
 
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -94,6 +103,74 @@ function buildInvalidConfigBlock(scope: Scope, filePath: string): MarketplaceRow
 }
 
 /**
+ * LAYER-06: a layer config's block with one failed row that carries the cause,
+ * because only a plugin row can carry one. The block itself has no status, so
+ * it groups the row and the tally counts the one error once. The row is named
+ * by the file's BASENAME (T-53-02-02).
+ */
+function buildLayerGapBlock(
+  scope: Scope,
+  filePath: string,
+  cause: string,
+): MarketplaceRows<PendingMsg> {
+  const name = path.basename(filePath);
+  return {
+    name,
+    scope,
+    plugins: [
+      {
+        status: "failed",
+        name,
+        reasons: ["invalid manifest"],
+        cause: new Error(cause),
+        // D-03: the layer error -> error.
+        severity: "error",
+        needsReload: false,
+      },
+    ],
+  };
+}
+
+/** CFG-03: one failed block per invalid layer config of a scope. */
+function invalidConfigBlocks(
+  scope: Scope,
+  outcome: ScopeLoadOutcome,
+): MarketplaceRows<PendingMsg>[] {
+  return [outcome.base, outcome.local].flatMap((result) =>
+    result.status === "invalid" ? [buildInvalidConfigBlock(scope, result.filePath)] : [],
+  );
+}
+
+/**
+ * LAYER-06 / D-MF-03: one failed block per layer that declares a plugin whose
+ * marketplace only the other layer declares. It runs on the readable layers
+ * only, after `invalidConfigBlocks` found none.
+ *
+ * MIG-01 (DIFF-01): when the base config is absent, the load's first-run
+ * migration writes it from state before its own check, so this check reads
+ * the same `buildConfigFromState` projection the planner reads
+ * (`mergedViewForPlanning`). Pending then reports the error the next load
+ * stops on.
+ */
+function layerMarketplaceGapBlocks(
+  scope: Scope,
+  loc: ScopedLocations,
+  outcome: ScopeLoadOutcome,
+  state: ExtensionState,
+): MarketplaceRows<PendingMsg>[] {
+  const local = outcome.local.status === "valid" ? outcome.local.config : {};
+  const base =
+    outcome.base.status === "valid" ? outcome.base.config : buildConfigFromState(state, local);
+  return findLayerMarketplaceGaps(base, local).map((gap) =>
+    buildLayerGapBlock(
+      scope,
+      gap.layer === "base" ? loc.baseConfigJsonPath : loc.localConfigJsonPath,
+      composeLayerMarketplaceCause(gap, scope),
+    ),
+  );
+}
+
+/**
  * Classify a `loadState` throw (unparseable JSON, schema-invalid record,
  * unreadable file) into a closed-set reason. `loadState` wraps the raw
  * `JSON.parse` `SyntaxError` in an `Error` whose `cause` is the
@@ -113,13 +190,15 @@ function narrowStateLoadFailReason(err: unknown): ContentReason {
  * MIG-01 pre-migration window (DIFF-01): pick the merged desired-state view
  * the planner runs against. When the BASE config file is ABSENT, the apply
  * path migrates FIRST inside its lock (apply.ts::readPassForScope step 1
- * writes `buildConfigFromState(state)` to `claude-plugins.json`, then plans
- * against the merged view). A pending-list that planned against the raw
+ * writes the `buildConfigFromState` projection to `claude-plugins.json`, then
+ * plans against the merged view). A pending-list that planned against the raw
  * merged view (absent base == empty desired state) would render a misleading
  * mass-uninstall plan for a populated state. Mirror the post-migration
  * merged view READ-ONLY instead: plan against the PURE
  * `buildConfigFromState` projection merged with the local arm -- no write,
- * no migration side effect (NFR-5 read-surface discipline). A pristine
+ * no migration side effect (NFR-5 read-surface discipline). The projection
+ * leaves out what the local config declares, as the migration does (FIX-02),
+ * so pending and the load plan the same view. A pristine
  * scope (empty state) projects an empty config, so the empty-advisory
  * behavior is unchanged; an invalid base/local arm never reaches this
  * helper (CFG-03 abort happens first).
@@ -130,7 +209,7 @@ function mergedViewForPlanning(outcome: ScopeLoadOutcome, state: ExtensionState)
   }
 
   const local = outcome.local.status === "valid" ? outcome.local.config : {};
-  return mergeScopeConfigs(buildConfigFromState(state), local);
+  return mergeScopeConfigs(buildConfigFromState(state, local), local);
 }
 
 /**
@@ -178,20 +257,13 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
     // eslint-disable-next-line no-await-in-loop -- at most two scopes, one config read each
     const outcome = await loadMergedScopeConfig(loc);
 
-    // CFG-03 abort: if EITHER base or local config is invalid,
-    // emit a (failed) {invalid manifest} row for that scope. Do NOT call
-    // planReconcile -- invalid input must never be coerced into an empty
-    // desired-state diff that would render as a mass-uninstall list.
-    if (outcome.base.status === "invalid") {
-      invalidBlocks.push(buildInvalidConfigBlock(scope, outcome.base.filePath));
-    }
-
-    if (outcome.local.status === "invalid") {
-      invalidBlocks.push(buildInvalidConfigBlock(scope, outcome.local.filePath));
-    }
-
-    if (outcome.base.status === "invalid" || outcome.local.status === "invalid") {
-      // Skip the planner for this scope.
+    // CFG-03 abort: if EITHER base or local config is invalid, emit a (failed)
+    // {invalid manifest} row for that layer. Do NOT call planReconcile --
+    // invalid input must never be coerced into an empty desired-state diff that
+    // would render as a mass-uninstall list.
+    const configBlocks = invalidConfigBlocks(scope, outcome);
+    if (configBlocks.length > 0) {
+      invalidBlocks.push(...configBlocks);
       continue;
     }
 
@@ -216,6 +288,14 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
         severity: "error",
         plugins: [],
       });
+      continue;
+    }
+
+    // LAYER-06: a layer that declares a plugin without its marketplace stops
+    // the scope as an invalid layer config does, so nothing is planned for it.
+    const gapBlocks = layerMarketplaceGapBlocks(scope, loc, outcome, state);
+    if (gapBlocks.length > 0) {
+      invalidBlocks.push(...gapBlocks);
       continue;
     }
 

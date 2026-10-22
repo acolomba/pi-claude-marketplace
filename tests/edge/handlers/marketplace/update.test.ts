@@ -46,7 +46,7 @@
 //
 // Arity: the positional schema declares ONE optional entry, so zero and one
 // positional are both accepted and there is no count below the accepted range.
-// Surplus positionals and unknown flags now reject before a refresh; the shared
+// Surplus positionals and unknown flags reject before a refresh; the shared
 // schema validates the entire argument list.
 //
 // No exhaustiveness claim: the selection is an `if` over an optional value, not a
@@ -77,8 +77,10 @@ import { createCompletionCache } from "../../../../extensions/pi-claude-marketpl
 import { createGitOpsFake } from "../../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
-import { createMachineNotificationBoundary } from "../../notification-boundary.ts";
-import { createNotificationBoundary } from "../../notification-boundary.ts";
+import {
+  createMachineNotificationBoundary,
+  createNotificationBoundary,
+} from "../../notification-boundary.ts";
 import { mergeMarketplaceIntoState, seedAutoupdateConfig } from "../marketplace-seed.ts";
 
 import type { EdgeDeps } from "../../../../extensions/pi-claude-marketplace/edge/types.ts";
@@ -145,8 +147,9 @@ interface SeededClones {
  * is a url source the workflow really refreshes -- but no reachable input opens
  * the door. With both `gitOps: deps.gitOps` forwards deleted, so the workflow
  * falls back to `DEFAULT_GIT_OPS`, five of the seven cases go red on their
- * MESSAGE (`{network unreachable}`, cause `The function requires a "remote OR
- * url" parameter but none was provided`) while this counter stays at exactly
+ * MESSAGE (a failed row with no reason whose cause reads `The function
+ * requires a "remote OR url" parameter but none was provided`) while this
+ * counter stays at exactly
  * ZERO: the refresh path dies inside `isomorphic-git` on a staged clone with no
  * configured remote, one step before the transport. Having the git door in the
  * import graph is not the same as having a route that opens it.
@@ -317,39 +320,33 @@ test("updates every recorded marketplace in both scopes when no name is supplied
   verify(pluginUpdate);
 });
 
-for (const { args, label, arity } of [
-  { args: "alpha", label: "named", arity: "at the accepted arity" },
-]) {
-  test(`updates the named marketplace alone and leaves its siblings untouched ${arity}`, async (t) => {
-    // arrange
-    const { cwd, networkCallCount } = await createHermeticScope(t, label);
-    const clones = await seedThreeMarketplaces(cwd);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
-      value: cwd,
-      reads: 1,
-    });
-    const git = createGitOpsFake({ boundary: "memory" });
-    const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-    when(() => pluginUpdate("hello", "alpha", "project")).thenResolve(unchangedHello());
-    const marketplaceUpdateHandler = makeMarketplaceUpdateHandler({
-      completionCache: createCompletionCache(),
-      gitOps: git.gitOps,
-      beginPluginUpdateRun: () => pluginUpdate,
-    });
-
-    // act
-    await marketplaceUpdateHandler(args, ctx, runWithNothingLoaded());
-
-    // assert
-    assert.deepStrictEqual(notifications, [{ message: PROJECT_ALPHA_ROW }]);
-    assert.deepStrictEqual(git.state.calls.fetch.map(describeFetch), [
-      fetchOf(clones.projectAlpha),
-    ]);
-    assert.strictEqual(networkCallCount(), 0);
-    verifyBoundary();
-    verify(pluginUpdate);
+test("updates the named marketplace alone and leaves its siblings untouched", async (t) => {
+  // arrange
+  const { cwd, networkCallCount } = await createHermeticScope(t, "named");
+  const clones = await seedThreeMarketplaces(cwd);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
+    value: cwd,
+    reads: 1,
   });
-}
+  const git = createGitOpsFake({ boundary: "memory" });
+  const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
+  when(() => pluginUpdate("hello", "alpha", "project")).thenResolve(unchangedHello());
+  const marketplaceUpdateHandler = makeMarketplaceUpdateHandler({
+    completionCache: createCompletionCache(),
+    gitOps: git.gitOps,
+    beginPluginUpdateRun: () => pluginUpdate,
+  });
+
+  // act
+  await marketplaceUpdateHandler("alpha", ctx, runWithNothingLoaded());
+
+  // assert
+  assert.deepStrictEqual(notifications, [{ message: PROJECT_ALPHA_ROW }]);
+  assert.deepStrictEqual(git.state.calls.fetch.map(describeFetch), [fetchOf(clones.projectAlpha)]);
+  assert.strictEqual(networkCallCount(), 0);
+  verifyBoundary();
+  verify(pluginUpdate);
+});
 
 test("D-10-18: begins one cascade run per command and none when the handler is built", async (t) => {
   // arrange -- every other case injects a factory that returns the same
@@ -400,21 +397,26 @@ test("D-10-18: begins one cascade run per command and none when the handler is b
   verify(pluginUpdate);
 });
 
-for (const { emissions, rows, scope, touched } of [
+for (const { emissions, expectCascade, rows, scope, touched } of [
   {
     emissions: 1,
+    expectCascade: (): void => undefined,
     rows: [USER_ALPHA_ROW],
     scope: "user",
     touched: (clones: SeededClones): readonly string[] => [clones.userAlpha],
   },
   {
     emissions: 2,
+    expectCascade: (pluginUpdate: PluginUpdate): void => {
+      when(() => pluginUpdate("hello", "alpha", "project")).thenResolve(unchangedHello());
+    },
     rows: [PROJECT_ALPHA_ROW, PROJECT_BETA_ROW],
     scope: "project",
     touched: (clones: SeededClones): readonly string[] => [clones.projectAlpha, clones.projectBeta],
   },
 ] satisfies readonly {
   readonly emissions: number;
+  readonly expectCascade: (pluginUpdate: PluginUpdate) => void;
   readonly rows: readonly string[];
   readonly scope: Scope;
   readonly touched: (clones: SeededClones) => readonly string[];
@@ -429,10 +431,7 @@ for (const { emissions, rows, scope, touched } of [
     });
     const git = createGitOpsFake({ boundary: "memory" });
     const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
-    if (scope === "project") {
-      when(() => pluginUpdate("hello", "alpha", "project")).thenResolve(unchangedHello());
-    }
-
+    expectCascade(pluginUpdate);
     const marketplaceUpdateHandler = makeMarketplaceUpdateHandler({
       completionCache: createCompletionCache(),
       gitOps: git.gitOps,
@@ -486,7 +485,7 @@ test("reports an unrecognised scope value with the update usage block and never 
 for (const { args, diagnostic } of [
   { args: "alpha extra", diagnostic: "Too many arguments." },
   { args: "alpha --bogus", diagnostic: 'Unknown flag: "--bogus".' },
-  { args: '""', diagnostic: "Argument must not be empty." },
+  { args: '""', diagnostic: "Marketplace name must not be empty." },
   { args: "'' --local", diagnostic: 'Unknown flag: "--local".' },
   { args: '--local " "', diagnostic: 'Unknown flag: "--local".' },
   { args: "--scope user --local", diagnostic: 'Unknown flag: "--local".' },
@@ -549,12 +548,12 @@ for (const { args, tally } of [
       "---\nname: greet\ndescription: Greeting skill.\n---\nSay hello.\n",
     );
     const locations = locationsFor("project", cwd);
-    const sharedBytes =
+    const baseBytes =
       '{ "marketplaces": { "alpha": { "source": "./alpha-src", "autoupdate": false } }, "plugins": { "hello@alpha": { "enabled": true } } }\n';
     const localBytes =
       '{ "marketplaces": { "alpha": { "source": "./alpha-local", "autoupdate": true } }, "plugins": { "keep@alpha": { "enabled": false } } }\n';
-    await writeFile(locations.configJsonPath, sharedBytes);
-    await writeFile(locations.configLocalJsonPath, localBytes);
+    await writeFile(locations.baseConfigJsonPath, baseBytes);
+    await writeFile(locations.localConfigJsonPath, localBytes);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
       value: cwd,
       reads: 1,
@@ -593,10 +592,10 @@ for (const { args, tally } of [
     );
     assert.deepStrictEqual(
       [
-        await readFile(locations.configJsonPath, "utf8"),
-        await readFile(locations.configLocalJsonPath, "utf8"),
+        await readFile(locations.baseConfigJsonPath, "utf8"),
+        await readFile(locations.localConfigJsonPath, "utf8"),
       ],
-      [sharedBytes, localBytes],
+      [baseBytes, localBytes],
     );
     assert.deepStrictEqual(git.state.calls.fetch.map(describeFetch), [fetchOf(cloneDir)]);
     verifyBoundary();
@@ -615,7 +614,7 @@ for (const mode of ["json", "rpc"] as const) {
     },
     {
       args: '""',
-      message: "Argument must not be empty.",
+      message: "Marketplace name must not be empty.",
     },
     {
       args: "alpha@official beta@official",

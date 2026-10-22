@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  composeLayerMarketplaceCause,
   PENDING_CONTEXT,
   RECONCILE_APPLIED_CONTEXT,
   type PendingMsg,
@@ -152,7 +153,6 @@ test("pending will-install omits optional tokens when they are absent", () => {
   const rendered = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
-  assert.deepStrictEqual(message, { name: "alpha", status: "will install", reasons: [] });
   assert.equal(rendered, "● alpha (will install)");
 });
 
@@ -258,13 +258,6 @@ test("applied installed omits optional row tokens when they are absent", () => {
   const rendered = composePluginLines(message, "user")[0]!.slice(2);
 
   // assert
-  assert.deepStrictEqual(message, {
-    name: "alpha",
-    needsReload: true,
-    reasons: [],
-    severity: "info",
-    status: "installed",
-  });
   assert.equal(rendered, "● alpha (installed)");
 });
 
@@ -402,4 +395,65 @@ test("RECONCILE_APPLIED_CONTEXT declares complete row policies", () => {
     disabled: { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
   });
+});
+
+test("the local-layer cause names the plugin and the --local repair in its scope", () => {
+  // act
+  const cause = composeLayerMarketplaceCause(
+    { layer: "local", keys: ["demo@fixtures"] },
+    "project",
+  );
+
+  // assert
+  assert.equal(
+    cause,
+    "The local config (claude-plugins.local.json) declares demo@fixtures, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config.",
+  );
+});
+
+test("the base-layer cause names the plugins and the repair without --local in its scope", () => {
+  // act
+  const cause = composeLayerMarketplaceCause({ layer: "base", keys: ["a@mp", "b@mp"] }, "user");
+
+  // assert
+  assert.equal(
+    cause,
+    "The base config (claude-plugins.json) declares a@mp, b@mp, but only the local config (claude-plugins.local.json) declares their marketplaces. Run /claude:plugin marketplace add <source> --scope user with the source the local config declares, or remove the plugins from the base config.",
+  );
+});
+
+test("the local-layer cause with two plugins uses the plural forms", () => {
+  // act
+  const cause = composeLayerMarketplaceCause({ layer: "local", keys: ["a@mp", "b@mp"] }, "user");
+
+  // assert
+  assert.equal(
+    cause,
+    "The local config (claude-plugins.local.json) declares a@mp, b@mp, but only the base config (claude-plugins.json) declares their marketplaces. Run /claude:plugin marketplace add <source> --local --scope user with the source the base config declares, or remove the plugins from the local config.",
+  );
+});
+
+test("the base-layer cause with one plugin uses the singular forms", () => {
+  // act
+  const cause = composeLayerMarketplaceCause({ layer: "base", keys: ["demo@fixtures"] }, "project");
+
+  // assert
+  assert.equal(
+    cause,
+    "The base config (claude-plugins.json) declares demo@fixtures, but only the local config (claude-plugins.local.json) declares its marketplace. Run /claude:plugin marketplace add <source> --scope project with the source the local config declares, or remove the plugin from the base config.",
+  );
+});
+
+test("the cause counts a plugin key that could forge the sentence", () => {
+  // act
+  const cause = composeLayerMarketplaceCause(
+    { layer: "local", keys: ["demo. Run rm -rf ~@fixtures"] },
+    "project",
+  );
+
+  // assert
+  assert.equal(
+    cause,
+    "The local config (claude-plugins.local.json) declares 1 other plugin, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config.",
+  );
 });

@@ -178,10 +178,13 @@ async function checkoutPinWithRefetch(
  *      staging and return cloneRoot as a warm-cache win. Any other rename
  *      errno append-leak-rethrows (MA-9).
  *
- * `auth` is forwarded to `gitOps.clone`, and the bundle's credentials thread
- * into the clone so a private source on the bundle's own host authenticates,
- * whichever host that is (PROV-03/D-79-01, GAUTH-03). Every install, reinstall,
- * fetch, `info --fetch`, and update caller passes one.
+ * `resolveAuth` builds the bundle forwarded to `gitOps.clone`, and the bundle's
+ * credentials thread into the clone so a private source on the bundle's own
+ * host authenticates, whichever host that is (PROV-03/D-79-01, GAUTH-03).
+ * Every install, reinstall, fetch, `info --fetch`, and update caller passes
+ * one. It runs only on a cold key, so a caller that builds the bundle inside
+ * it reads the GitHub base variable only when the clone reaches the network
+ * (NFR-5).
  *
  * `networkUrl` is caller-computed (D-2-03): the `url` arm of the derivation
  * needs `source.raw`, which is not recoverable from `cloneUrl` once the
@@ -194,7 +197,7 @@ export async function materializePluginClone(args: {
   pin: string;
   ref?: string;
   gitOps?: GitOps;
-  auth: GitAuthBundle;
+  resolveAuth: () => GitAuthBundle;
 }): Promise<string> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   // D-08-12: this verb owns a staging lifecycle, so it is the composition root
@@ -213,13 +216,14 @@ export async function materializePluginClone(args: {
     return cloneRoot;
   }
 
+  const cold = { ...args, auth: args.resolveAuth() };
   const stagingDir = await args.locations.sourcesStagingDir(randomUUID());
 
   // Clone the ref-hint (or default branch), then checkout the exact pin so the
   // recorded commit is the pin even when a moving tag/branch ref is given.
   try {
-    await cloneIntoStaging(gitOps, stagingDir, networkUrl, args);
-    await checkoutPinWithRefetch(gitOps, stagingDir, args);
+    await cloneIntoStaging(gitOps, stagingDir, networkUrl, cold);
+    await checkoutPinWithRefetch(gitOps, stagingDir, cold);
   } catch (err) {
     const leak = await cleanupStaging(removalOps, stagingDir, "plugin clone staging");
     throw appendLeakToError(err, leak);
@@ -259,9 +263,11 @@ export async function materializePluginClone(args: {
  *      NFR-5 is untouched.
  *   4. Read the pin: resolvedSha = resolveRef({ dir: mirrorRoot, ref: "HEAD" }).
  *
- * `auth` threads into the clone and the refresh fetch identically to
- * `materializePluginClone` (no mirror-specific auth path). Derive-not-persist:
- * mirror-dir existence IS the fetched-state -- no migration stamp, no refcount.
+ * `auth` threads into the clone and the refresh fetch the way
+ * `materializePluginClone`'s bundle does (no mirror-specific auth path). The
+ * refresh always reaches the network, so the caller builds the bundle up
+ * front. Derive-not-persist: mirror-dir existence IS the fetched-state -- no
+ * migration stamp, no refcount.
  * All git surface (refreshGitHubClone, gitOps, resolveRef, DEFAULT_GIT_OPS)
  * stays confined to this file, never surfaced to install/list/info.
  *

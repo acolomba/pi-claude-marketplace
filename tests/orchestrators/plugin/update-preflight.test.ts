@@ -17,6 +17,7 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -1143,6 +1144,33 @@ test("classifies a clone transport failure without exposing a raw throw", async 
   });
 });
 
+test("GHB-03: an invalid base rethrows from candidate resolution instead of skipping as no longer installable", async (t) => {
+  // arrange
+  const seed = await seedUpdate({
+    installed: pluginRecord("sha-000000000000"),
+    source: { source: "url", url: "https://example.com/private" },
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const invalidBase = new InvalidGitHubBaseUrlError(
+    "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+    "scheme",
+  );
+  const cloneCacheSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
+    materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
+    materializeOrRefreshPluginMirror: () => Promise.reject(invalidBase),
+  };
+
+  // act & assert
+  await assert.rejects(
+    () => prepare(seed, { cloneCacheSeam }),
+    (error: unknown) => {
+      assert.strictEqual(error, invalidBase);
+      return true;
+    },
+  );
+});
+
 test("swallows disabled clone cleanup failure after persisting the new pin", async (t) => {
   // arrange
   const sha = "3333333333333333333333333333333333333333";
@@ -1255,7 +1283,7 @@ test("passes authenticated clone context and refs through both clone arms", asyn
       return Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha, ref: "stable" });
     },
     materializePluginClone: (options) => {
-      assert.strictEqual(options.auth?.host, "github.com");
+      assert.strictEqual(options.resolveAuth().host, "github.com");
       assert.strictEqual(options.ref, "stable");
       return Promise.resolve(pinned.pluginRoot);
     },
@@ -1319,7 +1347,7 @@ test("D-3-04: gives the autoupdate cascade a github.com stored-credential bundle
       return Promise.resolve({ cloneUrl: "https://github.com/org/repo", pin: sha, ref: "stable" });
     },
     materializePluginClone: (options) => {
-      assert.deepStrictEqual(options.auth, {
+      assert.deepStrictEqual(options.resolveAuth(), {
         kind: "stored-credential",
         credentialOps,
         host: "github.com",

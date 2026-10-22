@@ -18,8 +18,7 @@
 // (top-of-file rationale + per-test naming + node:test + node:assert/strict).
 
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
@@ -28,6 +27,7 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import { addMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import { setMarketplaceAutoupdate } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts";
 import { removeMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
@@ -40,13 +40,20 @@ import {
 } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { mergeScopeConfigs } from "../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { writeMarketplaceConfigEntry } from "../../extensions/pi-claude-marketplace/persistence/config-write-back.ts";
-import { DEFAULT_STATE } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import {
+  DEFAULT_STATE,
+  loadState,
+  saveState,
+} from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
+import type { ReconcilePlan } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
+import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 const OFFICIAL_MARKETPLACE_REMOTE = "https://github.com/anthropics/claude-plugins-official.git";
 
@@ -72,547 +79,366 @@ function createGitOps(options: { readonly fixtureSourceDir: string }) {
   });
 }
 
-async function tmpScopeRoot(): Promise<{ scopeRoot: string; cleanup: () => Promise<void> }> {
-  const dir = await mkdtemp(path.join(tmpdir(), "pi-cm-consistency-test-"));
-  const scopeRoot = path.join(dir, ".pi");
-  await mkdir(scopeRoot, { recursive: true });
-  async function cleanup(): Promise<void> {
-    for (let attempt = 0; attempt < 10; attempt++) {
-      try {
-        await rm(dir, { recursive: true, force: true });
-        return;
-      } catch (error: unknown) {
-        if ((error as NodeJS.ErrnoException).code === "ENOTEMPTY" && attempt < 9) {
-          await new Promise<void>((resolve) => setTimeout(resolve, 25));
-          continue;
-        }
+const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
 
-        throw error;
-      }
-    }
-  }
-
-  return { scopeRoot, cleanup };
+/** Loads a config file and narrows it to the valid arm. */
+async function loadValidConfig(filePath: string): Promise<ScopeConfig> {
+  const loaded = await loadConfig(filePath);
+  assert.ok(loaded.status === "valid");
+  return loaded.config;
 }
 
-// ──────────────────────────────────────────────────────────────────────────
-// LIVE smoke: helper + planner integration
-// ──────────────────────────────────────────────────────────────────────────
+/** Plans reconcile for the project scope from the files the case left on disk. */
+async function planProjectReconcile(
+  locations: ReturnType<typeof locationsFor>,
+  config: ScopeConfig,
+): Promise<ReconcilePlan> {
+  const stateAfter = await loadState(locations.extensionRoot);
+  return planReconcile(mergeScopeConfigs(config, {}), stateAfter, "project");
+}
 
-test("config-state-consistency: writeMarketplaceConfigEntry + planReconcile reads back the one declared marketplace", async () => {
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const filePath = path.join(scopeRoot, "claude-plugins.json");
+function pathMarketplaceRecord(name: string, cwd: string): ExtensionState["marketplaces"][string] {
+  return {
+    name,
+    scope: "project",
+    source: pathSource(`./${name}-src`),
+    addedFromCwd: cwd,
+    manifestPath: path.join(cwd, `${name}-src`, ".claude-plugin", "marketplace.json"),
+    marketplaceRoot: path.join(cwd, `${name}-src`),
+    plugins: {},
+  };
+}
 
-    // 1. Empty starting config (status === "absent" on the load arm).
-    const empty: ScopeConfig = { schemaVersion: 1 };
+test("config-state-consistency: writeMarketplaceConfigEntry + planReconcile reads back the one declared marketplace", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "pi-cm-consistency-test-");
+  const scopeRoot = path.join(cwd, ".pi");
+  await mkdir(scopeRoot, { recursive: true });
+  const filePath = path.join(scopeRoot, "claude-plugins.json");
+  const empty: ScopeConfig = { schemaVersion: 1 };
+  const expectedPlan = {
+    ...emptyReconcilePlan("user"),
+    marketplacesToAdd: [
+      { configSource: "base", marketplace: "mp1", scope: "user", source: "owner/repo" },
+    ],
+  };
 
-    // 2. Write one marketplace via the helper.
-    await writeMarketplaceConfigEntry(empty, filePath, scopeRoot, "mp1", {
-      source: "owner/repo",
-      autoupdate: true,
-    });
+  // act
+  await writeMarketplaceConfigEntry(empty, filePath, scopeRoot, "mp1", {
+    source: "owner/repo",
+    autoupdate: true,
+  });
+  const config = await loadValidConfig(filePath);
+  const plan = planReconcile(mergeScopeConfigs(config, {}), DEFAULT_STATE, "user");
 
-    // 3. Read it back -- prove the file is on-disk and parses cleanly.
-    const cfg = await loadConfig(filePath);
-    assert.strictEqual(cfg.status, "valid");
-    if (cfg.status !== "valid") {
-      return;
-    }
-
-    // 4. Run the planner against the read-back config and empty state.
-    //    Because state is empty, the one declared marketplace lands in
-    //    marketplacesToAdd; every other bucket is empty.
-    const merged = mergeScopeConfigs(cfg.config, {});
-    const plan = planReconcile(merged, DEFAULT_STATE, "user");
-
-    assert.strictEqual(plan.marketplacesToAdd.length, 1);
-    assert.strictEqual(plan.marketplacesToAdd[0]!.marketplace, "mp1");
-    assert.strictEqual(plan.marketplacesToAdd[0]!.source, "owner/repo");
-    assert.strictEqual(plan.marketplacesToRemove.length, 0);
-    assert.strictEqual(plan.pluginsToInstall.length, 0);
-    assert.strictEqual(plan.pluginsToUninstall.length, 0);
-    assert.strictEqual(plan.pluginsToEnable.length, 0);
-    assert.strictEqual(plan.pluginsToDisable.length, 0);
-    assert.strictEqual(plan.sourceMismatches.length, 0);
-    assert.strictEqual(plan.scope, "user");
-
-    // Sanity check: a freshly emptyReconcilePlan and our 1-bucket plan are
-    // not deepEqual (the asymmetry is the point -- the FULL no-op proof
-    // requires orchestrator-level state mutation, exercised by sibling tests).
-    assert.notDeepStrictEqual(plan, emptyReconcilePlan("user"));
-  } finally {
-    await cleanup();
-  }
+  // assert
+  // Only the marketplace bucket is non-empty; the full no-op proof needs
+  // orchestrator-level state mutation, exercised by the sibling cases.
+  assert.deepStrictEqual(plan, expectedPlan);
 });
 
-// ──────────────────────────────────────────────────────────────────────────
-// Live coverage of the orchestrator write-back paths
-// ──────────────────────────────────────────────────────────────────────────
+test("WB-01 SC#4 (add path): after addMarketplace, reconcile is a no-op AND state ⊆ config (round-trip integrity)", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "pi-cm-consistency-test-");
+  const locations = locationsFor("project", cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  const { gitOps } = createGitOps({ fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace") });
 
-test("WB-01 SC#4 (add path): after addMarketplace, reconcile is a no-op AND state ⊆ config (round-trip integrity)", async () => {
-  // Wire-up: invoke the real `addMarketplace` (standalone mode) against a
-  // mock GitOps + valid fixture. Read back the config + the post-mutation
-  // state. Plan and assert: planReconcile produces emptyReconcilePlan.
-  const { locationsFor } =
-    await import("../../extensions/pi-claude-marketplace/persistence/locations.ts");
-  const { loadState } =
-    await import("../../extensions/pi-claude-marketplace/persistence/state-io.ts");
+  // act
+  await addMarketplace({
+    ctx,
+    run: runWithNothingLoaded(),
+    scope: "project",
+    cwd,
+    completionCache: createCompletionCache(),
+    rawSource: "anthropics/claude-plugins-official",
+    gitOps,
+  });
+  const config = await loadValidConfig(locations.baseConfigJsonPath);
+  const state = await loadState(locations.extensionRoot);
+  const plan = planReconcile(mergeScopeConfigs(config, {}), state, "project");
 
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const cwd = scopeRoot.replace(/\/\.pi$/, "");
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-
-    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
-    const { gitOps } = createGitOps({
-      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-    });
-
-    await addMarketplace({
-      ctx,
-      run: runWithNothingLoaded(),
-      scope: "project",
-      cwd,
-      completionCache: createCompletionCache(),
-      rawSource: "anthropics/claude-plugins-official",
-      gitOps,
-    });
-
-    // 1. The config file was written under the locked transaction.
-    const cfg = await loadConfig(locations.configJsonPath);
-    assert.strictEqual(cfg.status, "valid");
-    if (cfg.status !== "valid") {
-      return;
-    }
-
-    // 2. State was committed with the marketplace recorded.
-    const state = await loadState(locations.extensionRoot);
-    assert.ok("valid-marketplace" in state.marketplaces);
-
-    // 3. planReconcile against (merged config, post-mutation state) is a
-    //    NO-OP -- every bucket empty (WB-01 SC#4 round-trip integrity).
-    const merged = mergeScopeConfigs(cfg.config, {});
-    const plan = planReconcile(merged, state, "project");
-    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
-  } finally {
-    await cleanup();
-  }
+  // assert
+  assert.ok("valid-marketplace" in state.marketplaces);
+  assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
 });
 
-test("WB-01 SC#4 (add + autoupdate enable): post-flip reconcile is a no-op AND unknown forward-compat keys survive", async () => {
-  const { locationsFor } =
-    await import("../../extensions/pi-claude-marketplace/persistence/locations.ts");
-  const { loadState } =
-    await import("../../extensions/pi-claude-marketplace/persistence/state-io.ts");
-
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const cwd = scopeRoot.replace(/\/\.pi$/, "");
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-
-    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
-    const { gitOps } = createGitOps({
-      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-    });
-
-    // 1. Seed the config with a marketplace + unknown forward-compat keys.
-    //    futureField at the entry level (D-09); futureTopLevel at the top.
-    //    saveConfig is the SOLE sanctioned writer (SPLIT-02); validated
-    //    against the lenient schema, unknown keys survive the round trip.
-    await saveConfig(
-      locations.configJsonPath,
-      {
-        schemaVersion: 1,
-        marketplaces: {
-          // Pre-existing entry: the next addMarketplace targets a NEW name;
-          // this entry must remain untouched with its futureField intact.
-          legacy: {
-            source: "owner/legacy",
-            ...({ futureField: "preserve me" } as Record<string, unknown>),
-          },
-        },
-        ...({ futureTopLevel: "preserve me too" } as Record<string, unknown>),
-      },
-      locations.scopeRoot,
-    );
-
-    await addMarketplace({
-      ctx,
-      run: runWithNothingLoaded(),
-      scope: "project",
-      cwd,
-      completionCache: createCompletionCache(),
-      rawSource: "anthropics/claude-plugins-official",
-      gitOps,
-    });
-
-    // 2. Flip autoupdate ON via the orchestrator.
-    await setMarketplaceAutoupdate({
-      ctx,
-      run: runWithNothingLoaded(),
-      name: "valid-marketplace",
-      enable: true,
-      scope: "project",
-      cwd,
-    });
-
-    // 3. Read back the config; unknown keys at BOTH entry and top level
-    //    survived every write-back (add, then autoupdate flip).
-    const cfg = await loadConfig(locations.configJsonPath);
-    assert.strictEqual(cfg.status, "valid");
-    if (cfg.status !== "valid") {
-      return;
-    }
-
-    const cfgRecord = cfg.config as unknown as Record<string, unknown>;
-    const legacyEntry = (cfg.config.marketplaces?.legacy ?? {}) as Record<string, unknown>;
-    assert.strictEqual(legacyEntry.futureField, "preserve me");
-    assert.strictEqual(cfgRecord.futureTopLevel, "preserve me too");
-    // The new marketplace's autoupdate flip landed.
-    assert.strictEqual(cfg.config.marketplaces?.["valid-marketplace"]?.autoupdate, true);
-
-    // 4. Post-mutation reconcile is a no-op (the legacy entry is recorded
-    //    in config but not in state, so reconcile would plan it as
-    //    'to add'; we therefore prune it before reconciling to focus on
-    //    the WB-01 SC#4 invariant for the actually-mutated marketplace).
-    const stateAfter = await loadState(locations.extensionRoot);
-    const cfgForReconcile = {
-      ...cfg.config,
-      marketplaces: Object.fromEntries(
-        Object.entries(cfg.config.marketplaces ?? {}).filter(([name]) => name !== "legacy"),
-      ),
-    };
-    const merged = mergeScopeConfigs(cfgForReconcile, {});
-    const plan = planReconcile(merged, stateAfter, "project");
-    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
-  } finally {
-    await cleanup();
-  }
-});
-
-test("WB-01 SC#4 (add + autoupdate disable): post-flip reconcile is a no-op", async () => {
-  const { locationsFor } =
-    await import("../../extensions/pi-claude-marketplace/persistence/locations.ts");
-  const { loadState } =
-    await import("../../extensions/pi-claude-marketplace/persistence/state-io.ts");
-
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const cwd = scopeRoot.replace(/\/\.pi$/, "");
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-
-    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
-    const { gitOps } = createGitOps({
-      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-    });
-
-    await addMarketplace({
-      ctx,
-      run: runWithNothingLoaded(),
-      scope: "project",
-      cwd,
-      completionCache: createCompletionCache(),
-      rawSource: "anthropics/claude-plugins-official",
-      gitOps,
-    });
-    await setMarketplaceAutoupdate({
-      ctx,
-      run: runWithNothingLoaded(),
-      name: "valid-marketplace",
-      enable: true,
-      scope: "project",
-      cwd,
-    });
-    // Now flip back OFF.
-    await setMarketplaceAutoupdate({
-      ctx,
-      run: runWithNothingLoaded(),
-      name: "valid-marketplace",
-      enable: false,
-      scope: "project",
-      cwd,
-    });
-
-    const cfg = await loadConfig(locations.configJsonPath);
-    assert.strictEqual(cfg.status, "valid");
-    if (cfg.status !== "valid") {
-      return;
-    }
-
-    assert.strictEqual(cfg.config.marketplaces?.["valid-marketplace"]?.autoupdate, false);
-
-    const stateAfter = await loadState(locations.extensionRoot);
-    const merged = mergeScopeConfigs(cfg.config, {});
-    const plan = planReconcile(merged, stateAfter, "project");
-    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
-  } finally {
-    await cleanup();
-  }
-});
-
-test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and config no longer carries the marketplace entry", async () => {
-  const { locationsFor } =
-    await import("../../extensions/pi-claude-marketplace/persistence/locations.ts");
-  const { loadState } =
-    await import("../../extensions/pi-claude-marketplace/persistence/state-io.ts");
-
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const cwd = scopeRoot.replace(/\/\.pi$/, "");
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-
-    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
-    const { gitOps } = createGitOps({
-      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-    });
-    const completionCache = createCompletionCache();
-
-    // Add then remove the same marketplace -- the round-trip should leave
-    // config + state in their original empty shape.
-    await addMarketplace({
-      ctx,
-      run: runWithNothingLoaded(),
-      scope: "project",
-      cwd,
-      completionCache: createCompletionCache(),
-      rawSource: "anthropics/claude-plugins-official",
-      gitOps,
-    });
-    await removeMarketplace({
-      completionCache,
-      ctx,
-      run: runWithNothingLoaded(),
-      name: "valid-marketplace",
-      scope: "project",
-      cwd,
-    });
-
-    const cfg = await loadConfig(locations.configJsonPath);
-    assert.strictEqual(cfg.status, "valid");
-    if (cfg.status !== "valid") {
-      return;
-    }
-
-    // remove cleared the entry (cascade: no orphaned plugin keys).
-    assert.strictEqual("valid-marketplace" in (cfg.config.marketplaces ?? {}), false);
-
-    const stateAfter = await loadState(locations.extensionRoot);
-    assert.strictEqual("valid-marketplace" in stateAfter.marketplaces, false);
-
-    const merged = mergeScopeConfigs(cfg.config, {});
-    const plan = planReconcile(merged, stateAfter, "project");
-    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
-  } finally {
-    await cleanup();
-  }
-});
-
-test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entries survive the batched write-back", async () => {
-  // CR-01 regression: the per-name sequential
-  // writeMarketplaceConfigEntry loop rebuilt the file from the SAME stale
-  // snapshot on each iteration, so a bare-form flip over N marketplaces
-  // persisted only the LAST marketplace's entry. The batched write-back must
-  // land every fresh-flipped entry in one atomic save.
-  const { pathSource } = await import("../../extensions/pi-claude-marketplace/domain/source.ts");
-  const { locationsFor } =
-    await import("../../extensions/pi-claude-marketplace/persistence/locations.ts");
-  const { saveState } =
-    await import("../../extensions/pi-claude-marketplace/persistence/state-io.ts");
-
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const cwd = scopeRoot.replace(/\/\.pi$/, "");
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
-
-    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
-
-    function mpRecord(name: string): Record<string, unknown> {
-      return {
-        name,
-        scope: "project",
-        source: pathSource(`./${name}-src`),
-        addedFromCwd: cwd,
-        manifestPath: path.join(cwd, `${name}-src`, ".claude-plugin", "marketplace.json"),
-        marketplaceRoot: path.join(cwd, `${name}-src`),
-        plugins: {},
-      };
-    }
-
-    await saveState(locations.extensionRoot, {
+test("WB-01 SC#4 (add + autoupdate enable): post-flip reconcile is a no-op AND unknown forward-compat keys survive", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "pi-cm-consistency-test-");
+  const locations = locationsFor("project", cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  const { gitOps } = createGitOps({ fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace") });
+  // futureField at the entry level (D-09); futureTopLevel at the top. The
+  // pre-existing `legacy` entry must keep its futureField through the add
+  // and the autoupdate flip.
+  await saveConfig(
+    locations.baseConfigJsonPath,
+    {
       schemaVersion: 1,
-      marketplaces: { mp1: mpRecord("mp1"), mp2: mpRecord("mp2") },
-    } as never);
+      marketplaces: {
+        legacy: {
+          source: "owner/legacy",
+          ...({ futureField: "preserve me" } as Record<string, unknown>),
+        },
+      },
+      ...({ futureTopLevel: "preserve me too" } as Record<string, unknown>),
+    },
+    locations.scopeRoot,
+  );
 
-    // Bare form: NO name -- every marketplace in the scope flips.
-    await setMarketplaceAutoupdate({
-      ctx,
-      run: runWithNothingLoaded(),
-      enable: true,
-      scope: "project",
-      cwd,
-    });
+  // act
+  await addMarketplace({
+    ctx,
+    run: runWithNothingLoaded(),
+    scope: "project",
+    cwd,
+    completionCache: createCompletionCache(),
+    rawSource: "anthropics/claude-plugins-official",
+    gitOps,
+  });
+  await setMarketplaceAutoupdate({
+    ctx,
+    run: runWithNothingLoaded(),
+    name: "valid-marketplace",
+    enable: true,
+    scope: "project",
+    cwd,
+  });
+  const config = await loadValidConfig(locations.baseConfigJsonPath);
+  // The legacy entry is declared but not recorded in state, so reconcile
+  // would plan it as 'to add'; pruning it focuses the plan on the mutated
+  // marketplace.
+  const configWithoutLegacy = {
+    ...config,
+    marketplaces: Object.fromEntries(
+      Object.entries(config.marketplaces ?? {}).filter(([name]) => name !== "legacy"),
+    ),
+  };
+  const plan = await planProjectReconcile(locations, configWithoutLegacy);
 
-    const cfg = await loadConfig(locations.configJsonPath);
-    assert.strictEqual(cfg.status, "valid");
-    if (cfg.status !== "valid") {
-      return;
-    }
+  // assert
+  const configRecord = config as unknown as Record<string, unknown>;
+  const legacyEntry = (config.marketplaces?.legacy ?? {}) as Record<string, unknown>;
+  assert.strictEqual(legacyEntry.futureField, "preserve me");
+  assert.strictEqual(configRecord.futureTopLevel, "preserve me too");
+  assert.strictEqual(config.marketplaces?.["valid-marketplace"]?.autoupdate, true);
+  assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
+});
 
-    // BOTH entries carry the flip + the synthesized verbatim source -- the
-    // last-write-wins clobber would have dropped mp1.
-    assert.strictEqual(cfg.config.marketplaces?.mp1?.autoupdate, true);
-    assert.strictEqual(cfg.config.marketplaces?.mp1?.source, "./mp1-src");
-    assert.strictEqual(cfg.config.marketplaces?.mp2?.autoupdate, true);
-    assert.strictEqual(cfg.config.marketplaces?.mp2?.source, "./mp2-src");
-  } finally {
-    await cleanup();
-  }
+test("WB-01 SC#4 (add + autoupdate disable): post-flip reconcile is a no-op", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "pi-cm-consistency-test-");
+  const locations = locationsFor("project", cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  const { gitOps } = createGitOps({ fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace") });
+
+  // act
+  await addMarketplace({
+    ctx,
+    run: runWithNothingLoaded(),
+    scope: "project",
+    cwd,
+    completionCache: createCompletionCache(),
+    rawSource: "anthropics/claude-plugins-official",
+    gitOps,
+  });
+  await setMarketplaceAutoupdate({
+    ctx,
+    run: runWithNothingLoaded(),
+    name: "valid-marketplace",
+    enable: true,
+    scope: "project",
+    cwd,
+  });
+  await setMarketplaceAutoupdate({
+    ctx,
+    run: runWithNothingLoaded(),
+    name: "valid-marketplace",
+    enable: false,
+    scope: "project",
+    cwd,
+  });
+  const config = await loadValidConfig(locations.baseConfigJsonPath);
+  const plan = await planProjectReconcile(locations, config);
+
+  // assert
+  assert.strictEqual(config.marketplaces?.["valid-marketplace"]?.autoupdate, false);
+  assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
+});
+
+test("WB-01 SC#4 (add + remove cascade): post-remove reconcile is a no-op and config no longer carries the marketplace entry", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "pi-cm-consistency-test-");
+  const locations = locationsFor("project", cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  const { gitOps } = createGitOps({ fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace") });
+
+  // act
+  await addMarketplace({
+    ctx,
+    run: runWithNothingLoaded(),
+    scope: "project",
+    cwd,
+    completionCache: createCompletionCache(),
+    rawSource: "anthropics/claude-plugins-official",
+    gitOps,
+  });
+  await removeMarketplace({
+    completionCache: createCompletionCache(),
+    ctx,
+    run: runWithNothingLoaded(),
+    name: "valid-marketplace",
+    scope: "project",
+    cwd,
+  });
+  const config = await loadValidConfig(locations.baseConfigJsonPath);
+  const stateAfter = await loadState(locations.extensionRoot);
+  const plan = planReconcile(mergeScopeConfigs(config, {}), stateAfter, "project");
+
+  // assert
+  assert.strictEqual("valid-marketplace" in (config.marketplaces ?? {}), false);
+  assert.strictEqual("valid-marketplace" in stateAfter.marketplaces, false);
+  assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
+});
+
+test("WB-01 SC#4 (bare-form autoupdate flip, 2 marketplaces): BOTH config entries survive the batched write-back", async (t) => {
+  // arrange
+  // CR-01: a per-name sequential write loop rebuilt the file from the same
+  // stale snapshot on each iteration, so a bare-form flip over N marketplaces
+  // would persist only the last entry. The batched write-back lands every
+  // flipped entry in one atomic save.
+  const { cwd } = await createHermeticEnvironment(t, "pi-cm-consistency-test-");
+  const locations = locationsFor("project", cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 1,
+    marketplaces: {
+      mp1: pathMarketplaceRecord("mp1", cwd),
+      mp2: pathMarketplaceRecord("mp2", cwd),
+    },
+  });
+  await saveConfig(
+    locations.baseConfigJsonPath,
+    {
+      schemaVersion: 1,
+      marketplaces: { mp1: { source: "./mp1-src" }, mp2: { source: "./mp2-src" } },
+    },
+    locations.scopeRoot,
+  );
+
+  // act
+  // Bare form: no name, so every marketplace the config declares flips.
+  await setMarketplaceAutoupdate({
+    ctx,
+    run: runWithNothingLoaded(),
+    enable: true,
+    scope: "project",
+    cwd,
+  });
+  const config = await loadValidConfig(locations.baseConfigJsonPath);
+
+  // assert
+  assert.deepStrictEqual(config.marketplaces, {
+    mp1: { source: "./mp1-src", autoupdate: true },
+    mp2: { source: "./mp2-src", autoupdate: true },
+  });
 });
 
 test("WB-01 SC#4 (cross-scope CMP-3 install): project-scope install via user-scope marketplace fallback declares the adopted marketplace -- reconcile is a no-op", async (t) => {
-  // CR-02 regression: a project-scope install resolving
-  // the marketplace via the CMP-3 user-scope fallback clones the record into
-  // PROJECT state. The write-back must declare BOTH the plugin key AND the
-  // adopted marketplace entry in the project config -- a bare plugin key is
-  // a dangling declaration the planner converts into a marketplace removal
-  // plus a perpetual `<marketplace not declared>` failed row.
-  const { pathSource } = await import("../../extensions/pi-claude-marketplace/domain/source.ts");
-  const { locationsFor } =
-    await import("../../extensions/pi-claude-marketplace/persistence/locations.ts");
-  const { loadState, saveState } =
-    await import("../../extensions/pi-claude-marketplace/persistence/state-io.ts");
-  const { writeFile } = await import("node:fs/promises");
-
-  // Hermetic HOME so the user-scope marketplace lives under a tmp root.
-  const { home: hermeticHome } = await createHermeticEnvironment(t, "pi-cm-cr02-");
-
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const cwd = scopeRoot.replace(/\/\.pi$/, "");
-    const projectLocations = locationsFor("project", cwd);
-    const userLocations = locationsFor("user", cwd);
-    await mkdir(projectLocations.extensionRoot, { recursive: true });
-    await mkdir(userLocations.extensionRoot, { recursive: true });
-
-    // Seed a USER-scope path marketplace with one single-skill plugin.
-    const marketplaceRoot = path.join(hermeticHome, "mp-src");
-    const pluginRoot = path.join(marketplaceRoot, "plugins", "tool");
-    await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
-    await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
-    const skillDir = path.join(pluginRoot, "skills", "helper");
-    await mkdir(skillDir, { recursive: true });
-    await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: helper\n---\n\nBody.\n");
-    await writeFile(
-      path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-      JSON.stringify({ name: "tool", version: "0.0.1" }),
-    );
-    const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
-    await writeFile(
-      manifestPath,
-      JSON.stringify({ name: "mp", plugins: [{ name: "tool", source: "./plugins/tool" }] }),
-    );
-    await saveState(userLocations.extensionRoot, {
-      schemaVersion: 1,
-      marketplaces: {
-        mp: {
-          name: "mp",
-          scope: "user",
-          source: pathSource(marketplaceRoot),
-          addedFromCwd: cwd,
-          manifestPath,
-          marketplaceRoot,
-          plugins: {},
-        },
+  // arrange
+  // CR-02: a project-scope install that resolves the marketplace through the
+  // CMP-3 user-scope fallback clones the record into project state. The
+  // write-back must declare both the plugin key and the adopted marketplace
+  // in the project config; a bare plugin key is a dangling declaration the
+  // planner turns into a marketplace removal plus a perpetual failed row.
+  const { cwd, home } = await createHermeticEnvironment(t, "pi-cm-cr02-");
+  const projectLocations = locationsFor("project", cwd);
+  const userLocations = locationsFor("user", cwd);
+  await mkdir(projectLocations.extensionRoot, { recursive: true });
+  await mkdir(userLocations.extensionRoot, { recursive: true });
+  const marketplaceRoot = path.join(home, "mp-src");
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "tool");
+  const skillDir = path.join(pluginRoot, "skills", "helper");
+  await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(path.join(skillDir, "SKILL.md"), "---\nname: helper\n---\n\nBody.\n");
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "tool", version: "0.0.1" }),
+  );
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await writeFile(
+    manifestPath,
+    JSON.stringify({ name: "mp", plugins: [{ name: "tool", source: "./plugins/tool" }] }),
+  );
+  await saveState(userLocations.extensionRoot, {
+    schemaVersion: 1,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "user",
+        source: pathSource(marketplaceRoot),
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot,
+        plugins: {},
       },
-    } as never);
+    },
+  });
+  const installPlugin = createInstallOperation(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+  );
 
-    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
-    const installPlugin = createInstallOperation(
-      createHooksRouting(createHooksRuntime(), { readHooksJson }),
-      createCompletionCache(),
-    );
+  // act
+  // Marketplace "mp" is not in project state, so the install falls back to
+  // the user-scope record and clones it into project state.
+  await installPlugin({
+    ctx,
+    run: runWithNothingLoaded(),
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin: "tool",
+  });
+  const config = await loadValidConfig(projectLocations.baseConfigJsonPath);
+  const plan = await planProjectReconcile(projectLocations, config);
 
-    // Project-scope install: marketplace "mp" is NOT in project state, so
-    // resolveInstallMarketplaceSource falls back to the user-scope record
-    // (CMP-3) and clones it into project state.
-    await installPlugin({
-      ctx,
-      run: runWithNothingLoaded(),
-      scope: "project",
-      cwd,
-      marketplace: "mp",
-      plugin: "tool",
-    });
-
-    const cfg = await loadConfig(projectLocations.configJsonPath);
-    assert.strictEqual(cfg.status, "valid");
-    if (cfg.status !== "valid") {
-      return;
-    }
-
-    // The adopted marketplace is DECLARED alongside the plugin key, with the
-    // cloned record's verbatim source.raw.
-    assert.strictEqual(cfg.config.marketplaces?.mp?.source, marketplaceRoot);
-    assert.ok(cfg.config.plugins?.["tool@mp"] !== undefined);
-
-    // Post-command reconcile against (merged project config, project state)
-    // is the EMPTY plan: no marketplacesToRemove, no dangling failed row.
-    const stateAfter = await loadState(projectLocations.extensionRoot);
-    const merged = mergeScopeConfigs(cfg.config, {});
-    const plan = planReconcile(merged, stateAfter, "project");
-    assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
-  } finally {
-    await cleanup();
-  }
+  // assert
+  assert.strictEqual(config.marketplaces?.mp?.source, marketplaceRoot);
+  assert.ok(config.plugins?.["tool@mp"] !== undefined);
+  assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
 });
 
-test("WR-09 orchestrated-mode SKIP: addMarketplace with notifications.mode 'orchestrated' does NOT touch the config file", async () => {
-  const { locationsFor } =
-    await import("../../extensions/pi-claude-marketplace/persistence/locations.ts");
-  const { readFile, stat, writeFile } = await import("node:fs/promises");
+test("WR-09 orchestrated-mode SKIP: addMarketplace with notifications.mode 'orchestrated' does NOT touch the config file", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "pi-cm-consistency-test-");
+  const locations = locationsFor("project", cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  const { gitOps } = createGitOps({ fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace") });
+  await mkdir(locations.scopeRoot, { recursive: true });
+  const initialBytes = JSON.stringify({ schemaVersion: 1 });
+  await writeFile(locations.baseConfigJsonPath, initialBytes, "utf8");
+  const beforeStat = await stat(locations.baseConfigJsonPath);
 
-  const { scopeRoot, cleanup } = await tmpScopeRoot();
-  try {
-    const cwd = scopeRoot.replace(/\/\.pi$/, "");
-    const locations = locationsFor("project", cwd);
-    await mkdir(locations.extensionRoot, { recursive: true });
+  // act
+  await addMarketplace({
+    ctx,
+    run: runWithNothingLoaded(),
+    scope: "project",
+    cwd,
+    completionCache: createCompletionCache(),
+    rawSource: "anthropics/claude-plugins-official",
+    gitOps,
+    notifications: { mode: "orchestrated" },
+  });
+  const afterBytes = await readFile(locations.baseConfigJsonPath, "utf8");
+  const afterStat = await stat(locations.baseConfigJsonPath);
 
-    const ctx = { mode: "tui", ui: { notify: (): void => undefined } };
-    const { gitOps } = createGitOps({
-      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
-    });
-
-    // Pre-seed config with a known fixture so we can prove byte-stability.
-    await mkdir(locations.scopeRoot, { recursive: true });
-    const initialBytes = JSON.stringify({ schemaVersion: 1 });
-    await writeFile(locations.configJsonPath, initialBytes, "utf8");
-    const beforeStat = await stat(locations.configJsonPath);
-
-    await addMarketplace({
-      ctx,
-      run: runWithNothingLoaded(),
-      scope: "project",
-      cwd,
-      completionCache: createCompletionCache(),
-      rawSource: "anthropics/claude-plugins-official",
-      gitOps,
-      notifications: { mode: "orchestrated" },
-    });
-
-    // Config file bytes + mtime UNCHANGED: orchestrated mode skipped the
-    // write-back. State MAY have changed (the orchestrator still recorded
-    // the marketplace in state.json); only the config side is asserted here.
-    const afterBytes = await readFile(locations.configJsonPath, "utf8");
-    const afterStat = await stat(locations.configJsonPath);
-    assert.strictEqual(afterBytes, initialBytes);
-    assert.strictEqual(afterStat.mtimeMs, beforeStat.mtimeMs);
-  } finally {
-    await cleanup();
-  }
+  // assert
+  // Only the config side is asserted: state may have changed.
+  assert.strictEqual(afterBytes, initialBytes);
+  assert.strictEqual(afterStat.mtimeMs, beforeStat.mtimeMs);
 });

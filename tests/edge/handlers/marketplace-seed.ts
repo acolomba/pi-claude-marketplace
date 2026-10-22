@@ -113,7 +113,7 @@ export async function seedAutoupdateConfig(
   mpName: string,
   autoupdate: boolean,
 ): Promise<void> {
-  const cfgPath = locations.configJsonPath;
+  const cfgPath = locations.baseConfigJsonPath;
   let existing: { marketplaces?: Record<string, { source: string; autoupdate?: boolean }> } = {};
   try {
     existing = JSON.parse(await readFile(cfgPath, "utf8")) as typeof existing;

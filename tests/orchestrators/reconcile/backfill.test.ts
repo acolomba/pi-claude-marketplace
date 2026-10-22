@@ -393,7 +393,6 @@ function seededScopeTree(): readonly string[] {
 /** The paths a promotion of both `skills` and `commands` leaves behind. */
 function fullyPromotedScopeTree(): readonly string[] {
   return [
-    "claude-plugins.json",
     "pi-claude-marketplace/",
     "pi-claude-marketplace/commands-staging/",
     "pi-claude-marketplace/resources/",
@@ -1240,7 +1239,6 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     });
     assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
-      "claude-plugins.json",
       "pi-claude-marketplace/",
       "pi-claude-marketplace/resources/",
       "pi-claude-marketplace/resources/skills/",
@@ -1353,7 +1351,6 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     });
     assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
-      "claude-plugins.json",
       "pi-claude-marketplace/",
       "pi-claude-marketplace/commands-staging/",
       "pi-claude-marketplace/hooks/",
@@ -2702,7 +2699,6 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     });
     assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
-      "claude-plugins.json",
       "pi-claude-marketplace/",
       "pi-claude-marketplace/commands-staging/",
       "pi-claude-marketplace/resources/",

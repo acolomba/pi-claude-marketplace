@@ -156,5 +156,35 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // LAYER-06: the same layer error in the pending diff; pending plans
+    // nothing for the scope. The file heads its block with no status, so the
+    // one failed row is the one error the tally counts.
+    "pending-layer-marketplace-undeclared": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Reconcile pending",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "claude-plugins.local.json",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "claude-plugins.local.json",
+                reasons: ["invalid manifest"],
+                cause: new Error(
+                  "The local config (claude-plugins.local.json) declares helper@official, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config.",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };

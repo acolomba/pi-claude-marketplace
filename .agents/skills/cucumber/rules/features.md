@@ -1,0 +1,112 @@
+# Feature files
+
+Part of the `cucumber` skill: `.agents/skills/cucumber/SKILL.md`.
+
+A feature file describes one user-visible capability from the outside. A reader who never opens a step definition must understand what each scenario proves. Where a feature file lives and how it is named is in `.agents/skills/cucumber/rules/layout.md`.
+
+```gherkin
+Feature: Orders checkout
+
+  Checkout turns the lines a customer picked into a placed order.
+  The scenarios run against a fake of the Acme payments API.
+
+  Scenario: The placed order prices every line
+    Given the order holds these lines:
+      | item  | quantity | price |
+      | apple | 2        | 2     |
+      | pear  | 1        | 3     |
+    When the customer places the order
+    Then the order has these lines:
+      | item  | quantity | subtotal |
+      | apple | 2        | 4        |
+      | pear  | 1        | 3        |
+```
+
+## Feature description
+
+- Every feature has a description of two or three lines under the title.
+- The description says what the feature protects and what the scenarios stand in for, such as a fake service in place of a vendor's.
+
+## Scenarios
+
+- Titles use sentence case and name the behavior. No `works`, `happy path`, `test`, or ticket and plan references.
+- One scenario proves one behavior. A scenario that needs a second `When` to prove its point usually hides a second behavior; split it.
+- A `Scenario Outline` is for three or more variants of one behavior. Its `<placeholder>` names say what each value is: `<quantity>`, not `<n>`.
+- The three variants of an Outline count the rows of every `Examples:` block, tagged or not.
+
+## Steps
+
+- Steps are entirely lower case after the keyword, so one step never appears in two spellings. Quoted values keep their own case.
+- Use `Given`, `When`, and `Then` only. Never `And` or `But`; repeat the keyword, so every step states its own role and moving a line never changes what it means.
+- Order: every `Given` comes before the first `When`. After that, `When` and `Then` may alternate, and no `Given` follows a `When`: setup after an action belongs to a second behavior and a second scenario.
+- `Given` states a precondition as a fact.
+- `When` states one action by a named actor in the present tense.
+- `Then` states an observable outcome in the present tense. Never `should`.
+- Use the definite article for a specific thing and `these` to introduce a data table (`these <things>:`), so the step reads as continuing into the table below it.
+- Be concise and use active verbs. Use the passive voice only when the actor is unknown.
+- Steps name user-visible things only: commands the user types, results the user sees, files the user owns. They never name temporary paths, process handles, or implementation modules.
+
+## Data tables
+
+- Header cells name the fields of the thing they describe in lower-case words: `unit price` for `unitPrice`.
+- A nested field drops a leading word that its parent already says: `cause.causeChain` is `cause chain`. So `source.kind` and `source.sourceKind` read the same, and a table cannot tell those two spellings apart. When two fields of one record read the same, the step fails rather than compare one of them.
+- A table lists every row the outcome contains, not a sample. The step compares the whole set.
+- A result with no rows has its own step, such as `the result lists no marketplaces`. A table with only a header row cannot be compared.
+- Align the columns.
+
+## Source kinds
+
+A marketplace can be published as one of several source kinds: `dir`, `file`, `url`, and `github`. A behavior that several kinds share is one `Scenario Outline`:
+
+- An untagged `Examples:` block holds the local kinds, `dir` and `file`. An `@url` block holds the url kind, and an `@github` block holds the github kind. `npm run check:features` fails on a row whose `source kind` does not belong in its block, and on a tagged block with no `source kind` column.
+- The kind reaches the steps through a `<source kind>` column, and the source the user types reaches them through a `<source>` column.
+- Tags appear only on `Examples:` blocks, and the only tags are `@url` and `@github`. A tag on a feature or a scenario would also tag its local rows, so excluding that tag would drop them.
+
+```gherkin
+  Scenario Outline: Adding a marketplace records it in the chosen scope
+    Given the marketplace "tools" is published as a <source kind> source
+    When the user runs "/claude:plugin marketplace add <source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+
+    Examples:
+      | source kind | source                                                    |
+      | dir         | {home}/marketplaces/tools                                 |
+      | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json |
+
+    @url
+    Examples:
+      | source kind | source                            |
+      | url         | https://{git host}/acme/tools.git |
+
+    @github
+    Examples:
+      | source kind | source     |
+      | github      | acme/tools |
+```
+
+`cucumber.json` excludes no tag, so every row runs. The url and github kinds share one stand-in, the run's https git host. The github kind reaches it through `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`. If a new source kind has no stand-in yet, `cucumber.json` excludes its tag, and the work that adds the stand-in removes the exclusion. Removing a tag turns on every row of that kind, with no edit to a feature file.
+
+A behavior that only one kind has lives in a feature file of its own.
+
+## Run tokens
+
+A scenario cannot know where its sandbox lives or when it runs. It writes each run-specific value as a brace token (D-03):
+
+- `{home}` is the home directory of the sandbox. A command expands it to the real path, and a result shows `{home}` wherever the real path appears.
+- `{git host}` is the `127.0.0.1:<port>` address of the run's https git host. A command expands it to that address, and a result shows `{git host}` wherever that exact address appears.
+- `{scenario time}` in a `last updated at` cell matches any exact ISO timestamp between the start of the scenario and the check. Any other value stays as written, so a stale, future, or malformed time fails (D-05).
+
+A token never uses `<...>`, because an Outline uses that form for its placeholders. A token never uses `~`, because the product prints `~` itself. An `Examples:` cell can hold a token: `| dir | {home}/marketplaces/tools |`. A stand-in whose address shows up in a command or a result gets its own token in the same way.
+
+## Background
+
+- A `Background:` holds `Given` steps only, and only those that every scenario in the file needs. Anything more moves part of a scenario's point out of the scenario.

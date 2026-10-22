@@ -36,10 +36,13 @@
 // cascade keeps its own entry fallback for that case (D-01-07).
 //
 // The failure arm's `cause.message` IS the rendered cause line. It carries the
-// declarer's `name@marketplace` key and a field path, a fixed phrase, or a
-// path-redacted message -- never an absolute path -- and it is built WITHOUT
-// `{ cause }` chaining, so the renderer's cause-chain walk cannot print the
-// raw underlying message behind it.
+// declarer's `name@marketplace` key and a fixed phrase or field path this
+// extension writes. It never carries the text of a manifest that fails to
+// load, because that text comes from repository content (T-05-04). A load
+// failure gets a fixed reason chosen by the error's class or errno code, never
+// by its message, so a missing, an unreadable, and an invalid manifest stay
+// distinguishable. It is built WITHOUT `{ cause }` chaining, so the renderer's
+// cause-chain walk has no raw message to print behind it.
 //
 // A declaration HOLDS its key whatever `version` or `sha` constraint it
 // carries. The closure walk's refusal of a `sha` pin is an install-time rule;
@@ -59,8 +62,7 @@
 
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { errorMessage } from "../../shared/errors.ts";
-import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
+import { InvalidMarketplaceManifestError, isErrnoException } from "../../shared/errors.ts";
 
 import { readDependencyDeclaration } from "./dependency-declaration-read.ts";
 
@@ -119,8 +121,8 @@ export interface ScopeDeclarationIndexOptions extends ScopeDeclarationDetailOpti
  * The index and the walked records, or the first record whose declarations
  * could not be established (D-05-07). `cause.message` names the declarer and
  * says why it could not be read -- its marketplace does not list it, its
- * declaration is unusable, its marketplace manifest failed to load, or its own
- * manifest is present but cannot be read. No classified token rides along: the
+ * declaration is unusable, its marketplace manifest is missing, cannot be read,
+ * or is invalid, or its own manifest is present but cannot be read. No classified token rides along: the
  * row a caller renders is about the TARGET, and the declarer's read-failure
  * token would make a false claim about the target's own manifest (the row
  * grammar's brace states a fact about the row's subject). `candidates` holds
@@ -162,12 +164,32 @@ export type ScopeDeclarationDetailResult =
 export type RecordDeclarations =
   { readonly ok: true; readonly declared: readonly AddressedDependency[] } | IndexFailure;
 
-function unreadableDeclarer(key: string, detail: string): IndexFailure {
+/**
+ * The failure that names `key`. `reason` is a fixed phrase or field path this
+ * extension writes, never the text of a thrown error or of a file (T-05-04).
+ */
+function unreadableDeclarer(key: string, reason: string): IndexFailure {
   return {
     ok: false,
     declarer: key,
-    cause: new Error(`cannot read the dependencies of ${key}: ${detail}`),
+    cause: new Error(`cannot read the dependencies of ${key}: ${reason}`),
   };
+}
+
+/**
+ * D-04 / T-05-04: why a marketplace manifest failed to load, as a fixed reason
+ * picked by the error's class or errno code. The error's own message never
+ * reaches the cause line.
+ */
+function manifestLoadReason(err: unknown): string {
+  if (err instanceof InvalidMarketplaceManifestError) {
+    return "its marketplace manifest is invalid";
+  }
+
+  const code = isErrnoException(err) ? err.code : undefined;
+  return code === "ENOENT" || code === "ENOTDIR"
+    ? "its marketplace manifest is missing"
+    : "its marketplace manifest cannot be read";
 }
 
 /**
@@ -190,8 +212,8 @@ export async function readRecordDeclarations(
   let manifest: Awaited<ReturnType<typeof loadMarketplaceManifest>>;
   try {
     manifest = await (options.loadManifest ?? loadMarketplaceManifest)(marketplace.manifestPath);
-  } catch (err: unknown) {
-    return unreadableDeclarer(key, redactAbsolutePaths(errorMessage(err)));
+  } catch (err) {
+    return unreadableDeclarer(key, manifestLoadReason(err));
   }
 
   const declared = lookupDeclaredPlugin(manifest, name);

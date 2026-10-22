@@ -20,6 +20,8 @@
 //     first load (gate-closed scrub in migrate.ts) so this projection can
 //     capture it before the next load scrubs it.
 
+import { ownValue } from "../shared/own-key.ts";
+
 import {
   loadConfig,
   saveConfig,
@@ -55,6 +57,12 @@ import type { ParsedSource } from "../domain/source.ts";
  *     (divergence-prone) loadConfig probe.
  *   - `"empty-state"` -- nothing to capture; an empty-but-present state.json
  *     must NOT spawn an empty claude-plugins.json in every scope root.
+ *   - `"local-invalid"` -- claude-plugins.json is absent and
+ *     claude-plugins.local.json cannot be read, so which records are
+ *     personal is unknown. The migration writes nothing rather than copy
+ *     every local declaration into the base config (FIX-02). The same read
+ *     pass aborts the plan on that local config (CFG-03), and the next load
+ *     after a repair migrates.
  *
  * Cutting `error` along the discriminant means the type system rejects
  * `result.error` reads on the `existing-valid` / `empty-state` arms; the
@@ -81,14 +89,24 @@ export type MigrateFirstRunResult =
       readonly migrated: false;
       readonly reason: "empty-state";
       readonly filePath: string;
+    }
+  | {
+      readonly migrated: false;
+      readonly reason: "local-invalid";
+      readonly filePath: string;
     };
 
 /**
- * MIG-01: pure lossless projection from in-memory ExtensionState to the
- * declarative ScopeConfig shape consumed by the reconcile planner.
+ * MIG-01: pure projection from in-memory ExtensionState to the declarative
+ * ScopeConfig shape consumed by the reconcile planner.
  *
  * No I/O. Every state marketplace and every plugin (including
- * `compatibility.installable === false`) appears in the output. Plugin
+ * `compatibility.installable === false`) appears in the output, except what
+ * `local` declares (FIX-02): a marketplace the local config declares is left
+ * out with every plugin recorded under it, and so is a plugin key the local
+ * config declares. The local config stays the only record of what is
+ * personal. The migration runs only while claude-plugins.json is absent, so a
+ * marketplace the local config declares is declared only there. Plugin
  * entries are flat-keyed `${pluginName}@${mpName}` (D-01) so the same
  * plugin name across two marketplaces does not collide. Each plugin entry
  * body is `{}` per D-04 (defaults applied at consume time).
@@ -108,7 +126,10 @@ export type MigrateFirstRunResult =
  *
  * Return shape includes `schemaVersion: 1` per D-v1.12-51-11 (self-documenting).
  */
-export function buildConfigFromState(state: ExtensionState): ScopeConfig & {
+export function buildConfigFromState(
+  state: ExtensionState,
+  local: ScopeConfig,
+): ScopeConfig & {
   readonly schemaVersion: 1;
   readonly marketplaces: NonNullable<ScopeConfig["marketplaces"]>;
   readonly plugins: NonNullable<ScopeConfig["plugins"]>;
@@ -117,6 +138,10 @@ export function buildConfigFromState(state: ExtensionState): ScopeConfig & {
   const pluginEntries: Array<[string, PluginConfigEntry]> = [];
 
   for (const [mpName, mp] of Object.entries(state.marketplaces)) {
+    if (ownValue(local.marketplaces, mpName) !== undefined) {
+      continue;
+    }
+
     // SP-7: the raw verbatim user input is the contract.
     // Defense-in-depth: ST-6 admits unknown-kind source objects without a
     // string `raw` (NFR-12 forward-compat); coerce those to their JSON
@@ -148,17 +173,26 @@ export function buildConfigFromState(state: ExtensionState): ScopeConfig & {
     }
 
     marketplaceEntries.push([mpName, entry]);
-
-    // Iterate plugins UNCONDITIONALLY -- soft-degraded entries
-    // (compatibility.installable === false) MUST appear in the projection.
-    for (const pluginName of Object.keys(mp.plugins)) {
-      pluginEntries.push([`${pluginName}@${mpName}`, {}]);
-    }
+    pluginEntries.push(...basePluginEntries(mpName, Object.keys(mp.plugins), local));
   }
 
   const marketplaces = Object.fromEntries(marketplaceEntries);
   const plugins = Object.fromEntries(pluginEntries);
   return { schemaVersion: 1, marketplaces, plugins };
+}
+
+// The base config's plugin entries for one marketplace. Soft-degraded entries
+// (compatibility.installable === false) appear too; only a plugin key the
+// local config declares is left out (FIX-02).
+function basePluginEntries(
+  mpName: string,
+  pluginNames: readonly string[],
+  local: ScopeConfig,
+): Array<[string, PluginConfigEntry]> {
+  return pluginNames
+    .map((pluginName) => `${pluginName}@${mpName}`)
+    .filter((key) => ownValue(local.plugins, key) === undefined)
+    .map((key) => [key, {}]);
 }
 
 /**
@@ -171,7 +205,9 @@ export function buildConfigFromState(state: ExtensionState): ScopeConfig & {
  * Idempotency comes from the loadConfig trichotomy itself (no half-set
  * flag).
  *
- * On the `absent` arm: builds the projection and writes via saveConfig.
+ * On the `absent` arm: reads claude-plugins.local.json, declines with
+ * `"local-invalid"` when it cannot be read (FIX-02), then builds the
+ * projection without the local declarations and writes via saveConfig.
  * Atomicity, NFR-10 containment, and CONFIG_VALIDATOR revalidation are all
  * inherited from saveConfig (SPLIT-02 sole sanctioned writer). No notify(),
  * no console.warn -- saveConfig errors propagate; the reconciliation caller
@@ -182,9 +218,9 @@ export async function migrateFirstRunConfig(
   loc: ScopedLocations,
   state: ExtensionState,
 ): Promise<MigrateFirstRunResult> {
-  const result = await loadConfig(loc.configJsonPath);
+  const result = await loadConfig(loc.baseConfigJsonPath);
   if (result.status === "valid") {
-    return { migrated: false, reason: "existing-valid", filePath: loc.configJsonPath };
+    return { migrated: false, reason: "existing-valid", filePath: loc.baseConfigJsonPath };
   }
 
   if (result.status === "invalid") {
@@ -192,20 +228,26 @@ export async function migrateFirstRunConfig(
       migrated: false,
       reason: "existing-invalid",
       error: result.error,
-      filePath: loc.configJsonPath,
+      filePath: loc.baseConfigJsonPath,
     };
   }
 
-  const config = buildConfigFromState(state);
+  const localResult = await loadConfig(loc.localConfigJsonPath);
+  if (localResult.status === "invalid") {
+    return { migrated: false, reason: "local-invalid", filePath: loc.baseConfigJsonPath };
+  }
+
+  const local = localResult.status === "valid" ? localResult.config : {};
+  const config = buildConfigFromState(state, local);
   const entryCount = Object.keys(config.marketplaces).length + Object.keys(config.plugins).length;
   if (entryCount === 0) {
     // UAT-01: nothing to capture -- an empty-but-present
     // state.json must NOT spawn an empty claude-plugins.json in every scope
     // root. The config file first appears when there is real desired state to
     // record (migration of a populated state, or command write-back).
-    return { migrated: false, reason: "empty-state", filePath: loc.configJsonPath };
+    return { migrated: false, reason: "empty-state", filePath: loc.baseConfigJsonPath };
   }
 
-  await saveConfig(loc.configJsonPath, config, loc.scopeRoot);
-  return { migrated: true, entryCount, filePath: loc.configJsonPath };
+  await saveConfig(loc.baseConfigJsonPath, config, loc.scopeRoot);
+  return { migrated: true, entryCount, filePath: loc.baseConfigJsonPath };
 }

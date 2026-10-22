@@ -17,7 +17,7 @@ Adding a new subcommand that reuses the existing grammar (existing status tokens
    - one `SubcommandHandlers` interface field (interface at `:26`-`:49`),
    - one `*_SUBCOMMANDS` tuple token plus any aliases (`TOP_LEVEL_SUBCOMMANDS` at `:55`-`:69`, `MARKETPLACE_SUBCOMMANDS` at `:75`-`:85`),
    - one switch `case` (top-level switch at `:143`-`:172`, marketplace switch at `:190`-`:213`),
-   - one `*_USAGE` usage-string line (`TOP_LEVEL_USAGE` at `:87`-`:100`, `MARKETPLACE_USAGE` at `:102`-`:110`).
+   - one usage entry: a new top-level verb adds one `TOP_LEVEL_USAGE` line and its spelling in the hand-written `TOP_LEVEL_USAGE` header. A new marketplace verb adds one `MARKETPLACE_VERB_SIGNATURES` row. That row adds the verb to the `MarketplaceVerb` type, builds its line in the marketplace help and its own usage line, and adds the verb and its alias to the spelling lists in the marketplace help header and in `TOP_LEVEL_USAGE`. The marketplace verb still needs the three edits above: the `SubcommandHandlers` field, its `MARKETPLACE_SUBCOMMANDS` tokens (verb and alias), and its switch `case`.
 
 2. **`edge/register.ts`** -- one wiring line in the `handlers` object (`:78`-`:97`), the `make*Handler(pi[, deps])` entry that binds the verb to its handler.
 

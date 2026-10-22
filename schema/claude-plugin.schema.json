@@ -166,7 +166,18 @@
                           "stale workflow command",
                           "requires pi-dynamic-workflows",
                           "components now supported",
-                          "unsupported mcp"
+                          "unsupported mcp",
+                          "marketplace in local layer only",
+                          "marketplace in base layer only",
+                          "plugin in local layer only",
+                          "plugin in base layer only",
+                          "already installed in base layer",
+                          "already installed in local layer",
+                          "still installed in base layer",
+                          "still installed in local layer",
+                          "disabled in local layer",
+                          "enabled in local layer",
+                          "network error"
                         ]
                       }
                     },
@@ -302,7 +313,18 @@
                     "stale workflow command",
                     "requires pi-dynamic-workflows",
                     "components now supported",
-                    "unsupported mcp"
+                    "unsupported mcp",
+                    "marketplace in local layer only",
+                    "marketplace in base layer only",
+                    "plugin in local layer only",
+                    "plugin in base layer only",
+                    "already installed in base layer",
+                    "already installed in local layer",
+                    "still installed in base layer",
+                    "still installed in local layer",
+                    "disabled in local layer",
+                    "enabled in local layer",
+                    "network error"
                   ]
                 }
               }
@@ -488,7 +510,18 @@
                           "stale workflow command",
                           "requires pi-dynamic-workflows",
                           "components now supported",
-                          "unsupported mcp"
+                          "unsupported mcp",
+                          "marketplace in local layer only",
+                          "marketplace in base layer only",
+                          "plugin in local layer only",
+                          "plugin in base layer only",
+                          "already installed in base layer",
+                          "already installed in local layer",
+                          "still installed in base layer",
+                          "still installed in local layer",
+                          "disabled in local layer",
+                          "enabled in local layer",
+                          "network error"
                         ]
                       }
                     },
@@ -624,7 +657,18 @@
                     "stale workflow command",
                     "requires pi-dynamic-workflows",
                     "components now supported",
-                    "unsupported mcp"
+                    "unsupported mcp",
+                    "marketplace in local layer only",
+                    "marketplace in base layer only",
+                    "plugin in local layer only",
+                    "plugin in base layer only",
+                    "already installed in base layer",
+                    "already installed in local layer",
+                    "still installed in base layer",
+                    "still installed in local layer",
+                    "disabled in local layer",
+                    "enabled in local layer",
+                    "network error"
                   ]
                 }
               }
@@ -875,7 +919,18 @@
                       "stale workflow command",
                       "requires pi-dynamic-workflows",
                       "components now supported",
-                      "unsupported mcp"
+                      "unsupported mcp",
+                      "marketplace in local layer only",
+                      "marketplace in base layer only",
+                      "plugin in local layer only",
+                      "plugin in base layer only",
+                      "already installed in base layer",
+                      "already installed in local layer",
+                      "still installed in base layer",
+                      "still installed in local layer",
+                      "disabled in local layer",
+                      "enabled in local layer",
+                      "network error"
                     ]
                   }
                 },
@@ -1054,7 +1109,18 @@
                       "stale workflow command",
                       "requires pi-dynamic-workflows",
                       "components now supported",
-                      "unsupported mcp"
+                      "unsupported mcp",
+                      "marketplace in local layer only",
+                      "marketplace in base layer only",
+                      "plugin in local layer only",
+                      "plugin in base layer only",
+                      "already installed in base layer",
+                      "already installed in local layer",
+                      "still installed in base layer",
+                      "still installed in local layer",
+                      "disabled in local layer",
+                      "enabled in local layer",
+                      "network error"
                     ]
                   }
                 },
@@ -1316,7 +1382,18 @@
                             "stale workflow command",
                             "requires pi-dynamic-workflows",
                             "components now supported",
-                            "unsupported mcp"
+                            "unsupported mcp",
+                            "marketplace in local layer only",
+                            "marketplace in base layer only",
+                            "plugin in local layer only",
+                            "plugin in base layer only",
+                            "already installed in base layer",
+                            "already installed in local layer",
+                            "still installed in base layer",
+                            "still installed in local layer",
+                            "disabled in local layer",
+                            "enabled in local layer",
+                            "network error"
                           ]
                         }
                       },
@@ -1501,7 +1578,18 @@
                             "stale workflow command",
                             "requires pi-dynamic-workflows",
                             "components now supported",
-                            "unsupported mcp"
+                            "unsupported mcp",
+                            "marketplace in local layer only",
+                            "marketplace in base layer only",
+                            "plugin in local layer only",
+                            "plugin in base layer only",
+                            "already installed in base layer",
+                            "already installed in local layer",
+                            "still installed in base layer",
+                            "still installed in local layer",
+                            "disabled in local layer",
+                            "enabled in local layer",
+                            "network error"
                           ]
                         }
                       },
@@ -1630,7 +1718,18 @@
               "stale workflow command",
               "requires pi-dynamic-workflows",
               "components now supported",
-              "unsupported mcp"
+              "unsupported mcp",
+              "marketplace in local layer only",
+              "marketplace in base layer only",
+              "plugin in local layer only",
+              "plugin in base layer only",
+              "already installed in base layer",
+              "already installed in local layer",
+              "still installed in base layer",
+              "still installed in local layer",
+              "disabled in local layer",
+              "enabled in local layer",
+              "network error"
             ]
           }
         }

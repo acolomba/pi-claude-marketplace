@@ -46,7 +46,7 @@
 // `emptyReconcilePlan(scope)` is the canonical empty target used by the
 // deferred convergence proof:
 //
-//   planReconcile(mergeScopeConfigs(buildConfigFromState(state), {}), state, scope)
+//   planReconcile(mergeScopeConfigs(buildConfigFromState(state, {}), {}), state, scope)
 //     deepEqual emptyReconcilePlan(scope)
 //
 // for any populated state.
