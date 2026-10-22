@@ -130,7 +130,7 @@ Los servidores MCP de los complementos reciben los nombres que les da Claude Cod
 
 Puedes instalar mercados y complementos en el ámbito de usuario o en el ámbito del proyecto. El valor predeterminado es el ámbito de usuario.
 
-El ámbito del proyecto hereda el ámbito de usuario. Así, puedes instalar un complemento desde un mercado de ámbito de usuario en el ámbito del proyecto. La instalación agrega ese mercado al ámbito del proyecto, como lo haría `marketplace add --scope project`, y lo declara en la configuración base del proyecto (`claude-plugins.json`), o en su configuración local (`claude-plugins.local.json`) con `--local`. Para un mercado git, el proyecto obtiene su propio clon. El proyecto conserva entonces el mercado cuando lo eliminas del ámbito de usuario.
+El ámbito del proyecto hereda el ámbito de usuario. Así, puedes instalar un complemento desde un mercado de ámbito de usuario en el ámbito del proyecto.
 
 También puedes instalar el mismo complemento en ambos ámbitos, el de usuario y el de proyecto. En ese caso, el complemento del ámbito de usuario tiene prioridad.
 
@@ -172,7 +172,7 @@ La configuración local, `claude-plugins.local.json`, está junto a la configura
 | `user`    | `~/.pi/agent/claude-plugins.local.json` |
 | `project` | `<cwd>/.pi/claude-plugins.local.json`   |
 
-La configuración local anula entradas de la configuración base. Puedes declarar un mercado o un complemento en ambas capas. Su entrada local anula solo los campos que define, y toma los demás campos de la configuración base. Por ejemplo, una entrada local de mercado sin `autoupdate` usa el valor de `autoupdate` de la configuración base, y una entrada local de complemento sin `enabled` usa el valor de `enabled` de la configuración base.
+La configuración local anula entradas de la configuración base.
 
 Un comando que escribe una declaración modifica solo la configuración base, o solo la configuración local con `--local`. Hay dos excepciones:
 
@@ -200,42 +200,6 @@ En el ámbito del proyecto, confirma (`commit`) la configuración base, `claude-
 ```
 
 Las configuraciones de ámbito de usuario se encuentran en tu directorio de inicio. Son personales y nunca se comparten.
-
-## Espejo de GitHub
-
-La mayoría de los usuarios nunca necesita esta sección. `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` es una configuración avanzada. Envía los orígenes de GitHub a otro host git `https`, como un espejo, un servidor aislado de la red o un servidor local de pruebas. Un origen de GitHub es una abreviatura `owner/repo` o una URL `https://github.com/...`.
-
-Define la variable en el shell que inicia Pi:
-
-```text
-export PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL=https://git.example.com/mirror
-```
-
-Después, agrega un mercado de GitHub en Pi como de costumbre:
-
-```text
-/claude:plugin marketplace add upstash/context7
-```
-
-Este comando clona `https://git.example.com/mirror/upstash/context7.git`. La ruta después del host se conserva en la URL, y una barra final en el valor no cambia nada.
-
-El valor debe ser una URL `https:` sin nombre de usuario, contraseña, consulta ni fragmento. Si el valor incumple una de estas reglas, el comando falla con un error que nombra la variable. Un valor vacío cuenta como no definido.
-
-La configuración tiene estos límites:
-
-- Mientras la variable está definida, los orígenes de GitHub nunca usan la autenticación Device Flow.
-
-- Las credenciales vienen solo de `git credential`. Guarda una credencial bajo el host del valor, con su puerto si lo tiene. Por ejemplo, para `https://git.example.com/mirror`:
-
-  ```text
-  printf 'protocol=https\nhost=git.example.com\nusername=<user>\npassword=<token>\n\n' | git credential approve
-  ```
-
-- `list`, `info`, las configuraciones (`claude-plugins.json` y `claude-plugins.local.json`) y los resultados de los comandos siguen mostrando URLs `https://github.com/...`. Cuando falla la descarga de un comando, el error nombra la URL que el comando descargó realmente, así que un valor incorrecto es fácil de ver. `/claude:plugin bootstrap` no muestra esta URL, y los errores de `/reload` no siempre la muestran.
-
-- Un valor modificado se aplica en la siguiente descarga. No hace falta volver a agregar el mercado.
-
-Claude Code no tiene esta configuración, así que este comportamiento es una diferencia con respecto a Claude Code.
 
 ## Referencia de comandos
 

@@ -132,7 +132,7 @@ Plugin MCP servers get the names that Claude Code gives them. The model sees eac
 
 You can install marketplaces and plugins in the user scope or the project scope. The default is user scope.
 
-The project scope inherits the user scope. So you can install a plugin from a user-scope marketplace into the project scope. The install adds that marketplace to the project scope, as `marketplace add --scope project` would, and declares it in the project's base config (`claude-plugins.json`), or in its local config (`claude-plugins.local.json`) with `--local`. For a git marketplace, the project gets its own clone. The project then keeps the marketplace when you remove it from the user scope.
+The project scope inherits the user scope. So you can install a plugin from a user-scope marketplace into the project scope.
 
 You can also install the same plugin in both the user and project scopes. Then the user-scope plugin takes precedence.
 
@@ -174,7 +174,7 @@ The local config, `claude-plugins.local.json`, is next to the base config.
 | `user`    | `~/.pi/agent/claude-plugins.local.json` |
 | `project` | `<cwd>/.pi/claude-plugins.local.json`   |
 
-The local config overrides entries from the base config. You can declare a marketplace or a plugin in both layers. Its local entry overrides only the fields that it sets, and it takes the other fields from the base config. For example, a local marketplace entry without `autoupdate` uses the `autoupdate` value of the base config, and a local plugin entry without `enabled` uses the `enabled` value of the base config.
+The local config overrides entries from the base config.
 
 A command that writes a declaration changes only the base config, or only the local config with `--local`. There are two exceptions:
 
@@ -202,42 +202,6 @@ In the project scope, commit the base config, `claude-plugins.json`. Then your c
 ```
 
 User-scope configs live in your home directory. They are personal and never shared.
-
-## GitHub mirror
-
-Most users never need this section. `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` is an advanced setting. It sends GitHub sources to another `https` git host, such as a mirror, an air-gapped server, or a local test server. A GitHub source is an `owner/repo` shorthand or an `https://github.com/...` URL.
-
-Set the variable in the shell that starts Pi:
-
-```text
-export PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL=https://git.example.com/mirror
-```
-
-Then add a GitHub marketplace in Pi as usual:
-
-```text
-/claude:plugin marketplace add upstash/context7
-```
-
-This command clones `https://git.example.com/mirror/upstash/context7.git`. The path after the host stays in the URL, and a trailing slash in the value makes no difference.
-
-The value must be an `https:` URL with no user name, password, query, or fragment. If the value breaks one of these rules, the command fails with an error that names the variable. An empty value counts as unset.
-
-The setting has these limits:
-
-- While the variable is set, GitHub sources never use Device Flow authentication.
-
-- Credentials come only from `git credential`. Store a credential under the host of the value, with its port if it has one. For example, for `https://git.example.com/mirror`:
-
-  ```text
-  printf 'protocol=https\nhost=git.example.com\nusername=<user>\npassword=<token>\n\n' | git credential approve
-  ```
-
-- `list`, `info`, the configs (`claude-plugins.json` and `claude-plugins.local.json`), and command results keep showing `https://github.com/...` URLs. When a command's fetch fails, the error names the URL that the command actually fetched, so a wrong value is easy to see. `/claude:plugin bootstrap` does not show this URL, and errors from `/reload` do not always show it.
-
-- A changed value applies on the next fetch. You do not have to add the marketplace again.
-
-Claude Code has no such setting, so this behavior is a difference from Claude Code.
 
 ## Command reference
 
