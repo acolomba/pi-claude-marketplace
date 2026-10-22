@@ -21,6 +21,39 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
+## Current Milestone: lifecycle-coverage -- Plugin Lifecycle Behavioral Tests
+
+**Goal:** The cucumber suite covers every `/claude:plugin` lifecycle command,
+so a regression in plugin install, enable, update, or any other lifecycle
+behavior fails a scenario named after it, as `marketplace-features` did for
+marketplace commands.
+
+**Target features:**
+
+- Happy paths that the plugin suite lacks: `enable` and `disable` (skills
+  come back or go away, the plugin stays installed), single-plugin
+  `reinstall`, and `update @<marketplace>`.
+- Flags and variants that no scenario covers: `install --partial` and
+  `--map-model`, dependency cascade install, user scope, `uninstall
+  --keep-data` and `--prune`, and git, github, and url plugin sources served
+  by the loopback git host.
+- Feature files of their own for `list`, `info`, `pending`, `fetch`, `prune`,
+  `import`, `bootstrap`, `browse` (the non-TUI refusal), and plugin `help`.
+- Reconcile on a new session after a hand-edited config: added, removed,
+  enabled, and disabled plugins converge.
+- Failure behavior: rollback when an install or update fails partway, a
+  state lock held by another process, cleanup after a failed `marketplace
+  add`, and `plugin-clones/` cleanup on `marketplace remove`.
+- Missing optional peers (pi-subagents, pi-mcp-adapter) degrade an install
+  instead of failing it.
+
+**Key context:** Test plugins carry skills only; scenarios for the other
+component kinds (commands, agents, MCP, hooks, workflows) are a later
+milestone. Shared step-definition and driver changes land in a first phase,
+so that each later phase owns its own feature file and runs in parallel with
+the others. The suite's existing feature files, steps, and stand-ins are the
+pattern.
+
 ## Previous Milestone: marketplace-features -- Marketplace Behavioral Tests (branch: features/cucumber-behavioral-tests, started 2026-10-15, completed 2026-10-21, PR #271, not yet merged, no npm release)
 
 **Goal:** A cucumber suite drives every `/claude:plugin marketplace` lifecycle
@@ -1589,4 +1622,4 @@ _Last updated: 2026-10-11 after the json-output milestone: 9 phases and
 under `.planning/milestones/json-output-*`. Merge of `features/json` and the
 next milestone remain._
 
-_Last updated: 2026-10-16 after marketplace-features Phase 3 (Marketplace Add)._
+_Last updated: 2026-10-22 at the start of milestone lifecycle-coverage._
