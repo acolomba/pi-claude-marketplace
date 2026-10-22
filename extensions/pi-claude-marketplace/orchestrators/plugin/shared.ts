@@ -46,6 +46,7 @@ import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { crossScopeFlag, marketplaceInOtherScope } from "../marketplace/shared.ts";
 
 import { readRecordDeclarations } from "./dependency-index.ts";
+import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
 
 import type { MarketplaceStateRecord } from "./dependency-index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
@@ -1723,4 +1724,27 @@ export function retiresWorkflowCommand(
 ): boolean {
   const placed = new Set(placedNames);
   return previousNames.some((name) => !placed.has(name));
+}
+
+/**
+ * WLIF-01: sweep abandoned workflow staging trees on behalf of `verb` and
+ * debug-log what the sweep could not remove. Never throws and never reaches
+ * the user (D-19-01): hygienic cleanup never becomes the primary user-facing
+ * path.
+ */
+export async function sweepWorkflowsStaging(
+  locations: Pick<ScopedLocations, "workflowsStagingDir" | "workflowsHomeDir">,
+  verb: string,
+  pluginRef: string,
+): Promise<void> {
+  try {
+    const leaks = await garbageCollectWorkflowsStaging(locations);
+    if (leaks.length > 0) {
+      hookDebugLog(
+        `${verb}: workflows staging GC left ${leaks.length.toString()} tree(s) for ${pluginRef}: ${leaks.join("; ")}`,
+      );
+    }
+  } catch (err) {
+    hookDebugLog(`${verb}: workflows staging GC failed for ${pluginRef}: ${errorMessage(err)}`);
+  }
 }

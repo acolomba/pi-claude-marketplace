@@ -53,7 +53,7 @@ const MARKETPLACE_VALIDATOR = Compile(MARKETPLACE_SCHEMA);
 /**
  * Isolates invalid dependency declarations before validating the marketplace.
  * The stub's `source` sub-object is the shape `info.ts`'s
- * `isUnsupportedEntrySource` check and `tests/architecture/partial-vocabulary-guard.test.ts`
+ * `isUnsupportedEntrySource` check and `test/architecture/partial-vocabulary-guard.test.ts`
  * both pin. The stub keeps the entry's own `dependencies` value: the resolver
  * parses it again and reports the parse failure as the entry's defect, so no
  * synthetic marker is needed and a real entry cannot be mistaken for a stub.

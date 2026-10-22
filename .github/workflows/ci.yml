@@ -13,7 +13,7 @@ on:
     # Build inputs. The npm-check hook in .pre-commit-config.yaml lists the same files.
     paths: &build_inputs
       - "extensions/**"
-      - "tests/**"
+      - "test/**"
       - "features/**"
       - "cucumber.json"
       - "rule-packs/**"
@@ -178,7 +178,7 @@ jobs:
         run: npm ci --ignore-scripts
 
       - name: Install exact Pi peer-floor fixture
-        run: npm --prefix tests/e2e/pi-peer-floor ci --ignore-scripts
+        run: npm --prefix test/e2e/pi-peer-floor ci --ignore-scripts
 
       - name: Run pinned e2e tests
         run: npm run test:e2e

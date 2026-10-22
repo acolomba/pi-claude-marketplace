@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- Internal: the test suite moves from `tests/` to `test/`, and the duplication check now fails on every repeated block of code. (#272)
+
 - Adding a git marketplace now takes a `#ref` on the `owner/repo` shorthand, and a failed add, update, or fetch reports its git failure more clearly.
 
   - The `owner/repo#ref` shorthand now adds the marketplace at that ref, as `owner/repo@ref` does.

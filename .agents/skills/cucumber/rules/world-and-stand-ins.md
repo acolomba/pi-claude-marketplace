@@ -24,4 +24,4 @@ Part of the `cucumber` skill: `.agents/skills/cucumber/SKILL.md`.
 - An MCP config notice result has no rows: its notices are fields, and only `the command reports these results:` states them. That step records it through the world's `markNoticesCompared()`. A scenario that otherwise passes fails when the last command emitted a notice that step did not compare, and a second `When` fails when the first one's notices went uncompared.
 - Local marketplace fixtures live under the sandbox home directory.
 - The world records the source kind of each published marketplace, and the library code dispatches on it. A new source kind changes library code only, not the steps.
-- A driver may reuse a process harness from `tests/` rather than copy it.
+- A driver may reuse a process harness from `test/` rather than copy it.

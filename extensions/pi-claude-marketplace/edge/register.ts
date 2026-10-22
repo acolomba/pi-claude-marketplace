@@ -163,7 +163,7 @@ export function registerClaudePluginCommand(
     // `process.cwd()` there, so a fresh `makeLocationsResolver` is
     // built from the current directory on each lookup -- the read
     // happens per lookup, not once when the command is registered.
-    // Pinned by `tests/edge/register.test.ts`, test "resolves argument
+    // Pinned by `test/edge/register.test.ts`, test "resolves argument
     // completions against the working directory the callback runs in".
     getArgumentCompletions: (prefix) =>
       getArgumentCompletions(prefix, makeLocationsResolver(process.cwd()), deps.completionCache),

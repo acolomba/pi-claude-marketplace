@@ -67,7 +67,7 @@ Pi wraps each notification in an `entry_appended` event. Its `entry` has `type: 
 
 The payload's `origin.kind` identifies `command`, `load`, or `hook` output. For a command, `origin.commandId` names the operation, such as `plugin list`. `origin.invocationId` identifies one run. Two runs of `plugin list` have the same command ID and different invocation IDs. For a file with several runs, set `invocation_id` to the run you need instead of using the single-run selector. The examples exclude load and hook entries.
 
-Real CLI tests passed on Pi 1.0.0, both the installed runtime and the exact-floor fixture, with stdin closed. Both runs emitted a command-origin `cascade` with `marketplaces: []` for an empty installation. The tests load the production extension in temporary directories without operator credentials. See [the runtime tests](../tests/e2e/pi-json-output.test.ts).
+Real CLI tests passed on Pi 1.0.0, both the installed runtime and the exact-floor fixture, with stdin closed. Both runs emitted a command-origin `cascade` with `marketplaces: []` for an empty installation. The tests load the production extension in temporary directories without operator credentials. See [the runtime tests](../test/e2e/pi-json-output.test.ts).
 
 ## Prepare one command for the examples
 
@@ -864,7 +864,7 @@ RPC front-ends receive custom `claude-plugin` entries through the JSON strategy.
 
 A slash-command-only run does not create its initial session file until an assistant message exists. This applies even when persistence is enabled. The independent `--no-session` flag disables persistence altogether. An entry in session memory or the event stream therefore does not prove that Pi wrote a session file.
 
-The [real-runtime tests](../tests/e2e/pi-json-output.test.ts) passed on installed Pi 1.0.0 and on the separate exact-floor fixture, also Pi 1.0.0. Both runs verified schema-valid command output, startup memory without streaming, RPC retrieval, and slash-only persistence timing. An earlier [execution record](../.planning/milestones/json-output-phases/07-mode-refusals-real-pi-verification-and-docs/07-03-SUMMARY.md#verification-evidence) records the same checks on Pi 0.87.1 and the earlier 0.86.1 floor. These tests use fresh directories and no operator credentials.
+The [real-runtime tests](../test/e2e/pi-json-output.test.ts) passed on installed Pi 1.0.0 and on the separate exact-floor fixture, also Pi 1.0.0. Both runs verified schema-valid command output, startup memory without streaming, RPC retrieval, and slash-only persistence timing. An earlier [execution record](../.planning/milestones/json-output-phases/07-mode-refusals-real-pi-verification-and-docs/07-03-SUMMARY.md#verification-evidence) records the same checks on Pi 0.87.1 and the earlier 0.86.1 floor. These tests use fresh directories and no operator credentials.
 
 Output delivery has four accepted limits:
 

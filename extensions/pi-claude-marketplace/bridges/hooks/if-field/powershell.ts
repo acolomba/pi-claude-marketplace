@@ -402,6 +402,7 @@ function readBalancedParens(text: string, start: number): number {
 function emitInner(inner: string, out: string[], depth: number): void {
   for (const piece of splitOnCompoundSeparators(inner)) {
     out.push(piece);
+    // fallow-ignore-next-line code-duplication -- reviewed: Bash and PowerShell parse command substitution differently, so each scanner keeps its own recursion and the two can drift apart
     pushRecursed(piece, out, depth + 1);
   }
 }

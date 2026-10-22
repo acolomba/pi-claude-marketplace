@@ -3,7 +3,7 @@
 // Read-only info surface for `marketplace info <name>`. MUST NOT touch
 // the network (NFR-5) -- no `platform/git`, no `DEFAULT_GIT_OPS`, no
 // `refreshGitHubClone`. The grep-gate test in
-// `tests/orchestrators/marketplace/info.test.ts` enforces this
+// `test/orchestrators/marketplace/info.test.ts` enforces this
 // structurally. IL-2: exactly one `notify()` call per invocation on the
 // all-success / all-not-added paths. The partial-failure path intentionally
 // emits one notify per scope in project-first order, so a corrupt manifest

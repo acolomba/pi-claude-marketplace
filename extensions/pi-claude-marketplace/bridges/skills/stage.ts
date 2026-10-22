@@ -248,6 +248,7 @@ export async function prepareStageSkills(
   // generated-name collision is that same skip whether the two sources sit
   // in one declared componentPaths.skills entry or in two, so `discovered`
   // is collision-free here by construction.
+  // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
   const { discovered, warnings: discoverWarnings } = await discoverPluginSkills({
     pluginName,
     resolved,
@@ -405,6 +406,7 @@ export async function prepareStageSkills(
     );
   }
 
+  // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
   return {
     kind: "staged",
     locations,
@@ -571,6 +573,7 @@ export async function replacePreparedSkills(
       renamed.push({ to: pair.to });
     }
   } catch (err) {
+    // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
     const leaks = await rollbackSkillsReplacementInternal(
       ops,
       prepared,

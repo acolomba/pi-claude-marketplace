@@ -144,19 +144,24 @@ export interface PendingSessionStartContext {
 // Runtime-bound operations
 // ──────────────────────────────────────────────────────────────────────────
 
-/** Routing behavior bound to one required hooks runtime. */
-export interface RoutingStateOperations {
-  readonly currentEpoch: () => number;
-  readonly bumpEpoch: () => number;
-  readonly appendPendingSessionStartContext: (entry: PendingSessionStartContext) => void;
-  readonly pendingSessionStartContextEntries: () => readonly PendingSessionStartContext[];
-  readonly clearPendingSessionStartContext: () => void;
-  readonly setParsedConfig: (key: string, entry: CacheEntry) => void;
-  readonly deleteParsedConfig: (key: string) => void;
-  readonly parsedConfigEntries: () => ReadonlyMap<string, CacheEntry>;
-  readonly getRoutingBucket: (event: BucketAEvent) => readonly RoutingEntry[];
-  readonly setRoutingBucket: (event: BucketAEvent, entries: readonly RoutingEntry[]) => void;
-  readonly routingTableEntries: () => ReadonlyMap<BucketAEvent, readonly RoutingEntry[]>;
+/**
+ * Routing behavior bound to one required hooks runtime. The members it shares
+ * with `HooksRuntime` are the runtime's own; the rest rename a runtime member.
+ */
+export interface RoutingStateOperations extends Pick<
+  HooksRuntime,
+  | "appendPendingSessionStartContext"
+  | "pendingSessionStartContextEntries"
+  | "setParsedConfig"
+  | "deleteParsedConfig"
+  | "parsedConfigEntries"
+  | "getRoutingBucket"
+  | "setRoutingBucket"
+  | "routingTableEntries"
+> {
+  readonly currentEpoch: HooksRuntime["currentGeneration"];
+  readonly bumpEpoch: HooksRuntime["advanceGeneration"];
+  readonly clearPendingSessionStartContext: HooksRuntime["preparePendingContextForRegistration"];
 }
 
 /** Binds routing behavior to an explicitly supplied runtime lifetime. */

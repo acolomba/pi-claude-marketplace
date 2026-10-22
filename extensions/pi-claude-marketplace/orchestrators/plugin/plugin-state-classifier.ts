@@ -4,7 +4,7 @@
 // the list row owners (`composeInstalledListRow` / `availableRowMessage`) and the
 // completion bucketizer (`orchestrators/edge-deps.ts::loadManifestForMarketplace`)
 // derive their finer plugin state from THESE two functions -- there is no
-// second classifier. A parity drift-guard test (tests/orchestrators/edge-deps.test.ts)
+// second classifier. A parity drift-guard test (test/orchestrators/edge-deps.test.ts)
 // asserts the two surfaces never diverge.
 //
 // PURITY (NFR-5): both functions take already-resolved inputs. They perform no

@@ -43,6 +43,7 @@
 /.claude/skills/show-me
 /.claude/skills/fallow
 /.claude/skills/spike-findings-*/
+/.claude/worktrees
 
 # codex
 /.codex/.gsd-profile

@@ -89,7 +89,7 @@ fi
 
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
 
-# Resolve the repository's own Pi CLI through tests/pi-runtime.ts, never a
+# Resolve the repository's own Pi CLI through test/pi-runtime.ts, never a
 # `pi` on PATH. pathToFileURL keeps the import safe for spaces and `#` in
 # repo_root. A resolution failure (package not installed) writes an `npm ci`
 # hint to stderr and exits non-zero, which `set -e` turns into a script exit.
@@ -102,7 +102,7 @@ try {
   process.stderr.write(`scripts/pi.sh: ${error.message}\n`);
   process.exitCode = 1;
 }
-' "$repo_root/tests/pi-runtime.ts" "$repo_root")
+' "$repo_root/test/pi-runtime.ts" "$repo_root")
 
 # Companion extensions, pinned here only (PIFL-07): never as dependencies,
 # devDependencies or package-lock.json entries (NFR-5, D-98-10). package.json

@@ -263,7 +263,7 @@ export function notifyPluginPathSkipped(
  * caller's message and usage block (RAWS-01, D-06). The text strategy joins
  * them with one blank line when usage is nonempty, at `error` severity (SNM-13); that blank
  * line is part of the user contract, and
- * `tests/shared/notification-dispatch.test.ts` asserts it byte-for-byte (the
+ * `test/shared/notification-dispatch.test.ts` asserts it byte-for-byte (the
  * SNM-13 case).
  */
 export function notifyUsageError(
@@ -430,7 +430,7 @@ export function notifyAsyncRewakeSummary(
  * first line ("Stop hook override cap reached.") and, after a `\n\n`
  * separator, a detail block naming the plugin and the cap. The host UI prepends
  * the `Warning:` label to the summary line. The byte form is locked by
- * `tests/architecture/hooks-cap-notify.test.ts` against the
+ * `test/architecture/hooks-cap-notify.test.ts` against the
  * `stop-override-cap` block in `docs/output-catalog.md`.
  */
 export function notifyStopHookOverrideCap(

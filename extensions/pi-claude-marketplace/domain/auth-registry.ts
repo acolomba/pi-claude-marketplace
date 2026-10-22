@@ -16,7 +16,7 @@
  * names, error codes and request bodies, so both hosts share one engine.
  *
  * AUTH-09 discipline: no credential field is ever interpolated into an
- * Error/notify here; enforced by tests/architecture/no-credential-leak.test.ts
+ * Error/notify here; enforced by test/architecture/no-credential-leak.test.ts
  * (PROV-05).
  */
 

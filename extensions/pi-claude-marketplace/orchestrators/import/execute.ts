@@ -17,6 +17,7 @@ import {
   type PluginInstallRecord,
 } from "../../persistence/state-io.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
+import { declaredDependencies } from "../../shared/concerns/soft-dep.ts";
 import {
   ConcurrentInstallError,
   DependencyCascadeError,
@@ -62,7 +63,6 @@ import type { InstallHooksRouting } from "../../orchestrators/plugin/install-dis
 import type { InstallPluginOutcome } from "../../orchestrators/types.ts";
 import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
-import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -480,29 +480,6 @@ function unexpectedFailureReason(reason: UnexpectedPluginFailureOutcome["reason"
 }
 
 /**
- * WDEP-02: `workflows` pushes LAST, so a cascade row that declares agents and
- * mcp renders the same two-marker brace whether or not it also declares
- * workflows.
- */
-function dependenciesFromInstalled(o: PluginInstalledOutcome): readonly Dependency[] {
-  const deps: Dependency[] = [];
-  if (o.declaresAgents) {
-    deps.push("agents");
-  }
-
-  if (o.declaresMcp) {
-    deps.push("mcp");
-  }
-
-  if (o.declaresWorkflows) {
-    deps.push("workflows");
-  }
-
-  // defense-in-depth: typed readonly + runtime freeze (codebase convention)
-  return Object.freeze(deps);
-}
-
-/**
  * Converts a `ClaudeImportExecutionResult` into the
  * `MarketplaceNotificationMessage[]` payload for `notify()`.
  *
@@ -555,7 +532,7 @@ function buildImportNotificationMarketplaces(
     const row: PluginInstalledMessage = {
       status: "installed",
       name: o.plugin,
-      dependencies: dependenciesFromInstalled(o),
+      dependencies: declaredDependencies(o),
       // D-04-07: a promotion's brace is the standalone row's -- the record was
       // here before, and this command promoted it.
       ...(o.promoted === true && { reasons: PROMOTED_ROW_REASONS }),

@@ -311,6 +311,7 @@ async function walkCommandsDir(
   out: DiscoveredCommand[],
   warnings: string[],
 ): Promise<void> {
+  // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
   const entries = await readWalkEntries(dir, base, warnings);
 
   // Deterministic ordering for stable warning messages and test assertions.

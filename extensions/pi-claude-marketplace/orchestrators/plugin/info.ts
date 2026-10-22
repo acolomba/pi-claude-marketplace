@@ -116,6 +116,7 @@ import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging
 import type {
   GitPluginRootResult,
   ResolveContext,
+  ResolvedPluginInstallable,
   ResolvedPluginUnavailable,
   ResolvedPluginPartiallyAvailable,
 } from "../../domain/resolver-types.ts";
@@ -1670,7 +1671,7 @@ function skipReasonFor(
  * signature that cannot express a fetch is a stronger guarantee than a branch
  * that declines one, and adding a `fetchCtx` parameter would silently dissolve
  * it. What keeps that true under change is the pair of zero-call INFO-12 cases
- * in `tests/orchestrators/plugin/info.test.ts`, which inject the clone-cache
+ * in `test/orchestrators/plugin/info.test.ts`, which inject the clone-cache
  * and credential seams and pin every counter on both mocks at 0 -- once for a
  * `--fetch` run and once for a bare `info` run -- an assertion that can fail,
  * not a reading of the control flow.
@@ -2185,23 +2186,12 @@ async function buildInstalledGitRow(opts: {
         resolveGitPluginRoot: probe,
       });
       if (resolved.state === "installable") {
-        const composed = await composeResolvedComponents(
-          reader,
-          env,
-          presence.pluginRoot,
-          resolved,
+        return await buildResolvedInstalledRow(reader, env, presence.pluginRoot, resolved, {
           pluginName,
-        );
-        return {
-          status: "installed",
-          name: pluginName,
-          ...(version !== undefined && { version }),
-          ...(description !== undefined && { description }),
-          ...advisoryFields(composed.notes),
-          componentsResolved: true,
-          components: composed.components,
-          ...(dependencies !== undefined && { dependencies }),
-        };
+          version,
+          description,
+          dependencies,
+        });
       }
     }
   } catch (err) {
@@ -2224,6 +2214,36 @@ async function buildInstalledGitRow(opts: {
   // COLD / missing clone, non-installable warm resolve, or a probe/read throw:
   // preserve the recorded install status (D-78-04) with `components: not resolved`.
   return buildNonPathInstalledRow(pluginName, version, description, installedRecord);
+}
+
+/**
+ * Build the `(installed)` row of a plugin that resolved installable, with its
+ * components read from `pluginRoot`.
+ */
+async function buildResolvedInstalledRow(
+  reader: PluginInfoReader,
+  env: ClaudeEnv,
+  pluginRoot: string,
+  resolved: ResolvedPluginInstallable,
+  row: {
+    readonly pluginName: string;
+    readonly version: string | undefined;
+    readonly description: string | undefined;
+    readonly dependencies: readonly string[] | undefined;
+  },
+): Promise<PluginInfoRow> {
+  const { pluginName, version, description, dependencies } = row;
+  const composed = await composeResolvedComponents(reader, env, pluginRoot, resolved, pluginName);
+  return {
+    status: "installed",
+    name: pluginName,
+    ...(version !== undefined && { version }),
+    ...(description !== undefined && { description }),
+    ...advisoryFields(composed.notes),
+    componentsResolved: true,
+    components: composed.components,
+    ...(dependencies !== undefined && { dependencies }),
+  };
 }
 
 /**
@@ -2298,23 +2318,12 @@ async function buildInstalledRow(opts: {
       readFileText: (filePath) => reader.readTextFile(filePath),
     });
     if (resolved.state === "installable") {
-      const composed = await composeResolvedComponents(
-        reader,
-        env,
-        resolved.pluginRoot,
-        resolved,
+      return await buildResolvedInstalledRow(reader, env, resolved.pluginRoot, resolved, {
         pluginName,
-      );
-      return {
-        status: "installed",
-        name: pluginName,
-        ...(version !== undefined && { version }),
-        ...(description !== undefined && { description }),
-        ...advisoryFields(composed.notes),
-        componentsResolved: true,
-        components: composed.components,
-        ...(dependencies !== undefined && { dependencies }),
-      };
+        version,
+        description,
+        dependencies,
+      });
     }
 
     // resolveStrict returned a non-installable arm but the state record says

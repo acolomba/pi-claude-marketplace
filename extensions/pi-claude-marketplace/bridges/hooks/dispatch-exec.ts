@@ -44,7 +44,7 @@
 // `node:child_process` import sites in the extension tree (the first being
 // `platform/git-credential.ts`; the third is the async-rewake registry at
 // `bridges/hooks/async-rewake/registry.ts`). The architecture-test gate at
-// `tests/architecture/no-shell-out.test.ts` enforces the 3-element set;
+// `test/architecture/no-shell-out.test.ts` enforces the 3-element set;
 // adding a fourth file requires an explicit edit there + an update to the
 // sibling "exactly three files" assertion, with justification in the
 // docstring header.
@@ -407,6 +407,7 @@ async function spawnAndCollect(
         hookDebugLog(`exec: stderr (${entry.pluginId}/${entry.claudeEvent}): ${stderr.trim()}`);
       }
 
+      // fallow-ignore-next-line code-duplication -- reviewed: the async-rewake and synchronous dispatch paths each own their child's stdin wiring; the shared part is a short EPIPE guard
       settle(parseHookStdout(code, stdout, stderr));
     });
 

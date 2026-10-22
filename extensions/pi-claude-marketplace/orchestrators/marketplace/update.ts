@@ -193,7 +193,7 @@ export interface UpdateMarketplaceOptions {
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
-   * inject createCredentialOpsFake() from tests/platform/credential-ops-fake.ts
+   * inject createCredentialOpsFake() from test/platform/credential-ops-fake.ts
    * so the developer's OS keychain is never touched.
    */
   readonly credentialOps?: CredentialOps;
@@ -226,7 +226,7 @@ export interface UpdateAllMarketplacesOptions {
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
-   * inject createCredentialOpsFake() from tests/platform/credential-ops-fake.ts
+   * inject createCredentialOpsFake() from test/platform/credential-ops-fake.ts
    * so the developer's OS keychain is never touched.
    */
   readonly credentialOps?: CredentialOps;

@@ -15,7 +15,7 @@
 // on a merged view -- serializing a merged view back to disk would copy
 // `claude-plugins.local.json` entries into `claude-plugins.json` and
 // silently clobber the per-machine override. The architecture test at
-// `tests/architecture/config-state-consistency.test.ts` is the round-trip
+// `test/architecture/config-state-consistency.test.ts` is the round-trip
 // integrity gate.
 //
 // Cascade-delete contract: `deleteMarketplaceConfigEntryWithCascade`
@@ -175,7 +175,7 @@ export interface BatchedConfigPatch {
  *
  * Structural single-write guarantee: this function contains exactly ONE
  * `await saveConfig(...)` call. Test coverage at
- * `tests/persistence/config-write-back.test.ts` exercises both the unknown
+ * `test/persistence/config-write-back.test.ts` exercises both the unknown
  * forward-compat key preservation property AND the all-N-patches-applied
  * post-condition.
  */

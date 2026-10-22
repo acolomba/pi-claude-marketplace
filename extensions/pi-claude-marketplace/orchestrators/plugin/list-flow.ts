@@ -516,8 +516,8 @@ const EMPTY_ORPHAN_FOLD: OrphanFold = { folded: [], foldedNames: new Set() };
  * duplicate `(available)`. FSTAT-02 / FSTAT-04 / D-66-01 / D-66-02: the derived
  * `partially-installed` / `partially-upgradable` rows are recorded-installed
  * inventory and join for the same reason. Regressions:
- * tests/integration/fold-adoption.test.ts and the "CR-01 / G-21-01
- * fold-carryover" case in tests/orchestrators/plugin/list-flow.test.ts.
+ * test/integration/fold-adoption.test.ts and the "CR-01 / G-21-01
+ * fold-carryover" case in test/orchestrators/plugin/list-flow.test.ts.
  */
 async function computeOrphanFold(
   opts: PluginListPayloadOptions,

@@ -20,7 +20,7 @@ pi-claude-marketplace/
 │   ├── persistence/                    # atomic state.json / config.json / agents-index.json I/O
 │   ├── platform/                       # Pi API + git wrappers
 │   └── shared/                         # leaf utilities: notify, errors, path-safety, atomic-json
-├── tests/                              # 343 *.test.ts files, mirrors extensions/ layout, plus pi-runtime.ts support and index.test.ts
+├── test/                              # 343 *.test.ts files, mirrors extensions/ layout, plus pi-runtime.ts support and index.test.ts
 │   ├── architecture/                   # 49 tests — source-scan gates, catalog-uat/
 │   ├── bridges/                        # 69 tests + _fixtures/ (fixture plugin trees, no .test.ts inside)
 │   ├── domain/                         # 35 tests
@@ -95,7 +95,7 @@ pi-claude-marketplace/
 - `.fallowrc.json`: fallow entry point, health thresholds (`maxCyclomatic: 20`, `maxCognitive: 15`, and `maxCrap: 0`, which switches CRAP off), 14-zone boundary rules, and `rulePacks`, which loads `rule-packs/architecture.json`
 - `rule-packs/architecture.json`: the fallow rule pack, the call and import bans (stdio, console, `ui.notify`, Pi peer, `isomorphic-git`, `proper-lockfile`, `write-file-atomic`, network modules, `fetch`) scoped to `extensions/pi-claude-marketplace/**` with per-file chokepoint exemptions (see ARCHITECTURE.md and CONVENTIONS.md)
 - `eslint.config.js`: flat ESLint config, incl. `import-x/no-restricted-paths` (BLOCK C: the 8-folder boundary matrix plus the D-v1.0-01-11 ledger zones over `PLUGIN_LEDGERS`/`MARKETPLACE_LEDGERS`), and BLOCK F's default-deny NFR-5 network-free rules over every `orchestrators/` and `domain/` module outside `NETWORK_SEAMS`
-- `tsconfig.json`: strict compiler options, includes `extensions/**/*.ts` and `tests/**/*.ts`
+- `tsconfig.json`: strict compiler options, includes `extensions/**/*.ts` and `test/**/*.ts`
 
 **Core Logic:**
 - `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts`: install composition root; `install-outcome.ts` holds the 7-phase ledger body
@@ -103,7 +103,7 @@ pi-claude-marketplace/
 - `extensions/pi-claude-marketplace/domain/plugin-resolver.ts`: discriminated-union plugin resolver
 
 **Testing:**
-- `tests/architecture/source-scan.ts`: shared grep/comment-stripping helpers used by architecture tests
+- `test/architecture/source-scan.ts`: shared grep/comment-stripping helpers used by architecture tests
 
 ## Naming Conventions
 
@@ -125,7 +125,7 @@ pi-claude-marketplace/
 - Router entry: `extensions/pi-claude-marketplace/edge/router.ts`
 - Handler: `extensions/pi-claude-marketplace/edge/handlers/plugin/<verb>.ts` or `handlers/marketplace/<verb>.ts`
 - Business logic: `extensions/pi-claude-marketplace/orchestrators/plugin/<verb>.ts` or `<verb>-flow.ts` (+ `<verb>.messaging.ts`) or `orchestrators/marketplace/<verb>.ts`
-- Tests: `tests/edge/handlers/...` and `tests/orchestrators/plugin/<verb>.test.ts` or `tests/orchestrators/marketplace/<verb>.test.ts`
+- Tests: `test/edge/handlers/...` and `test/orchestrators/plugin/<verb>.test.ts` or `test/orchestrators/marketplace/<verb>.test.ts`
 
 **New artifact-kind bridge:**
 - Implementation: `extensions/pi-claude-marketplace/bridges/<kind>/` following the `discover.ts`/`stage.ts`/`unstage.ts`/`types.ts` shape, plus a barrel `index.ts`
@@ -143,13 +143,13 @@ pi-claude-marketplace/
 - Generated: Yes
 - Committed: No (not verified against `.gitignore` here, but cache directories are standard non-source)
 
-**`tests/fixtures/` and `tests/bridges/_fixtures/`:**
+**`test/fixtures/` and `test/bridges/_fixtures/`:**
 - Purpose: static fixture plugin trees (manifests, skills, agents, commands) consumed by bridge/discover tests
 - Generated: No — hand-authored fixture data
 - Committed: Yes
 - Contains no `.test.ts` files itself
 
-**`tests/live-uat/`:**
+**`test/live-uat/`:**
 - Purpose: standalone `.mjs` UAT drivers, excluded from the typed TypeScript tree (see the `eslint.config.js` ignored paths) and containing no `.test.ts` suites
 - Committed: Yes
 
@@ -157,7 +157,7 @@ pi-claude-marketplace/
 - Purpose: ADRs (`docs/adr/`), PRDs (`docs/prd/`), research notes (`docs/research/`), execution plans (`docs/plans/`), competitive analysis, plus root-level `env-vars.md`, `hooks-compatibility.md`, `messaging-style-guide.md`, `output-catalog.md`
 - Generated: No
 - Committed: Yes
-- Note: there is no `tests/docs` directory in this tree
+- Note: there is no `test/docs` directory in this tree
 
 ---
 
