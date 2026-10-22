@@ -66,7 +66,7 @@ These anchors link the code to a specification row, not to a planning step.
 Words like `phase` that name domain concepts in the code itself are **not** planning references and must be preserved unchanged. Examples:
 
 - The two-phase commit narration in `bridges/agents/stage.ts` (`Phase 2: remove old target files ...`).
-- The `phase ledger` transaction concept and any body text under `tests/transaction/phase-ledger.test.ts` that talks about the ledger's own phases (e.g. `4 phases, phase 3 throws`).
+- The `phase ledger` transaction concept and any body text under `test/transaction/phase-ledger.test.ts` that talks about the ledger's own phases (e.g. `4 phases, phase 3 throws`).
 - Fixture strings such as `plugin update phase 3 failed`.
 - Version pins inside URLs such as `#v1.0`.
 

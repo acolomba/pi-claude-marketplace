@@ -87,7 +87,7 @@ await assert.rejects(
 
 - Short self-describing literals: `"order-123"`, `"customer-1"`, `"sku-a"`. No realistic prose, random generators, or long fixture blobs.
 - Typed literals, checked with `satisfies` when they stand in for a production type. Set only what the case is about: `{ ...placedOrder(), status: "cancelled" }`.
-- Seeds reused across cases live in the concern's seed module (`tests/orders/order-seeds.ts`) as functions that return fresh values, never shared mutable constants.
+- Seeds reused across cases live in the concern's seed module (`test/orders/order-seeds.ts`) as functions that return fresh values, never shared mutable constants.
 - Do not compute test data with production code.
 
 ## Data-driven cases

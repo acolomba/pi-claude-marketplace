@@ -15,7 +15,7 @@
 //   - the scope-target flag name consumed by `extractLocalFlag`
 //     (`SCOPE_TARGET_FLAG`).
 //
-// Guarded BY TEST (tests/architecture/flag-catalog-drift.test.ts): the
+// Guarded BY TEST (test/architecture/flag-catalog-drift.test.ts): the
 // reinstall/enable/disable/fetch/pending/import/bootstrap handlers hard-reject
 // unknown long flags inline rather than consuming the catalog, so the drift
 // guard pins every verb's parse-set to the exact flags its handler accepts (and

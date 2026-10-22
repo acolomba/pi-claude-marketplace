@@ -5,7 +5,7 @@
 // offline and re-materialized, so a plugin missing components this extension can
 // now support becomes whole without the user running anything.
 //
-// A concern with its own test file (tests/orchestrators/reconcile/backfill.test.ts)
+// A concern with its own test file (test/orchestrators/reconcile/backfill.test.ts)
 // and its own name is a module (FLOW-09).
 
 import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";

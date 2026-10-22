@@ -155,7 +155,7 @@ Filed 2026-08-15 alongside the fallow adoption (quick task 260815-h7g).
 `boundaries.coverage.requireAllFiles: true`, so zone coverage is complete by
 construction rather than by accident of the current tree. Both questions the
 item asked are settled: the failure names the unzoned path
-(`extensions/.../probe.ts:1 no matching boundary zone`), and `tests/**` plus
+(`extensions/.../probe.ts:1 no matching boundary zone`), and `test/**` plus
 `eslint.config.js` are explicitly out of scope through `allowUnmatched`, which
 records them as unmatched by design rather than by oversight.
 
@@ -184,7 +184,7 @@ it should turn an unzoned file into a loud failure that says "add a zone,"
 instead of silence that reads as "no violations."
 
 Two things to settle when picking this up. First, the failure has to name the
-unzoned path, or it just moves the confusion. Second, decide whether `tests/`
+unzoned path, or it just moves the confusion. Second, decide whether `test/`
 and repo-root config files are in or out of the policy's scope -- they match no
 zone either, by design, and a naive policy would flag every one of them.
 
@@ -276,7 +276,7 @@ it buys editor-time feedback and a second opinion on the graph, at the cost of
 a type-aware rule running over the full extension tree. Weigh the lint-time
 cost against that.
 
-`tests/architecture/import-boundaries.test.ts` pins both the current glob and
+`test/architecture/import-boundaries.test.ts` pins both the current glob and
 the `import-x/extensions` setting the rule depends on (without `.ts` in that
 setting the rule walks a one-node graph and greens on any cycle). Widening the
 glob means updating that test in the same change, and the test is the thing
@@ -520,7 +520,7 @@ derived one is the point of recording it.
 `.planning/milestones/refine-unit-tests-phases/07-gate-integrity/07-16-SUMMARY.md` carries the satisfaction
 row: plan `07-07` resolved both boundary gates through
 `ESLint#calculateConfigForFile` and deleted the two gates it replaced, verified
-by `node --test tests/architecture/eslint-effective-config.test.ts` and by
+by `node --test test/architecture/eslint-effective-config.test.ts` and by
 `npm run lint` inside `npm run check`.
 `.planning/milestones/refine-unit-tests-phases/07-gate-integrity/07-VERIFICATION.md` reads `status: passed`,
 7/7, with the `GGAT-03` row `SATISFIED`.
@@ -715,7 +715,7 @@ The clause fragments that make the match, quoted from `.planning/REQUIREMENTS.md
 - `GGAT-04`: "Terminal closed-set and delegated-contract gates cover their real
   production consumers and any public seams created by approved splits, with
   visitation, offender, and benign controls."
-  `tests/architecture/no-test-only-production-surface.test.ts` is the standing
+  `test/architecture/no-test-only-production-surface.test.ts` is the standing
   gate that stops the count returning above zero.
 
 **This route is derived from clause text, not from a record that names
@@ -795,13 +795,13 @@ sitting in the wrong module, and moving it gave it a public interface for free:
 - `errorWithManualRecovery` and `findManualRecoveryError` were declared in
   `reinstall.ts` but are the `ManualRecoveryError` PROTOCOL: three bridges throw
   the class and the notify renderer reads it. Both moved to `shared/errors.ts`
-  beside the class, and their ten tests moved to `tests/shared/errors.test.ts`
+  beside the class, and their ten tests moved to `test/shared/errors.test.ts`
   against the public interface.
 - `clonePluginRecord` moved to `persistence/state-io.ts`, beside the
   `PLUGIN_INSTALL_RECORD_SCHEMA` it copies field by field. Its own comment warns
   that a forgotten key vanishes silently; the point of the move is that the
   schema and the enumeration are now adjacent, so whoever adds a field sees the
-  clone that must copy it. Its two tests moved to `tests/persistence/`.
+  clone that must copy it. Its two tests moved to `test/persistence/`.
 
 The move surfaced something the seam had been hiding. THREE separate depth-5
 `Error.cause` walkers existed -- `causeChainTrailer` in `errors.ts`,
@@ -858,7 +858,7 @@ The remaining work is dependency injection proper: pass the executor,
 the probe bundle and the spawn function in, after which the seams
 disappear rather than moving. Note `__test_availableRowMessage` is
 different in kind -- it feeds a real cross-surface drift guard in
-`tests/orchestrators/edge-deps.test.ts`, so it wants a public contract,
+`test/orchestrators/edge-deps.test.ts`, so it wants a public contract,
 not deletion.
 
 **Update 2026-08-18: the "fallow is quiet about them" claim above is only
@@ -1081,7 +1081,7 @@ front-ends render the entries, including device-flow instructions.
 
 The [JSON output guide](../docs/json-output.md) documents every payload kind,
 field, compatibility rule, command verdict, and delivery limitation.
-[Real-runtime tests](../tests/e2e/pi-json-output.test.ts) passed on Pi
+[Real-runtime tests](../test/e2e/pi-json-output.test.ts) passed on Pi
 0.87.1 and exact 0.86.1, including startup stream absence, RPC `get_entries`,
 and slash-only persistence timing. The executed commands and results are in
 [the runtime summary](phases/07-mode-refusals-real-pi-verification-and-docs/07-03-SUMMARY.md#verification-evidence).
@@ -1912,7 +1912,7 @@ invariant for the lazy-hydrate path: boot with a user-scope-only
 `SessionStart` plugin, assert the OTHER scope's root stays empty.
 
 Code seams: `bridges/hooks/event-router.ts` (the factory hydrate loop and
-`ensureSharedDataDir`), `tests/integration/hooks-dispatch-end-to-end.test.ts`.
+`ensureSharedDataDir`), `test/integration/hooks-dispatch-end-to-end.test.ts`.
 
 ## HKDR-01: the blocking lane settles on `close`, so a surviving grandchild can pin a turn
 
@@ -2035,7 +2035,7 @@ Two documents still describe it as live: `bridges/agents/discover.ts:93-95`
 collisions within a single plugin MUST throw with both source names listed").
 PRD RN-6 points the reader at AG-12 for exactly this, so the two rows now
 disagree about whether an agents collision throws. The two tests of the gate
-(`tests/bridges/agents/convert.test.ts:220`, `:238`) hand-build the colliding
+(`test/bridges/agents/convert.test.ts:220`, `:238`) hand-build the colliding
 array and call the function directly, which is why the suite says nothing.
 
 **Out of scope now.** PR #141's brief locked the skills gate as its subject
@@ -2281,7 +2281,7 @@ scan into a standalone gate that rejects without granting `--local`, or decide
 That choice is the whole cost of the item; the scan itself is mechanical.
 
 **Why the drift guard did not catch it.**
-`tests/architecture/flag-catalog-drift.test.ts` pins each verb's parse set
+`test/architecture/flag-catalog-drift.test.ts` pins each verb's parse set
 against `flag-catalog.ts`, but `CatalogVerb` enumerates only the twelve
 plugin-family verbs. No `marketplace <subcommand>` has a catalog entry or a
 drift assertion, so the three holes are outside what the guard can see. Closing
@@ -2296,7 +2296,7 @@ Code seams: `edge/args-schema.ts` (`parseCommandArgs`, the arity gap),
 `edge/args.ts` (`parseArgs`, the everything-is-a-positional tokenizer),
 `edge/handlers/shared.ts` (`extractLocalFlag`, the existing gate),
 `edge/handlers/marketplace/{info,list,update}.ts` (the three holes),
-`edge/flag-catalog.ts` + `tests/architecture/flag-catalog-drift.test.ts`
+`edge/flag-catalog.ts` + `test/architecture/flag-catalog-drift.test.ts`
 (the guard that needs to grow a marketplace half).
 
 ## ~~SEV-01: "absent target" renders at two severities depending on the verb~~ -- CLOSED
@@ -2497,7 +2497,7 @@ A written `env` or `headers` value that starts with `!` is written with one
 more `!`, so `!x` becomes `!!x`. pi-mcp-adapter drops one `!` from a `!!`
 value and interpolates the rest, so it outputs the literal value that Claude
 Code passes and runs no shell command. The adapter conformance test
-(`tests/integration/adapter-expansion-conformance.test.ts`) proves this
+(`test/integration/adapter-expansion-conformance.test.ts`) proves this
 against pi-mcp-adapter 5.1.0 in CI. `docs/mcp-compatibility.md` section
 "Variables" records the rule.
 
@@ -2858,7 +2858,7 @@ install valid on THIS volume succeeds? Candidate directions:
 - probe the target volume's behavior and fold only when it actually folds
 - do nothing and document the exposure
 
-`tests/domain/workflow-script.test.ts` currently pins the NFC/NFD pair as
+`test/domain/workflow-script.test.ts` currently pins the NFC/NFD pair as
 explicitly NOT colliding, so whichever direction wins has a test to retitle.
 `.planning/WINDOWS.md` is the other document this touches.
 
@@ -2890,7 +2890,7 @@ Two facts separate this from the case and normalization variants:
 
 **Closed for the workflows gate.** `domain/name.ts::generatedWorkflowName` now
 refuses a generated name matching `/\p{Cs}/u`, with the pair of lone-surrogate
-rows and a well-formed-astral acceptance row pinned in `tests/domain/name.test.ts`.
+rows and a well-formed-astral acceptance row pinned in `test/domain/name.test.ts`.
 The screen is documented at its site as the one place this gate deliberately
 exceeds the engine.
 
@@ -2910,7 +2910,7 @@ recursion, no wrapper stripping. Both command arms now guard on
 `event.toolName` so `Bash(...)` rules no longer fire on powershell events.
 -->
 
-## ~~SWTEST-01: the Sonar way ruleset stops at `extensions/`; `tests/` is unmeasured by it~~ -- CLOSED
+## ~~SWTEST-01: the Sonar way ruleset stops at `extensions/`; `test/` is unmeasured by it~~ -- CLOSED
 
 **Closed 2026-09-14 — test-backlog Phase 2.** The three assertion rules now
 run as errors on tests. Seven exact type-only owner files retain their compile-time
@@ -2931,16 +2931,16 @@ than guessed, so the decision is a scoping call and not a discovery exercise.
 `eslint.config.js` runs `sonarjs.configs.recommended.rules` over
 `extensions/pi-claude-marketplace/**/*.ts` only. That scope mirrors
 `sonar.sources`. The test tree is outside it for two independent reasons:
-`sonar.test.exclusions=tests/**` means SonarCloud never reads it, so there is
+`sonar.test.exclusions=test/**` means SonarCloud never reads it, so there is
 no upstream parity pressure; and the same ruleset reports 1021 problems there
 today.
 
-**There is no blanket exemption to lean on.** The `tests/**/*.ts` block turns
+**There is no blanket exemption to lean on.** The `test/**/*.ts` block turns
 off five sonarjs rules and a handful of typescript-eslint ones, nothing more.
 Every other active rule already runs on the test tree and passes. So this is
 an opt-in decision about 1021 specific findings, not a wall.
 
-**The measured breakdown**, from the full ruleset against `tests/`:
+**The measured breakdown**, from the full ruleset against `test/`:
 
 | Count | Rule | Reading |
 |---|---|---|
@@ -2971,13 +2971,13 @@ coexists with ~231 surviving-mutation BLOCKERs; per-pair coverage is not
 evidence of assertion strength". These three rules are a cheap, automated
 probe for that class, and nothing in the repo currently runs them.
 
-Direction for later: do NOT enable the ruleset wholesale on `tests/`. Enable
+Direction for later: do NOT enable the ruleset wholesale on `test/`. Enable
 the three assertion-strength rules first and read their 21 findings, since
 they carry the value and are separable from the noise. Then decide the rest
 per cluster: `void-use` should almost certainly stay off for the test tree
 (the idiom is deliberate and documented), the fixture clusters
 (`publicly-writable-directories`, `no-hardcoded-passwords`) want a
-`tests/fixtures/**` carve-out rather than a rule-level disable, and
+`test/fixtures/**` carve-out rather than a rule-level disable, and
 `no-unused-vars` should be left to the typescript-eslint rule already
 configured for it rather than run twice under two ignore patterns.
 
@@ -2986,7 +2986,7 @@ large test-quality corpus with 9 operator decisions pending, and its
 `test:coverage:direct` work would collide with a broad test-tree lint change.
 
 Code seams: `eslint.config.js` (the Sonar way block, currently scoped to
-`extensions/`; and the `tests/**/*.ts` block that disables five sonarjs
+`extensions/`; and the `test/**/*.ts` block that disables five sonarjs
 rules), `.planning/codebase/CONVENTIONS.md` (the "Sonar way on `extensions/`
 only" bullet, which states the scope this item would change).
 
@@ -3118,14 +3118,14 @@ assertion), `package.json` (`test:coverage:direct:negative`), `.github/workflows
 
 **Revalidated 2026-09-14 (test-backlog HIST-01):** the current tests already
 assert the folded marketplace grammar. `env -u PI_CODING_AGENT_DIR node
-tests/e2e/import-command.test.ts` passes all three cases (3 pass, 0 fail) on
+test/e2e/import-command.test.ts` passes all three cases (3 pass, 0 fail) on
 Node v26.8.2. No test rewrite is needed. The original report below describes
 a condition that no longer exists.
 
 Carried out of the `refine-unit-tests` milestone close (2026-09-13) as an open
 audit item. Originally recorded in Phase 25, which archived with milestone v1.4.1.
 
-Three cases in `tests/e2e/import-command.test.ts` fail: `import imports enabled
+Three cases in `test/e2e/import-command.test.ts` fail: `import imports enabled
 Claude settings across both scopes`, `import --scope project narrows writes to
 project scope`, and `import reports source mismatches and skips dependent
 plugins`. All three match on a `Claude plugin import summary` header. The command
@@ -3138,7 +3138,7 @@ command's output surface. The source-load runtime smoke in the same suite passes
 including the test that matters for extension loading (`real Pi runtime package
 bin loads the extension under isolated HOME and cwd`).
 
-Why it has stayed open: `tests/e2e/**` is excluded from `npm run check`, so these
+Why it has stayed open: `test/e2e/**` is excluded from `npm run check`, so these
 never gate a commit. CI does run `pinned e2e tests` as its own job, which is where
 they would surface.
 
@@ -3150,7 +3150,7 @@ Candidate directions:
   (`shared/notification-grammar.ts`) instead of rendered stdout, which is what the
   unit suites do
 
-Code seams: `tests/e2e/import-command.test.ts` (the three cases and the header
+Code seams: `test/e2e/import-command.test.ts` (the three cases and the header
 regex), `extensions/pi-claude-marketplace/orchestrators/import/execute.messaging.ts`
 (the message builder that replaced the old header), `package.json`
 (`test:e2e`, and the `check` chain that excludes it).
@@ -3159,7 +3159,7 @@ regex), `extensions/pi-claude-marketplace/orchestrators/import/execute.messaging
 Pruned 2026-06-08: both prior items shipped in v1.10 Error Attribution.
 - "Install error misattribution when marketplace is missing" -> closed by ATTR-01..10
   (every op converges on the marketplace-subject `{not added}` model; see
-  tests/orchestrators/plugin/install.test.ts "ATTR-01").
+  test/orchestrators/plugin/install.test.ts "ATTR-01").
 - "Structural `{not added}` variant for `PluginInfoMessage`" -> closed by TYPE-01..04
   (dedicated `marketplace-not-added` kind in shared/notify.ts; placeholder/sole-reason
   renderer carve-out removed).
@@ -3279,7 +3279,7 @@ arms were removed under the unreachable-code rule, because `addMarketplace`,
 `installPlugin` and `setPluginEnabled` each answer with a typed outcome for every
 throw they can meet. That claim rests on an internal contract, and no test can
 check it: all three orchestrators are STATIC imports, and `ApplyReconcileOptions`
-exposes no injection seam, so `tests/orchestrators/reconcile/apply.test.ts`
+exposes no injection seam, so `test/orchestrators/reconcile/apply.test.ts`
 physically cannot plant a throwing collaborator. Contrast the two loops that kept
 their catch, which ARE covered, because `raceStateFromRead` gives the test a way
 to force the throw.
@@ -3361,7 +3361,7 @@ in the guide.
 
 **To settle it:** measure the `needsReload` plumbing across every producer that
 stamps it, then restate the guide at the grade that holds. A doc pin
-(`tests/architecture/messaging-guide-doc-pins.test.ts`) should bind the restated
+(`test/architecture/messaging-guide-doc-pins.test.ts`) should bind the restated
 sentence to the source the way the variant names are bound.
 
 Note 2026-10-05: `ce38da6a` deleted that test with the other documentation
@@ -3388,7 +3388,7 @@ Carried from the workflows-replay close (WINDOWS #72; OPEN-QUESTIONS Q7).
 
 The storage assertions in the archived phase-105 verification were never driven
 against a live engine, and their driver
-(`tests/live-uat/workflow-storage-canary.mjs`) was never re-landed on this
+(`test/live-uat/workflow-storage-canary.mjs`) was never re-landed on this
 branch. The storage half of the host-engine contract rests on a source read;
 the `agent()` failure half was measured at 3.10.1 and refuted the source read.
 
@@ -3396,10 +3396,10 @@ the `agent()` failure half was measured at 3.10.1 and refuted the source read.
 canary was run -- a disposable `npm install --prefix` scratch engine plus
 `PI_WORKFLOW_ENGINE_ROOT`, with the negative control.
 
-Closed 2026-09-21 on the workflows branch: `tests/live-uat/workflow-storage-canary.mjs`
+Closed 2026-09-21 on the workflows branch: `test/live-uat/workflow-storage-canary.mjs`
 landed and was driven against engine 3.13.0 in both scopes (W0-W5 all PASS),
 with `--invert`, a missing engine and an out-of-sandbox agent directory each
-exiting 1. The transcript is in `tests/live-uat/README.md`; the compatibility
+exiting 1. The transcript is in `test/live-uat/README.md`; the compatibility
 doc's storage claims carry the `runtime-measured at 3.13.0` grade.
 
 ## WPIN-01: machine-check the engine internals the compatibility doc cites
@@ -3457,7 +3457,7 @@ Walking the "Scope when picked up" list against what actually closed it:
   "A dependency's own enablement" section states the current behavior for
   both call sites, and `docs/dependency-resolution.md`'s already-installed
   section states the same for install's side, gated by
-  `tests/architecture/dependency-doc-agreement.test.ts` driving the real
+  `test/architecture/dependency-doc-agreement.test.ts` driving the real
   composer against both.
 - **"a decision record superseding the Phase 3 policy"** -- D-08-02 (the
   `{dependency enabled}` token) and this phase's `<threat_model>` entries
@@ -3599,7 +3599,7 @@ a steady-state reload before shipping it.
 Surfaced during Phase 9's code review (2026-09-22): the host `/tmp` tmpfs hit
 100% inodes with ~29.8k `clone-cache*`, `clone-cache-marketplace-*` and
 `clone-cache-nongit-*` directories dated across several days of `npm test`
-runs. `tests/orchestrators/plugin/clone-cache.test.ts` creates them with
+runs. `test/orchestrators/plugin/clone-cache.test.ts` creates them with
 `mkdtemp(path.join(tmpdir(), ...))` and never removes them; every run of the
 suite on this machine leaves hundreds behind. The orchestrator removed the
 ones older than two hours to unblock the run.
@@ -3623,8 +3623,8 @@ update. `update-flow.test.ts`'s PDEF-01 case was fixed in `afa96ed2` by
 seeding a real `other-mp/marketplace.json`.
 
 Two more carry the same shape and pass today only because their verbs never
-reach that walk: `tests/orchestrators/plugin/reinstall-flow.test.ts:882` and
-`tests/orchestrators/plugin/install-flow.test.ts:785` (the
+reach that walk: `test/orchestrators/plugin/reinstall-flow.test.ts:882` and
+`test/orchestrators/plugin/install-flow.test.ts:785` (the
 `conflictingMarketplaceRecord` helper, used by PI-6, PDEF-01 and RESV-06).
 They are latent, not broken — the next phase that puts a scope-wide
 declaration read in front of install or reinstall will turn both red for a
@@ -3750,7 +3750,7 @@ Closed 2026-09-30 by quick task 260930-j4y. Disposition per finding:
 - WR-04: wrong at HEAD. `locations.sourceCloneDir` runs `assertPathInside`
   before recognition, and its segment walk lstats `sources/<name>` and throws
   `SymlinkRefusedError` for a symlink (`shared/path-containment.ts`). Guarded
-  by `tests/persistence/locations.test.ts` "source clones refuse a symlinked
+  by `test/persistence/locations.test.ts` "source clones refuse a symlinked
   marketplace component". `add.ts` now records this in a comment.
 - IN-05: fixed in `727939fc`. `domain/clone-key.ts::originMatchesSource`
   parses the origin through the source parser and compares normalized
@@ -3834,7 +3834,7 @@ shrinkwrap: `overrides`, `npm dedupe`, and a fresh lock all left it at 5.0.9
 paper only, because `npm ci` re-extracts the shrinkwrapped tree.
 
 The copy is a dev-only dependency that no attacker-controlled glob reaches. The
-peer-floor fixture lock under `tests/e2e/pi-peer-floor/` keeps Pi 0.86.1's
+peer-floor fixture lock under `test/e2e/pi-peer-floor/` keeps Pi 0.86.1's
 shrinkwrapped 5.0.9 by design, as `07-PEER-FLOOR-AUDIT.md` decided; the
 json-output close kept that fixture byte-identical.
 
@@ -3929,7 +3929,7 @@ expected <plugin>@<marketplace>).` The plugin declares no dependency, so the
 cause is misleading. `list` and `info` show the resolver's verdict for the
 same name, `(unavailable) {unsupported source}`. The refusal itself is
 correct: no record is dropped and no file changes. The case
-`tests/integration/reserved-record-keys.test.ts` pins the current text.
+`test/integration/reserved-record-keys.test.ts` pins the current text.
 
 Scope when picked up: decide which verdict an invalid root name should get,
 check what Claude Code's `/plugin install` prints for such a name first, then
@@ -4010,5 +4010,5 @@ reverse D-76-04 inside the suite close.
 
 Scope when picked up: decide parity (switch to the first-`@` split and retire
 D-76-04) or record D-76-04 as a divergence with an ID. A switch is test-first
-in `tests/domain/source.test.ts`, keeps the `#` arm's rule (D-12, D-MF-07),
+in `test/domain/source.test.ts`, keeps the `#` arm's rule (D-12, D-MF-07),
 and adds a CHANGELOG line, because it changes which sources parse.

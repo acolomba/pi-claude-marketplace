@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url";
 import { minVersion } from "semver";
 
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
-// tests/integration/optional-peer.ts reads this directory; change the two together.
+// test/integration/optional-peer.ts reads this directory; change the two together.
 const cacheParent = path.join(projectRoot, "node_modules", ".cache");
 const cacheDir = path.join(cacheParent, "optional-peers");
 const peerNames = ["pi-mcp-adapter", "pi-subagents"];

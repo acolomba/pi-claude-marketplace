@@ -1671,7 +1671,7 @@ function skipReasonFor(
  * signature that cannot express a fetch is a stronger guarantee than a branch
  * that declines one, and adding a `fetchCtx` parameter would silently dissolve
  * it. What keeps that true under change is the pair of zero-call INFO-12 cases
- * in `tests/orchestrators/plugin/info.test.ts`, which inject the clone-cache
+ * in `test/orchestrators/plugin/info.test.ts`, which inject the clone-cache
  * and credential seams and pin every counter on both mocks at 0 -- once for a
  * `--fetch` run and once for a bare `info` run -- an assertion that can fail,
  * not a reading of the control flow.

@@ -171,7 +171,7 @@ export default tseslint.config(
       "dist/",
       "node_modules/",
       "tmp/",
-      "tests/live-uat/",
+      "test/live-uat/",
     ],
   },
   js.configs.recommended,
@@ -584,7 +584,7 @@ export default tseslint.config(
     // the push rather than after it.
     //
     // Scoped to mirror `sonar.sources` in sonar-project.properties.
-    // `sonar.test.exclusions` drops tests/**, so SonarCloud never reads the
+    // `sonar.test.exclusions` drops test/**, so SonarCloud never reads the
     // test tree. Tests opt into the three assertion rules below. The full
     // preset conflicts with compiler proofs, strict mocks, and fixture data;
     // SWTEST-01 records the measured per-cluster policy.
@@ -615,7 +615,7 @@ export default tseslint.config(
     // construction rather than by coincidence.
     //
     // Scoped to mirror `sonar.sources`, like the block above. SonarCloud
-    // drops tests/** via `sonar.test.exclusions`, so enforcing there would
+    // drops test/** via `sonar.test.exclusions`, so enforcing there would
     // gate code Sonar never grades.
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
     rules: {
@@ -629,7 +629,7 @@ export default tseslint.config(
     // above does not carry it.
     //
     // Scoped to mirror `sonar.sources`, like the blocks above. SonarCloud
-    // drops tests/** via `sonar.test.exclusions`.
+    // drops test/** via `sonar.test.exclusions`.
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
     rules: {
       "no-await-in-loop": "error",
@@ -639,7 +639,7 @@ export default tseslint.config(
     // Tests deliberately do defensive checking after operations that "should"
     // have populated state, and `node:test`'s `test(...)` returns an unawaited
     // promise by design. Relax the rules that fight that style.
-    files: ["tests/**/*.ts"],
+    files: ["test/**/*.ts"],
     rules: {
       "@typescript-eslint/no-floating-promises": "off",
       "@typescript-eslint/no-non-null-assertion": "off",
@@ -675,16 +675,16 @@ export default tseslint.config(
     // contract is compile-time, and the shared `assertNever` owner carries the
     // runtime cases for that concern.
     files: [
-      "tests/bridges/agents/types.test.ts",
-      "tests/bridges/commands/types.test.ts",
-      "tests/bridges/hooks/exec-result.test.ts",
-      "tests/bridges/mcp/types.test.ts",
-      "tests/bridges/skills/types.test.ts",
-      "tests/bridges/workflows/types.test.ts",
-      "tests/domain/resolver-types.test.ts",
-      "tests/edge/types.test.ts",
-      "tests/orchestrators/import/types.test.ts",
-      "tests/orchestrators/types.test.ts",
+      "test/bridges/agents/types.test.ts",
+      "test/bridges/commands/types.test.ts",
+      "test/bridges/hooks/exec-result.test.ts",
+      "test/bridges/mcp/types.test.ts",
+      "test/bridges/skills/types.test.ts",
+      "test/bridges/workflows/types.test.ts",
+      "test/domain/resolver-types.test.ts",
+      "test/edge/types.test.ts",
+      "test/orchestrators/import/types.test.ts",
+      "test/orchestrators/types.test.ts",
     ],
     rules: { "sonarjs/no-empty-test-file": "off" },
   },

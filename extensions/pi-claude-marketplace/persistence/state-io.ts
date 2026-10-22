@@ -268,7 +268,7 @@ export function toDisabledRecord<R extends PluginInstallRecord["resources"]>(
  * {@link toDisabledRecord} writes. Every surface that asks "is this record
  * currently disabled" consumes this one definition; a module that re-derives
  * the rule locally is a drift twin the gate in
- * `tests/architecture/disabled-state-classification.test.ts` rejects. That
+ * `test/architecture/disabled-state-classification.test.ts` rejects. That
  * gate WALKS the whole extension source tree rather than an allowlist of
  * known sites, so the claim holds for a copy landing anywhere -- this module
  * is the single exemption, because reading the boolean here IS the
@@ -478,7 +478,7 @@ export async function loadState(
   // `path.dirname(extensionRoot)` is `<scopeRoot>` and the config sits as a
   // sibling at `<scopeRoot>/claude-plugins.json` -- this matches the
   // `locationsFor` construction in `persistence/locations.ts` byte-for-byte
-  // (pinned by a drift-guard test in tests/persistence/state-io.test.ts).
+  // (pinned by a drift-guard test in test/persistence/state-io.test.ts).
   // We do NOT import `locationsFor` here because the external
   // `loadState` keeps the extension-root path contract for orchestrator callers.
   const baseConfigJsonPath = path.join(path.dirname(extensionRoot), "claude-plugins.json");

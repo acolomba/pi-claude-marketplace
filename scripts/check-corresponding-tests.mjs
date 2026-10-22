@@ -6,7 +6,7 @@ import ts from "typescript";
 
 const defaultProjectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const productionRoot = "extensions/pi-claude-marketplace";
-const testRoot = "tests";
+const testRoot = "test";
 const nonCorrespondingRoots = new Set(["architecture", "e2e", "integration"]);
 
 function toProjectPath(projectRoot, absolutePath) {
@@ -43,13 +43,13 @@ function isCorrespondingTestCandidate(testPath) {
 }
 
 function supplementalCompanions(testPath) {
-  const match = testPath.match(/^tests\/(domain|platform)\/(.+)-fake\.test\.ts$/);
+  const match = testPath.match(/^test\/(domain|platform)\/(.+)-fake\.test\.ts$/);
   if (match === null) {
     return undefined;
   }
 
   const [, concern, relativeName] = match;
-  const prefix = `tests/${concern}/${relativeName}`;
+  const prefix = `test/${concern}/${relativeName}`;
   return {
     contractPath: `${prefix}-contract.ts`,
     fakePath: `${prefix}-fake.ts`,

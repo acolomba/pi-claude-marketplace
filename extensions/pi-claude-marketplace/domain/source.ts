@@ -541,7 +541,7 @@ export function stripSlashAndFragment(input: string): { base: string; ref: strin
  * directory (D-2-05).
  *
  * D-2-03: this string is what `pluginCloneKey` and `pluginMirrorKey` hash, so
- * its composition order is pinned by `tests/domain/source.test.ts`'s identity
+ * its composition order is pinned by `test/domain/source.test.ts`'s identity
  * table. `stripSlashAndFragment` composes the same two steps in the same order
  * for the wire form and differs only in keeping `.git`; the two share no
  * composition, so a correction to the wire form cannot move the cache identity.

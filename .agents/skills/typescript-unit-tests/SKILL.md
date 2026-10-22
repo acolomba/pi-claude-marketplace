@@ -1,6 +1,6 @@
 ---
 name: typescript-unit-tests
-description: Unit test rules for this TypeScript project -- which test modules exist, how source is shaped for them, how cases, doubles, and boundaries are written, and how to review them. Use when planning, writing, changing, or reviewing extensions/pi-claude-marketplace/**/*.ts or tests/**/*.ts.
+description: Unit test rules for this TypeScript project -- which test modules exist, how source is shaped for them, how cases, doubles, and boundaries are written, and how to review them. Use when planning, writing, changing, or reviewing extensions/pi-claude-marketplace/**/*.ts or test/**/*.ts.
 ---
 
 # TypeScript unit tests

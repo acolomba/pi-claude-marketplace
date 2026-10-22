@@ -1055,7 +1055,7 @@ if (handler.asyncRewake === true) {
 - NEW `src/bridges/hooks/async-rewake-registry.ts` (~180 LoC, the class above)
 - MODIFY `src/bridges/hooks/dispatch.ts` (or equivalent existing dispatcher) -- add the `if (handler.asyncRewake === true)` branch and registry construction in the bridge's lifecycle bootstrap
 - MODIFY `src/bridges/lifecycle.ts` (or equivalent `/reload` teardown) -- call `asyncRewakeRegistry.shutdownAll()` on reload and on extension shutdown
-- NEW `tests/bridges/hooks/async-rewake-registry.test.ts` (~100 LoC) -- fixture plugin that exits 2 after 200ms sleep; assert (a) dispatcher returns within ≤50ms, (b) `pi.sendMessage` called exactly once with `customType: "claude-hook-rewake"` and the expected content, (c) `ctx.ui.notify(rewakeSummary, "info")` called when `rewakeSummary` set, (d) `display: false` in the sent message, (e) `deliverAs` is `"followUp"` when `ctx.isIdle()` returns false and `"nextTurn"` when true
+- NEW `test/bridges/hooks/async-rewake-registry.test.ts` (~100 LoC) -- fixture plugin that exits 2 after 200ms sleep; assert (a) dispatcher returns within ≤50ms, (b) `pi.sendMessage` called exactly once with `customType: "claude-hook-rewake"` and the expected content, (c) `ctx.ui.notify(rewakeSummary, "info")` called when `rewakeSummary` set, (d) `display: false` in the sent message, (e) `deliverAs` is `"followUp"` when `ctx.isIdle()` returns false and `"nextTurn"` when true
 
 **Loss-mode disclosure (none required, but document for completeness):**
 

@@ -44,7 +44,7 @@
 // `node:child_process` import sites in the extension tree (the first being
 // `platform/git-credential.ts`; the third is the async-rewake registry at
 // `bridges/hooks/async-rewake/registry.ts`). The architecture-test gate at
-// `tests/architecture/no-shell-out.test.ts` enforces the 3-element set;
+// `test/architecture/no-shell-out.test.ts` enforces the 3-element set;
 // adding a fourth file requires an explicit edit there + an update to the
 // sibling "exactly three files" assertion, with justification in the
 // docstring header.

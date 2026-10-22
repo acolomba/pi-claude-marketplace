@@ -14,7 +14,7 @@
 //   - The algorithm, the truncation length (12), AND the walk filter list
 //     are part of the stable user contract. Any change requires a
 //     CHANGELOG entry.
-//   - The snapshot test in tests/domain/version.test.ts pins the expected
+//   - The snapshot test in test/domain/version.test.ts pins the expected
 //     hash for a fixture tree.
 
 import { createHash, type Hash } from "node:crypto";

@@ -5,7 +5,7 @@
 // This is a plain string literal, NOT a runtime `import ... with { type:
 // "json" }` of package.json. The literal read is zero-I/O and stays offline
 // (NFR-5). The literal MUST equal package.json `version`; a drift-guard test
-// (tests/architecture/extension-version-sync.test.ts) fails CI on any desync,
+// (test/architecture/extension-version-sync.test.ts) fails CI on any desync,
 // so the two are bumped in lockstep.
 //
 // Consumed by the load-time backfill version gate: it is compared against the

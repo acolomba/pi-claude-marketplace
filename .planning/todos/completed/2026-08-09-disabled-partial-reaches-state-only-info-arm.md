@@ -49,7 +49,7 @@ characterization test asserting today's output.
 
 1. Collapse the predicate onto `enabled` alone (ENBL-05), leaving the
    `installable` conjunct only where the reconcile planner genuinely needs it.
-2. Widen the guard test. `tests/orchestrators/plugin/info-manifest-absent.test.ts`
+2. Widen the guard test. `test/orchestrators/plugin/info-manifest-absent.test.ts`
    has the test "D-54-01: a manifest-absent DISABLED record still renders the
    (disabled) inventory cascade", which seeds `{ version: "1.0.0",
    disabled: true }`. The fixture factory turns that into `unsupported: []` ->
@@ -69,4 +69,4 @@ characterization test asserting today's output.
   (`isCurrentlyDisabled`, disable branch)
 - `extensions/pi-claude-marketplace/orchestrators/plugin/info.ts`
   (`partitionDisabledScopes`)
-- `tests/orchestrators/plugin/info-manifest-absent.test.ts`
+- `test/orchestrators/plugin/info-manifest-absent.test.ts`

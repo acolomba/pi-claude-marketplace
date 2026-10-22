@@ -23,7 +23,7 @@ The spike added cucumber scenarios for `plugin install`, `uninstall`, and `updat
 
 ## 1. Migrate the POC to the layout -- done
 
-The step modules live in `features/steps/*.steps.ts`, `cucumber.json` imports only those and `features/lib/world.ts`, and the review with `skills/cucumber-review/SKILL.md` is applied: 13 scenarios pass. The review also tightened the scenarios -- a new session must offer the installed skill (and its version), every plugin table names `id`, `status`, and `reasons`, and every result states `severity`, `needsReload`, `noOp`, and `summary` in full. The two known gaps became rules: a directory stand-in is a fixture, not a fake that is armed to fail, and a driver may reuse the `tests/e2e/` process harness.
+The step modules live in `features/steps/*.steps.ts`, `cucumber.json` imports only those and `features/lib/world.ts`, and the review with `skills/cucumber-review/SKILL.md` is applied: 13 scenarios pass. The review also tightened the scenarios -- a new session must offer the installed skill (and its version), every plugin table names `id`, `status`, and `reasons`, and every result states `severity`, `needsReload`, `noOp`, and `summary` in full. The two known gaps became rules: a directory stand-in is a fixture, not a fake that is armed to fail, and a driver may reuse the `test/e2e/` process harness.
 
 ## 1b. Re-lay the POC out by vertical function
 

@@ -13,9 +13,9 @@
 import { once } from "node:events";
 import { createInterface } from "node:readline";
 
-import { killProcessGroup, startRpcPi } from "../../tests/e2e/_rpc.ts";
+import { killProcessGroup, startRpcPi } from "../../test/e2e/_rpc.ts";
 
-import type { RpcGitEnvironment, RpcSandbox } from "../../tests/e2e/_rpc.ts";
+import type { RpcGitEnvironment, RpcSandbox } from "../../test/e2e/_rpc.ts";
 
 export type { RpcGitEnvironment, RpcSandbox };
 

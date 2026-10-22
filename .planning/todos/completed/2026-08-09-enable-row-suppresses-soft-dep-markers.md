@@ -38,6 +38,6 @@ seam exists), then build `dependencies` + `severity` through
 
 Needs: a soft-dep catalog state under `## /claude:plugin enable` in
 `docs/output-catalog.md` (mirroring `soft-dep-on-installed`), its fixture in
-`tests/architecture/catalog-uat.test.ts`, and row assertions in
-`tests/orchestrators/plugin/enable-disable.test.ts` +
-`tests/orchestrators/reconcile/notify.test.ts`.
+`test/architecture/catalog-uat.test.ts`, and row assertions in
+`test/orchestrators/plugin/enable-disable.test.ts` +
+`test/orchestrators/reconcile/notify.test.ts`.

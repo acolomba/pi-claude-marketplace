@@ -524,7 +524,7 @@ export type PluginUpdateFn = (
  * shape would widen this arm with a field nothing here writes. The key set is
  * pinned bidirectionally by `COMPAT-01: the install outcome inherits exactly the
  * signals installPlugin populates` in
- * `tests/architecture/compat-01-no-expansion.test.ts`, which stops compiling on
+ * `test/architecture/compat-01-no-expansion.test.ts`, which stops compiling on
  * either a widening or a narrowing. Each field of the shared shape is optional,
  * so intersecting all six never made a missing one a compile error -- it only
  * advertised `stagedAgents` / `stagedMcpServers` / `stagedWorkflows` that

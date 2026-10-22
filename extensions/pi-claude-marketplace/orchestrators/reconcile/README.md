@@ -22,7 +22,7 @@ orchestrators/reconcile/
 
 ## Purity discipline
 
-`plan.ts` exports `planReconcile(MergedConfig, ExtensionState, Scope, ScopeSatisfactionVerdict) -> ReconcilePlan`. It is a pure bidirectional 9-bucket diff: no `node:fs`, no `platform/git`, no `notify`, no `saveState` / `saveConfig` / `atomicWriteJson` / `withStateGuard` / `withLockedStateTransaction`. The architecture grep-gate at `tests/architecture/reconcile-planner-purity.test.ts` enforces this structurally; the gate operates on the comment-stripped source so the header docstring may legally mention forbidden symbols without self-invalidation.
+`plan.ts` exports `planReconcile(MergedConfig, ExtensionState, Scope, ScopeSatisfactionVerdict) -> ReconcilePlan`. It is a pure bidirectional 9-bucket diff: no `node:fs`, no `platform/git`, no `notify`, no `saveState` / `saveConfig` / `atomicWriteJson` / `withStateGuard` / `withLockedStateTransaction`. The architecture grep-gate at `test/architecture/reconcile-planner-purity.test.ts` enforces this structurally; the gate operates on the comment-stripped source so the header docstring may legally mention forbidden symbols without self-invalidation.
 
 `notify.ts` exports two pure projections: `buildReconcilePendingNotification(plans, forceInstallKeys) -> { marketplaces }` for the pending surface, whose rows are typed `MarketplaceRows<PendingMsg>`, and `buildReconcileAppliedCascade(outcomes) -> ReconcileAppliedCascadeMessage` for the apply surface. Neither projection calls `ctx.ui.notify`; `pending.ts` and `apply.ts` own the single sanctioned `notify()` call per invocation (IL-2).
 

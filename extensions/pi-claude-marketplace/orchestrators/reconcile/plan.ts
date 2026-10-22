@@ -2,7 +2,7 @@
 //
 // DIFF-01 pure bidirectional 8-bucket diff between MergedConfig and
 // ExtensionState. NEVER touches the disk or network. The architecture
-// purity gate at `tests/architecture/reconcile-planner-purity.test.ts`
+// purity gate at `test/architecture/reconcile-planner-purity.test.ts`
 // structurally enforces zero effectful imports (no node:fs, no platform
 // git, no save*/withState*/withLockedStateTransaction, no notify).
 //

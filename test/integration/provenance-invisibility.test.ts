@@ -1,0 +1,140 @@
+// test/integration/provenance-invisibility.test.ts
+//
+// T-d8i-01 headline safety claim, verified against pi-subagents' OWN parser:
+// the provenance folded under the frontmatter `provenance:` mapping stays
+// invisible to the child subagent. The child subagent's system prompt is
+// exactly the `body` that pi-subagents' `parseFrontmatter` returns
+// (pi-subagents' agent loader parses an agent file with
+// `parseFrontmatter(content)` and sets `systemPrompt: body`), so running a
+// real `emitGeneratedAgentFile(...)`
+// output through that parser and inspecting its `body` + top-level
+// `frontmatter` keys is the load-bearing check -- not this extension's own
+// line-based parseFrontmatter (which trims lines and does NOT mirror
+// pi-subagents' anchored `^([\w-]+):` key regex over indented content).
+//
+// pi-subagents is an optional peer. The test imports its compiled
+// `src/agents/frontmatter.js` in place from the declared floor in the optional
+// peer cache, through pi-subagents-peer.ts. A missing or wrong-version package
+// fails the test, and so does a module that is missing or fails to import. A
+// run reports the proven version as a diagnostic.
+
+import assert from "node:assert/strict";
+import { test } from "node:test";
+
+import { emitGeneratedAgentFile } from "../../extensions/pi-claude-marketplace/bridges/agents/frontmatter.ts";
+import { GENERATED_AGENT_MARKER } from "../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
+
+import { findPiSubagentsPackage, loadPiSubagentsModule } from "./pi-subagents-peer.ts";
+
+interface PiSubagentsFrontmatterModule {
+  readonly parseFrontmatter: (content: string) => {
+    frontmatter: Record<string, string>;
+    body: string;
+  };
+}
+
+test("T-d8i-01: provenance stays invisible to pi-subagents' own frontmatter parser", async (t) => {
+  // arrange
+  const peer = await findPiSubagentsPackage();
+  t.diagnostic(`pi-subagents ${peer.version} at ${peer.root}`);
+  const fm = await loadPiSubagentsModule<PiSubagentsFrontmatterModule>(peer, "frontmatter");
+
+  // A distinctive body so any provenance leak into the child system prompt
+  // is unambiguous. Provenance values are equally distinctive.
+  const bodyText = "CHILD SYSTEM PROMPT: perform the delegated task and report.";
+  const agentFileContent = emitGeneratedAgentFile({
+    frontmatter: {
+      name: "pi-claude-marketplace-acme-bot",
+      description: "An agent.",
+      model: "anthropic/claude-sonnet-4-6",
+      tools: ["read", "bash"],
+      skills: ["acme-knowledge"],
+      inheritSkills: true,
+    },
+    provenance: {
+      pluginName: "acme",
+      sourceName: "bot",
+      sourcePath: "/abs/provenance-source.md",
+      originalModel: "sonnet",
+      // Exercises BOTH list forms: a non-empty block list (droppedFields,
+      // warnings, each rendered `    - item`) and an empty inline `[]`
+      // (droppedTools) -- the two shapes the safety claim must survive.
+      droppedFields: ["provColorField"],
+      droppedTools: [],
+      warnings: ["provWarningText leaked check"],
+    },
+    body: bodyText,
+  });
+
+  // act
+  const { frontmatter, body } = fm.parseFrontmatter(agentFileContent);
+
+  // assert
+  // (a) The parsed body IS the child subagent's system prompt. It must carry
+  //     none of the provenance keys, values, or the generated marker.
+  const provenanceLeaks = [
+    // keys
+    "generatedBy",
+    "sourcePlugin",
+    "sourceAgent",
+    "sourcePath",
+    "originalModel",
+    "droppedFields",
+    "droppedTools",
+    "warnings",
+    // marker text
+    GENERATED_AGENT_MARKER,
+    // values
+    "provColorField",
+    "provWarningText",
+    "/abs/provenance-source.md",
+  ];
+  for (const needle of provenanceLeaks) {
+    assert.ok(
+      !body.includes(needle),
+      `child system prompt (body) must not contain provenance token ${JSON.stringify(needle)}`,
+    );
+  }
+
+  // The boundary landed exactly at the closing `---`: the body pi-subagents
+  // hands the child is precisely the source body (their parser .trim()s it),
+  // proving the nested provenance block did not shift the frontmatter/body
+  // split into the prompt.
+  assert.equal(body, bodyText);
+
+  // (b) None of the provenance member keys surfaced as TOP-LEVEL config
+  //     keys -- pi-subagents folded the whole indented block under the single
+  //     `provenance` key and never re-parsed its members.
+  for (const provKey of [
+    "generatedBy",
+    "sourcePlugin",
+    "sourceAgent",
+    "sourcePath",
+    "originalModel",
+    "droppedFields",
+    "droppedTools",
+    "warnings",
+  ]) {
+    assert.equal(
+      frontmatter[provKey],
+      undefined,
+      `provenance member ${provKey} must not become a top-level frontmatter key`,
+    );
+  }
+
+  // The real top-level config keys parsed correctly (the boundary and key
+  // set were not corrupted by the appended provenance mapping).
+  assert.equal(frontmatter.name, "pi-claude-marketplace-acme-bot");
+  assert.equal(frontmatter.model, "anthropic/claude-sonnet-4-6");
+  assert.equal(frontmatter.tools, "read,bash");
+  assert.equal(frontmatter.skills, "acme-knowledge");
+  assert.equal(frontmatter.inheritSkills, "true");
+
+  // The provenance block rode along as the single `provenance` key's value
+  // (a multi-line string), carrying the marker -- so isOwnedAgentFile's
+  // whole-file substring check still matches while the child never sees it.
+  assert.ok(
+    frontmatter.provenance?.includes(GENERATED_AGENT_MARKER),
+    "the provenance mapping value must carry the generated marker",
+  );
+});

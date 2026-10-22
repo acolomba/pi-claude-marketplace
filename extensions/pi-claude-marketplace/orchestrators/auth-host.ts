@@ -37,7 +37,7 @@
  * seam (shared/github-base-url.ts).
  *
  * AUTH-09: no credential field is ever interpolated into an Error/notify here;
- * enforced by tests/architecture/no-credential-leak.test.ts (PROV-05).
+ * enforced by test/architecture/no-credential-leak.test.ts (PROV-05).
  */
 
 import { findProviderForHost } from "../domain/auth-registry.ts";

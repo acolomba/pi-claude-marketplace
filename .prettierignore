@@ -1,2 +1,2 @@
 # Intentionally malformed JSON fixture for the MA-9 cleanup tests.
-tests/orchestrators/marketplace/_fixtures/invalid-manifest/.claude-plugin/marketplace.json
+test/orchestrators/marketplace/_fixtures/invalid-manifest/.claude-plugin/marketplace.json
