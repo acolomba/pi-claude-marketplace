@@ -54,6 +54,14 @@ so that each later phase owns its own feature file and runs in parallel with
 the others. The suite's existing feature files, steps, and stand-ins are the
 pattern.
 
+**Bug policy (user decision 2026-10-22):** A scenario that exposes a product
+bug fixes the bug in the same phase, with Claude Code's `/plugin` behavior as
+the reference (research it with `claude-code-compat-research`). The run is
+autonomous and non-interactive. It stops for the user only when Claude Code's
+behavior plainly contradicts an established pi-claude-marketplace principle
+(the recorded divergences such as SC-1, D-MF-04, and the layer model) and the
+precedent of other commands does not settle which one wins.
+
 ## Previous Milestone: marketplace-features -- Marketplace Behavioral Tests (branch: features/cucumber-behavioral-tests, started 2026-10-15, completed 2026-10-21, PR #271, not yet merged, no npm release)
 
 **Goal:** A cucumber suite drives every `/claude:plugin marketplace` lifecycle
