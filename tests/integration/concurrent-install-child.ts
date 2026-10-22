@@ -31,6 +31,7 @@ function isStartMessage(value: unknown): value is StartMessage {
 function sendResult(result: {
   readonly ok: boolean;
   readonly message: string;
+  // fallow-ignore-next-line code-duplication -- reviewed: each integration child process reports its own result shape, so each keeps its own send-and-disconnect wiring
   readonly notifications?: readonly NotificationRecord[];
 }): void {
   process.send?.(result, () => {

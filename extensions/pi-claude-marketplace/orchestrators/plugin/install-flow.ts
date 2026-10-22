@@ -69,11 +69,11 @@ import {
   resolveInstallMarketplaceSource,
   surfaceDiscoveryWarnings,
   undeclarableMarketplaceRefusal,
+  sweepWorkflowsStaging,
   writeAdoptingConfigEntries,
   type LedgerDegradationSignals,
   type TargetLayers,
 } from "./shared.ts";
-import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
 
 import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
 import type {
@@ -1121,19 +1121,7 @@ async function collectPostCommitWarnings(
   // is what creates them, so the install side has to sweep or a machine that
   // never uninstalls never would. Debug-logged only (D-19-01): no row is
   // pushed, because a cleanup the user did not ask for does not narrate itself.
-  try {
-    const leaks = await garbageCollectWorkflowsStaging(installCtx.locations);
-    if (leaks.length > 0) {
-      hookDebugLog(
-        `install: workflows staging GC left ${leaks.length.toString()} tree(s) for ${plugin}@${marketplace}: ${leaks.join("; ")}`,
-      );
-    }
-  } catch (err) {
-    // D-19-01: hygienic cleanup never becomes the primary user-facing path.
-    hookDebugLog(
-      `install: workflows staging GC failed for ${plugin}@${marketplace}: ${errorMessage(err)}`,
-    );
-  }
+  await sweepWorkflowsStaging(installCtx.locations, "install", `${plugin}@${marketplace}`);
 
   return warnings;
 }

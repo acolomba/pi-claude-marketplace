@@ -15,14 +15,14 @@
  * plugin declares workflows into a session with no host workflow engine, and
  * none of them renders it when the engine is loaded.
  *
- * That claim needs ONE owner. Seven scattered per-site assertions can each be
- * deleted without anything noticing; a single projection over all seven cannot.
+ * That claim needs ONE owner. Scattered per-site assertions can each be
+ * deleted without anything noticing; a single projection over all of them cannot.
  * The one-assertion shape is also what makes the deletion-of-one-arm control
  * informative: reverting a single derivation turns exactly one row of the
  * projected array red, and that row names the file to open.
  *
  * The case list is BOUND to the tree, not hand-maintained (WR-04). A literal
- * seven-entry array can only prove the seven sites it already names: an eighth
+ * array can only prove the sites it already names: one more
  * derivation would render no marker and leave this suite green, which is the
  * exact failure mode the word EVERY above claims to exclude. The second case
  * below therefore scans `orchestrators/` for the two shapes a derivation takes
@@ -33,10 +33,14 @@
  * the sites are files rather than type members, so the binding cannot be a type.
  *
  * Every case asserts on the RENDERED ROW rather than on an intermediate
- * `Dependency[]`, so all seven prove the same end-to-end claim (D-114-05). Five
- * of the seven derivations are module-private and stay that way: they are
- * reached through their exported outcome-to-row composers or through a full
+ * `Dependency[]`, so all of them prove the same end-to-end claim (D-114-05).
+ * Every derivation but one is module-private and stays that way: each is
+ * reached through its exported outcome-to-row composer or through a full
  * orchestrator entry point, never through an export added to serve a test.
+ *
+ * Rows that derive from the three declares-flags alone call
+ * `declaredDependencies` in `shared/concerns/soft-dep.ts`, which its owner suite
+ * covers; they derive nothing themselves, so they are not sites here.
  *
  * Every surface renders from a notification run and reads the run's
  * soft-dependency snapshot (D-05), so the cases seed the snapshot directly. The
@@ -55,19 +59,15 @@ import {
   readHooksJson,
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
-import { importClaudeSettings } from "../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
 import { composeCascadeMemberRows } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts";
 import { listPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/list-flow.ts";
 import { createInstallOperation } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
-import { reinstalledRowFromOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts";
 import { enableRowDependencies } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import { updatedRowFromOutcome } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts";
-import { dependenciesFromInstall } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { notify } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
-import { createGitOpsFake } from "../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 import { runWithSoftDeps } from "../shared/notification-run-seeds.ts";
 
@@ -120,9 +120,9 @@ function runFor(engineLoaded: boolean): NotificationRun {
 }
 
 /**
- * Render one composed message and return the emitted bytes. The two Tier A and
- * two Tier B cases share this so their claim is the same "this surface renders
- * the marker" claim the three Tier C cases make.
+ * Render one composed message and return the emitted bytes. The Tier A and
+ * Tier B cases share this so their claim is the same "this surface renders
+ * the marker" claim the Tier C cases make.
  */
 function renderThroughNotify(engineLoaded: boolean, message: NotificationMessage): string {
   const { ctx, notifications } = makeCtx();
@@ -207,7 +207,7 @@ async function runInstall(
 }
 
 // ---------------------------------------------------------------------------
-// The seven cases, one per `Dependency[]` derivation site.
+// One case per `Dependency[]` derivation site.
 // ---------------------------------------------------------------------------
 
 interface SiteCase {
@@ -327,40 +327,6 @@ const SITE_CASES = [
       ),
   },
   {
-    // Tier B: `dependenciesFromOutcome` is module-private behind the exported
-    // row composer.
-    site: "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall.messaging.ts",
-    drive: (engineLoaded) =>
-      Promise.resolve(
-        renderThroughNotify(engineLoaded, {
-          marketplaces: [
-            {
-              name: "mp",
-              scope: "project",
-              plugins: [
-                reinstalledRowFromOutcome(
-                  {
-                    partition: "reinstalled",
-                    name: "hello",
-                    marketplace: "mp",
-                    scope: "project",
-                    version: "1.0.0",
-                    resourcesChanged: true,
-                    stagedAgentNames: [],
-                    stagedMcpServerNames: [],
-                    declaresAgents: false,
-                    declaresMcp: false,
-                    declaresWorkflows: true,
-                  },
-                  undefined,
-                ),
-              ],
-            },
-          ],
-        }),
-      ),
-  },
-  {
     // Tier B: `outcomeDependencies` is module-private behind the exported row
     // composer.
     site: "extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts",
@@ -394,77 +360,13 @@ const SITE_CASES = [
         }),
       ),
   },
-  {
-    // Tier C: `dependenciesFromInstalled` is module-private; a full import run
-    // with production collaborators is the only public surface that reaches it.
-    site: "extensions/pi-claude-marketplace/orchestrators/import/execute.ts",
-    drive: async (engineLoaded) =>
-      withHermeticEnvironment("wf-marker-", async ({ cwd }) => {
-        // arrange
-        const marketplaceRoot = await seedWorkflowPlugin(cwd);
-        await writeUnder(
-          path.join(cwd, ".claude", "settings.json"),
-          JSON.stringify({
-            enabledPlugins: { "hello@mp": true },
-            extraKnownMarketplaces: { mp: { directory: marketplaceRoot } },
-          }),
-        );
-        const { ctx, notifications } = makeCtx();
-
-        // act
-        await importClaudeSettings({
-          ctx,
-          run: runFor(engineLoaded),
-          cwd,
-          gitOps: createGitOpsFake({ allowedRemoteUrls: [], boundary: "memory" }).gitOps,
-          selectedScopes: ["project"],
-          hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
-          completionCache: createCompletionCache(),
-        });
-
-        // assert
-        const emitted = notifications[0];
-        assert.ok(emitted !== undefined, "importClaudeSettings emitted no notification");
-        return emitted.message;
-      }),
-  },
-  {
-    // Tier A: exported for production reasons; the gate calls it and renders
-    // the array it returns.
-    site: "extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts",
-    drive: (engineLoaded) =>
-      Promise.resolve(
-        renderThroughNotify(engineLoaded, {
-          marketplaces: [
-            {
-              name: "mp",
-              scope: "project",
-              plugins: [
-                {
-                  status: "installed",
-                  name: "hello",
-                  version: "1.0.0",
-                  dependencies: dependenciesFromInstall({
-                    declaresAgents: false,
-                    declaresMcp: false,
-                    declaresWorkflows: true,
-                  }),
-                  severity: "warning",
-                  needsReload: true,
-                },
-              ],
-            },
-          ],
-        }),
-      ),
-  },
 ] as const satisfies readonly SiteCase[];
 
 test("WDEP-04 / SNM-06: every Dependency[] derivation site renders the host-engine marker", async () => {
   // arrange
   const observed: { site: string; marked: boolean; clean: boolean }[] = [];
 
-  // act -- sequential, not `Promise.all`: the three full-orchestrator cases
+  // act -- sequential, not `Promise.all`: the full-orchestrator cases
   // swap `process.env.HOME`, and concurrent drives would race that global.
   for (const siteCase of SITE_CASES) {
     const absent = await siteCase.drive(false);
@@ -511,7 +413,7 @@ test("WDEP-04: the case list covers every Dependency[] derivation site", async (
     DERIVATION_SHAPE,
   );
 
-  // assert -- set equality in BOTH directions. An eighth derivation that no
+  // assert -- set equality in BOTH directions. A derivation that no
   // case drives is a red row here even though its own surface renders no
   // marker; a case whose site no longer derives anything is red too, so a
   // deleted derivation cannot leave a case asserting against nothing.

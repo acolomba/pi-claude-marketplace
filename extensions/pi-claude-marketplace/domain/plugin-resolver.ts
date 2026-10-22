@@ -52,6 +52,7 @@ import {
 import { collectUnsupportedKinds } from "./unsupported-components.ts";
 
 import type {
+  GitPluginRootResult,
   ResolveContext,
   ResolvedPlugin,
   ResolvedPluginInstallable,
@@ -389,6 +390,9 @@ function resolveDescription(
   return entry.description === "" ? undefined : entry.description;
 }
 
+type SourcePluginRoot =
+  { kind: "ok"; pluginRoot: string } | { kind: "unavailable"; result: ResolvedPluginUnavailable };
+
 /**
  * PURL-01 / PURL-03: derive the pluginRoot for an already-supported source kind.
  *
@@ -420,27 +424,11 @@ async function deriveSourcePluginRoot(
   ctx: ResolveContext,
   parsedSource: SupportedParsedSource,
   partial: PartialResolution,
-): Promise<
-  { kind: "ok"; pluginRoot: string } | { kind: "unavailable"; result: ResolvedPluginUnavailable }
-> {
+): Promise<SourcePluginRoot> {
   if (parsedSource.kind === "path") {
     if (ctx.resolvePathPluginRoot !== undefined && ctx.pathPluginPin !== undefined) {
       const r = await ctx.resolvePathPluginRoot(parsedSource, ctx.pathPluginPin);
-      switch (r.kind) {
-        case "materialized":
-          return { kind: "ok", pluginRoot: r.pluginRoot };
-        case "escapes":
-        case "missing-subdir":
-          return {
-            kind: "unavailable",
-            result: unavailable(entry.name, [...partial.notes, r.detail]),
-          };
-        case "not-cached":
-          return {
-            kind: "unavailable",
-            result: unavailable(entry.name, [...partial.notes, `not installed`]),
-          };
-      }
+      return pluginRootFromResult(entry, partial, r);
     }
 
     const pluginRoot = path.resolve(ctx.marketplaceRoot, parsedSource.raw);
@@ -468,6 +456,19 @@ async function deriveSourcePluginRoot(
   }
 
   const r = await ctx.resolveGitPluginRoot(parsedSource);
+  return pluginRootFromResult(entry, partial, r);
+}
+
+/**
+ * Map a pinned-path or git root resolution to the source-root verdict:
+ * `materialized` carries the pluginRoot, `escapes` / `missing-subdir` carry
+ * their structural detail, and `not-cached` reports the plugin is not installed.
+ */
+function pluginRootFromResult(
+  entry: PluginEntry,
+  partial: PartialResolution,
+  r: GitPluginRootResult,
+): SourcePluginRoot {
   switch (r.kind) {
     case "materialized":
       return { kind: "ok", pluginRoot: r.pluginRoot };

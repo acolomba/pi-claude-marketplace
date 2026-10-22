@@ -145,6 +145,7 @@ async function collectSkillSubdirs(
   seenByDir: Set<string>,
   warnings: string[],
 ): Promise<void> {
+  // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
   const entries = await readDirEntriesTolerant(skillsDir);
 
   const sorted = [...entries].sort((a, b) => a.name.localeCompare(b.name));

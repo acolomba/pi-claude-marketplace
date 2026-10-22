@@ -670,34 +670,6 @@ export function classifyReadPassThrow(err: unknown): ContentReason {
 }
 
 /**
- * Derive the closed-set Dependency[] from InstallPluginOutcome flags.
- *
- * WDEP-02: `workflows` pushes LAST, so a projection that declares agents and
- * mcp renders the same two-marker brace whether or not it also declares
- * workflows.
- */
-export function dependenciesFromInstall(outcome: {
-  readonly declaresAgents: boolean;
-  readonly declaresMcp: boolean;
-  readonly declaresWorkflows: boolean;
-}): readonly Dependency[] {
-  const deps: Dependency[] = [];
-  if (outcome.declaresAgents) {
-    deps.push("agents");
-  }
-
-  if (outcome.declaresMcp) {
-    deps.push("mcp");
-  }
-
-  if (outcome.declaresWorkflows) {
-    deps.push("workflows");
-  }
-
-  return deps;
-}
-
-/**
  * AFILE-04: lift an orchestrated outcome's MCP config notices onto the reconcile
  * outcome built from it. The orchestrated outcomes set the member only when
  * non-empty, so an absent member stays absent (NREG-01).

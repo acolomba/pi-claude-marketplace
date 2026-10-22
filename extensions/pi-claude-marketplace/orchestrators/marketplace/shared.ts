@@ -632,14 +632,7 @@ export async function cascadeUnstagePlugin(
 
     return Object.freeze({
       ok: true,
-      dropped: Object.freeze({
-        skills: Object.freeze([...dropped.skills]),
-        commands: Object.freeze([...dropped.commands]),
-        agents: Object.freeze([...dropped.agents]),
-        hooks: Object.freeze([...dropped.hooks]),
-        mcpServers: Object.freeze([...dropped.mcpServers]),
-        workflows: Object.freeze([...dropped.workflows]),
-      }),
+      dropped: freezeDropped(dropped),
       ...mcpConfigNoticesMember(mcpConfigNotices),
       ...writtenMcpFilesMember(writtenMcpFiles),
     });
@@ -662,19 +655,23 @@ export async function cascadeUnstagePlugin(
 
     return Object.freeze({
       ok: false,
-      dropped: Object.freeze({
-        skills: Object.freeze([...dropped.skills]),
-        commands: Object.freeze([...dropped.commands]),
-        agents: Object.freeze([...dropped.agents]),
-        hooks: Object.freeze([...dropped.hooks]),
-        mcpServers: Object.freeze([...dropped.mcpServers]),
-        workflows: Object.freeze([...dropped.workflows]),
-      }),
+      dropped: freezeDropped(dropped),
       cause: failure instanceof Error ? failure : new Error(String(failure)),
       ...mcpConfigNoticesMember(mcpConfigNotices),
       ...writtenMcpFilesMember(writtenMcpFiles),
     });
   }
+}
+
+function freezeDropped(dropped: UnstageOutcome["dropped"]): UnstageOutcome["dropped"] {
+  return Object.freeze({
+    skills: Object.freeze([...dropped.skills]),
+    commands: Object.freeze([...dropped.commands]),
+    agents: Object.freeze([...dropped.agents]),
+    hooks: Object.freeze([...dropped.hooks]),
+    mcpServers: Object.freeze([...dropped.mcpServers]),
+    workflows: Object.freeze([...dropped.workflows]),
+  });
 }
 
 /**

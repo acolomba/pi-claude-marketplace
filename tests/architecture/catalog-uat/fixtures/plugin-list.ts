@@ -118,6 +118,7 @@ export const PLUGIN_LIST_FIXTURES: FixtureMap = {
     },
 
     "same-plugin-both-scopes": {
+      // fallow-ignore-next-line code-duplication -- reviewed: each catalog state spells out its full expected message, so a state reads on its own
       pi: piWithBothLoaded(),
       message: {
         marketplaces: [

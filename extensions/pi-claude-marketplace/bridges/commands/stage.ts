@@ -176,6 +176,7 @@ export async function prepareStageCommands(
   // D-07: discover returns { discovered, warnings }. warnings carry
   // duplicate-generated-name first-wins skips across multiple
   // componentPaths.commands entries.
+  // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
   const { discovered, warnings: discoverWarnings } = await discoverPluginCommands({
     pluginName,
     resolved,
@@ -291,6 +292,7 @@ export async function prepareStageCommands(
     targetPath: path.join(locations.promptsTargetDir, command.generatedName + ".md"),
   }));
 
+  // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
   return {
     kind: "staged",
     locations,
@@ -465,6 +467,7 @@ export async function replacePreparedCommands(
       renamed.push({ to: pair.to });
     }
   } catch (err) {
+    // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
     const leaks = await rollbackCommandsReplacementInternal(
       ops,
       prepared,

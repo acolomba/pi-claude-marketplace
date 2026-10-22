@@ -206,6 +206,7 @@ const behaviorCases: readonly CredentialOpsContractCase[] = [
     run: async (createCredentialOps) => {
       // arrange
       const credentialOps = await createCredentialOps();
+      // fallow-ignore-next-line code-duplication -- reviewed: each contract case spells out its own arrange, act, and assert, so a case reads on its own
       await credentialOps.approve("github.com", credential);
 
       // act

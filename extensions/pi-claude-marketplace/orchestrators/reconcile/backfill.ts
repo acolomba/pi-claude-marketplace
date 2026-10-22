@@ -13,6 +13,7 @@ import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+import { declaredDependencies } from "../../shared/concerns/soft-dep.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { EXTENSION_VERSION } from "../../shared/extension-version.ts";
@@ -24,7 +25,6 @@ import {
   carriedMcpConfigNotices,
   classifyOrchestratorThrow,
   classifyReadPassThrow,
-  dependenciesFromInstall,
 } from "./apply-outcomes.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
@@ -464,7 +464,7 @@ async function maybeBackfillPlugin(
     marketplace,
     plugin,
     ...(outcome.version !== "" && { version: outcome.version }),
-    dependencies: dependenciesFromInstall(outcome),
+    dependencies: declaredDependencies(outcome),
     // The re-resolved installability selects the row: a fully promoted plugin
     // (unsupported now empty) -> `installable` -> (installed); a partial
     // re-materialize stays `partially-available` -> (partially-installed).

@@ -165,6 +165,7 @@ export const PLUGIN_REINSTALL_FIXTURES: FixtureMap = {
         label: "Plugin reinstall",
         cardinality: "plural",
         marketplaces: [
+          // fallow-ignore-next-line code-duplication -- reviewed: each catalog state spells out its full expected message, so a state reads on its own
           {
             name: "official",
             scope: "user",

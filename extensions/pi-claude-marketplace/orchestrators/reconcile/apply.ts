@@ -76,6 +76,7 @@ import path from "node:path";
 import { findLayerMarketplaceGaps, loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
+import { declaredDependencies } from "../../shared/concerns/soft-dep.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { DependencyCascadeError, errorMessage } from "../../shared/errors.ts";
 import { pathExists } from "../../shared/fs-utils.ts";
@@ -103,7 +104,6 @@ import {
   carriedMcpConfigNotices,
   classifyOrchestratorThrow,
   classifyReadPassThrow,
-  dependenciesFromInstall,
   dependencyDisabledOutcome,
   MigrateConfigSaveError,
 } from "./apply-outcomes.ts";
@@ -705,7 +705,7 @@ async function applyPluginInstalls(
         scope: op.scope,
         marketplace: op.marketplace,
         plugin: op.plugin,
-        dependencies: dependenciesFromInstall(result),
+        dependencies: declaredDependencies(result),
         // S2 / PR #51: propagate post-commit warnings so the cascade
         // caller can surface them to the operator (mirrors the
         // `pushDiagnostic` channel in
@@ -809,7 +809,7 @@ async function applyDependencyInstalls(
           marketplace: member.marketplace,
           plugin: member.name,
           version: member.version,
-          dependencies: dependenciesFromInstall(member),
+          dependencies: declaredDependencies(member),
           dependencyInstalled: true,
           ...(member.key === rootKey &&
             result.postCommitWarnings !== undefined &&

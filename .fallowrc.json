@@ -146,9 +146,6 @@
       }
     ]
   },
-  "duplicates": {
-    "threshold": 3
-  },
   "includeEntryExports": true,
   "rules": {
     "private-type-leaks": "error",

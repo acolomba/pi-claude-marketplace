@@ -407,6 +407,7 @@ async function spawnAndCollect(
         hookDebugLog(`exec: stderr (${entry.pluginId}/${entry.claudeEvent}): ${stderr.trim()}`);
       }
 
+      // fallow-ignore-next-line code-duplication -- reviewed: the async-rewake and synchronous dispatch paths each own their child's stdin wiring; the shared part is a short EPIPE guard
       settle(parseHookStdout(code, stdout, stderr));
     });
 

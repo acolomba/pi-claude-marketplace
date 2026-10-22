@@ -218,6 +218,7 @@ function tokenize(pattern: string): GlobToken[] {
  * word-boundary and path-tail-globstar conventions).
  */
 function matchStar(
+  // fallow-ignore-next-line code-duplication -- reviewed: star and globstar are separate glob operators that share only their scan loop; one flag-driven matcher would be harder to read
   tokens: readonly GlobToken[],
   text: string,
   ti: number,

@@ -357,6 +357,7 @@ export async function spawnAndRegister(
     child.once("error", (err) => {
       ladder.cancel();
       hookDebugLog(`async-rewake: child error dispatchId=${dispatchId}: ${errorMessage(err)}`);
+      // fallow-ignore-next-line code-duplication -- reviewed: the async-rewake and synchronous dispatch paths each own their child's stdin wiring; the shared part is a short EPIPE guard
       finalizeOnce(undefined);
     });
 

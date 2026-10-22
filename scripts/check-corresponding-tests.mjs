@@ -158,6 +158,7 @@ function checkCorrespondingTests(projectRoot = defaultProjectRoot) {
     }
   }
 
+  // fallow-ignore-next-line code-duplication -- reviewed: scripts/check-corresponding-tests.mjs comes from the TypeScript blueprint, so a helper shared with it would conflict on every blueprint sync; each gate script keeps its own CLI prologue
   for (const testPath of testPaths.filter(isCorrespondingTestCandidate)) {
     if (isStructuralSupplement(projectRoot, testPath)) {
       continue;
@@ -198,6 +199,7 @@ function main() {
   }
 
   for (const violation of violations) {
+    // fallow-ignore-next-line code-duplication -- reviewed: scripts/check-corresponding-tests.mjs comes from the TypeScript blueprint, so a helper shared with it would conflict on every blueprint sync; each gate script keeps its own CLI prologue
     process.stderr.write(`${violation.kind}: ${violation.path}\n`);
   }
 

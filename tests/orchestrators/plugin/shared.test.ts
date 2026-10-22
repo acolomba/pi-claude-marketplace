@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, symlink, utimes, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
-import { describe, test } from "node:test";
+import { describe, test, type TestContext } from "node:test";
 
 import { mock, verify, when } from "strong-mock";
 
@@ -34,6 +35,7 @@ import {
   retiresWorkflowCommand,
   splitStagingWarnings,
   surfaceDiscoveryWarnings,
+  sweepWorkflowsStaging,
   undeclarableMarketplaceRefusal,
   writeAdoptingConfigEntries,
   type CrossPluginGeneratedNames,
@@ -52,6 +54,7 @@ import {
   PluginInLocalLayerOnlyError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
+import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
@@ -3237,3 +3240,65 @@ for (const { previousNames, placedNames, expected } of [
     assert.strictEqual(retiresWorkflowCommand(previousNames, placedNames), expected);
   });
 }
+
+describe("sweepWorkflowsStaging", () => {
+  async function workflowsHome(t: TestContext): Promise<string> {
+    const home = await mkdtemp(path.join(tmpdir(), "plugin-shared-sweep-"));
+    t.after(() => rm(home, { recursive: true, force: true }));
+    return home;
+  }
+
+  test("logs nothing when the sweep leaves no tree behind", async (t) => {
+    // arrange
+    const home = await workflowsHome(t);
+    const locations = { workflowsHomeDir: home, workflowsStagingDir: path.join(home, "staging") };
+    const logged = captureDebugLog(t);
+
+    // act
+    await sweepWorkflowsStaging(locations, "install", "hello@mp");
+
+    // assert
+    assert.deepStrictEqual(logged, []);
+  });
+
+  test("logs the trees the sweep could not remove", async (t) => {
+    // arrange -- an aged tree outside the workflows home is refused per entry
+    // and recorded as a leak.
+    const home = await workflowsHome(t);
+    const outside = await workflowsHome(t);
+    const abandoned = path.join(outside, "abandoned");
+    await mkdir(abandoned);
+    const backdated = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+    await utimes(abandoned, backdated, backdated);
+    const locations = { workflowsHomeDir: home, workflowsStagingDir: outside };
+    const logged = captureDebugLog(t);
+
+    // act
+    await sweepWorkflowsStaging(locations, "uninstall", "hello@mp");
+
+    // assert
+    assert.equal(logged.length, 1);
+    assert.match(
+      logged[0] ?? "",
+      /^\[hooks\] uninstall: workflows staging GC left 1 tree\(s\) for hello@mp: abandoned: /,
+    );
+  });
+
+  test("logs and swallows a sweep that throws", async (t) => {
+    // arrange -- a file where the staging directory belongs fails enumeration
+    // with an errno other than ENOENT, which the sweep rethrows.
+    const home = await workflowsHome(t);
+    const staging = path.join(home, "staging");
+    await writeFile(staging, "not a directory");
+    const locations = { workflowsHomeDir: home, workflowsStagingDir: staging };
+    const logged = captureDebugLog(t);
+
+    // act
+    await sweepWorkflowsStaging(locations, "install", "hello@mp");
+
+    // assert
+    assert.deepStrictEqual(logged, [
+      `[hooks] install: workflows staging GC failed for hello@mp: ENOTDIR: not a directory, scandir '${staging}'`,
+    ]);
+  });
+});

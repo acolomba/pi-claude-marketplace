@@ -1,4 +1,5 @@
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
+import { declaredDependencies } from "../../shared/concerns/soft-dep.ts";
 import {
   type ContentReason,
   type PluginFailedMessage,
@@ -10,7 +11,6 @@ import { notifyWithContext } from "../../shared/notify-context.ts";
 import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
 
 import type { NotificationContext } from "../../platform/pi-api.ts";
-import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { CommandContext, MarketplaceRows, Plural } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -196,7 +196,12 @@ export function reinstalledRowFromOutcome(
   return {
     status: "reinstalled",
     name: outcome.name,
-    dependencies: dependenciesFromOutcome(outcome),
+    // WDEP-04 / SEV-01: the reinstall row stamps the soft-dep marker but takes
+    // NO `companionSeverity` raise, matching the `agents` and `mcp` markers on
+    // this same row. That asymmetry against install / update / enable is
+    // deliberate and byte-pinned by the catalog's reinstall soft-dep state,
+    // which carries no attention summary line; do not "repair" it with a raise.
+    dependencies: declaredDependencies(outcome),
     // IN-02: the spread is not defensive -- `resolvePluginVersion` always
     // returns a non-empty string. It keeps a legacy record carrying an empty
     // version from putting an empty slot in the payload; the renderer suppresses
@@ -297,40 +302,6 @@ function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
       return failed;
     }
   }
-}
-
-/**
- * Map a `ReinstallReinstalledOutcome`'s `declaresAgents` / `declaresMcp` /
- * `declaresWorkflows` predicate flags to the `Dependency[]` tuple consumed by
- * `PluginReinstalledMessage.dependencies` per SNM-06. `resolveRows`
- * iterates this array to compose the `{requires pi-subagents}` /
- * `{requires pi-mcp-adapter}` / `{requires pi-dynamic-workflows}` markers when the
- * companion extension is unloaded (MSG-SD-1..2, D-12).
- *
- * WDEP-02: `workflows` pushes LAST, so a reinstall that declares agents and mcp
- * renders the same two-marker brace whether or not it also declares workflows.
- *
- * WDEP-04 / SEV-01: the reinstall row stamps the marker but takes NO
- * `companionSeverity` raise, matching the `agents` and `mcp` markers on this
- * same row. That asymmetry against install / update / enable is deliberate and
- * byte-pinned by the catalog's reinstall soft-dep state, which carries no
- * attention summary line; do not "repair" it by adding a raise here.
- */
-function dependenciesFromOutcome(outcome: ReinstallReinstalledOutcome): readonly Dependency[] {
-  const deps: Dependency[] = [];
-  if (outcome.declaresAgents) {
-    deps.push("agents");
-  }
-
-  if (outcome.declaresMcp) {
-    deps.push("mcp");
-  }
-
-  if (outcome.declaresWorkflows) {
-    deps.push("workflows");
-  }
-
-  return Object.freeze(deps);
 }
 
 /**

@@ -105,6 +105,7 @@ import {
   missIsNotInstalled,
   pluginLayerVerdict,
   resolveCrossScopePluginTarget,
+  sweepWorkflowsStaging,
 } from "./shared.ts";
 import {
   composeDependencyRefusalCause,
@@ -115,7 +116,6 @@ import {
   composeUninstalledRow,
   UNINSTALL_CONTEXT,
 } from "./uninstall.messaging.ts";
-import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
 
 import type { IndexedRecord, ScopeDeclarationIndexResult } from "./dependency-index.ts";
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
@@ -1152,19 +1152,7 @@ async function runPostUninstallCleanup({
   // WLIF-01: workflow staging trees live under the home directory rather than
   // under any scope root, so nothing else in this cleanup reaches them.
   // Debug-logged, leaks included, and never user-facing (D-19-01).
-  try {
-    const leaks = await garbageCollectWorkflowsStaging(locations);
-    if (leaks.length > 0) {
-      hookDebugLog(
-        `uninstall: workflows staging GC left ${leaks.length.toString()} tree(s) for ${plugin}@${marketplace}: ${leaks.join("; ")}`,
-      );
-    }
-  } catch (err) {
-    // D-19-01: hygienic cleanup never becomes the primary user-facing path.
-    hookDebugLog(
-      `uninstall: workflows staging GC failed for ${plugin}@${marketplace}: ${errorMessage(err)}`,
-    );
-  }
+  await sweepWorkflowsStaging(locations, "uninstall", `${plugin}@${marketplace}`);
 }
 
 /**

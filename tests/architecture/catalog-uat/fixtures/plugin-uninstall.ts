@@ -281,6 +281,7 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
     // then one block per other marketplace that lost a member.
     "success-prune": {
       pi: piWithBothLoaded(),
+      // fallow-ignore-next-line code-duplication -- reviewed: each catalog state spells out its full expected message, so a state reads on its own
       message: {
         marketplaces: [
           {

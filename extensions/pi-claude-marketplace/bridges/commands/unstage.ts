@@ -26,6 +26,7 @@ export async function unstagePluginCommands(
     try {
       // eslint-disable-next-line no-await-in-loop -- the first containment or unlink failure stops later unlinks
       await unlink(target);
+      // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
       removed.push(name);
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") {

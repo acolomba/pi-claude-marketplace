@@ -65,6 +65,32 @@ const SOFT_DEP_MARKER_MCP: Reason = `requires ${COMPANION_MCP}`;
 const SOFT_DEP_MARKER_WORKFLOWS: Reason = `requires ${COMPANION_WORKFLOWS}`;
 
 /**
+ * SNM-06: the dependencies a plugin's declares-flags select, in canonical order.
+ * WDEP-02: `workflows` comes last, so a row that declares agents and mcp renders
+ * the same two-marker brace whether or not it also declares workflows.
+ */
+export function declaredDependencies(flags: {
+  readonly declaresAgents: boolean;
+  readonly declaresMcp: boolean;
+  readonly declaresWorkflows: boolean;
+}): readonly Dependency[] {
+  const deps: Dependency[] = [];
+  if (flags.declaresAgents) {
+    deps.push("agents");
+  }
+
+  if (flags.declaresMcp) {
+    deps.push("mcp");
+  }
+
+  if (flags.declaresWorkflows) {
+    deps.push("workflows");
+  }
+
+  return Object.freeze(deps);
+}
+
+/**
  * Pure given the probe result. Returns the soft-dep markers to append, in
  * canonical order (agents, then mcp, then workflows -- byte-critical for the
  * `{<r1>, <r2>}` brace join).
