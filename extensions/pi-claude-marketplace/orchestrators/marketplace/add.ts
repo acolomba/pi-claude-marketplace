@@ -68,6 +68,7 @@ import {
   InvalidMarketplaceManifestError,
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
+  StateLockHeldError,
   UnreadableSourceCloneError,
   UnremovableLeftoverCloneError,
   UnsupportedSourceError,
@@ -109,6 +110,7 @@ import { seedSameRepoPluginMirrors } from "../plugin/clone-cache.ts";
 import { ADD_CONTEXT } from "./add.messaging.ts";
 import {
   DEFAULT_GIT_OPS,
+  marketplaceFailureRows,
   recordedManifestPath,
   type GitAuthBundle,
   type GitOps,
@@ -290,9 +292,10 @@ function joinLeaks(a: string | undefined, b: string | undefined): string | undef
 /**
  * ATTR-07: map an `addMarketplace` precondition error to its
  * closed-set `ContentReason`. Fully `instanceof`-driven (D-48-C A3) so the
- * catch-all returns `undefined` -- a non-enumerated error (e.g.
- * `StateLockHeldError`, an unforeseen catastrophic failure) re-throws at the
- * entrypoint rather than being silently mislabeled. No substring matching.
+ * catch-all returns `undefined` -- a non-enumerated error (an unforeseen
+ * catastrophic failure) re-throws at the entrypoint rather than being silently
+ * mislabeled. No substring matching. `handleAddFailure` reports a
+ * `StateLockHeldError` before it calls this classifier (FLR-02).
  */
 export function classifyAddError(rawErr: unknown): ContentReason | undefined {
   const err = unwrapAddError(rawErr);
@@ -812,6 +815,37 @@ function hostErrorFrame(
 }
 
 /**
+ * FLR-02: an add that another process's state lock stopped fails with the
+ * row `marketplace update` shows for a held lock: the failed header and one
+ * failed child carrying `lock held` and the lock error as its cause. The add
+ * takes the lock before it reads a manifest, so the row names the marketplace
+ * by the typed source, as every failure before the manifest read does
+ * (ATTR-07 A2). Its child names that source, not a plugin, so the child's
+ * JSON id is the source alone, as on every failed add (ADD-10). The caller
+ * tests the raw error: `unwrapAddError` would read its ELOCKED cause instead.
+ */
+function surfaceLockHeldAdd(
+  opts: AddMarketplaceOptions,
+  err: StateLockHeldError,
+  orchestrated: boolean,
+): AddMarketplaceOutcome {
+  if (!orchestrated) {
+    const [block] = marketplaceFailureRows(opts.rawSource, opts.scope, "lock held", err);
+    const plugins = block.plugins.map((row) => ({ ...row, marketplaceSubject: true as const }));
+    notifyWithContext(
+      opts.ctx,
+      opts.run,
+      ADD_CONTEXT,
+      [{ ...block, plugins }],
+      undefined,
+      "single",
+    );
+  }
+
+  return { status: "failed", reason: "lock held", error: err, cause: errorMessage(err) };
+}
+
+/**
  * RECON-03: route the catch arm of `addMarketplace` to a typed
  * `AddMarketplaceOutcome`, emitting the standalone notify() row first when the
  * caller is not orchestrated. The outcome is returned on BOTH paths; the
@@ -828,6 +862,9 @@ function hostErrorFrame(
  * GHB-03: an `InvalidGitHubBaseUrlError` is the exception. Both modes rethrow
  * it, so an invalid variable fails the whole command.
  *
+ * FLR-02: a held state lock fails the add as `lock held` in both modes (see
+ * `surfaceLockHeldAdd`).
+ *
  * WR-02 / MA-14: the standalone row of a leftover the add could not remove
  * carries one advisory line naming the cleanup failure; the orchestrated
  * outcome carries the same leak in `cause`.
@@ -840,13 +877,17 @@ function handleAddFailure(
   err: unknown,
   orchestrated: boolean,
 ): AddMarketplaceOutcome {
+  if (err instanceof StateLockHeldError) {
+    return surfaceLockHeldAdd(opts, err, orchestrated);
+  }
+
   const reason = classifyAddError(err);
   const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
   if (reason === undefined) {
     rethrowInvalidGitHubBaseUrl(err);
     if (!orchestrated) {
-      // Not an enumerated add precondition (e.g. a StateLockHeldError or an
-      // unforeseen catastrophic error) -- never swallow it in standalone mode.
+      // Not an enumerated add precondition (an unforeseen catastrophic error)
+      // -- never swallow it in standalone mode.
       throw err;
     }
 

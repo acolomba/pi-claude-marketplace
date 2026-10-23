@@ -778,3 +778,60 @@ Feature: Marketplace remove
     Examples:
       | source kind |
       | github      |
+
+  Scenario: Removing a marketplace deletes the clones of the git-source plugins it uninstalls
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the git repository "mono" holds these plugins:
+      | name | version | path         |
+      | subp | 1.0.0   | plugins/subp |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+      | subp | git-subdir  | mono       | true   |
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the user has run "/claude:plugin install subp@gits --scope project"
+    When the user runs "/claude:plugin marketplace remove gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id        | name | status      | reasons | scope   |
+      | gits             | project           | removed            | ghp@gits  | ghp  | uninstalled |         | project |
+      | gits             | project           | removed            | subp@gits | subp | uninstalled |         | project |
+    Then the project scope holds no git clones
+    Then the git host receives no request
+
+  Scenario: Removing a marketplace keeps a pinned clone that a plugin of another marketplace still uses
+    Given the git repository "mono" holds these plugins:
+      | name | version | path         |
+      | subp | 1.0.0   | plugins/subp |
+      | subq | 1.0.0   | plugins/subq |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | subp | git-subdir  | mono       | true   |
+    Given the marketplace "others" is published as a dir source
+    Given the marketplace "others" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | subq | git-subdir  | mono       | true   |
+    Given the marketplace "gits" is added to the project scope
+    Given the marketplace "others" is added to the project scope
+    Given the user has run "/claude:plugin install subp@gits --scope project"
+    Given the user has run "/claude:plugin install subq@others --scope project"
+    When the user runs "/claude:plugin marketplace remove gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id        | name | status      | reasons | scope   |
+      | gits             | project           | removed            | subp@gits | subp | uninstalled |         | project |
+    Then the project scope holds these git clones:
+      | clone  | origin                           | revision          |
+      | plugin | https://{git host}/acme/mono.git | {mono revision 1} |
+    Then the git host receives no request

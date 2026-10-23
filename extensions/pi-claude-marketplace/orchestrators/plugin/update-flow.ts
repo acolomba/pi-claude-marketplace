@@ -74,6 +74,7 @@ import {
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
   rethrowInvalidGitHubBaseUrl,
+  StateLockHeldError,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
@@ -679,6 +680,8 @@ async function updateSinglePluginWith(
         cause: err as Error,
         cleanupFailures,
       }),
+      // FLR-02: a held state lock renders its cause chain, as on the direct path.
+      ...(err instanceof StateLockHeldError && { cause: err }),
       // CMC-13: required booleans on every
       // PluginUpdateOutcome partition. `(failed)` rows do NOT render
       // the soft-dep marker (MSG-SD-3), so the value is `false`.
@@ -692,11 +695,15 @@ async function updateSinglePluginWith(
 
 /**
  * Map an exported-workflow error to a closed-set `Reason[]` for cascade-failure
- * outcomes. Typed concurrency facts and errno codes win; the permissive
- * fallback is `not in manifest`.
+ * outcomes. Typed facts (a held state lock, FLR-02, and the concurrency
+ * errors) and errno codes win; the permissive fallback is `not in manifest`.
  */
 function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
   const primary = err instanceof CleanupContextError ? err.primary : err;
+  if (primary instanceof StateLockHeldError) {
+    return ["lock held"] as const;
+  }
+
   if (primary instanceof PluginUpdateConcurrencyError) {
     return [
       primary.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled",
@@ -807,8 +814,9 @@ function rollbackPartialCauseSlot(p: UpdatePhase3Failure): { readonly cause: Err
 
 /**
  * Narrow a direct-path failure's typed error to a closed-set `Reason` for
- * the synthetic `PluginFailedMessage`. Order: typed identities first,
- * errno / stable transport fields second, honest generic fallback last.
+ * the synthetic `PluginFailedMessage`. Order: the typed identities of
+ * `typedDirectFailReason` first (a held state lock among them), errno /
+ * stable transport fields second, honest generic fallback last.
  * The fallback `"unreadable manifest"` mirrors the marketplace/update.ts
  * narrowFailReason precedent for unknown error shapes.
  */
@@ -817,32 +825,9 @@ function narrowDirectFailReason(err: Error): ContentReason {
   // handle the enumerate / syncClone / phase-2 paths only.
   const primary = err instanceof CleanupContextError ? err.primary : err;
 
-  if (primary instanceof MarketplaceNotFoundError) {
-    return "not found";
-  }
-
-  if (primary instanceof PluginUpdatePhase3Error) {
-    return "rollback partial";
-  }
-
-  if (primary instanceof PluginUpdateConcurrencyError) {
-    return primary.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled";
-  }
-
-  if (primary instanceof InvalidMarketplaceManifestError) {
-    return "invalid manifest";
-  }
-
-  if (primary instanceof PluginInLocalLayerOnlyError) {
-    return "plugin in local layer only";
-  }
-
-  if (primary instanceof PluginInBaseLayerOnlyError) {
-    return "plugin in base layer only";
-  }
-
-  if (primary instanceof DependencyDeclarationsUnreadableError) {
-    return "unreadable";
+  const typedReason = typedDirectFailReason(primary);
+  if (typedReason !== undefined) {
+    return typedReason;
   }
 
   const transportReason = classifyGitTransportFailure(primary);
@@ -872,6 +857,47 @@ function narrowErrnoFailReason(code: string | undefined): ContentReason {
     default:
       return "unreadable manifest";
   }
+}
+
+/**
+ * The reason a typed direct-path failure names, or `undefined` for an error
+ * no typed identity matches. FLR-01: a held state lock is `"lock held"`, as
+ * the other plugin commands report it.
+ */
+function typedDirectFailReason(primary: Error): ContentReason | undefined {
+  if (primary instanceof StateLockHeldError) {
+    return "lock held";
+  }
+
+  if (primary instanceof MarketplaceNotFoundError) {
+    return "not found";
+  }
+
+  if (primary instanceof PluginUpdatePhase3Error) {
+    return "rollback partial";
+  }
+
+  if (primary instanceof PluginUpdateConcurrencyError) {
+    return primary.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled";
+  }
+
+  if (primary instanceof InvalidMarketplaceManifestError) {
+    return "invalid manifest";
+  }
+
+  if (primary instanceof PluginInLocalLayerOnlyError) {
+    return "plugin in local layer only";
+  }
+
+  if (primary instanceof PluginInBaseLayerOnlyError) {
+    return "plugin in base layer only";
+  }
+
+  if (primary instanceof DependencyDeclarationsUnreadableError) {
+    return "unreadable";
+  }
+
+  return undefined;
 }
 
 /**

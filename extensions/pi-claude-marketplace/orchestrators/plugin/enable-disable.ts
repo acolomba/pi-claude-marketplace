@@ -2560,9 +2560,9 @@ async function runSetEnabledOutcome(
       // through the active verb's CommandContext for naming consistency.
       // EDEP-01 / EDEP-02 / FIX-03: an `EnableRefusedError` (cycle, unreadable
       // declarer, missing dependency, enabled dependents, or a local-only
-      // marketplace) is the one transaction throw this catch classifies for
-      // standalone mode -- its reason names the fact the cause line states. Every other transaction
-      // throw keeps the pre-existing brace-less `(failed)` row.
+      // marketplace) carries the reason that names the fact its cause line
+      // states. FLR-01 / D-02: a held state lock reads `lock held`. Every other
+      // transaction throw keeps the brace-less `(failed)` row.
       emitEnableDisableFailedRow({
         ctx,
         run,
@@ -2572,7 +2572,7 @@ async function runSetEnabledOutcome(
         row: {
           status: "failed",
           name: plugin,
-          reasons: cause instanceof EnableRefusedError ? [cause.reason] : ([] as const),
+          reasons: standaloneTransactionThrowReasons(cause),
           cause,
           // D-03/D-06: a transaction-throw enable/disable failure -> error, no
           // reload.
@@ -2664,6 +2664,19 @@ export function createSetPluginEnabled(
  */
 function classifyTransactionThrow(cause: Error): ContentReason {
   return cause instanceof StateLockHeldError ? "lock held" : primaryDisableFailureReason(cause);
+}
+
+/**
+ * The reasons of the standalone transaction-throw row. It stays off
+ * `classifyTransactionThrow`'s errno ladder, so only a refusal and a held
+ * state lock (FLR-01 / D-02) fill the brace.
+ */
+function standaloneTransactionThrowReasons(cause: Error): readonly ContentReason[] {
+  if (cause instanceof EnableRefusedError) {
+    return [cause.reason];
+  }
+
+  return cause instanceof StateLockHeldError ? ["lock held"] : [];
 }
 
 /**

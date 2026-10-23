@@ -4936,6 +4936,58 @@ test("a held project lock returns lock-held in orchestrated mode and succeeds af
   });
 });
 
+test("FLR-01: a held project lock fails a standalone disable as lock held with its cause and changes nothing", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await writeUserState(home, {
+      cwd,
+      disabled: false,
+      marketplaceName: "mp",
+      pluginName: "foo",
+      scope: "project",
+    });
+    const locations = locationsFor("project", cwd);
+    const beforeState = await readFile(statePath, "utf8");
+    const release = await lockfile.lock(locations.extensionRoot, {
+      lockfilePath: locations.stateLockFile,
+      realpath: false,
+      retries: 0,
+      stale: 10_000,
+      update: 2_000,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    try {
+      await setPluginEnabled({
+        ctx,
+        cwd,
+        enable: false,
+        marketplace: "mp",
+        run: runWithNothingLoaded(),
+        plugin: "foo",
+        scope: "project",
+      });
+    } finally {
+      await release();
+    }
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● mp [project]\n" +
+          "  ⊘ foo (failed) {lock held}\n" +
+          "    cause: Another pi-claude-marketplace operation is in progress for project scope " +
+          `(${locations.stateLockFile}). Retry after it completes. -> Lock file is already being held`,
+        severity: "error",
+      },
+    ]);
+    assert.strictEqual(await readFile(statePath, "utf8"), beforeState);
+  });
+});
+
 test("a config-write failure leaves the state bytes unchanged and a standalone retry succeeds", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange

@@ -13,6 +13,7 @@ import {
 import {
   InstallMarketplaceAddError,
   PluginShapeError,
+  StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import { resolveRows } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
@@ -639,6 +640,35 @@ describe("composeInstallFailureMessage", () => {
       reasons: [],
       version: "6.0.0",
       scope: "project",
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("FLR-01: a held state lock fails the row as lock held and keeps its cause chain", () => {
+    // arrange
+    const failure = new StateLockHeldError("project", "/scope/.state-lock", {
+      cause: new Error("Lock file is already being held"),
+    });
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["lock held"],
+      scope: "project",
+      cause: failure,
       severity: "error",
       needsReload: false,
     });

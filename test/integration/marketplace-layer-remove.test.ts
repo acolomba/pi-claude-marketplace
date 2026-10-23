@@ -33,7 +33,6 @@ import { mergeScopeConfigs } from "../../extensions/pi-claude-marketplace/persis
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { StateLockHeldError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import {
   createMachineNotificationBoundary,
@@ -839,10 +838,10 @@ test("LAYER-03: a full remove that keeps a dependency keeps the url marketplace'
   boundary.verifyBoundary();
 });
 
-test("a remove while another holder has the scope's state lock rejects and changes nothing", async (t) => {
+test("a remove while another holder has the scope's state lock fails as lock held and changes nothing", async (t) => {
   // arrange
   const scope = await projectScope(t, "mp-layer-remove-locked-");
-  const boundary = createNotificationBoundary(2);
+  const boundary = createNotificationBoundary(3);
   await addRepo(scope, boundary, false);
   await installFrom(scope, boundary, "alpha", false);
   const before = await removeFootprint(scope);
@@ -855,11 +854,17 @@ test("a remove while another holder has the scope's state lock rejects and chang
   });
 
   // act
-  const removal = removeMp(scope, boundary);
+  await removeMp(scope, boundary);
 
   // assert
-  await assert.rejects(removal, StateLockHeldError);
   assert.deepStrictEqual(await removeFootprint(scope), before);
-  assert.deepStrictEqual(boundary.notifications, [ADDED, installed("alpha")]);
+  assert.deepStrictEqual(boundary.notifications, [
+    ADDED,
+    installed("alpha"),
+    {
+      message: `Some operations have failed.\n\n⊘ mp [project] (failed)\n  ⊘ mp (failed) {lock held}\n    cause: Another pi-claude-marketplace operation is in progress for project scope (${scope.locations.stateLockFile}). Retry after it completes. -> Lock file is already being held`,
+      severity: "error",
+    },
+  ]);
   boundary.verifyBoundary();
 });

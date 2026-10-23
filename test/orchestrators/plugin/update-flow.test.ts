@@ -56,6 +56,7 @@ import {
   MarketplaceNotFoundError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
+  StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
@@ -2383,6 +2384,60 @@ test("updateSinglePlugin classifies an unreadable manifest as permission denied"
         await chmod(manifestPath, 0o600).catch(() => undefined);
       }
 
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FLR-02: updateSinglePlugin under a held state lock fails as lock held with the lock cause", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-cascade-lock-held-");
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      process.chdir(cwd);
+      const release = await lockfile.lock(locations.extensionRoot, {
+        lockfilePath: locations.stateLockFile,
+        realpath: false,
+      });
+      let outcome: Awaited<ReturnType<PluginUpdateFn>>;
+      try {
+        // act
+        outcome = await updateSinglePlugin("hello", "mp", "project");
+      } finally {
+        await release();
+      }
+
+      // assert
+      assert.ok(outcome.partition === "failed");
+      const { cause, ...failure } = outcome;
+      const lockMessage = `Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`;
+      assert.deepStrictEqual(failure, {
+        partition: "failed",
+        name: "hello",
+        notes: [`${lockMessage}\n\ncause: ${lockMessage} -> Lock file is already being held`],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        reasons: ["lock held"],
+      });
+      assert.ok(cause instanceof StateLockHeldError);
+      assert.deepStrictEqual(
+        [cause.message, cause.scope, cause.lockPath],
+        [lockMessage, "project", locations.stateLockFile],
+      );
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    } finally {
+      process.chdir(previousCwd);
       await rm(cwd, { recursive: true, force: true });
     }
   });
@@ -5858,6 +5913,53 @@ test("WR-02 / NFR-3: an already-current disabled record does not take the scope 
       } finally {
         await release();
       }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FLR-01: a held scope lock fails an update that is due as lock held and keeps its cause", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-flr01-lock-held-");
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const { ctx, run, notifications } = makeCtx();
+      const release = await lockfile.lock(locations.extensionRoot, {
+        lockfilePath: locations.stateLockFile,
+        realpath: false,
+      });
+      try {
+        // act
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+      } finally {
+        await release();
+      }
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        refusedUpdateNotification(
+          "hello",
+          "lock held",
+          `Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes. -> Lock file is already being held`,
+        ),
+      ]);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

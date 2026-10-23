@@ -156,10 +156,12 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
    */
   readonly reasons?: readonly ContentReason[];
   /**
-   * LAYER-04 / CFG-03: set only for a named reinstall's layer refusal. Its
+   * LAYER-04 / CFG-03: set for a named reinstall's layer refusal. Its
    * message is the row's cause line, built from fixed text and safe names or
-   * a file's basename. Every other failure keeps its text in `notes` only,
-   * because that text is not prepared for a rendered cause line.
+   * a file's basename. FLR-01: also set for a held state lock, whose cause
+   * line names the lock file the way the uninstall row does (D-01). Every
+   * other failure keeps its text in `notes` only, because that text is not
+   * prepared for a rendered cause line.
    */
   readonly cause?: Error;
 }

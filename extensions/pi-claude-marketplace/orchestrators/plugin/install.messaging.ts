@@ -3,6 +3,7 @@ import {
   errorMessage,
   InstallMarketplaceAddError,
   PluginShapeError,
+  StateLockHeldError,
 } from "../../shared/errors.ts";
 import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import {
@@ -143,6 +144,22 @@ function composeNotInstallableMessage(
 // interface, which is the one the tests use (FLOW-09).
 // ───────────────────────────────────────────────────────────────────────────
 
+/**
+ * FLR-01 / D-02: the reasons of the runtime-throw row. A held state lock reads
+ * `lock held`, as uninstall's row does; a git host that refused the clone reads
+ * its git-host reason; any other throw has none.
+ */
+function runtimeFailureReasons(
+  err: unknown,
+  gitReason: ContentReason | undefined,
+): readonly ContentReason[] {
+  if (err instanceof StateLockHeldError) {
+    return ["lock held"];
+  }
+
+  return gitReason !== undefined ? [gitReason] : [];
+}
+
 export function composeInstallFailureMessage(args: {
   err: unknown;
   plugin: string;
@@ -223,14 +240,16 @@ export function composeInstallFailureMessage(args: {
   // `source missing`, `network unreachable`, `network error`, or
   // `authentication required`. The auth row is bare (amended D-79-03: the
   // stored-credential cause line lives only on the update path's child row);
-  // every other row keeps its cause chain, as fetch's failed row does. A throw
-  // the ladder leaves unclassified keeps an empty reasons array and rides the
-  // cause-chain trailer (the renderer suppresses the `{}` brace per D-15-01).
+  // every other row keeps its cause chain, as fetch's failed row does. A held
+  // state lock reads `lock held` and keeps its StateLockHeldError cause chain
+  // (FLR-01 / D-02). A throw the ladder leaves unclassified keeps an empty
+  // reasons array and rides the cause-chain trailer (the renderer suppresses
+  // the `{}` brace per D-15-01).
   const gitReason = classifyGitHostFailure(err);
   const failed: PluginFailedMessage = {
     status: "failed",
     name: plugin,
-    reasons: gitReason !== undefined ? ([gitReason] as const) : ([] as const),
+    reasons: runtimeFailureReasons(err, gitReason),
     ...(version !== undefined && version !== "" && { version }),
     scope,
     ...(gitReason !== "authentication required" && cause !== undefined && { cause }),
