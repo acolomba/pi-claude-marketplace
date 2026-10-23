@@ -12626,7 +12626,7 @@ test("AFILE-04: an update that fails after its MCP commit still reports the remo
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ hello (failed) {rollback partial}\n" +
-            `    cause: Plugin "hello" update failed during physical replace. plugin-uninstall + plugin-install for "hello". -> ${refusal}\n` +
+            `    cause: Plugin "hello" failed during physical replace. plugin-uninstall + plugin-install for "hello". -> ${refusal}\n` +
             "    [workflows] (rollback failed)\n" +
             `      cause: ${refusal}`,
           severity: "error",

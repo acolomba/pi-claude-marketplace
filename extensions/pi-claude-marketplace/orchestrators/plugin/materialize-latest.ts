@@ -37,5 +37,5 @@ export async function materializeLatestVersion(
     return preflight;
   }
 
-  return swapPluginUpdate(args, preflight);
+  return swapPluginUpdate(args, preflight, policy);
 }

@@ -54,6 +54,7 @@ import type {
   AgentsReplacement,
   ConvertedAgent,
   DiscoveredAgent,
+  PreparedAgentsStaged,
   PreparedAgentsStaging,
   ReplacePreparedAgentsOptions,
   StageAgentsInput,
@@ -311,8 +312,30 @@ function formatAgentWarnings(converted: ConvertedAgent): string[] {
 }
 
 /**
+ * RINST-01 / D-18-15: which previous index rows a commit replaces, and which
+ * it keeps. By default only the rows whose files this plugin still owns are
+ * replaced; the AG-5 rows (this plugin's own agent files whose bytes a user
+ * changed) stay on disk and in the index. `force` is reinstall's repair
+ * overwrite: it replaces the AG-5 rows too. A file no index row names is
+ * never in either set.
+ */
+function partitionPreviousEntries(
+  prepared: PreparedAgentsStaged,
+  options: { readonly force?: boolean } | undefined,
+): { readonly replaced: readonly AgentsIndexEntry[]; readonly kept: readonly AgentsIndexEntry[] } {
+  return options?.force === true
+    ? { replaced: [...prepared.previousEntries, ...prepared.foreignPreservedEntries], kept: [] }
+    : { replaced: prepared.previousEntries, kept: prepared.foreignPreservedEntries };
+}
+
+/**
  * Phase 2: reject occupied new targets before removing old owned files,
  * rename staged files into <scopeRoot>/agents/, persist the index, clean up.
+ *
+ * `options.force` is reinstall's repair overwrite (RINST-01, D-18-15): the
+ * plugin's own user-edited previous agent files are replaced and their
+ * preserved index rows dropped. `update` and install never pass it. A file at
+ * a new target that no index row names is refused with or without it (PI-6).
  *
  * If deletion, rename or index persistence fails, the index still describes
  * the OLD entries. Newly renamed files are moved back to staging and cleaned
@@ -325,10 +348,13 @@ function formatAgentWarnings(converted: ConvertedAgent): string[] {
 export async function commitPreparedAgents(
   ops: RemovalOps,
   prepared: PreparedAgentsStaging,
+  options?: { readonly force?: boolean },
 ): Promise<string | undefined> {
   if (prepared.kind === "noop") {
     return undefined;
   }
+
+  const previous = partitionPreviousEntries(prepared, options);
 
   // TR-07: Step 1 is retry-safe by construction. The Promise.all
   // rm loop pre-removes OLD plugin-owned targets; ENOENT means "already gone"
@@ -340,11 +366,11 @@ export async function commitPreparedAgents(
   // The loop stays parallel here because step 1 has no source to roll back
   // to -- those files were never backed up (commitPreparedAgents is the
   // commit path, not the replacePreparedAgents backup path); rollback would
-  // have nothing to restore. foreignPreservedEntries is INTENTIONALLY
-  // excluded -- those targets stay untouched on disk and their rows stay
-  // in the index.
+  // have nothing to restore. The kept rows (foreignPreservedEntries unless
+  // forced) are INTENTIONALLY excluded -- those targets stay untouched on disk
+  // and their rows stay in the index.
   try {
-    const previousTargets = new Set(prepared.previousEntries.map((entry) => entry.targetPath));
+    const previousTargets = new Set(previous.replaced.map((entry) => entry.targetPath));
     for (const entry of prepared.newEntries) {
       // eslint-disable-next-line no-await-in-loop -- the first non-previous target throws before any rm
       if (!previousTargets.has(entry.targetPath) && (await pathExists(entry.targetPath))) {
@@ -355,7 +381,7 @@ export async function commitPreparedAgents(
     }
 
     await Promise.all(
-      prepared.previousEntries.map(async (entry) => {
+      previous.replaced.map(async (entry) => {
         try {
           await rm(entry.targetPath);
         } catch (err) {
@@ -393,11 +419,7 @@ export async function commitPreparedAgents(
     // newly claimed names on disk without their ownership records.
     await saveAgentsIndex(prepared.locations, {
       schemaVersion: 1,
-      agents: [
-        ...prepared.otherEntries,
-        ...prepared.newEntries,
-        ...prepared.foreignPreservedEntries,
-      ],
+      agents: [...prepared.otherEntries, ...prepared.newEntries, ...previous.kept],
     });
   } catch (err) {
     // Reverse-walk completed renames -- restore each back to staging. The

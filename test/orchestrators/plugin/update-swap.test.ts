@@ -18,6 +18,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 // The flow suite supplies the real bridge, filesystem, rollback, and
@@ -278,7 +279,7 @@ test("AGENT-01: update retries agent migration once the occupying target is free
       fromVersion: "1.0.0",
       toVersion: "2.0.0",
       notes: [
-        'Plugin "hello" update failed during physical replace. plugin-uninstall + plugin-install for "hello".',
+        'Plugin "hello" failed during physical replace. plugin-uninstall + plugin-install for "hello".',
         `agents: ${message}`,
       ],
       reasons: ["rollback partial"],
@@ -312,6 +313,197 @@ test("AGENT-01: update retries agent migration once the occupying target is free
     // assert
     await assertAgentsMigrated({ outcome, coexist: false, fixture });
   });
+});
+
+/** Cascade-mode swap arguments for `hello@mp` in the project scope of `cwd`. */
+function cascadeSwapArgs(cwd: string): ThreePhaseArgsBase & { readonly cascade: true } {
+  return {
+    plugin: "hello",
+    marketplace: "mp",
+    scope: "project",
+    cwd,
+    locations: locationsFor("project", cwd),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache: createCompletionCache(),
+    env: {},
+    cascade: true,
+    cleanupClones: () => Promise.resolve(),
+  };
+}
+
+test("D-18-06: a partially available candidate's swap records the plugin as not installable with its dropped kinds", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-partial-");
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasSkill: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  await mkdir(path.join(marketplaceRoot, "plugins", "hello", "themes"), { recursive: true });
+  const args = cascadeSwapArgs(cwd);
+  const preflight = await preparePluginUpdate({ ...args, partial: true });
+  assert.ok(!("partition" in preflight));
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight);
+
+  // assert
+  assert.strictEqual(outcome.partition, "updated");
+  const state = await loadState(args.locations.extensionRoot);
+  assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.compatibility, {
+    installable: false,
+    notes: ["contains themes"],
+    supported: ["skills"],
+    unsupported: ["themes"],
+  });
+});
+
+/**
+ * Seeds `hello` 2.0.0 shipping agent `bot`, and an install of 1.0.0 whose own
+ * agent file at the same target a user edited (an AG-5 preserved row).
+ */
+async function seedUserEditedAgentUpdate(t: TestContext) {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-overwrite-");
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasSkill: false, hasAgent: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const args = cascadeSwapArgs(cwd);
+  const { locations } = args;
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+  const target = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
+  const editedBytes = "---\nname: bot\n---\nEdited by hand.\n";
+  await mkdir(locations.agentsDir, { recursive: true });
+  await writeFile(target, editedBytes);
+  const indexBytes = JSON.stringify({
+    schemaVersion: 1,
+    agents: [
+      {
+        plugin: "hello",
+        marketplace: "mp",
+        sourceAgent: "bot",
+        generatedName: "pi-claude-marketplace-hello-bot",
+        sourcePath: path.join(pluginRoot, "agents", "bot.md"),
+        targetPath: target,
+        sourceHash: "a".repeat(64),
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+    ],
+  });
+  await writeFile(locations.agentsIndexPath, indexBytes);
+  const state = await loadState(locations.extensionRoot);
+  const oldRecord = state.marketplaces.mp?.plugins.hello;
+  assert.ok(oldRecord !== undefined);
+  oldRecord.resources = {
+    skills: [],
+    prompts: [],
+    agents: ["pi-claude-marketplace-hello-bot"],
+    mcpServers: [],
+    hooks: [],
+    workflows: [],
+  };
+  await saveState(locations.extensionRoot, state);
+  const preflight = await preparePluginUpdate(args);
+  assert.ok(!("partition" in preflight));
+  return { args, preflight, pluginRoot, target, editedBytes, indexBytes, oldRecord };
+}
+
+test("D-18-15: an overwrite policy commits over a previous agent file a user edited", async (t) => {
+  // arrange
+  const { args, preflight, pluginRoot, target, oldRecord } = await seedUserEditedAgentUpdate(t);
+  const sourcePath = path.join(pluginRoot, "agents", "bot.md");
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, {
+    refreshSource: false,
+    skipSameRevision: false,
+    overwrite: true,
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "updated",
+    name: "hello",
+    fromVersion: "1.0.0",
+    toVersion: "2.0.0",
+    notes: ["[bot] source description was missing or empty -- using fallback"],
+    stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
+    stagedMcpServerNames: [],
+    declaresAgents: true,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+  });
+  assert.strictEqual(
+    await readFile(target, "utf8"),
+    `---\nname: hello:bot\ndescription: Imported Claude Code plugin agent bot from plugin hello.\naliases: pi-claude-marketplace-hello-bot\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings:\n    - source description was missing or empty -- using fallback\n---\n\nBody.\n`,
+  );
+  assert.deepStrictEqual(JSON.parse(await readFile(args.locations.agentsIndexPath, "utf8")), {
+    schemaVersion: 1,
+    agents: [
+      {
+        plugin: "hello",
+        marketplace: "mp",
+        sourceAgent: "bot",
+        generatedName: "pi-claude-marketplace-hello-bot",
+        sourcePath,
+        targetPath: target,
+        sourceHash: createHash("sha256")
+          .update("---\nname: bot\ntools: Read,Grep\n---\n\nBody.\n")
+          .digest("hex"),
+        droppedFields: [],
+        droppedTools: [],
+        warnings: ["source description was missing or empty -- using fallback"],
+      },
+    ],
+  });
+  const state = await loadState(args.locations.extensionRoot);
+  assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello, {
+    ...oldRecord,
+    version: "2.0.0",
+    resolvedSource: pluginRoot,
+    compatibility: { installable: true, notes: [], supported: ["agents"], unsupported: [] },
+    updatedAt: "2026-01-02T00:00:00.000Z",
+  });
+});
+
+test("D-18-15: without an overwrite policy a user-edited previous agent file fails the swap rollback partial", async (t) => {
+  // arrange
+  const { args, preflight, target, editedBytes, indexBytes } = await seedUserEditedAgentUpdate(t);
+  const message = `Cannot replace agent target with non-previous content at ${target}`;
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    fromVersion: "1.0.0",
+    toVersion: "2.0.0",
+    notes: [
+      'Plugin "hello" failed during physical replace. plugin-uninstall + plugin-install for "hello".',
+      `agents: ${message}`,
+    ],
+    reasons: ["rollback partial"],
+    phaseFailures: [{ phase: "agents", msg: message }],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
+  assert.strictEqual(await readFile(target, "utf8"), editedBytes);
+  assert.strictEqual(await readFile(args.locations.agentsIndexPath, "utf8"), indexBytes);
 });
 
 test("exposes the atomic plugin update swap owner", () => {
@@ -820,7 +1012,7 @@ test("AFILE-04: a swap whose workflows commit fails after the MCP commit carries
         fromVersion: "1.0.0",
         toVersion: "2.0.0",
         notes: [
-          'Plugin "hello" update failed during physical replace. plugin-uninstall + plugin-install for "hello".',
+          'Plugin "hello" failed during physical replace. plugin-uninstall + plugin-install for "hello".',
           `workflows: ${refusal}`,
         ],
         reasons: ["rollback partial"],
@@ -922,7 +1114,7 @@ test("AMIG-02: a legacy removal that fails records an mcp phase failure and keep
         fromVersion: "1.0.0",
         toVersion: "2.0.0",
         notes: [
-          'Plugin "hello" update failed during physical replace. plugin-uninstall + plugin-install for "hello".',
+          'Plugin "hello" failed during physical replace. plugin-uninstall + plugin-install for "hello".',
           `mcp: ${failureMsg}`,
         ],
         reasons: ["rollback partial"],

@@ -140,6 +140,7 @@ import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
 import type {
+  MaterializationPolicy,
   PreparedPluginUpdate,
   PreparePluginUpdateOptions,
   UpdateCloneCacheSeam,
@@ -738,16 +739,21 @@ function applyPerBridgeResources(
 }
 
 /**
- * SC#2 all-or-nothing: the version bump, `installable: true` and
+ * SC#2 all-or-nothing: the version bump, the `compatibility` block and
  * `resolvedSource` happen ONLY when every bridge succeeded. On failure the
  * intent-mark `compatibility` set by `markUpdateInProgress` carries forward,
  * which is the truthful "we did not complete the swap" view.
+ *
+ * `installable` is the same derived flag install writes: a
+ * `partially-available` candidate records `false` beside its dropped kinds,
+ * because enable, install and backfill read that flag as the partial-consent
+ * marker (D-18-06).
  */
 function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: PluginPreflight): void {
   const { installable, toVersion, resolvedSha } = preflight;
   sRecord.version = toVersion;
   sRecord.compatibility = {
-    installable: true,
+    installable: installable.state === "installable",
     notes: [...installable.notes],
     supported: [...installable.supported],
     unsupported: [...installable.unsupported],
@@ -1052,12 +1058,17 @@ async function commitUpdateWorkflows(prepared: PreparedWorkflowsStaging): Promis
  * marked entries leave the scope's `mcp.json`. Update has no rollback, so a
  * removal that throws is an `mcp` failure that keeps the new entry and the
  * legacy one; the next reload or a reinstall finishes the move.
+ *
+ * D-18-15: `overwrite` reaches the agents commit only, as RINST-01 shipped.
+ * Skills and commands already replace a stray target; the workflows commit
+ * keeps its WR-06 refusal and MCP its ANAME-03 collision refusal.
  */
 async function commitUpdatePhase3a(
   ops: RemovalOps,
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
   handles: PrepHandles,
+  overwrite: boolean,
 ): Promise<{
   readonly failures: UpdatePhase3Failure[];
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
@@ -1112,7 +1123,7 @@ async function commitUpdatePhase3a(
   }
 
   try {
-    const leak = await commitPreparedAgents(ops, handles.agents);
+    const leak = await commitPreparedAgents(ops, handles.agents, { force: overwrite });
     if (leak !== undefined) {
       const cleanupFailure = commitCleanupFailure(
         "agents",
@@ -1211,7 +1222,9 @@ function composePhase3FailureOutcome(
 ): UpdatePhase3FailedOutcome {
   const { plugin } = args;
   const recoveryHint = `${RECOVERY_PLUGIN_REINSTALL_PREFIX} "${plugin}".`;
-  const aggregateMsg = `Plugin "${plugin}" update failed during physical replace. ${recoveryHint}`;
+  // D-18-10: the text names no verb, because `update` and `reinstall` both run
+  // this swap.
+  const aggregateMsg = `Plugin "${plugin}" failed during physical replace. ${recoveryHint}`;
   // CR-01: phase-3 failure text is NOT path-redacted, in `msg` or along the
   // `cause` chain. These strings ARE the manual-recovery instructions: the
   // workflows commit deliberately leaves the only copy of a displaced envelope
@@ -1262,10 +1275,11 @@ function composePhase3FailureOutcome(
 // fast path, prepare-handles, the intent-mark window, phase-3a per-bridge
 // commits, finalize, and the phase-3b aggregate error path. The per-phase
 // save-vs-throw discipline stays visible here; the phase bodies themselves are
-// extracted above.
+// extracted above. An absent `policy` is update's, which never overwrites.
 export async function swapPluginUpdate(
   args: ThreePhaseArgs,
   preflight: PreparedPluginUpdate,
+  policy?: MaterializationPolicy,
 ): Promise<UpdateRunOutcome> {
   const { plugin, marketplace, scope } = args;
   const { installable, fromVersion, toVersion } = preflight;
@@ -1326,14 +1340,14 @@ export async function swapPluginUpdate(
     hookEntries,
     workflows: workflowsCommit,
     mcpConfigNotices,
-  } = await commitUpdatePhase3a(removalOps, args, preflight, handles);
+  } = await commitUpdatePhase3a(removalOps, args, preflight, handles, policy?.overwrite === true);
 
   // ─── Phase 2b: finalize state (TR-04) ─────────────────────────────────────
   //
   // The finalize window writes per-bridge resource updates for every
   // bridge whose commit succeeded (independent of other bridges' outcomes),
-  // and bumps `version` + `installable=true` + `resolvedSource` ONLY when
-  // all four bridges succeeded.
+  // and bumps `version` + the `compatibility` block + `resolvedSource` ONLY
+  // when all four bridges succeeded.
   //
   // Order discipline: finalize MUST run BEFORE the phase-3b recovery-hint
   // emission. If finalize ran AFTER the recovery-hint emission on a success

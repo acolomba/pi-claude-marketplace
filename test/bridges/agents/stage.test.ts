@@ -1586,6 +1586,153 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     assert.strictEqual(await exists(prepared.stagingDir), false);
     assert.strictEqual(await exists(locations.agentsIndexPath), false);
   });
+
+  test("force replaces a previous target whose bytes a user changed and drops its preserved row", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-commit-force-",
+    );
+    const sourcePath = path.join(agentsSourceDir, "current.md");
+    await writeFile(
+      sourcePath,
+      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
+    );
+    const currentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
+    const orphanTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-orphan.md");
+    await mkdir(locations.agentsDir, { recursive: true });
+    await writeFile(currentTarget, "---\nname: current\n---\nEdited by hand.\n");
+    await writeFile(orphanTarget, "---\nname: orphan\n---\nEdited by hand.\n");
+    const editedRow = (sourceAgent: string, targetPath: string) => ({
+      plugin: "acme",
+      marketplace: "catalog",
+      sourceAgent,
+      generatedName: `pi-claude-marketplace-acme-${sourceAgent}`,
+      sourcePath: `/previous/${sourceAgent}.md`,
+      targetPath,
+      sourceHash: `hash-${sourceAgent}`,
+      droppedFields: [],
+      droppedTools: [],
+      warnings: [],
+    });
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await writeFile(
+      locations.agentsIndexPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        agents: [editedRow("current", currentTarget), editedRow("orphan", orphanTarget)],
+      }),
+    );
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+    });
+
+    // act
+    const cleanupLeak = await commitPreparedAgents(createRemovalOps(), prepared, { force: true });
+
+    // assert
+    assert.strictEqual(cleanupLeak, undefined);
+    assert.deepStrictEqual(await readdir(locations.agentsDir), [
+      "pi-claude-marketplace-acme-current.md",
+    ]);
+    assert.strictEqual(
+      await readFile(currentTarget, "utf8"),
+      `---\nname: acme:current\ndescription: Current agent\naliases: pi-claude-marketplace-acme-current\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: current\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nCurrent.\n`,
+    );
+    assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
+      schemaVersion: 1,
+      agents: [
+        {
+          plugin: "acme",
+          marketplace: "catalog",
+          sourceAgent: "current",
+          generatedName: "pi-claude-marketplace-acme-current",
+          sourcePath,
+          targetPath: currentTarget,
+          sourceHash: "24214fe4c9874b0a54cc773880901f4cac6c6e3c26010846e02c7054b2026249",
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        },
+      ],
+    });
+  });
+
+  test("force still refuses a file no index row names at a new target", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-commit-force-intruder-",
+    );
+    const sourcePath = path.join(agentsSourceDir, "current.md");
+    await writeFile(
+      sourcePath,
+      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
+    );
+    const currentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
+    const orphanTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-orphan.md");
+    const intruderBytes = "---\nname: current\n---\nDo not overwrite.\n";
+    const orphanBytes = "---\nname: orphan\n---\nEdited by hand.\n";
+    await mkdir(locations.agentsDir, { recursive: true });
+    await writeFile(currentTarget, intruderBytes);
+    await writeFile(orphanTarget, orphanBytes);
+    await mkdir(locations.extensionRoot, { recursive: true });
+    const indexBytes = JSON.stringify({
+      schemaVersion: 1,
+      agents: [
+        {
+          plugin: "acme",
+          marketplace: "catalog",
+          sourceAgent: "orphan",
+          generatedName: "pi-claude-marketplace-acme-orphan",
+          sourcePath: "/previous/orphan.md",
+          targetPath: orphanTarget,
+          sourceHash: "hash-orphan",
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        },
+      ],
+    });
+    await writeFile(locations.agentsIndexPath, indexBytes);
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+
+    // act
+    const error = await commitPreparedAgents(createRemovalOps(), prepared, { force: true }).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, cause: error.cause },
+      {
+        name: "Error",
+        message: `Cannot replace agent target with non-previous content at ${currentTarget}`,
+        cause: undefined,
+      },
+    );
+    assert.strictEqual(await readFile(currentTarget, "utf8"), intruderBytes);
+    assert.strictEqual(await readFile(orphanTarget, "utf8"), orphanBytes);
+    assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), indexBytes);
+    assert.strictEqual(await exists(prepared.stagingDir), false);
+  });
 });
 
 describe("abortPreparedAgents", () => {
