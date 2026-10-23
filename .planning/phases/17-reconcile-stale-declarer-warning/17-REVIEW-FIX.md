@@ -4,9 +4,9 @@ fixed_at: 2026-10-23T14:00:00Z
 review_path: .planning/phases/17-reconcile-stale-declarer-warning/17-REVIEW.md
 iteration: 1
 findings_in_scope: 8
-fixed: 7
-skipped: 1
-status: partial
+fixed: 8
+skipped: 0
+status: all_fixed
 ---
 
 # Phase 17: Code Review Fix Report
@@ -39,14 +39,16 @@ status: partial
   warning row.
 - Planning text: CONTEXT D-02 glyph corrected to `⊘`.
 
-## Skipped
+## Fixed after the user's decision (iteration 2)
 
-- **WR-02** (tokens differ from `narrowProbeError`, which `list`/`info` use:
-  malformed JSON is `{unparseable}` there, missing is `{source missing}`,
-  EACCES is `{permission denied}`): left for the user. The 2026-10-23 decision
-  names `{invalid manifest}` for an invalid marketplace manifest, which
-  `narrowProbeError` would render `{unparseable}` for malformed JSON. Choosing
-  one token set across surfaces is a user-facing call.
+- **WR-02** (tokens differ from `narrowProbeError`): the user decided
+  (CONTEXT D-11) that a marketplace manifest load failure takes the shared
+  classifier's token. `dependency-index.ts` now calls `narrowProbeError`:
+  malformed JSON `{unparseable}`, schema-invalid `{invalid manifest}`, missing
+  `{source missing}`, EACCES/EPERM `{permission denied}`, else `{unreadable}`.
+  The `marketplace/update.feature` outline gains a `declarer reason` column,
+  and `plugin/reconcile.feature` gains a malformed-JSON scenario (new shared
+  step `the manifest of the marketplace {string} is no longer valid json`).
 
 ## Verification
 

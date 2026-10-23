@@ -1,11 +1,13 @@
 ---
 phase: 17-reconcile-stale-declarer-warning
-verified: 2026-10-23T14:30:00Z
+verified: 2026-10-23T14:05:26Z
 status: passed
-score: 7/7 must-haves verified
+score: 8/8 must-haves verified
 covered_files:
   - .planning/phases/17-reconcile-stale-declarer-warning/17-01-PLAN.md
   - .planning/phases/17-reconcile-stale-declarer-warning/17-01-SUMMARY.md
+  - .planning/phases/17-reconcile-stale-declarer-warning/17-CONTEXT.md
+  - .planning/phases/17-reconcile-stale-declarer-warning/17-REVIEW-FIX.md
   - docs/dependency-resolution.md
   - docs/json-output.md
   - docs/output-catalog.md
@@ -15,26 +17,40 @@ covered_files:
   - extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts
   - extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts
+  - extensions/pi-claude-marketplace/shared/probe-classifiers.ts
   - features/marketplace/remove.feature
   - features/marketplace/update.feature
   - features/plugin/reconcile.feature
   - features/plugin/reinstall.feature
   - features/plugin/uninstall.feature
   - features/plugin/update.feature
-covered_digest: "v3:sha256:a63e6fe96fe94e3e8075824b5c77e8afd29357e2a8420acb6b70bc93dd39a45a"
+  - features/step_definitions/marketplace/publishing.steps.ts
+  - test/orchestrators/plugin/dependency-index.test.ts
+covered_digest: "v3:sha256:e023ad6d9b6f8fb033a2b0eab07a8e09fccfa6e8ea8b8e3815038d2be853fd20"
 behavior_unverified: 0
 overrides_applied: 0
+re_verification:
+  previous_status: passed
+  previous_score: 7/7
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
+  reason: "D-11 (user decision on review WR-02) changed the marketplace-manifest tokens after the initial verification of 2bdc399d/981d3685"
 ---
 
 # Phase 17: Reconcile Stale-Declarer Warning Verification Report
 
 **Phase Goal:** A new session tells the truth about a plugin that is still installed but whose marketplace no longer describes it.
 **Requirement:** REC-05
-**Verified:** 2026-10-23T14:30:00Z
+**Verified:** 2026-10-23T14:05:26Z
 **Status:** passed
-**Re-verification:** No (initial verification)
+**Re-verification:** Yes. The previous report passed on commits `2bdc399d` and `981d3685`. This run checks the D-11 change on top of them. It started as uncommitted work and was committed during the run as `f85cc546` (`fix(reconcile): name a manifest fault as list and info do`); its diffstat matches the working-tree diff that was checked, and the source tree is clean against it. The planning edits (SUMMARY, CONTEXT, REVIEW-FIX) are still uncommitted.
 
-The change was uncommitted when verification started. The orchestrator committed it as `2bdc399d` (`fix(reconcile): warn about a plugin whose dependencies cannot be read`) during the run. After that commit the working tree has no tracked changes, so the commit is the tree that was checked.
+**What changed (D-11, CONTEXT.md):** a marketplace manifest that fails to load now takes the token of `shared/probe-classifiers.ts::narrowProbeError`, the classifier `list` and `info` use. Malformed JSON is `{unparseable}`, schema-invalid is `{invalid manifest}`, missing (ENOENT/ENOTDIR) is `{source missing}`, EACCES/EPERM is `{permission denied}`, and anything else is `{unreadable}`. A catalog drop stays `{not in manifest}`, a rejected `dependencies` value stays `{invalid manifest}`, an unusable own manifest stays `{unreadable manifest}`. The cause phrases are unchanged.
+
+**`npm run check`:** not run here, as instructed. The orchestrating session runs it on this tree and reports the result. This report's `passed` status assumes that run is green. If it fails, treat SC3 as failed and this phase as `gaps_found`.
+
+**`npm run check` result (recorded by the phase session, 2026-10-23):** exit 0 on the tree committed as `f85cc546`: static checks, unit, integration, cucumber 705/705 scenarios, direct coverage merged (280 records).
 
 ## Goal Achievement
 
@@ -42,61 +58,55 @@ The change was uncommitted when verification started. The orchestrator committed
 
 | # | Truth | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | ROADMAP SC1: a plugin that its marketplace catalog dropped is reported at each new session as a `warning` row with `{not in manifest}` and a cause chain, and it keeps working | VERIFIED | `dependency-index.ts` `readRecordDeclarations`: `declared.kind === "absent"` produces `unreadableDeclarer(key, "not in manifest", "not declared by its marketplace")`. `dependency-verdict.ts:313` passes the failure arm through unchanged. `apply.ts` `reportUnreadableDeclarer` pushes `plugin-declarer-unreadable` with `verdict.reason` and `verdict.cause`. `notify.ts` renders it as `status: "failed"`, `reasons: [reason]`, `cause`, `severity: "warning"`, `needsReload: false`. `plan.ts:433` `isHeldByUnsatisfiedDependency` returns false when `verdict.ok` is false, so nothing is disabled. Behavioral proof: the new `reconcile.feature` scenario "Every new session warns about an installed plugin that its catalog no longer offers and keeps it working" runs two new sessions in a real Pi process. Each session asserts the warning severity, the tally (failures 0, warnings 1), `{not in manifest}`, the cause chain, and that `/skill:demo-skill` is still offered. Passed in a focused run. |
-| 2 | ROADMAP SC2: a plugin whose marketplace manifest is invalid is reported the same way with `{invalid manifest}` | VERIFIED | `manifestLoadFailure` maps `InvalidMarketplaceManifestError` to `"invalid manifest"` with the phrase "its marketplace manifest is invalid". The new scenario "Every new session warns about an installed plugin whose marketplace manifest is invalid and keeps it working" asserts the same row shape on two consecutive sessions, and that the skill is still offered. Passed. Note: the cucumber step makes the manifest invalid against the schema (`invalidateManifest(..., "schema-invalid")`). Malformed JSON takes the same code path but has no feature of its own (see WR-02 below). |
-| 3 | ROADMAP SC3: `npm run check` stays green | VERIFIED | The orchestrator reports `npm run check` exit 0 on this tree on 2026-10-23: static checks, unit, integration, 704 cucumber scenarios, and direct coverage. As instructed, it was not re-run here. Focused checks run here as corroboration: `npx tsc --noEmit` exit 0; six unit files (205 tests) passed; the REC-05/D-05-07/D-05-16/RECON-04 tests in `apply.test.ts` (8) passed; the six pinned features (196 scenarios) passed. |
-| 4 | PLAN (D-05): the walk's failure arm carries a required closed-set `reason`, chosen by the branch that picks the cause phrase | VERIFIED | `DeclarerReadFailure = Extract<Reason, "not in manifest" \| "invalid manifest" \| "unreadable manifest">`. `reason` is required on `ScopeDeclarationIndexResult`, `ScopeDeclarationDetailResult`, and `ScopeSatisfactionVerdict`. Each `unreadableDeclarer` call passes the token and the phrase together. After the WR-01 fix, an own manifest that was refused carries `ownManifest: true` (`OwnManifestRefusal`) and maps to `unreadable manifest`, which matches its "cannot be read" phrase. A rejected `dependencies` value maps to `invalid manifest`. No token is chosen from message text. |
-| 5 | PLAN (D-02/D-03): a new outcome kind is rendered `(failed) {<reason>}` at `warning`, with the walk's cause and no reload | VERIFIED | `PluginDeclarerUnreadableOutcome` is in `PerEntryOutcome`. Both notify switches name the kind, and `tsc` would fail on a missing arm. `notify-stamp-coverage.test.ts`, `notify.test.ts`, and `apply-outcomes.test.ts` (`satisfies` plus `@ts-expect-error` proofs) all pass. |
-| 6 | PLAN (D-06): the target rows of uninstall, marketplace remove, update, and reinstall keep `{unreadable}` | VERIFIED | `grep "failed \| unreadable" features` finds only command target rows: `remove.feature:588`, `uninstall.feature:230`, `update.feature:181`, `reinstall.feature:103,140`, plus the unrelated EISDIR row at `update-rollback.feature:29`. Each of the first four carries the "cannot read the dependencies of ..." cause, and none sits after a "starts a new pi session" step. |
-| 7 | PLAN (D-08): the row is emitted every session while the fault lasts, at most once per pass, and the plugin's skills stay offered | VERIFIED | The verdict is rebuilt on every pass (`apply.ts:291`) and nothing is stored. Both new scenarios assert the row in a second session. The single-emit check is narrowed to `SUPPRESSING_DECLARER_KINDS` (failed and uninstalled rows) and now runs after `applyBackfillForScopeIsolated`. The `apply.test.ts` case "REC-05: a declarer this pass disables still gets the warning that the check was lost" passes. |
+| 1 | ROADMAP SC1: a plugin that its catalog dropped is reported at each new session as a `warning` row with `{not in manifest}` and a cause chain, and it keeps working | VERIFIED (regression check) | D-11 leaves the `declared.kind === "absent"` arm untouched (`dependency-index.ts`, `unreadableDeclarer(key, "not in manifest", ...)`). The two-session scenario in `reconcile.feature` passed in the focused run below. |
+| 2 | ROADMAP SC2: a plugin whose marketplace manifest is invalid is reported the same way with `{invalid manifest}` | VERIFIED for a schema-invalid manifest; superseded by D-11 for malformed JSON | Schema-invalid: `loadMarketplaceManifestUncached` throws `InvalidMarketplaceManifestError("marketplace.json schema invalid: ...")` with no cause (`domain/manifest.ts:141`), so `narrowProbeError` returns `invalid manifest`. The `reconcile.feature` scenario "...whose marketplace manifest is invalid..." (step `has become invalid`, schema-invalid) and the two `breaks the manifest schema` rows of the `update.feature` outline assert `invalid manifest`; all pass. The new unit case "REC-05: a schema-invalid marketplace manifest ends the walk as an invalid manifest" passes. Malformed JSON: the loader wraps the `SyntaxError` as `cause` (`manifest.ts:125`), so the token is now `unparseable`. That departs from the ROADMAP text, and D-11 records it as the user's decision ("supersedes ... the ROADMAP text that named only `{invalid manifest}`"). |
+| 3 | ROADMAP SC3: `npm run check` stays green | VERIFIED (focused); full gate reported by the orchestrating session | Not re-run here. Focused checks on this tree: `npx tsc --noEmit` exit 0; `dependency-index.test.ts` plus `probe-classifiers.test.ts` 68/68 passed; seven features (209 scenarios, 2482 steps) passed. |
+| 4 | PLAN (D-05, amended by D-11): the walk's failure arm carries a required closed-set `reason`, chosen by the branch, never from message text | VERIFIED | `DeclarerReadFailure = Extract<Reason, "not in manifest" \| "invalid manifest" \| "unreadable manifest"> \| ReturnType<typeof narrowProbeError>`. The manifest-load catch is now `unreadableDeclarer(key, narrowProbeError(err), manifestLoadPhrase(err))` (`dependency-index.ts:242`). `narrowProbeError` and `manifestLoadPhrase` both branch on class and errno code, not on message text. `tsc` passes, so every consumer of the widened type (`dependency-verdict.ts:108`, `apply-outcomes.ts:469`) accepts the new tokens. |
+| 5 | D-11: the shared classifier is reused, not duplicated | VERIFIED | `dependency-index.ts:70` imports `narrowProbeError` from `shared/probe-classifiers.ts`. The old `manifestLoadFailure` token ladder is gone. What remains, `manifestLoadPhrase`, picks only the cause phrase, which D-11 keeps unchanged. No second token ladder exists in the module. The same function serves `list-candidate-row.ts`, `plugin/info.ts`, `marketplace/info.ts`, `fetch.ts`, `pending.ts`, and `apply-outcomes.ts`. |
+| 6 | D-11: the token mapping holds end to end | VERIFIED | Unit (`dependency-index.test.ts` `LOAD_FAILURES`): ENOENT and ENOTDIR → `source missing`; malformed (typed error with `SyntaxError` cause) → `unparseable`; schema-invalid → `invalid manifest`; EACCES → `permission denied`; a generic `Error` → `unreadable`. Each case keeps its old cause phrase. EPERM is covered by `probe-classifiers.test.ts`. Features: the new `reconcile.feature` scenario "...whose marketplace manifest is not valid json and keeps it working" asserts `failed \| unparseable` at warning severity, tally 0 failures / 1 warning, the cause "...its marketplace manifest is invalid", and `/skill:demo-skill` still offered, over two new sessions. The `update.feature` outline "An invalid refreshed manifest leaves installed plugins unchanged" gains a `declarer reason` column: `unparseable` for the two `is not valid json` rows, `invalid manifest` for the two `breaks the manifest schema` rows. Both pass. |
+| 7 | PLAN (D-02/D-03/D-06): the new outcome renders `(failed) {<reason>}` at `warning` with the cause and no reload; command target rows keep `{unreadable}` | VERIFIED (regression check) | `apply-outcomes.ts`, `notify.ts`, and `apply.ts` are not in the D-11 diff. The `remove`, `uninstall`, `update`, and `reinstall` features passed in the focused run. |
+| 8 | PLAN (D-08): the row returns every session while the fault lasts, at most once per pass, and the skills stay offered | VERIFIED (regression check) | `apply.ts` is unchanged. The new malformed-JSON scenario asserts the row in a second session and the skill still offered in both. |
 
-**Score:** 7/7 truths verified (0 present-but-behavior-unverified)
+**Score:** 8/8 truths verified (0 present-but-behavior-unverified). The full `npm run check` verdict comes from the orchestrating session.
 
-### Pinned feature rows (decision consistency)
+### Pinned feature rows (D-11)
 
-| Feature | New-session row | Consistent with the decision |
-| --- | --- | --- |
-| `features/marketplace/update.feature:~811` | `demo` dropped from the catalog: `failed \| not in manifest` at warning, with the cause | Yes |
-| `features/marketplace/update.feature:~918` (outline over `<scope>`) | invalid manifest: `failed \| invalid manifest` at warning, with the cause | Yes |
-| `features/marketplace/remove.feature:~594` | declarer `lib`: `invalid manifest` at warning, with the cause. The command's own row at :588 keeps `{unreadable}` (D-06) | Yes |
-| `features/plugin/uninstall.feature:~233` | declarer `lib`: `invalid manifest` at warning. The target row `app` at :230 keeps `{unreadable}` | Yes |
-| `features/plugin/update.feature:~181` | declarer `lib`: `invalid manifest` at warning. The target row at :181 keeps `{unreadable}` | Yes |
-| `features/plugin/reinstall.feature` | No new-session row to re-pin. Its new sessions (lines 29, 152, 172, 206) involve no unreadable declarer. Its two `{unreadable}` rows (:103, :140) are reinstall's own command rows (D-06). The SUMMARY's claim is confirmed | Yes |
-| `features/plugin/reconcile.feature:172-232` | Two new scenarios (`{not in manifest}`, `{invalid manifest}`), each over two sessions, with the skill still offered | Yes |
-
-Each pinned session shows two `reconcile-applied-cascade` payloads. This was already true before the change: the step definition says "Pi reports a lasting reconcile failure twice", and the old error rows were also pinned twice.
+| Feature | Row | Token | Matches D-11 |
+| --- | --- | --- | --- |
+| `features/plugin/reconcile.feature:234-261` (new) | malformed JSON, two sessions | `unparseable` | Yes |
+| `features/plugin/reconcile.feature:~205` | schema-invalid, two sessions | `invalid manifest` | Yes |
+| `features/plugin/reconcile.feature:~172` | catalog drop, two sessions | `not in manifest` | Yes |
+| `features/marketplace/update.feature:925-937` | `is not valid json` x2 / `breaks the manifest schema` x2 | `unparseable` / `invalid manifest` | Yes |
+| `remove.feature`, `uninstall.feature`, `plugin/update.feature` | declarer `lib`, schema-invalid (step `has become invalid`) | `invalid manifest` | Yes |
 
 ### Required Artifacts
 
 | Artifact | Status | Details |
 | --- | --- | --- |
-| `orchestrators/plugin/dependency-index.ts` | VERIFIED | Has the token type, the required `reason`, and `manifestLoadFailure` |
-| `orchestrators/plugin/dependency-declaration-read.ts` | VERIFIED | `OwnManifestRefusal` with the `ownManifest: true` discriminant |
-| `orchestrators/reconcile/dependency-verdict.ts` | VERIFIED | `reason` on the failure arm, passed through at :313 |
-| `orchestrators/reconcile/apply-outcomes.ts` | VERIFIED | `PluginDeclarerUnreadableOutcome` is in the union |
-| `orchestrators/reconcile/apply.ts` | VERIFIED | `reportUnreadableDeclarer` pushes the new kind; narrowed suppression; runs after the backfill |
-| `orchestrators/reconcile/notify.ts` | VERIFIED | Warning `failed` row with the cause |
-| `features/plugin/reconcile.feature` | VERIFIED | Contains `not in manifest`; both scenarios pass |
-| `docs/output-catalog.md` state `reconcile-dependency-declarer-unreadable` | VERIFIED | The catalog-UAT tests pass at 292 states |
+| `orchestrators/plugin/dependency-index.ts` | VERIFIED | Widened `DeclarerReadFailure`; `narrowProbeError` call; `manifestLoadPhrase` keeps the cause phrases |
+| `features/plugin/reconcile.feature` | VERIFIED | Malformed-JSON scenario passes |
+| `features/step_definitions/marketplace/publishing.steps.ts` | VERIFIED | New step `the manifest of the marketplace {string} is no longer valid json` calls the existing `invalidateManifest(..., "malformed")`. All lower case, per the cucumber rules |
+| `features/marketplace/update.feature` | VERIFIED | `declarer reason` Examples column |
+| `test/orchestrators/plugin/dependency-index.test.ts` | VERIFIED | Six load-failure cases, one per D-11 token |
+| `docs/output-catalog.md`, `docs/dependency-resolution.md` | VERIFIED | Both name the shared tokens. The catalog lists all five plus the `dependencies` and own-manifest tokens. `dependency-resolution.md` gives examples ("such as"). The catalog example block (`{not in manifest}`) is unchanged and still valid. `docs/json-output.md` already lists `unparseable`, `source missing`, `permission denied`, and `unreadable` in `Reason` |
+| `17-CONTEXT.md` D-11, `17-REVIEW-FIX.md`, `17-01-SUMMARY.md` | VERIFIED | D-11 recorded; WR-02 moved to fixed (8/8, `all_fixed`); SUMMARY follow-up section added; `## Threat Flags` present |
 
 ### Key Link Verification
 
 | From | To | Via | Status |
 | --- | --- | --- | --- |
-| `readRecordDeclarations` | `buildScopeDeclarationDetail` | `if (!read.ok) return read` (dependency-index.ts:300/324) | WIRED |
-| `buildScopeDeclarationDetail` | `buildScopeSatisfactionVerdict` | `if (!detail.ok) return detail` (dependency-verdict.ts:313) | WIRED |
-| `buildScopeSatisfactionVerdict` | `readResult.verdict` | apply.ts:291 | WIRED |
-| `readResult.verdict` | `reportUnreadableDeclarer` | per-scope loop after the backfill | WIRED |
-| `plugin-declarer-unreadable` | rendered row | `applyOutcomeToBlock` → `applyPluginOutcomeToBlock` | WIRED |
+| `loadMarketplaceManifest` throw | `narrowProbeError` | `dependency-index.ts:242` catch | WIRED |
+| `readRecordDeclarations` failure | `buildScopeSatisfactionVerdict` → `reportUnreadableDeclarer` → rendered row | unchanged chain (see the initial report) | WIRED (the new feature scenario proves it end to end) |
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 | --- | --- | --- | --- |
 | Typecheck | `npx tsc --noEmit` | exit 0 | PASS |
-| Walk, read, verdict, notify, outcome proofs, stamp coverage | `node --test` on 6 files | 205/205 passed | PASS |
-| REC-05 apply cases | `node --test --test-name-pattern="REC-05\|D-05-07\|D-05-16\|RECON-04" apply.test.ts` | 8/8 passed | PASS |
-| Six pinned features | `npx cucumber-js` on the 6 features (sandboxed HOME) | 196/196 scenarios passed | PASS |
+| Walk tokens and the shared classifier | `node --test test/orchestrators/plugin/dependency-index.test.ts test/shared/probe-classifiers.test.ts` | 68/68 passed | PASS |
+| Pinned and affected features | `npx cucumber-js` on `plugin/reconcile`, `marketplace/update`, `marketplace/info`, `marketplace/remove`, `plugin/uninstall`, `plugin/update`, `plugin/reinstall` (sandboxed HOME) | 209/209 scenarios passed | PASS |
+| New malformed-JSON scenario, by name | `npx cucumber-js features/plugin/reconcile.feature --name "not valid json and keeps it working"` | 1/1 passed | PASS |
+| `update.feature` outline, by name | `--name "An invalid refreshed manifest"` | 4/4 passed | PASS |
 
 ### Probe Execution
 
@@ -106,33 +116,33 @@ Not applicable. The phase declares no probes.
 
 | Requirement | Source Plan | Status | Evidence |
 | --- | --- | --- | --- |
-| REC-05 | 17-01 | SATISFIED | Truths 1, 2, 7. The REQUIREMENTS.md checkbox and traceability row still say `Pending`. The orchestrator updates those. |
+| REC-05 | 17-01 | SATISFIED (with D-11) | Truths 1, 2, 6, 8. REQUIREMENTS.md still names only `{not in manifest}` or `{invalid manifest}` and shows `Pending`; the orchestrator owns those files. |
 
-No requirement is orphaned. REQUIREMENTS.md maps only REC-05 to Phase 17.
+No requirement is orphaned.
 
 ### Anti-Patterns Found
 
-None. The lines this commit adds contain no TBD, FIXME, XXX, TODO, HACK, or placeholder markers. T-17-01 holds: the cause is the walk's fixed-phrase `Error`, built without `{ cause }`.
+None. The D-11 diff adds no TBD, FIXME, XXX, TODO, HACK, or placeholder markers. T-17-01 holds: the cause is still a fixed phrase, never the error's message.
 
 ### Human Verification Required
 
-None. The two new cucumber scenarios drive a real Pi process through two sessions and assert the rendered row, the severity, the tally, the cause, and the skill that is still offered.
+None.
 
 ### Gaps Summary
 
-No gaps. The open review item (WR-02) and the deferred remainder of STALE-DECLARER-01 are decisions or later work, not failures of REC-05. They are listed below.
+No gaps. WR-02 is resolved by D-11, and the malformed-JSON test gap is closed by the new `reconcile.feature` scenario and the `update.feature` column. The items below are decisions, text updates, or later work. None of them is a failure of REC-05.
 
 ## For the user
 
-- WR-02, cross-surface token parity: for the same marketplace fault, the stale-declarer row and `list`/`info` (`narrowProbeError`) use different tokens. Malformed JSON shows `{invalid manifest}` here but `{unparseable}` there; a missing manifest shows `{unreadable manifest}` versus `{source missing}`; EACCES/EPERM shows `{unreadable manifest}` versus `{permission denied}`. Schema-invalid shows `{invalid manifest}` on both. Decide whether to adopt `narrowProbeError`'s tokens (which conflicts with the decision text naming `{invalid manifest}`), or keep the three-token set and record why it overrides D-48-B/SC#1.
-- STALE-DECLARER-01 remainder (deferred): the walk still fails closed on the first unreadable declarer for the whole scope. Only one declarer is reported per pass, and the load-time check skips every plugin in that scope until it is fixed. Narrowing to per-record has to be weighed against both `buildScopeDeclarationDetail` (LOAD-01) and `buildScopeDeclarationIndex` (the uninstall dependents guard). It has no carrier phase in the ROADMAP: schedule it or confirm it stays in the backlog.
-- D-02 assumption: the row keeps the `(failed)` status at `warning` severity, not `(installed)`. The reason is that `installed` in the applied cascade means a realized transition that requests a reload and has no cause slot. Confirm that `(failed)` reads right to you for a plugin that is still working.
-- Upstream parity: Claude Code 2.1.309 reports this condition as a plugin load error (`Plugin <id> not found in marketplace <mp>`) every load. Here it is a warning with a token and a cause, per your 2026-10-23 decision. No action is needed unless you want the wording closer to upstream.
-- Stale backlog text: `.planning/BACKLOG.md` STALE-DECLARER-01 still describes the row as `(failed) {unreadable}` at error severity. Update it to the REC-05 warning shape when you next edit the backlog.
-- Pre-existing (not a regression): every lasting reconcile row, this warning included, shows up twice per new session (the step definition says "Pi reports a lasting reconcile failure twice"). Decide whether that double emission is worth a backlog entry now that this row appears every session.
-- Test gap (minor): malformed-JSON marketplace manifests are covered only at the walk level (`dependency-index.test.ts:489` pins `invalid manifest`). No feature renders that case on the stale-declarer row; add one once WR-02 is settled.
+- Requirement text: ROADMAP Phase 17 SC2 and REQUIREMENTS.md REC-05 still name only `{invalid manifest}`. Add the D-11 tokens (or a pointer to D-11) when you mark REC-05 complete.
+- Write-path parity: for malformed JSON, `marketplace update` (and `add`) still report their own row as `{invalid manifest}`, while the next session's declarer row now says `{unparseable}`. `update.feature:925-937` shows both in one scenario. Decide whether the write path should also adopt `narrowProbeError`, or accept the split.
+- STALE-DECLARER-01 remainder (deferred): the walk still fails closed on the first unreadable declarer per scope, so only one declarer is reported and the scope's load-time check is skipped. It has no carrier phase: schedule it or confirm it stays in the backlog.
+- D-02 assumption: the row uses the `(failed)` status at `warning` for a plugin that still works, because `installed` in the cascade implies a reload and has no cause slot. Confirm `(failed)` reads right to you.
+- Upstream parity: Claude Code 2.1.309 reports this as a plugin load error (`Plugin <id> not found in marketplace <mp>`). Here it is a warning with a token and a cause, per your decision. Change the wording only if you want it closer to upstream.
+- Stale backlog text: `.planning/BACKLOG.md` STALE-DECLARER-01 still describes `(failed) {unreadable}` at error severity. Update it to the REC-05 warning shape.
+- Pre-existing double emission: every lasting reconcile row, this one included, appears twice per new session. Decide whether that deserves a backlog entry.
 
 ---
 
-_Verified: 2026-10-23T14:30:00Z_
+_Verified: 2026-10-23T14:05:26Z_
 _Verifier: Claude (gsd-verifier)_

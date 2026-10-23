@@ -475,19 +475,25 @@ const LOAD_FAILURES: readonly LoadFailureCase[] = [
     title:
       "D-05-07: a missing marketplace manifest ends the walk naming the record and the missing manifest",
     thrown: errno("ENOENT"),
-    reason: "unreadable manifest",
+    reason: "source missing",
     message: "cannot read the dependencies of app@mp: its marketplace manifest is missing",
   },
   {
     title: "D-05-07: a marketplace manifest under a file instead of a directory reads as missing",
     thrown: errno("ENOTDIR"),
-    reason: "unreadable manifest",
+    reason: "source missing",
     message: "cannot read the dependencies of app@mp: its marketplace manifest is missing",
   },
   {
     title:
       "D-05-07: a malformed marketplace manifest ends the walk naming the record and the invalid manifest",
     thrown: new InvalidMarketplaceManifestError("bad json", { cause: new SyntaxError("x") }),
+    reason: "unparseable",
+    message: "cannot read the dependencies of app@mp: its marketplace manifest is invalid",
+  },
+  {
+    title: "REC-05: a schema-invalid marketplace manifest ends the walk as an invalid manifest",
+    thrown: new InvalidMarketplaceManifestError("marketplace.json schema invalid"),
     reason: "invalid manifest",
     message: "cannot read the dependencies of app@mp: its marketplace manifest is invalid",
   },
@@ -495,13 +501,13 @@ const LOAD_FAILURES: readonly LoadFailureCase[] = [
     title:
       "D-05-07: a marketplace manifest the process may not read ends the walk naming the record and the unreadable manifest",
     thrown: errno("EACCES"),
-    reason: "unreadable manifest",
+    reason: "permission denied",
     message: "cannot read the dependencies of app@mp: its marketplace manifest cannot be read",
   },
   {
     title: "D-05-07: a manifest load failure with no errno code reads as an unreadable manifest",
     thrown: new Error("lib@mp: marketplace text"),
-    reason: "unreadable manifest",
+    reason: "unreadable",
     message: "cannot read the dependencies of app@mp: its marketplace manifest cannot be read",
   },
 ];

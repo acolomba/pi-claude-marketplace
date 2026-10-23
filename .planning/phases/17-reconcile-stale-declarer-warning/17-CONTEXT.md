@@ -82,6 +82,18 @@ reconcile code that phase 19 changes (import on the reconcile path).
   requirement names: the plugin stays installed and loading in all of them,
   and only the dependency check is lost.
 
+- **D-11 (user, 2026-10-23, supersedes the marketplace-manifest arms of
+  D-05 and the ROADMAP text that named only `{invalid manifest}`):** a
+  marketplace manifest that fails to load takes the token of the shared
+  classifier `shared/probe-classifiers.ts::narrowProbeError`, the one `list`
+  and `info` use, so one fault reads the same on every surface: malformed JSON
+  → `unparseable`, schema-invalid → `invalid manifest`, missing (ENOENT /
+  ENOTDIR) → `source missing`, EACCES / EPERM → `permission denied`, anything
+  else → `unreadable`. A catalog drop stays `not in manifest`; a rejected
+  `dependencies` value stays `invalid manifest`; an unusable own manifest
+  stays `unreadable manifest`. The cause phrases are unchanged. (Resolves code
+  review WR-02.)
+
 ### Emission
 - **D-08:** The row is still emitted every session while the fault lasts
   (LOAD-02 re-derives the verdict live; nothing is persisted). RECON-04
