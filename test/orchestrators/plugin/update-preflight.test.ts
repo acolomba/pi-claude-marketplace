@@ -647,6 +647,28 @@ test("refreshes a disabled pin without materializing its recorded resources", as
   assert.strictEqual(refreshed?.enabled, false);
 });
 
+test("D-18-05: reinstall's policy skips a disabled record as already disabled without writing its pin", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0", false) });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const before = await readFile(seed.locations.stateJsonPath, "utf8");
+
+  // act
+  const outcome = await prepare(seed, { policy: REINSTALL_POLICY });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "skipped",
+    name: "hello",
+    notes: [],
+    reasons: ["already disabled"],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
+  assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), before);
+});
+
 test("WR-01: refreshing a disabled path-source pin drops a stale resolvedSha the record should no longer claim", async (t) => {
   // arrange: a STALE `resolvedSha` on the record, as a `path`-source record
   // could carry from a prior tag-pinned install/update. This refresh's
@@ -1176,7 +1198,7 @@ async function seedRecordedMirrorRefresh(t: TestContext): Promise<{
   return { seed, cloneCacheSeam, refreshFlags };
 }
 
-test("D-18-04: with no policy the unpinned mirror is refreshed", async (t) => {
+test("D-18-04: update's policy refreshes the unpinned mirror", async (t) => {
   // arrange
   const { seed, cloneCacheSeam, refreshFlags } = await seedRecordedMirrorRefresh(t);
 

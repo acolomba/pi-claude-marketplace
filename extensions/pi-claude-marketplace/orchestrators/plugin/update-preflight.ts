@@ -1041,8 +1041,34 @@ export async function preparePluginUpdate(
     ...(resolvedSha !== undefined && { resolvedSha }),
   };
   return isRecordedButDisabled(triaged.record)
-    ? refreshDisabledPluginUpdate(options, prepared, constraintFromVerdict(verdict))
+    ? finishDisabledPreflight(options, prepared, constraintFromVerdict(verdict))
     : prepared;
+}
+
+/**
+ * D-05 / D-18-05: the disabled-record pin refresh is update's alone. A policy
+ * that re-materializes the recorded revision (reinstall's) reaches a disabled
+ * record only when it was disabled after the verb read it, and skips it as
+ * `already disabled` without writing the record.
+ */
+async function finishDisabledPreflight(
+  options: PreparePluginUpdateOptions,
+  prepared: PreparedPluginUpdate,
+  constraint: UpdateConstraintDisclosure | undefined,
+): Promise<PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome> {
+  if (!options.policy.skipSameRevision) {
+    return {
+      partition: "skipped",
+      name: options.plugin,
+      notes: [],
+      reasons: ["already disabled"],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    };
+  }
+
+  return refreshDisabledPluginUpdate(options, prepared, constraint);
 }
 
 /**

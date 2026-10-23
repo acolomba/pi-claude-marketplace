@@ -87,8 +87,10 @@ export function reinstallOutcomeFromRun(
         ...(run.constraint !== undefined && { constraint: run.constraint }),
       };
     case "unchanged":
-      // Under reinstall's policy only the preflight's disabled-record branch
-      // answers `unchanged`: the record was disabled after reinstall read it.
+      // Reinstall's policy never reaches `unchanged`: it skips the same-revision
+      // short-circuit, and a record disabled after reinstall read it comes back
+      // as an `already disabled` skip (D-18-05). The arm keeps the switch
+      // exhaustive and answers the same skip.
       return { partition: "skipped", ...identity, notes: ["already disabled"] };
     case "skipped":
       return { partition: "skipped", ...identity, notes: run.notes, reasons: run.reasons };
