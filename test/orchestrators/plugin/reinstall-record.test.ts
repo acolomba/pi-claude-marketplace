@@ -6,6 +6,7 @@ import {
   reinstallReasonsFromError,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-record.ts";
 import {
+  CleanupContextError,
   DependencyDeclarationsUnreadableError,
   InvalidMarketplaceManifestError,
   LayerConfigUnreadableError,
@@ -13,6 +14,7 @@ import {
   PluginInBaseLayerOnlyError,
   PluginInLocalLayerOnlyError,
   PluginShapeError,
+  PluginUpdateConcurrencyError,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
@@ -163,7 +165,6 @@ test("records an installed replacement and returns its exact outcome", () => {
     declaresAgents: true,
     declaresMcp: true,
     declaresWorkflows: false,
-    resourcesChanged: true,
   });
   const recorded = state.marketplaces.market?.plugins.plugin;
   assert.ok(recorded);
@@ -321,7 +322,6 @@ test("records partial compatibility, sha, hooks, and degradation exactly", () =>
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,
-    resourcesChanged: false,
     degradedKinds: ["skill", "command"],
   });
   const recorded = state.marketplaces.market?.plugins.plugin;
@@ -637,4 +637,96 @@ test("LAYER-04: an unreadable dependency declaration narrows to unreadable", () 
 
   // assert
   assert.deepStrictEqual(reasons, ["unreadable"]);
+});
+
+test("FLR-01: a held state lock wrapped with cleanup failures carries lock held and the lock as its cause", () => {
+  // arrange
+  const lock = new StateLockHeldError("project", "/tmp/scope/.state-lock");
+  const error = new CleanupContextError(lock, [
+    {
+      phase: "abort",
+      artifact: "skills",
+      path: "/tmp/scope/skills-staging/run",
+      cause: new Error("busy"),
+    },
+  ]);
+  const lockMessage =
+    "Another pi-claude-marketplace operation is in progress for project scope (/tmp/scope/.state-lock). Retry after it completes.";
+
+  // act
+  const outcome = recordReinstallOutcome({
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    error,
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    notes: [
+      `${lockMessage}\n\ncause: ${lockMessage} (cleanup: abort skills run: busy) -> ${lockMessage}`,
+    ],
+    reasons: ["lock held"],
+    cause: lock,
+  });
+  assert.strictEqual(outcome.cause, lock);
+});
+
+for (const { kind, reason } of [
+  { kind: "plugin-updated", reason: "concurrently updated" },
+  { kind: "plugin-uninstalled", reason: "concurrently uninstalled" },
+] as const) {
+  test(`a ${kind} concurrency failure narrows to ${reason}`, () => {
+    // arrange
+    const error = new PluginUpdateConcurrencyError(kind, "hello", "mp", {
+      expectedVersion: "1.0.0",
+      actualVersion: "1.1.0",
+    });
+
+    // act
+    const reasons = reinstallReasonsFromError(error);
+
+    // assert
+    assert.deepStrictEqual(reasons, [reason]);
+  });
+}
+
+test("D-18-17: an unreadable dependency walk carries unreadable and names the record on its cause", () => {
+  // arrange
+  const walkMessage = "cannot read the dependencies of gone@mp: not declared by its marketplace";
+  const error = new DependencyDeclarationsUnreadableError("gone@mp", walkMessage);
+
+  // act
+  const outcome = recordReinstallOutcome({
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    error,
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    notes: [`${walkMessage}\n\ncause: ${walkMessage}`],
+    reasons: ["unreadable"],
+    cause: error,
+  });
+  assert.strictEqual(outcome.cause, error);
+});
+
+test("a thrown value that is not an Error narrows to no reason", () => {
+  // act
+  const reasons = reinstallReasonsFromError("EACCES");
+
+  // assert
+  assert.strictEqual(reasons, undefined);
 });

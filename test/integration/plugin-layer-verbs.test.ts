@@ -343,7 +343,6 @@ test("LAYER-08: the load-time backfill's reinstall of a dependency writes no lay
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,
-    resourcesChanged: true,
   });
   assert.deepStrictEqual(await layerConfigs(scope), before);
   assert.deepStrictEqual(await declarations(scope), baseDeclaresApp(scope.source));

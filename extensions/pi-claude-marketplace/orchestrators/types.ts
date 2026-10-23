@@ -24,7 +24,6 @@ export interface ReinstallOutcomeBase {
 export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly partition: "reinstalled";
   readonly version: string;
-  readonly resourcesChanged: boolean;
   /**
    * WLIF-06: the reinstall's new source did not re-place at least one workflow
    * envelope the record named, so the command that envelope registered is still
@@ -90,9 +89,10 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * D-141-03 / D-141-05: the DISCOVERY half of this reinstall's staging
    * warnings, unprefixed, carried separately from `notes`.
    *
-   * `notes` folds all three halves (discovery + hygiene + maintenance) behind
-   * a `warning: ` prefix for orchestrated consumers, so a reader cannot tell
-   * the halves apart again. `reinstallPlugins` needs exactly the discovery
+   * `notes` folds the discovery half and the maintenance warnings behind a
+   * `warning: ` prefix for orchestrated consumers, so a reader cannot tell
+   * them apart again. The agents and MCP hygiene half is not carried: the
+   * shared swap drops it in direct mode, as it does for `update`. `reinstallPlugins` needs exactly the discovery
    * half to render after its cascade, and the boundary forces the carrier:
    * the warnings originate inside the locked ledger while the rows are not
    * rendered until `renderReinstallPartitionAndNotify` at the very end of
@@ -124,6 +124,13 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
 export interface ReinstallSkippedOutcome extends ReinstallOutcomeBase {
   readonly partition: "skipped";
   readonly notes: readonly string[];
+  /**
+   * D-18-07: the shared runner's typed skip reasons, such as `dependents
+   * constrain`, whose holders ride on `notes`. Absent for reinstall's own
+   * `not installed` / `already disabled` skips, whose `notes` the messaging
+   * narrows.
+   */
+  readonly reasons?: readonly ContentReason[];
 }
 
 export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
@@ -159,11 +166,21 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
    * LAYER-04 / CFG-03: set for a named reinstall's layer refusal. Its
    * message is the row's cause line, built from fixed text and safe names or
    * a file's basename. FLR-01: also set for a held state lock, whose cause
-   * line names the lock file the way the uninstall row does (D-01). Every
-   * other failure keeps its text in `notes` only, because that text is not
-   * prepared for a rendered cause line.
+   * line names the lock file the way the uninstall row does (D-01), and for
+   * an unreadable dependency walk, whose message names the record it could
+   * not read (D-18-17). Every other failure keeps its text in `notes` only,
+   * because that text is not prepared for a rendered cause line.
    */
   readonly cause?: Error;
+  /**
+   * D-18-10: one child per bridge whose commit or finalize failed, as update
+   * renders them. Set only for a commit or finalize failure, whose `cause` is
+   * the swap's aggregate error.
+   */
+  readonly rollbackPartial?: readonly {
+    readonly phase: UpdatePhaseBridge;
+    readonly cause: Error;
+  }[];
 }
 
 export type ReinstallPluginOutcome =

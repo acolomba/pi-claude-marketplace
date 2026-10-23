@@ -698,7 +698,6 @@ for (const coexist of [false, true]) {
         declaresAgents: true,
         declaresMcp: false,
         declaresWorkflows: false,
-        resourcesChanged: true,
       });
       assert.deepStrictEqual(notifications, []);
       const expectedEntries = [];
@@ -1388,8 +1387,7 @@ test("PRL-12/RH-5: V2 per-variant reload-hint -- emitted on reinstalled even wit
       const noResource = await reinstallDefault(cwd, ctx, run);
       assert.equal(noResource.partition, "reinstalled");
       // The reload-hint trailer is emitted structurally
-      // from the `reinstalled` variant per D-16-12, regardless of
-      // resourcesChanged.
+      // from the `reinstalled` variant per D-16-12.
       assert.equal(
         (notifications.at(-1)?.message ?? "").includes("/reload to pick up changes"),
         true,
@@ -3562,7 +3560,6 @@ test("LAYER-04: the unnamed flagless reinstall the load-time backfill runs on a 
         declaresAgents: false,
         declaresMcp: false,
         declaresWorkflows: false,
-        resourcesChanged: true,
       });
       assert.deepEqual(notifications, []);
       assert.deepEqual(await layerConfigs(locations), layersBefore);
@@ -7491,7 +7488,6 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
         marketplace: "mp",
         name: "hello",
         partition: "reinstalled",
-        resourcesChanged: true,
         scope: "project",
         stagedAgentNames: [],
         stagedMcpServerNames: [],
@@ -7633,7 +7629,6 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
         marketplace: "mp",
         name: "hello",
         partition: "reinstalled",
-        resourcesChanged: true,
         scope: "project",
         stagedAgentNames: [],
         stagedMcpServerNames: [],
@@ -8231,7 +8226,6 @@ test("retry proof: reinstall: skills replacement refusal leaves an empty replace
       ]);
       assert.equal(second.partition, "reinstalled");
       assert.equal(second.version, "1.0.0");
-      assert.equal(second.resourcesChanged, true);
       assert.equal(second.notes, undefined);
       assert.deepStrictEqual(notifications, []);
       assert.equal(firstStateBytes, stateBytes);
@@ -10439,7 +10433,6 @@ test("PRL-08 / PRL-11: preserves state, tree, cleanup, and exact notification th
         declaresAgents: true,
         declaresMcp: true,
         declaresWorkflows: false,
-        resourcesChanged: true,
       });
       const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
       assert.ok(record !== undefined);
@@ -10638,7 +10631,6 @@ test("AFILE-04: an orchestrated reinstall returns the notice on its outcome and 
         marketplace: "mp",
         scope: "project",
         version: "1.0.0",
-        resourcesChanged: true,
         stagedAgentNames: [],
         stagedMcpServerNames: ["server1"],
         declaresAgents: false,

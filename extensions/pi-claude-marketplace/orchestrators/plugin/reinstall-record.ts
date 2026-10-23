@@ -1,4 +1,5 @@
 import {
+  CleanupContextError,
   composeErrorWithCauseChain,
   DependencyDeclarationsUnreadableError,
   findManualRecoveryError,
@@ -7,6 +8,7 @@ import {
   PluginInBaseLayerOnlyError,
   PluginInLocalLayerOnlyError,
   PluginShapeError,
+  PluginUpdateConcurrencyError,
   StateLockHeldError,
 } from "../../shared/errors.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
@@ -88,14 +90,29 @@ export function recordReinstallOutcome(input: RecordReinstallOutcomeInput): Rein
   }
 }
 
-/** Map typed reinstall failures without inventing a closed-set reason. */
+/**
+ * Map typed reinstall failures without inventing a closed-set reason. A
+ * `CleanupContextError` is read through to the failure it wraps.
+ */
 export function reinstallReasonsFromError(error: unknown): readonly ContentReason[] | undefined {
+  const primary = error instanceof CleanupContextError ? error.primary : error;
+  const typed = typedReinstallReason(primary);
+  if (typed !== undefined) {
+    return [typed];
+  }
+
+  const errno = errnoReinstallReason(primary);
+  return errno === undefined ? undefined : [errno];
+}
+
+/** The reason a typed reinstall failure names, by the failure's class. */
+function typedReinstallReason(error: unknown): ContentReason | undefined {
   if (error instanceof PluginShapeError) {
-    return ["source mismatch"] as const;
+    return "source mismatch";
   }
 
   if (error instanceof ManualRecoveryError) {
-    return ["rollback partial"] as const;
+    return "rollback partial";
   }
 
   // A held per-scope state lock is another operation in progress, not an
@@ -105,29 +122,32 @@ export function reinstallReasonsFromError(error: unknown): readonly ContentReaso
   // from the same closed set depending on which layer caught it. `lock held`
   // is the one word that tells the operator to retry.
   if (error instanceof StateLockHeldError) {
-    return ["lock held"] as const;
+    return "lock held";
+  }
+
+  if (error instanceof PluginUpdateConcurrencyError) {
+    return error.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled";
   }
 
   if (isLayerRefusal(error)) {
-    return [layerRefusalReason(error)] as const;
+    return layerRefusalReason(error);
   }
 
-  if (error instanceof DependencyDeclarationsUnreadableError) {
-    return ["unreadable"] as const;
-  }
+  return error instanceof DependencyDeclarationsUnreadableError ? "unreadable" : undefined;
+}
 
-  if (error instanceof Error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "EACCES" || code === "EPERM") {
-      return ["permission denied"] as const;
-    }
+/** The reason each filesystem errno code a reinstall can meet names. */
+const ERRNO_REASONS: Readonly<Record<string, ContentReason>> = {
+  EACCES: "permission denied",
+  EPERM: "permission denied",
+  ENOENT: "source missing",
+  ENOTDIR: "source missing",
+};
 
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return ["source missing"] as const;
-    }
-  }
-
-  return undefined;
+/** The reason a filesystem failure names, by its errno code. */
+function errnoReinstallReason(error: unknown): ContentReason | undefined {
+  const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+  return code === undefined ? undefined : ownValue(ERRNO_REASONS, code);
 }
 
 /**
@@ -149,11 +169,18 @@ function isLayerRefusal(error: unknown): error is LayerRefusal {
 
 /**
  * The failures whose message is safe as a rendered cause line: a layer
- * refusal, and a held state lock, which names the lock file as the uninstall
- * row does (D-01).
+ * refusal, a held state lock, which names the lock file as the uninstall row
+ * does (D-01), and an unreadable dependency walk, whose message is the walk's
+ * path-free cause line (D-18-17).
  */
-function isRenderedCause(error: unknown): error is LayerRefusal | StateLockHeldError {
-  return isLayerRefusal(error) || error instanceof StateLockHeldError;
+function isRenderedCause(
+  error: unknown,
+): error is LayerRefusal | StateLockHeldError | DependencyDeclarationsUnreadableError {
+  return (
+    isLayerRefusal(error) ||
+    error instanceof StateLockHeldError ||
+    error instanceof DependencyDeclarationsUnreadableError
+  );
 }
 
 function layerRefusalReason(error: LayerRefusal): ContentReason {
@@ -182,6 +209,7 @@ function failedOutcome(input: RecordFailedOutcomeInput): ReinstallFailedOutcome 
   const message = composeErrorWithCauseChain(input.error);
   const typedReasons = reinstallReasonsFromError(input.error);
   const isManualRecovery = findManualRecoveryError(input.error) !== undefined;
+  const primary = input.error instanceof CleanupContextError ? input.error.primary : input.error;
   return {
     partition: "failed",
     name: input.name,
@@ -190,7 +218,7 @@ function failedOutcome(input: RecordFailedOutcomeInput): ReinstallFailedOutcome 
     notes: [message],
     ...(isManualRecovery && { failureClass: "manual-recovery" as const }),
     ...(typedReasons !== undefined && { reasons: typedReasons }),
-    ...(isRenderedCause(input.error) && { cause: input.error }),
+    ...(isRenderedCause(primary) && { cause: primary }),
   };
 }
 
@@ -246,9 +274,9 @@ function recordReinstalledOutcome(
 
   // WR-06: `[]` stated HERE rather than defaulted, because the reasoning that
   // makes it safe is local to this site: this projection feeds only
-  // `stagedAgentNames`, `stagedMcpServerNames`, `declaresAgents`,
-  // `declaresMcp`, and `resourcesChanged`, none of which reads `workflows`,
-  // so an empty workflow inventory here is inert.
+  // `stagedAgentNames`, `stagedMcpServerNames`, `declaresAgents`, and
+  // `declaresMcp`, none of which reads `workflows`, so an empty workflow
+  // inventory here is inert.
   const outcomeResources = resourcesFromHandles(input.handles, []);
   const degradedKinds = Array.from(
     new Set<DegradeKind>([
@@ -267,7 +295,6 @@ function recordReinstalledOutcome(
     declaresAgents: outcomeResources.agents.length > 0,
     declaresMcp: outcomeResources.mcpServers.length > 0,
     declaresWorkflows: resources.workflows.length > 0,
-    resourcesChanged: resourcesChanged(input.oldRecord.resources, outcomeResources),
     ...(degradedKinds.length > 0 && { degradedKinds }),
     // WLIF-06: the record's PRE-reinstall inventory minus what the replace
     // step reported placing. A source that dropped or renamed a workflow
@@ -293,20 +320,4 @@ function resourcesFromHandles(
     hooks: plugin !== undefined && installable?.hooksConfigPath !== undefined ? [plugin] : [],
     workflows: [...placedWorkflowNames],
   };
-}
-
-function resourcesChanged(
-  oldResources: PluginInstallRecord["resources"],
-  next: PluginInstallRecord["resources"],
-): boolean {
-  return (
-    next.skills.length > 0 ||
-    next.prompts.length > 0 ||
-    next.agents.length > 0 ||
-    next.mcpServers.length > 0 ||
-    oldResources.skills.length > 0 ||
-    oldResources.prompts.length > 0 ||
-    oldResources.agents.length > 0 ||
-    oldResources.mcpServers.length > 0
-  );
 }

@@ -5,7 +5,7 @@ import {
   type PluginFailedMessage,
   type PluginManualRecoveryMessage,
   type PluginReinstalledMessage,
-  type PluginSkippedMessage,
+  type PluginUpdateSkippedMessage,
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
@@ -18,6 +18,7 @@ import type {
   ReinstallFailedOutcome,
   ReinstallPluginOutcome,
   ReinstallReinstalledOutcome,
+  ReinstallSkippedOutcome,
 } from "../types.ts";
 
 /**
@@ -33,7 +34,7 @@ type ReinstallStatus = "reinstalled" | "skipped" | "failed" | "manual recovery";
  */
 type ReinstallMsg =
   | PluginReinstalledMessage
-  | PluginSkippedMessage
+  | PluginUpdateSkippedMessage
   | PluginFailedMessage
   | PluginManualRecoveryMessage;
 
@@ -238,21 +239,8 @@ function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
     case "reinstalled":
       return reinstalledRowFromOutcome(outcome, undefined);
 
-    case "skipped": {
-      const reasons = narrowReasons(outcome.notes);
-      const skipped: PluginSkippedMessage = {
-        status: "skipped",
-        name: outcome.name,
-        reasons,
-        // D-01: an absent-target reinstall (the named plugin is not installed)
-        // cannot be carried out -> error (severity-only flip; the `(skipped)
-        // {not installed}` per-row grammar is preserved). Otherwise benign
-        // idempotent skip -> info, actionable skip -> warning; never reloads.
-        severity: reasons.includes("not installed") ? "error" : skipSeverity(reasons),
-        needsReload: false,
-      };
-      return skipped;
-    }
+    case "skipped":
+      return skippedRowFromOutcome(outcome);
 
     case "failed": {
       // CMC-16: structural failure-class tag takes priority over
@@ -295,6 +283,8 @@ function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
         name: outcome.name,
         reasons,
         ...(outcome.cause !== undefined && { cause: outcome.cause }),
+        // D-18-10: one child per bridge whose commit or finalize failed.
+        ...(outcome.rollbackPartial !== undefined && { rollbackPartial: outcome.rollbackPartial }),
         // D-03/D-06: a failed reinstall -> error, no reload.
         severity: "error",
         needsReload: false,
@@ -302,6 +292,28 @@ function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
       return failed;
     }
   }
+}
+
+/**
+ * The `skipped` row. The shared runner's typed reasons win over the narrowed
+ * notes (D-18-07). A `dependents constrain` skip carries the gate's holders on
+ * `notes`, and they become the row's cause line, as on update's row.
+ */
+function skippedRowFromOutcome(outcome: ReinstallSkippedOutcome): PluginUpdateSkippedMessage {
+  const reasons = outcome.reasons ?? narrowReasons(outcome.notes);
+  const holdsCause = reasons.includes("dependents constrain") && outcome.notes.length > 0;
+  return {
+    status: "skipped",
+    name: outcome.name,
+    reasons,
+    ...(holdsCause && { cause: new Error(outcome.notes.join(" ")) }),
+    // D-01: an absent-target reinstall (the named plugin is not installed)
+    // cannot be carried out -> error (severity-only flip; the `(skipped)
+    // {not installed}` per-row grammar is preserved). Otherwise benign
+    // idempotent skip -> info, actionable skip -> warning; never reloads.
+    severity: reasons.includes("not installed") ? "error" : skipSeverity(reasons),
+    needsReload: false,
+  };
 }
 
 /**

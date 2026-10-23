@@ -847,7 +847,6 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
     marketplace: "mp",
     scope: "project",
     version: "0.0.1",
-    resourcesChanged: false,
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,
