@@ -27,6 +27,7 @@ import {
 import { errorMessage, rethrowInvalidGitHubBaseUrl } from "../../../shared/errors.ts";
 import { notify, notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
+import { rejectUnknownFlag } from "../shared.ts";
 
 import type { SubcommandHandler } from "../../router.ts";
 import type { EdgeDeps } from "../../types.ts";
@@ -46,9 +47,7 @@ export function makeBootstrapHandler(
       return;
     }
 
-    const flag = parsed.positional.find((token) => token.startsWith("--"));
-    if (flag !== undefined) {
-      notifyUsageError(ctx, run, { message: `Unknown flag: "${flag}".`, usage: USAGE });
+    if (rejectUnknownFlag(parsed.positional, { ctx, run, usage: USAGE })) {
       return;
     }
 

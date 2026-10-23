@@ -666,21 +666,29 @@ test("records a plugin declaring itself off by default as disabled, because the 
 // Rejections: nothing materialises and the workflow is never reached.
 // ---------------------------------------------------------------------------
 
-for (const { args, label, summary } of [
+const MISSING_REFERENCE = "install requires exactly one <plugin>@<marketplace> argument.";
+
+for (const { args, label, summary, sentence = MISSING_REFERENCE } of [
   { args: "", label: "arity-zero", summary: "no reference at all" },
   {
     args: `${MAP_MODEL_FLAG} ${PARTIAL_FLAG}`,
     label: "arity-flags-only",
     summary: "both downstream flags with no reference",
   },
-  { args: "alpha@mp degraded@mp", label: "arity-two", summary: "two references" },
+  {
+    args: "alpha@mp degraded@mp",
+    label: "arity-two",
+    summary: "two references",
+    sentence: "Too many arguments.",
+  },
   {
     args: "alpha@mp degraded@mp optout@mp",
     label: "arity-three",
     summary: "three references",
+    sentence: "Too many arguments.",
   },
 ]) {
-  test(`rejects ${summary} with the exactly-one-argument sentence and never reaches the install workflow (MSG-NC-2)`, async (t) => {
+  test(`rejects ${summary} with the sentence for its arity and never reaches the install workflow (MSG-NC-2)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
@@ -693,8 +701,7 @@ for (const { args, label, summary } of [
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message:
-          "install requires exactly one <plugin>@<marketplace> argument.\n\nUsage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]",
+        message: `${sentence}\n\nUsage: /claude:plugin install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]`,
         severity: "error",
       },
     ]);

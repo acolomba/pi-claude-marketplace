@@ -406,7 +406,7 @@ for (const { args, label, offendingToken, summary } of [
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: `Unknown option: "${offendingToken}".\n\n${PENDING_USAGE}`, severity: "error" },
+      { message: `Unknown flag: "${offendingToken}".\n\n${PENDING_USAGE}`, severity: "error" },
     ]);
     assert.strictEqual(workspace.transportCalls(), 0);
     verifyBoundary();
@@ -459,7 +459,7 @@ for (const mode of ["json", "rpc"] as const) {
     },
     {
       args: "--bogus",
-      message: 'Unknown option: "--bogus".',
+      message: 'Unknown flag: "--bogus".',
     },
     {
       args: "alpha@official beta@official",

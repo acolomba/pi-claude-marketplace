@@ -347,7 +347,7 @@ test("reports an unrecognised scope value with the import usage block and never 
   verify(importClaudeSettings);
 });
 
-test("takes the scope-target flag as a positional and rejects it alongside a scope flag", async (t) => {
+test("rejects the scope-target flag as an unknown flag alongside a scope flag", async (t) => {
   // arrange
   await createHermeticScope(t, "scope-target");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -367,7 +367,12 @@ test("takes the scope-target flag as a positional and rejects it alongside a sco
   await importHandler("--scope user --local", ctx, run);
 
   // assert
-  assert.deepStrictEqual(notifications, [{ message: NO_POSITIONALS_MESSAGE, severity: "error" }]);
+  assert.deepStrictEqual(notifications, [
+    {
+      message: 'Unknown flag: "--local".\n\nUsage: /claude:plugin import [--scope user|project]',
+      severity: "error",
+    },
+  ]);
   assert.deepStrictEqual(git.state.calls.clone, []);
   verifyBoundary();
   verify(importClaudeSettings);

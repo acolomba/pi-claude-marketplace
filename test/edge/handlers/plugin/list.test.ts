@@ -777,7 +777,7 @@ for (const { args, label, summary } of [
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: `Unknown option: "--frobnicate".\n\n${LIST_USAGE}`, severity: "error" },
+      { message: `Unknown flag: "--frobnicate".\n\n${LIST_USAGE}`, severity: "error" },
     ]);
     assert.strictEqual(workspace.transportCalls(), 0);
     verifyBoundary();
@@ -810,7 +810,7 @@ for (const { args, label, summary } of [
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: `Unknown option: "--local".\n\n${LIST_USAGE}`, severity: "error" },
+      { message: `Unknown flag: "--local".\n\n${LIST_USAGE}`, severity: "error" },
     ]);
     assert.strictEqual(workspace.transportCalls(), 0);
     verifyBoundary();
@@ -863,7 +863,7 @@ for (const mode of ["json", "rpc"] as const) {
     },
     {
       args: "--bogus",
-      message: 'Unknown option: "--bogus".',
+      message: 'Unknown flag: "--bogus".',
     },
     {
       args: "alpha@official beta@official",
