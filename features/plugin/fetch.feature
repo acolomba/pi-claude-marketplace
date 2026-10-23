@@ -29,3 +29,171 @@ Feature: Plugin fetch
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+
+  Scenario: Fetching a git-source plugin downloads its new revision from the git host
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 2.0.0   |      |
+    When the user runs "/claude:plugin fetch ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status    | reasons |
+      | gits             | project           | ghp@gits | ghp  | available |         |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+
+  Scenario: A fetch installs no new version, so the plugin list still shows the installed one
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 2.0.0   |      |
+    Given the user has run "/claude:plugin fetch ghp@gits --scope project"
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version          |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | {ghp revision 1} |
+
+  Scenario: Fetching a marketplace fetches each git-source plugin and reports the one the git host refuses
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the git repository "urlp" holds these plugins:
+      | name | version | path |
+      | urlp | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+      | urlp | url         | urlp       | true   |
+    Given the marketplace "gits" is added to the project scope
+    Given the git host answers 404 for the plugin "ghp"
+    When the user runs "/claude:plugin fetch @gits --scope project"
+    Then the result has these fields:
+      | kind                | cascade                        |
+      | severity            | error                          |
+      | needs reload        | false                          |
+      | summary             | A plugin operation has failed. |
+      | tally label         | Plugin fetch                   |
+      | tally failures      | 1                              |
+      | tally warnings      | 0                              |
+      | tally success count | 2                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status    | reasons        | scope   | version | cause chain                                                        | cause truncated | leaks | rollback partial |
+      | gits             | project           | demo@gits | demo | skipped   | up-to-date     | project | 1.0.0   |                                                                    |                 |       |                  |
+      | gits             | project           | ghp@gits  | ghp  | failed    | source missing | project |         | HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git | false           |       |                  |
+      | gits             | project           | urlp@gits | urlp | available |                |         |         |                                                                    |                 |       |                  |
+    Then the git host receives these requests:
+      | method | path                                             | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack  | 404    |
+      | GET    | /acme/urlp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/urlp.git/git-upload-pack                   | 200    |
+
+  Scenario: A bare fetch fetches the git-source plugins of every marketplace in the scope
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the git repository "urlp" holds these plugins:
+      | name | version | path |
+      | urlp | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "more" is published as a dir source
+    Given the marketplace "more" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | urlp | url         | urlp       | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the marketplace "more" is added to the project scope
+    When the user runs "/claude:plugin fetch --scope project"
+    Then the result has these fields:
+      | kind                | cascade      |
+      | severity            | info         |
+      | needs reload        | false        |
+      | tally label         | Plugin fetch |
+      | tally failures      | 0            |
+      | tally warnings      | 0            |
+      | tally success count | 2            |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status    | reasons |
+      | gits             | project           | ghp@gits  | ghp  | available |         |
+      | more             | project           | urlp@more | urlp | available |         |
+    Then the git host receives these requests:
+      | method | path                                             | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack  | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                    | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack  | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                    | 200    |
+      | GET    | /acme/urlp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/urlp.git/git-upload-pack                   | 200    |
+      | GET    | /acme/urlp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/urlp.git/git-upload-pack                   | 200    |
+
+  Scenario: Fetching a path-source plugin makes no request and reports it up to date
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin fetch demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons    | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | skipped | up-to-date | project | 1.0.0   |
+    Then the git host receives no request
+
+  Scenario: Fetching a pinned plugin whose clone is present makes no request and reports it up to date
+    Given the git repository "mono" holds these plugins:
+      | name | version | path         |
+      | subp | 1.0.0   | plugins/subp |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | subp | git-subdir  | mono       | true   |
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install subp@gits --scope project"
+    When the user runs "/claude:plugin fetch subp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status  | reasons    | scope   |
+      | gits             | project           | subp@gits | subp | skipped | up-to-date | project |
+    Then the git host receives no request
