@@ -16,9 +16,9 @@ import path from "node:path";
 
 import { Then } from "@cucumber/cucumber";
 
-import { isPlainObject } from "../lib/field-rows.ts";
+import { isPlainObject } from "../../lib/field-rows.ts";
 
-import type { ScenarioWorld } from "../support/world.ts";
+import type { ScenarioWorld } from "../../support/world.ts";
 
 // The `plugin@marketplace` keys the scope's installation record holds.
 async function recordedPlugins(extensionRoot: string): Promise<readonly string[]> {
