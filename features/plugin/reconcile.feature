@@ -125,8 +125,8 @@ Feature: Plugin reconcile
     Given the marketplace "fixtures" is added to the project scope
     Given a config in scope project and layer base, with these plugins:
       | marketplace | plugin | enabled |
-      | fixtures    | demo   |         |
       | fixtures    | ghost  |         |
+      | fixtures    | demo   |         |
     When the user starts a new pi session
     Then the session reports these results:
       | kind                      | severity | needs reload | summary                        | tally label | tally failures | tally warnings | tally success count |
@@ -134,8 +134,8 @@ Feature: Plugin reconcile
       | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |                     |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id             | name  | status    | reasons         | scope   | version | leaks | rollback partial |
-      | fixtures         | project           | demo@fixtures  | demo  | installed |                 | project | 1.0.0   |       |                  |
       | fixtures         | project           | ghost@fixtures | ghost | failed    | not in manifest | project |         |       |                  |
+      | fixtures         | project           | demo@fixtures  | demo  | installed |                 | project | 1.0.0   |       |                  |
       | fixtures         | project           | ghost@fixtures | ghost | failed    | not in manifest | project |         |       |                  |
     Then the session offers these skills:
       | command           | description            |
