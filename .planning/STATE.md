@@ -5,16 +5,16 @@ milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 1
 current_phase_name: Suite Foundation
 status: executing
-stopped_at: Completed 01-06-PLAN.md
-last_updated: "2026-10-23T03:41:26.898Z"
+stopped_at: Completed 01-07-PLAN.md
+last_updated: "2026-10-23T03:53:23.970Z"
 last_activity: 2026-10-22
 last_activity_desc: Phase 1 execution started
-state_head: 76a6ebab0f74e3b6ccabefd4c8867548c02a0e18
+state_head: 24fbdeac486505a4fe207bac555bb00498be1ceb
 progress:
   total_phases: 15
   completed_phases: 0
   total_plans: 10
-  completed_plans: 6
+  completed_plans: 7
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 1 (Suite Foundation) — EXECUTING
-Plan: 7 of 10
+Plan: 8 of 10
 Status: Ready to execute
 Last activity: 2026-10-22 — Phase 1 execution started
 
@@ -186,8 +186,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-23T03:41:12.676Z
-**Stopped at:** Completed 01-06-PLAN.md
+**Last session:** 2026-10-23T03:53:23.846Z
+**Stopped at:** Completed 01-07-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -389,6 +389,7 @@ archived milestone artifacts.
 | Phase 01 P04 | 8 min | 2 tasks | 4 files |
 | Phase 01 P05 | 8 min | 2 tasks | 8 files |
 | Phase 01 P06 | 10 min | 3 tasks | 10 files |
+| Phase 01 P07 | 9 min | 2 tasks | 8 files |
 
 ## Decisions
 
@@ -557,6 +558,7 @@ archived milestone artifacts.
 - [Phase 01]: A session in another project uses a second, short-lived Pi that reads its first session with readSession and never sends new_session; the world releases its directory and process
 - [Phase 01]: Plugin publishing steps live in features/step_definitions/plugin/publishing.steps.ts; publishOutputStyle makes a published plugin partially available on every source kind
 - [Phase 01]: [lifecycle-coverage] Git host steps name a repository through {git repository}; every arm registers a disarming release, and 'the git host serves the <repository> again' lifts it mid-scenario
+- [Phase 01]: [lifecycle-coverage] Another process holds a scope's state lock through a self-spawning features/lib holder with the product's proper-lockfile options; a directory in place of mcp-adapter.json is the rollback obstruction; {project dir} and {agent dir} state sandbox paths
 
 ### mcp-4 decisions
 

@@ -151,7 +151,7 @@ Step module paths are relative to `features/step_definitions/`.
 3. The plugin steps live under `features/step_definitions/plugin/` in topic modules that take no verb name and none of the reserved module names. The git-host steps serve plugin repositories as well as marketplaces. The cucumber skill documents this milestone's file ownership: a later phase adds only its own feature files and step modules, and never edits a Phase 1 file.
 4. `npm run check:features` (the usage gate: no unused, undefined, or ambiguous step) and `npm run check` are green, and every existing scenario still passes.
 
-**Plans:** 6/10 plans executed
+**Plans:** 7/10 plans executed
 
 Plans:
 **Wave 1**
@@ -167,7 +167,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 - [x] 01-06-PLAN.md — Tracer: the git host arms and disarms any owner's repositories through `{git repository}`, every arm released by the world, seeded by a retried add in `marketplace/failed-add.feature`; the official marketplace and multi-payload setup, seeded in `plugin/bootstrap.feature`
-- [ ] 01-07-PLAN.md — Tracer: `{project dir}` and `{agent dir}` tokens and another process holding a scope's state lock, seeded in `plugin/state-lock.feature`; a directory blocking `mcp-adapter.json`, seeded by a retried install in `plugin/install-rollback.feature`
+- [x] 01-07-PLAN.md — Tracer: `{project dir}` and `{agent dir}` tokens and another process holding a scope's state lock, seeded in `plugin/state-lock.feature`; a directory blocking `mcp-adapter.json`, seeded by a retried install in `plugin/install-rollback.feature`
 
 **Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 01-08-PLAN.md — Tracer: plugin repositories on the git host offered as github, url, and git-subdir sources, pinned or not, with revision tokens, seeded in `plugin/git-source.feature`
@@ -400,7 +400,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Suite Foundation | 6/10 | In Progress | - |
+| 1. Suite Foundation | 7/10 | In Progress | - |
 | 2. Plugin Enable and Disable | 0/TBD | Not started | - |
 | 3. Install Dependencies, Partial, and User Scope | 0/TBD | Not started | - |
 | 4. Git-Source Plugins | 0/TBD | Not started | - |
