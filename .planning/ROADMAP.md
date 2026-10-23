@@ -424,7 +424,7 @@ Plans:
 **Success Criteria** (what must be TRUE):
 
 1. A plugin whose marketplace catalog dropped it is reported at each new session as a `warning` row with `{not in manifest}` and a cause chain, and it keeps working (REC-05).
-2. A plugin whose marketplace manifest is invalid is reported the same way with `{invalid manifest}` (REC-05).
+2. A plugin whose marketplace manifest is broken is reported the same way with the token `list`/`info` use for that fault: `{unparseable}`, `{source missing}`, `{permission denied}`, or `{invalid manifest}` (REC-05, D-11).
 3. `npm run check` stays green.
 
 ### Phase 18: Update and Reinstall Unification
