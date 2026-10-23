@@ -48,8 +48,8 @@ scenario, so no separate Wave 0 is needed.
 | 1-01-01 | 01 | 1 | FND-01, FND-02 | T-01-01 | Move-only commit; no step text changes | static + behavioral | `npm run check:features && npx cucumber-js features/plugin/install.feature` | ✅ | ⬜ pending |
 | 1-01-02 | 01 | 1 | FND-01, FND-02 | T-01-01 | Move-only commit; no step text changes | static + behavioral | `npm run check:features && npx cucumber-js features/marketplace/git-source.feature features/marketplace/github-source.feature features/marketplace/url-source.feature features/marketplace/url-source-update.feature features/marketplace/unsupported-source.feature` | ✅ | ⬜ pending |
 | 1-01-03 | 01 | 1 | FND-01 | — | Skill text only | static | `SKIP=npm-check pre-commit run --files .agents/skills/cucumber/rules/layout.md && grep -c '^## Parallel work$' .agents/skills/cucumber/rules/layout.md` | ✅ | ⬜ pending |
-| 1-02-01 | 02 | 2 | FND-01, FND-02 | T-01-02, T-01-04 | Session payloads validated against the payload schema; reset session reports none | behavioral | `npx cucumber-js features/plugin/reconcile.feature && npm run check:features` | ❌ task | ⬜ pending |
-| 1-02-02 | 02 | 2 | FND-01, FND-02 | T-01-03 | Uncompared session rows fail the scenario | behavioral (full suite) | `npm run test:cucumber && npm run check:features` | ✅ | ⬜ pending |
+| 1-02-01 | 02 | 2 | FND-01, FND-02 | T-01-02, T-01-04 | Session payloads validated against the payload schema; reset session reports none | behavioral (no commit of its own) | `npx cucumber-js features/plugin/reconcile.feature && npm run check:features` | ❌ task | ⬜ pending |
+| 1-02-02 | 02 | 2 | FND-01, FND-02 | T-01-03 | Uncompared session rows fail the scenario | behavioral (full suite); one commit for 1-02-01 and 1-02-02 | `npm run test:cucumber && npm run check:features` | ✅ | ⬜ pending |
 | 1-03-01 | 03 | 3 | FND-01, FND-02 | T-01-05 | A setup that must fail asserts every payload is an error | behavioral | `npx cucumber-js features/marketplace/failed-add.feature && npm run check:features` | ❌ task | ⬜ pending |
 | 1-03-02 | 03 | 3 | FND-01, FND-02 | T-01-06 | plugin-info-cascade blocks are read, never skipped | behavioral | `npx cucumber-js features/plugin/info.feature features/plugin/prune.feature && npm run check:features` | ❌ task | ⬜ pending |
 | 1-04-01 | 04 | 3 | FND-01, FND-02 | T-01-07 | Record read from the sandbox scope root only | behavioral | `npx cucumber-js features/plugin/enable.feature features/plugin/install.feature && npm run check:features` | ✅ | ⬜ pending |
@@ -67,6 +67,12 @@ scenario, so no separate Wave 0 is needed.
 | 1-09-02 | 09 | 5 | FND-01, FND-02 | T-01-22, T-01-23 | Settings written under the sandbox HOME or project only | behavioral | `npx cucumber-js features/plugin/import.feature features/plugin/pending.feature && npm run check:features` | ❌ task | ⬜ pending |
 | 1-10-01 | 10 | 6 | FND-01, FND-02 | T-01-25, T-01-26 | Plugin arms released by the world; resolution fails on an unknown or ambiguous plugin | behavioral | `npx cucumber-js features/plugin/fetch.feature features/marketplace/failed-add.feature features/marketplace/git-source.feature && npm run check:features` | ❌ task | ⬜ pending |
 | 1-10-02 | 10 | 6 | FND-01, FND-02 | T-01-27 | Clone reader reads only the sandbox scope's checkouts | behavioral | `npx cucumber-js features/plugin/git-source.feature features/plugin/git-source-update.feature && npm run check:features` | ❌ task | ⬜ pending |
+
+Plan 02 lands both of its tasks in Task 2's feature commit: once a session records its payloads, six
+existing scenarios fail until Task 2 compares their session reports. So 1-02-01 is sampled when the
+task ends, makes no commit, and gets the `npm-check` hook in that shared commit, and no commit leaves an
+existing scenario failing. Task 2 then commits the ROADMAP file-ownership note alone. The plans of
+waves 3, 4, and 5 run one at a time in this worktree; the wave numbers stay as they are.
 
 Phase gate (after wave 6): `npm run check` on the combined tree.
 
