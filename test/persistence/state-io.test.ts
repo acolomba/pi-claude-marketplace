@@ -11,7 +11,6 @@ import {
   type DisabledPluginRecord,
   type ExtensionState,
   type PluginInstallRecord,
-  clonePluginRecord,
   isRecordedButDisabled,
   loadState,
   saveState,
@@ -90,109 +89,6 @@ for (const { enabled, expectedDisabled } of [
     assert.strictEqual(disabled, expectedDisabled);
   });
 }
-
-test("clones every plugin field without retaining nested aliases", () => {
-  // arrange
-  const record: PluginInstallRecord = {
-    version: "sha-a1b2c3d4e5f6",
-    resolvedSource: "https://github.com/acme/plugin",
-    resolvedSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
-    hookEntries: [{ event: "PreToolUse", matcher: "Bash" }, { event: "SessionStart" }],
-    dependencyDisabled: true,
-    compatibility: {
-      installable: false,
-      notes: ["partial"],
-      supported: ["skills"],
-      unsupported: ["commands"],
-    },
-    resources: {
-      skills: ["skill-a"],
-      prompts: ["command-a"],
-      agents: ["agent-a"],
-      mcpServers: ["mcp-a"],
-      hooks: ["hooks-a"],
-      workflows: ["plugin:build"],
-    },
-    enabled: false,
-    provenance: "dependency",
-    installedAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-02-01T00:00:00.000Z",
-  };
-  const expectedRecord: PluginInstallRecord = {
-    version: "sha-a1b2c3d4e5f6",
-    resolvedSource: "https://github.com/acme/plugin",
-    resolvedSha: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
-    hookEntries: [{ event: "PreToolUse", matcher: "Bash" }, { event: "SessionStart" }],
-    dependencyDisabled: true,
-    compatibility: {
-      installable: false,
-      notes: ["partial"],
-      supported: ["skills"],
-      unsupported: ["commands"],
-    },
-    resources: {
-      skills: ["skill-a"],
-      prompts: ["command-a"],
-      agents: ["agent-a"],
-      mcpServers: ["mcp-a"],
-      hooks: ["hooks-a"],
-      workflows: ["plugin:build"],
-    },
-    enabled: false,
-    provenance: "dependency",
-    installedAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-02-01T00:00:00.000Z",
-  };
-
-  // act
-  const clonedRecord = clonePluginRecord(record);
-
-  // assert
-  assert.deepStrictEqual(clonedRecord, expectedRecord);
-  assert.notStrictEqual(clonedRecord, record);
-  assert.notStrictEqual(clonedRecord.hookEntries, record.hookEntries);
-  assert.notStrictEqual(clonedRecord.hookEntries?.[0], record.hookEntries?.[0]);
-  assert.notStrictEqual(clonedRecord.compatibility, record.compatibility);
-  assert.notStrictEqual(clonedRecord.compatibility.notes, record.compatibility.notes);
-  assert.notStrictEqual(clonedRecord.resources, record.resources);
-  assert.notStrictEqual(clonedRecord.resources.skills, record.resources.skills);
-  // WLIF-01: the enumeration must deep-copy the workflows axis too. A spread
-  // would alias it, and a later in-place mutation of the live record would
-  // reach the snapshot the removal paths read from.
-  assert.notStrictEqual(clonedRecord.resources.workflows, record.resources.workflows);
-});
-
-test("clones a legacy plugin without inventing optional fields", () => {
-  // arrange
-  const record: PluginInstallRecord = {
-    version: "1.0.0",
-    resolvedSource: "/plugins/legacy",
-    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
-    enabled: true,
-    provenance: "explicit",
-    installedAt: "2025-01-01T00:00:00.000Z",
-    updatedAt: "2025-01-01T00:00:00.000Z",
-  };
-
-  // act
-  const clonedRecord = clonePluginRecord(record);
-
-  // assert
-  assert.deepStrictEqual(clonedRecord, {
-    version: "1.0.0",
-    resolvedSource: "/plugins/legacy",
-    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
-    enabled: true,
-    provenance: "explicit",
-    installedAt: "2025-01-01T00:00:00.000Z",
-    updatedAt: "2025-01-01T00:00:00.000Z",
-  });
-  assert.strictEqual(Object.hasOwn(clonedRecord, "resolvedSha"), false);
-  assert.strictEqual(Object.hasOwn(clonedRecord, "hookEntries"), false);
-  assert.strictEqual(Object.hasOwn(clonedRecord, "dependencyDisabled"), false);
-});
 
 test("disables a plugin while preserving its complete inventory", () => {
   // arrange

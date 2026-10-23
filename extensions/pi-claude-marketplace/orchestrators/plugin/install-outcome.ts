@@ -1379,11 +1379,10 @@ async function runInstallLedgerBody(
         // down. Do not "fix" this literal by carrying the field through from
         // `existing`: a stale marker would make the planner read a live record
         // as one it is still responsible for. The reverse asymmetry is
-        // deliberate too -- `clonePluginRecord` and `toDisabledRecord`
-        // (`persistence/state-io.ts`) both PRESERVE the marker, because a
-        // snapshot restored after a failed operation and a record a user then
-        // disables are not re-materializations, and losing it there would let
-        // a held-down record read as a disable the user asked for.
+        // deliberate too -- `toDisabledRecord` (`persistence/state-io.ts`)
+        // PRESERVES the marker, because a record a user then disables is not a
+        // re-materialization, and losing it there would let a held-down record
+        // read as a disable the user asked for.
         // D-04-01 / ENBL-02: a KEPT record's provenance rides through the
         // enable branch, which hand-builds its options with
         // `allowExistingRecord` and never names the field -- falling back

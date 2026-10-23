@@ -133,7 +133,6 @@ export const MANIFEST_LOOKUP_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts",
   "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts",

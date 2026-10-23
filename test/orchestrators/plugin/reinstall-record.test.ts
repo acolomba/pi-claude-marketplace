@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { describe } from "node:test";
 
 import {
   recordReinstallOutcome,
+  reinstallOutcomeFromRun,
   reinstallReasonsFromError,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-record.ts";
 import {
@@ -20,6 +21,7 @@ import {
 
 import type { MaterializablePlugin } from "../../../extensions/pi-claude-marketplace/domain/resolver-types.ts";
 import type { ReinstallPreparedHandles } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts";
+import type { UpdateRunOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import type {
   ExtensionState,
   PluginInstallRecord,
@@ -729,4 +731,206 @@ test("a thrown value that is not an Error narrows to no reason", () => {
 
   // assert
   assert.strictEqual(reasons, undefined);
+});
+
+const RUN_TARGET = { name: "hello", marketplace: "mp", scope: "project" } as const;
+
+describe("reinstallOutcomeFromRun", () => {
+  test("REI-04 / D-18-08: a swapped candidate is reinstalled at the version the runner derived", () => {
+    // arrange
+    const run: UpdateRunOutcome = {
+      partition: "updated",
+      name: "hello",
+      fromVersion: "1.0.0",
+      toVersion: "1.1.0",
+      stagedAgentNames: ["hello-bot"],
+      stagedMcpServerNames: ["hello-server"],
+      declaresAgents: true,
+      declaresMcp: true,
+      declaresWorkflows: false,
+      constraint: undefined,
+      notes: ["skill tool could not be read"],
+    };
+
+    // act
+    const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, undefined);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "reinstalled",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      version: "1.1.0",
+      stagedAgentNames: ["hello-bot"],
+      stagedMcpServerNames: ["hello-server"],
+      declaresAgents: true,
+      declaresMcp: true,
+      declaresWorkflows: false,
+    });
+  });
+
+  test("WARN-01 / WLIF-06: a swapped candidate carries its degraded kinds and the stale-command flag", () => {
+    // arrange
+    const run: UpdateRunOutcome = {
+      partition: "updated",
+      name: "hello",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: true,
+      constraint: undefined,
+      degradedKinds: ["skill", "command"],
+      staleWorkflowCommand: true,
+    };
+
+    // act
+    const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, undefined);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "reinstalled",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      version: "1.0.0",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: true,
+      degradedKinds: ["skill", "command"],
+      staleWorkflowCommand: true,
+    });
+  });
+
+  test("ENBL-05: an unchanged run is an already-disabled skip", () => {
+    // arrange
+    const run: UpdateRunOutcome = {
+      partition: "unchanged",
+      name: "hello",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+      constraint: undefined,
+    };
+
+    // act
+    const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, undefined);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "skipped",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      notes: ["already disabled"],
+    });
+  });
+
+  test("D-18-07: a skipped run keeps its notes and typed reasons", () => {
+    // arrange
+    const run: UpdateRunOutcome = {
+      partition: "skipped",
+      name: "hello",
+      fromVersion: "1.0.0",
+      notes: ["no version satisfies ^1.0.0 (app@mp)"],
+      reasons: ["dependents constrain"],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    };
+
+    // act
+    const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, undefined);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "skipped",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      notes: ["no version satisfies ^1.0.0 (app@mp)"],
+      reasons: ["dependents constrain"],
+    });
+  });
+
+  test("a preflight failure keeps its notes and reasons and carries no cause", () => {
+    // arrange
+    const run: UpdateRunOutcome = {
+      partition: "failed",
+      name: "hello",
+      notes: ["not found"],
+      reasons: ["not in manifest"],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    };
+
+    // act
+    const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, undefined);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      notes: ["not found"],
+      reasons: ["not in manifest"],
+    });
+  });
+
+  test("D-18-10: a commit failure carries the captured aggregate error and one child per failed bridge", () => {
+    // arrange
+    const skillsCause = new Error("skills refused");
+    const workflowsCause = new Error("workflows refused");
+    const aggregate = new Error("replace failed");
+    const run: UpdateRunOutcome = {
+      partition: "failed",
+      name: "hello",
+      fromVersion: "1.0.0",
+      toVersion: "1.1.0",
+      notes: ["replace failed", "skills: skills refused", "workflows: workflows refused"],
+      reasons: ["rollback partial"],
+      phaseFailures: [
+        { phase: "skills", msg: "skills refused" },
+        { phase: "workflows", msg: "workflows refused" },
+      ],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    };
+
+    // act
+    const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, {
+      error: aggregate,
+      failures: [
+        { phase: "skills", msg: "skills refused", cause: skillsCause },
+        { phase: "workflows", msg: "workflows refused", cause: workflowsCause },
+      ],
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      notes: ["replace failed", "skills: skills refused", "workflows: workflows refused"],
+      reasons: ["rollback partial"],
+      cause: aggregate,
+      rollbackPartial: [
+        { phase: "skills", cause: skillsCause },
+        { phase: "workflows", cause: workflowsCause },
+      ],
+    });
+    assert.ok(outcome.partition === "failed");
+    assert.strictEqual(outcome.cause, aggregate);
+  });
 });

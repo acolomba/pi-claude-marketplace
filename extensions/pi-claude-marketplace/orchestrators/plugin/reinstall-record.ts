@@ -28,6 +28,7 @@ import type {
   ReinstallSkippedOutcome,
 } from "../types.ts";
 import type { ReinstallPreparedHandles } from "./reinstall-replace.ts";
+import type { UpdatePhase3Failure, UpdateRunOutcome } from "./update-swap.ts";
 
 /** Identity shared by every composed reinstall outcome. */
 export interface ReinstallOutcomeTarget {
@@ -87,6 +88,57 @@ export function recordReinstallOutcome(input: RecordReinstallOutcomeInput): Rein
       return failedOutcome(input);
     case "reinstalled":
       return recordReinstalledOutcome(input);
+  }
+}
+
+/** The phase-3 aggregate the shared swap reported through its direct-mode callback. */
+export interface ReinstallPhaseFailure {
+  readonly error: Error;
+  readonly failures: readonly UpdatePhase3Failure[];
+}
+
+/**
+ * Projects the shared runner's outcome onto reinstall's. A swapped candidate
+ * is `reinstalled` at the version the runner derived (D-18-08); every verdict
+ * the runner reached without swapping keeps its notes and typed reasons.
+ */
+export function reinstallOutcomeFromRun(
+  target: ReinstallOutcomeTarget,
+  run: UpdateRunOutcome,
+  phaseFailure: ReinstallPhaseFailure | undefined,
+): ReinstallPluginOutcome {
+  const identity = { name: target.name, marketplace: target.marketplace, scope: target.scope };
+  switch (run.partition) {
+    case "updated":
+      return {
+        partition: "reinstalled",
+        ...identity,
+        version: run.toVersion,
+        stagedAgentNames: run.stagedAgentNames,
+        stagedMcpServerNames: run.stagedMcpServerNames,
+        declaresAgents: run.declaresAgents,
+        declaresMcp: run.declaresMcp,
+        declaresWorkflows: run.declaresWorkflows,
+        ...(run.degradedKinds !== undefined && { degradedKinds: run.degradedKinds }),
+        ...(run.staleWorkflowCommand === true && { staleWorkflowCommand: true }),
+      };
+    case "unchanged":
+      // Under reinstall's policy only the preflight's disabled-record branch
+      // answers `unchanged`: the record was disabled after reinstall read it.
+      return { partition: "skipped", ...identity, notes: ["already disabled"] };
+    case "skipped":
+      return { partition: "skipped", ...identity, notes: run.notes, reasons: run.reasons };
+    case "failed":
+      return {
+        partition: "failed",
+        ...identity,
+        notes: run.notes,
+        reasons: run.reasons,
+        ...(phaseFailure !== undefined && {
+          cause: phaseFailure.error,
+          rollbackPartial: phaseFailure.failures.map((f) => ({ phase: f.phase, cause: f.cause })),
+        }),
+      };
   }
 }
 
@@ -259,9 +311,7 @@ function recordReinstalledOutcome(
     // the record from `oldRecord` field by field, so the field's absence is what
     // clears the load-time check's marker on a plugin that is live again. Do not
     // carry it forward from `oldRecord`: a stale marker on a re-materialized
-    // record would read as a hold the check still owns. The rollback path is the
-    // deliberate opposite -- it restores a `clonePluginRecord` snapshot, which
-    // PRESERVES the marker, because a restore puts the record back as it was.
+    // record would read as a hold the check still owns.
     // D-04-01: a reinstall replaces the artifacts, not the reason the plugin
     // is here -- the old record's provenance carries forward with installedAt.
     // D-04-07 names `install` alone as the verb that promotes a dependency the

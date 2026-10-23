@@ -2004,8 +2004,8 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     verifyBoundary();
   });
 
-  // The re-materialize takes the per-scope state lock itself
-  // (`runLockedReinstall`), so a concurrent process holding it fails the
+  // The re-materialize takes the per-scope state lock itself (the shared
+  // swap's intent mark), so a concurrent process holding it fails the
   // reinstall at the lock rather than on anything it would have read. That
   // failure is caught INSIDE `reinstallPlugin` and returned as a `failed`
   // outcome, and the failed arm prefers the outcome's own pre-narrowed reason
@@ -2062,7 +2062,14 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       },
     ]);
     assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
-    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
+    // D-18-10: the shared swap stages before its intent mark takes the lock,
+    // so the aborted run leaves the two empty staging parents behind.
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+      "pi-claude-marketplace/",
+      "pi-claude-marketplace/commands-staging/",
+      "pi-claude-marketplace/skills-staging/",
+      "pi-claude-marketplace/state.json",
+    ]);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
@@ -2145,8 +2152,8 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
               workflows: ["hello:greet"],
             },
             enabled: true,
-            // D-68-02: the promotion re-materializes at the recorded version, so
-            // both the version and the original install time survive it.
+            // D-18-08 / D-18-09: the version survives because the marketplace
+            // still offers it, and the original install time always survives.
             installedAt: RECORDED_AT,
             updatedAt: REMATERIALIZED_AT,
           },
@@ -2392,8 +2399,11 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
   test("SF-01: classifies the composed notes when the re-materialize reports no reason", async (t) => {
     // arrange
     const { cwd, locations } = await createHermeticProjectScope(t, "unnarrowed-failure");
+    // The manifest declares the sibling too, so the dependency walk can read
+    // it (D-18-17) and the re-materialize reaches the conflict.
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
       hello: { skill: "clean", command: true },
+      conflictor: { skill: "clean" },
     });
     // A sibling record already owns the generated skill name this promotion
     // would write, so the cross-plugin conflict fails the re-materialize with
@@ -2592,10 +2602,9 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     verifyBoundary();
   });
 
-  test("SF-02: promotes a healthy plugin under one marketplace while a corrupt manifest fails its own", async (t) => {
+  test("SF-02 / D-18-17: a corrupt manifest fails its own plugin and fails the healthy sibling's promotion as unreadable", async (t) => {
     // arrange
     const { cwd, locations } = await createHermeticProjectScope(t, "per-plugin-isolation");
-    t.mock.timers.enable({ apis: ["Date"], now: new Date(REMATERIALIZED_AT) });
     const bad = await writeMarketplaceSource(cwd, "bad-src", "bad", { alpha: { skill: "clean" } });
     const good = await writeMarketplaceSource(cwd, "good-src", "good", {
       bravo: { skill: "clean", command: true },
@@ -2604,7 +2613,9 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     const alphaRoot = path.join(bad.marketplaceRoot, "plugins", "alpha");
     const bravoRoot = path.join(good.marketplaceRoot, "plugins", "bravo");
     // `bad` is inserted first so the corrupt manifest is scanned before the
-    // healthy sibling under the other marketplace.
+    // healthy sibling under the other marketplace. The sibling's
+    // re-materialize walks every record's declarations, cannot read alpha's,
+    // and fails closed (D-18-17).
     const seeded: ExtensionState = {
       schemaVersion: 3,
       lastReconciledExtensionVersion: STALE_STAMP,
@@ -2640,7 +2651,8 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
       outcomes,
     );
 
-    // assert
+    // assert -- both rows fail, so the version stamp is not written and the
+    // gate stays open: the promotion is retried on the next load.
     assert.deepStrictEqual(outcomes, [
       {
         kind: "plugin-install-failed",
@@ -2650,66 +2662,15 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
         reason: "unparseable",
       },
       {
-        kind: "plugin-backfilled",
+        kind: "plugin-install-failed",
         scope: "project",
         marketplace: "good",
         plugin: "bravo",
-        version: "1.0.0",
-        dependencies: [],
-        installable: true,
-        unsupported: [],
+        reason: "unreadable",
       },
     ]);
-    assert.deepStrictEqual(await loadState(locations.extensionRoot), {
-      schemaVersion: 3,
-      lastReconciledExtensionVersion: STALE_STAMP,
-      marketplaces: {
-        bad: marketplaceRecord(cwd, "bad", "bad-src", bad.manifestPath, bad.marketplaceRoot, {
-          alpha: pluginRecord({
-            pluginRoot: alphaRoot,
-            installable: false,
-            supported: ["skills"],
-            unsupported: ["themes"],
-          }),
-        }),
-        good: marketplaceRecord(cwd, "good", "good-src", good.manifestPath, good.marketplaceRoot, {
-          bravo: {
-            version: "1.0.0",
-            resolvedSource: bravoRoot,
-            compatibility: {
-              installable: true,
-              notes: [],
-              supported: ["skills", "commands"],
-              unsupported: [],
-            },
-            resources: {
-              skills: ["bravo-tool"],
-              prompts: ["bravo:deploy"],
-              agents: [],
-              mcpServers: [],
-              hooks: [],
-              workflows: [],
-            },
-            enabled: true,
-            provenance: "explicit",
-            installedAt: RECORDED_AT,
-            updatedAt: REMATERIALIZED_AT,
-          },
-        }),
-      },
-    });
-    assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
-      "pi-claude-marketplace/",
-      "pi-claude-marketplace/commands-staging/",
-      "pi-claude-marketplace/resources/",
-      "pi-claude-marketplace/resources/prompts/",
-      "pi-claude-marketplace/resources/prompts/bravo:deploy.md",
-      "pi-claude-marketplace/resources/skills/",
-      "pi-claude-marketplace/resources/skills/bravo-tool/",
-      "pi-claude-marketplace/resources/skills/bravo-tool/SKILL.md",
-      "pi-claude-marketplace/skills-staging/",
-      "pi-claude-marketplace/state.json",
-    ]);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(await retryTree(locations.scopeRoot), seededScopeTree());
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
