@@ -35,13 +35,13 @@ settle which one wins (see PROJECT.md).
 
 ### install
 
-- [ ] **INS-01**: Installing a plugin that declares dependencies installs the whole closure in dependency order and reports each member
-- [ ] **INS-02**: A dependency closure that cannot be resolved (a missing dependency, an unsatisfiable version constraint) installs nothing
-- [ ] **INS-03**: Installing a partially available plugin (skills plus an unsupported component) fails without `--partial` and installs the supported part with `--partial`, and `info` names what was left out
-- [ ] **INS-04**: Installing into the user scope with no `--scope` and with `--scope user` records it in the user scope only, and a new session in any project offers its skills
+- [x] **INS-01**: Installing a plugin that declares dependencies installs the whole closure in dependency order and reports each member
+- [x] **INS-02**: A dependency closure that cannot be resolved (a missing dependency, an unsatisfiable version constraint) installs nothing
+- [x] **INS-03**: Installing a partially available plugin (skills plus an unsupported component) fails without `--partial` and installs the supported part with `--partial`, and `info` names what was left out
+- [x] **INS-04**: Installing into the user scope with no `--scope` and with `--scope user` records it in the user scope only, and a new session in any project offers its skills
 - [ ] **INS-05**: A plugin with a git, a github, or a url source installs from the loopback git host; a second install of the same pinned source reuses the clone and makes no request
 - [ ] **INS-06**: A plugin source the host refuses (404, 401, connection drop) fails with the matching reason and leaves no record, clone, or skill behind
-- [ ] **INS-07**: An install that fails partway (a phase cannot write its target) rolls back every artifact it wrote, and a retry succeeds once the cause is gone
+- [x] **INS-07**: An install that fails partway (a phase cannot write its target) rolls back every artifact it wrote, and a retry succeeds once the cause is gone
 
 ### uninstall
 
@@ -54,7 +54,7 @@ settle which one wins (see PROJECT.md).
 - [x] **UPD-01**: `update @<marketplace>` updates every outdated plugin of that marketplace and leaves the plugins of other marketplaces unchanged
 - [ ] **UPD-02**: Updating a git-source plugin fetches the new revision on a cache miss and makes no request when the cache already holds it
 - [x] **UPD-03**: A dependency whose version constraint the new version breaks blocks the update and changes nothing
-- [ ] **UPD-04**: An update that fails partway keeps the installed version, its skills, and its record
+- [x] **UPD-04**: An update that fails partway keeps the installed version, its skills, and its record
 - [x] **UPD-05**: `update --partial` updates a plugin whose new version became partially available, and fails without the flag
 
 ### reinstall
@@ -65,19 +65,19 @@ settle which one wins (see PROJECT.md).
 
 ### list
 
-- [ ] **LST-01**: `list` shows installed, available, unavailable, and partially available plugins with their status and scope
-- [ ] **LST-02**: `--installed`, `--available`, `--unavailable`, and `--partial` each keep only their rows, and combined filters keep the union
-- [ ] **LST-03**: `list <marketplace>` keeps only that marketplace's plugins, and an unknown marketplace fails as not added
-- [ ] **LST-04**: `list --remote` reports plugins whose source has a newer revision on the git host, and `list` without it makes no request
-- [ ] **LST-05**: `list --scope user` and `--scope project` keep only that scope's installations
+- [x] **LST-01**: `list` shows installed, available, unavailable, and partially available plugins with their status and scope
+- [x] **LST-02**: `--installed`, `--available`, `--unavailable`, and `--partial` each keep only their rows, and combined filters keep the union
+- [x] **LST-03**: `list <marketplace>` keeps only that marketplace's plugins, and an unknown marketplace fails as not added
+- [x] **LST-04**: `list --remote` reports plugins whose source has a newer revision on the git host, and `list` without it makes no request
+- [x] **LST-05**: `list --scope user` and `--scope project` keep only that scope's installations
 
 ### info
 
-- [ ] **INF-01**: `info` on an installed plugin shows its version, scope, source, and the skills it provides
-- [ ] **INF-02**: `info` on an available but not installed plugin shows what installing it would provide
-- [ ] **INF-03**: `info` on a partially available or unavailable plugin names the reasons
-- [ ] **INF-04**: `info --fetch` reads the remote source and reports a newer revision, and `info` without it makes no request
-- [ ] **INF-05**: `info` on a plugin the marketplace does not offer fails as not in the manifest
+- [x] **INF-01**: `info` on an installed plugin shows its version, scope, source, and the skills it provides
+- [x] **INF-02**: `info` on an available but not installed plugin shows what installing it would provide
+- [x] **INF-03**: `info` on a partially available or unavailable plugin names the reasons
+- [x] **INF-04**: `info --fetch` reads the remote source and reports a newer revision, and `info` without it makes no request
+- [x] **INF-05**: `info` on a plugin the marketplace does not offer fails as not in the manifest
 
 ### pending
 
@@ -93,15 +93,15 @@ settle which one wins (see PROJECT.md).
 
 ### fetch
 
-- [ ] **FET-01**: `fetch <plugin>@<marketplace>` refreshes the cached source of a git-source plugin from the host without installing a new version
-- [ ] **FET-02**: `fetch @<marketplace>` and a bare `fetch` refresh every git-source plugin in scope, continuing after one fails
-- [ ] **FET-03**: `fetch` of a path-source plugin makes no request and reports nothing to fetch
+- [x] **FET-01**: `fetch <plugin>@<marketplace>` refreshes the cached source of a git-source plugin from the host without installing a new version
+- [x] **FET-02**: `fetch @<marketplace>` and a bare `fetch` refresh every git-source plugin in scope, continuing after one fails
+- [x] **FET-03**: `fetch` of a path-source plugin makes no request and reports nothing to fetch
 
 ### prune
 
-- [ ] **PRN-01**: `prune` removes orphaned dependencies and unused clones and reports each one
-- [ ] **PRN-02**: `prune --dry-run` reports the same rows and removes nothing
-- [ ] **PRN-03**: `prune` with nothing to remove reports an empty result
+- [x] **PRN-01**: `prune` removes orphaned dependencies and unused clones and reports each one
+- [x] **PRN-02**: `prune --dry-run` reports the same rows and removes nothing
+- [x] **PRN-03**: `prune` with nothing to remove reports an empty result
 
 ### import
 
@@ -153,46 +153,46 @@ settle which one wins (see PROJECT.md).
 | ENA-04 | Phase 2 | Pending |
 | ENA-05 | Phase 2 | Pending |
 | ENA-06 | Phase 2 | Pending |
-| INS-01 | Phase 3 | Pending |
-| INS-02 | Phase 3 | Pending |
-| INS-03 | Phase 3 | Pending |
-| INS-04 | Phase 3 | Pending |
+| INS-01 | Phase 3 | Complete |
+| INS-02 | Phase 3 | Complete |
+| INS-03 | Phase 3 | Complete |
+| INS-04 | Phase 3 | Complete |
 | INS-05 | Phase 4 | Pending |
 | INS-06 | Phase 4 | Pending |
-| INS-07 | Phase 5 | Pending |
+| INS-07 | Phase 5 | Complete |
 | UNI-01 | Phase 6 | Complete |
 | UNI-02 | Phase 6 | Complete |
 | UNI-03 | Phase 4 | Pending |
 | UPD-01 | Phase 7 | Complete |
 | UPD-02 | Phase 4 | Pending |
 | UPD-03 | Phase 7 | Complete |
-| UPD-04 | Phase 5 | Pending |
+| UPD-04 | Phase 5 | Complete |
 | UPD-05 | Phase 7 | Complete |
 | REI-01 | Phase 8 | Complete |
 | REI-02 | Phase 8 | Complete |
 | REI-03 | Phase 8 | Complete |
-| LST-01 | Phase 9 | Pending |
-| LST-02 | Phase 9 | Pending |
-| LST-03 | Phase 9 | Pending |
-| LST-04 | Phase 9 | Pending |
-| LST-05 | Phase 9 | Pending |
-| INF-01 | Phase 10 | Pending |
-| INF-02 | Phase 10 | Pending |
-| INF-03 | Phase 10 | Pending |
-| INF-04 | Phase 10 | Pending |
-| INF-05 | Phase 10 | Pending |
+| LST-01 | Phase 9 | Complete |
+| LST-02 | Phase 9 | Complete |
+| LST-03 | Phase 9 | Complete |
+| LST-04 | Phase 9 | Complete |
+| LST-05 | Phase 9 | Complete |
+| INF-01 | Phase 10 | Complete |
+| INF-02 | Phase 10 | Complete |
+| INF-03 | Phase 10 | Complete |
+| INF-04 | Phase 10 | Complete |
+| INF-05 | Phase 10 | Complete |
 | PND-01 | Phase 11 | Pending |
 | PND-02 | Phase 11 | Pending |
 | REC-01 | Phase 11 | Pending |
 | REC-02 | Phase 11 | Pending |
 | REC-03 | Phase 11 | Pending |
 | REC-04 | Phase 11 | Pending |
-| FET-01 | Phase 12 | Pending |
-| FET-02 | Phase 12 | Pending |
-| FET-03 | Phase 12 | Pending |
-| PRN-01 | Phase 12 | Pending |
-| PRN-02 | Phase 12 | Pending |
-| PRN-03 | Phase 12 | Pending |
+| FET-01 | Phase 12 | Complete |
+| FET-02 | Phase 12 | Complete |
+| FET-03 | Phase 12 | Complete |
+| PRN-01 | Phase 12 | Complete |
+| PRN-02 | Phase 12 | Complete |
+| PRN-03 | Phase 12 | Complete |
 | IMP-01 | Phase 13 | Pending |
 | IMP-02 | Phase 13 | Pending |
 | IMP-03 | Phase 13 | Pending |

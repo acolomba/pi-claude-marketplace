@@ -114,16 +114,16 @@ Step module paths are relative to `features/step_definitions/`.
 
 - [x] **Phase 1: Suite Foundation** — Every driver, fixture, stand-in, and shared step that more than one later phase needs, each with a seed scenario, so Phases 2-15 add only their own files (completed 2026-10-23)
 - [ ] **Phase 2: Plugin Enable and Disable** — Skills come and go across sessions while the plugin stays installed, no-ops skip, scopes stay separate, and dependencies follow Claude Code
-- [ ] **Phase 3: Install Dependencies, Partial, and User Scope** — The dependency closure, an unresolvable closure, `--partial`, and the user scope
+- [x] **Phase 3: Install Dependencies, Partial, and User Scope** — The dependency closure, an unresolvable closure, `--partial`, and the user scope (completed 2026-10-23)
 - [ ] **Phase 4: Git-Source Plugins** — Install, refusal, update, and uninstall of git-source plugins against the loopback git host, with the request log
-- [ ] **Phase 5: Install and Update Rollback** — An install or update that fails partway leaves the scope as it was, and a retry succeeds
+- [x] **Phase 5: Install and Update Rollback** — An install or update that fails partway leaves the scope as it was, and a retry succeeds (completed 2026-10-23)
 - [x] **Phase 6: Uninstall Data and Prune Flags** — `uninstall` removes or keeps the plugin data directory and prunes unneeded dependencies (completed 2026-10-23)
 - [x] **Phase 7: Plugin Update by Marketplace, Constraint, and Partial** — `update @<marketplace>`, a blocking version constraint, and `update --partial` (completed 2026-10-23)
 - [x] **Phase 8: Plugin Reinstall** — Single-plugin reinstall, restoring deleted skill files, and the not-installed failure (completed 2026-10-23)
-- [ ] **Phase 9: Plugin List** — Every row status, the filters, marketplace and scope selection, and `--remote`
-- [ ] **Phase 10: Plugin Info** — Installed, available, partial, and unavailable plugins, `--fetch`, and the not-in-manifest failure
+- [x] **Phase 9: Plugin List** — Every row status, the filters, marketplace and scope selection, and `--remote` (completed 2026-10-23)
+- [x] **Phase 10: Plugin Info** — Installed, available, partial, and unavailable plugins, `--fetch`, and the not-in-manifest failure (completed 2026-10-23)
 - [ ] **Phase 11: Pending and Reconcile** — `pending` after hand-edited configs, and a new session converging on them
-- [ ] **Phase 12: Fetch and Prune** — Refreshing git-source plugin caches, and removing orphaned dependencies and unused clones
+- [x] **Phase 12: Fetch and Prune** — Refreshing git-source plugin caches, and removing orphaned dependencies and unused clones (completed 2026-10-23)
 - [ ] **Phase 13: Plugin Import** — Importing enabled plugins and marketplaces from a Claude Code settings file
 - [ ] **Phase 14: Bootstrap, Browse, Help, and Usage Errors** — `bootstrap`, the non-TUI `browse` refusal, plugin `help`, and every plugin usage rejection
 - [ ] **Phase 15: State Lock and Marketplace Failure Cleanup** — A held state lock refuses plugin and marketplace commands, a failed `marketplace add` leaves nothing, and `marketplace remove` cleans plugin clones
@@ -402,16 +402,16 @@ Plans:
 | --- | --- | --- | --- |
 | 1. Suite Foundation | 10/10 | Complete    | 2026-10-23 |
 | 2. Plugin Enable and Disable | 0/TBD | Not started | - |
-| 3. Install Dependencies, Partial, and User Scope | 0/TBD | Not started | - |
+| 3. Install Dependencies, Partial, and User Scope | 1/1 | Complete    | 2026-10-23 |
 | 4. Git-Source Plugins | 0/TBD | Not started | - |
-| 5. Install and Update Rollback | 0/TBD | Not started | - |
+| 5. Install and Update Rollback | 1/1 | Complete    | 2026-10-23 |
 | 6. Uninstall Data and Prune Flags | 1/1 | Complete    | 2026-10-23 |
 | 7. Plugin Update by Marketplace, Constraint, and Partial | 1/1 | Complete    | 2026-10-23 |
 | 8. Plugin Reinstall | 1/1 | Complete    | 2026-10-23 |
-| 9. Plugin List | 0/TBD | Not started | - |
-| 10. Plugin Info | 0/TBD | Not started | - |
+| 9. Plugin List | 2/2 | Complete    | 2026-10-23 |
+| 10. Plugin Info | 1/1 | Complete    | 2026-10-23 |
 | 11. Pending and Reconcile | 0/TBD | Not started | - |
-| 12. Fetch and Prune | 0/TBD | Not started | - |
+| 12. Fetch and Prune | 2/2 | Complete    | 2026-10-23 |
 | 13. Plugin Import | 0/TBD | Not started | - |
 | 14. Bootstrap, Browse, Help, and Usage Errors | 0/TBD | Not started | - |
 | 15. State Lock and Marketplace Failure Cleanup | 0/TBD | Not started | - |
