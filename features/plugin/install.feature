@@ -190,3 +190,69 @@ Feature: Plugin install
     Then the "claude-plugins.local.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
+
+  Scenario: Installing with no --scope records the plugin in the user scope only
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin install demo@fixtures"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the project scope has no installed plugins
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+
+  Scenario: Installing with --scope user records the plugin in the user scope only
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin install demo@fixtures --scope user"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the project scope has no installed plugins
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+
+  Scenario: The project-scope plugin list shows nothing of the marketplace once the user scope installs its plugin with no --scope
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures"
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists no marketplaces
+
+  Scenario: The project-scope plugin list shows nothing of the marketplace once the user scope installs its plugin with --scope user
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists no marketplaces
+
+  Scenario: A session in another project offers the skills of a plugin installed with no --scope
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures"
+    When the user starts a new pi session in another project
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
