@@ -1,8 +1,9 @@
 /**
  * @fileoverview Steps about the https git host that serves git marketplace
- * sources: arming one repository to fail or to require a credential, the
- * credential a user stores for the host, and the requests the host receives.
- * Only the feature files of the git source kinds use them.
+ * sources: arming one repository to fail or to require a credential, letting
+ * it serve again, the credential a user stores for the host, and the requests
+ * the host receives. A step names a repository through the `git repository`
+ * parameter type. Every arm is released with its scenario (HOST-03).
  */
 
 import assert from "node:assert/strict";
@@ -13,44 +14,86 @@ import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import { armedStatus } from "../lib/https-git-host/server.ts";
 
+import type { GitHostArm } from "../lib/https-git-host/server.ts";
+import type { GitRepositoryReference } from "../support/git-repository.ts";
 import type { ScenarioWorld } from "../support/world.ts";
 
-/** Returns the repository the git host serves the marketplace `name` from. */
-function publishedRepository(world: ScenarioWorld, name: string): string {
-  const published = world.requirePublished(name);
+interface ServedRepository {
+  readonly owner: string;
+  readonly directory: string;
+}
+
+/** Returns the owner and directory the git host serves `reference` under. */
+function servedRepository(
+  world: ScenarioWorld,
+  reference: GitRepositoryReference,
+): ServedRepository {
+  const published = world.requirePublished(reference.name);
   if (published.kind === "url" || published.kind === "github") {
-    return published.repository;
+    return { owner: published.owner, directory: published.repository };
   }
 
-  assert.fail(`the marketplace ${name} is not published as a git source`);
+  assert.fail(`the marketplace ${reference.name} is not published as a git source`);
+}
+
+/**
+ * Arms the repository `reference` names to fail as `arm`, and registers a
+ * release that disarms it, so the arm never outlives the scenario. The release
+ * ignores whether the repository was still armed: a scenario may have let it
+ * serve again.
+ */
+async function armRepository(
+  world: ScenarioWorld,
+  reference: GitRepositoryReference,
+  arm: GitHostArm,
+): Promise<void> {
+  const { owner, directory } = servedRepository(world, reference);
+  const { gitHost } = world;
+  await gitHost.arm(directory, arm, owner);
+  world.onRelease(() => {
+    gitHost.disarm(directory, owner);
+  });
 }
 
 Given(
-  "the git host answers {int} for the marketplace {string}",
-  async function (this: ScenarioWorld, status: number, name: string): Promise<void> {
-    await this.gitHost.arm(publishedRepository(this, name), {
-      kind: "status",
-      status: armedStatus(status),
-    });
+  "the git host answers {int} for the {git repository}",
+  async function (
+    this: ScenarioWorld,
+    status: number,
+    reference: GitRepositoryReference,
+  ): Promise<void> {
+    await armRepository(this, reference, { kind: "status", status: armedStatus(status) });
   },
 );
 
 Given(
-  "the git host drops the connection for the marketplace {string}",
-  async function (this: ScenarioWorld, name: string): Promise<void> {
-    await this.gitHost.arm(publishedRepository(this, name), { kind: "drop" });
+  "the git host drops the connection for the {git repository}",
+  async function (this: ScenarioWorld, reference: GitRepositoryReference): Promise<void> {
+    await armRepository(this, reference, { kind: "drop" });
   },
 );
 
 Given(
-  "the git host requires the user {string} with the password {string} for the marketplace {string}",
+  "the git host requires the user {string} with the password {string} for the {git repository}",
   async function (
     this: ScenarioWorld,
     user: string,
     password: string,
-    name: string,
+    reference: GitRepositoryReference,
   ): Promise<void> {
-    await this.gitHost.arm(publishedRepository(this, name), { kind: "credential", user, password });
+    await armRepository(this, reference, { kind: "credential", user, password });
+  },
+);
+
+Given(
+  "the git host serves the {git repository} again",
+  function (this: ScenarioWorld, reference: GitRepositoryReference): void {
+    const { owner, directory } = servedRepository(this, reference);
+    assert.strictEqual(
+      this.gitHost.disarm(directory, owner),
+      true,
+      `the git host has not armed the repository ${owner}/${directory}.git`,
+    );
   },
 );
 

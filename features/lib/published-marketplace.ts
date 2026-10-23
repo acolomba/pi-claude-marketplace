@@ -44,14 +44,20 @@ const MANIFEST_WRITERS: Readonly<
   "schema-invalid": writeInvalidManifest,
 };
 
-/** The git host as the publishing code needs it: where it keeps and serves repositories. */
+/**
+ * The git host as the publishing code needs it: where it keeps and serves
+ * repositories. A repository belongs to an owner, the host's default owner
+ * when a caller names none.
+ */
 export interface GitRepositoryHost {
-  /** Returns the bare repository the host serves for `directory`. */
-  repositoryPath(directory: string): string;
-  /** Returns the URL a user types to clone the repository `directory`. */
-  repositoryUrl(directory: string): string;
-  /** Returns the `owner/repo` shorthand a user types for the repository `directory`. */
-  repositoryShorthand(directory: string): string;
+  /** Returns the bare repository the host serves for `directory` of `owner`. */
+  repositoryPath(directory: string, owner?: string): string;
+  /** Returns the URL a user types to clone the repository `directory` of `owner`. */
+  repositoryUrl(directory: string, owner?: string): string;
+  /** Returns the `owner/repo` shorthand a user types for the repository `directory` of `owner`. */
+  repositoryShorthand(directory: string, owner?: string): string;
+  /** The owner a repository is served under when a caller names none. */
+  readonly defaultOwner: string;
   /** The scratch HOME of every git that writes the host's repositories. */
   readonly gitHome: string;
 }
@@ -75,15 +81,16 @@ export interface PathPublication {
 
 /**
  * A marketplace published as a git repository: `root` is the work tree that
- * holds its files, `repository` the directory the git host serves it under
- * `acme/`, and `bareRepository` the repository the host serves. `gitHome` is
- * the HOME of the git that commits and publishes it.
+ * holds its files, `owner` and `repository` the owner and directory the git
+ * host serves it under, and `bareRepository` the repository the host serves.
+ * `gitHome` is the HOME of the git that commits and publishes it.
  */
 export interface GitPublication {
   readonly kind: "url" | "github";
   readonly root: string;
   readonly source: string;
   readonly manifestPath: string;
+  readonly owner: string;
   readonly repository: string;
   readonly bareRepository: string;
   readonly gitHome: string;
@@ -206,6 +213,7 @@ export async function publishMarketplaceIn(
             ? gitHost.repositoryUrl(directory)
             : gitHost.repositoryShorthand(directory),
         manifestPath,
+        owner: gitHost.defaultOwner,
         repository: directory,
         bareRepository,
         gitHome: gitHost.gitHome,

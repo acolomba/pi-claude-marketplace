@@ -4,13 +4,16 @@
  * Pi reads its CA file and the git host's port once, when it starts, so each
  * worker starts one host before its Pi and keeps it for the run (HOST-01,
  * HOST-02). The host makes its own certificate at start, binds `127.0.0.1`
- * only, and serves the bare repositories under `repositories/acme/` through
- * `git http-backend`. It records every request in arrival order with the
- * status it answered, and counts connections, so a scenario can state the
- * exact traffic of a command (HOST-04). A scenario can arm one repository to
- * answer an error status, to drop the connection, or to require one
- * credential, and the other repositories keep serving (HOST-03). Before each
- * scenario the run resets it to an empty host with no arm.
+ * only, and serves the bare repositories under `repositories/<owner>/`
+ * through `git http-backend`. The owner is `acme` unless a caller names
+ * another, such as `anthropics` for the official marketplace. It records
+ * every request in arrival order with the status it answered, and counts
+ * connections, so a scenario can state the exact traffic of a command
+ * (HOST-04). A scenario can arm one repository to answer an error status, to
+ * drop the connection, or to require one credential, and the other
+ * repositories keep serving (HOST-03). An arm lasts until it is disarmed or
+ * the host is reset. Before each scenario the run resets it to an empty host
+ * with no arm.
  */
 
 import { execFile } from "node:child_process";
@@ -29,7 +32,7 @@ import type { Server } from "node:https";
 
 const execFileAsync = promisify(execFile);
 
-const OWNER = "acme";
+const DEFAULT_OWNER = "acme";
 
 // A one-day P-256 certificate for the loopback address the host binds.
 const CERTIFICATE_ARGUMENTS = [
@@ -58,9 +61,10 @@ const ARMED_STATUSES = [404, 500, 502, 503] as const;
 export type ArmedStatus = (typeof ARMED_STATUSES)[number];
 
 /**
- * How an armed repository fails until the next reset: it answers an error
- * status, drops the connection on every request, or answers 401 to every
- * request that does not carry one user and password.
+ * How an armed repository fails until it is disarmed or the host is reset
+ * (HOST-03): it answers an error status, drops the connection on every
+ * request, or answers 401 to every request that does not carry one user and
+ * password.
  */
 export type GitHostArm =
   | { readonly kind: "status"; readonly status: ArmedStatus }
@@ -106,7 +110,7 @@ export interface GitHostTraffic {
 /** Everything the host holds, which the run checks is empty before each scenario. */
 export interface GitHostSnapshot {
   readonly repositories: readonly string[];
-  /** The armed repositories, in arming order. */
+  /** The armed repositories as `owner/directory`, in arming order. */
   readonly arms: readonly string[];
   readonly requests: readonly GitHostRequest[];
   readonly connections: number;
@@ -174,13 +178,18 @@ function servedPath(requestPath: string, origin: string): string | undefined {
   }
 }
 
+/** Returns the key the arms use for the repository `directory` of `owner`. */
+function repositoryKey(directory: string, owner: string): string {
+  return `${owner}/${directory}`;
+}
+
 /**
  * Returns the arm of the repository that `served` belongs to: a decoded path
- * the CGI serves, under `/acme/<repository>/` or `/acme/<repository>.git/`.
+ * the CGI serves, under `/<owner>/<directory>/` or `/<owner>/<directory>.git/`.
  */
 function armFor(arms: ReadonlyMap<string, GitHostArm>, served: string): GitHostArm | undefined {
-  for (const [repository, arm] of arms) {
-    const prefix = `/${OWNER}/${repository}`;
+  for (const [key, arm] of arms) {
+    const prefix = `/${key}`;
     if (served.startsWith(`${prefix}/`) || served.startsWith(`${prefix}.git/`)) {
       return arm;
     }
@@ -271,6 +280,8 @@ export class HttpsGitHost {
   readonly certificatePath: string;
   /** The scratch HOME of every git that writes the repositories the host serves. */
   readonly gitHome: string;
+  /** The owner a repository is served under when a caller names none. */
+  readonly defaultOwner = DEFAULT_OWNER;
   private readonly repositories: string;
   private readonly server: Server;
   private readonly log: LoggedRequest[] = [];
@@ -309,44 +320,53 @@ export class HttpsGitHost {
     return new HttpsGitHost(root, server, port);
   }
 
-  /** Returns the bare repository the host serves as `acme/<directory>.git`. */
-  repositoryPath(directory: string): string {
-    return path.join(this.repositories, OWNER, `${directory}.git`);
+  /** Returns the bare repository the host serves as `<owner>/<directory>.git`. */
+  repositoryPath(directory: string, owner = DEFAULT_OWNER): string {
+    return path.join(this.repositories, owner, `${directory}.git`);
   }
 
-  /** Returns the URL a user types to clone the repository `directory`. */
-  repositoryUrl(directory: string): string {
-    return `https://${this.address}/${OWNER}/${directory}.git`;
+  /** Returns the URL a user types to clone the repository `directory` of `owner`. */
+  repositoryUrl(directory: string, owner = DEFAULT_OWNER): string {
+    return `https://${this.address}/${owner}/${directory}.git`;
   }
 
   /**
    * Returns the `owner/repo` shorthand a user types for the repository
-   * `directory`. The GitHub base override sends it to this host as the path
-   * that `repositoryUrl` names.
+   * `directory` of `owner`. The GitHub base override sends it to this host as
+   * the path that `repositoryUrl` names.
    */
-  repositoryShorthand(directory: string): string {
-    return `${OWNER}/${directory}`;
+  repositoryShorthand(directory: string, owner = DEFAULT_OWNER): string {
+    return `${owner}/${directory}`;
   }
 
   /**
-   * Arms the published repository `repository` to fail as `arm` until the
-   * next reset, failing when nothing is published there or when it is armed
-   * already.
+   * Arms the published repository `directory` of `owner` to fail as `arm`
+   * until it is disarmed or the host is reset, failing when nothing is
+   * published there or when it is armed already.
    */
-  async arm(repository: string, arm: GitHostArm): Promise<void> {
-    const published = await stat(this.repositoryPath(repository)).then(
+  async arm(directory: string, arm: GitHostArm, owner = DEFAULT_OWNER): Promise<void> {
+    const key = repositoryKey(directory, owner);
+    const published = await stat(this.repositoryPath(directory, owner)).then(
       () => true,
       () => false,
     );
     if (!published) {
-      throw new Error(`the git host serves no repository ${OWNER}/${repository}.git to arm`);
+      throw new Error(`the git host serves no repository ${key}.git to arm`);
     }
 
-    if (this.arms.has(repository)) {
-      throw new Error(`the git host has armed the repository ${OWNER}/${repository}.git already`);
+    if (this.arms.has(key)) {
+      throw new Error(`the git host has armed the repository ${key}.git already`);
     }
 
-    this.arms.set(repository, arm);
+    this.arms.set(key, arm);
+  }
+
+  /**
+   * Disarms the repository `directory` of `owner`, so it serves again, and
+   * returns whether it was armed.
+   */
+  disarm(directory: string, owner = DEFAULT_OWNER): boolean {
+    return this.arms.delete(repositoryKey(directory, owner));
   }
 
   /** Returns the current counts, which open a window for `requestsSince()`. */
