@@ -2269,7 +2269,7 @@ async function seedFoldedInstallations(home: string, cwd: string): Promise<void>
   });
 }
 
-test("SC-6 / LST-05: --scope project keeps a project installation folded under a user marketplace, and nothing else", async () => {
+test("SC-6 / LST-05: --scope project lists a project clone of a user marketplace under its own header", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     await seedFoldedInstallations(home, cwd);
@@ -2278,7 +2278,14 @@ test("SC-6 / LST-05: --scope project keeps a project installation folded under a
     await listPlugins({ ctx, run, cwd, scope: "project" });
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● mp1 [user]\n  ● alpha [project] v1.0.0 (installed)" },
+      {
+        message: [
+          "● mp1 [project]",
+          "  ● alpha v1.0.0 (installed)",
+          "  ○ beta v1.0.0 (available)",
+          "  ○ gamma v1.0.0 (available)",
+        ].join("\n"),
+      },
     ]);
 
     verify(ctx);
@@ -2286,7 +2293,7 @@ test("SC-6 / LST-05: --scope project keeps a project installation folded under a
   });
 });
 
-test("SC-6 / LST-05: --scope user drops the project installation folded under a user marketplace", async () => {
+test("SC-6 / LST-05: --scope user offers a plugin installed only in the project scope as available", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     await seedFoldedInstallations(home, cwd);
@@ -2298,9 +2305,35 @@ test("SC-6 / LST-05: --scope user drops the project installation folded under a 
       {
         message: [
           "● mp1 [user]",
+          "  ○ alpha v1.0.0 (available)",
           "  ● beta v1.0.0 (installed)",
           "  ○ gamma v1.0.0 (available)",
         ].join("\n"),
+      },
+    ]);
+
+    verify(ctx);
+    verify(ui);
+  });
+});
+
+test("SC-6 / LST-05 / PL-6: --scope project keeps the failed header of a project clone whose manifest cannot be read", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedFoldedInstallations(home, cwd);
+    await writeFile(
+      path.join(home, ".pi", "agent", "marketplaces", "mp1", ".claude-plugin", "marketplace.json"),
+      "{ not json",
+      "utf8",
+    );
+    const { ctx, run, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, run, cwd, scope: "project" });
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: "A marketplace operation has failed.\n\n⊘ mp1 [project] (failed)",
+        severity: "error",
       },
     ]);
 
