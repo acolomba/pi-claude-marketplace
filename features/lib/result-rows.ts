@@ -5,7 +5,9 @@
  * A result's row arrays, `marketplaces` and `blocks`, have row steps of their
  * own. Every other field is an envelope field, which the field steps state.
  * A result with marketplace blocks is a `cascade` or a
- * `reconcile-applied-cascade`, and the row steps read both alike.
+ * `reconcile-applied-cascade`, and the row steps read both alike. The blocks
+ * of an info fan-out are rows too: a `marketplace-info-cascade`'s are
+ * marketplace rows, and a `plugin-info-cascade`'s are plugin rows.
  */
 
 import assert from "node:assert/strict";
@@ -33,6 +35,27 @@ type MarketplaceBlocksResult = Extract<
 
 function hasMarketplaceBlocks(result: NotificationPayload): result is MarketplaceBlocksResult {
   return result.kind === "cascade" || result.kind === "reconcile-applied-cascade";
+}
+
+// A row step reads marketplace blocks or the blocks of the info fan-out
+// `infoKind`; any other result fails.
+function requireMarketplaceBlocks(
+  result: NotificationPayload,
+  infoKind: string,
+): asserts result is MarketplaceBlocksResult {
+  if (!hasMarketplaceBlocks(result)) {
+    assert.fail(
+      `expected a cascade, reconcile-applied-cascade, or ${infoKind} result, got ${JSON.stringify(result)}`,
+    );
+  }
+}
+
+// One record per block of an info fan-out.
+function infoBlockRecords(
+  blocks: readonly object[],
+  tokens: RunTokens,
+): Array<Map<string, string>> {
+  return blocks.map((block) => fieldRecord(flatten(block, tokens)));
 }
 
 // One record per plugin row, carrying its marketplace's fields. A marketplace
@@ -77,19 +100,19 @@ export function envelopeFields(
 }
 
 /**
- * Returns one record per plugin row of `result`. Fails when `result` has no
- * marketplace blocks.
+ * Returns one record per plugin row of `result`: the blocks of a plugin info
+ * fan-out, named as the fields of a single plugin-info result are, or the
+ * plugin rows of a result with marketplace blocks. Fails on any other result.
  */
 export function pluginRowRecords(
   result: NotificationPayload,
   tokens: RunTokens,
 ): Array<Map<string, string>> {
-  if (!hasMarketplaceBlocks(result)) {
-    assert.fail(
-      `expected a cascade or reconcile-applied-cascade result, got ${JSON.stringify(result)}`,
-    );
+  if (result.kind === "plugin-info-cascade") {
+    return infoBlockRecords(result.blocks, tokens);
   }
 
+  requireMarketplaceBlocks(result, "plugin-info-cascade");
   return pluginRecords(result, tokens);
 }
 
@@ -103,15 +126,10 @@ export function marketplaceRowRecords(
   tokens: RunTokens,
 ): Array<Map<string, string>> {
   if (result.kind === "marketplace-info-cascade") {
-    return result.blocks.map((block) => fieldRecord(flatten(block, tokens)));
+    return infoBlockRecords(result.blocks, tokens);
   }
 
-  if (!hasMarketplaceBlocks(result)) {
-    assert.fail(
-      `expected a cascade, reconcile-applied-cascade, or marketplace-info-cascade result, got ${JSON.stringify(result)}`,
-    );
-  }
-
+  requireMarketplaceBlocks(result, "marketplace-info-cascade");
   return result.marketplaces.map(({ plugins, ...block }) => {
     if (plugins.length > 0) {
       assert.fail(
