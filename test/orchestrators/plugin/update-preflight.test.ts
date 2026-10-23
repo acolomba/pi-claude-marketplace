@@ -328,6 +328,7 @@ test("D-10-03: the gate runs after triage and before candidate resolution", asyn
     materializeOrRefreshPluginMirror: () => {
       throw new Error("clone seam must not be reached");
     },
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
   const heldCause = 'the declared ranges admit no version in common -- required by "other@mp"';
 
@@ -766,6 +767,7 @@ test("prepares pinned and unpinned URL clones with their exact resolved sha", as
       }),
     materializePluginClone: () => Promise.resolve(pinned.pluginRoot),
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
   const unpinnedSeam: UpdateCloneCacheSeam = {
     resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
@@ -775,6 +777,7 @@ test("prepares pinned and unpinned URL clones with their exact resolved sha", as
         pluginRoot: unpinned.pluginRoot,
         resolvedSha: unpinnedSha,
       }),
+    materializePluginCommitCopy: () => Promise.resolve(unpinned.pluginRoot),
   };
 
   // act
@@ -784,10 +787,11 @@ test("prepares pinned and unpinned URL clones with their exact resolved sha", as
   // assert
   assert.ok(!("partition" in pinnedPrepared));
   assert.strictEqual(pinnedPrepared.resolvedSha, pinnedSha);
-  assert.strictEqual(pinnedPrepared.toVersion, "sha-111111111111");
+  // VER-01: the declared version, not the sha, names the update target.
+  assert.strictEqual(pinnedPrepared.toVersion, "2.0.0");
   assert.ok(!("partition" in unpinnedPrepared));
   assert.strictEqual(unpinnedPrepared.resolvedSha, unpinnedSha);
-  assert.strictEqual(unpinnedPrepared.toVersion, "sha-222222222222");
+  assert.strictEqual(unpinnedPrepared.toVersion, "2.0.0");
 });
 
 test("UPDT-01: a tag-pinned update records the tag's version, not a sha", async (t) => {
@@ -804,6 +808,7 @@ test("UPDT-01: a tag-pinned update records the tag's version, not a sha", async 
       Promise.resolve({ cloneUrl: "https://example.com/tagged", pin: pinnedSha }),
     materializePluginClone: () => Promise.resolve(seed.pluginRoot),
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
   const constraintGate: PreparePluginUpdateOptions["constraintGate"] = () =>
     Promise.resolve({
@@ -849,6 +854,7 @@ test("D-10-20: a constraint pin overrides the entry's own declared sha", async (
     },
     materializePluginClone: () => Promise.resolve(seed.pluginRoot),
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
   const constraintGate: PreparePluginUpdateOptions["constraintGate"] = () =>
     Promise.resolve({
@@ -875,10 +881,10 @@ test("D-10-20: a constraint pin overrides the entry's own declared sha", async (
 });
 
 test("UPDT-01: a second update of a tag-pinned plugin is unchanged", async (t) => {
-  // arrange -- the recorded version already equals the pin's own version.
+  // arrange -- the record already holds the pin's own version and commit.
   const pinnedSha = "6666666666666666666666666666666666666666";
   const seed = await seedUpdate({
-    installed: pluginRecord("1.2.0"),
+    installed: { ...pluginRecord("1.2.0"), resolvedSha: pinnedSha },
     source: { source: "url", url: "https://example.com/tagged" },
   });
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
@@ -887,6 +893,7 @@ test("UPDT-01: a second update of a tag-pinned plugin is unchanged", async (t) =
       Promise.resolve({ cloneUrl: "https://example.com/tagged", pin: pinnedSha }),
     materializePluginClone: () => Promise.resolve(seed.pluginRoot),
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
   const constraintGate: PreparePluginUpdateOptions["constraintGate"] = () =>
     Promise.resolve({
@@ -1096,6 +1103,7 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
       mirrorCalls.push({ cloneUrl, networkUrl });
       return Promise.resolve({ pluginRoot: seed.pluginRoot, resolvedSha: mirrorSha });
     },
+    materializePluginCommitCopy: () => Promise.resolve(seed.pluginRoot),
   };
 
   // act
@@ -1125,6 +1133,7 @@ test("classifies a clone transport failure without exposing a raw throw", async 
     resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
     materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
     materializeOrRefreshPluginMirror: () => Promise.reject(transportError),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
 
   // act
@@ -1159,6 +1168,7 @@ test("GHB-03: an invalid base rethrows from candidate resolution instead of skip
     resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
     materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
     materializeOrRefreshPluginMirror: () => Promise.reject(invalidBase),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
 
   // act & assert
@@ -1184,6 +1194,7 @@ test("swallows disabled clone cleanup failure after persisting the new pin", asy
     resolvePluginPin: () => Promise.resolve({ cloneUrl: "https://example.com/disabled", pin: sha }),
     materializePluginClone: () => Promise.resolve(seed.pluginRoot),
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
 
   // act
@@ -1197,7 +1208,7 @@ test("swallows disabled clone cleanup failure after persisting the new pin", asy
   assert.strictEqual(outcome.partition, "skipped");
   const refreshed = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
   assert.strictEqual(refreshed?.resolvedSha, sha);
-  assert.strictEqual(refreshed?.version, "sha-333333333333");
+  assert.strictEqual(refreshed?.version, "2.0.0");
 });
 
 test("cleans obsolete clones after persisting a disabled git pin", async (t) => {
@@ -1214,6 +1225,7 @@ test("cleans obsolete clones after persisting a disabled git pin", async (t) => 
       Promise.resolve({ cloneUrl: "https://example.com/disabled-cleanup", pin: sha }),
     materializePluginClone: () => Promise.resolve(seed.pluginRoot),
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
   let cleanupCalls = 0;
 
@@ -1288,6 +1300,7 @@ test("passes authenticated clone context and refs through both clone arms", asyn
       return Promise.resolve(pinned.pluginRoot);
     },
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
   const unpinnedSeam: UpdateCloneCacheSeam = {
     resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
@@ -1296,6 +1309,11 @@ test("passes authenticated clone context and refs through both clone arms", asyn
       assert.strictEqual(options.auth?.host, "github.com");
       assert.strictEqual(options.ref, "next");
       return Promise.resolve({ pluginRoot: unpinned.pluginRoot, resolvedSha: sha });
+    },
+    materializePluginCommitCopy: (options) => {
+      assert.strictEqual(options.resolveAuth().host, "github.com");
+      assert.strictEqual(options.sha, sha);
+      return Promise.resolve(unpinned.pluginRoot);
     },
   };
 
@@ -1355,6 +1373,7 @@ test("D-3-04: gives the autoupdate cascade a github.com stored-credential bundle
       return Promise.resolve(pinned.pluginRoot);
     },
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
   const unpinnedSeam: UpdateCloneCacheSeam = {
     resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
@@ -1367,6 +1386,7 @@ test("D-3-04: gives the autoupdate cascade a github.com stored-credential bundle
       });
       return Promise.resolve({ pluginRoot: unpinned.pluginRoot, resolvedSha: sha });
     },
+    materializePluginCommitCopy: () => Promise.resolve(unpinned.pluginRoot),
   };
 
   // act
@@ -1416,6 +1436,7 @@ test("resolves pinned and unpinned git-subdir roots", async (t) => {
       }),
     materializePluginClone: () => Promise.resolve(pinnedRoot),
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
   const unpinnedSeam: UpdateCloneCacheSeam = {
     resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
@@ -1425,6 +1446,7 @@ test("resolves pinned and unpinned git-subdir roots", async (t) => {
         pluginRoot: unpinnedRoot,
         resolvedSha: unpinnedSha,
       }),
+    materializePluginCommitCopy: () => Promise.resolve(unpinnedRoot),
   };
 
   // act
@@ -1474,6 +1496,7 @@ test("classifies missing pinned and unpinned git-subdir roots", async (t) => {
       Promise.resolve({ cloneUrl: "https://example.com/pinned-missing", pin: sha }),
     materializePluginClone: () => Promise.resolve(pinned.pluginRoot),
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
   const unpinnedSeam: UpdateCloneCacheSeam = {
     resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
@@ -1483,6 +1506,7 @@ test("classifies missing pinned and unpinned git-subdir roots", async (t) => {
         pluginRoot: unpinned.pluginRoot,
         resolvedSha: sha,
       }),
+    materializePluginCommitCopy: () => Promise.resolve(unpinned.pluginRoot),
   };
 
   // act
@@ -1521,6 +1545,7 @@ test("keeps a concurrent disabled-plugin removal absent", async (t) => {
       return seed.pluginRoot;
     },
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
 
   // act
@@ -1564,6 +1589,7 @@ test("does not rewrite a concurrently converged disabled pin", async (t) => {
       return seed.pluginRoot;
     },
     materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
 
   // act
@@ -1572,7 +1598,7 @@ test("does not rewrite a concurrently converged disabled pin", async (t) => {
   const state = await loadState(seed.locations.extensionRoot);
   const record = state.marketplaces.mp?.plugins.hello;
   assert.ok(record !== undefined);
-  record.version = "sha-999999999999";
+  record.version = "2.0.0";
   record.resolvedSource = seed.pluginRoot;
   record.resolvedSha = sha;
   record.compatibility = { installable: true, notes: [], supported: ["skills"], unsupported: [] };
@@ -1587,3 +1613,76 @@ test("does not rewrite a concurrently converged disabled pin", async (t) => {
   assert.strictEqual(outcome.partition, "skipped");
   assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), converged);
 });
+
+for (const { label, recordedSha, partition } of [
+  {
+    label: "is unchanged at the recorded commit",
+    recordedSha: "1".repeat(40),
+    partition: "unchanged",
+  },
+  { label: "updates to a new commit", recordedSha: "0".repeat(40), partition: undefined },
+]) {
+  test(`D-16-09: a git source at the same declared version ${label}`, async (t) => {
+    // arrange
+    const sha = "1".repeat(40);
+    const seed = await seedUpdate({
+      installed: { ...pluginRecord("2.0.0"), resolvedSha: recordedSha },
+      source: { source: "url", url: "https://example.com/pinned", sha },
+    });
+    t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+    const cloneCacheSeam: UpdateCloneCacheSeam = {
+      resolvePluginPin: () => Promise.resolve({ cloneUrl: "https://example.com/pinned", pin: sha }),
+      materializePluginClone: () => Promise.resolve(seed.pluginRoot),
+      materializeOrRefreshPluginMirror: () =>
+        Promise.reject(new Error("unexpected mirror refresh")),
+      materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
+    };
+
+    // act
+    const outcome = await prepare(seed, { cloneCacheSeam });
+
+    // assert
+    assert.strictEqual("partition" in outcome ? outcome.partition : undefined, partition);
+    assert.strictEqual("toVersion" in outcome ? outcome.toVersion : undefined, "2.0.0");
+  });
+}
+
+for (const { label, recordedSha, source } of [
+  {
+    label: "a path record whose entry moved to a git source",
+    recordedSha: undefined,
+    source: { source: "url", url: "https://example.com/pinned", sha: "1".repeat(40) },
+  },
+  {
+    label: "a git record whose entry moved to a path source",
+    recordedSha: "1".repeat(40),
+    source: undefined,
+  },
+]) {
+  test(`D-16-09: ${label} at the same declared version updates`, async (t) => {
+    // arrange
+    const seed = await seedUpdate({
+      installed: {
+        ...pluginRecord("2.0.0"),
+        ...(recordedSha !== undefined && { resolvedSha: recordedSha }),
+      },
+      ...(source !== undefined && { source }),
+    });
+    t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+    const cloneCacheSeam: UpdateCloneCacheSeam = {
+      resolvePluginPin: () =>
+        Promise.resolve({ cloneUrl: "https://example.com/pinned", pin: "1".repeat(40) }),
+      materializePluginClone: () => Promise.resolve(seed.pluginRoot),
+      materializeOrRefreshPluginMirror: () =>
+        Promise.reject(new Error("unexpected mirror refresh")),
+      materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
+    };
+
+    // act
+    const outcome = await prepare(seed, { cloneCacheSeam });
+
+    // assert
+    assert.ok(!("partition" in outcome));
+    assert.strictEqual(outcome.toVersion, "2.0.0");
+  });
+}

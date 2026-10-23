@@ -20,7 +20,7 @@
 // (sha over ref; unpinned resolves remote HEAD via resolveRemoteRef, D-77-05).
 
 import { randomUUID } from "node:crypto";
-import { cp, mkdir, readFile, rename } from "node:fs/promises";
+import { cp, mkdir, readFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -71,6 +71,11 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
  */
 function isGitCommitNotFetchedError(err: unknown): boolean {
   return err instanceof Error && err.name === "CommitNotFetchedError";
+}
+
+/** isomorphic-git's `NotFoundError`: the object a checkout names is absent. */
+function isGitNotFoundError(err: unknown): boolean {
+  return err instanceof Error && err.name === "NotFoundError";
 }
 
 /**
@@ -236,10 +241,94 @@ export async function materializePluginClone(args: {
 }
 
 /**
+ * GIT-01: check out `sha` into `dest` from the URL-keyed mirror of
+ * `cloneUrl`, local only. Returns false when there is no mirror or the mirror
+ * does not hold `sha`, so the caller clones instead.
+ *
+ * Only the mirror's `.git` is copied, and its index is dropped, so the
+ * checkout writes exactly the commit's tree into an empty work tree: no
+ * untracked or edited mirror file rides along, and a relative symlink stays
+ * relative instead of pointing back into the mirror (NFR-10). A checkout
+ * failure other than a missing commit propagates with the staging leak
+ * appended (MA-9).
+ */
+async function copyMirrorAtCommit(
+  ops: RemovalOps,
+  args: {
+    readonly locations: ScopedLocations;
+    readonly cloneUrl: string;
+    readonly sha: string;
+    readonly gitOps: GitOps;
+  },
+  dest: string,
+): Promise<boolean> {
+  const mirrorRoot = await args.locations.pluginCloneDir(pluginMirrorKey(args.cloneUrl));
+  if (!(await pathExists(mirrorRoot))) {
+    return false;
+  }
+
+  const staging = await args.locations.sourcesStagingDir(randomUUID());
+  try {
+    await mkdir(staging, { recursive: true });
+    await cp(path.join(mirrorRoot, ".git"), path.join(staging, ".git"), {
+      recursive: true,
+      verbatimSymlinks: true,
+    });
+    await rm(path.join(staging, ".git", "index"), { force: true });
+    await args.gitOps.checkout({ dir: staging, ref: args.sha });
+  } catch (err) {
+    const leak = await cleanupStaging(ops, staging, "plugin commit copy staging");
+    if (isGitCommitNotFetchedError(err) || isGitNotFoundError(err)) {
+      return false;
+    }
+
+    throw appendLeakToError(err, leak);
+  }
+
+  await promoteStagingToClone(ops, staging, dest, "plugin commit copy staging");
+  return true;
+}
+
+/**
+ * GIT-01 / D-16-02: materialize the per-commit copy of a git plugin source at
+ * `sha` into `plugin-clones/<key>/`, the key a pinned clone uses, and return
+ * its root. An installed plugin runs from this copy, so refreshing the mirror
+ * (`fetch`, `info --fetch`) never changes its files.
+ *
+ * A present copy is returned as is. Otherwise the URL-keyed mirror, when it
+ * holds `sha`, is copied and checked out at `sha` with no network access;
+ * failing that, `materializePluginClone` clones the commit.
+ */
+export async function materializePluginCommitCopy(args: {
+  locations: ScopedLocations;
+  cloneUrl: string;
+  networkUrl: string;
+  sha: string;
+  gitOps?: GitOps;
+  resolveAuth: () => GitAuthBundle;
+}): Promise<string> {
+  const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
+  const dest = await args.locations.pluginCloneDir(pluginCloneKey(args.cloneUrl, args.sha));
+  if (await pathExists(dest)) {
+    return dest;
+  }
+
+  if (await copyMirrorAtCommit(createRemovalOps(), { ...args, gitOps }, dest)) {
+    return dest;
+  }
+
+  return materializePluginClone({ ...args, gitOps, pin: args.sha });
+}
+
+/**
  * MIRR-01/02/03 / D-79.1-01/02: materialize-or-refresh the single mutable
  * mirror clone for an UNPINNED git plugin source at `plugin-clones/<urlhash12>/`
  * (bare URL key, no sha suffix), returning the mirror root + the checked-out
  * HEAD sha.
+ *
+ * The mirror is a download cache only (GIT-01): a caller that installs code
+ * from it materializes the per-commit copy at the returned sha through
+ * `materializePluginCommitCopy` and never records the mirror itself.
  *
  * This is the marketplace clone lifecycle applied to a URL-keyed directory
  * (D-79.1-01): one mirror per canonical URL, refreshed in place on mutating

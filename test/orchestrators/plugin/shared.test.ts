@@ -2446,6 +2446,47 @@ describe("resolveInstalledMarketplaceTarget", () => {
 });
 
 describe("resolvePluginVersion", () => {
+  test("VER-01: a git commit names the version when none is declared", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+      await writeFile(path.join(pluginRoot, ".claude-plugin", "plugin.json"), "{}");
+      const entry = { name: "alpha", source: "./alpha" } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
+
+      // act
+      const version = await resolvePluginVersion(
+        entry,
+        installable,
+        "0123456789abcdef0123456789abcdef01234567",
+      );
+
+      // assert
+      assert.equal(version, "sha-0123456789ab");
+    });
+  });
+
+  test("VER-01: a declared version wins over a git commit", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(pluginRoot, { recursive: true });
+      const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
+
+      // act
+      const version = await resolvePluginVersion(
+        entry,
+        installable,
+        "0123456789abcdef0123456789abcdef01234567",
+      );
+
+      // assert
+      assert.equal(version, "1.0.0");
+    });
+  });
+
   test("prefers a non-empty plugin manifest version over the marketplace entry", async () => {
     // arrange
     await withTempScopes(async ({ root }) => {

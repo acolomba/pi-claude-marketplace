@@ -586,8 +586,9 @@ async function markUpdateInProgress(
         throw new PluginUpdateConcurrencyError("plugin-uninstalled", plugin, marketplace);
       }
 
-      // ST-9: stale-version check.
-      if (sRecord.version !== fromVersion) {
+      // ST-9: stale-version check. Two git revisions can share a declared
+      // version (D-16-09), so the recorded commit must not have moved either.
+      if (sRecord.version !== fromVersion || sRecord.resolvedSha !== preflight.record.resolvedSha) {
         throw new PluginUpdateConcurrencyError("plugin-updated", plugin, marketplace, {
           expectedVersion: fromVersion,
           actualVersion: sRecord.version,

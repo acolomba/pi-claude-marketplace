@@ -21,6 +21,7 @@ import {
   materializeMarketplaceTagClone,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
+  materializePluginCommitCopy,
   resolveGitPluginRootWithSubdir,
   resolveGitSubdirRoot,
   resolvePluginPin,
@@ -2007,4 +2008,251 @@ void test("materializeMarketplaceTagClone: a marketplace checkout with no discov
 
   // assert: materialization still succeeds off the name-keyed fallback.
   assert.equal(tagClone.kind, "materialized");
+});
+
+/**
+ * Seeds the URL-keyed mirror of `cloneUrl` with a `.git` holding a config and
+ * an index, and one untracked work-tree file, returning its root.
+ */
+async function seedMirror(locations: ScopedLocations, cloneUrl: string): Promise<string> {
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+  await mkdir(path.join(mirrorRoot, ".git"), { recursive: true });
+  await writeFile(path.join(mirrorRoot, ".git", "config"), "mirror config");
+  await writeFile(path.join(mirrorRoot, ".git", "index"), "mirror index");
+  await writeFile(path.join(mirrorRoot, "plugin.txt"), "untracked mirror file");
+  return mirrorRoot;
+}
+
+/** A fake gitOps whose first checkout rejects with `failure`. */
+function failingFirstCheckout(failure: Error): {
+  readonly gitOps: GitOps;
+  readonly state: ReturnType<typeof createGitOps>["state"];
+} {
+  let checkouts = 0;
+  const { gitOps: inner, state } = createGitOps({ remoteRefs: { [PIN_40]: PIN_40 } });
+  return {
+    gitOps: {
+      ...inner,
+      checkout(options) {
+        checkouts += 1;
+        return checkouts === 1 ? Promise.reject(failure) : inner.checkout(options);
+      },
+    },
+    state,
+  };
+}
+
+function namedError(name: string, message: string): Error {
+  const error = new Error(message);
+  error.name = name;
+  return error;
+}
+
+void test("GIT-01: a present per-commit copy uses the default git surface without a git call", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  const copyRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, PIN_40));
+  await mkdir(copyRoot, { recursive: true });
+
+  // act
+  const result = await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha: PIN_40,
+    resolveAuth: () => assert.fail("a present copy never builds clone auth"),
+  });
+
+  // assert
+  assert.strictEqual(result, copyRoot);
+});
+
+void test("GIT-01: a per-commit copy checks the commit out of the mirror's .git alone, offline", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  const mirrorRoot = await seedMirror(locations, cloneUrl);
+  const { gitOps, state } = createGitOps({ remoteRefs: { [PIN_40]: PIN_40 } });
+
+  // act
+  const result = await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha: PIN_40,
+    gitOps,
+    resolveAuth: () => assert.fail("a mirror copy never builds clone auth"),
+  });
+
+  // assert
+  assert.strictEqual(result, await locations.pluginCloneDir(pluginCloneKey(cloneUrl, PIN_40)));
+  assert.strictEqual(await readFile(path.join(result, ".git", "config"), "utf8"), "mirror config");
+  assert.strictEqual(await pathExists(path.join(result, ".git", "index")), false);
+  assert.strictEqual(await pathExists(path.join(result, "plugin.txt")), false);
+  assert.strictEqual(
+    await readFile(path.join(mirrorRoot, "plugin.txt"), "utf8"),
+    "untracked mirror file",
+  );
+  assert.deepStrictEqual(
+    state.checkoutCalls.map((call) => call.ref),
+    [PIN_40],
+  );
+  assert.strictEqual(state.cloneCalls.length, 0);
+  assert.deepStrictEqual(await readdir(path.join(locations.extensionRoot, "sources-staging")), []);
+});
+
+void test("GIT-01: a real per-commit copy holds the commit's tree with relative symlinks and no untracked file", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+  await mkdir(path.join(mirrorRoot, "shared"), { recursive: true });
+  await mkdir(path.join(mirrorRoot, "skills"), { recursive: true });
+  await writeFile(path.join(mirrorRoot, "shared", "tool.txt"), "first");
+  await fs.promises.symlink("../shared", path.join(mirrorRoot, "skills", "link"));
+  await git.init({ fs, dir: mirrorRoot, defaultBranch: "main" });
+  await git.add({ fs, dir: mirrorRoot, filepath: "shared/tool.txt" });
+  await git.add({ fs, dir: mirrorRoot, filepath: "skills/link" });
+  const sha = await git.commit({
+    fs,
+    dir: mirrorRoot,
+    message: "first",
+    author: { name: "test", email: "test@example.com" },
+  });
+  await writeFile(path.join(mirrorRoot, "shared", "tool.txt"), "edited in the mirror");
+  await writeFile(path.join(mirrorRoot, "untracked.txt"), "untracked");
+
+  // act
+  const result = await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha,
+    resolveAuth: () => assert.fail("a mirror copy never builds clone auth"),
+  });
+
+  // assert
+  assert.strictEqual(await readFile(path.join(result, "shared", "tool.txt"), "utf8"), "first");
+  assert.strictEqual(await fs.promises.readlink(path.join(result, "skills", "link")), "../shared");
+  assert.strictEqual(await pathExists(path.join(result, "untracked.txt")), false);
+});
+
+void test("GIT-01: a mirror that lacks the commit falls back to a clone of it", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  await seedMirror(locations, cloneUrl);
+  const { gitOps, state } = failingFirstCheckout(namedError("NotFoundError", "no such commit"));
+
+  // act
+  const result = await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha: PIN_40,
+    gitOps,
+    resolveAuth: publicCloneAuth,
+  });
+
+  // assert
+  assert.strictEqual(result, await locations.pluginCloneDir(pluginCloneKey(cloneUrl, PIN_40)));
+  assert.strictEqual(state.cloneCalls.length, 1);
+  assert.deepStrictEqual(await readdir(path.join(locations.extensionRoot, "sources-staging")), []);
+});
+
+void test("GIT-01: a mirror whose commit was not fetched falls back to a clone of it", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  await seedMirror(locations, cloneUrl);
+  const { gitOps, state } = failingFirstCheckout(
+    namedError("CommitNotFetchedError", "commit not fetched"),
+  );
+
+  // act
+  await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha: PIN_40,
+    gitOps,
+    resolveAuth: publicCloneAuth,
+  });
+
+  // assert
+  assert.strictEqual(state.cloneCalls.length, 1);
+});
+
+void test("GIT-01: any other checkout failure propagates without a clone", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  await seedMirror(locations, cloneUrl);
+  const failure = new Error("disk full");
+  const { gitOps, state } = failingFirstCheckout(failure);
+
+  // act & assert
+  await assert.rejects(
+    materializePluginCommitCopy({
+      locations,
+      cloneUrl,
+      networkUrl: cloneUrl,
+      sha: PIN_40,
+      gitOps,
+      resolveAuth: publicCloneAuth,
+    }),
+    (error: unknown) => error === failure,
+  );
+  assert.strictEqual(state.cloneCalls.length, 0);
+  assert.deepStrictEqual(await readdir(path.join(locations.extensionRoot, "sources-staging")), []);
+});
+
+void test("GIT-01: with no mirror the per-commit copy is cloned at the commit", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  const { gitOps, state } = createGitOps({ remoteRefs: { [PIN_40]: PIN_40 } });
+
+  // act
+  const result = await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha: PIN_40,
+    gitOps,
+    resolveAuth: publicCloneAuth,
+  });
+
+  // assert
+  assert.strictEqual(result, await locations.pluginCloneDir(pluginCloneKey(cloneUrl, PIN_40)));
+  assert.strictEqual(state.cloneCalls.length, 1);
+  assert.deepStrictEqual(
+    state.checkoutCalls.map((call) => call.ref),
+    [PIN_40],
+  );
+});
+
+void test("GIT-01: a mirror that cannot be copied fails the copy and leaves no staging", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  const mirrorRoot = await seedMirror(locations, cloneUrl);
+  await chmod(path.join(mirrorRoot, ".git", "config"), 0o000);
+  const { gitOps, state } = createGitOps();
+
+  // act & assert
+  await assert.rejects(
+    materializePluginCommitCopy({
+      locations,
+      cloneUrl,
+      networkUrl: cloneUrl,
+      sha: PIN_40,
+      gitOps,
+      resolveAuth: publicCloneAuth,
+    }),
+    (error: unknown) => (error as NodeJS.ErrnoException).code === "EACCES",
+  );
+  assert.strictEqual(state.cloneCalls.length, 0);
+  assert.deepStrictEqual(await readdir(path.join(locations.extensionRoot, "sources-staging")), []);
 });

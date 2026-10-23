@@ -69,6 +69,7 @@ for (const mode of ["json", "rpc"]) {
           await options.auth.onAuthRequired();
           return { pluginRoot: root, resolvedSha: SHA };
         },
+        materializePluginCommitCopy: () => Promise.resolve(root),
       };
 
       // act
@@ -176,6 +177,9 @@ test("returns a materialized pinned cache result and its resolved sha", async (t
     materializeOrRefreshPluginMirror() {
       return Promise.reject(new Error("unexpected mirror materialization"));
     },
+    materializePluginCommitCopy() {
+      return Promise.reject(new Error("unexpected commit copy"));
+    },
   };
 
   // act
@@ -212,6 +216,9 @@ test("NFR-5: a pinned GitHub source the seam finds warm never reads an invalid b
     },
     materializeOrRefreshPluginMirror() {
       return Promise.reject(new Error("unexpected mirror materialization"));
+    },
+    materializePluginCommitCopy() {
+      return Promise.reject(new Error("unexpected commit copy"));
     },
   };
 
@@ -256,6 +263,9 @@ test("sends the pinned clone the identity url and the typed wire url", async (te
     materializeOrRefreshPluginMirror() {
       return Promise.reject(new Error("unexpected mirror materialization"));
     },
+    materializePluginCommitCopy() {
+      return Promise.reject(new Error("unexpected commit copy"));
+    },
   };
 
   // act
@@ -283,7 +293,8 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
   const cloneUrl = "https://example.com/mirror-plugin";
   const rawUrl = "https://example.com/mirror-plugin.git";
   const mirrorRoot = path.join(root, "mirror-clone");
-  await mkdir(mirrorRoot, { recursive: true });
+  const copyRoot = path.join(root, "commit-copy");
+  await mkdir(copyRoot, { recursive: true });
   const source: GitBackedSource = { kind: "url", raw: rawUrl, url: cloneUrl, ref: "main" };
   const calls: unknown[] = [];
   const pluginAuth = auth();
@@ -301,6 +312,14 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
       });
       return Promise.resolve({ pluginRoot: mirrorRoot, resolvedSha: SHA });
     },
+    materializePluginCommitCopy({ resolveAuth, ...copyOptions }) {
+      const bundle = resolveAuth();
+      calls.push({
+        ...copyOptions,
+        auth: { credentialOps: bundle.credentialOps, host: bundle.host },
+      });
+      return Promise.resolve(copyRoot);
+    },
   };
 
   // act
@@ -308,7 +327,7 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
 
   // assert
   assert.deepStrictEqual(outcome, {
-    result: { kind: "materialized", pluginRoot: mirrorRoot, resolvedSha: SHA },
+    result: { kind: "materialized", pluginRoot: copyRoot, resolvedSha: SHA },
     resolvedSha: SHA,
   });
   assert.deepStrictEqual(calls, [
@@ -318,6 +337,13 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
       networkUrl: rawUrl,
       locations,
       ref: "main",
+    },
+    {
+      auth: { credentialOps: pluginAuth.credentialOps, host: "example.com" },
+      cloneUrl,
+      networkUrl: rawUrl,
+      locations,
+      sha: SHA,
     },
   ]);
 });
@@ -356,6 +382,7 @@ test("returns a refreshed unpinned mirror result with ref and auth", async (test
       assert.ok(options.auth !== undefined);
       return Promise.resolve({ pluginRoot: mirrorRoot, resolvedSha: SHA });
     },
+    materializePluginCommitCopy: () => Promise.resolve(mirrorRoot),
   };
 
   // act
@@ -401,6 +428,9 @@ test("returns a missing-subdir result without exposing the resolved sha", async 
     materializeOrRefreshPluginMirror() {
       return Promise.reject(new Error("unexpected mirror materialization"));
     },
+    materializePluginCommitCopy() {
+      return Promise.reject(new Error("unexpected commit copy"));
+    },
   };
 
   // act
@@ -437,6 +467,7 @@ test("returns an escaping-subdir result without exposing the mirror sha", async 
     materializeOrRefreshPluginMirror() {
       return Promise.resolve({ pluginRoot: mirrorRoot, resolvedSha: SHA });
     },
+    materializePluginCommitCopy: () => Promise.resolve(mirrorRoot),
   };
 
   // act
@@ -471,6 +502,9 @@ test("propagates a pinned clone failure unchanged", async (testContext) => {
     },
     materializeOrRefreshPluginMirror() {
       return Promise.reject(new Error("unexpected mirror materialization"));
+    },
+    materializePluginCommitCopy() {
+      return Promise.reject(new Error("unexpected commit copy"));
     },
   };
 

@@ -392,3 +392,30 @@ test("records removal leaks in cache order and continues deleting later clones",
   ]);
   assert.deepStrictEqual(cloneKeys, ["alpha-stale", "beta-stale", "gamma-stale"]);
 });
+
+test("GIT-02: keeps the mirror of an installed per-commit copy and removes an unused mirror", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const installedCopy = "aaaaaaaaaaaa-111111111111";
+  await seedState(locations, {
+    alpha: marketplace(locations, "alpha", {
+      copied: pluginRecord({
+        resolvedSource: path.join(locations.pluginClonesDir, installedCopy),
+        resolvedSha: SHA_ALPHA,
+      }),
+    }),
+  });
+  await seedCloneDirectories(locations, [
+    installedCopy,
+    "aaaaaaaaaaaa",
+    "aaaaaaaaaaaa-222222222222",
+    "bbbbbbbbbbbb",
+  ]);
+
+  // act
+  const leaks = await garbageCollectPluginClones(locations);
+
+  // assert
+  assert.deepStrictEqual(leaks, []);
+  assert.deepStrictEqual(await cloneEntries(locations), ["aaaaaaaaaaaa", installedCopy]);
+});

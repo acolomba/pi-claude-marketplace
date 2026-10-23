@@ -13,10 +13,9 @@
 //       PI-2:                cached manifest read ONLY (no network)
 //       PI-4:                resolveStrict + requireInstallable
 //       PI-6:                assertNoCrossPluginConflicts(scope, names, state)
-//       PI-7:                deriveInstallVersion -- pin override, then the
-//                            git-source sha, then the 3-tier precedence
-//                            (plugin.json > entry.version > hash) delegated
-//                            to `shared.ts::resolvePluginVersion`
+//       PI-7:                deriveInstallVersion -- pin override, then
+//                            `shared.ts::resolvePluginVersion` (plugin.json >
+//                            entry.version > git sha > hash, VER-01)
 //       runPhases(phases, ctx)                             // D-01 7-phase ledger
 //       format rollback result, capture rows, throw error  // D-02 PI-14 bypass
 //   })
@@ -110,7 +109,6 @@ import {
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource, type ParsedSource, type PathSource } from "../../domain/source.ts";
-import { shaVersion } from "../../domain/version.ts";
 import {
   ConcurrentInstallError,
   errorMessage,
@@ -437,18 +435,16 @@ type InstallLedgerContextResult =
   | { readonly kind: "marketplace-absent" };
 
 /**
- * PI-7 / D-77-01 / PURL-09: derive the recorded plugin version.
+ * PI-7 / PURL-09 / VER-01: derive the recorded plugin version.
  *
  * Precedence:
  *   1. `pinVersionOverride` (D-54-01 / ENBL-02): an enable re-materialization
  *      reuses the caller-supplied pin verbatim so the recorded `version`
  *      survives across a disable/enable cycle.
- *   2. git source (url / git-subdir / github) with a captured sha: record
- *      `sha-<12hex>` -- the commit IS the version identity for a git-materialized
- *      plugin, REPLACING the whole 3-tier ladder (a plugin.json version inside a
- *      pinned commit is redundant with the sha). `resolvedSha` is set by the
- *      clone probe on the materialized path, which the install gate required.
- *   3. otherwise: the 3-tier ladder (plugin.json > entry.version > hash).
+ *   2. otherwise `resolvePluginVersion`: the declared version (plugin.json,
+ *      then the marketplace entry), then `sha-<12hex>` for a git source (url /
+ *      git-subdir / github) whose clone probe captured the commit, then the
+ *      content hash (D-16-08). The full sha is recorded apart (D-77-02).
  */
 async function deriveInstallVersion(args: {
   entry: PluginEntry;
@@ -462,11 +458,11 @@ async function deriveInstallVersion(args: {
 
   const kind = parsePluginSource(args.entry.source).kind;
   const isGitSource = kind === "url" || kind === "git-subdir" || kind === "github";
-  if (isGitSource && args.resolvedSha !== undefined) {
-    return shaVersion(args.resolvedSha);
-  }
-
-  return resolvePluginVersion(args.entry, args.installable);
+  return resolvePluginVersion(
+    args.entry,
+    args.installable,
+    isGitSource ? args.resolvedSha : undefined,
+  );
 }
 
 /** The real `marketplaceAdd` seam: the `marketplace add` body and settle. */
@@ -692,8 +688,8 @@ async function preflightInstallResolve(
   // resolveGitPluginRoot callback plus its captured resolved sha. The
   // resolver stays network-free; install injects THIS policy so a git source
   // clones once into the cache and returns the clone-anchored pluginRoot.
-  // The full sha is read AFTER the resolve for the sha-<12hex> version
-  // (D-77-01) and the full-sha state field (D-77-02).
+  // The full sha is read AFTER the resolve for the version's sha tier
+  // (VER-01) and the full-sha state field (D-77-02).
   let resolvedSha: string | undefined;
 
   // PI-4: resolveStrict + gate. Per D-04 the strict resolver consumes the
@@ -906,8 +902,7 @@ async function runInstallLedgerBody(
   // caller-supplied pin verbatim so the recorded `version` survives across a
   // disable/enable cycle.
   //
-  // D-77-01 / PURL-09: derive the recorded version (git => sha-<12hex>; path /
-  // github-name => the 3-tier ladder). See `deriveInstallVersion`.
+  // VER-01 / PURL-09: derive the recorded version. See `deriveInstallVersion`.
   const version = await deriveInstallVersion({
     entry,
     installable,

@@ -24,6 +24,9 @@ import { errorMessage } from "../../shared/errors.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 
+/** A per-commit clone key, `pluginCloneKey`'s shape; group 1 is its mirror key. */
+const PER_COMMIT_KEY = /^([0-9a-f]{12})-[0-9a-f]{12}$/;
+
 /**
  * D-78-01 Option A: derive the set of still-referenced clone keys from the
  * surviving plugin records. A record contributes a key only when it carries
@@ -33,6 +36,12 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
  * `<key>/<subdir>`, so the segment is the clone root, not the subdir. A
  * `resolvedSource` outside `pluginClonesDir` yields a leading ".." (or empty)
  * segment and protects no cache dir.
+ *
+ * GIT-02 / D-16-07: a live per-commit key `<url12>-<sha12>` also keeps the
+ * URL-keyed mirror `<url12>` of the same URL, the download cache a later
+ * `update` of that plugin fetches into. A mirror no installed plugin's URL
+ * shares, such as one `fetch` warmed for a plugin that is not installed, is
+ * not live.
  */
 function deriveLiveCloneKeys(state: ExtensionState, pluginClonesDir: string): Set<string> {
   const liveKeys = new Set<string>();
@@ -45,6 +54,10 @@ function deriveLiveCloneKeys(state: ExtensionState, pluginClonesDir: string): Se
       const seg = path.relative(pluginClonesDir, record.resolvedSource).split(path.sep)[0];
       if (seg !== undefined && seg !== "" && !seg.startsWith("..")) {
         liveKeys.add(seg);
+        const mirrorKey = PER_COMMIT_KEY.exec(seg)?.[1];
+        if (mirrorKey !== undefined) {
+          liveKeys.add(mirrorKey);
+        }
       }
     }
   }

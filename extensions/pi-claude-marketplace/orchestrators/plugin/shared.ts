@@ -17,7 +17,7 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
-import { computeHashVersion } from "../../domain/version.ts";
+import { computeHashVersion, shaVersion } from "../../domain/version.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import {
   writeBatchedConfigEntries,
@@ -1172,13 +1172,13 @@ async function manifestCandidateExists(manifestPath: string): Promise<boolean> {
 }
 
 /**
- * Tier 1 of {@link resolvePluginVersion}: the `version` the plugin's own
+ * The first tier of {@link resolveDeclaredPluginVersion}: the `version` the plugin's own
  * manifest declares, or `undefined` when it declares none usable.
  *
  * MANF-01: the walk is the shared `MANIFEST_CANDIDATES` ordering, so this
  * reader and the resolver read the same file. D-01-07: a candidate that
  * EXISTS ends the walk -- if it cannot be read, cannot be parsed, or carries
- * no usable `version`, the answer falls to tier 2, never to a sibling
+ * no usable `version`, the answer falls to the marketplace entry, never to a sibling
  * candidate. Never throws (D-23-02 / D-23-03).
  */
 async function readDeclaredPluginVersion(pluginRoot: string): Promise<string | undefined> {
@@ -1195,7 +1195,7 @@ async function readDeclaredPluginVersion(pluginRoot: string): Promise<string | u
       // eslint-disable-next-line no-await-in-loop -- D-01-07: only the first existing candidate is read
       parsed = JSON.parse(await readFile(manifestPath, "utf8"));
     } catch (err) {
-      // Present and unusable: tier 2 / tier 3 cover it.
+      // Present and unusable: the entry, the commit, or the hash covers it.
       hookDebugLog(`resolvePluginVersion: plugin.json read/parse failed: ${errorMessage(err)}`);
       return undefined;
     }
@@ -1218,37 +1218,54 @@ function usableDeclaredVersion(parsed: unknown): string | undefined {
 }
 
 /**
- * PI-7 / PUP-3 / SNM-34 version precedence (3 tiers, highest first):
- *   1. The plugin's own manifest `version`, read at the first
- *      `MANIFEST_CANDIDATES` location present under `pluginRoot` (MANF-01;
- *      D-23-01: "If also set in the marketplace entry, `plugin.json` wins.").
- *   2. The marketplace `entry.version`.
- *   3. The PI-7 `computeHashVersion` content hash, as a last resort.
- *
- * Each declared `version` is accepted iff it is a non-empty string (the same
- * gate used for `entry.version`; D-23-03 -- no SemVer enforcement). The
- * plugin.json read is re-done here independently (D-23-02): the NFR-7
- * discriminated `ResolvedPluginInstallable` union is NOT widened with a
- * `manifest` field. Any read/parse failure (absence, malformed JSON, missing
- * or non-string `.version`) silently falls through to the next tier and never
- * throws.
+ * VER-01 / D-23-01: the version a plugin declares, or undefined when it
+ * declares none: the plugin's own manifest `version`, read at the first
+ * `MANIFEST_CANDIDATES` location present under `pluginRoot` (MANF-01;
+ * "If also set in the marketplace entry, `plugin.json` wins."), then the
+ * marketplace `entry.version`. Each is accepted iff it is a non-empty string
+ * (D-23-03 -- no SemVer enforcement). A read or parse failure falls through to
+ * the entry and never throws.
  */
-export async function resolvePluginVersion(
+export async function resolveDeclaredPluginVersion(
   entry: PluginEntry,
-  installable: MaterializablePlugin,
-): Promise<string> {
-  // Tier 1: the plugin's own manifest `version`.
-  const declaredVersion = await readDeclaredPluginVersion(installable.pluginRoot);
+  pluginRoot: string,
+): Promise<string | undefined> {
+  const declaredVersion = await readDeclaredPluginVersion(pluginRoot);
   if (declaredVersion !== undefined) {
     return declaredVersion;
   }
 
-  // Tier 2: the marketplace entry version.
-  if (typeof entry.version === "string" && entry.version.length > 0) {
-    return entry.version;
+  return typeof entry.version === "string" && entry.version.length > 0 ? entry.version : undefined;
+}
+
+/**
+ * PI-7 / PUP-3 / SNM-34 / VER-01 version precedence, highest first:
+ *   1. The declared version (`resolveDeclaredPluginVersion`: plugin.json,
+ *      then the marketplace entry).
+ *   2. `sha-<12hex>` of `resolvedSha`, the commit a git source installs
+ *      (D-16-08, superseding D-77-01's sha-replaces-the-ladder rule). Claude
+ *      Code orders a git plugin's version the same way: manifest, catalog
+ *      entry, then the commit.
+ *   3. The PI-7 `computeHashVersion` content hash, as a last resort.
+ *
+ * The plugin.json read is re-done here independently (D-23-02): the NFR-7
+ * discriminated `ResolvedPluginInstallable` union is NOT widened with a
+ * `manifest` field.
+ */
+export async function resolvePluginVersion(
+  entry: PluginEntry,
+  installable: MaterializablePlugin,
+  resolvedSha?: string,
+): Promise<string> {
+  const declared = await resolveDeclaredPluginVersion(entry, installable.pluginRoot);
+  if (declared !== undefined) {
+    return declared;
   }
 
-  // Tier 3: PI-7 content hash (last resort, unchanged).
+  if (resolvedSha !== undefined) {
+    return shaVersion(resolvedSha);
+  }
+
   return computeHashVersion(installable.pluginRoot);
 }
 

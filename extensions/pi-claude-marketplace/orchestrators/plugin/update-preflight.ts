@@ -6,7 +6,6 @@ import {
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
-import { shaVersion } from "../../domain/version.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
@@ -33,6 +32,7 @@ import {
   materializeMarketplaceTagClone,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
+  materializePluginCommitCopy,
   networkCloneUrl,
   resolveGitSubdirRoot,
   resolvePluginPin,
@@ -76,6 +76,7 @@ export interface UpdateCloneCacheSeam {
   readonly resolvePluginPin: typeof resolvePluginPin;
   readonly materializePluginClone: typeof materializePluginClone;
   readonly materializeOrRefreshPluginMirror: typeof materializeOrRefreshPluginMirror;
+  readonly materializePluginCommitCopy: typeof materializePluginCommitCopy;
 }
 
 /** Direct update request validated and classified by the update flow. */
@@ -227,29 +228,33 @@ function makeUpdateCloneProbe(
   async function probeUnpinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
     const cloneUrl = canonicalCloneUrl(gitSource);
     const authBundle = cloneAuth(cloneUrl, gitSource.kind);
-    const materialized = await seam.materializeOrRefreshPluginMirror({
+    const mirror = await seam.materializeOrRefreshPluginMirror({
       locations,
       cloneUrl,
       networkUrl: networkCloneUrl(gitSource),
       ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
       auth: authBundle,
     });
+    // GIT-01: the updated plugin runs from its own copy at the mirror's commit.
+    const copyRoot = await seam.materializePluginCommitCopy({
+      locations,
+      cloneUrl,
+      networkUrl: networkCloneUrl(gitSource),
+      sha: mirror.resolvedSha,
+      resolveAuth: () => authBundle,
+    });
     if (gitSource.kind === "git-subdir") {
-      const subdir = await resolveGitSubdirRoot(materialized.pluginRoot, gitSource.path);
+      const subdir = await resolveGitSubdirRoot(copyRoot, gitSource.path);
       if (subdir.kind !== "materialized") {
         return subdir;
       }
 
-      captured = materialized.resolvedSha;
-      return { ...subdir, resolvedSha: materialized.resolvedSha };
+      captured = mirror.resolvedSha;
+      return { ...subdir, resolvedSha: mirror.resolvedSha };
     }
 
-    captured = materialized.resolvedSha;
-    return {
-      kind: "materialized",
-      pluginRoot: materialized.pluginRoot,
-      resolvedSha: materialized.resolvedSha,
-    };
+    captured = mirror.resolvedSha;
+    return { kind: "materialized", pluginRoot: copyRoot, resolvedSha: mirror.resolvedSha };
   }
 
   async function probePinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
@@ -305,12 +310,33 @@ async function deriveUpdateToVersion(
     return pinnedVersion;
   }
 
-  const kind = parsePluginSource(entry.source).kind;
-  if ((kind === "url" || kind === "git-subdir" || kind === "github") && resolvedSha !== undefined) {
-    return shaVersion(resolvedSha);
-  }
+  return resolvePluginVersion(
+    entry,
+    installable,
+    isGitSourceEntry(entry) ? resolvedSha : undefined,
+  );
+}
 
-  return resolvePluginVersion(entry, installable);
+/**
+ * D-16-09: whether an update candidate is the revision the record holds. A
+ * source that moved to a new commit is a new revision even when its declared
+ * version did not change, because the stored sha is the revision; a switch
+ * between a git and a `path` source adds or drops the sha, so it is a new
+ * revision too. Only when neither side has a sha does the version alone
+ * decide.
+ */
+function isSameRevision(
+  record: PluginStateRecord,
+  toVersion: string,
+  resolvedSha: string | undefined,
+): boolean {
+  return toVersion === record.version && resolvedSha === record.resolvedSha;
+}
+
+/** Whether `entry` installs from a git source (url / git-subdir / github). */
+function isGitSourceEntry(entry: PluginEntry): boolean {
+  const kind = parsePluginSource(entry.source).kind;
+  return kind === "url" || kind === "git-subdir" || kind === "github";
 }
 
 function isPartialableUpdateShapeError(error: unknown): error is PartialableUpdateShapeError {
@@ -678,7 +704,7 @@ async function refreshDisabledPluginUpdate(
     }
   }
 
-  if (preflight.toVersion === preflight.fromVersion) {
+  if (isSameRevision(preflight.record, preflight.toVersion, preflight.resolvedSha)) {
     return {
       partition: "unchanged",
       name: options.plugin,
@@ -885,6 +911,7 @@ export async function preparePluginUpdate(
       resolvePluginPin,
       materializePluginClone,
       materializeOrRefreshPluginMirror,
+      materializePluginCommitCopy,
     },
     options.locations,
     auth,
@@ -921,7 +948,10 @@ export async function preparePluginUpdate(
     return stageTwoHold;
   }
 
-  if (toVersion === triaged.record.version && !isRecordedButDisabled(triaged.record)) {
+  if (
+    isSameRevision(triaged.record, toVersion, resolvedSha) &&
+    !isRecordedButDisabled(triaged.record)
+  ) {
     return {
       partition: "unchanged",
       name: options.plugin,
