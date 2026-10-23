@@ -1608,6 +1608,43 @@ describe("buildReconcileAppliedCascade", () => {
     });
   });
 
+  test("REC-06: renders the narrowed reasons a plugin-install-failed row carries", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "cr",
+        reason: "no longer installable",
+        reasons: ["unsupported hooks", "lsp"],
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "failed",
+              name: "cr",
+              reasons: ["unsupported hooks", "lsp"],
+              severity: "error",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   test("RESV-06: carries the dependency-cascade cause on a plugin-install-failed row that names one", () => {
     // arrange
     const cause = new DependencyCascadeError(

@@ -38,6 +38,7 @@ export interface GitOpsFakeCalls {
     readonly dir: string;
     readonly remote?: string;
     readonly ref?: string;
+    readonly tags?: boolean;
     readonly auth?: GitAuthBundle;
   }>;
   readonly forceUpdateRef: Array<{

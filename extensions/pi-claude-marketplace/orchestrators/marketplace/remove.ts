@@ -97,7 +97,7 @@ import {
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
 import { garbageCollectPluginClones } from "../plugin/clone-gc.ts";
-import { buildScopeDeclarationIndex } from "../plugin/dependency-index.ts";
+import { buildScopeDeclarationIndex, withoutDisabledHolders } from "../plugin/dependency-index.ts";
 
 import { composeHeldRemovalCause, REMOVE_CONTEXT, type RemoveRowMsg } from "./remove.messaging.ts";
 import {
@@ -759,7 +759,9 @@ class HeldRemovalStop extends Error {
  * before anything changes, as `disable` refuses (`{dependents remain}`): the
  * user uninstalls the dependents first, or removes the marketplace from the
  * other file too. The full remove applies no such rule, because it removes the
- * marketplace from the scope.
+ * marketplace from the scope. MPR-01: the caller passes the index without its
+ * disabled holders, so a disabled dependent does not refuse the remove, as it
+ * does not refuse a named uninstall.
  */
 function refuseHeldRemovals(
   plan: RemovePlan,
@@ -904,7 +906,11 @@ async function runRemoveLockBody(args: {
     locations,
     read: opts.declarationIndex ?? buildScopeDeclarationIndex,
   });
-  refuseHeldRemovals(plan, index, opts.name);
+  refuseHeldRemovals(
+    plan,
+    index === undefined ? undefined : withoutDisabledHolders(index, tx.state as ExtensionState),
+    opts.name,
+  );
 
   // D-02: per-plugin cascade loop (MR-3 continuation across failures).
   const removal = {

@@ -104,6 +104,7 @@ import { UninstallRefusedError } from "../plugin/uninstall.ts";
 import {
   carriedMcpConfigNotices,
   classifyOrchestratorThrow,
+  installFailureReasonFields,
   classifyReadPassThrow,
   dependencyDisabledOutcome,
   MigrateConfigSaveError,
@@ -722,7 +723,7 @@ async function applyPluginInstalls(
         scope: op.scope,
         marketplace: op.marketplace,
         plugin: op.plugin,
-        reason: classifyOrchestratorThrow(result.error),
+        ...installFailureReasonFields(result.error),
         // RESV-06: only a dependency-cascade failure carries a cause onto
         // this row. Redact defensively (T-55-02-02 / T-53-02-02) -- the
         // closure/constraint arms build their message from keys and version
@@ -838,7 +839,7 @@ async function applyDependencyInstalls(
       scope: op.scope,
       marketplace: op.marketplace,
       plugin: op.plugin,
-      reason: result.reason ?? classifyOrchestratorThrow(result.error),
+      ...installFailureReasonFields(result.error, result.reason),
       ...(result.error instanceof DependencyCascadeError && {
         cause: redactedDependencyCascadeError(result.error),
       }),

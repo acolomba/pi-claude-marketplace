@@ -648,12 +648,23 @@ export function narrowResolverReasons(
   return [...new Set(out)];
 }
 
-export function classifyInstallFailure(err: unknown, formattedCause: string): InstallPluginOutcome {
+export function classifyInstallFailure(
+  err: unknown,
+  formattedCause: string,
+  rollbackPartials: readonly RollbackPartial[] = [],
+): InstallPluginOutcome {
   // All failure variants collapse to `{ status: "failed"; error; cause }`.
   // `error` is the dispatch surface (narrow on `instanceof PluginShapeError`
   // to recover `.shape.kind`); `cause` is the formatted user-visible text.
   // `ConcurrentInstallError` is preserved as a distinct typed branch (PI-15);
   // non-Error inputs are wrapped so the contract guarantees `error instanceof Error`.
+  // REC-06: the rollback partials ride along, so an orchestrated caller can
+  // name them as the standalone row does.
   const wrapped = err instanceof Error ? err : new Error(formattedCause);
-  return { status: "failed", error: wrapped, cause: formattedCause };
+  return {
+    status: "failed",
+    error: wrapped,
+    cause: formattedCause,
+    ...(rollbackPartials.length > 0 && { rollbackPartials }),
+  };
 }

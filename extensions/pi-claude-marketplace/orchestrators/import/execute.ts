@@ -1041,7 +1041,9 @@ async function installOnePlannedPlugin(
       // The collapsed `failed` status carries the typed Error directly. Narrow
       // on `instanceof PluginShapeError` plus `.kind` to recover the specific
       // failure class; everything else falls through to the unexpected bucket.
-      dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause);
+      dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause, {
+        rolledBackPartial: (outcome.rollbackPartials?.length ?? 0) > 0,
+      });
       return "install-failed";
     case "installed":
       result.installedPlugins.push({
@@ -1137,7 +1139,9 @@ async function enableOnePlannedPlugin(
     case "failed":
       // AFILE-04: a failed enable can still have rewritten the MCP config.
       result.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
-      dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause);
+      dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause, {
+        rolledBackPartial: outcome.reason === "rollback partial",
+      });
       return "install-failed";
     case "skipped":
       // A race another process won: the record is enabled already, or gone.
@@ -1805,9 +1809,11 @@ function pushUnexpectedFailure(
   plugin: PlannedPluginImport,
   reason: UnexpectedPluginFailureOutcome["reason"],
   error: Error,
+  rolledBackPartial = false,
 ): void {
   const causeChain = redactCauseChain(error.cause);
-  const runtimeReason = reason === "unexpected-failure" ? runtimeFailureReason(error) : undefined;
+  const runtimeReason =
+    reason === "unexpected-failure" ? runtimeFailureReason(error, rolledBackPartial) : undefined;
   result.unexpectedPluginFailures.push({
     kind: "plugin-failure",
     scope: plugin.scope,
@@ -1823,10 +1829,15 @@ function pushUnexpectedFailure(
 
 /**
  * IMP-09: the reason `install`'s failure row gives an error its shape ladder
- * leaves unclassified: the reason of the marketplace add the install ran
+ * leaves unclassified: a rollback that could not finish (REC-06, install's
+ * row names it first), the reason of the marketplace add the install ran
  * (LAYER-07), or the git host's answer.
  */
-function runtimeFailureReason(error: Error): ContentReason | undefined {
+function runtimeFailureReason(error: Error, rolledBackPartial: boolean): ContentReason | undefined {
+  if (rolledBackPartial) {
+    return "rollback partial";
+  }
+
   return error instanceof InstallMarketplaceAddError ? error.reason : classifyGitHostFailure(error);
 }
 
@@ -1853,6 +1864,7 @@ function dispatchFailedOutcome(
   plugin: PlannedPluginImport,
   error: Error,
   cause: string,
+  options: { readonly rolledBackPartial: boolean },
 ): void {
   if (error instanceof DependencyCascadeError) {
     pushUnexpectedFailure(result, plugin, "dependency-failed", error);
@@ -1906,7 +1918,7 @@ function dispatchFailedOutcome(
     }
   }
 
-  pushUnexpectedFailure(result, plugin, "unexpected-failure", error);
+  pushUnexpectedFailure(result, plugin, "unexpected-failure", error, options.rolledBackPartial);
 }
 
 /**

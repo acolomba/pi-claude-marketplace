@@ -603,12 +603,12 @@ describe("withoutCleanupLeaks", () => {
 });
 
 describe("PinnedCommitMissingError", () => {
-  test("names the commit the git host does not have and keeps its cause", () => {
+  test("names the commit a fresh clone does not hold, with no chained cause", () => {
     // arrange
-    const cause = new Error("not available locally");
+    const sha = "0123abc";
 
     // act
-    const error = new PinnedCommitMissingError("0123abc", { cause });
+    const error = new PinnedCommitMissingError(sha);
 
     // assert
     assert.deepStrictEqual(
@@ -617,7 +617,7 @@ describe("PinnedCommitMissingError", () => {
         name: "PinnedCommitMissingError",
         message: "A fresh clone from the git host does not hold the commit 0123abc",
         sha: "0123abc",
-        cause,
+        cause: undefined,
       },
     );
   });

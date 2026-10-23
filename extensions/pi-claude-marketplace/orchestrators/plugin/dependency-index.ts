@@ -66,6 +66,7 @@
 
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { InvalidMarketplaceManifestError, isErrnoException } from "../../shared/errors.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
@@ -327,4 +328,26 @@ export async function buildScopeDeclarationDetail(
   }
 
   return { ok: true, declarations };
+}
+
+/**
+ * UNI-01 / D-23-07: drops every holder the user or a config disabled. Claude
+ * Code counts only enabled plugins as reverse dependents, so such a plugin
+ * neither holds a named uninstall nor is named on its row. A record the
+ * load-time check held down (`dependencyDisabled`) is still enabled in its
+ * config, so it keeps holding, as Claude Code reads the settings. Shared by a
+ * named uninstall and a layer `marketplace remove` (MPR-01).
+ */
+export function withoutDisabledHolders(
+  index: DeclarationIndex,
+  state: ExtensionState,
+): DeclarationIndex {
+  const disabled = new Set(
+    Object.entries(state.marketplaces).flatMap(([marketplace, record]) =>
+      Object.entries(record.plugins)
+        .filter(([, plugin]) => isRecordedButDisabled(plugin) && plugin.dependencyDisabled !== true)
+        .map(([name]) => `${name}@${marketplace}`),
+    ),
+  );
+  return new Map([...index].filter(([holder]) => !disabled.has(holder)));
 }

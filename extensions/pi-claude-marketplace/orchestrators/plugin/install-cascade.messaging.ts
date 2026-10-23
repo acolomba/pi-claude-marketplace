@@ -339,7 +339,7 @@ function rangeConflictFacts(
         version: failure.recordedVersion,
         reasons: ["already installed", "version conflict"],
         cause: new DependencyCascadeError(
-          `Dependency "${failure.key}" is installed at version ${failure.recordedVersion}, which does not satisfy "${failure.range}".`,
+          `Dependency "${failure.key}" is installed at version ${failure.recordedVersion}, which does not satisfy ${failure.range}.`,
           failure.key,
         ),
       }
@@ -347,7 +347,7 @@ function rangeConflictFacts(
         key: failure.key,
         reasons: ["version conflict"],
         cause: new DependencyCascadeError(
-          `Dependency "${failure.key}" has contradictory version constraints "${failure.range}" (${failure.detail}).`,
+          `Dependency "${failure.key}" has contradictory version constraints ${failure.range} (${failure.detail}).`,
           failure.key,
         ),
       };
@@ -370,7 +370,7 @@ function constraintFailureFacts(failure: CascadeConstraintFailure): CascadeFailu
         key: failure.key,
         reasons: ["no matching version"],
         cause: new DependencyCascadeError(
-          `Dependency "${failure.key}" has no release tag satisfying "${failure.range}".`,
+          `Dependency "${failure.key}" has no release tag satisfying ${failure.range}.`,
           failure.key,
         ),
       };
@@ -384,7 +384,7 @@ function constraintFailureFacts(failure: CascadeConstraintFailure): CascadeFailu
         // `unreadable`.
         reasons: [failure.classification ?? "unreadable"],
         cause: new DependencyCascadeError(
-          `Dependency "${failure.key}" could not be checked against "${failure.range}" (${failure.classification ?? "tag listing failed"}).`,
+          `Dependency "${failure.key}" could not be checked against ${failure.range} (${failure.classification ?? "tag listing failed"}).`,
           failure.key,
         ),
       };
@@ -393,7 +393,7 @@ function constraintFailureFacts(failure: CascadeConstraintFailure): CascadeFailu
         key: failure.key,
         reasons: ["invalid version constraint"],
         cause: new DependencyCascadeError(
-          `Dependency "${failure.key}" declares an unparseable version constraint "${failure.range}" (${failure.detail}).`,
+          `Dependency "${failure.key}" declares an unparseable version constraint ${failure.range} (${failure.detail}).`,
           failure.key,
         ),
       };
