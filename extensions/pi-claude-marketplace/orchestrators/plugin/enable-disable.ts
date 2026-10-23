@@ -83,6 +83,7 @@ import { buildScopeDeclarationIndex, readRecordDeclarations } from "./dependency
 import {
   composeDisableRefusalCause,
   composeEnableCascadeRows,
+  composeEnableMissingDependencyCause,
   DISABLE_CONTEXT,
   ENABLE_CONTEXT,
   narrowDisableFailure,
@@ -534,7 +535,8 @@ async function runEnableBranch(
  * inside the locked transaction before anything left disk. On the enable
  * cascade (EDEP-01), the closure could not be resolved -- either some other
  * record's declarations could not be established, or the declared graph
- * closes on itself. On the disable branch (EDEP-02, `readEnabledDependents`),
+ * closes on itself -- or a member of it is not installed in the scope
+ * (upstream's `dependency_missing`). On the disable branch (EDEP-02, `readEnabledDependents`),
  * an installed and ENABLED plugin in the same scope still declares the
  * target. On either branch (`refuseMarketplaceDeclarationWrite`), a
  * standalone call would write its flag into `claude-plugins.json` under a
@@ -569,24 +571,22 @@ class EnableRefusedError extends Error {
  *   (`isRecordedButDisabled`); it is re-materialized through its own record.
  * - `"already-enabled"`: the member's record is present and already enabled;
  *   D-08-03's full-closure report still gives it a row.
- * - `"not-installed"`: the scope records nothing under the member's exact
- *   key. LOAD-01's load-time check owns reporting a missing declared
- *   dependency, so this disposition never refuses the root's own enable.
+ *
+ * A member the scope records nothing for has no disposition: it refuses the
+ * whole enable (`resolveEnableCascade`).
  */
-type EnableCascadeDisposition = "re-enabled" | "already-enabled" | "not-installed";
+type EnableCascadeDisposition = "re-enabled" | "already-enabled";
 
 /**
  * One non-root member of the enable cascade's transitive closure, classified
- * against the live locked snapshot. `record` is present for `"re-enabled"`
- * and `"already-enabled"` (a record was found) and absent for
- * `"not-installed"`.
+ * against the live locked snapshot, with the record it was classified from.
  */
 interface EnableCascadeMember {
   readonly key: string;
   readonly name: string;
   readonly marketplace: string;
   readonly disposition: EnableCascadeDisposition;
-  readonly record?: InstalledPluginRecord;
+  readonly record: InstalledPluginRecord;
 }
 
 /** The enable cascade's closure resolution: every non-root member, classified. */
@@ -732,19 +732,17 @@ function enableCascadeClosureFailure(failure: ClosureFailure): EnableRefusedErro
   );
 }
 
-/** Classify one non-root closure member against the live locked snapshot. */
+/**
+ * Classify one non-root closure member against the live locked snapshot, or
+ * return `undefined` when the scope records nothing under its exact key.
+ */
 function classifyEnableCascadeMember(
   state: ExtensionState,
   member: ClosureMember,
-): EnableCascadeMember {
+): EnableCascadeMember | undefined {
   const record = ownValue(ownValue(state.marketplaces, member.marketplace)?.plugins, member.name);
   if (record === undefined) {
-    return {
-      key: member.key,
-      name: member.name,
-      marketplace: member.marketplace,
-      disposition: "not-installed",
-    };
+    return undefined;
   }
 
   return {
@@ -771,7 +769,10 @@ function classifyEnableCascadeMember(
  * network-free gate.
  *
  * Throws `EnableRefusedError` when the closure cannot be resolved -- an
- * unreadable declarer reached by the walk, or a cycle.
+ * unreadable declarer reached by the walk, or a cycle -- and when a member is
+ * not installed in the scope. Upstream refuses that enable as
+ * `dependency_missing` and enables nothing, so the root never turns on with
+ * a dependency it cannot load.
  */
 async function resolveEnableCascade(
   state: ExtensionState,
@@ -794,9 +795,28 @@ async function resolveEnableCascade(
     throw enableCascadeClosureFailure(closure);
   }
 
-  const members = closure.closure
-    .filter((member) => member.key !== rootKey)
-    .map((member) => classifyEnableCascadeMember(state, member));
+  const members: EnableCascadeMember[] = [];
+  const missing: string[] = [];
+  for (const member of closure.closure) {
+    if (member.key === rootKey) {
+      continue;
+    }
+
+    const classified = classifyEnableCascadeMember(state, member);
+    if (classified === undefined) {
+      missing.push(member.key);
+    } else {
+      members.push(classified);
+    }
+  }
+
+  if (missing.length > 0) {
+    throw new EnableRefusedError(
+      "dependency unsatisfied",
+      composeEnableMissingDependencyCause(rootKey, missing),
+    );
+  }
+
   return { members };
 }
 
@@ -1060,30 +1080,14 @@ function buildEnableRootPhase(
   };
 }
 
-/** A classified member's row when nothing is materialized for it. */
+/** An already-enabled member's row: nothing is materialized for it. */
 function enableCascadeSkipRow(member: EnableCascadeMember): EnableCascadeMemberRow {
-  if (member.disposition === "already-enabled") {
-    return {
-      status: "skipped",
-      name: member.key,
-      ...(member.record !== undefined && { version: member.record.version }),
-      reasons: ["already enabled"],
-      severity: "info",
-      needsReload: false,
-    };
-  }
-
-  // WR-04: "not-installed". LOAD-01's load-time check owns reporting a
-  // missing declared dependency, so this disposition never refuses the
-  // root's own enable -- it only reports. The enable WAS carried out, so
-  // `warning` ("carried out but short"), never `error` ("not carried out"):
-  // the next reload holds the root down as `dependencyDisabled` until the
-  // missing dependency is installed.
   return {
     status: "skipped",
     name: member.key,
-    reasons: absentTargetReasons(),
-    severity: "warning",
+    version: member.record.version,
+    reasons: ["already enabled"],
+    severity: "info",
     needsReload: false,
   };
 }
@@ -1113,12 +1117,7 @@ function buildEnableCascadeMemberPhases(
   };
   const phases: Phase<EnableCascadeRun>[] = [];
   for (const member of members) {
-    if (member.disposition !== "re-enabled") {
-      run.rows.push(enableCascadeSkipRow(member));
-      continue;
-    }
-
-    if (member.record !== undefined) {
+    if (member.disposition === "re-enabled") {
       phases.push(
         buildEnableCascadeMemberPhase(
           transaction,
@@ -1130,6 +1129,8 @@ function buildEnableCascadeMemberPhases(
           member.record,
         ),
       );
+    } else {
+      run.rows.push(enableCascadeSkipRow(member));
     }
   }
 

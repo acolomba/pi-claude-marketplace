@@ -6446,7 +6446,7 @@ test("EDEP-01: a diamond shares its member once", async () => {
   });
 });
 
-test("EDEP-01: a not-installed declared dependency reports {not installed} and does not refuse the root", async () => {
+test("EDEP-01: a declared dependency that is not installed refuses the enable and writes nothing", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const { statePath } = await seedEdepGraph(home, [
@@ -6457,6 +6457,7 @@ test("EDEP-01: a not-installed declared dependency reports {not installed} and d
         enabled: false,
       },
     ]);
+    const mtimeBefore = (await stat(statePath)).mtimeMs;
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
@@ -6475,17 +6476,14 @@ test("EDEP-01: a not-installed declared dependency reports {not installed} and d
     assert.equal(
       notifications[0]!.message,
       [
-        "A plugin operation needs attention.",
+        "A plugin operation has failed.",
         "",
         "● official [user]",
-        "  ● a v1.0.0 (installed)",
-        "  ⊘ formatter@tools (skipped) {not installed}",
-        "",
-        "/reload to pick up changes",
+        "  ⊘ a (failed) {dependency unsatisfied}",
+        "    cause: Install formatter@tools first, then a@official.",
       ].join("\n"),
     );
-    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
-    assert.equal(state.marketplaces.official!.plugins.a!.enabled, true);
+    assert.equal((await stat(statePath)).mtimeMs, mtimeBefore);
   });
 });
 

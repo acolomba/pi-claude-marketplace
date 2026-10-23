@@ -112,6 +112,19 @@ export function composeDisableRefusalCause(target: string, dependents: readonly 
   return `Disable ${renderDependentKeys(dependents)} first, then ${target}.`;
 }
 
+/**
+ * The enable refusal's instruction when a dependency in the target's closure
+ * is not installed, in the same D-08-01 form as `composeDisableRefusalCause`:
+ * install the missing dependencies first, then enable the target. Upstream
+ * refuses the same enable as `dependency_missing`.
+ */
+export function composeEnableMissingDependencyCause(
+  target: string,
+  missing: readonly string[],
+): string {
+  return `Install ${renderDependentKeys(missing)} first, then ${target}.`;
+}
+
 // ───────────────────────────────────────────────────────────────────────────
 // Failure -> reasons narrowing for both verbs, moved from enable-disable.ts
 // where `staleGateDropped` was reached through a `__test_` re-export. These
