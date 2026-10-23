@@ -131,6 +131,13 @@ Step module paths are relative to `features/step_definitions/`.
 - [ ] **Phase 17: Reconcile Stale-Declarer Warning** — A plugin whose catalog dropped it or whose manifest broke is reported as a warning with its real reason and cause
 - [ ] **Phase 18: Update and Reinstall Unification** — `reinstall` takes the latest known version and reports it, through one code path shared with `update`
 - [ ] **Phase 19: Import on the Reconcile Path** — `import` uses reconcile's desired-state path, reports what it skipped, and refuses under a held state lock
+- [ ] **Phase 20: Path-Source Version and Missing Source** — Path-source rows follow the one version rule, and a missing path directory reads `{source missing}`
+- [ ] **Phase 21: Marketplace Add No-Op and Token Parity** — Re-adding a marketplace is a skipped no-op, and write-path manifest faults use list/info's tokens
+- [ ] **Phase 22: Install Failure Reasons** — Every install failure in a cascade, a leaked cleanup, or a missing pinned commit carries its reason
+- [ ] **Phase 23: Uninstall and Prune Parity** — `will uninstall` rows show versions, prune's lock cause matches other commands, and uninstall of a disabled-only dependency matches Claude Code
+- [ ] **Phase 24: Import Reasons** — `import` reports the same reasons and statuses as `install` and reconcile
+- [ ] **Phase 25: Update and Reinstall Rows** — Same-version updates show commits, and update and reinstall rows carry their versions and consistent reasons
+- [ ] **Phase 26: Git Mirror Access** — Mirror refreshes take the state lock, one copy helper serves all clones, and a cold `info --fetch` contacts the host once
 
 ## Phase Details
 
@@ -192,7 +199,7 @@ Plans:
 1. After `disable`, a new session offers none of the plugin's skills and `list` shows the plugin installed and disabled. After `enable`, a new session offers its skills again and the scope still holds exactly one installation record for it (ENA-01, ENA-02).
 2. Enabling an enabled plugin and disabling a disabled one each report a skipped row with the matching no-op reason. Enable and disable of a plugin that is not installed fail with the not-installed reason (ENA-03, ENA-06).
 3. With `--scope user` and with `--scope project`, enable and disable change only the named scope: the other scope's `list` rows, configs, and offered skills stay the same (ENA-04).
-4. Enabling a plugin whose dependencies are disabled or absent enables or installs them and reports each one. Disabling a plugin that an enabled plugin depends on is refused or cascaded as Claude Code's `/plugin` does, and the scenario title says which (ENA-05).
+4. Enabling a plugin whose dependencies are disabled enables them and reports each one; a dependency that is absent refuses the enable with `{dependency unsatisfied}`, as Claude Code does. Disabling a plugin that an enabled plugin depends on is refused or cascaded as Claude Code's `/plugin` does, and the scenario title says which (ENA-05).
 5. The phase's scenarios pass in `npm run test:cucumber`, and `npm run check:features` and `npm run check` stay green.
 
 **Plans:** TBD
@@ -205,9 +212,9 @@ Plans:
 **Files:** `features/plugin/install.feature`, `features/plugin/install-dependencies.feature`, `features/plugin/partial-install.feature`; `plugin/install.steps.ts` if needed.
 **Success Criteria** (what must be TRUE):
 
-1. Installing a plugin that declares dependencies installs the whole closure in dependency order, reports a row for each member, and a new session offers the skills of every member (INS-01).
+1. Installing a plugin that declares dependencies installs the whole closure in dependency order (proven by the `RESV-01` unit tests), reports a row for each member, and a new session offers the skills of every member (INS-01).
 2. A closure with a missing dependency, or with a version constraint no offered version satisfies, fails with its reason and installs nothing: `list` shows no member installed, and a new session offers none of their skills (INS-02).
-3. A plugin with skills and an unsupported component fails to install without `--partial`. With `--partial`, it installs only the skills, and `info` then names the component that was left out (INS-03).
+3. A plugin with skills and an unsupported component fails to install without `--partial`. With `--partial`, it installs only the skills, and `info` then reports it as `unsupported component` (INS-03).
 4. Installing with no `--scope`, and with `--scope user`, records the plugin in the user scope only (`list --scope project` shows no installation of it), and a new session started in another project offers its skills (INS-04).
 5. The phase's scenarios pass in `npm run test:cucumber`, and `npm run check:features` and `npm run check` stay green.
 
@@ -267,8 +274,8 @@ Plans:
 **Success Criteria** (what must be TRUE):
 
 1. `update @<marketplace>` updates every outdated plugin of that marketplace and reports each move. The outdated plugins of another marketplace keep their installed versions (UPD-01).
-2. An update whose new version breaks a dependency's version constraint is blocked with its reason, and the installed versions, records, and offered skills stay unchanged (UPD-03).
-3. `update --partial` updates a plugin whose new version became partially available, and `info` names what was left out. Without the flag, the update fails and the installed version stays (UPD-05).
+2. An update whose new version a dependent's version constraint does not accept is blocked with its reason, and the installed versions, records, and offered skills stay unchanged (UPD-03).
+3. `update --partial` updates a plugin whose new version became partially available, Without the flag, the update is not applied, is reported as a `partially-upgradable` warning, and the installed version stays (UPD-05).
 4. The phase's scenarios pass in `npm run test:cucumber`, and `npm run check:features` and `npm run check` stay green.
 
 **Plans:** TBD
@@ -299,7 +306,7 @@ Plans:
 1. `list` shows installed, available, unavailable, and partially available plugins, each with its status and scope, compared as one whole table (LST-01).
 2. `--installed`, `--available`, `--unavailable`, and `--partial` each keep only their own rows, and two combined filters keep the union of their rows (LST-02).
 3. `list <marketplace>` keeps only that marketplace's plugins, and an unknown marketplace fails as not added. `--scope user` and `--scope project` keep only that scope's installations (LST-03, LST-05).
-4. `list --remote` reports a git-source plugin whose source has a newer revision on the git host, and `list` without the flag makes no request (LST-04).
+4. `list --remote` filters to plugins from remote (git) sources (RSTA-07), and `list` makes no network request (LST-04, NFR-5).
 5. The phase's scenarios pass in `npm run test:cucumber`, and `npm run check:features` and `npm run check` stay green.
 
 **Plans:** TBD
@@ -312,7 +319,7 @@ Plans:
 **Files:** `features/plugin/info.feature`; `plugin/info.steps.ts` if needed.
 **Success Criteria** (what must be TRUE):
 
-1. `info` on an installed plugin shows its version, scope, source, and skills. On an available plugin that is not installed, it shows what installing it would provide (INF-01, INF-02).
+1. `info` on an installed plugin shows its version, marketplace, scope, and skills. On an available plugin that is not installed, it shows what installing it would provide (INF-01, INF-02).
 2. `info` on a partially available plugin names what an install would leave out, and on an unavailable plugin it names the reasons (INF-03).
 3. `info --fetch` reads the remote source and reports a newer revision, and `info` without the flag makes no request (INF-04).
 4. `info` on a plugin the marketplace does not offer fails as not in the manifest (INF-05).
@@ -455,6 +462,104 @@ Plans:
 3. `import` run while another process holds the state lock fails with `lock held` and its cause chain, and changes nothing (IMP-07).
 4. `npm run check` stays green.
 
+### Phase 20: Path-Source Version and Missing Source
+
+**Goal:** A path-source plugin reports its version and a missing source the same way a git-source plugin does.
+**Depends on:** Phase 16
+**Decision:** 2026-10-23 (user + orchestrator, second round): follow Claude Code unless a recorded divergence applies; resolve the rest per upstream and existing rules. Path and git sources behave the same in most respects (user: a git source is a path source from a cloned repo).
+**Requirements:** VER-02, SRC-01
+**Files:** `orchestrators/plugin/list-candidate-row.ts`, `orchestrators/plugin/info.ts`, `shared/probe-classifiers.ts`; `features/plugin/list.feature`, `features/plugin/info.feature`, `features/plugin/install.feature`.
+**Success Criteria** (what must be TRUE):
+
+1. A path-source plugin whose plugin.json declares a version different from its marketplace entry shows plugin.json's version in `list`, `info`, and after `install` (VER-02).
+2. A path-source plugin whose directory is missing reads `{source missing}` in `info`, `install`, and `list` (SRC-01).
+3. `npm run check` stays green.
+
+### Phase 21: Marketplace Add No-Op and Token Parity
+
+**Goal:** Marketplace write commands treat an already-added marketplace as a no-op and name manifest faults with the read commands' tokens.
+**Depends on:** Phase 19
+**Decision:** 2026-10-23 (user + orchestrator, second round): follow Claude Code unless a recorded divergence applies; resolve the rest per upstream and existing rules.
+**Requirements:** MPA-01, MPA-02, MPA-03
+**Files:** `orchestrators/marketplace/add.ts`, `orchestrators/marketplace/update.ts`, `orchestrators/plugin/bootstrap.ts`, the marketplace help handler; `features/marketplace/*.feature`, `features/plugin/bootstrap.feature`.
+**Success Criteria** (what must be TRUE):
+
+1. `marketplace add` and `bootstrap` of a marketplace already added with the same source report `(skipped) {already added}` at `info` and change nothing (MPA-01).
+2. A malformed, missing, or unreadable marketplace manifest reads the same token in `marketplace add`/`update` as in `list`/`info` and the stale-declarer row (MPA-02).
+3. `marketplace help --bogus` reports `Unknown flag: "--bogus".` (MPA-03).
+4. `npm run check` stays green.
+
+### Phase 22: Install Failure Reasons
+
+**Goal:** No install failure renders without its reason.
+**Depends on:** Phase 16
+**Decision:** 2026-10-23 (user + orchestrator, second round): follow Claude Code unless a recorded divergence applies; resolve the rest per upstream and existing rules.
+**Requirements:** INR-01, INR-02, INR-03, INR-04
+**Files:** `orchestrators/plugin/install-cascade.ts` (`handleCascadeThrow`), `install-outcome.ts`, `install.messaging.ts`, the staging-leak helper (`appendLeakToError`); `features/plugin/install*.feature`, `features/plugin/git-source.feature`.
+**Success Criteria** (what must be TRUE):
+
+1. A cascade whose dependency clone the host refuses names the reason on that member's row and after `/reload` (INR-01).
+2. A staging cleanup leak keeps the failure's reason (INR-02).
+3. An install pinned to a commit the remote lacks fails with a reason (INR-03).
+4. Both `{version conflict}` causes print ranges in one form (INR-04).
+5. `npm run check` stays green.
+
+### Phase 23: Uninstall and Prune Parity
+
+**Goal:** Uninstall and prune previews and refusals read as Claude Code's do and as the other commands' do.
+**Depends on:** Phase 16
+**Decision:** 2026-10-23 (user + orchestrator, second round): follow Claude Code unless a recorded divergence applies; resolve the rest per upstream and existing rules.
+**Requirements:** PRN-02, PRN-03, UNI-01
+**Files:** `shared/notification-types.ts` (`PluginWillUninstallMessage`), its payload schema, the prune, pending, and reconcile `will uninstall` producers, `orchestrators/plugin/uninstall.ts`; `features/plugin/prune.feature`, `features/plugin/uninstall.feature`, `features/plugin/pending.feature`.
+**Success Criteria** (what must be TRUE):
+
+1. Every `will uninstall` row (prune `--dry-run`, pending, reconcile) shows the plugin's version (PRN-02).
+2. `prune` under a held lock prints the lock path as the other commands do (PRN-03).
+3. `uninstall` of a dependency whose only dependents are disabled behaves as Claude Code 2.1.30x does (UNI-01).
+4. `npm run check` stays green.
+
+### Phase 24: Import Reasons
+
+**Goal:** `import` reports the same reasons and statuses as `install` and reconcile.
+**Depends on:** Phase 19
+**Decision:** 2026-10-23 (user + orchestrator, second round): follow Claude Code unless a recorded divergence applies; resolve the rest per upstream and existing rules.
+**Requirements:** IMP-08, IMP-09, IMP-10
+**Files:** `orchestrators/import/*`; `features/plugin/import.feature`.
+**Success Criteria** (what must be TRUE):
+
+1. A first-time import of an uninstallable plugin shows the narrowed reason `install` shows (IMP-08).
+2. An unclassified import failure is not rendered as `{not in manifest}` (IMP-09).
+3. Import re-enabling a partially installed plugin reports `(partially-installed)` (IMP-10).
+4. `npm run check` stays green.
+
+### Phase 25: Update and Reinstall Rows
+
+**Goal:** Update and reinstall rows always say which version and commit moved, and refusals match `uninstall`.
+**Depends on:** Phase 18
+**Decision:** 2026-10-23 (user + orchestrator, second round): follow Claude Code unless a recorded divergence applies; resolve the rest per upstream and existing rules. User: show the commit when the version is the same: `1.0.0 (bfgaef) -> 1.0.0 (abe2a)`.
+**Requirements:** UPR-02, UPR-03, UPR-04
+**Files:** the update and reinstall messaging after Phase 18's unification, `shared/notification-grammar.ts`; `features/plugin/update.feature`, `features/plugin/reinstall.feature`.
+**Success Criteria** (what must be TRUE):
+
+1. An update to a new commit at the same declared version renders `1.0.0 (<sha7>) → 1.0.0 (<sha7>)` (UPR-02).
+2. `partially-installed` and `failed` update rows show the version and from/to where known (UPR-03).
+3. `reinstall` of a plugin that is not installed reports `failed {not installed}` (UPR-04).
+4. `npm run check` stays green.
+
+### Phase 26: Git Mirror Access
+
+**Goal:** The git download cache is refreshed safely and fetched once.
+**Depends on:** Phase 18
+**Decision:** 2026-10-23 (user + orchestrator, second round): follow Claude Code unless a recorded divergence applies; resolve the rest per upstream and existing rules.
+**Requirements:** GIT-03, GIT-04, GIT-05
+**Files:** `orchestrators/plugin/clone-cache.ts`, `orchestrators/plugin/fetch.ts`, `orchestrators/plugin/info.ts` (`--fetch`), the marketplace tag-clone helper; `features/plugin/fetch.feature`, `features/plugin/info.feature`.
+**Success Criteria** (what must be TRUE):
+
+1. `fetch` and `info --fetch` refresh the mirror under the state lock; with the lock held they fail with `lock held` (GIT-03).
+2. Per-commit copies and tag clones use one copy-and-checkout helper that handles a symlink-only directory (GIT-04).
+3. A cold `info --fetch` of an unpinned source makes one request round to the host (GIT-05).
+4. `npm run check` stays green.
+
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
@@ -478,6 +583,13 @@ Plans:
 | 17. Reconcile Stale-Declarer Warning | 0/TBD | Not started | - |
 | 18. Update and Reinstall Unification | 0/TBD | Not started | - |
 | 19. Import on the Reconcile Path | 0/TBD | Not started | - |
+| 20. Path-Source Version and Missing Source | 0/TBD | Not started | - |
+| 21. Marketplace Add No-Op and Token Parity | 0/TBD | Not started | - |
+| 22. Install Failure Reasons | 0/TBD | Not started | - |
+| 23. Uninstall and Prune Parity | 0/TBD | Not started | - |
+| 24. Import Reasons | 0/TBD | Not started | - |
+| 25. Update and Reinstall Rows | 0/TBD | Not started | - |
+| 26. Git Mirror Access | 0/TBD | Not started | - |
 
 ## Carried Forward
 
