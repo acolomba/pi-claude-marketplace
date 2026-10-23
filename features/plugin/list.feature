@@ -4,7 +4,7 @@ Feature: Plugin list
   and install scope, and its filters keep only the rows they select. The scenarios run
   the real extension in a headless Pi, with local marketplaces and a loopback git host.
 
-  Scenario: The list shows every plugin status with its scope
+  Scenario: The list shows each kind of plugin with its status and scope
     Given the git repository "ghp" holds these plugins:
       | name | version | path |
       | ghp  | 1.0.0   |      |
@@ -457,7 +457,7 @@ Feature: Plugin list
     Given the marketplace "tools" offers these plugins from git repositories:
       | name | source kind | repository | pinned |
       | ghp  | github      | ghp        | false  |
-    When the user runs "/claude:plugin list extras"
+    When the user runs "/claude:plugin list tools"
     Then the result has these fields:
       | kind                | cascade     |
       | severity            | info        |
@@ -465,10 +465,16 @@ Feature: Plugin list
       | tally label         | Plugin list |
       | tally failures      | 0           |
       | tally warnings      | 0           |
-      | tally success count | 1           |
+      | tally success count | 7           |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id          | name | status    | reasons | scope | version |
-      | extras           | user              | kilo@extras | kilo | installed |         | user  | 1.0.0   |
+      | marketplace name | marketplace scope | id          | name  | status              | reasons               | scope   | version |
+      | tools            | project           | alpha@tools | alpha | upgradable          |                       | project | 1.0.0   |
+      | tools            | project           | beta@tools  | beta  | available           |                       |         | 1.0.0   |
+      | tools            | project           | delta@tools | delta | partially-installed | unsupported component | project | 1.0.0   |
+      | tools            | project           | eps@tools   | eps   | disabled            |                       | project | 1.0.0   |
+      | tools            | project           | gamma@tools | gamma | partially-available | unsupported component |         | 1.0.0   |
+      | tools            | project           | ghp@tools   | ghp   | remote              |                       |         |         |
+      | tools            | project           | npmp@tools  | npmp  | unavailable         | unsupported source    |         | 1.0.0   |
 
   Scenario: The user scope filter keeps only the user installations
     Given the git repository "ghp" holds these plugins:
@@ -600,6 +606,19 @@ Feature: Plugin list
       | name         | extras                              |
       | reasons      | marketplace not added               |
 
+  Scenario: Naming a marketplace no scope holds with a scope fails as not added to that scope
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin list extras --scope project"
+    Then the result has these fields:
+      | kind         | marketplace-not-added               |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+      | name         | extras                              |
+      | scope        | project                             |
+      | reasons      | marketplace not added               |
+
   Scenario: Naming a marketplace with a scope that does not hold it fails as not added to that scope
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" is added to the project scope
@@ -613,7 +632,7 @@ Feature: Plugin list
       | scope        | user                                |
       | reasons      | marketplace not added to user scope |
 
-  Scenario: The project scope filter keeps a project installation from a marketplace only the user scope added
+  Scenario: The project scope filter lists a user marketplace from the project scope when a project installation added it
     Given the marketplace "extras" is published as a dir source
     Given the marketplace "extras" offers these plugins:
       | name | version |
@@ -631,12 +650,14 @@ Feature: Plugin list
       | tally label         | Plugin list |
       | tally failures      | 0           |
       | tally warnings      | 0           |
-      | tally success count | 1           |
+      | tally success count | 3           |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id          | name | status    | reasons | scope   | version |
-      | extras           | user              | kilo@extras | kilo | installed |         | project | 1.0.0   |
+      | extras           | project           | kilo@extras | kilo | installed |         | project | 1.0.0   |
+      | extras           | project           | lima@extras | lima | available |         |         | 1.0.0   |
+      | extras           | project           | mike@extras | mike | available |         |         | 1.0.0   |
 
-  Scenario: The user scope filter leaves out a project installation from a user marketplace
+  Scenario: The user scope filter offers a plugin installed only in the project scope as available
     Given the marketplace "extras" is published as a dir source
     Given the marketplace "extras" offers these plugins:
       | name | version |
@@ -654,8 +675,9 @@ Feature: Plugin list
       | tally label         | Plugin list |
       | tally failures      | 0           |
       | tally warnings      | 0           |
-      | tally success count | 2           |
+      | tally success count | 3           |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id          | name | status    | reasons | scope | version |
+      | extras           | user              | kilo@extras | kilo | available |         |       | 1.0.0   |
       | extras           | user              | lima@extras | lima | installed |         | user  | 1.0.0   |
       | extras           | user              | mike@extras | mike | available |         |       | 1.0.0   |
