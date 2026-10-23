@@ -1,10 +1,13 @@
 /**
- * @fileoverview Steps that check which plugins a scope has installed.
+ * @fileoverview Steps about what a plugin install leaves in a scope.
  *
  * A result can report a failure after the install already reached disk. These
  * steps look at what the install leaves behind: the plugins the scope's
- * installation record holds, with the version and enabled state of each, and
- * the skills and prompts it stages. The steps only read.
+ * installation record holds, with the version and enabled state of each, the
+ * files a plugin's data directory holds, and the skills and prompts it stages.
+ * Two setup steps change the files of an installed plugin as a user can: one
+ * plants a file in its data directory, and one deletes its installed skills.
+ * The other steps only read.
  *
  * A missing installation record fails the step; it never reads as no plugins.
  * A scope that has a marketplace added always has one.
@@ -12,10 +15,10 @@
 
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { type DataTable, Then } from "@cucumber/cucumber";
+import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import { isPlainObject } from "../../lib/field-rows.ts";
 
@@ -27,11 +30,51 @@ interface RecordedPlugin {
   readonly id: string;
   readonly version: string;
   readonly enabled: boolean;
+  /** The names of the plugin's installed skill directories. */
+  readonly skills: readonly string[];
 }
 
-// The directory where the extension keeps the scope's record and staged resources.
+// The directory where the extension keeps the scope's record, staged resources, and data.
 function extensionRoot(world: ScenarioWorld, scope: string): string {
   return path.join(world.scopeRoot(scope), "pi-claude-marketplace");
+}
+
+// Whether `name` names one entry of a directory: no separator, and not `.` or `..`.
+function isEntryName(name: string): boolean {
+  return name !== "" && name !== "." && name !== ".." && !/[/\\]/u.test(name);
+}
+
+// The plugin `id` as its record in `file` holds it; `content` is the file's text.
+function recordedPlugin(
+  id: string,
+  record: unknown,
+  file: string,
+  content: string,
+): RecordedPlugin {
+  if (
+    !isPlainObject(record) ||
+    !("version" in record) ||
+    typeof record.version !== "string" ||
+    !("enabled" in record) ||
+    typeof record.enabled !== "boolean"
+  ) {
+    assert.fail(
+      `the plugin ${id} in ${file} has no string version and boolean enabled: ${content}`,
+    );
+  }
+
+  const skills =
+    "resources" in record && isPlainObject(record.resources) && "skills" in record.resources
+      ? record.resources.skills
+      : undefined;
+  if (
+    !Array.isArray(skills) ||
+    !skills.every((skill): skill is string => typeof skill === "string")
+  ) {
+    assert.fail(`the plugin ${id} in ${file} has no resources.skills list of names: ${content}`);
+  }
+
+  return { id, version: record.version, enabled: record.enabled, skills };
 }
 
 // The plugins the scope's installation record holds, in record order.
@@ -49,29 +92,77 @@ async function recordedPlugins(root: string): Promise<readonly RecordedPlugin[]>
       assert.fail(`the marketplace ${marketplace} in ${file} has no plugins object: ${content}`);
     }
 
-    return Object.entries(entry.plugins).map(([plugin, record]): RecordedPlugin => {
-      const id = `${plugin}@${marketplace}`;
-      if (
-        !isPlainObject(record) ||
-        !("version" in record) ||
-        typeof record.version !== "string" ||
-        !("enabled" in record) ||
-        typeof record.enabled !== "boolean"
-      ) {
-        assert.fail(
-          `the plugin ${id} in ${file} has no string version and boolean enabled: ${content}`,
-        );
-      }
-
-      return { id, version: record.version, enabled: record.enabled };
-    });
+    return Object.entries(entry.plugins).map(([plugin, record]) =>
+      recordedPlugin(`${plugin}@${marketplace}`, record, file, content),
+    );
   });
+}
+
+// The data directory of the plugin `id` (`plugin@marketplace`) in the scope.
+function pluginDataDirectory(world: ScenarioWorld, scope: string, id: string): string {
+  const [plugin, marketplace, ...rest] = id.split("@");
+  if (
+    plugin === undefined ||
+    marketplace === undefined ||
+    rest.length > 0 ||
+    !isEntryName(plugin) ||
+    !isEntryName(marketplace)
+  ) {
+    assert.fail(`${id} is not a plugin@marketplace id`);
+  }
+
+  return path.join(extensionRoot(world, scope), "data", marketplace, plugin);
 }
 
 // The entries a staged-resource directory holds; an absent directory holds none.
 async function stagedEntries(directory: string): Promise<readonly string[]> {
   return existsSync(directory) ? readdir(directory) : [];
 }
+
+Given(
+  "the data directory of {string} in the {word} scope holds the file {string} with the text {string}",
+  async function (this: ScenarioWorld, id: string, scope: string, name: string, text: string) {
+    const directory = pluginDataDirectory(this, scope, id);
+    assert.ok(
+      existsSync(directory),
+      `${directory} does not exist, so the install did not create it`,
+    );
+    assert.ok((await stat(directory)).isDirectory(), `${directory} is not a directory`);
+    assert.ok(isEntryName(name), `${name} is not a file name`);
+    const file = path.join(directory, name);
+    await writeFile(file, text, { flag: "wx" });
+    this.onRelease(() => rm(file, { force: true }));
+    assert.equal(await readFile(file, "utf8"), text);
+  },
+);
+
+Given(
+  "the user has deleted the installed skills of {string} in the {word} scope",
+  async function (this: ScenarioWorld, id: string, scope: string) {
+    const root = extensionRoot(this, scope);
+    const recorded = (await recordedPlugins(root)).find((plugin) => plugin.id === id);
+    assert.ok(
+      recorded !== undefined,
+      `the installation record of the ${scope} scope holds no ${id}`,
+    );
+    assert.notDeepStrictEqual(
+      recorded.skills,
+      [],
+      `the installation record of ${id} lists no skill`,
+    );
+    const directories = recorded.skills.map((name) => {
+      assert.ok(isEntryName(name), `the installation record of ${id} lists the skill ${name}`);
+      return path.join(root, "resources", "skills", name);
+    });
+    // Without force, a skill the install did not stage fails the removal.
+    await Promise.all(directories.map((directory) => rm(directory, { recursive: true })));
+    await Promise.all(
+      directories.map((directory) =>
+        assert.rejects(stat(directory), { code: "ENOENT" }, `${directory} still exists`),
+      ),
+    );
+  },
+);
 
 Then(
   "the {word} scope has no installed plugins",
@@ -98,5 +189,29 @@ Then(
       .sort((left, right) => left.id.localeCompare(right.id))
       .map((plugin) => [plugin.id, plugin.version, String(plugin.enabled)]);
     assert.deepStrictEqual([["id", "version", "enabled"], ...rows], table.raw());
+  },
+);
+
+Then(
+  "the data directory of {string} in the {word} scope holds these files:",
+  async function (this: ScenarioWorld, id: string, scope: string, table: DataTable) {
+    const directory = pluginDataDirectory(this, scope, id);
+    assert.ok(existsSync(directory), `${directory} does not exist`);
+    const entries = await readdir(directory, { recursive: true, withFileTypes: true });
+    const files = await Promise.all(
+      entries
+        .filter((entry) => entry.isFile())
+        .map(async (entry) => {
+          const file = path.join(entry.parentPath, entry.name);
+          return {
+            name: path.relative(directory, file).split(path.sep).join("/"),
+            text: await readFile(file, "utf8"),
+          };
+        }),
+    );
+    const rows = files
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map((file) => [file.name, file.text]);
+    assert.deepStrictEqual([["file", "text"], ...rows], table.raw());
   },
 );

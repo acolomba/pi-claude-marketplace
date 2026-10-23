@@ -244,3 +244,18 @@ Feature: Plugin uninstall
       | command          | description           |
       | /skill:app-skill | A skill of app 1.0.0. |
       | /skill:lib-skill | A skill of lib 1.0.0. |
+
+  Scenario: Uninstalling with --keep-data keeps the plugin's data directory and the file in it
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the data directory of "demo@fixtures" in the project scope holds the file "notes.txt" with the text "Kept by the user."
+    When the user runs "/claude:plugin uninstall demo@fixtures --scope project --keep-data"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons   | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | uninstalled | data kept | project | 1.0.0   |
+    Then the data directory of "demo@fixtures" in the project scope holds these files:
+      | file      | text              |
+      | notes.txt | Kept by the user. |

@@ -138,3 +138,18 @@ Feature: Plugin reinstall
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status | reasons    | scope   | leaks | rollback partial |
       | fixtures         | project           | demo@fixtures | demo | failed | unreadable | project |       |                  |
+
+  Scenario: Reinstalling a plugin whose installed skills were deleted restores them
+    Given the user has deleted the installed skills of "demo@fixtures" in the project scope
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | reinstalled |         | project | 1.0.0   |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
