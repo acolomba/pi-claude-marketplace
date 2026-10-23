@@ -106,6 +106,8 @@ export class ScenarioWorld extends World {
     const run = currentRun();
     return {
       home: run.sandbox.home,
+      projectDir: run.sandbox.cwd,
+      agentDir: run.sandbox.agentDir,
       gitHost: run.gitHost.address,
       scenarioStartedAt: this.startedAt,
     };

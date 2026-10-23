@@ -2,7 +2,9 @@
  * @fileoverview The brace tokens that stand for run-specific values in scenarios.
  *
  * A scenario cannot know where the sandbox lives, where the git host listens,
- * or when it runs, so it writes those values as tokens. A typed command has
+ * or when it runs, so it writes those values as tokens. The sandbox HOME,
+ * project, and Pi agent directory do not nest, so the order in which their
+ * tokens are replaced does not matter. A typed command has
  * each token expanded to its value, and a result value is projected back to
  * the token by exact substring, so only that exact value reads as the token
  * (D-03).
@@ -14,6 +16,10 @@
 export interface RunTokens {
   /** The realpath of the sandbox HOME, which `{home}` stands for. */
   readonly home: string;
+  /** The sandbox project, Pi's working directory, which `{project dir}` stands for. */
+  readonly projectDir: string;
+  /** The sandbox Pi agent directory, which `{agent dir}` stands for. */
+  readonly agentDir: string;
   /** The `127.0.0.1:<port>` address of the run's git host, which `{git host}` stands for. */
   readonly gitHost: string;
   /** When the scenario started, in milliseconds since the epoch. */
@@ -21,6 +27,8 @@ export interface RunTokens {
 }
 
 const HOME_TOKEN = "{home}";
+const PROJECT_DIR_TOKEN = "{project dir}";
+const AGENT_DIR_TOKEN = "{agent dir}";
 const GIT_HOST_TOKEN = "{git host}";
 const SCENARIO_TIME_TOKEN = "{scenario time}";
 
@@ -34,23 +42,32 @@ function isScenarioTime(value: string, startedAt: number): boolean {
 }
 
 /**
- * Replaces every `{home}` in `text` with the sandbox HOME and every
- * `{git host}` with the git host's address.
+ * Replaces every `{home}`, `{project dir}`, and `{agent dir}` in `text` with
+ * the sandbox directory it stands for, and every `{git host}` with the git
+ * host's address.
  */
 export function expandTokens(text: string, tokens: RunTokens): string {
-  return text.replaceAll(HOME_TOKEN, tokens.home).replaceAll(GIT_HOST_TOKEN, tokens.gitHost);
+  return text
+    .replaceAll(HOME_TOKEN, tokens.home)
+    .replaceAll(PROJECT_DIR_TOKEN, tokens.projectDir)
+    .replaceAll(AGENT_DIR_TOKEN, tokens.agentDir)
+    .replaceAll(GIT_HOST_TOKEN, tokens.gitHost);
 }
 
 /**
  * Projects the result value `value` of the field `key` back to tokens. A
  * `lastUpdatedAt` inside the scenario's window becomes `{scenario time}`;
- * otherwise every occurrence of the sandbox HOME becomes `{home}`, and every
- * occurrence of the git host's address becomes `{git host}`.
+ * otherwise every occurrence of a sandbox directory becomes its token, and
+ * every occurrence of the git host's address becomes `{git host}`.
  */
 export function projectTokens(key: string, value: string, tokens: RunTokens): string {
   if (key === "lastUpdatedAt" && isScenarioTime(value, tokens.scenarioStartedAt)) {
     return SCENARIO_TIME_TOKEN;
   }
 
-  return value.replaceAll(tokens.home, HOME_TOKEN).replaceAll(tokens.gitHost, GIT_HOST_TOKEN);
+  return value
+    .replaceAll(tokens.home, HOME_TOKEN)
+    .replaceAll(tokens.projectDir, PROJECT_DIR_TOKEN)
+    .replaceAll(tokens.agentDir, AGENT_DIR_TOKEN)
+    .replaceAll(tokens.gitHost, GIT_HOST_TOKEN);
 }

@@ -102,6 +102,8 @@ A behavior that only one kind has lives in a feature file of its own.
 A scenario cannot know where its sandbox lives or when it runs. It writes each run-specific value as a brace token (D-03):
 
 - `{home}` is the home directory of the sandbox. A command expands it to the real path, and a result shows `{home}` wherever the real path appears.
+- `{project dir}` is the project directory of the sandbox, where Pi runs. The root of the project scope is `{project dir}/.pi`. It expands and projects back the same way.
+- `{agent dir}` is the Pi agent directory of the sandbox, which is the root of the user scope. It expands and projects back the same way.
 - `{git host}` is the `127.0.0.1:<port>` address of the run's https git host. A command expands it to that address, and a result shows `{git host}` wherever that exact address appears.
 - `{scenario time}` in a `last updated at` cell matches any exact ISO timestamp between the start of the scenario and the check. Any other value stays as written, so a stale, future, or malformed time fails (D-05).
 
