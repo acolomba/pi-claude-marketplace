@@ -1310,25 +1310,42 @@ async function applyPlan(
   applySourceMismatches(plan, outcomes);
 }
 
+/** The outcomes after which the stale-declarer row would be redundant or false. */
+const SUPPRESSING_DECLARER_KINDS: ReadonlySet<PerEntryOutcome["kind"]> = new Set([
+  "plugin-install-failed",
+  "plugin-uninstall-failed",
+  "plugin-enable-failed",
+  "plugin-disable-failed",
+  "plugin-uninstalled",
+]);
+
 /**
  * D-05-07 / LOAD-01: report the one declarer whose declarations could not be
  * established, which is why no plugin in this scope was held down on this pass.
+ *
+ * REC-05: the row is a warning naming the fault (`not in manifest`, `invalid
+ * manifest`, `unreadable manifest`) with the walk's cause line. The plugin
+ * keeps loading; only the check is lost. The verdict is re-derived on every
+ * pass, so the row returns every session until the fault is fixed.
  *
  * The walk fails closed, so an unreadable declarer never reads as a plugin that
  * declares nothing -- but it must not be silent either: a silent pass is
  * indistinguishable from a scope whose declarations are all satisfied, and the
  * dependent that should have been held down keeps loading. The row names the
- * DECLARER rather than `state.json`, because the read that failed was of a
- * plugin manifest and the read-pass catch's file row would make a false claim
- * about the state document.
+ * DECLARER rather than `state.json`, because the read that failed was of that
+ * plugin's own or marketplace manifest and the read-pass catch's file row would
+ * make a false claim about the state document.
  *
  * The key is built by the walk as `${name}@${marketplace}`, so splitting on the
  * last `@` is total and needs no fallback arm.
  *
- * RECON-04 single-emit: a declarer this pass already reported -- its clone is
- * gone, its install failed -- gets no second row. The same tree that stops a
- * manifest being read is usually the one that already failed something else
- * about that plugin, and two rows for one plugin state the same fact twice.
+ * RECON-04 single-emit: a declarer this pass already reported as failed -- its
+ * clone is gone, its install failed -- gets no second row. The same tree that
+ * stops a manifest being read is usually the one that already failed something
+ * else about that plugin, and two rows for one plugin state the same fact
+ * twice. A declarer this pass uninstalled is gone, so it gets none either. A
+ * success row (installed, enabled, disabled, backfilled) does not say the check
+ * was lost, so the warning still follows it (REC-05).
  */
 function reportUnreadableDeclarer(
   scope: Scope,
@@ -1345,6 +1362,7 @@ function reportUnreadableDeclarer(
   const plugin = verdict.declarer.slice(0, at);
   const reported = outcomes.some(
     (outcome) =>
+      SUPPRESSING_DECLARER_KINDS.has(outcome.kind) &&
       outcome.scope === scope &&
       "plugin" in outcome &&
       outcome.plugin === plugin &&
@@ -1355,11 +1373,12 @@ function reportUnreadableDeclarer(
   }
 
   outcomes.push({
-    kind: "plugin-disable-failed",
+    kind: "plugin-declarer-unreadable",
     scope,
     marketplace,
     plugin,
-    reason: "unreadable",
+    reason: verdict.reason,
+    cause: verdict.cause,
   });
 }
 
@@ -1467,8 +1486,6 @@ async function applyReconcileWithReader(
       await applyPlan(reader, opts, readResult.plan, outcomes);
     }
 
-    reportUnreadableDeclarer(scope, readResult, outcomes);
-
     // BFILL-01 / BFILL-02 / D-68-03: load-time backfill sibling step. Runs in
     // the no-outer-lock apply region (CR-01) after applyPlan so re-materialized
     // promotions ride the same single cascade (RECON-04). Gated on the version
@@ -1477,6 +1494,10 @@ async function applyReconcileWithReader(
     // never aborts the cascade.
     // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing
     await applyBackfillForScopeIsolated(opts, scope, readResult, outcomes);
+
+    // REC-05: after the backfill, so a backfill failure for the same plugin
+    // suppresses the row as an apply-pass failure does.
+    reportUnreadableDeclarer(scope, readResult, outcomes);
 
     // DISP-02: after the per-scope apply pass (or the no-plan arm), rebuild
     // this scope's routing tables so the next Pi event fires against a

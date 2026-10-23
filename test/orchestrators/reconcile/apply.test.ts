@@ -1811,16 +1811,17 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Some plugin operations have failed.\n" +
+          "A plugin operation has failed.\n" +
           "\n" +
           "● mp [project]\n" +
           "  ⊘ victim (failed) {unreadable}\n" +
           "    cause: cannot read the dependencies of stray@mp: not declared by its marketplace\n" +
-          // `stray` itself is declared but its marketplace does not list it, so
-          // its own re-resolution fails on the same unreadable manifest entry.
-          "  ⊘ stray (failed) {unreadable}\n" +
+          // REC-05: `stray` itself is declared but its marketplace does not
+          // list it, so its own row is the stale-declarer warning.
+          "  ⊘ stray (failed) {not in manifest}\n" +
+          "    cause: cannot read the dependencies of stray@mp: not declared by its marketplace\n" +
           "\n" +
-          "Reconcile: 2 failures",
+          "Reconcile: 1 failure, 1 warning",
         severity: "error",
       },
     ]);
@@ -4927,7 +4928,7 @@ describe("applyReconcile", () => {
     second.verifyBoundary();
   });
 
-  test("D-05-07: a declarer whose own manifest cannot be read is reported and nothing in the scope is disabled", async (t) => {
+  test("D-05-07 / REC-05: a declarer whose own manifest cannot be read is a warning with its cause and nothing in the scope is disabled", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-unreadable");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -4973,13 +4974,14 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "A plugin operation has failed.\n" +
+          "A plugin operation needs attention.\n" +
           "\n" +
           "\u25cf mp [project]\n" +
-          "  \u2298 broken (failed) {unreadable}\n" +
+          "  \u2298 broken (failed) {unreadable manifest}\n" +
+          "    cause: cannot read the dependencies of broken@mp: its own manifest is present but cannot be read\n" +
           "\n" +
-          "Reconcile: 1 failure",
-        severity: "error",
+          "Reconcile: 1 warning",
+        severity: "warning",
       },
     ]);
     assert.equal((await recordFor(project, "mp", "alfa"))?.enabled, true);
@@ -4987,6 +4989,64 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
+  test("REC-05: a declarer this pass disables still gets the warning that the check was lost", async (t) => {
+    // arrange -- `gone` is recorded and enabled, its catalog no longer lists
+    // it, and the config now declares it disabled.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-declarer-disabled");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      alfa: { skill: "clean" },
+    });
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "alfa@mp": {}, "gone@mp": { enabled: false } },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: EXTENSION_VERSION,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            alfa: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "alfa") }),
+            gone: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "gone") }),
+          },
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "\u25cf mp [project]\n" +
+          "  \u25cd gone v1.0.0 (disabled)\n" +
+          "  \u2298 gone (failed) {not in manifest}\n" +
+          "    cause: cannot read the dependencies of gone@mp: not declared by its marketplace\n" +
+          "\n" +
+          "Reconcile: 1 warning, 1 success",
+        severity: "warning",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "gone"))?.enabled, false);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
   test("LOAD-01: a held-down plugin whose unstage is refused reports the failure and is not stamped", async (t) => {
     // arrange
     const { cwd, denyWrites, project } = await createHermeticScopes(t, "dependency-refused");

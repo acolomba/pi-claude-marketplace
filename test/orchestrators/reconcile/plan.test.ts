@@ -1761,6 +1761,7 @@ describe("planReconcile", () => {
     const verdict: ScopeSatisfactionVerdict = {
       ok: false,
       declarer: "deploy-kit@keep",
+      reason: "unreadable manifest",
       cause: new Error("cannot read the dependencies of deploy-kit@keep"),
     };
 

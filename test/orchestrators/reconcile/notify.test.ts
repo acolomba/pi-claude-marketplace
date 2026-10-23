@@ -411,6 +411,37 @@ function appliedOutcomeRows(): AppliedOutcomeRows {
         ],
       },
     },
+    "plugin-declarer-unreadable": {
+      outcome: {
+        kind: "plugin-declarer-unreadable",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "cr",
+        reason: "not in manifest",
+        cause: new Error("cannot read the dependencies of cr@mp: not declared by its marketplace"),
+      },
+      expected: {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "cr",
+                reasons: ["not in manifest"],
+                cause: new Error(
+                  "cannot read the dependencies of cr@mp: not declared by its marketplace",
+                ),
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
     "source-mismatch": {
       outcome: {
         kind: "source-mismatch",

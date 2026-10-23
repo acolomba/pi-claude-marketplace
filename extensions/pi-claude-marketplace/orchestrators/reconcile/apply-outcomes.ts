@@ -46,6 +46,7 @@ import type { UnsatisfiedKind } from "./dependency-verdict.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { DeclarerReadFailure } from "../plugin/dependency-index.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { UninstallRefusedError } from "../plugin/uninstall.ts";
 
@@ -458,6 +459,18 @@ export interface PluginDisableFailedOutcome extends PluginOutcomeBase {
 }
 
 /**
+ * REC-05: a recorded plugin whose declarations could not be established, so the
+ * load-time dependency check did not run for the scope (D-05-07). The plugin
+ * stays installed and loading; `reason` names the fault and `cause` is the
+ * walk's fixed-phrase line (T-05-04).
+ */
+export interface PluginDeclarerUnreadableOutcome extends PluginOutcomeBase {
+  readonly kind: "plugin-declarer-unreadable";
+  readonly reason: DeclarerReadFailure;
+  readonly cause: Error;
+}
+
+/**
  * Source-mismatch outcome from `planReconcile`. Report-only: apply.ts does
  * NOT drive an orchestrator for these; the planner surfaces them on the
  * cascade as a `(failed) {source mismatch}` mp row with an optional plugin
@@ -576,6 +589,7 @@ export type PerEntryOutcome =
   | PluginDisabledOutcome
   | PluginDependencyDisabledOutcome
   | PluginDisableFailedOutcome
+  | PluginDeclarerUnreadableOutcome
   | SourceMismatchOutcome
   | InvalidBlockOutcome
   | LayerMarketplaceGapOutcome;

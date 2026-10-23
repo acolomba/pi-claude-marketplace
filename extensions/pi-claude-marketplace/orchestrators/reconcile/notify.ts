@@ -902,7 +902,8 @@ function applyPluginOutcomeToBlock(
         | "plugin-install-failed"
         | "plugin-uninstall-failed"
         | "plugin-enable-failed"
-        | "plugin-disable-failed";
+        | "plugin-disable-failed"
+        | "plugin-declarer-unreadable";
     }
   >,
 ): MarketplaceBlock<ReconcileAppliedMsg> {
@@ -1010,6 +1011,18 @@ function applyPluginOutcomeToBlock(
         needsReload: false,
       });
       return block;
+    case "plugin-declarer-unreadable":
+      block.plugins.push({
+        status: "failed",
+        name: outcome.plugin,
+        reasons: [outcome.reason],
+        cause: outcome.cause,
+        // REC-05: the dependency check failed, not the plugin, which stays
+        // installed and loading -- the carried-out-but-short warning arm.
+        severity: "warning",
+        needsReload: false,
+      });
+      return block;
   }
 }
 
@@ -1048,6 +1061,7 @@ function applyOutcomeToBlock(
     case "plugin-uninstall-failed":
     case "plugin-enable-failed":
     case "plugin-disable-failed":
+    case "plugin-declarer-unreadable":
       return applyPluginOutcomeToBlock(block, outcome);
   }
 }

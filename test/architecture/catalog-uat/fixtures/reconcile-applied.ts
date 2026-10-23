@@ -461,6 +461,37 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
       },
     },
 
+    // REC-05: the check could not read one declarer's dependencies because its
+    // catalog no longer lists it. The plugin keeps loading, so the row is a
+    // warning naming the fault, with the walk's cause line.
+    "reconcile-dependency-declarer-unreadable": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "deploy-kit",
+                reasons: ["not in manifest"],
+                cause: new Error(
+                  "cannot read the dependencies of deploy-kit@mp: not declared by its marketplace",
+                ),
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // LOAD-01: the same check, on the arm where the dependency is recorded and
     // enabled at a version outside the declared range. The second token, and a
     // remedy that names the canonical folded range.

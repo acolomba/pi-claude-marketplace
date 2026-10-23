@@ -102,6 +102,17 @@ export interface DependencyDeclarationReadOptions {
   readonly refuseUnusableOwnManifest?: true;
 }
 
+/**
+ * D-05-07 / REC-05: the `unusable` arm a refused own manifest answers. The
+ * `ownManifest` discriminant tells it from a declaration the parser rejected,
+ * so a caller can name the fault without reading `detail`.
+ */
+export interface OwnManifestRefusal {
+  readonly kind: "unusable";
+  readonly detail: string;
+  readonly ownManifest: true;
+}
+
 async function isRegularFile(filePath: string): Promise<boolean> {
   return (await stat(filePath)).isFile();
 }
@@ -273,13 +284,17 @@ async function readOwnManifest(
  */
 export async function readDependencyDeclaration(
   options: DependencyDeclarationReadOptions,
-): Promise<DeclarationLookupResult> {
+): Promise<DeclarationLookupResult | OwnManifestRefusal> {
   const reader = options.reader ?? REAL_DEPENDENCY_DECLARATION_READER;
   const pluginRoot = await resolvePluginRootFsOnly(reader, options);
   const own = pluginRoot === undefined ? ABSENT : await readOwnManifest(reader, pluginRoot);
   if (own.kind === "unusable" && options.refuseUnusableOwnManifest !== undefined) {
     // T-05-04: a fixed phrase -- no path, no manifest text, no chained cause.
-    return { kind: "unusable", detail: "its own manifest is present but cannot be read" };
+    return {
+      kind: "unusable",
+      detail: "its own manifest is present but cannot be read",
+      ownManifest: true,
+    };
   }
 
   // A readable manifest wins outright, INCLUDING when its `dependencies` key is

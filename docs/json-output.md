@@ -802,7 +802,7 @@ All counts are nonnegative integers. The failure and warning counts are always p
 | Field path | Type                            | Presence | Meaning                                |
 | ---------- | ------------------------------- | -------- | -------------------------------------- |
 | `label`    | string                          | required | Subject of the count, such as plugins. |
-| `failures` | nonnegative integer             | required | Failed rows.                           |
+| `failures` | nonnegative integer             | required | Error rows.                            |
 | `warnings` | nonnegative integer             | required | Warning rows.                          |
 | `success`  | [Success tally](#success-tally) | optional | Successful operation count.            |
 

@@ -233,13 +233,13 @@ Feature: Plugin uninstall
       | app@tools |
     When the user starts a new pi session
     Then the session reports these results:
-      | kind                      | severity | needs reload | summary                        | tally label | tally failures | tally warnings |
-      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
-      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+      | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id        | name | status | reasons    | scope   | leaks | rollback partial |
-      | tools            | project           | lib@tools | lib  | failed | unreadable | project |       |                  |
-      | tools            | project           | lib@tools | lib  | failed | unreadable | project |       |                  |
+      | marketplace name | marketplace scope | id        | name | status | reasons          | scope   | leaks | rollback partial | cause chain                                                                    | cause truncated |
+      | tools            | project           | lib@tools | lib  | failed | invalid manifest | project |       |                  | cannot read the dependencies of lib@tools: its marketplace manifest is invalid | false           |
+      | tools            | project           | lib@tools | lib  | failed | invalid manifest | project |       |                  | cannot read the dependencies of lib@tools: its marketplace manifest is invalid | false           |
     Then the session offers these skills:
       | command          | description           |
       | /skill:app-skill | A skill of app 1.0.0. |

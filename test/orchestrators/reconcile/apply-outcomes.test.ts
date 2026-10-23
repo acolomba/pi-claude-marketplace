@@ -19,6 +19,7 @@ import {
   type OutcomeBase,
   type PerEntryOutcome,
   type PluginBackfilledOutcome,
+  type PluginDeclarerUnreadableOutcome,
   type PluginDependencyDisabledOutcome,
   type PluginDisabledOutcome,
   type PluginDisableFailedOutcome,
@@ -180,6 +181,16 @@ void ({
   plugin: "formatter",
   reason: "lock held",
 } satisfies PluginDisableFailedOutcome);
+void ({
+  kind: "plugin-declarer-unreadable",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  reason: "not in manifest",
+  cause: new Error(
+    "cannot read the dependencies of formatter@official: not declared by its marketplace",
+  ),
+} satisfies PluginDeclarerUnreadableOutcome);
 void ({
   kind: "source-mismatch",
   cause: "source-mismatch",
@@ -392,6 +403,23 @@ void ({
   plugin: "formatter",
   // @ts-expect-error plugin disable failure outcomes require a reason
 } satisfies PluginDisableFailedOutcome);
+void ({
+  kind: "plugin-declarer-unreadable",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  cause: new Error("cause"),
+  // @ts-expect-error the stale-declarer row always names its fault
+} satisfies PluginDeclarerUnreadableOutcome);
+void ({
+  kind: "plugin-declarer-unreadable",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  // @ts-expect-error only a declarer read failure token names the fault
+  reason: "lock held",
+  cause: new Error("cause"),
+} satisfies PluginDeclarerUnreadableOutcome);
 void ({
   kind: "source-mismatch",
   cause: "dangling-reference",
