@@ -17,6 +17,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
+import lockfile from "proper-lockfile";
 import { mock, verify, when } from "strong-mock";
 
 import { NO_STORED_CREDENTIAL_CAUSE } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
@@ -39,6 +40,7 @@ import {
   InvalidGitHubBaseUrlError,
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
+  StateLockHeldError,
   UnremovableLeftoverCloneError,
   UnsupportedSourceError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -2810,6 +2812,96 @@ test("RECON-03 orchestrated mode -- unsupported source returns { status: 'failed
   });
 });
 
+/** Runs `act` while this process holds the scope's real state lock. */
+async function whileLockHeld<T>(locations: ScopedLocations, act: () => Promise<T>): Promise<T> {
+  const release = await lockfile.lock(locations.extensionRoot, {
+    lockfilePath: locations.stateLockFile,
+    realpath: false,
+  });
+  try {
+    return await act();
+  } finally {
+    await release();
+  }
+}
+
+function lockHeldCause(locations: ScopedLocations): string {
+  return `Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`;
+}
+
+const NO_GIT_CALLS = {
+  checkoutCalls: [],
+  cloneCalls: [],
+  fetchCalls: [],
+  forceUpdateRefCalls: [],
+  resolveRefCalls: [],
+};
+
+test("FLR-02: an add under a held state lock reports lock held and clones nothing", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx(1);
+    const { gitOps, state } = createGitOps();
+
+    // act
+    const outcome = await whileLockHeld(locations, () =>
+      addMarketplace({ ctx, run, scope: "project", cwd, rawSource: "owner/repo", gitOps }),
+    );
+
+    // assert
+    assert.strictEqual(outcome, undefined);
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `Some operations have failed.\n\n⊘ owner/repo [project] (failed)\n  ⊘ owner/repo (failed) {lock held}\n    cause: ${lockHeldCause(locations)} -> Lock file is already being held`,
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(state, NO_GIT_CALLS);
+    assert.deepStrictEqual(
+      [await pathExists(locations.stateJsonPath), await pathExists(locations.baseConfigJsonPath)],
+      [false, false],
+    );
+  });
+});
+
+test("FLR-02: an orchestrated add under a held state lock returns lock held and clones nothing", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx(0);
+    const { gitOps, state } = createGitOps();
+
+    // act
+    const outcome = await whileLockHeld(locations, () =>
+      addMarketplace({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        rawSource: "owner/repo",
+        gitOps,
+        notifications: { mode: "orchestrated" },
+      }),
+    );
+
+    // assert
+    assert.ok(outcome.status === "failed");
+    const { error, ...failure } = outcome;
+    assert.deepStrictEqual(failure, {
+      status: "failed",
+      reason: "lock held",
+      cause: lockHeldCause(locations),
+    });
+    assert.ok(error instanceof StateLockHeldError);
+    assert.deepStrictEqual([error.scope, error.lockPath], ["project", locations.stateLockFile]);
+    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(state, NO_GIT_CALLS);
+    assert.deepStrictEqual(
+      [await pathExists(locations.stateJsonPath), await pathExists(locations.baseConfigJsonPath)],
+      [false, false],
+    );
+  });
+});
+
 test("orchestrated mode normalizes a non-Error opaque failure without mutation", async (t) => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
@@ -2867,7 +2959,7 @@ test("normalizes a structurally classified exotic throw in orchestrated mode", a
       {
         getPrototypeOf: () => {
           prototypeReads += 1;
-          return prototypeReads <= 2 ? MarketplaceDuplicateNameError.prototype : null;
+          return prototypeReads <= 3 ? MarketplaceDuplicateNameError.prototype : null;
         },
       },
     );
@@ -2901,7 +2993,7 @@ test("normalizes a structurally classified exotic throw in orchestrated mode", a
       error: new Error("[object Object]"),
       cause: "[object Object]",
     });
-    assert.strictEqual(prototypeReads, 5);
+    assert.strictEqual(prototypeReads, 6);
     assert.deepStrictEqual(notifications, []);
     assert.deepStrictEqual(state, {
       checkoutCalls: [],

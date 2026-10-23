@@ -63,3 +63,37 @@ Feature: Marketplace state lock
     Then the user scope stages these skills and prompts:
       | kind  | name       |
       | skill | demo-skill |
+
+  Scenario Outline: Adding a marketplace while another process holds the state lock of the scope fails as lock held and leaves no marketplace
+    Given the marketplace "tools" is published as a <source kind> source
+    Given another process holds the state lock of the <scope> scope
+    When the user runs "/claude:plugin marketplace add <source> --scope <scope>"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id                | name     | status | reasons   | scope   | cause chain                                                                                                                                                                           | cause truncated | leaks | rollback partial |
+      | <source>         | <scope>           | failed             | <source>@<source> | <source> | failed | lock held | <scope> | Another pi-claude-marketplace operation is in progress for <scope> scope (<scope root>/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+    Then the "claude-plugins.json" file of the <scope> scope does not exist
+    Then the <scope> scope holds no git clones
+
+    Examples:
+      | scope   | scope root        | source kind | source                                                    |
+      | project | {project dir}/.pi | dir         | {home}/marketplaces/tools                                 |
+      | project | {project dir}/.pi | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json |
+      | user    | {agent dir}       | dir         | {home}/marketplaces/tools                                 |
+      | user    | {agent dir}       | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json |
+
+    @url
+    Examples:
+      | scope   | scope root        | source kind | source                            |
+      | project | {project dir}/.pi | url         | https://{git host}/acme/tools.git |
+      | user    | {agent dir}       | url         | https://{git host}/acme/tools.git |
+
+    @github
+    Examples:
+      | scope   | scope root        | source kind | source     |
+      | project | {project dir}/.pi | github      | acme/tools |
+      | user    | {agent dir}       | github      | acme/tools |
