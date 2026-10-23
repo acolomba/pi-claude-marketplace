@@ -49,3 +49,12 @@ Feature: Plugin pending
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status       | reasons | scope   |
       | fixtures         | project           | demo@fixtures | demo | will install |         | project |
+
+  Scenario: Pending reports nothing when the configs and the records agree
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
