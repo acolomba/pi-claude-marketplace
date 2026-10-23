@@ -6,7 +6,6 @@ import { describe, test, type TestContext } from "node:test";
 import {
   abortPreparedMcp,
   commitPreparedMcp,
-  finalizeMcpReplacement,
   prepareStageMcpServers,
   replacePreparedMcp,
   rollbackMcpReplacement,
@@ -3665,49 +3664,10 @@ describe("rollbackMcpReplacement", () => {
     assert.strictEqual(await readFile(project.mcpAdapterJsonPath, "utf8"), PROJECT_LEFTOVERS_TEXT);
     assert.strictEqual(await readFile(user.mcpJsonPath, "utf8"), EMPTIED_LEGACY_ACME_TEXT);
   });
-});
 
-describe("finalizeMcpReplacement", () => {
-  test("returns a frozen empty leak list for no-op and replaced handles", async (t) => {
+  test("rejects a replacement handle this module did not make", async (t) => {
     // arrange
-    const { cwd, locations } = await createProjectScope(t, "mcp-finalize-");
-    const noopPrepared = await prepareStageMcpServers({
-      locations,
-      cwd,
-      marketplaceName: "catalog",
-      pluginName: "empty-plugin",
-      pluginRoot: path.join(cwd, "plugins", "empty-plugin"),
-      pluginData: path.join(cwd, "data", "empty-plugin"),
-      env: {},
-      servers: {},
-    });
-    const noopReplacement = await replacePreparedMcp(noopPrepared);
-    const stagedPrepared = await prepareStageMcpServers({
-      locations,
-      cwd,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot: path.join(cwd, "plugins", "acme"),
-      pluginData: path.join(cwd, "data", "acme"),
-      env: {},
-      servers: { server: { command: "node" } },
-    });
-    const replaced = await replacePreparedMcp(stagedPrepared);
-
-    // act
-    const noopLeaks = finalizeMcpReplacement(noopReplacement);
-    const replacementLeaks = finalizeMcpReplacement(replaced);
-
-    // assert
-    assert.deepStrictEqual(noopLeaks, []);
-    assert.strictEqual(Object.isFrozen(noopLeaks), true);
-    assert.deepStrictEqual(replacementLeaks, []);
-    assert.strictEqual(Object.isFrozen(replacementLeaks), true);
-  });
-
-  test("rejects an unknown replacement handle", async (t) => {
-    // arrange
-    const { cwd, locations } = await createProjectScope(t, "mcp-finalize-unknown-");
+    const { cwd, locations } = await createProjectScope(t, "mcp-rollback-unknown-");
     const prepared = await prepareStageMcpServers({
       locations,
       cwd,
@@ -3720,7 +3680,7 @@ describe("finalizeMcpReplacement", () => {
     });
     const replacement = await replacePreparedMcp(prepared);
     assert.strictEqual(replacement.kind, "replaced");
-    t.after(() => finalizeMcpReplacement(replacement));
+    const replacedBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
     const { locations: replacementLocations, ...cloneablePrepared } = replacement.prepared;
     const clonedReplacement = structuredClone({ ...replacement, prepared: cloneablePrepared });
     const unknownReplacement = {
@@ -3729,8 +3689,8 @@ describe("finalizeMcpReplacement", () => {
     } satisfies typeof replacement;
 
     // act & assert
-    assert.throws(
-      () => finalizeMcpReplacement(unknownReplacement),
+    await assert.rejects(
+      () => rollbackMcpReplacement(unknownReplacement),
       (error: unknown) => {
         assert.ok(error instanceof Error);
         assert.deepStrictEqual(
@@ -3740,5 +3700,6 @@ describe("finalizeMcpReplacement", () => {
         return true;
       },
     );
+    assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), replacedBytes);
   });
 });

@@ -26,7 +26,6 @@ import {
   createNodeReinstallPlugins,
   createReinstallPlugin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
-import { REAL_REINSTALL_TRANSACTION } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -65,13 +64,11 @@ import type {
   GitOps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { InstallCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-clone-probe.ts";
-import type * as ReinstallFlow from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import type {
   ReinstallHooksRouting,
   ReinstallPluginOptions,
   ReinstallPluginsOptions,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
-import type { ReinstallTransaction } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-replace.ts";
 import type { UpdateCloneCacheSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -82,14 +79,6 @@ import type {
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 
-// The single-plugin production convenience wrapper is module-private: its only
-// consumer is `createNodeReinstallPlugins` in the same file, and every reader
-// outside it asks either the composition owner or this factory with the real
-// transaction. Restoring the export makes the `satisfies` resolve and turns the
-// directive below into an unused one (TS2578).
-// @ts-expect-error reinstall-flow does not expose createNodeReinstallPlugin
-void ({} satisfies { readonly retired?: typeof ReinstallFlow.createNodeReinstallPlugin });
-
 interface NotifyRecord {
   message: string;
   severity?: string;
@@ -97,7 +86,6 @@ interface NotifyRecord {
 
 function reinstallPlugin(opts: ReinstallPluginOptions) {
   return createReinstallPlugin(
-    REAL_REINSTALL_TRANSACTION,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     createCompletionCache(),
   )(opts);
@@ -118,7 +106,6 @@ function createCompletionCacheWithDrop(
 
 function reinstallPluginWithCache(opts: ReinstallPluginOptions, completionCache: CompletionCache) {
   return createReinstallPlugin(
-    REAL_REINSTALL_TRANSACTION,
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache,
   )(opts);
@@ -130,7 +117,7 @@ test("owns the injected single-plugin and the bulk production reinstall factorie
   const completionCache = createCompletionCache();
 
   // act
-  const injected = createReinstallPlugin(REAL_REINSTALL_TRANSACTION, hooksRouting, completionCache);
+  const injected = createReinstallPlugin(hooksRouting, completionCache);
   const bulk = createNodeReinstallPlugins(hooksRouting, completionCache);
 
   // assert
@@ -2344,21 +2331,6 @@ async function reinstallFileSnapshot(
   };
 }
 
-/** A transaction whose replacement and rollback fail the case when they run. */
-function refusingReinstallTransaction(calls: string[]): ReinstallTransaction {
-  return {
-    ...REAL_REINSTALL_TRANSACTION,
-    replaceReinstalledPlugin: () => {
-      calls.push("replaceReinstalledPlugin");
-      return Promise.reject(new Error("replaceReinstalledPlugin must not run"));
-    },
-    rollbackReinstalledPlugin: () => {
-      calls.push("rollbackReinstalledPlugin");
-      return Promise.reject(new Error("rollbackReinstalledPlugin must not run"));
-    },
-  };
-}
-
 const BASE_MARKETPLACE_ONLY = JSON.stringify({
   schemaVersion: 1,
   marketplaces: { mp: { source: "./mp-src" } },
@@ -2398,9 +2370,7 @@ for (const { direction, base, local, flag, refusal, reason, cause } of [
         // arrange
         const locations = await seedLocalLayerReinstall(cwd, base, local);
         const filesBefore = await reinstallFileSnapshot(cwd, locations);
-        const transactionCalls: string[] = [];
         const reinstall = createReinstallPlugin(
-          refusingReinstallTransaction(transactionCalls),
           createHooksRouting(createHooksRuntime(), { readHooksJson }),
           createCompletionCache(),
         );
@@ -2440,7 +2410,6 @@ for (const { direction, base, local, flag, refusal, reason, cause } of [
             severity: "error",
           },
         ]);
-        assert.deepStrictEqual(transactionCalls, []);
         assert.deepStrictEqual(await reinstallFileSnapshot(cwd, locations), filesBefore);
       } finally {
         await rm(cwd, { recursive: true, force: true });
@@ -3060,7 +3029,6 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
       // act
       const { ctx, run, notifications } = makeCtx();
       const outcome = await createReinstallPlugin(
-        REAL_REINSTALL_TRANSACTION,
         hooksRouting,
         createCompletionCache(),
       )({
@@ -5759,11 +5727,7 @@ test("retry proof: reinstall: a post-save hook-cache read failure stays silent a
         },
       );
 
-      const reinstall = createReinstallPlugin(
-        REAL_REINSTALL_TRANSACTION,
-        hooksRouting,
-        createCompletionCache(),
-      );
+      const reinstall = createReinstallPlugin(hooksRouting, createCompletionCache());
 
       const { ctx, notifications, run } = makeCtx({
         piMcpAdapterLoaded: true,
@@ -5862,11 +5826,7 @@ test("WR-03: a post-save routing-table rebuild failure leaves the committed rein
       t.mock.method(hooksRouting, "rebuildRoutingTables", () => {
         throw new Error("routing rebuild denied");
       });
-      const reinstall = createReinstallPlugin(
-        REAL_REINSTALL_TRANSACTION,
-        hooksRouting,
-        createCompletionCache(),
-      );
+      const reinstall = createReinstallPlugin(hooksRouting, createCompletionCache());
       const { ctx, notifications, run } = makeCtx();
 
       // act
@@ -6587,7 +6547,6 @@ for (const { label, env, notices } of [
           }),
         );
         const reinstall = createReinstallPlugin(
-          REAL_REINSTALL_TRANSACTION,
           createHooksRouting(createHooksRuntime(), { readHooksJson }),
           createCompletionCache(),
           env,

@@ -114,19 +114,6 @@ export interface PreparedCommandsStaged {
   readonly _renamePairs: readonly { from: string; to: string }[];
 }
 
-/** Opaque reinstall replacement handle for staged commands. */
-export type CommandsReplacement = CommandsReplacementNoop | CommandsReplacementReplaced;
-
-export interface CommandsReplacementNoop {
-  readonly kind: "noop";
-  readonly prepared: Extract<PreparedCommandsStaging, { kind: "noop" }>;
-}
-
-export interface CommandsReplacementReplaced {
-  readonly kind: "replaced";
-  readonly prepared: PreparedCommandsStaged;
-}
-
 /** Input bundle for `unstagePluginCommands`. */
 export interface UnstageCommandsInput {
   readonly locations: ScopedLocations;

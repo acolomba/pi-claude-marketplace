@@ -5,14 +5,12 @@
 // this owner binds those contracts to the concrete Node implementations, so a
 // command boundary asks for an operation rather than assembling one.
 //
-// Reinstall is the exception, and the user-facing verb takes the other path.
-// `reinstall-flow.ts` binds `REAL_REINSTALL_TRANSACTION` a second time in its
-// module-private `createNodeReinstallPlugin`, which feeds the exported bulk
-// `createNodeReinstallPlugins` that `edge/register.ts` calls for
-// `/claude:plugin reinstall`. `createReinstallOperation` below binds the same
-// transaction for the single-plugin form `reconcile/backfill.ts` takes. The two
-// bodies are identical and nothing holds them in step, so a change made to one
-// binding reaches only that binding's callers.
+// Reinstall is bound in two places. `reinstall-flow.ts`'s bulk
+// `createNodeReinstallPlugins`, which `edge/register.ts` calls for
+// `/claude:plugin reinstall`, and `createReinstallOperation` below, which
+// `reconcile/backfill.ts` takes for the single-plugin form, both call the same
+// two-argument `createReinstallPlugin(hooksRouting, completionCache)`, so
+// neither binding carries anything the other lacks.
 //
 // The two read commands are bound as values rather than behind a factory: they
 // take no routing or completion-cache owner from their caller, so there is
@@ -33,7 +31,6 @@ import { createInstallMissingDependency, createInstallPlugin } from "./install-f
 import { runInstallLedger } from "./install-outcome.ts";
 import { createPrunePlugin } from "./prune.ts";
 import { createReinstallPlugin } from "./reinstall-flow.ts";
-import { REAL_REINSTALL_TRANSACTION } from "./reinstall-replace.ts";
 import { loadTargetLayers, writeAdoptingConfigEntries } from "./shared.ts";
 import { createUninstallPlugin, REAL_UNINSTALL_TRANSACTION } from "./uninstall.ts";
 
@@ -157,24 +154,21 @@ export function createPruneOperation(
 }
 
 /**
- * Composes the single-plugin reinstall operation from its production
- * transaction owner and the caller's routing and completion-cache owners.
- * Constructing the operation runs no work of its own -- only invoking the
- * returned operation does.
+ * Composes the single-plugin reinstall operation from the caller's routing and
+ * completion-cache owners. Constructing the operation runs no work of its own
+ * -- only invoking the returned operation does.
  *
- * Reinstall's binding is imported rather than built here for the same reason as
- * uninstall's: five of `REAL_REINSTALL_TRANSACTION`'s six members are steps of
- * reinstall's own prepare/replace/compensate schedule, private to
- * `reinstall-replace.ts`, so this module imports the bound object and never its
- * parts (D-03). The binding names no network capability, which is what keeps
- * this module inside the network-free gate while composing an operation that
- * materializes artifacts (NFR-5: reinstall reads the cached manifest only).
+ * The operation materializes through the shared runner that `update` uses, so
+ * it may clone a git source on a cache miss and list a constrained
+ * dependency's tags (NFR-5 as amended by D-03-03; D-18-04, D-18-07). This
+ * module names no git surface itself: the runner reaches git through its own
+ * seams, which keeps this module inside the network-free gate.
  */
 export function createReinstallOperation(
   hooksRouting: ReinstallHooksRouting,
   completionCache: CompletionCache,
 ): ReinstallPluginFn {
-  return createReinstallPlugin(REAL_REINSTALL_TRANSACTION, hooksRouting, completionCache);
+  return createReinstallPlugin(hooksRouting, completionCache);
 }
 
 // The one concrete binding of fetch's status capability. Both members are the

@@ -12,7 +12,6 @@
 export {
   abortPreparedMcp,
   commitPreparedMcp,
-  finalizeMcpReplacement,
   prepareStageMcpServers,
   replacePreparedMcp,
   rollbackMcpReplacement,

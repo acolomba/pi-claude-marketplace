@@ -117,7 +117,7 @@ const FORBIDDEN_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
 ];
 
 function describeTestOnlySurfaceViolation(offenders: ReadonlyArray<string>): string {
-  return `MF-DEC-07 / D-05-01 violation: test-only substitution surface declared on production module(s):\n  ${offenders.join("\n  ")}\n  (a production module must not carry a member whose only purpose is letting a test swap its collaborators. Give the capability a production owner instead: a named collaborator on the flow's own transaction, the form \`ReinstallTransaction.replaceOperations\` takes, or a single named typed optional member with its own type and its own doc line, the form \`cloneCacheSeam?\` takes. D-07-18 forecloses an allow-list entry, so there is no third option.)`;
+  return `MF-DEC-07 / D-05-01 violation: test-only substitution surface declared on production module(s):\n  ${offenders.join("\n  ")}\n  (a production module must not carry a member whose only purpose is letting a test swap its collaborators. Give the capability a production owner instead: a named collaborator on the flow's own transaction, the form \`InstallLedgerTransaction.runPhases\` takes, or a single named typed optional member with its own type and its own doc line, the form \`cloneCacheSeam?\` takes. D-07-18 forecloses an allow-list entry, so there is no third option.)`;
 }
 
 /** Every repository-relative `.ts` module at or below `rel`, in a stable order. */

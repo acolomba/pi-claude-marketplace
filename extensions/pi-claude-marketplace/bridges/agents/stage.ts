@@ -1,8 +1,7 @@
 // bridges/agents/stage.ts
 //
-// Two-phase staging for the agents bridge: prepare / commit / abort, plus
-// three-phase replacement exports: replacePreparedAgents,
-// rollbackAgentsReplacement, finalizeAgentsReplacement. Notable invariants:
+// Two-phase staging for the agents bridge: prepare / commit / abort. Notable
+// invariants:
 //
 //   1. agents-index IO lives in persistence/agents-index-io.ts.
 //      saveAgentsIndex is the LAST step in commit so the self-heal property
@@ -23,26 +22,13 @@
 //      without touching disk.
 
 import { randomUUID } from "node:crypto";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import writeFileAtomic from "write-file-atomic";
-
-import { assertSafeName } from "../../domain/name.ts";
 import { loadAgentsIndex, saveAgentsIndex } from "../../persistence/agents-index-io.ts";
 import { AgentOwnershipConflictError } from "../../shared/errors-bridges.ts";
-import {
-  appendLeakToError,
-  appendLeaks,
-  errorMessage,
-  ManualRecoveryError,
-} from "../../shared/errors.ts";
-import {
-  cleanupStaging,
-  pathExists,
-  removeOrphanIfPresent,
-  rollbackReplacementCommon,
-} from "../../shared/fs-utils.ts";
+import { appendLeakToError, appendLeaks, errorMessage } from "../../shared/errors.ts";
+import { cleanupStaging, pathExists } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
 import { convertAgent, GUIDED_DROPPED_FIELDS } from "./convert.ts";
@@ -51,12 +37,10 @@ import { findOwnershipConflicts, partitionByOwner } from "./index-mutation.ts";
 import { isOwnedAgentFile } from "./marker.ts";
 
 import type {
-  AgentsReplacement,
   ConvertedAgent,
   DiscoveredAgent,
   PreparedAgentsStaged,
   PreparedAgentsStaging,
-  ReplacePreparedAgentsOptions,
   StageAgentsInput,
   StageAgentsCommitResult,
   StagedAgentRecord,
@@ -64,18 +48,6 @@ import type {
 } from "./types.ts";
 import type { AgentsIndexEntry } from "../../persistence/agents-index-schema.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
-
-interface AgentsReplacementInternals {
-  readonly backupRoot: string;
-  readonly oldIndexText: string | undefined;
-  readonly backups: readonly { name: string; from: string; to: string }[];
-  readonly renamed: readonly { to: string }[];
-}
-
-const agentsReplacementInternals = new WeakMap<
-  Extract<AgentsReplacement, { kind: "replaced" }>,
-  AgentsReplacementInternals
->();
 
 /**
  * 9-step prepare. NOTHING outside `<extensionRoot>/agents-staging/<uuid>/`
@@ -364,9 +336,8 @@ export async function commitPreparedAgents(
   // property documented at the function JSDoc above (the index pointing at
   // the OLD targetPaths plus step-1 ENOENT tolerance closes the retry loop).
   // The loop stays parallel here because step 1 has no source to roll back
-  // to -- those files were never backed up (commitPreparedAgents is the
-  // commit path, not the replacePreparedAgents backup path); rollback would
-  // have nothing to restore. The kept rows (foreignPreservedEntries unless
+  // to -- this commit keeps no backup of those files, so rollback would have
+  // nothing to restore. The kept rows (foreignPreservedEntries unless
   // forced) are INTENTIONALLY excluded -- those targets stay untouched on disk
   // and their rows stay in the index.
   try {
@@ -400,10 +371,9 @@ export async function commitPreparedAgents(
 
   // Step 2: mkdir <scopeRoot>/agents/ + sequential rename staged -> target.
   // TR-01: Sequential so we can track completed renames and reverse them on
-  // a partial failure -- mirrors the rollback shape in
-  // `rollbackReplacementCommon` (shared/fs-utils.ts:270-312): spread-before-
-  // reverse to avoid in-place mutation, per-pair try/catch into a leaks[]
-  // string array, and the rollback loop NEVER throws.
+  // a partial failure: spread-before-reverse to avoid in-place mutation,
+  // per-pair try/catch into a leaks[] string array, and the rollback loop
+  // NEVER throws.
   const completedRenames: { from: string; to: string }[] = [];
   // fallow-ignore-next-line code-duplication -- reviewed: the agents and commands bridges keep the same TR-01/TR-05 commit-and-rollback shape on purpose, so each rollback contract stays beside the commit it protects
   try {
@@ -467,214 +437,4 @@ export async function abortPreparedAgents(
   }
 
   return cleanupStaging(ops, prepared.stagingDir, "agents staging directory");
-}
-
-/**
- * Reinstall-safe replacement helper. Unlike commitPreparedAgents, this
- * backs up previous plugin-owned agent files and agents-index.json before
- * staged renames so later orchestrator failures can restore the old install.
- */
-export async function replacePreparedAgents(
-  ops: RemovalOps,
-  prepared: PreparedAgentsStaging,
-  options?: ReplacePreparedAgentsOptions,
-): Promise<AgentsReplacement> {
-  if (prepared.kind === "noop") {
-    return { kind: "noop", prepared };
-  }
-
-  if (prepared.result.failed.length > 0 && options?.force !== true) {
-    throw new Error(
-      `Agent replacement blocked by foreign previous content:\n${prepared.result.failed
-        .map((f) => `  - ${f.generatedName} at ${f.targetPath}: ${f.reason}`)
-        .join("\n")}`,
-    );
-  }
-
-  const oldIndexText = await readOptionalText(prepared.locations.agentsIndexPath);
-  const backupRoot = path.join(prepared.locations.agentsStagingDir, `backup-${randomUUID()}`);
-  await mkdir(backupRoot, { recursive: true });
-  await assertPathInside(prepared.locations.agentsStagingDir, backupRoot, "agents backup root");
-  const backupEntries =
-    options?.force === true
-      ? [...prepared.previousEntries, ...prepared.foreignPreservedEntries]
-      : [...prepared.previousEntries];
-  const backups: { name: string; from: string; to: string }[] = [];
-  const renamed: { to: string }[] = [];
-
-  try {
-    for (const entry of backupEntries) {
-      assertSafeName(entry.generatedName, "previous agent name");
-      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
-      await assertPathInside(prepared.locations.agentsDir, entry.targetPath, "previous agent file");
-      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
-      if (!(await pathExists(entry.targetPath))) {
-        continue;
-      }
-
-      const backup = path.join(backupRoot, entry.generatedName + ".md");
-      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
-      await assertPathInside(backupRoot, backup, "agents backup file");
-      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
-      await rename(entry.targetPath, backup);
-      backups.push({ name: entry.generatedName, from: entry.targetPath, to: backup });
-    }
-
-    // TR-06: 3-arm policy at the rename loop. ownedNames is the basename
-    // membership set derived from agents-index.json (via previousEntries). When
-    // a pre-existing target shares an owned basename, it is treated as an
-    // orphan from a prior partial install and pre-removed via the
-    // kind-strict helper. Foreign content (basename NOT in ownedNames)
-    // still triggers the existing PI-6 "non-previous content" rejection
-    // verbatim. Agents targets are .md files -> mode "file".
-    const ownedNames = new Set<string>(prepared.previousEntries.map((e) => e.generatedName));
-    await mkdir(prepared.locations.agentsDir, { recursive: true });
-    for (const pair of prepared.stagedFilePaths) {
-      const targetName = path.basename(pair.to, ".md");
-      if (ownedNames.has(targetName)) {
-        // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
-        await removeOrphanIfPresent(pair.to, "file");
-        // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
-      } else if (await pathExists(pair.to)) {
-        // fallow-ignore-next-line code-duplication -- reviewed: the agents and skills bridges keep the same TR-06 orphan-or-reject rename loop on purpose, so each rollback stays beside the commit it protects; the marker sits on this line because the first line of the span carries an eslint directive
-        throw new Error(`Cannot replace agent target with non-previous content at ${pair.to}`);
-      }
-
-      // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
-      await rename(pair.from, pair.to);
-      renamed.push({ to: pair.to });
-    }
-
-    await saveAgentsIndex(prepared.locations, {
-      schemaVersion: 1,
-      agents: [...prepared.otherEntries, ...prepared.newEntries],
-    });
-  } catch (err) {
-    const leaks = await rollbackAgentsReplacementInternal(
-      ops,
-      prepared,
-      renamed,
-      backups,
-      backupRoot,
-      oldIndexText,
-    );
-    if (leaks.length > 0) {
-      throw new ManualRecoveryError(errorMessage(err), leaks, { cause: err });
-    }
-
-    throw err;
-  }
-
-  const replacement: Extract<AgentsReplacement, { kind: "replaced" }> = {
-    kind: "replaced",
-    prepared,
-  };
-  agentsReplacementInternals.set(replacement, {
-    backupRoot,
-    oldIndexText,
-    backups: Object.freeze(backups),
-    renamed: Object.freeze(renamed),
-  });
-  return replacement;
-}
-
-export async function rollbackAgentsReplacement(
-  ops: RemovalOps,
-  replacement: AgentsReplacement,
-): Promise<readonly string[]> {
-  if (replacement.kind === "noop") {
-    return Object.freeze([]);
-  }
-
-  const internals = requireAgentsReplacementInternals(replacement);
-  return rollbackAgentsReplacementInternal(
-    ops,
-    replacement.prepared,
-    internals.renamed,
-    internals.backups,
-    internals.backupRoot,
-    internals.oldIndexText,
-  );
-}
-
-export async function finalizeAgentsReplacement(
-  ops: RemovalOps,
-  replacement: AgentsReplacement,
-): Promise<readonly string[]> {
-  if (replacement.kind === "noop") {
-    return Object.freeze([]);
-  }
-
-  const internals = requireAgentsReplacementInternals(replacement);
-  const leaks = [
-    await cleanupStaging(ops, internals.backupRoot, "agents replacement backup directory"),
-    await cleanupStaging(ops, replacement.prepared.stagingDir, "agents staging directory"),
-  ].filter((leak): leak is string => leak !== undefined);
-  return Object.freeze(leaks);
-}
-
-function requireAgentsReplacementInternals(
-  replacement: Extract<AgentsReplacement, { kind: "replaced" }>,
-): AgentsReplacementInternals {
-  const internals = agentsReplacementInternals.get(replacement);
-  if (internals === undefined) {
-    throw new Error("Unknown agents replacement handle.");
-  }
-
-  return internals;
-}
-
-async function rollbackAgentsReplacementInternal(
-  ops: RemovalOps,
-  prepared: Extract<PreparedAgentsStaging, { kind: "staged" }>,
-  renamed: readonly { to: string }[],
-  backups: readonly { name: string; from: string; to: string }[],
-  backupRoot: string,
-  oldIndexText: string | undefined,
-): Promise<readonly string[]> {
-  return rollbackReplacementCommon({
-    ops,
-    renamed,
-    backups,
-    stagingRoot: prepared.stagingDir,
-    backupRoot,
-    removeMode: "file",
-    labels: {
-      replacement: "replacement agent file",
-      previous: "previous agent file",
-      stagingDir: "agents staging directory",
-      backupDir: "agents replacement backup directory",
-    },
-    beforeCleanup: () => restoreAgentsIndex(prepared.locations.agentsIndexPath, oldIndexText),
-  });
-}
-
-async function restoreAgentsIndex(
-  agentsIndexPath: string,
-  oldIndexText: string | undefined,
-): Promise<readonly string[]> {
-  try {
-    if (oldIndexText === undefined) {
-      await rm(agentsIndexPath, { force: true });
-    } else {
-      await mkdir(path.dirname(agentsIndexPath), { recursive: true });
-      await writeFileAtomic(agentsIndexPath, oldIndexText, { encoding: "utf8" });
-    }
-
-    return [];
-  } catch (err) {
-    return [`failed to restore agents index at ${agentsIndexPath}: ${errorMessage(err)}`];
-  }
-}
-
-async function readOptionalText(filePath: string): Promise<string | undefined> {
-  try {
-    return await readFile(filePath, "utf8");
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      return undefined;
-    }
-
-    throw err;
-  }
 }

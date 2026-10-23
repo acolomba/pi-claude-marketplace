@@ -5,7 +5,6 @@ import {
   abortPreparedMcp,
   checkMcpAdapterConfig,
   commitPreparedMcp,
-  finalizeMcpReplacement,
   prepareStageMcpServers,
   projectDisableStubNames,
   readLegacyMcpOwners,
@@ -25,7 +24,6 @@ import {
 import {
   abortPreparedMcp as peerAbortPreparedMcp,
   commitPreparedMcp as peerCommitPreparedMcp,
-  finalizeMcpReplacement as peerFinalizeMcpReplacement,
   prepareStageMcpServers as peerPrepareStageMcpServers,
   replacePreparedMcp as peerReplacePreparedMcp,
   rollbackMcpReplacement as peerRollbackMcpReplacement,
@@ -80,17 +78,6 @@ describe("MCP barrel runtime bindings", () => {
 
     // assert
     assert.strictEqual(boundaryCommitPreparedMcp, expectedCommitPreparedMcp);
-  });
-
-  test("re-exports finalizeMcpReplacement from the stage module", () => {
-    // arrange
-    const expectedFinalizeMcpReplacement = peerFinalizeMcpReplacement;
-
-    // act
-    const boundaryFinalizeMcpReplacement = finalizeMcpReplacement;
-
-    // assert
-    assert.strictEqual(boundaryFinalizeMcpReplacement, expectedFinalizeMcpReplacement);
   });
 
   test("re-exports prepareStageMcpServers from the stage module", () => {

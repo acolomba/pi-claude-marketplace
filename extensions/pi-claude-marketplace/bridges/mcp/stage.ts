@@ -1,7 +1,7 @@
 // bridges/mcp/stage.ts
 //
 // MC-6 prepare/commit/abort for the MCP bridge, plus replacement
-// exports: replacePreparedMcp, rollbackMcpReplacement, finalizeMcpReplacement.
+// exports: replacePreparedMcp, rollbackMcpReplacement.
 // The prepare phase reads the scope's `mcp-adapter.json` with
 // pi-mcp-adapter's grammar and refuses a file it cannot read (AFILE-02). Each
 // plugin server goes under the key Claude Code's tool names use,
@@ -765,20 +765,6 @@ export async function rollbackMcpReplacement(
   }
 
   return Object.freeze(await restoreFiles(requireMcpReplacementInternals(replacement).written));
-}
-
-/**
- * AMIG-02: accepts a replacement this module made and returns no leaks, since
- * a replace that stays has nothing left to clean up. Throws for a handle it
- * did not make.
- */
-export function finalizeMcpReplacement(replacement: McpReplacement): readonly string[] {
-  if (replacement.kind === "noop") {
-    return Object.freeze([]);
-  }
-
-  requireMcpReplacementInternals(replacement);
-  return Object.freeze([]);
 }
 
 function requireMcpReplacementInternals(

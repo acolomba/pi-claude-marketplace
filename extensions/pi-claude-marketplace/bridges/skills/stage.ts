@@ -1,8 +1,6 @@
 // bridges/skills/stage.ts
 //
-// Skills bridge prepare/commit/abort with per-skill atomic dir rename, plus
-// replacement exports: replacePreparedSkills, rollbackSkillsReplacement,
-// finalizeSkillsReplacement.
+// Skills bridge prepare/commit/abort with per-skill atomic dir rename.
 //
 // Behavior:
 //   - D-04: bridge owns its own staging dir at
@@ -25,13 +23,8 @@ import { assertSafeName } from "../../domain/name.ts";
 import { rewriteMarkdownReferences } from "../../domain/skill-tokens.ts";
 import { parseFrontmatter } from "../../platform/pi-api.ts";
 import { stripBom } from "../../shared/bom.ts";
-import { appendLeakToError, errorMessage, ManualRecoveryError } from "../../shared/errors.ts";
-import {
-  cleanupStaging,
-  pathExists,
-  removeOrphanIfPresent,
-  rollbackReplacementCommon,
-} from "../../shared/fs-utils.ts";
+import { appendLeakToError, errorMessage } from "../../shared/errors.ts";
+import { cleanupStaging } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
 
@@ -49,24 +42,12 @@ import { rewriteFrontmatterName } from "./rewrite-frontmatter.ts";
 import type {
   PreparedSkillsStaging,
   SkillDegradeRecord,
-  SkillsReplacement,
   StagedSkillRecord,
   StageSkillsInput,
 } from "./types.ts";
 import type { InstalledReferenceNames } from "../../domain/skill-tokens.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
 import type { ClaudePluginVars } from "../../shared/vars.ts";
-
-type SkillsReplacementInternals = Readonly<{
-  backupRoot: string;
-  backups: readonly { name: string; from: string; to: string }[];
-  renamed: readonly { to: string }[];
-}>;
-
-const skillsReplacementInternals = new WeakMap<
-  Extract<SkillsReplacement, { kind: "replaced" }>,
-  SkillsReplacementInternals
->();
 
 /**
  * SKILL-01: extract the markdown body from a skill source whose frontmatter
@@ -508,162 +489,4 @@ export async function abortPreparedSkills(
   }
 
   return cleanupStaging(ops, prepared.stagingRoot, "skills staging directory");
-}
-
-/**
- * Reinstall-safe replacement helper. Unlike commitPreparedSkills, this moves
- * previous plugin-owned target dirs to a backup root before staged renames so
- * a later orchestrator failure can restore the old install.
- */
-export async function replacePreparedSkills(
-  ops: RemovalOps,
-  prepared: PreparedSkillsStaging,
-): Promise<SkillsReplacement> {
-  if (prepared.kind === "noop") {
-    return { kind: "noop", prepared };
-  }
-
-  const backupRoot = path.join(prepared.locations.skillsStagingDir, `backup-${randomUUID()}`);
-  await mkdir(backupRoot, { recursive: true });
-  await assertPathInside(prepared.locations.skillsStagingDir, backupRoot, "skills backup root");
-
-  const backups: { name: string; from: string; to: string }[] = [];
-  const renamed: { to: string }[] = [];
-
-  try {
-    for (const name of prepared._previousNames) {
-      assertSafeName(name, "previous skill name");
-      const target = path.join(prepared.locations.skillsTargetDir, name);
-      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
-      await assertPathInside(prepared.locations.skillsTargetDir, target, "previous skill dir");
-      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
-      if (!(await pathExists(target))) {
-        continue;
-      }
-
-      const backup = path.join(backupRoot, name);
-      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
-      await assertPathInside(backupRoot, backup, "skills backup dir");
-      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
-      await rename(target, backup);
-      backups.push({ name, from: target, to: backup });
-    }
-
-    // TR-06: 3-arm policy at the rename loop. ownedNames is the basename
-    // membership set derived from state.json (via _previousNames). When a
-    // pre-existing target shares an owned basename, it is treated as an
-    // orphan from a prior partial install and pre-removed via the
-    // kind-strict helper. Foreign content (basename NOT in ownedNames)
-    // still triggers the existing PI-6 "non-previous content" rejection
-    // verbatim. Skills targets are directories -> mode "tree".
-    const ownedNames = new Set<string>(prepared._previousNames);
-    await mkdir(prepared.locations.skillsTargetDir, { recursive: true });
-    for (const pair of prepared._renamePairs) {
-      const targetName = path.basename(pair.to);
-      if (ownedNames.has(targetName)) {
-        // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
-        await removeOrphanIfPresent(pair.to, "tree");
-        // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
-      } else if (await pathExists(pair.to)) {
-        throw new Error(`Cannot replace skill target with non-previous content at ${pair.to}`);
-      }
-
-      // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
-      await rename(pair.from, pair.to);
-      renamed.push({ to: pair.to });
-    }
-  } catch (err) {
-    // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
-    const leaks = await rollbackSkillsReplacementInternal(
-      ops,
-      prepared,
-      renamed,
-      backups,
-      backupRoot,
-    );
-    if (leaks.length > 0) {
-      throw new ManualRecoveryError(errorMessage(err), leaks, { cause: err });
-    }
-
-    throw err;
-  }
-
-  const replacement: Extract<SkillsReplacement, { kind: "replaced" }> = {
-    kind: "replaced",
-    prepared,
-  };
-  skillsReplacementInternals.set(replacement, {
-    backupRoot,
-    backups: Object.freeze(backups),
-    renamed: Object.freeze(renamed),
-  });
-  return replacement;
-}
-
-export async function rollbackSkillsReplacement(
-  ops: RemovalOps,
-  replacement: SkillsReplacement,
-): Promise<readonly string[]> {
-  if (replacement.kind === "noop") {
-    return Object.freeze([]);
-  }
-
-  const internals = requireSkillsReplacementInternals(replacement);
-  return rollbackSkillsReplacementInternal(
-    ops,
-    replacement.prepared,
-    internals.renamed,
-    internals.backups,
-    internals.backupRoot,
-  );
-}
-
-export async function finalizeSkillsReplacement(
-  ops: RemovalOps,
-  replacement: SkillsReplacement,
-): Promise<readonly string[]> {
-  if (replacement.kind === "noop") {
-    return Object.freeze([]);
-  }
-
-  const internals = requireSkillsReplacementInternals(replacement);
-  const leaks = [
-    await cleanupStaging(ops, internals.backupRoot, "skills replacement backup directory"),
-    await cleanupStaging(ops, replacement.prepared.stagingRoot, "skills staging directory"),
-  ].filter((leak): leak is string => leak !== undefined);
-  return Object.freeze(leaks);
-}
-
-function requireSkillsReplacementInternals(
-  replacement: Extract<SkillsReplacement, { kind: "replaced" }>,
-): SkillsReplacementInternals {
-  const internals = skillsReplacementInternals.get(replacement);
-  if (internals === undefined) {
-    throw new Error("Unknown skills replacement handle.");
-  }
-
-  return internals;
-}
-
-async function rollbackSkillsReplacementInternal(
-  ops: RemovalOps,
-  prepared: Extract<PreparedSkillsStaging, { kind: "staged" }>,
-  renamed: readonly { to: string }[],
-  backups: readonly { name: string; from: string; to: string }[],
-  backupRoot: string,
-): Promise<readonly string[]> {
-  return rollbackReplacementCommon({
-    ops,
-    renamed,
-    backups,
-    stagingRoot: prepared.stagingRoot,
-    backupRoot,
-    removeMode: "tree",
-    labels: {
-      replacement: "replacement skill dir",
-      previous: "previous skill dir",
-      stagingDir: "skills staging directory",
-      backupDir: "skills replacement backup directory",
-    },
-  });
 }

@@ -1,8 +1,5 @@
 import type {
   CommandDegradeRecord,
-  CommandsReplacement,
-  CommandsReplacementNoop,
-  CommandsReplacementReplaced,
   DiscoveredCommand,
   PreparedCommandsNoop,
   PreparedCommandsStaged,
@@ -135,25 +132,6 @@ void preparedCommandsStagedWithoutRenames;
 // @ts-expect-error a preparation handle has a closed discriminant set
 void ({ kind: "prepared", result: stageCommandsCommitResult } satisfies PreparedCommandsStaging);
 
-const commandsReplacementNoop: CommandsReplacementNoop = {
-  kind: "noop",
-  prepared: preparedCommandsNoop,
-} satisfies CommandsReplacementNoop;
-void commandsReplacementNoop;
-
-const commandsReplacementReplaced: CommandsReplacementReplaced = {
-  kind: "replaced",
-  prepared: preparedCommandsStaged,
-} satisfies CommandsReplacementReplaced;
-void commandsReplacementReplaced;
-
-void (commandsReplacementNoop satisfies CommandsReplacement);
-void (commandsReplacementReplaced satisfies CommandsReplacement);
-void (commandsReplacementNoop.kind satisfies "noop");
-void (commandsReplacementReplaced.kind satisfies "replaced");
-void (commandsReplacementNoop.prepared.kind satisfies "noop");
-void (commandsReplacementReplaced.prepared.kind satisfies "staged");
-
 const unstageCommandsInput: UnstageCommandsInput = {
   locations: undefined!,
   previousCommandNames: ["acme:build:deploy"],
@@ -195,16 +173,6 @@ void preparedCommandsNoop.stagingRoot;
 void preparedCommandsStaged.prepared;
 // @ts-expect-error staged preparations require staging state
 void ({ kind: "staged", result: stageCommandsCommitResult } satisfies PreparedCommandsStaging);
-// @ts-expect-error noop replacements contain only noop preparations
-void commandsReplacementNoop.prepared.stagingRoot;
-// @ts-expect-error replaced handles require a staged preparation
-void ({ kind: "replaced", prepared: preparedCommandsNoop } satisfies CommandsReplacement);
-// @ts-expect-error noop handles require a noop preparation
-void ({ kind: "noop", prepared: preparedCommandsStaged } satisfies CommandsReplacement);
-// @ts-expect-error a command replacement has a closed discriminant set
-void ({ kind: "staged", prepared: preparedCommandsStaged } satisfies CommandsReplacement);
-// @ts-expect-error a replacement handle always carries its preparation
-void ({ kind: "noop" } satisfies CommandsReplacement);
 
 // @ts-expect-error unstage input always carries the previous command names
 const unstageCommandsInputWithoutNames: UnstageCommandsInput = {

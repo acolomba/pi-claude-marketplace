@@ -40,9 +40,15 @@
 // reconcile-driven INSTALL of the same plugin reports it. Tracked as part of
 // BACKLOG UPCASC-01 (decide the cascade rendering once).
 
+import { rm } from "node:fs/promises";
+
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
-import { composeErrorWithCauseChain, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
+import {
+  composeErrorWithCauseChain,
+  errorMessage,
+  rethrowInvalidGitHubBaseUrl,
+} from "../../shared/errors.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
@@ -60,7 +66,6 @@ import {
   reinstallOutcomeFromRun,
   reinstallReasonsFromError,
 } from "./reinstall-record.ts";
-import { REAL_REINSTALL_TRANSACTION } from "./reinstall-replace.ts";
 import { selectReinstallTargets } from "./reinstall-targets.ts";
 import {
   REINSTALL_CONTEXT,
@@ -87,13 +92,20 @@ import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts";
 import type { ReinstallPhaseFailure } from "./reinstall-record.ts";
-import type {
-  ReinstallMaintenanceInput,
-  ReinstallTransaction,
-  RemoveDataDirFn,
-} from "./reinstall-replace.ts";
 import type { ReinstallPluginsTarget, ReinstallTargetSelection } from "./reinstall-targets.ts";
 import type { MaterializationPolicy, UpdateCloneCacheSeam } from "./update-preflight.ts";
+import type { RmOptions } from "node:fs";
+
+/**
+ * Filesystem removal seam used after a committed reinstall. The options
+ * narrow Node's own removal options: both slots are optional booleans there,
+ * and pinning each to `true` is what stops a non-recursive or non-forced
+ * removal from satisfying the seam.
+ */
+export type RemoveDataDirFn = (
+  path: string,
+  options: RmOptions & { recursive: true; force: true },
+) => Promise<void>;
 
 /** Hook-routing capabilities the shared swap re-routes a reinstalled plugin with. */
 export type ReinstallHooksRouting = Pick<
@@ -130,7 +142,7 @@ export interface ReinstallPluginOptions {
   readonly stateTransaction?: LockedStateTransactionDeps;
   /**
    * Post-success plugin-data-directory removal seam. Production callers leave
-   * this undefined; `reinstall-replace.ts` owns the fallback.
+   * this undefined and get a recursive, forced `rm`.
    */
   readonly removeDataDir?: RemoveDataDirFn;
   /**
@@ -170,7 +182,7 @@ export interface ReinstallPluginsOptions {
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
 }
 
-/** One plugin reinstall bound to a transaction and lifecycle routing owner. */
+/** One plugin reinstall bound to a lifecycle routing owner. */
 export type ReinstallPluginFn = (
   options: ReinstallPluginOptions,
 ) => Promise<ReinstallPluginOutcome>;
@@ -208,41 +220,28 @@ const REINSTALL_MATERIALIZATION: MaterializationPolicy = {
 
 /** The collaborators one reinstall binds. */
 interface ReinstallBindings {
-  readonly transaction: ReinstallTransaction;
   readonly hooksRouting: ReinstallHooksRouting;
   readonly completionCache: CompletionCache;
   readonly env: ClaudeEnv;
 }
 
 /**
- * Binds one reinstall operation to a required semantic transaction owner. The
- * flow reads only its `runPostSuccessMaintenance` member.
+ * Binds one reinstall operation to its hook-routing owner and completion
+ * cache. D-18-05: the materialization is the shared runner's, and the
+ * post-success maintenance is this module's own step, so there is no
+ * transaction to inject.
  *
  * D-08-06: `env` is the environment the reinstall stages MCP servers with. It
  * defaults to Pi's process environment here, at the entry point, the way
  * `createGetPluginInfo` binds it.
  */
 export function createReinstallPlugin(
-  transaction: ReinstallTransaction,
   hooksRouting: ReinstallHooksRouting,
   completionCache: CompletionCache,
   env: ClaudeEnv = process.env,
 ): ReinstallPluginFn {
-  const bindings: ReinstallBindings = { transaction, hooksRouting, completionCache, env };
+  const bindings: ReinstallBindings = { hooksRouting, completionCache, env };
   return (options) => reinstallPluginWith(REINSTALL_FLOW_OWNERS, bindings, options);
-}
-
-/**
- * Binds one production reinstall to the real transaction and supplied routing
- * owner. Module-private: `createNodeReinstallPlugins` below is its only
- * consumer, and a caller outside this module composes the same operation
- * through `orchestrators/plugin/operations.ts` (D-03).
- */
-function createNodeReinstallPlugin(
-  hooksRouting: ReinstallHooksRouting,
-  completionCache: CompletionCache,
-): ReinstallPluginFn {
-  return createReinstallPlugin(REAL_REINSTALL_TRANSACTION, hooksRouting, completionCache);
 }
 
 /** Binds direct and bulk production reinstall to one lifecycle routing owner. */
@@ -250,7 +249,7 @@ export function createNodeReinstallPlugins(
   hooksRouting: ReinstallHooksRouting,
   completionCache: CompletionCache,
 ): ReinstallPluginsFn {
-  const reinstallPlugin = createNodeReinstallPlugin(hooksRouting, completionCache);
+  const reinstallPlugin = createReinstallPlugin(hooksRouting, completionCache);
   return (options) => reinstallPluginsWith(REINSTALL_FLOW_OWNERS, options, reinstallPlugin);
 }
 
@@ -300,8 +299,8 @@ async function reinstallPluginWith(
     return outcome;
   }
 
-  const maintenanceWarnings = await bindings.transaction.runPostSuccessMaintenance(
-    maintenanceInput(opts),
+  const maintenanceWarnings = await runPostSuccessMaintenance(
+    opts,
     locations,
     bindings.completionCache,
   );
@@ -426,15 +425,45 @@ function skippedBeforeRunner(outcome: ReinstallPluginOutcome): ReinstallReached 
   return { outcome, discoveryWarnings: [], mcpConfigNotices: [] };
 }
 
-function maintenanceInput(opts: ReinstallPluginOptions): ReinstallMaintenanceInput {
-  return {
-    scope: opts.scope,
-    marketplace: opts.marketplace,
-    plugin: opts.plugin,
-    ...(opts.removeDataDir !== undefined && {
-      removeDataDir: opts.removeDataDir,
-    }),
-  };
+const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
+  await rm(dataDir, { recursive: true, force: true });
+};
+
+/**
+ * D-18-05: the non-fatal cleanup after a reinstalled outcome. It drops the
+ * marketplace's completion cache and removes the plugin-data directory, and
+ * returns one deferral warning per step that failed.
+ */
+async function runPostSuccessMaintenance(
+  opts: ReinstallPluginOptions,
+  locations: ScopedLocations,
+  completionCache: CompletionCache,
+): Promise<readonly string[]> {
+  const { scope, marketplace, plugin } = opts;
+  const warnings: string[] = [];
+  try {
+    await completionCache.dropMarketplaceCache(
+      await locations.pluginCacheFile(marketplace),
+      scope,
+      marketplace,
+    );
+  } catch (error) {
+    warnings.push(
+      `Plugin "${plugin}" reinstalled; completion cache refresh deferred: ${errorMessage(error)}`,
+    );
+  }
+
+  const dataDir = await locations.pluginDataDir(marketplace, plugin);
+  const removeDataDir = opts.removeDataDir ?? defaultRemoveDataDir;
+  try {
+    await removeDataDir(dataDir, { recursive: true, force: true });
+  } catch (error) {
+    warnings.push(
+      `Plugin "${plugin}" reinstalled; data cleanup deferred at ${dataDir}: ${errorMessage(error)}`,
+    );
+  }
+
+  return Object.freeze(warnings);
 }
 
 /**
