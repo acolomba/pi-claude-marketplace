@@ -6043,8 +6043,7 @@ describe("applyReconcile", () => {
       reason: "reload",
     });
 
-    // assert -- app's own cascade row is the only row (the standard install
-    // path carries no version for a config-declared install); helper is
+    // assert -- app's own cascade row is the only row; helper is
     // materialized once, and deploy-kit is left untouched.
     assert.deepStrictEqual(notifications, [
       {

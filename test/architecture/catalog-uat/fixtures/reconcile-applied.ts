@@ -26,6 +26,7 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
               {
                 status: "installed",
                 name: "new-plugin",
+                version: "1.0.0",
                 dependencies: [],
                 severity: "info",
                 needsReload: true,
@@ -40,6 +41,7 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
               {
                 status: "installed",
                 name: "other-plugin",
+                version: "1.0.0",
                 dependencies: [],
                 severity: "info",
                 needsReload: true,

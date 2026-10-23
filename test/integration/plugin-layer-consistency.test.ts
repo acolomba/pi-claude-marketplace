@@ -152,7 +152,7 @@ test("a local layer that declares a plugin whose marketplace only the base layer
     plugins: { "other@mp": {} },
   });
   assert.deepStrictEqual(await reload(scope), [
-    { message: "● mp [project] (added)\n  ● other (installed)\n\nReconcile: 2 successes" },
+    { message: "● mp [project] (added)\n  ● other v1.0.0 (installed)\n\nReconcile: 2 successes" },
   ]);
   await writeLayer(scope.locations.localConfigJsonPath, { plugins: { "demo@mp": {} } });
   const before = await treeBytes(scope.locations.scopeRoot);
@@ -187,7 +187,7 @@ test("a base layer that declares a plugin whose marketplace only the local layer
     plugins: { "other@mp": {} },
   });
   assert.deepStrictEqual(await reload(scope), [
-    { message: "● mp [project] (added)\n  ● other (installed)\n\nReconcile: 2 successes" },
+    { message: "● mp [project] (added)\n  ● other v1.0.0 (installed)\n\nReconcile: 2 successes" },
   ]);
   await writeLayer(scope.locations.baseConfigJsonPath, { plugins: { "demo@mp": {} } });
   const before = await treeBytes(scope.locations.scopeRoot);
@@ -228,7 +228,7 @@ test("the local layer an earlier --local install wrote keeps its bytes and its p
     plugins: { "demo@mp": {} },
   });
   assert.deepStrictEqual(await reload(scope), [
-    { message: "● mp [project] (added)\n  ● demo (installed)\n\nReconcile: 2 successes" },
+    { message: "● mp [project] (added)\n  ● demo v1.0.0 (installed)\n\nReconcile: 2 successes" },
   ]);
   await writeLayer(scope.locations.baseConfigJsonPath, {
     marketplaces: { mp: { source: scope.source } },
@@ -257,7 +257,7 @@ test("before the first-run migration, pending reports the layer error the reload
     plugins: { "demo@mp": {} },
   });
   assert.deepStrictEqual(await reload(scope), [
-    { message: "● mp [project] (added)\n  ● demo (installed)\n\nReconcile: 2 successes" },
+    { message: "● mp [project] (added)\n  ● demo v1.0.0 (installed)\n\nReconcile: 2 successes" },
   ]);
   await rm(scope.locations.baseConfigJsonPath);
   await writeLayer(scope.locations.localConfigJsonPath, { plugins: { "demo@mp": {} } });
@@ -302,7 +302,7 @@ test("a plugin whose marketplace no layer declares keeps its dangling reference 
         "Some operations have failed.\n" +
         "\n" +
         "● mp [project] (added)\n" +
-        "  ● other (installed)\n" +
+        "  ● other v1.0.0 (installed)\n" +
         "\n" +
         "⊘ nowhere [project] (failed) {dangling reference}\n" +
         "  ⊘ ghost (failed) {dangling reference}\n" +
@@ -335,7 +335,7 @@ test("a malformed plugin key reaches the planner's diagnostic and no layer error
         "⊘ demo@ [project] (failed) {source mismatch}\n" +
         "\n" +
         "● mp [project] (added)\n" +
-        "  ● other (installed)\n" +
+        "  ● other v1.0.0 (installed)\n" +
         "\n" +
         "Reconcile: 1 failure, 2 successes",
       severity: "error",
