@@ -10,8 +10,8 @@
 // Duck-typed on the isomorphic-git error shapes (D-13: no isomorphic-git
 // import outside the platform tier); the project's own
 // `CrossOriginChallengeError` and `StoredCredentialRejectedError` are narrowed
-// by `instanceof`. Per-verb fallbacks (fetch's `source missing` fold,
-// install's auth-only narrowing) stay thin wrappers at their call sites.
+// by `instanceof`. Per-verb fallbacks (fetch's `source missing` fold) stay
+// thin wrappers at their call sites.
 
 import { CrossOriginChallengeError, StoredCredentialRejectedError } from "./errors.ts";
 import { gitHubWireUrl } from "./github-base-url.ts";
@@ -123,16 +123,15 @@ function isRemoteNotFound(error: unknown): boolean {
 }
 
 /**
- * Extend the shared transport ladder for a source-access operation such as
- * `marketplace add`. A 404 or 410 is `source missing` (ADD-09), and so is a
- * ref or object the remote does not have, like a repository the host does not
- * have. Any other status outside the 401/403 auth challenge is
- * `network error`, because the host was reached and refused;
- * `network unreachable` stays for the connection errno codes. The opt-in
- * layer keeps other callers' fallthroughs unchanged: the transport ladder
- * that update and the plugin verbs use leaves a missing ref unclassified.
+ * Extend the shared transport ladder with the git host's own HTTP answer. A
+ * 404 or 410 is `source missing` (ADD-09, INS-06). Any other status outside
+ * the 401/403 auth challenge is `network error`, because the host was reached
+ * and refused; `network unreachable` stays for the connection errno codes.
+ * `install` uses this layer: a local read that finds no ref or object on a
+ * clone already on disk stays unclassified there, so it is never reported as
+ * a repository the host lacks.
  */
-export function classifyGitSourceAccessFailure(
+export function classifyGitHostFailure(
   error: unknown,
 ):
   | "network unreachable"
@@ -145,14 +144,29 @@ export function classifyGitSourceAccessFailure(
     return transportReason;
   }
 
-  if (isRemoteNotFound(error)) {
-    return "source missing";
-  }
-
   const status = hostHttpStatus(error);
   if (status === undefined) {
     return undefined;
   }
 
   return SOURCE_MISSING_HTTP_STATUSES.has(status) ? "source missing" : "network error";
+}
+
+/**
+ * Extend the host ladder for a source-access operation such as `marketplace
+ * add`, which always clones fresh: a ref or object the remote does not have,
+ * like a repository the host does not have, is `source missing` too. The
+ * opt-in layer keeps other callers' fallthroughs unchanged: the transport
+ * ladder that update and the plugin verbs use leaves a missing ref
+ * unclassified.
+ */
+export function classifyGitSourceAccessFailure(
+  error: unknown,
+):
+  | "network unreachable"
+  | "authentication required"
+  | "source missing"
+  | "network error"
+  | undefined {
+  return isRemoteNotFound(error) ? "source missing" : classifyGitHostFailure(error);
 }

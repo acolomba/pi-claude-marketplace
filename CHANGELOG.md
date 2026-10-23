@@ -2,10 +2,10 @@
 
 ## [Unreleased]
 
-- Installing a plugin from a git source now contacts the git host less often, and a failed install says why.
+- Plugins from git sources now reach the git host less often, and an install the host refuses says why.
 
-  - The first install of a plugin from an unpinned git source clones its repository once. It used to fetch the repository again right after the clone.
-  - An install fails as `{source missing}` when the git host answers 404, and as `{network unreachable}` when the connection drops. It used to show no reason.
+  - A command that clones a plugin's unpinned git source for the first time clones it once. It used to fetch the repository again right after the clone.
+  - An install fails as `{source missing}` when the git host answers 404, `{network error}` for another refusal, and `{network unreachable}` when the connection drops. It used to show no reason.
 
 - Internal: the test suite moves from `tests/` to `test/`, and the duplication check now fails on every repeated block of code. (#272)
 

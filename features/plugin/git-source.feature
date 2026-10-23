@@ -131,9 +131,10 @@ Feature: Plugin git source
     Then the session offers no skills
 
     Examples:
-      | refusal              | reason              | status  | cause chain                                                        |
-      | answers 404          | source missing      | 404     | HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git |
-      | drops the connection | network unreachable | dropped | socket hang up, fetched https://{git host}/acme/ghp.git            |
+      | refusal              | reason              | status  | cause chain                                                                  |
+      | answers 404          | source missing      | 404     | HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git           |
+      | drops the connection | network unreachable | dropped | socket hang up, fetched https://{git host}/acme/ghp.git                      |
+      | answers 503          | network error       | 503     | HTTP Error: 503 Service Unavailable, fetched https://{git host}/acme/ghp.git |
 
   Scenario: An install fails as authentication required when the git host asks for a credential the user has not stored
     Given the git repository "ghp" holds these plugins:

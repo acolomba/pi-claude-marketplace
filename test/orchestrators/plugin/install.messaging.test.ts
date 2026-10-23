@@ -502,6 +502,66 @@ describe("composeInstallFailureMessage", () => {
     });
   });
 
+  test("INS-06: classifies a git host server error as network error and keeps its cause", () => {
+    // arrange
+    const failure = Object.assign(new Error("HTTP Error: 503 Service Unavailable"), {
+      code: "HttpError",
+      data: { statusCode: 503 },
+    });
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["network error"],
+      scope: "project",
+      cause: failure,
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("INS-06: leaves a ref the clone on disk lacks unclassified and keeps its cause", () => {
+    // arrange
+    const failure = Object.assign(new Error("Could not find HEAD."), {
+      code: "NotFoundError",
+      name: "NotFoundError",
+    });
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: [],
+      scope: "project",
+      cause: failure,
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
   test("INS-06: classifies a network errno failure as network unreachable and keeps its cause", () => {
     // arrange
     const failure = Object.assign(new Error("socket hang up"), { code: "ECONNRESET" });

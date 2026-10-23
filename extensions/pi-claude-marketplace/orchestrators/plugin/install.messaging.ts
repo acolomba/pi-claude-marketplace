@@ -4,7 +4,7 @@ import {
   InstallMarketplaceAddError,
   PluginShapeError,
 } from "../../shared/errors.ts";
-import { classifyGitSourceAccessFailure } from "../../shared/git-failure-classifiers.ts";
+import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import {
   type ContentReason,
   type PluginDisabledMessage,
@@ -218,15 +218,15 @@ export function composeInstallFailureMessage(args: {
     return failed;
   }
 
-  // Branch 4: runtime throw. A refused git-source clone maps to the reason
-  // `marketplace add` reports for the same failure (ADD-09, INS-06):
+  // Branch 4: runtime throw. A git host that refused the clone maps to the
+  // reason `marketplace add` reports for the same answer (ADD-09, INS-06):
   // `source missing`, `network unreachable`, `network error`, or
   // `authentication required`. The auth row is bare (amended D-79-03: the
   // stored-credential cause line lives only on the update path's child row);
   // every other row keeps its cause chain, as fetch's failed row does. A throw
   // the ladder leaves unclassified keeps an empty reasons array and rides the
   // cause-chain trailer (the renderer suppresses the `{}` brace per D-15-01).
-  const gitReason = classifyGitSourceAccessFailure(err);
+  const gitReason = classifyGitHostFailure(err);
   const failed: PluginFailedMessage = {
     status: "failed",
     name: plugin,

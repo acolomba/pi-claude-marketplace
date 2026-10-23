@@ -13048,7 +13048,7 @@ test("plugin install authentication: classifies a providerless 401 without a cau
   });
 });
 
-test("plugin install authentication: preserves a network failure outside authentication narrowing", async () => {
+test("plugin install authentication: names a network failure network unreachable and keeps its cause", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-network-"));
     try {
@@ -13090,7 +13090,7 @@ test("plugin install authentication: preserves a network failure outside authent
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ network (failed)\n    cause: connect ENETUNREACH 10.0.0.1:443",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ network (failed) {network unreachable}\n    cause: connect ENETUNREACH 10.0.0.1:443",
           severity: "error",
         },
       ]);

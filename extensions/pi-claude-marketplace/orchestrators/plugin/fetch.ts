@@ -338,8 +338,8 @@ interface FetchOneDeps {
  *       clone is already `materialized` is a no-op -> `(skipped) {up-to-date}`,
  *       no network. Otherwise (remote-cold OR any unpinned) run the materialize:
  *       pinned arm -> resolvePluginPin + materializePluginClone; unpinned arm ->
- *       canonicalCloneUrl + materializeOrRefreshPluginMirror (always refreshes;
- *       the refresh IS the consented fetch).
+ *       canonicalCloneUrl + materializeOrRefreshPluginMirror (a cold mirror is
+ *       cloned, a warm one refreshed; either IS the consented fetch).
  *   (3) After the seam returns, derive the row FRESH from `probeManifestEntry`
  *       against the now-warm tree (never a pre-materialize probe).
  */

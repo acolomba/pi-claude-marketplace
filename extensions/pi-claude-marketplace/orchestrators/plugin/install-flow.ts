@@ -1559,7 +1559,8 @@ function promotedRowOutcome(args: {
  *   2. Entity-shape errors (PI-3 / PI-4 / PI-5) -- the classifier's
  *      `status: "failed" | "unavailable"` discriminator is preserved
  *      verbatim.
- *   3. Generic runtime error -- reasons: [] and cause: err; the renderer
+ *   3. Runtime error -- a git host refusal carries its reason (INS-06), and
+ *      any other throw keeps reasons: [] and cause: err; the renderer
  *      suppresses the empty brace per D-15-01.
  */
 function handleInstallThrow(args: {
