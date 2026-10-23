@@ -1286,11 +1286,12 @@ function composePhase3FailureOutcome(
 // fast path, prepare-handles, the intent-mark window, phase-3a per-bridge
 // commits, finalize, and the phase-3b aggregate error path. The per-phase
 // save-vs-throw discipline stays visible here; the phase bodies themselves are
-// extracted above. An absent `policy` is update's, which never overwrites.
+// extracted above. `policy` is the calling verb's; its `overwrite` reaches the
+// agents commit.
 export async function swapPluginUpdate(
   args: ThreePhaseArgs,
   preflight: PreparedPluginUpdate,
-  policy?: MaterializationPolicy,
+  policy: MaterializationPolicy,
 ): Promise<UpdateRunOutcome> {
   const { plugin, marketplace, scope } = args;
   const { installable, fromVersion, toVersion } = preflight;
@@ -1340,7 +1341,7 @@ export async function swapPluginUpdate(
     // NFR-3 / PI-6: the agents commit's target refusals run here first, so an
     // occupied target refuses before the intent mark and changes nothing. The
     // commit repeats them for a file that appears in between.
-    await assertAgentCommitTargets(handles.agents, { force: policy?.overwrite === true });
+    await assertAgentCommitTargets(handles.agents, { force: policy.overwrite });
     await markUpdateInProgress(args, preflight, handles);
   } catch (err) {
     // A target refusal or an intent-mark failure (typically ST-9
@@ -1355,7 +1356,7 @@ export async function swapPluginUpdate(
     hookEntries,
     workflows: workflowsCommit,
     mcpConfigNotices,
-  } = await commitUpdatePhase3a(removalOps, args, preflight, handles, policy?.overwrite === true);
+  } = await commitUpdatePhase3a(removalOps, args, preflight, handles, policy.overwrite);
 
   // ─── Phase 2b: finalize state (TR-04) ─────────────────────────────────────
   //

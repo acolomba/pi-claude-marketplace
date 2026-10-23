@@ -37,6 +37,16 @@ import type { TestContext } from "node:test";
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 
+/** `update`'s knobs on the shared runner (D-18-04). */
+const UPDATE_POLICY = {
+  refreshSource: true,
+  skipSameRevision: true,
+  overwrite: false,
+} satisfies MaterializationPolicy;
+
+// D-18-04: a caller names its verb's policy; omitting it does not compile.
+void (true satisfies undefined extends PreparePluginUpdateOptions["policy"] ? false : true);
+
 const REINSTALL_POLICY = {
   refreshSource: false,
   skipSameRevision: false,
@@ -153,7 +163,7 @@ async function prepare(
     locations: seed.locations,
     cleanupClones: options.cleanupClones ?? (async () => {}),
     ...(options.partial === true && { partial: true }),
-    ...(options.policy !== undefined && { policy: options.policy }),
+    policy: options.policy ?? UPDATE_POLICY,
     ...(options.cloneCacheSeam !== undefined && { cloneCacheSeam: options.cloneCacheSeam }),
     ...(options.constraintGate !== undefined && { constraintGate: options.constraintGate }),
     ...(options.pathPinProbe !== undefined && { pathPinProbe: options.pathPinProbe }),
@@ -178,6 +188,7 @@ test("classifies a missing marketplace without reading a manifest", async (t) =>
 
   // act
   const outcome = await preparePluginUpdate({
+    policy: UPDATE_POLICY,
     plugin: "hello",
     marketplace: "missing",
     scope: "project",

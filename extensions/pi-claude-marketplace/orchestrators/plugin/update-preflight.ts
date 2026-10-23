@@ -151,8 +151,8 @@ export interface PreparePluginUpdateOptions {
   readonly marketplace: string;
   readonly scope: Scope;
   readonly locations: ScopedLocations;
-  /** Absent is update's policy (refresh, skip the recorded revision, no overwrite). */
-  readonly policy?: MaterializationPolicy;
+  /** D-18-04: the calling verb's knobs; required so no caller inherits update's by omission. */
+  readonly policy: MaterializationPolicy;
   /** State I/O for the disabled-pin refresh; production callers omit it. */
   readonly stateTransaction?: LockedStateTransactionDeps;
   readonly partial?: boolean;
@@ -970,7 +970,7 @@ export async function preparePluginUpdate(
     },
     options.locations,
     auth,
-    options.policy?.refreshSource !== false,
+    options.policy.refreshSource,
   );
   const { candidate, resolvedSha, pin } = await resolvePinnedUpdateCandidate(
     triaged.entry,
@@ -1005,7 +1005,7 @@ export async function preparePluginUpdate(
   }
 
   if (
-    options.policy?.skipSameRevision !== false &&
+    options.policy.skipSameRevision &&
     !isRecordedButDisabled(triaged.record) &&
     isRecordedCandidate(triaged.record, {
       toVersion,

@@ -11,8 +11,16 @@ import { preparePluginUpdate } from "../../../extensions/pi-claude-marketplace/o
 import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import { seedUnconstrainedTarget } from "../plugin/seed-unconstrained-target.ts";
 
+import type { MaterializationPolicy } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type { PluginUpdateOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ResolvedRow } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
+
+/** `update`'s knobs on the shared runner (D-18-04). */
+const UPDATE_POLICY = {
+  refreshSource: true,
+  skipSameRevision: true,
+  overwrite: false,
+} satisfies MaterializationPolicy;
 
 void ({
   status: "updated",
@@ -565,6 +573,7 @@ test("SC3: an unconstrained plugin renders the same autoupdate cascade rows as b
   const seed = await seedUnconstrainedTarget("sc3-update-messaging-");
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
   const prepared = await preparePluginUpdate({
+    policy: UPDATE_POLICY,
     plugin: "alpha",
     marketplace: "mp",
     scope: "project",
