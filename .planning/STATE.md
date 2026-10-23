@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: lifecycle-coverage
 milestone_name: Plugin Lifecycle Behavioral Tests
 status: planning
-last_updated: "2026-10-22T23:55:01.733Z"
+last_updated: "2026-10-23T00:03:10.000Z"
 last_activity: 2026-10-22
 progress:
-  total_phases: 0
+  total_phases: 15
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -17,19 +17,25 @@ progress:
 
 ## Project Reference
 
-See: `.planning/PROJECT.md` (updated 2026-10-21 after marketplace-features Phase 9)
+See: `.planning/PROJECT.md` (updated 2026-10-22 at the lifecycle-coverage start)
 
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 10 — GitHub Source Kind and Suite Close
+**Current focus:** Phase 1 — Suite Foundation (then Phases 2-15 in parallel)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-10-22 — Milestone lifecycle-coverage started
+Phase: 1 of 15 (Suite Foundation)
+Plan: Not started
+Status: Ready to plan
+Last activity: 2026-10-22 — Roadmap created: 15 phases, 61/61 requirements mapped
+
+Progress: [░░░░░░░░░░] 0%
+
+Phases 2-15 depend only on Phase 1 and may run in parallel once it lands. Each
+owns its own feature files and step modules (the file ownership table in
+ROADMAP.md); Phase 1 owns every shared file under `features/`.
 
 ### mcp-4 closeout
 
@@ -175,9 +181,14 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-21T15:41:06.689Z
-**Stopped at:** Phase 10 complete — all phases complete
+**Last session:** 2026-10-23T00:03:10.000Z
+**Stopped at:** lifecycle-coverage roadmap created (15 phases); Phase 1 ready to plan
 **Resume file:** None
+
+**lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
+`claude/plugin-lifecycle-coverage-b1d431`. Next: `/gsd-plan-phase 1` (Suite
+Foundation). After Phase 1 lands, Phases 2-15 run in parallel; each depends on
+Phase 1 only.
 
 **Phase 8 closed (2026-10-20):** all five plans executed, Nyquist-compliant,
 `threats_open: 0`, the code review fix loop closed 7 of 7 findings, and
@@ -699,6 +710,9 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Roadmap Evolution
 
+- lifecycle-coverage roadmap created 2026-10-22: Phase 1 (Suite Foundation)
+  then Phases 2-15 in parallel, each owning disjoint feature files and step
+  modules
 - Phase 8 added: Address tech debt: ledger dispositions and advisory
 - Phase 9 added: Address tech debt: redact LLM tool error text
 - Phase 3.1 inserted after Phase 3: Local Declaration Leak Fix: a --local marketplace leaks into claude-plugins.json on the first-run migration (FIX-02), found in Phase 3 discussion
@@ -716,6 +730,10 @@ in the phase deferred items. The milestone remains open for audit and archival.
 
 ### Blockers/Concerns
 
+- [lifecycle-coverage] Parallel Phases 2-15 own disjoint `features/` files,
+  but a product fix can touch production code or `CHANGELOG.md` that another
+  phase also changes; the later merge resolves the overlap and re-runs
+  `npm run check`.
 - [Phase 9] The url stand-in is proven only locally (OpenSSL 4, Node 26, git 2.55);
   CI (OpenSSL 3.0.13, Node 24) first runs it when the branch is pushed.
 - [Phase 10] Resolved: no tag is excluded; every `@github` row runs (48 pass).

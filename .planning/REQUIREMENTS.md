@@ -145,12 +145,73 @@ settle which one wins (see PROJECT.md).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
+| FND-01 | Phase 1 | Pending |
+| FND-02 | Phase 1 | Pending |
+| ENA-01 | Phase 2 | Pending |
+| ENA-02 | Phase 2 | Pending |
+| ENA-03 | Phase 2 | Pending |
+| ENA-04 | Phase 2 | Pending |
+| ENA-05 | Phase 2 | Pending |
+| ENA-06 | Phase 2 | Pending |
+| INS-01 | Phase 3 | Pending |
+| INS-02 | Phase 3 | Pending |
+| INS-03 | Phase 3 | Pending |
+| INS-04 | Phase 3 | Pending |
+| INS-05 | Phase 4 | Pending |
+| INS-06 | Phase 4 | Pending |
+| INS-07 | Phase 5 | Pending |
+| UNI-01 | Phase 6 | Pending |
+| UNI-02 | Phase 6 | Pending |
+| UNI-03 | Phase 4 | Pending |
+| UPD-01 | Phase 7 | Pending |
+| UPD-02 | Phase 4 | Pending |
+| UPD-03 | Phase 7 | Pending |
+| UPD-04 | Phase 5 | Pending |
+| UPD-05 | Phase 7 | Pending |
+| REI-01 | Phase 8 | Pending |
+| REI-02 | Phase 8 | Pending |
+| REI-03 | Phase 8 | Pending |
+| LST-01 | Phase 9 | Pending |
+| LST-02 | Phase 9 | Pending |
+| LST-03 | Phase 9 | Pending |
+| LST-04 | Phase 9 | Pending |
+| LST-05 | Phase 9 | Pending |
+| INF-01 | Phase 10 | Pending |
+| INF-02 | Phase 10 | Pending |
+| INF-03 | Phase 10 | Pending |
+| INF-04 | Phase 10 | Pending |
+| INF-05 | Phase 10 | Pending |
+| PND-01 | Phase 11 | Pending |
+| PND-02 | Phase 11 | Pending |
+| REC-01 | Phase 11 | Pending |
+| REC-02 | Phase 11 | Pending |
+| REC-03 | Phase 11 | Pending |
+| REC-04 | Phase 11 | Pending |
+| FET-01 | Phase 12 | Pending |
+| FET-02 | Phase 12 | Pending |
+| FET-03 | Phase 12 | Pending |
+| PRN-01 | Phase 12 | Pending |
+| PRN-02 | Phase 12 | Pending |
+| PRN-03 | Phase 12 | Pending |
+| IMP-01 | Phase 13 | Pending |
+| IMP-02 | Phase 13 | Pending |
+| IMP-03 | Phase 13 | Pending |
+| IMP-04 | Phase 13 | Pending |
+| BOO-01 | Phase 14 | Pending |
+| BOO-02 | Phase 14 | Pending |
+| BRW-01 | Phase 14 | Pending |
+| HLP-01 | Phase 14 | Pending |
+| USE-01 | Phase 14 | Pending |
+| FLR-01 | Phase 15 | Pending |
+| FLR-02 | Phase 15 | Pending |
+| FLR-03 | Phase 15 | Pending |
+| FLR-04 | Phase 15 | Pending |
 
 **Coverage:**
 - v1 requirements: 61 total
-- Mapped to phases: 0
-- Unmapped: 61
+- Mapped to phases: 61
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-10-22*
-*Last updated: 2026-10-22 after initial definition*
+*Last updated: 2026-10-22 after roadmap creation (15 phases)*
