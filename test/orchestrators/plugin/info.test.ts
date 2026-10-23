@@ -30,7 +30,7 @@
 import assert from "node:assert/strict";
 import { createHook } from "node:async_hooks";
 import * as fs from "node:fs";
-import { mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { devNull } from "node:os";
 import path from "node:path";
@@ -8489,10 +8489,10 @@ test("a warm installable git plugin folds a component read failure to remote exa
   });
 });
 
-test("an explicit fetch whose second materialization fails folds the warm resolver error", async () => {
+test("an explicit fetch whose fetched tree cannot be read folds the warm resolver error", async () => {
   // arrange
   await withHermeticHome(async ({ home, cwd }) => {
-    const cloneUrl = "https://example.com/second-fetch-fails";
+    const cloneUrl = "https://example.com/fetched-tree-unreadable";
     await seedPathMarketplace({
       scope: "user",
       scopeRoot: path.join(home, ".pi", "agent"),
@@ -8525,15 +8525,11 @@ test("an explicit fetch whose second materialization fails folds the warm resolv
       materializePluginClone() {
         return Promise.reject(new Error("pinned materialization was not expected"));
       },
-      materializeOrRefreshPluginMirror() {
+      async materializeOrRefreshPluginMirror() {
         materializations += 1;
-        if (materializations === 2) {
-          return Promise.reject(
-            Object.assign(new Error("mirror became unreadable"), { code: "EACCES" }),
-          );
-        }
-
-        return Promise.resolve({ pluginRoot: mirrorDir, resolvedSha: "a".repeat(40) });
+        // The fetch leaves a manifest the resolver cannot read.
+        await chmod(path.join(mirrorDir, ".claude-plugin", "plugin.json"), 0o000);
+        return { pluginRoot: mirrorDir, resolvedSha: "a".repeat(40) };
       },
     };
     const { ctx, run, notifications } = makeCtx();
@@ -8551,7 +8547,7 @@ test("an explicit fetch whose second materialization fails folds the warm resolv
     });
 
     // assert
-    assert.equal(materializations, 2);
+    assert.equal(materializations, 1);
     assert.deepEqual(notifications, [
       {
         message:
@@ -9400,6 +9396,43 @@ test("D-01-32: a WARM git clone's plugin.json supplies the dependency list, not 
           "  ○ gplug v1.0.0 (available)\n" +
           "    skills: warm-skill\n" +
           "    dependencies: fresh@mp",
+      ],
+    );
+  });
+});
+
+test("D-77-01: a WARM git clone whose entry declares no version shows the clone's commit", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "gplug", source: cloneUrl }] },
+    });
+    await seedWarmMirror({
+      scope: "user",
+      cwd,
+      cloneUrl,
+      pluginJson: { name: "gplug" },
+      componentDirs: ["skills/warm-skill"],
+    });
+    const mirrorDir = await locationsFor("user", cwd).pluginCloneDir(pluginMirrorKey(cloneUrl));
+    const head = await git.resolveRef({ fs, dir: mirrorDir, ref: "HEAD" });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(
+      notifications.map(({ message }) => message),
+      [
+        "● mp [user] <no autoupdate>\n" +
+          `  ○ gplug v#${head.slice(0, 7)} (available)\n` +
+          "    skills: warm-skill",
       ],
     );
   });
