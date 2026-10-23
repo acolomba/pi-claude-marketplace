@@ -2560,9 +2560,8 @@ async function runSetEnabledOutcome(
       // through the active verb's CommandContext for naming consistency.
       // EDEP-01 / EDEP-02 / FIX-03: an `EnableRefusedError` (cycle, unreadable
       // declarer, missing dependency, enabled dependents, or a local-only
-      // marketplace) is the one
-      // transaction throw this catch classifies for standalone mode -- its
-      // reason names the fact the cause line states. Every other transaction
+      // marketplace) is the one transaction throw this catch classifies for
+      // standalone mode -- its reason names the fact the cause line states. Every other transaction
       // throw keeps the pre-existing brace-less `(failed)` row.
       emitEnableDisableFailedRow({
         ctx,

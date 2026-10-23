@@ -4130,7 +4130,7 @@ A plugin operation has failed.
     cause: Install formatter@tools first, then enable helper@official.
 ```
 
-`helper` is disabled and declares `formatter@tools`, which the scope has not installed. Claude Code refuses this enable as `dependency_missing`, so the enable is refused before anything changes: no member is re-materialized, `tx.save` is never called, and no config is written. The row reuses `{dependency unsatisfied}`, whose subject is the dependent, and `error` severity with no reload-hint. The `cause:` line names the missing dependencies, sorted and comma-joined, in the D-08-01 plain-English form; an unrenderable name collapses the list to a count, as the disable refusal does. A root that is already enabled is not refused: it renders `(skipped) {already enabled}`, as upstream answers it before it reads the closure.
+`helper` is disabled and declares `formatter@tools`, which the scope has not installed. Claude Code refuses this enable as `dependency_missing`, so the enable is refused before anything changes: no member is re-materialized, `tx.save` is never called, and no config is written. The row reuses `{dependency unsatisfied}`, whose subject is the dependent, and `error` severity with no reload-hint. The `cause:` line names the missing dependencies in closure order, comma-joined, in the D-08-01 plain-English form; an unrenderable name collapses the list to a count, as the disable refusal does. A root that is already enabled is not refused: it renders `(skipped) {already enabled}`, as upstream answers it before it reads the closure.
 
 ### Partial enable -- component kinds dropped (ENBL-07)
 

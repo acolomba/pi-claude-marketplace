@@ -217,7 +217,7 @@ Feature: Plugin enable
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status | reasons                | scope   | cause chain                              | cause truncated | leaks | rollback partial |
+      | marketplace name | marketplace scope | id        | name | status | reasons                | scope   | cause chain                                     | cause truncated | leaks | rollback partial |
       | tools            | project           | app@tools | app  | failed | dependency unsatisfied | project | Install lib@tools first, then enable app@tools. | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
