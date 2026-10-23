@@ -163,7 +163,7 @@ Feature: Plugin import
     Given the claude code settings file of the user scope holds this text:
       """
       {
-        "enabledPlugins": { "demo@fixtures": true, "ghost@fixtures": true },
+        "enabledPlugins": { "ghost@fixtures": true, "demo@fixtures": true },
         "extraKnownMarketplaces": {
           "fixtures": {
             "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
@@ -241,6 +241,7 @@ Feature: Plugin import
       | name     | source                       |
       | fixtures | {home}/marketplaces/fixtures |
     Then the "claude-plugins.json" file of the user scope does not exist
+    Then the import leaves no installation record in the user scope
     When the user starts a new pi session
     Then the session offers these skills:
       | command           | description            |
@@ -291,6 +292,7 @@ Feature: Plugin import
       | name     | source                       |
       | fixtures | {home}/marketplaces/fixtures |
     Then the "claude-plugins.json" file of the project scope does not exist
+    Then the import leaves no installation record in the project scope
     When the user starts a new pi session
     Then the session offers these skills:
       | command           | description            |
