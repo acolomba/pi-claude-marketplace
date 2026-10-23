@@ -684,7 +684,7 @@ Our behavior is per verb:
 | `install`                        | On cache miss only                 | Uses the cached manifest and does no sync                                                                                              |
 | `update`                         | Yes                                | Re-resolves the pin, refreshes the mirror, and short-circuits when `toVersion === fromVersion`                                         |
 | `fetch`                          | Yes, because that is the operation | Writes no state. A pinned and materialized plugin renders `(skipped) {up-to-date}` with no network                                     |
-| `reinstall`                      | Almost never                       | Never resolves a pin. Repairs the filesystem only, from the warm mirror, using the recorded sha                                        |
+| `reinstall`                      | On cache miss only                 | Installs the version the marketplace offers now. Reads a present mirror's HEAD offline and does no refresh                             |
 | `uninstall`, `enable`, `disable` | Never, and a gate enforces it      | Disable zeroes resources but keeps the record. Enable replays the ledger with `pinVersionOverride`, so a cycle cannot bump the version |
 
 Our version strings are `hash-<12hex>`, a SHA-256 over a deterministic walk with symlinks skipped and BOM and CRLF normalized, or `sha-<12hex>` for a git source. The ladder runs from `pinVersionOverride`, to the git `resolvedSha`, to `plugin.json.version`, to the manifest entry version, to the content hash.

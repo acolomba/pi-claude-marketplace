@@ -2814,7 +2814,7 @@ test("ENBL-19: an enable/disable/enable round trip succeeds -- the retained inve
 // ENBL-07: enable on a DISABLED PARTIAL record
 // ──────────────────────────────────────────────────────────────────────────
 
-test("ENBL-07: enable on a disabled PARTIAL re-materializes through the partial gate, restoring the CURRENT manifest's supported set (D-68-02 repair/promotion stance)", async () => {
+test("ENBL-07: enable on a disabled PARTIAL re-materializes through the partial gate, restoring the CURRENT manifest's supported set (BFILL-01 / D-18-06 partial-capable stance)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const { statePath } = await seedRealDisabledMarketplace(home, {

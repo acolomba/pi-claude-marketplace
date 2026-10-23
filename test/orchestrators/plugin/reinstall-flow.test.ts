@@ -3842,11 +3842,11 @@ test("BFILL-01 / D-18-06 full: reinstall of an installable plugin records instal
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// PURL-07 / D-78-02 -- offline reinstall of a git-source (url / git-subdir /
-// github) plugin from the state record's recorded resolvedSha. Reinstall pins
-// from the recorded sha and reaches materializePluginClone by name via the
-// clone-cache seam; it NEVER calls resolvePluginPin / resolveRemoteRef, so a
-// warm cache is offline by construction.
+// PURL-07 / D-18-04 -- reinstall of a pinned git-source (url / git-subdir /
+// github) plugin. The shared runner materializes the marketplace entry's sha
+// through the clone-cache seam's resolvePluginPin then materializePluginClone;
+// a pinned ref resolves with no remote call, so a warm copy is offline and only
+// a cache miss clones.
 // ───────────────────────────────────────────────────────────────────────────
 
 const GIT_SOURCE_SHA = "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678";
@@ -4048,6 +4048,59 @@ async function seedInstalledGitSourcePlugin(opts: {
     cloneCacheSeam: installSeamWith(gitOps),
   });
 }
+
+test("a clone-cache seam non-Error rejection becomes a complete skipped outcome", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-clone-string-failure-"));
+    try {
+      // arrange
+      await seedInstalledGitSourcePlugin({
+        cwd,
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+      });
+      const locations = locationsFor("project", cwd);
+      const cloneRoot = await locations.pluginCloneDir(
+        pluginCloneKey("https://github.com/org/repo", GIT_SOURCE_SHA),
+      );
+      // The cold pinned cache reaches the clone through `resolvePluginPin`
+      // then `materializePluginClone`.
+      await rm(cloneRoot, { recursive: true, force: true });
+      const { gitOps } = createGitOps({ cloneThrows: new Error("unexpected clone") });
+      const rejectNonError = Promise.reject.bind(Promise);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        render: "none",
+        cloneCacheSeam: {
+          ...installSeamWith(gitOps),
+          materializePluginClone: () => rejectNonError("clone-cache string failure"),
+        },
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "skipped",
+        name: "gp",
+        marketplace: "mp",
+        scope: "project",
+        notes: ["clone-cache string failure"],
+        reasons: ["no longer installable"],
+      });
+      assert.deepEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 test("plugin reinstall authentication: a cold GitHub cache threads one provider bundle", async () => {
   await withHermeticHome(async () => {
@@ -4371,7 +4424,7 @@ test("a git-source reinstall carries the recorded resolvedSha, version, and inst
       const after = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
       assert.ok(after !== undefined, "the record survives the reinstall");
       assert.equal(after.resolvedSha, GIT_SOURCE_SHA, "resolvedSha carried forward (not dropped)");
-      assert.equal(after.version, before.version, "same recorded version (reinstall identity)");
+      assert.equal(after.version, before.version, "the version the copy declares (unchanged here)");
       assert.equal(after.installedAt, before.installedAt, "same installedAt (reinstall identity)");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -4379,7 +4432,7 @@ test("a git-source reinstall carries the recorded resolvedSha, version, and inst
   });
 });
 
-test("a cold-cache git-source reinstall re-materializes from the recorded sha without re-resolving the ref", async () => {
+test("a cold-cache git-source reinstall re-materializes from the entry's pinned sha without re-resolving the ref", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-purl-cold-"));
     try {
@@ -4404,7 +4457,8 @@ test("a cold-cache git-source reinstall re-materializes from the recorded sha wi
       // act
       // A gitOps that copies the fixture back on clone (does NOT throw on
       // clone) but whose resolveRemoteRef still throws: the pin must come from
-      // the recorded sha, never from a ref re-resolution.
+      // the entry's sha (here also the recorded one), never from a ref
+      // re-resolution.
       const fixtureRepoDir = path.join(cwd, "repo-fixture");
       const { gitOps, state: gitState } = createGitOps({
         fixtureSourceDir: fixtureRepoDir,
@@ -4433,7 +4487,7 @@ test("a cold-cache git-source reinstall re-materializes from the recorded sha wi
       assert.equal(
         gitState.checkoutCalls[0]?.ref,
         GIT_SOURCE_SHA,
-        "checkout pins the recorded sha, not a re-resolved ref",
+        "checkout pins the entry's sha, not a re-resolved ref",
       );
       assert.equal(gitState.resolveRemoteRefCalls.length, 0, "no ref re-resolution");
     } finally {
@@ -4487,6 +4541,57 @@ test("GHB-03: reinstalling a pinned GitHub-source plugin whose clone is gone fai
       );
       assert.deepStrictEqual(gitState.cloneCalls, []);
       verifyBoundary();
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GHB-03 / D-18-16: an invalid GitHub base fails a reinstall of a GitHub-source plugin even on a warm cache", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-ghb-warm-"));
+    try {
+      // arrange
+      // D-18-16: a misconfiguration the user must fix. The shared probe builds
+      // the host auth bundle before it reads the cache, as `update` does, so a
+      // warm copy does not exempt the reinstall.
+      await seedInstalledGitSourcePlugin({
+        cwd,
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+      });
+      const locations = locationsFor("project", cwd);
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      setGitHubBaseUrl(t, "http://mirror.example");
+      const { gitOps, state: gitState } = createGitOps({
+        cloneThrows: new Error("network unreachable: clone"),
+      });
+      const { ctx, run } = makeCtx();
+
+      // act & assert
+      await assert.rejects(
+        () =>
+          reinstallPlugin({
+            ctx,
+            run,
+            scope: "project",
+            cwd,
+            marketplace: "mp",
+            plugin: "gp",
+            render: "none",
+            cloneCacheSeam: reinstallSeamWith(gitOps),
+          }),
+        (error: unknown) => {
+          assert.deepStrictEqual(
+            error,
+            new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+          );
+          return true;
+        },
+      );
+      assert.deepStrictEqual(gitState.cloneCalls, []);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -6714,6 +6819,112 @@ test("an unpinned git-subdir reinstall copies the mirror's HEAD without external
           resolvedSha: MIRROR_HEAD_SHA,
         },
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("an unpinned git-subdir reinstall whose mirror lacks the subdirectory is skipped without cloning", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-subdir-mirror-missing-"));
+    try {
+      // arrange
+      const cloneUrl = "https://example.com/org/mono";
+      const locations = locationsFor("project", cwd);
+      const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+      await writeMirrorTree(mirrorRoot, mirrorRoot, "gp", MIRROR_HEAD_SHA);
+      await seedUnpinnedGitRecord({
+        cwd,
+        resolvedSource: mirrorRoot,
+        resolvedSha: MIRROR_HEAD_SHA,
+        source: { source: "git-subdir", url: cloneUrl, path: "packages/missing" },
+      });
+      const { gitOps, state: gitState } = createGitOps({
+        head: MIRROR_HEAD_SHA,
+        cloneThrows: new Error("unexpected clone"),
+      });
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        render: "none",
+        cloneCacheSeam: reinstallSeamWith(gitOps),
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "skipped",
+        name: "gp",
+        marketplace: "mp",
+        scope: "project",
+        notes: [
+          'Plugin "gp" is no longer installable: git-subdir path "packages/missing" does not exist in the plugin clone',
+        ],
+        reasons: ["no longer installable"],
+      });
+      assert.deepEqual(gitState.cloneCalls, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("a pinned git-subdir reinstall whose cached copy lacks the subdirectory is skipped without cloning", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-subdir-pinned-missing-"));
+    try {
+      // arrange
+      const cloneUrl = "https://example.com/org/mono";
+      const locations = locationsFor("project", cwd);
+      const cloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, GIT_SOURCE_SHA));
+      await writeMirrorTree(cloneRoot, cloneRoot, "gp", GIT_SOURCE_SHA);
+      await seedUnpinnedGitRecord({
+        cwd,
+        resolvedSource: cloneRoot,
+        resolvedSha: GIT_SOURCE_SHA,
+        source: {
+          source: "git-subdir",
+          url: cloneUrl,
+          path: "packages/missing",
+          sha: GIT_SOURCE_SHA,
+        },
+      });
+      const { gitOps, state: gitState } = createGitOps({
+        cloneThrows: new Error("unexpected clone"),
+      });
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        render: "none",
+        cloneCacheSeam: reinstallSeamWith(gitOps),
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "skipped",
+        name: "gp",
+        marketplace: "mp",
+        scope: "project",
+        notes: [
+          'Plugin "gp" is no longer installable: git-subdir path "packages/missing" does not exist in the plugin clone',
+        ],
+        reasons: ["no longer installable"],
+      });
+      assert.deepEqual(gitState.cloneCalls, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
