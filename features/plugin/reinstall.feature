@@ -153,3 +153,80 @@ Feature: Plugin reinstall
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Reinstalling an installed plugin rebuilds it at the same version in the same scope
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | reinstalled |         | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+
+  Scenario: A new session offers the skills of the reinstalled plugin
+    Given the user has run "/claude:plugin reinstall demo@fixtures --scope project"
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Uninstalling a reinstalled plugin removes it from the scope
+    Given the user has run "/claude:plugin reinstall demo@fixtures --scope project"
+    When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | uninstalled |         | project | 1.0.0   |
+    Then the project scope has no installed plugins
+
+  Scenario: The plugin list shows the reinstalled plugin at the same version
+    Given the user has run "/claude:plugin reinstall demo@fixtures --scope project"
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+
+  Scenario: Deleting the installed skills of a plugin takes them out of a new session before any reinstall
+    Given the user has deleted the installed skills of "demo@fixtures" in the project scope
+    When the user starts a new pi session
+    Then the session offers no skills
+
+  Scenario: Reinstalling a plugin that is not installed fails as not installed and changes nothing
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | pp   | 1.0.0   |
+    When the user runs "/claude:plugin reinstall pp@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name | status  | reasons       | scope   |
+      | fixtures         | project           | pp@fixtures | pp   | skipped | not installed | project |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the project scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the "claude-plugins.local.json" file of the project scope does not exist
