@@ -97,6 +97,8 @@ A marketplace can be published as one of several source kinds: `dir`, `file`, `u
 
 A behavior that only one kind has lives in a feature file of its own.
 
+A plugin can also come from a git repository on the git host, as a `github`, `url`, or `git-subdir` source. These are the plugin's source kinds, not the marketplace's: any marketplace kind can offer them. An Outline over the plugin source kinds names its column `plugin source kind` and keeps its `Examples:` blocks untagged, because `npm run check:features` reads a `source kind` column, and the `@url` and `@github` tags, as the marketplace's.
+
 ## Run tokens
 
 A scenario cannot know where its sandbox lives or when it runs. It writes each run-specific value as a brace token (D-03):
@@ -105,6 +107,7 @@ A scenario cannot know where its sandbox lives or when it runs. It writes each r
 - `{project dir}` is the project directory of the sandbox, where Pi runs. The root of the project scope is `{project dir}/.pi`. It expands and projects back the same way.
 - `{agent dir}` is the Pi agent directory of the sandbox, which is the root of the user scope. It expands and projects back the same way.
 - `{git host}` is the `127.0.0.1:<port>` address of the run's https git host. A command expands it to that address, and a result shows `{git host}` wherever that exact address appears.
+- `{<repository> revision <n>}` is the version of the n-th revision, counted from 1, that a scenario published to a git plugin repository. For example, `{ghp revision 1}` is the `sha-` version of the first revision of the repository `ghp`: `sha-` and the first 12 hex digits of its commit. Commit dates change every run, so the commit does too. A command expands the token to the version, and a result shows the token wherever that version appears.
 - `{scenario time}` in a `last updated at` cell matches any exact ISO timestamp between the start of the scenario and the check. Any other value stays as written, so a stale, future, or malformed time fails (D-05).
 
 A token never uses `<...>`, because an Outline uses that form for its placeholders. A token never uses `~`, because the product prints `~` itself. An `Examples:` cell can hold a token: `| dir | {home}/marketplaces/tools |`. A stand-in whose address shows up in a command or a result gets its own token in the same way.

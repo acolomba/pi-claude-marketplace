@@ -112,6 +112,14 @@ export class ScenarioWorld extends World {
       agentDir: run.sandbox.agentDir,
       gitHost: run.gitHost.address,
       scenarioStartedAt: this.startedAt,
+      revisions: new Map(
+        [...this.gitRepositories.values()].flatMap((repository) =>
+          repository.revisions.map((sha, index): [string, string] => [
+            `{${repository.name} revision ${index + 1}}`,
+            `sha-${sha.slice(0, 12)}`,
+          ]),
+        ),
+      ),
     };
   }
 
