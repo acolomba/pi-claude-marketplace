@@ -2166,6 +2166,70 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     verifyBoundary();
   });
 
+  test("BFILL-01 / D-18-12: a promotion records the version the marketplace offers now", async (t) => {
+    // arrange -- the WCONV-01 growth fixture, with the marketplace now
+    // offering 1.1.0 while the record still holds 1.0.0.
+    const { cwd, locations } = await createHermeticProjectScope(t, "newer-version");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", workflow: true },
+    });
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "mp",
+        plugins: [{ name: "hello", version: "1.1.0", source: "./plugins/hello" }],
+      }),
+    );
+    const seeded: ExtensionState = {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, verifyBoundary } = createSilentBoundary();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, cwd, createOfflineGitOps().gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert -- D-18-08 / D-18-09: the re-materialize derives the version the
+    // marketplace offers, and the original install time survives.
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-backfilled",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        version: "1.1.0",
+        dependencies: ["workflows"],
+        installable: true,
+        unsupported: [],
+      },
+    ]);
+    const promoted = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+      "hello"
+    ];
+    assert.deepStrictEqual(
+      { version: promoted?.version, installedAt: promoted?.installedAt },
+      { version: "1.1.0", installedAt: RECORDED_AT },
+    );
+    verifyBoundary();
+  });
+
   test("AFILE-04: a promotion that rewrites a commented mcp-adapter.json carries the comments-removed notice", async (t) => {
     // arrange -- the workflow grows the supported set; the re-materialize then
     // restages the plugin's MCP server too.

@@ -33,6 +33,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
+  DependencyDeclarationsUnreadableError,
   InvalidGitHubBaseUrlError,
   LayerConfigUnreadableError,
   PluginInBaseLayerOnlyError,
@@ -79,6 +80,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type { LockedStateTransactionDeps } from "../../../extensions/pi-claude-marketplace/transaction/with-state-guard.ts";
 
 interface NotifyRecord {
   message: string;
@@ -169,7 +171,7 @@ interface ResourceSet {
   readonly mcp?: boolean;
   /**
    * WR-03: seed `<pluginRoot>/hooks/hooks.json` so reinstall's resolver
-   * advertises `hooksConfigPath` and the per-plugin lock runs the
+   * advertises `hooksConfigPath` and the shared swap runs the
    * cache+rebuild pattern.
    */
   readonly hooksJson?: object;
@@ -357,7 +359,7 @@ async function writePluginTree(
   }
 
   // WR-03: seed hooks payload so the resolver advertises hooksConfigPath
-  // and the reinstall ledger exercises the cache+rebuild path.
+  // and the shared swap exercises the cache+rebuild path.
   if (resources.hooksJson !== undefined) {
     const hooksDir = path.join(pluginRoot, "hooks");
     await mkdir(hooksDir, { recursive: true });
@@ -957,6 +959,77 @@ test("PDEF-01: reinstall preview detects an agent conflict from a later resolved
       assert.match(outcome.notes?.[0] ?? "", /pi-claude-marketplace-hello-later/);
       assert.strictEqual(notifications.length, 1);
       assert.strictEqual(notifications[0]?.severity, "error");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PDEF-01: reinstall stages every agent directory", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-agent-dirs-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        agentDirectories: ["declared-agents"],
+        resources: {
+          agents: [
+            {
+              directory: "declared-agents",
+              sourceName: "shared-first",
+              frontmatterName: "shared",
+              body: "First shared agent.\n",
+            },
+            { sourceName: "later", body: "Later agent.\n" },
+            {
+              sourceName: "shared-later",
+              frontmatterName: "shared",
+              body: "Later shared agent.\n",
+            },
+          ],
+        },
+        install: true,
+      });
+      const { ctx, run } = makeCtx({ piSubagentsLoaded: true });
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+
+      // assert
+      assert.strictEqual(outcome.partition, "reinstalled");
+      // The duplicate-name warning is an agents hygiene note, which the shared
+      // swap does not carry in direct mode (D-18-02, D-141-03).
+      assert.ok(!Object.hasOwn(outcome, "notes"), JSON.stringify(outcome));
+      const state = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.agents, [
+        "pi-claude-marketplace-hello-shared",
+        "pi-claude-marketplace-hello-later",
+      ]);
+      assert.match(
+        await readFile(
+          path.join(locations.agentsDir, "pi-claude-marketplace-hello-shared.md"),
+          "utf8",
+        ),
+        /First shared agent\./,
+      );
+      assert.match(
+        await readFile(
+          path.join(locations.agentsDir, "pi-claude-marketplace-hello-later.md"),
+          "utf8",
+        ),
+        /Later agent\./,
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1683,6 +1756,54 @@ test("ATTR-03: bare reinstall of a marketplace absent in BOTH scopes emits stand
   });
 });
 
+test("PRL-13: a bulk reinstall continues past a plugin it can no longer resolve", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-continue-"));
+    try {
+      // arrange
+      const bad = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "bad",
+        resources: { skill: "bad" },
+        install: true,
+      });
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "good",
+        resources: { skill: "good" },
+        install: true,
+      });
+      // The manifest still declares `bad`, so the dependency walk reads it;
+      // only its own resolution fails.
+      await rm(bad.pluginRoot, { recursive: true, force: true });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcomes = await reinstallPlugins({ ctx, run, cwd, target: { kind: "all" } });
+
+      // assert
+      assert.deepEqual(
+        outcomes.map((o) => `${o.name}:${o.partition}`),
+        ["bad:skipped", "good:reinstalled"],
+      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ bad (skipped) {no longer installable}\n  ● good v1.0.0 (reinstalled)\n\nPlugin reinstall: 1 warning, 1 success\n\n/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
+      const body = notifications.at(-1)?.message ?? "";
+      assert.equal(body.includes('Reinstalled plugin "good".'), false);
+      assert.equal(body.includes("Failed:"), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("PRL-13 deterministic partition output sorts by scope marketplace plugin", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-sort-"));
@@ -1884,6 +2005,117 @@ test("PRL-14 batch reload hint uses only changed successful outcomes", async () 
   });
 });
 
+test("PRL-15: batch soft dependency markers ride only the reinstalled row", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-soft-deps-"));
+    try {
+      // arrange
+      const bad = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "bad",
+        resources: { agent: "bad agent" },
+        install: true,
+      });
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "good",
+        resources: { agent: "good agent", mcp: true },
+        install: true,
+      });
+      await rm(bad.pluginRoot, { recursive: true, force: true });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await reinstallPlugins({ ctx, run, cwd, target: { kind: "all" } });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ bad (skipped) {no longer installable}\n  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}\n\nPlugin reinstall: 1 warning, 1 success\n\n/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-18-17: a recorded plugin the manifest no longer declares fails every other reinstall in its scope as unreadable", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-unreadable-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "bad",
+        resources: { agent: "bad agent" },
+        install: true,
+      });
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "good",
+        resources: { agent: "good agent", mcp: true },
+        install: true,
+      });
+      await writeManifest(path.join(cwd, "mp-src"), "mp", { good: "1.0.0" });
+      const goodAgentPath = path.join(locations.agentsDir, "pi-claude-marketplace-good-bot.md");
+      const goodAgentBefore = await readFile(goodAgentPath, "utf8");
+      const adapterBefore = await readFile(locations.mcpAdapterJsonPath, "utf8");
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcomes = await reinstallPlugins({ ctx, run, cwd, target: { kind: "all" } });
+
+      // assert
+      // D-18-17: the walk fails closed on a record it cannot read, and the row
+      // names the true cause; `dependents constrain` is kept for a real range
+      // hold (D-18-07). `bad`'s own triage answers before its walk runs.
+      const walkCause = "cannot read the dependencies of bad@mp: not declared by its marketplace";
+      const [badOutcome, goodOutcome] = outcomes;
+      assert.deepStrictEqual(badOutcome, {
+        partition: "skipped",
+        name: "bad",
+        marketplace: "mp",
+        scope: "project",
+        notes: ["not in manifest"],
+        reasons: ["not in manifest"],
+      });
+      assert.ok(goodOutcome?.partition === "failed");
+      const { cause, ...goodRest } = goodOutcome;
+      assert.deepStrictEqual(goodRest, {
+        partition: "failed",
+        name: "good",
+        marketplace: "mp",
+        scope: "project",
+        notes: [`${walkCause}\n\ncause: ${walkCause}`],
+        reasons: ["unreadable"],
+      });
+      assert.ok(cause instanceof DependencyDeclarationsUnreadableError);
+      assert.strictEqual(cause.message, walkCause);
+      assert.strictEqual(cause.declarer, "bad@mp");
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `A plugin operation has failed.\n\n● mp [project]\n  ⊘ bad (skipped) {not in manifest}\n  ⊘ good (failed) {unreadable}\n    cause: ${walkCause}\n\nPlugin reinstall: 1 failure, 1 warning`,
+          severity: "error",
+        },
+      ]);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+      assert.equal(await readFile(goodAgentPath, "utf8"), goodAgentBefore);
+      assert.equal(await readFile(locations.mcpAdapterJsonPath, "utf8"), adapterBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // -----------------------------------------------------------------------
 // Additional coverage tests for uncovered paths
 // -----------------------------------------------------------------------
@@ -1905,6 +2137,50 @@ test("GAP-01: an empty bulk reinstall emits only its sentinel", async () => {
       assert.deepEqual([...outcomes], []);
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.message, "(no marketplaces)");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GAP-02: a bulk reinstall of a plugin the manifest no longer declares renders a not-in-manifest skip", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-zero-reinstall-"));
+    try {
+      // arrange
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old" },
+        install: true,
+      });
+      await writeFile(
+        path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json"),
+        JSON.stringify({ name: "mp", plugins: [] }),
+      );
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcomes = await reinstallPlugins({ ctx, run, cwd, target: { kind: "all" } });
+
+      // assert
+      assert.deepStrictEqual(outcomes, [
+        {
+          partition: "skipped",
+          name: "hello",
+          marketplace: "mp",
+          scope: "project",
+          notes: ["not in manifest"],
+          reasons: ["not in manifest"],
+        },
+      ]);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ hello (skipped) {not in manifest}\n\nPlugin reinstall: 1 warning",
+          severity: "warning",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1955,11 +2231,11 @@ test("GAP-03: reinstallPlugin render=none returns a not-in-manifest skip without
   });
 });
 
-test("GAP-04: errorWithManualRecovery empty-leaks path: saveState fails on empty-resource plugin", async () => {
-  // Empty-resource plugin: replaceAll succeeds with all-noop replacements,
-  // rollbackReplacements([]) returns []. errorWithManualRecovery(err, [])
-  // hits the leaks.length === 0 early-return branch and returns the base
-  // error unchanged (no MANUAL RECOVERY REQUIRED prefix).
+test("GAP-04: a reinstall of an empty-resource plugin whose state save fails reports the save error", async () => {
+  // Empty-resource plugin: the shared swap's first state write is its intent
+  // mark (D-18-10). That save fails, so the swap aborts the prepared handles
+  // and the failed outcome carries the save error with no manual-recovery
+  // prefix.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-empty-leaks-"));
     try {
@@ -1999,11 +2275,11 @@ test("GAP-04: errorWithManualRecovery empty-leaks path: saveState fails on empty
   });
 });
 
-test("GAP-06: prepareAllHandles catch: MCP collision aborts partial handles and wraps error", async () => {
+test("GAP-06: an MCP collision at prepare aborts the prepared handles and fails the reinstall", async () => {
   // A foreign full definition sits under hello's own server key. Reinstalling
   // hello triggers McpServerCollisionError inside prepareStageMcpServers,
-  // which is caught by prepareAllHandles' try/catch. The error is wrapped by
-  // errorWithManualRecovery and surfaced as a failed outcome.
+  // which the shared swap's prepare step catches: it aborts the handles it
+  // already prepared and surfaces a failed outcome.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mcp-collision-"));
     try {
@@ -3214,8 +3490,8 @@ test("CFG-03: a named flagless reinstall whose local layer cannot be read is ref
 // ─────────────────────────────────────────────────────────────────────────────
 // WR-03 / D-60-05: after reinstallPlugin succeeds, the hooks-bridge routing
 // table reflects the post-reinstall entry set. Reinstall does NOT delegate
-// to install/uninstall, so the cache lifecycle
-// is wired explicitly inside the per-plugin lock and verified end-to-end.
+// to install/uninstall; the shared swap wires the cache lifecycle, and this
+// section verifies it end-to-end.
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries without /reload", async () => {
@@ -3282,7 +3558,7 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
       );
 
       // Post-condition: the routing-table entry still reflects the plugin
-      // after the explicit remove+add inside the per-plugin lock. This
+      // after the shared swap's explicit remove+add. This
       // proves both `removePluginConfigFromCache` and
       // `addPluginConfigToCache` plus the trailing `rebuildRoutingTables`
       // call landed in the right order.
@@ -3307,10 +3583,9 @@ test("WR-03: reinstallPlugin round-trips the plugin's routing-table entries with
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LIFE-01: 5th cascade slot in reinstall.ts -- the parallel-prepare/commit
-// path writes <hooksDir>/<plugin>/hooks.json between the agents and mcp
-// replace steps and removes the stale subtree when the plugin no longer
-// ships hooks.
+// LIFE-01: the shared swap reinstall runs writes <hooksDir>/<plugin>/hooks.json
+// between its agents and mcp commits, and removes the stale subtree when the
+// plugin no longer ships hooks.
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("LIFE-01 (reinstall): a plugin with hooks rewrites <hooksDir>/<plugin>/hooks.json from the resolved manifest", async () => {
@@ -3425,13 +3700,13 @@ test("LIFE-01 (reinstall): a plugin without hooks removes any stale <hooksDir>/<
   });
 });
 
-// BFILL-01 / RINST-01 / D-68-02: reinstall is partial-capable. It resolves the
-// `installable | partially-available` union through `requirePartialInstallable`,
-// so a plugin that re-resolves `partially-available` (here: a `.lsp.json`
-// lspServers convention file beside a supported skill) passes the gate instead of
-// throwing `{not-installable}`. Re-resolution stays cache-only (NFR-5). The persisted
+// BFILL-01 / RINST-01 / D-18-06: reinstall is partial-capable. It runs the
+// shared runner with `partial` admitted, so a plugin that re-resolves
+// `partially-available` (here: a `.lsp.json` lspServers convention file beside
+// a supported skill) passes the gate instead of throwing `{not-installable}`.
+// Re-resolution of a path source stays cache-only (NFR-5). The persisted
 // compatibility record reflects the REAL supported/unsupported sets at the
-// SAME recorded version (a promotion-shaped repair, not an upgrade).
+// version the marketplace offers, which here is still the recorded one (D-18-08).
 async function seedThenDegradeToUnsupported(cwd: string): Promise<string> {
   // Install a normal (installable) plugin with one supported skill.
   const seeded = await seedMarketplace({
@@ -3474,13 +3749,23 @@ test("BFILL-01 / RINST-01: reinstalling a partially-installed plugin succeeds in
   });
 });
 
-test("BFILL-01 / D-68-02 partial: reinstall records the REAL non-empty unsupported set at the same version", async () => {
+test("BFILL-01 / D-18-06 / D-18-18: a reinstall of a clean record whose source now resolves partially records it as partial", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bfill-partial-"));
     try {
       // arrange
       const locations = locationsFor("project", cwd);
       await seedThenDegradeToUnsupported(cwd);
+      const before = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.deepStrictEqual(
+        {
+          installable: before?.compatibility.installable,
+          unsupported: before?.compatibility.unsupported,
+        },
+        { installable: true, unsupported: [] },
+      );
 
       // act
       const { ctx, run } = makeCtx();
@@ -3505,7 +3790,7 @@ test("BFILL-01 / D-68-02 partial: reinstall records the REAL non-empty unsupport
       assert.equal(record.compatibility.installable, false);
       assert.deepEqual(record.compatibility.unsupported, ["lspServers"]);
       assert.deepEqual(record.compatibility.supported, ["skills"]);
-      // D-68-02: SAME recorded version (a repair/promotion, not an upgrade).
+      // D-18-08: the version the marketplace offers, which is still 1.0.0.
       assert.equal(record.version, "1.0.0");
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -3513,7 +3798,7 @@ test("BFILL-01 / D-68-02 partial: reinstall records the REAL non-empty unsupport
   });
 });
 
-test("BFILL-01 / D-68-02 full: reinstall of an installable plugin records installable:true with empty unsupported", async () => {
+test("BFILL-01 / D-18-06 full: reinstall of an installable plugin records installable:true with empty unsupported", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bfill-full-"));
     try {
@@ -4255,7 +4540,7 @@ test("a git-subdir reinstall honors clone-root subdir containment (pluginRoot un
 // ───────────────────────────────────────────────────────────────────────────
 // SUB-02 -- end-to-end ${CLAUDE_PROJECT_DIR} delivery through the reinstall path
 //
-// reinstall's prepareAllHandles threads `cwd` into every stage input by hand
+// the shared swap's prepare step threads `cwd` into every stage input by hand
 // (an optional field the compiler cannot enforce). A refactor that drops the
 // `cwd` line would compile, pass the rest of the suite, and silently ship
 // un-substituted project dirs on the reinstall path. These tests install a
@@ -5486,6 +5771,114 @@ test("NREG-01: a clean reinstall outcome carries neither notes nor discoveryWarn
   });
 });
 
+test("NREG-01: a hygiene-only reinstall carries neither notes nor discoveryWarnings", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-nreg-hyg-"));
+    try {
+      // arrange
+      // The agent has no `description`, so the HYGIENE half is non-empty while
+      // the discovery half stays empty. The shared swap carries only the
+      // discovery half in direct mode, so neither carrier key appears.
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", agent: "old agent" },
+        install: true,
+      });
+      const { ctx, run } = makeCtx({ piSubagentsLoaded: true });
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "reinstalled",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        version: "1.0.0",
+        stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
+        stagedMcpServerNames: [],
+        declaresAgents: true,
+        declaresMcp: false,
+        declaresWorkflows: false,
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-141-03: a reinstall carries its discovery warning on notes and drops the agents hygiene warning", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-hygwarn-"));
+    try {
+      // arrange
+      // `writePluginTree` writes the agent frontmatter with no `description`,
+      // which the agents bridge reports as a hygiene note. The colliding skills
+      // beside it give a discovery warning: without that positive control the
+      // absence below would also pass if the split returned nothing.
+      const { pluginRoot } = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", agent: "old agent" },
+        install: true,
+      });
+      await seedCollidingSkills(pluginRoot, "hello", ["foo"]);
+      function elision(skillsDir: string): string {
+        return `skill source "hello-foo" in "${skillsDir}" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.`;
+      }
+
+      // The outcome carries the absolute directory; the rendered row redacts it.
+      const discovery = elision(path.join(pluginRoot, "skills"));
+      const orchestrated = makeCtx({ piSubagentsLoaded: true });
+      const standalone = makeCtx({ piSubagentsLoaded: true });
+
+      // act
+      const orchestratedOutcome = await reinstallPlugin({
+        ctx: orchestrated.ctx,
+        run: orchestrated.run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+      await reinstallPlugins({
+        ctx: standalone.ctx,
+        run: standalone.run,
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.ok(orchestratedOutcome.partition === "reinstalled");
+      assert.deepStrictEqual(orchestratedOutcome.notes, [`warning: ${discovery}`]);
+      assert.deepStrictEqual(orchestratedOutcome.discoveryWarnings, [discovery]);
+      assert.deepStrictEqual(orchestrated.notifications, []);
+      assert.deepStrictEqual(standalone.notifications, [
+        {
+          message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes",
+        },
+        {
+          message: `Plugin "hello" reinstalled; 1 declared component has a note.\n\n${elision("skills")}`,
+          severity: "warning",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // WGATE-01 / D-115-05: the workflows discovery channel on a standalone reinstall
 //
@@ -6536,7 +6929,7 @@ test("WLIF-06: a reinstall whose source dropped a workflow carries the stale-com
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-workflows-stale-"));
     try {
       // arrange -- the record names `hello:greet`; the new tree declares only
-      // `hello:farewell`, so the replace step places a name the record did not
+      // `hello:farewell`, so the shared swap places a name the record did not
       // hold and does not re-place one it did.
       const seeded = await seedMarketplace({
         cwd,
@@ -6622,6 +7015,71 @@ test("WLIF-01: a reinstall with no workflows records an empty array, not an abse
       assert.ok(Object.hasOwn(record.resources, "workflows"));
       assert.deepStrictEqual(record.resources.workflows, []);
       assert.deepStrictEqual(await entriesOf(locations.workflowsSavedDir), []);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("PRL-03: a bulk cascade forwards the state-transaction seam to every per-plugin reinstall", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-state-seam-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const alpha = await seedMarketplace({
+        cwd,
+        install: true,
+        marketplaceRoot,
+        pluginName: "alpha",
+        resources: { skill: "old alpha" },
+      });
+      const beta = await seedMarketplace({
+        cwd,
+        install: true,
+        marketplaceRoot,
+        pluginName: "beta",
+        resources: { skill: "old beta" },
+      });
+      await writePluginTree(alpha.pluginRoot, "alpha", { skill: "new alpha" });
+      await writePluginTree(beta.pluginRoot, "beta", { skill: "new beta" });
+      const saved: string[] = [];
+      const stateTransaction: LockedStateTransactionDeps = {
+        saveState: async (extensionRoot, state) => {
+          saved.push(extensionRoot);
+          await saveState(extensionRoot, state);
+        },
+      };
+      const { ctx, run } = makeCtx({ piMcpAdapterLoaded: true, piSubagentsLoaded: true });
+
+      // act
+      const outcomes = await reinstallPlugins({
+        ctx,
+        cwd,
+        run,
+        scope: "project",
+        stateTransaction,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        outcomes.map(({ name, partition }) => ({ name, partition })),
+        [
+          { name: "alpha", partition: "reinstalled" },
+          { name: "beta", partition: "reinstalled" },
+        ],
+      );
+      // Two substituted writes per cascaded plugin, the swap's intent mark and
+      // its finalize (D-18-10): the seam the caller supplied reaches every
+      // per-plugin reinstall, not just the first.
+      assert.deepStrictEqual(saved, [
+        locations.extensionRoot,
+        locations.extensionRoot,
+        locations.extensionRoot,
+        locations.extensionRoot,
+      ]);
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }
