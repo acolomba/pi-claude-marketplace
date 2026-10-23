@@ -1176,13 +1176,13 @@ export class DependencyCascadeError extends Error {
 }
 
 /**
- * INR-03: a fresh clone of a git plugin source, which fetches every branch and
- * tag, does not hold the commit the marketplace pins.
+ * INR-03: a fresh clone of a git plugin source does not hold the commit the
+ * marketplace pins.
  */
 export class PinnedCommitMissingError extends Error {
   readonly sha: string;
   constructor(sha: string, options?: ErrorOptions) {
-    super(`No branch or tag the git host serves holds the commit ${sha}`, options);
+    super(`A fresh clone from the git host does not hold the commit ${sha}`, options);
     this.name = "PinnedCommitMissingError";
     this.sha = sha;
   }

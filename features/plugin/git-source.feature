@@ -270,8 +270,8 @@ Feature: Plugin git source
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                                          | cause truncated |
-      | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  | No branch or tag the git host serves holds the commit 0123456789abcdef0123456789abcdef01234567, Failed to checkout "0123456789abcdef0123456789abcdef01234567" because commit 0123456789abcdef0123456789abcdef01234567 is not available locally. Do a git fetch to make the branch available locally. | false           |
+      | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                                             | cause truncated |
+      | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  | A fresh clone from the git host does not hold the commit 0123456789abcdef0123456789abcdef01234567, Failed to checkout "0123456789abcdef0123456789abcdef01234567" because commit 0123456789abcdef0123456789abcdef01234567 is not available locally. Do a git fetch to make the branch available locally. | false           |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |

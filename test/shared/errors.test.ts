@@ -615,7 +615,7 @@ describe("PinnedCommitMissingError", () => {
       { name: error.name, message: error.message, sha: error.sha, cause: error.cause },
       {
         name: "PinnedCommitMissingError",
-        message: "No branch or tag the git host serves holds the commit 0123abc",
+        message: "A fresh clone from the git host does not hold the commit 0123abc",
         sha: "0123abc",
         cause,
       },
