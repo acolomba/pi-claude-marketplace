@@ -60,7 +60,10 @@ W1  Phases 2 3 4 5 6 7 8 9 10 11 12 13 14 15   (each needs Phase 1 only)
   phase-local step in its own module. It never edits a Phase 1 file.
 - **Untouched:** `features/plugin/configuration.feature`,
   `features/plugin/cross-scope-install.feature`, and every
-  `features/marketplace/*.feature` except `remove.feature` stay as they are.
+  `features/marketplace/*.feature` except `remove.feature` stay as they are
+  after Phase 1. Phase 1 edits `features/plugin/configuration.feature` and
+  `features/marketplace/update.feature` once, before phases 2-15 start, so
+  that their scenarios compare the reconcile report of a new session.
 - Phase 1's plugin topic modules take none of the module names reserved below.
 
 | Phase | Feature files | Step modules (only if needed) |
