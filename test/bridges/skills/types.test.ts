@@ -4,9 +4,6 @@ import type {
   PreparedSkillsStaged,
   PreparedSkillsStaging,
   SkillDegradeRecord,
-  SkillsReplacement,
-  SkillsReplacementNoop,
-  SkillsReplacementReplaced,
   StageSkillsCommitResult,
   StageSkillsInput,
   StagedSkillRecord,
@@ -148,25 +145,6 @@ void preparedSkillsStagedWithoutRenames;
 // @ts-expect-error a preparation handle has a closed discriminant set
 void ({ kind: "prepared", result: stageSkillsCommitResult } satisfies PreparedSkillsStaging);
 
-const skillsReplacementNoop: SkillsReplacementNoop = {
-  kind: "noop",
-  prepared: preparedSkillsNoop,
-} satisfies SkillsReplacementNoop;
-void skillsReplacementNoop;
-
-const skillsReplacementReplaced: SkillsReplacementReplaced = {
-  kind: "replaced",
-  prepared: preparedSkillsStaged,
-} satisfies SkillsReplacementReplaced;
-void skillsReplacementReplaced;
-
-void (skillsReplacementNoop satisfies SkillsReplacement);
-void (skillsReplacementReplaced satisfies SkillsReplacement);
-void (skillsReplacementNoop.kind satisfies "noop");
-void (skillsReplacementReplaced.kind satisfies "replaced");
-void (skillsReplacementNoop.prepared.kind satisfies "noop");
-void (skillsReplacementReplaced.prepared.kind satisfies "staged");
-
 const unstageSkillsInput: UnstageSkillsInput = {
   locations: undefined!,
   previousSkillNames: ["acme-deploy"],
@@ -208,16 +186,6 @@ void preparedSkillsNoop.stagingRoot;
 void preparedSkillsStaged.prepared;
 // @ts-expect-error staged preparations require staging state
 void ({ kind: "staged", result: stageSkillsCommitResult } satisfies PreparedSkillsStaging);
-// @ts-expect-error noop replacements contain only noop preparations
-void skillsReplacementNoop.prepared.stagingRoot;
-// @ts-expect-error replaced handles require a staged preparation
-void ({ kind: "replaced", prepared: preparedSkillsNoop } satisfies SkillsReplacement);
-// @ts-expect-error noop handles require a noop preparation
-void ({ kind: "noop", prepared: preparedSkillsStaged } satisfies SkillsReplacement);
-// @ts-expect-error a skill replacement has a closed discriminant set
-void ({ kind: "staged", prepared: preparedSkillsStaged } satisfies SkillsReplacement);
-// @ts-expect-error a replacement handle always carries its preparation
-void ({ kind: "noop" } satisfies SkillsReplacement);
 
 // @ts-expect-error unstage input always carries the previous skill names
 const unstageSkillsInputWithoutNames: UnstageSkillsInput = {

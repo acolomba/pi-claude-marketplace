@@ -365,7 +365,10 @@ export async function materializePluginCommitCopy(args: {
  *      (refresh-on-warm, D-79.1-02). A mirror this call just cloned is not
  *      refreshed: the clone already fetched the remote, and `marketplace add`
  *      and Claude Code both clone a source once. Reads (list/info) never call
- *      this seam, so NFR-5 is untouched.
+ *      this seam, so NFR-5 is untouched. With `refresh: false` a present
+ *      mirror answers the commit its last fetch recorded for the declared ref,
+ *      with no network (reinstall, D-18-04); a missing mirror, or a ref the
+ *      mirror never fetched, is the NFR-5 cache miss and still reaches it.
  *   4. Read the pin: resolvedSha = resolveRef({ dir: mirrorRoot, ref: "HEAD" }).
  *
  * `auth` threads into the clone and the refresh fetch the way
@@ -387,6 +390,7 @@ export async function materializeOrRefreshPluginMirror(args: {
   ref?: string;
   gitOps?: GitOps;
   auth: GitAuthBundle;
+  refresh?: boolean;
 }): Promise<{ pluginRoot: string; resolvedSha: string }> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   // D-08-12: this verb owns a staging lifecycle, so it is the composition root
@@ -428,13 +432,52 @@ export async function materializeOrRefreshPluginMirror(args: {
 
   // MIRR-02 / D-79.1-02: refresh a warm mirror in place (marketplace parity).
   // The HEAD sha read below is the fetched-state; no separate advance flag is
-  // consumed here.
+  // consumed here. D-18-04: with `refresh: false` the declared ref is read
+  // from the mirror's last fetch instead, and only a ref the mirror never
+  // fetched falls back to the refresh, as a cache miss would.
   if (promotion !== "renamed") {
+    const fetchedSha =
+      args.refresh === false
+        ? await resolveFetchedRefOffline(gitOps, mirrorRoot, args.ref)
+        : undefined;
+    if (fetchedSha !== undefined) {
+      return { pluginRoot: mirrorRoot, resolvedSha: fetchedSha };
+    }
+
     await refreshGitHubClone(mirrorRoot, args.ref, gitOps, undefined, args.auth);
   }
 
   const resolvedSha = await gitOps.resolveRef({ dir: mirrorRoot, ref: "HEAD" });
   return { pluginRoot: mirrorRoot, resolvedSha };
+}
+
+/**
+ * D-18-04 / REI-04: the commit a present mirror last fetched for the ref a
+ * source declares, read with no network. The mirror is keyed by URL only, so
+ * its checked-out HEAD belongs to whichever source refreshed it last, which
+ * can be another plugin with a different `ref`, or this entry before its
+ * `ref` changed. The remote-tracking ref is this source's own: the default
+ * branch (`refs/remotes/origin/HEAD`) when no ref is declared, otherwise
+ * `refs/remotes/origin/<ref>`.
+ *
+ * Returns undefined when the mirror holds no such ref, for example a tag or a
+ * branch no fetch brought in yet. The caller then refreshes.
+ */
+async function resolveFetchedRefOffline(
+  gitOps: GitOps,
+  mirrorRoot: string,
+  ref: string | undefined,
+): Promise<string | undefined> {
+  const trackingRef = ref === undefined ? "refs/remotes/origin/HEAD" : `refs/remotes/origin/${ref}`;
+  try {
+    return await gitOps.resolveRef({ dir: mirrorRoot, ref: trackingRef });
+  } catch (err) {
+    if (isGitNotFoundError(err)) {
+      return undefined;
+    }
+
+    throw err;
+  }
 }
 
 /**

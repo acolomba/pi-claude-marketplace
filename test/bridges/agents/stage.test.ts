@@ -21,19 +21,15 @@ import { describe, test, type TestContext } from "node:test";
 
 import {
   abortPreparedAgents,
+  assertAgentCommitTargets,
   commitPreparedAgents,
-  finalizeAgentsReplacement,
   prepareStagePluginAgents,
-  replacePreparedAgents,
-  rollbackAgentsReplacement,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/stage.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { AgentOwnershipConflictError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
-import { ManualRecoveryError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import { createDelegatingRemovalOps } from "../../platform/removal-ops-fake.ts";
+import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
-import type { AgentsReplacement } from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 
 async function createStageTree(t: TestContext, prefix: string) {
@@ -794,8 +790,6 @@ describe("commitPreparedAgents", () => {
   for (const { coexist, recovery } of [
     { coexist: false, recovery: "commit" },
     { coexist: true, recovery: "commit" },
-    { coexist: false, recovery: "replace" },
-    { coexist: true, recovery: "replace" },
   ]) {
     test(`AGENT-01: index persistence failure rolls back new names before ${recovery} retry with coexistence ${String(coexist)}`, async (t) => {
       // arrange
@@ -921,18 +915,7 @@ describe("commitPreparedAgents", () => {
       });
 
       // act
-      if (recovery === "commit") {
-        assert.strictEqual(await commitPreparedAgents(createRemovalOps(), retried), undefined);
-      } else {
-        const replacement = await replacePreparedAgents(createRemovalOps(), retried, {
-          force: true,
-        });
-        assert.strictEqual(replacement.kind, "replaced");
-        assert.deepStrictEqual(
-          await finalizeAgentsReplacement(createRemovalOps(), replacement),
-          [],
-        );
-      }
+      assert.strictEqual(await commitPreparedAgents(createRemovalOps(), retried), undefined);
 
       // assert
       assert.deepStrictEqual(retried.result, {
@@ -1586,6 +1569,289 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     assert.strictEqual(await exists(prepared.stagingDir), false);
     assert.strictEqual(await exists(locations.agentsIndexPath), false);
   });
+
+  test("force replaces a previous target whose bytes a user changed and drops its preserved row", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-commit-force-",
+    );
+    const sourcePath = path.join(agentsSourceDir, "current.md");
+    await writeFile(
+      sourcePath,
+      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
+    );
+    const currentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
+    const orphanTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-orphan.md");
+    await mkdir(locations.agentsDir, { recursive: true });
+    await writeFile(currentTarget, "---\nname: current\n---\nEdited by hand.\n");
+    await writeFile(orphanTarget, "---\nname: orphan\n---\nEdited by hand.\n");
+    const editedRow = (sourceAgent: string, targetPath: string) => ({
+      plugin: "acme",
+      marketplace: "catalog",
+      sourceAgent,
+      generatedName: `pi-claude-marketplace-acme-${sourceAgent}`,
+      sourcePath: `/previous/${sourceAgent}.md`,
+      targetPath,
+      sourceHash: `hash-${sourceAgent}`,
+      droppedFields: [],
+      droppedTools: [],
+      warnings: [],
+    });
+    await mkdir(locations.extensionRoot, { recursive: true });
+    await writeFile(
+      locations.agentsIndexPath,
+      JSON.stringify({
+        schemaVersion: 1,
+        agents: [editedRow("current", currentTarget), editedRow("orphan", orphanTarget)],
+      }),
+    );
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+    });
+
+    // act
+    const cleanupLeak = await commitPreparedAgents(createRemovalOps(), prepared, { force: true });
+
+    // assert
+    assert.strictEqual(cleanupLeak, undefined);
+    assert.deepStrictEqual(await readdir(locations.agentsDir), [
+      "pi-claude-marketplace-acme-current.md",
+    ]);
+    assert.strictEqual(
+      await readFile(currentTarget, "utf8"),
+      `---\nname: acme:current\ndescription: Current agent\naliases: pi-claude-marketplace-acme-current\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: current\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nCurrent.\n`,
+    );
+    assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
+      schemaVersion: 1,
+      agents: [
+        {
+          plugin: "acme",
+          marketplace: "catalog",
+          sourceAgent: "current",
+          generatedName: "pi-claude-marketplace-acme-current",
+          sourcePath,
+          targetPath: currentTarget,
+          sourceHash: "24214fe4c9874b0a54cc773880901f4cac6c6e3c26010846e02c7054b2026249",
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        },
+      ],
+    });
+  });
+
+  test("force still refuses a file no index row names at a new target", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-commit-force-intruder-",
+    );
+    const sourcePath = path.join(agentsSourceDir, "current.md");
+    await writeFile(
+      sourcePath,
+      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
+    );
+    const currentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
+    const orphanTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-orphan.md");
+    const intruderBytes = "---\nname: current\n---\nDo not overwrite.\n";
+    const orphanBytes = "---\nname: orphan\n---\nEdited by hand.\n";
+    await mkdir(locations.agentsDir, { recursive: true });
+    await writeFile(currentTarget, intruderBytes);
+    await writeFile(orphanTarget, orphanBytes);
+    await mkdir(locations.extensionRoot, { recursive: true });
+    const indexBytes = JSON.stringify({
+      schemaVersion: 1,
+      agents: [
+        {
+          plugin: "acme",
+          marketplace: "catalog",
+          sourceAgent: "orphan",
+          generatedName: "pi-claude-marketplace-acme-orphan",
+          sourcePath: "/previous/orphan.md",
+          targetPath: orphanTarget,
+          sourceHash: "hash-orphan",
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        },
+      ],
+    });
+    await writeFile(locations.agentsIndexPath, indexBytes);
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+
+    // act
+    const error = await commitPreparedAgents(createRemovalOps(), prepared, { force: true }).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, cause: error.cause },
+      {
+        name: "Error",
+        message: `Cannot replace agent target with non-previous content at ${currentTarget}`,
+        cause: undefined,
+      },
+    );
+    assert.strictEqual(await readFile(currentTarget, "utf8"), intruderBytes);
+    assert.strictEqual(await readFile(orphanTarget, "utf8"), orphanBytes);
+    assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), indexBytes);
+    assert.strictEqual(await exists(prepared.stagingDir), false);
+  });
+
+  test("NFR-10: force refuses an index row whose target is outside the agents directory and removes nothing", async (t) => {
+    // arrange
+    const { scopeRoot, pluginRoot, agentsSourceDir, locations, pluginDataDir } =
+      await createStageTree(t, "agents-commit-force-escape-");
+    const sourcePath = path.join(agentsSourceDir, "current.md");
+    await writeFile(
+      sourcePath,
+      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
+    );
+    const outsideTarget = path.join(scopeRoot, "pi-claude-marketplace-acme-outside.md");
+    const outsideBytes = "---\nname: outside\n---\nNot an agent file.\n";
+    await writeFile(outsideTarget, outsideBytes);
+    await mkdir(locations.agentsDir, { recursive: true });
+    await mkdir(locations.extensionRoot, { recursive: true });
+    const indexBytes = JSON.stringify({
+      schemaVersion: 1,
+      agents: [
+        {
+          plugin: "acme",
+          marketplace: "catalog",
+          sourceAgent: "outside",
+          generatedName: "pi-claude-marketplace-acme-outside",
+          sourcePath: "/previous/outside.md",
+          targetPath: outsideTarget,
+          sourceHash: "hash-outside",
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        },
+      ],
+    });
+    await writeFile(locations.agentsIndexPath, indexBytes);
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+
+    // act
+    const error = await commitPreparedAgents(createRemovalOps(), prepared, { force: true }).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+
+    // assert
+    assert.ok(error instanceof PathContainmentError);
+    assert.deepStrictEqual(
+      { name: error.name, parent: error.parent, child: error.child, message: error.message },
+      {
+        name: "PathContainmentError",
+        parent: locations.agentsDir,
+        child: outsideTarget,
+        message: `previous agent file escapes ${locations.agentsDir} (resolved: ${outsideTarget}).`,
+      },
+    );
+    assert.strictEqual(await readFile(outsideTarget, "utf8"), outsideBytes);
+    assert.deepStrictEqual(await readdir(locations.agentsDir), []);
+    assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), indexBytes);
+    assert.strictEqual(await exists(prepared.stagingDir), false);
+  });
+});
+
+describe("assertAgentCommitTargets", () => {
+  test("accepts a no-op prepare without touching the agents directory", async (t) => {
+    // arrange
+    const { pluginRoot, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-targets-noop-",
+    );
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [],
+    });
+
+    // act & assert
+    await assert.doesNotReject(assertAgentCommitTargets(prepared, { force: true }));
+    assert.strictEqual(await exists(locations.agentsDir), false);
+  });
+
+  test("PI-6: refuses a new target holding a file no index row names and keeps the staged handle", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-targets-occupied-",
+    );
+    await writeFile(
+      path.join(agentsSourceDir, "current.md"),
+      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
+    );
+    const currentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
+    const intruderBytes = "---\nname: current\n---\nDo not overwrite.\n";
+    await mkdir(locations.agentsDir, { recursive: true });
+    await writeFile(currentTarget, intruderBytes);
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+
+    // act
+    const error = await assertAgentCommitTargets(prepared).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, cause: error.cause },
+      {
+        name: "Error",
+        message: `Cannot replace agent target with non-previous content at ${currentTarget}`,
+        cause: undefined,
+      },
+    );
+    assert.strictEqual(await readFile(currentTarget, "utf8"), intruderBytes);
+    assert.deepStrictEqual(await readdir(prepared.stagingDir), [
+      "pi-claude-marketplace-acme-current.md",
+    ]);
+  });
 });
 
 describe("abortPreparedAgents", () => {
@@ -1640,1080 +1906,5 @@ describe("abortPreparedAgents", () => {
     assert.strictEqual(await exists(prepared.stagingDir), false);
     assert.strictEqual(await exists(locations.agentsDir), false);
     assert.strictEqual(await exists(locations.agentsIndexPath), false);
-  });
-});
-
-describe("replacePreparedAgents", () => {
-  for (const coexist of [false, true]) {
-    test(`AGENT-01: migrates legacy ownership and restores exact bytes with coexistence ${String(coexist)}`, async (t) => {
-      // arrange
-      const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
-        t,
-        "agents-migration-",
-      );
-      const sourcePath = path.join(agentsSourceDir, "acme-reviewer.md");
-      const sourceBytes =
-        "---\nname: acme-reviewer\ndescription: Prefixed reviewer\ntools: Read\n---\n\nPrefixed body.\n";
-      await writeFile(sourcePath, sourceBytes);
-      const shortSource = path.join(agentsSourceDir, "reviewer.md");
-      const shortBytes =
-        "---\nname: reviewer\ndescription: Reviewer\ntools: Read\n---\n\nShort body.\n";
-      if (coexist) {
-        await writeFile(shortSource, shortBytes);
-      }
-
-      await mkdir(locations.agentsDir, { recursive: true });
-      await mkdir(locations.extensionRoot, { recursive: true });
-      const oldTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-reviewer.md");
-      const newTarget = path.join(
-        locations.agentsDir,
-        "pi-claude-marketplace-acme-acme-reviewer.md",
-      );
-      const oldBytes = `---\nname: pi-claude-marketplace-acme-reviewer\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: acme-reviewer\n  sourcePath: ${sourcePath}\n---\n\nLegacy body.\n`;
-      await writeFile(oldTarget, oldBytes);
-      const oldIndex: AgentsIndex = {
-        schemaVersion: 1,
-        agents: [
-          {
-            plugin: "acme",
-            marketplace: "catalog",
-            sourceAgent: "acme-reviewer",
-            generatedName: "pi-claude-marketplace-acme-reviewer",
-            sourcePath,
-            targetPath: oldTarget,
-            sourceHash: "a".repeat(64),
-            droppedFields: [],
-            droppedTools: [],
-            warnings: [],
-          },
-        ],
-      };
-      const oldIndexBytes = JSON.stringify(oldIndex);
-      await writeFile(locations.agentsIndexPath, oldIndexBytes);
-      const prepared = await prepareStagePluginAgents(createRemovalOps(), {
-        locations,
-        cwd: locations.scopeRoot,
-        marketplaceName: "catalog",
-        pluginName: "acme",
-        pluginRoot,
-        pluginDataDir,
-        agentsDirs: [agentsSourceDir],
-      });
-      const expectedEntries = [
-        {
-          plugin: "acme",
-          marketplace: "catalog",
-          sourceAgent: "acme-reviewer",
-          generatedName: "pi-claude-marketplace-acme-acme-reviewer",
-          sourcePath,
-          targetPath: newTarget,
-          sourceHash: createHash("sha256").update(sourceBytes).digest("hex"),
-          droppedFields: [],
-          droppedTools: [],
-          warnings: [],
-        },
-        ...(coexist
-          ? [
-              {
-                plugin: "acme",
-                marketplace: "catalog",
-                sourceAgent: "reviewer",
-                generatedName: "pi-claude-marketplace-acme-reviewer",
-                sourcePath: shortSource,
-                targetPath: oldTarget,
-                sourceHash: createHash("sha256").update(shortBytes).digest("hex"),
-                droppedFields: [],
-                droppedTools: [],
-                warnings: [],
-              },
-            ]
-          : []),
-      ];
-
-      // act
-      const replacement = await replacePreparedAgents(createRemovalOps(), prepared, {
-        force: true,
-      });
-
-      // assert
-      assert.strictEqual(replacement.kind, "replaced");
-      assert.deepStrictEqual(prepared.result, {
-        stagedNames: coexist
-          ? ["pi-claude-marketplace-acme-acme-reviewer", "pi-claude-marketplace-acme-reviewer"]
-          : ["pi-claude-marketplace-acme-acme-reviewer"],
-        recorded: expectedEntries.map(({ generatedName, sourcePath: source, targetPath }) => ({
-          generatedName,
-          sourcePath: source,
-          targetPath,
-        })),
-        warnings: [],
-        failed: [],
-      });
-      assert.strictEqual(
-        await readFile(newTarget, "utf8"),
-        `---\nname: acme:acme-reviewer\ndescription: Prefixed reviewer\naliases: pi-claude-marketplace-acme-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: acme-reviewer\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nPrefixed body.\n`,
-      );
-      assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
-        schemaVersion: 1,
-        agents: expectedEntries,
-      });
-      if (coexist) {
-        assert.strictEqual(
-          await readFile(oldTarget, "utf8"),
-          `---\nname: acme:reviewer\ndescription: Reviewer\naliases: pi-claude-marketplace-acme-reviewer\ntools: read\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: acme\n  sourceAgent: reviewer\n  sourcePath: ${shortSource}\n  droppedFields: []\n  droppedTools: []\n  warnings: []\n---\n\nShort body.\n`,
-        );
-      } else {
-        assert.strictEqual(await exists(oldTarget), false);
-      }
-
-      // act
-      const leaks = await rollbackAgentsReplacement(createRemovalOps(), replacement);
-
-      // assert
-      assert.deepStrictEqual(leaks, []);
-      assert.strictEqual(await readFile(oldTarget, "utf8"), oldBytes);
-      assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), oldIndexBytes);
-      assert.strictEqual(await exists(newTarget), false);
-    });
-  }
-
-  test("returns a no-op replacement without materializing agent paths", async (t) => {
-    // arrange
-    const { pluginRoot, locations, pluginDataDir } = await createStageTree(
-      t,
-      "agents-replace-noop-",
-    );
-    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir,
-      agentsDirs: [],
-    });
-
-    // act
-    const replacement = await replacePreparedAgents(createRemovalOps(), prepared);
-
-    // assert
-    assert.deepStrictEqual(replacement, { kind: "noop", prepared });
-    assert.deepStrictEqual(await rollbackAgentsReplacement(createRemovalOps(), replacement), []);
-    assert.deepStrictEqual(await finalizeAgentsReplacement(createRemovalOps(), replacement), []);
-    assert.strictEqual(await exists(locations.agentsDir), false);
-    assert.strictEqual(await exists(locations.agentsIndexPath), false);
-  });
-
-  test("rejects foreign previous content by default and preserves every byte", async (t) => {
-    // arrange
-    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
-      t,
-      "agents-replace-foreign-block-",
-    );
-    const foreignTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-orphan.md");
-    const foreignBytes = "---\nname: orphan\n---\nHand-written content.\n";
-    const foreignIndex: AgentsIndex = {
-      schemaVersion: 1,
-      agents: [
-        {
-          plugin: "acme",
-          marketplace: "catalog",
-          sourceAgent: "orphan",
-          generatedName: "pi-claude-marketplace-acme-orphan",
-          sourcePath: "/previous/orphan.md",
-          targetPath: foreignTarget,
-          sourceHash: "foreign-hash",
-          droppedFields: [],
-          droppedTools: [],
-          warnings: [],
-        },
-      ],
-    };
-    const foreignIndexBytes = `${JSON.stringify(foreignIndex, null, 2)}\n`;
-    await mkdir(locations.agentsDir, { recursive: true });
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await writeFile(foreignTarget, foreignBytes);
-    await writeFile(locations.agentsIndexPath, foreignIndexBytes);
-    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir,
-      agentsDirs: [agentsSourceDir],
-    });
-    assert.strictEqual(prepared.kind, "staged");
-
-    // act
-    const error = await replacePreparedAgents(createRemovalOps(), prepared).then(
-      () => undefined,
-      (reason: unknown) => reason,
-    );
-
-    // assert
-    assert.ok(error instanceof Error);
-    assert.deepStrictEqual(
-      { name: error.name, message: error.message, cause: error.cause },
-      {
-        name: "Error",
-        message:
-          `Agent replacement blocked by foreign previous content:\n` +
-          `  - pi-claude-marketplace-acme-orphan at ${foreignTarget}: target ${foreignTarget} is missing the generated marker`,
-        cause: undefined,
-      },
-    );
-    assert.strictEqual(await readFile(foreignTarget, "utf8"), foreignBytes);
-    assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), foreignIndexBytes);
-    assert.strictEqual(await exists(prepared.stagingDir), true);
-    assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
-  });
-
-  test("force replaces foreign previous content and rollback restores it exactly", async (t) => {
-    // arrange
-    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
-      t,
-      "agents-replace-foreign-force-",
-    );
-    const sourcePath = path.join(agentsSourceDir, "current.md");
-    await writeFile(
-      sourcePath,
-      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
-    );
-    const foreignTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-orphan.md");
-    const currentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
-    const foreignBytes = "---\nname: orphan\n---\nHand-written content.\n";
-    const foreignIndex: AgentsIndex = {
-      schemaVersion: 1,
-      agents: [
-        {
-          plugin: "acme",
-          marketplace: "catalog",
-          sourceAgent: "orphan",
-          generatedName: "pi-claude-marketplace-acme-orphan",
-          sourcePath: "/previous/orphan.md",
-          targetPath: foreignTarget,
-          sourceHash: "foreign-hash",
-          droppedFields: [],
-          droppedTools: [],
-          warnings: [],
-        },
-      ],
-    };
-    const foreignIndexBytes = `${JSON.stringify(foreignIndex, null, 2)}\n`;
-    await mkdir(locations.agentsDir, { recursive: true });
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await writeFile(foreignTarget, foreignBytes);
-    await writeFile(locations.agentsIndexPath, foreignIndexBytes);
-    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir,
-      agentsDirs: [agentsSourceDir],
-    });
-    assert.strictEqual(prepared.kind, "staged");
-
-    // act
-    const replacement = await replacePreparedAgents(createRemovalOps(), prepared, { force: true });
-    const replacedIndex: unknown = JSON.parse(await readFile(locations.agentsIndexPath, "utf8"));
-    const rollbackLeaks = await rollbackAgentsReplacement(createRemovalOps(), replacement);
-
-    // assert
-    assert.deepStrictEqual(replacedIndex, {
-      schemaVersion: 1,
-      agents: [
-        {
-          plugin: "acme",
-          marketplace: "catalog",
-          sourceAgent: "current",
-          generatedName: "pi-claude-marketplace-acme-current",
-          sourcePath,
-          targetPath: currentTarget,
-          sourceHash: "24214fe4c9874b0a54cc773880901f4cac6c6e3c26010846e02c7054b2026249",
-          droppedFields: [],
-          droppedTools: [],
-          warnings: [],
-        },
-      ],
-    });
-    assert.deepStrictEqual(rollbackLeaks, []);
-    assert.strictEqual(await readFile(foreignTarget, "utf8"), foreignBytes);
-    assert.strictEqual(await exists(currentTarget), false);
-    assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), foreignIndexBytes);
-    assert.strictEqual(await exists(prepared.stagingDir), false);
-    assert.deepStrictEqual(await readdir(locations.agentsDir), [
-      "pi-claude-marketplace-acme-orphan.md",
-    ]);
-  });
-
-  test("replaces owned content and rollback restores its bytes and index", async (t) => {
-    // arrange
-    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
-      t,
-      "agents-replace-owned-rollback-",
-    );
-    const sourcePath = path.join(agentsSourceDir, "current.md");
-    const targetPath = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
-    const previousBytes = `---
-name: pi-claude-marketplace-acme-current
-provenance:
-  generatedBy: pi-claude-marketplace
----
-
-Previous.
-`;
-    const currentBytes = `---
-name: acme:current
-description: Current agent
-aliases: pi-claude-marketplace-acme-current
-tools: read
-systemPromptMode: replace
-inheritProjectContext: true
-inheritSkills: false
-provenance:
-  generatedBy: pi-claude-marketplace
-  sourcePlugin: acme
-  sourceAgent: current
-  sourcePath: ${sourcePath}
-  droppedFields: []
-  droppedTools: []
-  warnings: []
----
-
-Current.
-`;
-    await writeFile(
-      sourcePath,
-      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
-    );
-    await mkdir(locations.agentsDir, { recursive: true });
-    await writeFile(targetPath, previousBytes);
-    const previousIndex: AgentsIndex = {
-      schemaVersion: 1,
-      agents: [
-        {
-          plugin: "acme",
-          marketplace: "catalog",
-          sourceAgent: "current",
-          generatedName: "pi-claude-marketplace-acme-current",
-          sourcePath: "/previous/current.md",
-          targetPath,
-          sourceHash: "previous-hash",
-          droppedFields: [],
-          droppedTools: [],
-          warnings: [],
-        },
-      ],
-    };
-    const previousIndexBytes = `${JSON.stringify(previousIndex, null, 2)}\n`;
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await writeFile(locations.agentsIndexPath, previousIndexBytes);
-    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir,
-      agentsDirs: [agentsSourceDir],
-    });
-    assert.strictEqual(prepared.kind, "staged");
-
-    // act
-    const replacement = await replacePreparedAgents(createRemovalOps(), prepared);
-    const replacedBytes = await readFile(targetPath, "utf8");
-    const rollbackLeaks = await rollbackAgentsReplacement(createRemovalOps(), replacement);
-
-    // assert
-    assert.strictEqual(replacedBytes, currentBytes);
-    assert.deepStrictEqual(rollbackLeaks, []);
-    assert.strictEqual(await readFile(targetPath, "utf8"), previousBytes);
-    assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), previousIndexBytes);
-    assert.strictEqual(await exists(prepared.stagingDir), false);
-  });
-
-  test("rollback removes a first install and its newly created index", async (t) => {
-    // arrange
-    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
-      t,
-      "agents-replace-first-install-",
-    );
-    const sourcePath = path.join(agentsSourceDir, "current.md");
-    const targetPath = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
-    await writeFile(
-      sourcePath,
-      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
-    );
-    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir,
-      agentsDirs: [agentsSourceDir],
-    });
-    assert.strictEqual(prepared.kind, "staged");
-
-    // act
-    const replacement = await replacePreparedAgents(createRemovalOps(), prepared);
-    const installedIndex: unknown = JSON.parse(await readFile(locations.agentsIndexPath, "utf8"));
-    const rollbackLeaks = await rollbackAgentsReplacement(createRemovalOps(), replacement);
-
-    // assert
-    assert.deepStrictEqual(installedIndex, {
-      schemaVersion: 1,
-      agents: [
-        {
-          plugin: "acme",
-          marketplace: "catalog",
-          sourceAgent: "current",
-          generatedName: "pi-claude-marketplace-acme-current",
-          sourcePath,
-          targetPath,
-          sourceHash: "24214fe4c9874b0a54cc773880901f4cac6c6e3c26010846e02c7054b2026249",
-          droppedFields: [],
-          droppedTools: [],
-          warnings: [],
-        },
-      ],
-    });
-    assert.deepStrictEqual(rollbackLeaks, []);
-    assert.strictEqual(await exists(targetPath), false);
-    assert.strictEqual(await exists(locations.agentsIndexPath), false);
-    assert.strictEqual(await exists(prepared.stagingDir), false);
-  });
-
-  test("tolerates a previous target that vanishes before replacement", async (t) => {
-    // arrange
-    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
-      t,
-      "agents-replace-vanished-",
-    );
-    const sourcePath = path.join(agentsSourceDir, "current.md");
-    const targetPath = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
-    await writeFile(
-      sourcePath,
-      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
-    );
-    await mkdir(locations.agentsDir, { recursive: true });
-    await writeFile(
-      targetPath,
-      "---\nname: current\nprovenance:\n  generatedBy: pi-claude-marketplace\n---\n\nOld.\n",
-    );
-    const previousIndex: AgentsIndex = {
-      schemaVersion: 1,
-      agents: [
-        {
-          plugin: "acme",
-          marketplace: "catalog",
-          sourceAgent: "current",
-          generatedName: "pi-claude-marketplace-acme-current",
-          sourcePath: "/previous/current.md",
-          targetPath,
-          sourceHash: "previous-hash",
-          droppedFields: [],
-          droppedTools: [],
-          warnings: [],
-        },
-      ],
-    };
-    const previousIndexBytes = `${JSON.stringify(previousIndex, null, 2)}\n`;
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await writeFile(locations.agentsIndexPath, previousIndexBytes);
-    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir,
-      agentsDirs: [agentsSourceDir],
-    });
-    assert.strictEqual(prepared.kind, "staged");
-    await rm(targetPath);
-
-    // act
-    const replacement = await replacePreparedAgents(createRemovalOps(), prepared);
-    const rollbackLeaks = await rollbackAgentsReplacement(createRemovalOps(), replacement);
-
-    // assert
-    assert.deepStrictEqual(rollbackLeaks, []);
-    assert.strictEqual(await exists(targetPath), false);
-    assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), previousIndexBytes);
-    assert.strictEqual(await exists(prepared.stagingDir), false);
-  });
-
-  test("rejects a non-previous target and restores the pre-replacement state", async (t) => {
-    // arrange
-    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
-      t,
-      "agents-replace-intruder-",
-    );
-    const sourcePath = path.join(agentsSourceDir, "current.md");
-    const targetPath = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
-    const intruderBytes = "---\nname: current\n---\nDo not overwrite.\n";
-    await writeFile(
-      sourcePath,
-      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
-    );
-    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir,
-      agentsDirs: [agentsSourceDir],
-    });
-    assert.strictEqual(prepared.kind, "staged");
-    await mkdir(locations.agentsDir, { recursive: true });
-    await writeFile(targetPath, intruderBytes);
-
-    // act
-    const error = await replacePreparedAgents(createRemovalOps(), prepared).then(
-      () => undefined,
-      (reason: unknown) => reason,
-    );
-
-    // assert
-    assert.ok(error instanceof Error);
-    assert.deepStrictEqual(
-      { name: error.name, message: error.message, cause: error.cause },
-      {
-        name: "Error",
-        message: `Cannot replace agent target with non-previous content at ${targetPath}`,
-        cause: undefined,
-      },
-    );
-    assert.strictEqual(await readFile(targetPath, "utf8"), intruderBytes);
-    assert.strictEqual(await exists(locations.agentsIndexPath), false);
-    assert.strictEqual(await exists(prepared.stagingDir), false);
-  });
-
-  test("rejects a previous target outside the agents boundary", async (t) => {
-    // arrange
-    const { scopeRoot, pluginRoot, agentsSourceDir, locations, pluginDataDir } =
-      await createStageTree(t, "agents-replace-containment-");
-    const sourcePath = path.join(agentsSourceDir, "current.md");
-    const outsideTarget = path.join(scopeRoot, "pi-claude-marketplace-acme-outside.md");
-    const outsideBytes =
-      "---\nname: outside\nprovenance:\n  generatedBy: pi-claude-marketplace\n---\n\nOutside.\n";
-    await writeFile(
-      sourcePath,
-      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
-    );
-    await writeFile(outsideTarget, outsideBytes);
-    const previousIndex: AgentsIndex = {
-      schemaVersion: 1,
-      agents: [
-        {
-          plugin: "acme",
-          marketplace: "catalog",
-          sourceAgent: "outside",
-          generatedName: "pi-claude-marketplace-acme-outside",
-          sourcePath: "/previous/outside.md",
-          targetPath: outsideTarget,
-          sourceHash: "outside-hash",
-          droppedFields: [],
-          droppedTools: [],
-          warnings: [],
-        },
-      ],
-    };
-    const previousIndexBytes = `${JSON.stringify(previousIndex, null, 2)}\n`;
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await writeFile(locations.agentsIndexPath, previousIndexBytes);
-    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir,
-      agentsDirs: [agentsSourceDir],
-    });
-    assert.strictEqual(prepared.kind, "staged");
-
-    // act
-    const error = await replacePreparedAgents(createRemovalOps(), prepared).then(
-      () => undefined,
-      (reason: unknown) => reason,
-    );
-
-    // assert
-    assert.ok(error instanceof Error);
-    assert.deepStrictEqual(
-      {
-        name: error.name,
-        message: error.message,
-        parent: (error as Error & { parent?: string }).parent,
-        child: (error as Error & { child?: string }).child,
-      },
-      {
-        name: "PathContainmentError",
-        message: `previous agent file escapes ${locations.agentsDir} (resolved: ${outsideTarget}).`,
-        parent: locations.agentsDir,
-        child: outsideTarget,
-      },
-    );
-    assert.strictEqual(await readFile(outsideTarget, "utf8"), outsideBytes);
-    assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), previousIndexBytes);
-    assert.strictEqual(await exists(prepared.stagingDir), false);
-  });
-
-  test("propagates a non-missing index read failure without touching staged files", async (t) => {
-    // arrange
-    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
-      t,
-      "agents-replace-index-read-error-",
-    );
-    const sourcePath = path.join(agentsSourceDir, "current.md");
-    await writeFile(
-      sourcePath,
-      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
-    );
-    const customLocations = { ...locations, agentsIndexPath: locations.agentsDir };
-    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
-      locations: customLocations,
-      cwd: customLocations.scopeRoot,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir,
-      agentsDirs: [agentsSourceDir],
-    });
-    assert.strictEqual(prepared.kind, "staged");
-    await mkdir(locations.agentsDir, { recursive: true });
-
-    // act
-    const error = await replacePreparedAgents(createRemovalOps(), prepared).then(
-      () => undefined,
-      (reason: unknown) => reason,
-    );
-
-    // assert
-    assert.ok(error instanceof Error);
-    assert.deepStrictEqual(
-      {
-        name: error.name,
-        code: (error as NodeJS.ErrnoException).code,
-        syscall: (error as NodeJS.ErrnoException).syscall,
-      },
-      { name: "Error", code: "EISDIR", syscall: "read" },
-    );
-    assert.strictEqual(await exists(prepared.stagingDir), true);
-    assert.deepStrictEqual(await readdir(locations.agentsDir), []);
-    assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
-  });
-
-  test("reports structured manual recovery when replacement and rollback both fail", async (t) => {
-    // arrange
-    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
-      t,
-      "agents-replace-manual-recovery-",
-    );
-    const sourcePath = path.join(agentsSourceDir, "current.md");
-    const targetPath = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
-    await writeFile(
-      sourcePath,
-      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
-    );
-    const hostileLocations = {
-      ...locations,
-      extensionRoot: targetPath,
-      agentsIndexPath: locations.agentsDir,
-    };
-    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
-      locations: hostileLocations,
-      cwd: hostileLocations.scopeRoot,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir,
-      agentsDirs: [agentsSourceDir],
-    });
-    assert.strictEqual(prepared.kind, "staged");
-
-    // act
-    const error = await replacePreparedAgents(createRemovalOps(), prepared).then(
-      () => undefined,
-      (reason: unknown) => reason,
-    );
-
-    // assert
-    assert.ok(error instanceof ManualRecoveryError);
-    assert.strictEqual(error.name, "ManualRecoveryError");
-    assert.strictEqual(error.message, `EEXIST: file already exists, mkdir '${targetPath}'`);
-    assert.deepStrictEqual(error.leaks, [
-      `failed to restore agents index at ${locations.agentsDir}: Path is a directory: rm returned EISDIR (is a directory) ${locations.agentsDir}`,
-    ]);
-    assert.ok(error.cause instanceof Error);
-    assert.deepStrictEqual(
-      {
-        name: error.cause.name,
-        message: error.cause.message,
-        code: (error.cause as NodeJS.ErrnoException).code,
-        syscall: (error.cause as NodeJS.ErrnoException).syscall,
-        path: (error.cause as NodeJS.ErrnoException).path,
-      },
-      {
-        name: "Error",
-        message: `EEXIST: file already exists, mkdir '${targetPath}'`,
-        code: "EEXIST",
-        syscall: "mkdir",
-        path: targetPath,
-      },
-    );
-    assert.strictEqual(await exists(targetPath), false);
-    assert.strictEqual(await exists(prepared.stagingDir), false);
-  });
-});
-
-describe("rollbackAgentsReplacement", () => {
-  test("reports an index restoration leak and still removes replacement files", async (t) => {
-    // arrange
-    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
-      t,
-      "agents-rollback-index-leak-",
-    );
-    const sourcePath = path.join(agentsSourceDir, "current.md");
-    const targetPath = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
-    await writeFile(
-      sourcePath,
-      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
-    );
-    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir,
-      agentsDirs: [agentsSourceDir],
-    });
-    assert.strictEqual(prepared.kind, "staged");
-    const replacement = await replacePreparedAgents(createRemovalOps(), prepared);
-    await rm(locations.agentsIndexPath);
-    await mkdir(locations.agentsIndexPath);
-
-    // act
-    const rollbackLeaks = await rollbackAgentsReplacement(createRemovalOps(), replacement);
-
-    // assert
-    assert.deepStrictEqual(rollbackLeaks, [
-      `failed to restore agents index at ${locations.agentsIndexPath}: Path is a directory: rm returned EISDIR (is a directory) ${locations.agentsIndexPath}`,
-    ]);
-    assert.strictEqual(Object.isFrozen(rollbackLeaks), true);
-    assert.strictEqual(await exists(targetPath), false);
-    assert.strictEqual(await exists(prepared.stagingDir), false);
-  });
-
-  test("reports one leak per failed stage in stage order and leaves only the blocked roots", async (t) => {
-    // arrange
-    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
-      t,
-      "agents-rollback-stage-leaks-",
-    );
-    const generatedName = "pi-claude-marketplace-acme-current";
-    const sourcePath = path.join(agentsSourceDir, "current.md");
-    const targetPath = path.join(locations.agentsDir, `${generatedName}.md`);
-    await writeFile(
-      sourcePath,
-      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
-    );
-    await mkdir(locations.agentsDir, { recursive: true });
-    await writeFile(
-      targetPath,
-      `---\nname: ${generatedName}\nprovenance:\n  generatedBy: pi-claude-marketplace\n---\n\nPrevious.\n`,
-    );
-    const previousIndex: AgentsIndex = {
-      schemaVersion: 1,
-      agents: [
-        {
-          plugin: "acme",
-          marketplace: "catalog",
-          sourceAgent: "current",
-          generatedName,
-          sourcePath: "/previous/current.md",
-          targetPath,
-          sourceHash: "previous-hash",
-          droppedFields: [],
-          droppedTools: [],
-          warnings: [],
-        },
-      ],
-    };
-    const previousIndexBytes = `${JSON.stringify(previousIndex, null, 2)}\n`;
-    await mkdir(locations.extensionRoot, { recursive: true });
-    await writeFile(locations.agentsIndexPath, previousIndexBytes);
-    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir,
-      agentsDirs: [agentsSourceDir],
-    });
-    assert.strictEqual(prepared.kind, "staged");
-    const replacement = await replacePreparedAgents(createRemovalOps(), prepared);
-    assert.strictEqual(replacement.kind, "replaced");
-    const replacedBytes = await readFile(targetPath, "utf8");
-    const backupDirectory = (await readdir(locations.agentsStagingDir)).find((name) =>
-      name.startsWith("backup-"),
-    );
-    assert.notStrictEqual(backupDirectory, undefined);
-    const backupRoot = path.join(locations.agentsStagingDir, backupDirectory ?? "missing");
-    const backupPath = path.join(backupRoot, `${generatedName}.md`);
-    const removalError = Object.assign(new Error("replacement removal denied"), { code: "EACCES" });
-    const restoreError = Object.assign(new Error("previous restoration denied"), {
-      code: "EACCES",
-    });
-    const stagingError = Object.assign(new Error("staging cleanup denied"), { code: "EACCES" });
-    // Three of the rollback's four removals fault and the fourth does not: the
-    // backup root's cleanup runs for real, which is the half of the partition a
-    // collaborator that removes nothing could not state. The index restore sits
-    // between the restore stage and the cleanups and reaches no removal verb
-    // here, so it contributes no leak and the third message is the staging one.
-    const removal = createDelegatingRemovalOps({
-      boundary: "delegate",
-      delegate: createRemovalOps(),
-      rmErrors: [
-        [targetPath, removalError],
-        [prepared.stagingDir, stagingError],
-      ],
-      renameErrors: [[backupPath, restoreError]],
-    });
-    const expectedLeaks = [
-      `failed to remove replacement agent file at ${targetPath}: replacement removal denied`,
-      `failed to restore previous agent file ${generatedName} from ${backupPath} to ${targetPath}: ` +
-        "previous restoration denied",
-      `failed to clean up agents staging directory at ${prepared.stagingDir}: ` +
-        "staging cleanup denied",
-    ];
-
-    // act
-    const leaks = await rollbackAgentsReplacement(removal.removalOps, replacement);
-    const stagingPresent = await exists(prepared.stagingDir);
-    const backupPresent = await exists(backupRoot);
-    const targetBytes = await readFile(targetPath, "utf8");
-    const indexBytes = await readFile(locations.agentsIndexPath, "utf8");
-
-    // assert
-    assert.deepStrictEqual(leaks, expectedLeaks);
-    assert.strictEqual(Object.isFrozen(leaks), true);
-    assert.strictEqual(stagingPresent, true);
-    assert.strictEqual(backupPresent, false);
-    assert.strictEqual(targetBytes, replacedBytes);
-    assert.strictEqual(indexBytes, previousIndexBytes);
-  });
-
-  test("rejects a replaced-shaped value that was not issued by the lifecycle", async (t) => {
-    // arrange
-    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
-      t,
-      "agents-rollback-unknown-",
-    );
-    await writeFile(
-      path.join(agentsSourceDir, "current.md"),
-      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
-    );
-    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir,
-      agentsDirs: [agentsSourceDir],
-    });
-    assert.strictEqual(prepared.kind, "staged");
-    const unknownReplacement = { kind: "replaced", prepared } satisfies AgentsReplacement;
-
-    // act
-    const error = await rollbackAgentsReplacement(createRemovalOps(), unknownReplacement).then(
-      () => undefined,
-      (reason: unknown) => reason,
-    );
-
-    // assert
-    assert.ok(error instanceof Error);
-    assert.deepStrictEqual(
-      { name: error.name, message: error.message, cause: error.cause },
-      { name: "Error", message: "Unknown agents replacement handle.", cause: undefined },
-    );
-    assert.strictEqual(await exists(prepared.stagingDir), true);
-    assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
-  });
-});
-
-describe("finalizeAgentsReplacement", () => {
-  test("keeps installed bytes and removes replacement artifacts idempotently", async (t) => {
-    // arrange
-    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
-      t,
-      "agents-finalize-success-",
-    );
-    const sourcePath = path.join(agentsSourceDir, "current.md");
-    const targetPath = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
-    const expectedTargetBytes = `---
-name: acme:current
-description: Current agent
-aliases: pi-claude-marketplace-acme-current
-tools: read
-systemPromptMode: replace
-inheritProjectContext: true
-inheritSkills: false
-provenance:
-  generatedBy: pi-claude-marketplace
-  sourcePlugin: acme
-  sourceAgent: current
-  sourcePath: ${sourcePath}
-  droppedFields: []
-  droppedTools: []
-  warnings: []
----
-
-Current.
-`;
-    await writeFile(
-      sourcePath,
-      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
-    );
-    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir,
-      agentsDirs: [agentsSourceDir],
-    });
-    assert.strictEqual(prepared.kind, "staged");
-    const replacement = await replacePreparedAgents(createRemovalOps(), prepared);
-    assert.deepStrictEqual(
-      (await readdir(locations.agentsStagingDir)).sort(),
-      [
-        path.basename(prepared.stagingDir),
-        (await readdir(locations.agentsStagingDir)).find((name) => name.startsWith("backup-")),
-      ].sort(),
-    );
-
-    // act
-    const firstLeaks = await finalizeAgentsReplacement(createRemovalOps(), replacement);
-    const secondLeaks = await finalizeAgentsReplacement(createRemovalOps(), replacement);
-
-    // assert
-    assert.deepStrictEqual(firstLeaks, []);
-    assert.deepStrictEqual(secondLeaks, []);
-    assert.strictEqual(Object.isFrozen(firstLeaks), true);
-    assert.strictEqual(Object.isFrozen(secondLeaks), true);
-    assert.strictEqual(await readFile(targetPath, "utf8"), expectedTargetBytes);
-    assert.deepStrictEqual(await readdir(locations.agentsStagingDir), []);
-    assert.deepStrictEqual(JSON.parse(await readFile(locations.agentsIndexPath, "utf8")), {
-      schemaVersion: 1,
-      agents: [
-        {
-          plugin: "acme",
-          marketplace: "catalog",
-          sourceAgent: "current",
-          generatedName: "pi-claude-marketplace-acme-current",
-          sourcePath,
-          targetPath,
-          sourceHash: "24214fe4c9874b0a54cc773880901f4cac6c6e3c26010846e02c7054b2026249",
-          droppedFields: [],
-          droppedTools: [],
-          warnings: [],
-        },
-      ],
-    });
-  });
-
-  test("returns both cleanup leaks and succeeds after permissions are restored", async (t) => {
-    // arrange
-    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
-      t,
-      "agents-finalize-leaks-",
-    );
-    await writeFile(
-      path.join(agentsSourceDir, "current.md"),
-      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
-    );
-    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir,
-      agentsDirs: [agentsSourceDir],
-    });
-    assert.strictEqual(prepared.kind, "staged");
-    const replacement = await replacePreparedAgents(createRemovalOps(), prepared);
-    const stagingEntries = await readdir(locations.agentsStagingDir);
-    const backupName = stagingEntries.find((name) => name.startsWith("backup-"));
-    assert.ok(backupName !== undefined);
-    const backupRoot = path.join(locations.agentsStagingDir, backupName);
-    await chmod(locations.agentsStagingDir, 0o500);
-    t.after(async () => {
-      if (await exists(locations.agentsStagingDir)) {
-        await chmod(locations.agentsStagingDir, 0o700);
-      }
-    });
-
-    // act
-    const cleanupLeaks = await finalizeAgentsReplacement(createRemovalOps(), replacement);
-    await chmod(locations.agentsStagingDir, 0o700);
-    const retryLeaks = await finalizeAgentsReplacement(createRemovalOps(), replacement);
-
-    // assert
-    assert.deepStrictEqual(cleanupLeaks, [
-      `failed to clean up agents replacement backup directory at ${backupRoot}: EACCES: permission denied, rmdir '${backupRoot}'`,
-      `failed to clean up agents staging directory at ${prepared.stagingDir}: EACCES: permission denied, rmdir '${prepared.stagingDir}'`,
-    ]);
-    assert.deepStrictEqual(retryLeaks, []);
-    assert.deepStrictEqual(await readdir(locations.agentsStagingDir), []);
-  });
-
-  test("rejects a replaced-shaped value that has no lifecycle internals", async (t) => {
-    // arrange
-    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
-      t,
-      "agents-finalize-unknown-",
-    );
-    await writeFile(
-      path.join(agentsSourceDir, "current.md"),
-      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
-    );
-    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
-      locations,
-      cwd: locations.scopeRoot,
-      marketplaceName: "catalog",
-      pluginName: "acme",
-      pluginRoot,
-      pluginDataDir,
-      agentsDirs: [agentsSourceDir],
-    });
-    assert.strictEqual(prepared.kind, "staged");
-    const unknownReplacement = { kind: "replaced", prepared } satisfies AgentsReplacement;
-
-    // act
-    const error = await finalizeAgentsReplacement(createRemovalOps(), unknownReplacement).then(
-      () => undefined,
-      (reason: unknown) => reason,
-    );
-
-    // assert
-    assert.ok(error instanceof Error);
-    assert.deepStrictEqual(
-      { name: error.name, message: error.message, cause: error.cause },
-      { name: "Error", message: "Unknown agents replacement handle.", cause: undefined },
-    );
-    assert.strictEqual(await exists(prepared.stagingDir), true);
-    assert.strictEqual(await abortPreparedAgents(createRemovalOps(), prepared), undefined);
   });
 });

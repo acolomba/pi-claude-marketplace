@@ -12,6 +12,15 @@ import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification
 
 import { seedUnconstrainedTarget } from "./seed-unconstrained-target.ts";
 
+import type { MaterializationPolicy } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
+
+/** `update`'s knobs on the shared runner (D-18-04). */
+const UPDATE_POLICY = {
+  refreshSource: true,
+  skipSameRevision: true,
+  overwrite: false,
+} satisfies MaterializationPolicy;
+
 function updated(
   marketplace: string,
   scope: "project" | "user",
@@ -653,6 +662,7 @@ test("SC3: an unconstrained plugin renders the same manual cascade rows as befor
   const seed = await seedUnconstrainedTarget("sc3-update-cascade-");
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
   const prepared = await preparePluginUpdate({
+    policy: UPDATE_POLICY,
     plugin: "alpha",
     marketplace: "mp",
     scope: "project",

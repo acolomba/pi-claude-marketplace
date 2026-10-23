@@ -51,6 +51,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   CleanupContextError,
+  DependencyDeclarationsUnreadableError,
   InvalidGitHubBaseUrlError,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
@@ -705,7 +706,10 @@ export async function seedPathMarketplace(opts: {
 
   const installedPlugins: Record<string, PluginRecord> = {};
   for (const [pluginName, installedVersion] of Object.entries(opts.installedVersions ?? {})) {
-    installedPlugins[pluginName] = makePluginRecord(installedVersion);
+    installedPlugins[pluginName] = {
+      ...makePluginRecord(installedVersion),
+      resolvedSource: path.join(marketplaceRoot, "plugins", pluginName),
+    };
   }
 
   await saveState(locations.extensionRoot, {
@@ -2987,7 +2991,7 @@ test("an MCP commit permission failure becomes a rollback partial and retry conv
   });
 });
 
-test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'plugin-uninstall + plugin-install for \"<plugin>\".'", async (testContext) => {
+test("PUP-6 / D-18-10 phase-3 failure: bridge commit throws -> aggregate error tells the user to run reinstall", async (testContext) => {
   // The cleanest way to force a phase-3a failure deterministically is to
   // pre-create an UNWRITEABLE file at the target path where the skills
   // bridge would `rename(staging -> target)`. On most filesystems that
@@ -3053,7 +3057,7 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
       const allText = notifications[0]?.message ?? "";
       assert.match(
         allText,
-        /plugin-uninstall \+ plugin-install for "hello"\./,
+        /Run \/claude:plugin reinstall hello@mp to repair it\./,
         `expected RECOVERY_PLUGIN_REINSTALL_PREFIX hint in notification:\n${allText}`,
       );
 
@@ -3225,7 +3229,7 @@ test("WR-01: a CLEANLY-UPDATED predecessor before a phase-3a abort stays visible
         `expected 2 notifications, got ${notifications.length.toString()}: ${notifications.map((n) => n.message).join("\n---\n")}`,
       );
       const failure = notifications.find((n) =>
-        n.message.includes('plugin-uninstall + plugin-install for "zzz".'),
+        n.message.includes("Run /claude:plugin reinstall zzz@mp to repair it."),
       );
       assert.ok(failure !== undefined, "the zzz phase-3a failure notification must be present");
       const cascade = notifications.find((n) =>
@@ -4828,7 +4832,7 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
       const allText = notifications.map((n) => n.message).join("\n");
       assert.match(
         allText,
-        /plugin-uninstall \+ plugin-install for "hello"\./,
+        /Run \/claude:plugin reinstall hello@mp to repair it\./,
         `expected RECOVERY_PLUGIN_REINSTALL_PREFIX hint somewhere in:\n${allText}`,
       );
 
@@ -4859,11 +4863,11 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
 
 // ─── phase 3a agents commit failure ──────────────────────────────────────────
 
-test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAgents throws", async () => {
+test("phase3a-agents-fail: a read-only agents directory -> commitPreparedAgents throws", async () => {
   // commitPreparedAgents calls rename(stagedFile.md, targetFile.md) for each
-  // agent. On Linux, rename(regular_file, existing_directory) fails with
-  // EISDIR. Pre-creating the agent target path as a DIRECTORY forces this.
-  // This exercises runThreePhaseUpdate's phase 3a aggregation.
+  // agent. A read-only agents directory makes that rename fail with EACCES
+  // after the swap's pre-intent target check found the target free. This
+  // exercises runThreePhaseUpdate's phase 3a aggregation.
   //
   // Also pre-create the skills obstacle so the test also verifies that
   // phase 3a continues across multiple bridge failures (D-03 discipline).
@@ -4886,31 +4890,32 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
       await mkdir(locations.skillsTargetDir, { recursive: true });
       await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
-      // Pre-create the agent target path as a DIRECTORY to force agents commit
-      // failure. The generated agent name for "bot" in plugin "hello" is
-      // The generated basename is pi-claude-marketplace-hello-bot.
+      // Make the agents directory read-only to force the agents commit's
+      // rename to fail.
       await mkdir(locations.agentsDir, { recursive: true });
-      await mkdir(path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"), {
-        recursive: true,
-      });
+      await chmod(locations.agentsDir, 0o500);
 
       const { ctx, run, notifications } = makeCtx();
 
       // act
-      await updatePlugins({
-        ctx,
-        run,
-        scope: "project",
-        cwd,
-        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-      });
+      try {
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+      } finally {
+        await chmod(locations.agentsDir, 0o700);
+      }
 
       // assert
       // Both skills and agents commit should fail; recovery hint appears.
       const allText = notifications.map((n) => n.message).join("\n");
       assert.match(
         allText,
-        /plugin-uninstall \+ plugin-install for "hello"\./,
+        /Run \/claude:plugin reinstall hello@mp to repair it\./,
         `expected RECOVERY_PLUGIN_REINSTALL_PREFIX hint somewhere in:\n${allText}`,
       );
 
@@ -4985,7 +4990,7 @@ test("TR-04 matrix: skills-fails-others-succeed", async () => {
 
       assert.equal(notifications.length, 1);
       const allText = notifications[0]?.message ?? "";
-      assert.match(allText, /plugin-uninstall \+ plugin-install for "hello"\./);
+      assert.match(allText, /Run \/claude:plugin reinstall hello@mp to repair it\./);
 
       const after = await loadState(locations.extensionRoot);
       const rec = after.marketplaces["mp"]?.plugins["hello"];
@@ -5044,7 +5049,7 @@ test("TR-04 matrix: commands-fails-others-succeed", async () => {
 
       assert.equal(notifications.length, 1);
       const allText = notifications[0]?.message ?? "";
-      assert.match(allText, /plugin-uninstall \+ plugin-install for "hello"\./);
+      assert.match(allText, /Run \/claude:plugin reinstall hello@mp to repair it\./);
 
       const after = await loadState(locations.extensionRoot);
       const rec = after.marketplaces["mp"]?.plugins["hello"];
@@ -5083,24 +5088,27 @@ test("TR-04 matrix: agents-fails-others-succeed", async () => {
         installedVersions: { hello: "1.0.0" },
       });
 
-      // Force agents commit failure only (DIR at agent file path -> EISDIR).
+      // Force agents commit failure only (read-only agents directory -> the
+      // rename fails with EACCES).
       await mkdir(locations.agentsDir, { recursive: true });
-      await mkdir(path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"), {
-        recursive: true,
-      });
+      await chmod(locations.agentsDir, 0o500);
 
       const { ctx, run, notifications } = makeCtx();
-      await updatePlugins({
-        ctx,
-        run,
-        scope: "project",
-        cwd,
-        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-      });
+      try {
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+      } finally {
+        await chmod(locations.agentsDir, 0o700);
+      }
 
       assert.equal(notifications.length, 1);
       const allText = notifications[0]?.message ?? "";
-      assert.match(allText, /plugin-uninstall \+ plugin-install for "hello"\./);
+      assert.match(allText, /Run \/claude:plugin reinstall hello@mp to repair it\./);
 
       const after = await loadState(locations.extensionRoot);
       const rec = after.marketplaces["mp"]?.plugins["hello"];
@@ -5173,7 +5181,7 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
 
       assert.equal(notifications.length, 1);
       const call1Text = notifications[0]?.message ?? "";
-      assert.match(call1Text, /plugin-uninstall \+ plugin-install for "hello"\./);
+      assert.match(call1Text, /Run \/claude:plugin reinstall hello@mp to repair it\./);
 
       // Intermediate post-state assertion: partial-success state.
       const mid = await loadState(locations.extensionRoot);
@@ -5693,6 +5701,92 @@ for (const { form, target, rowName, blockName } of [
     });
   });
 }
+
+/**
+ * Install `hello` and `gone` from marketplace `mp` in the project scope, with
+ * `gone` no longer in the marketplace, so the dependency walk cannot read it.
+ */
+async function seedUnreadableSiblingRecord(cwd: string): Promise<ReturnType<typeof locationsFor>> {
+  const locations = locationsFor("project", cwd);
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+    installedVersions: { hello: "1.0.0", gone: "1.0.0" },
+  });
+  return locations;
+}
+
+test("D-18-17: an update whose dependency walk cannot read another recorded plugin fails as unreadable and names it", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-walk-unreadable-");
+    try {
+      // arrange
+      const locations = await seedUnreadableSiblingRecord(cwd);
+      const filesBefore = await updateFileSnapshot(locations);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        refusedUpdateNotification(
+          "hello",
+          "unreadable",
+          "cannot read the dependencies of gone@mp: not declared by its marketplace",
+        ),
+      ]);
+      assert.deepStrictEqual(await updateFileSnapshot(locations), filesBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-18-17: an autoupdate cascade fails a plugin whose dependency walk cannot read another record as unreadable", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-cascade-walk-unreadable-");
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      const locations = await seedUnreadableSiblingRecord(cwd);
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      process.chdir(cwd);
+
+      // act
+      const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+      // assert
+      assert.ok(outcome.partition === "failed");
+      const { cause, ...failure } = outcome;
+      const walkMessage =
+        "cannot read the dependencies of gone@mp: not declared by its marketplace";
+      assert.deepStrictEqual(failure, {
+        partition: "failed",
+        name: "hello",
+        notes: [`${walkMessage}\n\ncause: ${walkMessage}`],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        reasons: ["unreadable"],
+      });
+      assert.ok(cause instanceof DependencyDeclarationsUnreadableError);
+      assert.deepStrictEqual([cause.declarer, cause.message], ["gone@mp", walkMessage]);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 test("FIX-03: a bare update under a marketplace only the local config declares updates and writes no declaration", async () => {
   await withHermeticHome(async () => {
@@ -7561,6 +7655,49 @@ test("FORCE-02: --partial on a candidate that became partially available degrade
   });
 });
 
+test("D-18-06: an update --partial of a clean record records the degraded plugin as not installable", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-partial-record-");
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        partial: true,
+      });
+
+      // assert -- the flag install writes for the same resolution, which
+      // enable, install and backfill read as the partial-consent marker.
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.deepStrictEqual(record?.compatibility, {
+        installable: false,
+        notes: ["contains monitors", "contains themes"],
+        supported: ["skills"],
+        unsupported: ["monitors", "themes"],
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("XSURF-03 / FORCE-03: without --partial the partially-upgradable candidate declines `(partially-upgradable)` + the --partial trailer at warning", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-force03-");
@@ -8821,7 +8958,13 @@ async function seedConstrainedPathTarget(
         addedFromCwd: cwd,
         manifestPath,
         marketplaceRoot,
-        plugins: { app: makePluginRecord("1.0.0"), pathfoo: makePluginRecord(installedVersion) },
+        plugins: {
+          app: makePluginRecord("1.0.0"),
+          pathfoo: {
+            ...makePluginRecord(installedVersion),
+            resolvedSource: path.join(marketplaceRoot, "plugins", "pathfoo"),
+          },
+        },
       },
     },
   });
@@ -9021,6 +9164,68 @@ test("GIT-01 unpinned update: refreshes the mirror in place and re-anchors the r
         cloneEntries,
         [pluginMirrorKey(cloneUrl), copyKey].sort(),
         "plugin-clones/ holds the mirror and the new copy after the sweep",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-18-11: an update moves a record that names the mirror at its HEAD onto the per-commit copy", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-git-mirror-record-");
+    try {
+      // arrange -- a record made before per-commit copies: its root is the
+      // mirror and its sha is the mirror's HEAD.
+      const cloneUrl = "https://example.com/org/repo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
+      await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: cloneUrl },
+        recordedSha: SHA_NEW,
+      });
+      const locations = locationsFor("project", cwd);
+      const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+      const before = await loadState(locations.extensionRoot);
+      const seededRecord = before.marketplaces["mp"]?.plugins["gp"];
+      assert.ok(seededRecord !== undefined);
+      seededRecord.resolvedSource = mirrorRoot;
+      await saveState(locations.extensionRoot, before);
+      const { gitOps } = createGitOps({
+        fixtureSourceDir: fixtureRepoDir,
+        head: SHA_NEW,
+        localRefs: { "refs/heads/main": SHA_NEW },
+        remoteRefs: { "refs/remotes/origin/main": SHA_NEW },
+      });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      // assert
+      assert.deepEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● gp v9.9.9 → v9.9.9 (updated)\n\n/reload to pick up changes",
+        },
+      ]);
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
+      assert.deepStrictEqual(
+        { version: record?.version, sha: record?.resolvedSha, root: record?.resolvedSource },
+        {
+          version: "9.9.9",
+          sha: SHA_NEW,
+          root: await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA_NEW)),
+        },
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -10392,7 +10597,7 @@ test("D-03 fail-continue: a hooks write that cannot land is aggregated, not thro
       assert.match(body, /hooks/, `the failing bridge must be named in:\n${body}`);
       assert.match(
         body,
-        /plugin-uninstall \+ plugin-install for "hello"\./,
+        /Run \/claude:plugin reinstall hello@mp to repair it\./,
         `a phase-3 aggregate must carry the recovery hint in:\n${body}`,
       );
 
@@ -12057,7 +12262,7 @@ test("WR-03: a workflows failure reaches the rendered rollback-partial row", asy
       );
       assert.match(
         body,
-        /plugin-uninstall \+ plugin-install for "hello"\./,
+        /Run \/claude:plugin reinstall hello@mp to repair it\./,
         `a phase-3 aggregate must carry the recovery hint in:\n${body}`,
       );
     } finally {
@@ -12555,7 +12760,7 @@ test("AFILE-04: an update that fails after its MCP commit still reports the remo
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ hello (failed) {rollback partial}\n" +
-            `    cause: Plugin "hello" update failed during physical replace. plugin-uninstall + plugin-install for "hello". -> ${refusal}\n` +
+            `    cause: Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it. -> ${refusal}\n` +
             "    [workflows] (rollback failed)\n" +
             `      cause: ${refusal}`,
           severity: "error",

@@ -27,13 +27,31 @@ import type {
   DeviceFlowHttp,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type {
+  MaterializationPolicy,
   PreparePluginUpdateOptions,
   UpdateCloneCacheSeam,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { TestContext } from "node:test";
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
+
+/** `update`'s knobs on the shared runner (D-18-04). */
+const UPDATE_POLICY = {
+  refreshSource: true,
+  skipSameRevision: true,
+  overwrite: false,
+} satisfies MaterializationPolicy;
+
+// D-18-04: a caller names its verb's policy; omitting it does not compile.
+void (true satisfies undefined extends PreparePluginUpdateOptions["policy"] ? false : true);
+
+const REINSTALL_POLICY = {
+  refreshSource: false,
+  skipSameRevision: false,
+  overwrite: true,
+} satisfies MaterializationPolicy;
 
 function pluginRecord(version: string, enabled = true): PluginRecord {
   return {
@@ -56,7 +74,8 @@ function pluginRecord(version: string, enabled = true): PluginRecord {
 }
 
 interface SeedOptions {
-  readonly installed?: PluginRecord;
+  /** A function receives the seeded plugin root, for a record at the candidate's own root. */
+  readonly installed?: PluginRecord | ((pluginRoot: string) => PluginRecord);
   readonly declared?: boolean;
   readonly version?: string;
   readonly source?: unknown;
@@ -101,6 +120,8 @@ async function seedUpdate(options: SeedOptions = {}): Promise<{
   );
   const locations = locationsFor("project", cwd);
   await mkdir(locations.extensionRoot, { recursive: true });
+  const installed =
+    typeof options.installed === "function" ? options.installed(pluginRoot) : options.installed;
   await saveState(locations.extensionRoot, {
     schemaVersion: 2,
     marketplaces: {
@@ -111,7 +132,7 @@ async function seedUpdate(options: SeedOptions = {}): Promise<{
         addedFromCwd: cwd,
         manifestPath,
         marketplaceRoot,
-        plugins: options.installed === undefined ? {} : { hello: options.installed },
+        plugins: installed === undefined ? {} : { hello: installed },
       },
     },
   });
@@ -122,6 +143,7 @@ async function prepare(
   seed: Awaited<ReturnType<typeof seedUpdate>>,
   options: {
     readonly partial?: boolean;
+    readonly policy?: MaterializationPolicy;
     readonly cloneCacheSeam?: UpdateCloneCacheSeam;
     readonly constraintGate?: PreparePluginUpdateOptions["constraintGate"];
     readonly pathPinProbe?: PreparePluginUpdateOptions["pathPinProbe"];
@@ -141,6 +163,7 @@ async function prepare(
     locations: seed.locations,
     cleanupClones: options.cleanupClones ?? (async () => {}),
     ...(options.partial === true && { partial: true }),
+    policy: options.policy ?? UPDATE_POLICY,
     ...(options.cloneCacheSeam !== undefined && { cloneCacheSeam: options.cloneCacheSeam }),
     ...(options.constraintGate !== undefined && { constraintGate: options.constraintGate }),
     ...(options.pathPinProbe !== undefined && { pathPinProbe: options.pathPinProbe }),
@@ -165,6 +188,7 @@ test("classifies a missing marketplace without reading a manifest", async (t) =>
 
   // act
   const outcome = await preparePluginUpdate({
+    policy: UPDATE_POLICY,
     plugin: "hello",
     marketplace: "missing",
     scope: "project",
@@ -242,7 +266,9 @@ test("retains the recorded version when the refreshed manifest drops the plugin"
 
 test("returns an exact unchanged outcome for an enabled current plugin", async (t) => {
   // arrange
-  const seed = await seedUpdate({ installed: pluginRecord("2.0.0") });
+  const seed = await seedUpdate({
+    installed: (pluginRoot) => ({ ...pluginRecord("2.0.0"), resolvedSource: pluginRoot }),
+  });
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
   const before = await readFile(seed.locations.stateJsonPath, "utf8");
 
@@ -502,7 +528,9 @@ test("success criterion 3: an unconstrained plugin's outcome is identical with a
 
 test("reads a partitioned preflight answer as a finished outcome", async (t) => {
   // arrange
-  const seed = await seedUpdate({ installed: pluginRecord("2.0.0") });
+  const seed = await seedUpdate({
+    installed: (pluginRoot) => ({ ...pluginRecord("2.0.0"), resolvedSource: pluginRoot }),
+  });
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
   const unchanged = await prepare(seed);
 
@@ -617,6 +645,28 @@ test("refreshes a disabled pin without materializing its recorded resources", as
   assert.strictEqual(refreshed?.resolvedSource, seed.pluginRoot);
   assert.deepStrictEqual(refreshed?.resources, record.resources);
   assert.strictEqual(refreshed?.enabled, false);
+});
+
+test("D-18-05: reinstall's policy skips a disabled record as already disabled without writing its pin", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0", false) });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const before = await readFile(seed.locations.stateJsonPath, "utf8");
+
+  // act
+  const outcome = await prepare(seed, { policy: REINSTALL_POLICY });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "skipped",
+    name: "hello",
+    notes: [],
+    reasons: ["already disabled"],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
+  assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), before);
 });
 
 test("WR-01: refreshing a disabled path-source pin drops a stale resolvedSha the record should no longer claim", async (t) => {
@@ -884,7 +934,11 @@ test("UPDT-01: a second update of a tag-pinned plugin is unchanged", async (t) =
   // arrange -- the record already holds the pin's own version and commit.
   const pinnedSha = "6666666666666666666666666666666666666666";
   const seed = await seedUpdate({
-    installed: { ...pluginRecord("1.2.0"), resolvedSha: pinnedSha },
+    installed: (pluginRoot) => ({
+      ...pluginRecord("1.2.0"),
+      resolvedSource: pluginRoot,
+      resolvedSha: pinnedSha,
+    }),
     source: { source: "url", url: "https://example.com/tagged" },
   });
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
@@ -1118,6 +1172,98 @@ test("sends the unpinned mirror the identity url and the typed wire url", async 
   ]);
   assert.ok(!("partition" in prepared));
   assert.strictEqual(prepared.resolvedSha, mirrorSha);
+});
+
+/** Seeds an unpinned url source and a mirror seam that records each call's `refresh` flag. */
+async function seedRecordedMirrorRefresh(t: TestContext): Promise<{
+  readonly seed: Awaited<ReturnType<typeof seedUpdate>>;
+  readonly cloneCacheSeam: UpdateCloneCacheSeam;
+  readonly refreshFlags: (boolean | undefined)[];
+}> {
+  const seed = await seedUpdate({
+    installed: pluginRecord("sha-000000000000"),
+    source: { source: "url", url: "https://example.com/mirror" },
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const refreshFlags: (boolean | undefined)[] = [];
+  const cloneCacheSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
+    materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
+    materializeOrRefreshPluginMirror: ({ refresh }) => {
+      refreshFlags.push(refresh);
+      return Promise.resolve({ pluginRoot: seed.pluginRoot, resolvedSha: "4".repeat(40) });
+    },
+    materializePluginCommitCopy: () => Promise.resolve(seed.pluginRoot),
+  };
+  return { seed, cloneCacheSeam, refreshFlags };
+}
+
+test("D-18-04: update's policy refreshes the unpinned mirror", async (t) => {
+  // arrange
+  const { seed, cloneCacheSeam, refreshFlags } = await seedRecordedMirrorRefresh(t);
+
+  // act
+  await prepare(seed, { cloneCacheSeam });
+
+  // assert
+  assert.deepStrictEqual(refreshFlags, [true]);
+});
+
+test("D-18-04: a policy that does not refresh the source reads the mirror offline", async (t) => {
+  // arrange
+  const { seed, cloneCacheSeam, refreshFlags } = await seedRecordedMirrorRefresh(t);
+
+  // act
+  await prepare(seed, { cloneCacheSeam, policy: REINSTALL_POLICY });
+
+  // assert
+  assert.deepStrictEqual(refreshFlags, [false]);
+});
+
+test("D-18-04: a policy that does not skip the recorded revision prepares it", async (t) => {
+  // arrange
+  const seed = await seedUpdate({
+    installed: (pluginRoot) => ({ ...pluginRecord("2.0.0"), resolvedSource: pluginRoot }),
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+
+  // act
+  const prepared = await prepare(seed, { policy: REINSTALL_POLICY });
+
+  // assert
+  assert.ok(!("partition" in prepared));
+  assert.deepStrictEqual(prepared, {
+    state: prepared.state,
+    record: { ...pluginRecord("2.0.0"), resolvedSource: seed.pluginRoot },
+    entry: { name: "hello", source: "./plugins/hello", version: "2.0.0" },
+    installable: prepared.installable,
+    fromVersion: "2.0.0",
+    toVersion: "2.0.0",
+    constraint: undefined,
+  });
+  assert.strictEqual(prepared.installable.pluginRoot, seed.pluginRoot);
+});
+
+test("D-18-11: an enabled record at the same version under another root is prepared", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("2.0.0") });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+
+  // act
+  const prepared = await prepare(seed);
+
+  // assert
+  assert.ok(!("partition" in prepared));
+  assert.deepStrictEqual(prepared, {
+    state: prepared.state,
+    record: pluginRecord("2.0.0"),
+    entry: { name: "hello", source: "./plugins/hello", version: "2.0.0" },
+    installable: prepared.installable,
+    fromVersion: "2.0.0",
+    toVersion: "2.0.0",
+    constraint: undefined,
+  });
+  assert.strictEqual(prepared.installable.pluginRoot, seed.pluginRoot);
 });
 
 test("classifies a clone transport failure without exposing a raw throw", async (t) => {
@@ -1626,7 +1772,11 @@ for (const { label, recordedSha, partition } of [
     // arrange
     const sha = "1".repeat(40);
     const seed = await seedUpdate({
-      installed: { ...pluginRecord("2.0.0"), resolvedSha: recordedSha },
+      installed: (pluginRoot) => ({
+        ...pluginRecord("2.0.0"),
+        resolvedSource: pluginRoot,
+        resolvedSha: recordedSha,
+      }),
       source: { source: "url", url: "https://example.com/pinned", sha },
     });
     t.after(() => rm(seed.cwd, { force: true, recursive: true }));
@@ -1662,10 +1812,11 @@ for (const { label, recordedSha, source } of [
   test(`D-16-09: ${label} at the same declared version updates`, async (t) => {
     // arrange
     const seed = await seedUpdate({
-      installed: {
+      installed: (pluginRoot) => ({
         ...pluginRecord("2.0.0"),
+        resolvedSource: pluginRoot,
         ...(recordedSha !== undefined && { resolvedSha: recordedSha }),
-      },
+      }),
       ...(source !== undefined && { source }),
     });
     t.after(() => rm(seed.cwd, { force: true, recursive: true }));

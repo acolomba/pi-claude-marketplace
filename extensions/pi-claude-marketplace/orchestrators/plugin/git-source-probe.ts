@@ -205,8 +205,8 @@ export function makePresenceProbe(
 }
 
 /**
- * AMIG-01 / NFR-5: reinstall's source choice (`reinstall-clone-probe.ts`) with
- * `not-cached` in place of the clone, so the reload migration stays offline.
+ * AMIG-01 / NFR-5: the reload migration's source choice, with `not-cached` in
+ * place of a clone, so the migration stays offline.
  * It reads the per-commit copy at the install record's sha (GIT-01), never
  * the manifest's `source.sha`, which can differ from it after a marketplace
  * update. A record made before unpinned installs had their own copy names the

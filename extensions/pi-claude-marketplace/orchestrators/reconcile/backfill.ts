@@ -94,7 +94,8 @@ async function applyBackfillForScope(
 
   // SF-02: a scanned plugin's backfill FAILED -- a
   // genuine `failed` partition, OR a per-plugin manifest-I/O throw caught inside
-  // the scan for a record recorded `installable: false`; not a benign no-growth /
+  // the scan for a record recorded `installable: false` -- or a dependent's range
+  // held it (D-18-07); not a benign no-growth /
   // concurrent-uninstall / unresolvable-clean-record. Leave the version
   // gate OPEN so the next load retries -- symmetric with the WR-01 self-heal (a
   // THROW from the stamp write also keeps the gate open). Skipping the stamp
@@ -199,8 +200,9 @@ function hasForceInstalledPlugin(state: ExtensionState): boolean {
 /**
  * BFILL-01 / WCONV-01: scan EVERY plugin in the read-pass snapshot and
  * re-materialize each whose supported set grew -- a wider population than the
- * name describes. Iterates the snapshot; reinstallPlugin self-locks and
- * re-reads fresh state per plugin (CR-01).
+ * name describes. Iterates the snapshot; reinstallPlugin re-reads fresh state
+ * per plugin, and the shared swap takes the scope lock at its intent mark and
+ * its finalize (CR-01, D-18-10).
  *
  * WCONV-01 is what makes the population every record rather than only the
  * degraded ones: a plugin declaring a component kind this extension did not
@@ -225,7 +227,8 @@ function hasForceInstalledPlugin(state: ExtensionState): boolean {
  * SF-02: returns `true` iff at least one scanned plugin's backfill FAILED -- a
  * genuine `failed` partition surfaced by `maybeBackfillPlugin`, OR a THROW out of
  * `maybeBackfillPlugin` (e.g. a corrupt / permission-denied cached marketplace
- * manifest read for a record recorded `installable: false`), not a benign
+ * manifest read for a record recorded `installable: false`) -- or was held by a
+ * dependent's range (D-18-07), not a benign
  * no-growth / concurrent-uninstall -- so the caller can keep the version gate
  * OPEN and retry. A record recorded `installable: true` never reaches that arm:
  * `resolveRecordedPluginOffline` answers `undefined` for a clean record it
@@ -361,15 +364,17 @@ interface BackfillTarget {
  * BFILL-01: re-resolve one recorded plugin offline (NFR-5) and, if its
  * supported set strictly grew (the boundary moved for THIS plugin -- D-68-03,
  * avoiding needless mtime churn), re-materialize it in place via the
- * partial-capable reinstall primitive at the SAME recorded version (no upgrade --
- * D-68-02). The promotion folds into the single cascade as a
+ * partial-capable reinstall primitive. The re-materialize runs the shared
+ * runner, so it records the version the marketplace offers now (D-18-08,
+ * REI-04, D-18-12). The promotion folds into the single cascade as a
  * `PluginBackfilledOutcome` whose `installable` boolean drives the
  * (installed)-vs-(partially-installed) projection.
  *
  * SF-01 / SF-02: returns `true` iff the re-materialize FAILED (a genuine
- * failure, surfaced as a plugin-scoped (failed) row), so the caller keeps the
- * version gate OPEN and retries next load. Benign outcomes (no growth,
- * concurrent uninstall, successful promotion) return `false`.
+ * failure, surfaced as a plugin-scoped (failed) row) or a dependent's range
+ * held it (D-18-07, no row), so the caller keeps the version gate OPEN and
+ * retries next load. Benign outcomes (no growth, concurrent uninstall,
+ * successful promotion) return `false`.
  */
 async function maybeBackfillPlugin(
   opts: ApplyReconcileOptions,
@@ -399,9 +404,9 @@ async function maybeBackfillPlugin(
   // WCONV-01: growth is necessary but not sufficient. The supported set can grow
   // while the UNSUPPORTED set also moves, so a record recorded `installable:
   // true` can re-resolve `partially-available` with a strictly larger supported
-  // set. `requirePartialInstallable` admits that resolve (reinstall.ts), then
-  // `replaceAll` unstages every component that dropped out and `updateStateRecord`
-  // persists `installable: false` -- a clean record degraded, working artifacts
+  // set. Reinstall's shared runner admits that resolve (D-18-06), then the swap
+  // unstages every component that dropped out and records `installable: false`
+  // -- a clean record degraded, working artifacts
   // removed, on a reload the user did not initiate and with no flag to consent
   // through. The update path already refuses that transition by name: a clean
   // record is not admitted to a degrading update without `--partial`, "because
@@ -413,8 +418,8 @@ async function maybeBackfillPlugin(
     return false;
   }
 
-  // CR-01: render: "none" self-locking re-materialize. The recorded version is
-  // preserved by reinstall (D-68-02).
+  // CR-01: render: "none" re-materialize through the shared runner, which
+  // records the version the marketplace offers now (D-18-08, D-18-12).
   const outcome = await reinstallPlugin({
     ctx: opts.ctx,
     run: opts.run,
@@ -426,19 +431,23 @@ async function maybeBackfillPlugin(
   });
 
   if (outcome.partition === "skipped") {
-    // Two benign shapes reach here and neither is a failure: the record was
-    // removed under us (concurrent uninstall), or it was disabled under us
-    // between this scan's state SNAPSHOT and reinstall's own fresh read
-    // (ENBL-05 -- reinstall refuses a disabled record). The ENBL-08 filter
-    // above reads the snapshot, so it cannot see a cross-process disable that
-    // lands after it. Either way there is no promotion row and nothing to
-    // retry, so the gate may still close.
-    return false;
+    // D-18-07: a real range hold, `dependents constrain`, means the promotion
+    // did not happen and the plugin still lacks the kind this extension now
+    // supports. Keep the gate open with no row, so a later load retries once
+    // the dependents admit the offered version. Every other skip is benign:
+    // the record was removed under us (concurrent uninstall), or it was
+    // disabled under us between this scan's state SNAPSHOT and reinstall's own
+    // fresh read (ENBL-05 -- reinstall refuses a disabled record), or the
+    // shared runner found nothing to install. The ENBL-08 filter above reads
+    // the snapshot, so it cannot see a cross-process disable that lands after
+    // it. A dependency walk that cannot read a record is a failure, not a skip
+    // (D-18-17): it reaches the failed arm below and keeps the gate open.
+    return outcome.reasons?.includes("dependents constrain") === true;
   }
 
   if (outcome.partition === "failed") {
     // SF-01: render: "none" makes reinstallPlugin CATCH its own throw and RETURN
-    // a `failed` outcome (reinstall.ts handleSinglePluginFailure), so a genuine
+    // the `failed` outcome it composes, so a genuine
     // re-materialize failure (EACCES / EIO / bridge failure) never throws and the
     // WR-01 wrapper -- which only catches THROWS -- never sees it. Surface a
     // plugin-scoped (failed) row on the same cascade instead of silently dropping

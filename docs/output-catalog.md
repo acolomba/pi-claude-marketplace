@@ -1700,9 +1700,26 @@ Plugin reinstall: 1 warning
 /reload to pick up changes
 ```
 
-The reinstall's source no longer declares a workflow the record named, or declares it under a different generated name. Either way the old envelope is gone and the command it registered is still live, because the host cannot unregister one. The gate is the record's pre-reinstall inventory minus the names the replace step reported placing, so a RENAME retires a command exactly as a deletion does, and a name present in both sets retires nothing -- that is the ordinary re-place.
+The reinstall's source no longer declares a workflow the record named, or declares it under a different generated name. Either way the old envelope is gone and the command it registered is still live, because the host cannot unregister one. The gate is the record's pre-reinstall inventory minus the names the shared swap staged, so a RENAME retires a command exactly as a deletion does, and a name present in both sets retires nothing -- that is the ordinary re-place.
 
 One token per plugin however many names were retired, at the tail of the brace. Severity `warning`: the reinstall was carried out, but the desired state is not reached until the reload the trailer names. A reinstall that re-placed everything renders the brace-less row above.
+
+### Reinstall that leaves a component out (D-18-06)
+
+<!-- catalog-state: reinstall-partial-component -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ● alpha v1.1.0 (reinstalled) {unsupported hooks}
+
+Plugin reinstall: 1 warning
+
+/reload to pick up changes
+```
+
+The source the marketplace offers now resolves `partially-available`, so the reinstall installs the supported components and leaves the rest out. The row keeps `(reinstalled)` and names each left-out kind with the same token the `(partially-installed)` rows use, after any `{malformed ...}` token. Severity `warning` when the record left nothing out before the reinstall: working components were just removed, and the user did not ask for that. A record that was already partially installed renders the same token at `info`. When a dependent's range held the plugin to the marketplace's current copy, `{dependency current copy}` comes first in the brace, as on the `(updated)` row, and changes no severity.
 
 ### Reinstall over an already-disabled record inside a cascade (ENBL-05 / ENBL-18 / DFEN-07)
 
@@ -1811,6 +1828,66 @@ Plugin reinstall: 2 successes
 ```
 
 The marketplaces never collapse -- each per-scope header is a distinct marketplace block. OUT-03/D-04: the plural tally counts the two `reinstalled` rows across the per-scope blocks as two successes.
+
+### Reinstall held by a dependent's version range (D-18-07)
+
+<!-- catalog-state: reinstall-held-by-dependents -->
+
+```text
+A plugin operation needs attention.
+
+● mp [user]
+  ⊘ shared-lib (skipped) {dependents constrain}
+    cause: version 2.0.0 falls outside what the combined range admits (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"
+```
+
+A reinstall installs the version the marketplace offers now, so it runs the same dependency constraint gate as `update`. When an installed dependent's range does not admit the offered version and no tag the range admits can be installed instead, the reinstall is skipped and changes nothing. The cause line names the combined range and the dependents that hold it, composed by the same `describeConstraint` composer the `update-held-out-of-range` state uses. Severity `warning`: the reinstall was not carried out, and the user can act by updating or removing the dependent. No reload-hint (nothing changed on disk). When the range admits a tag, the reinstall installs that tag and renders an ordinary `(reinstalled)` row at that tag's version.
+
+### Reinstall of a plugin the marketplace no longer offers in an installable form
+
+<!-- catalog-state: reinstall-runner-skips -->
+
+```text
+Some plugin operations need attention.
+
+● official [user]
+  ⊘ alpha (skipped) {no longer installable}
+  ⊘ beta (skipped) {not in manifest}
+
+Plugin reinstall: 2 warnings
+```
+
+The reinstall resolves the entry the marketplace offers now, through the same candidate resolution `update` uses. `{no longer installable}` means the entry's source cannot be installed: the resolver refuses it, a git source has no plugin at its declared path, or the source cannot be fetched on a cache miss. `{not in manifest}` means the cached marketplace manifest no longer declares the plugin. Either way nothing is staged and the record is unchanged. Severity `warning` per row; no reload-hint.
+
+### Reinstall whose dependency walk cannot read a record (D-18-17)
+
+<!-- catalog-state: reinstall-dependency-walk-unreadable -->
+
+```text
+A plugin operation has failed.
+
+● mp [project]
+  ⊘ good (failed) {unreadable}
+    cause: cannot read the dependencies of bad@mp: not declared by its marketplace
+```
+
+The constraint gate reads the dependency declarations of every plugin the scope records. When it cannot read one, it fails closed: the reinstall changes nothing and fails with `{unreadable}`, never `{dependents constrain}`, because nothing was shown to hold the version. The cause line names the record the walk could not read. This is the named-target form of the bulk `{unreadable}` row the section introduction describes, and `update` renders the same row for the same walk.
+
+### Reinstall that failed partway through its commit (D-18-10)
+
+<!-- catalog-state: reinstall-rollback-partial -->
+
+```text
+A plugin operation has failed.
+
+● mp [project]
+  ⊘ hello (failed) {rollback partial}
+    cause: Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it. -> EACCES: permission denied, rename
+    [agents] (rollback failed)
+      cause: EACCES: permission denied, rename
+```
+
+A reinstall replaces the plugin through the same three-phase swap `update` runs. A failure while it commits the bridges, or while it writes the final record, leaves the plugin partly replaced: the swap reports one child per bridge that failed, and the record keeps the in-progress marker its intent mark wrote. The cause line is the swap's own message, which `update` shares, and its recovery hint is to run `reinstall` again, which repairs it. Severity `error`; no reload-hint. A failure before the intent mark, such as an agent target that holds a file no index row names, changes nothing and renders an ordinary `(failed)` row instead.
 
 ### Failure -- plugin not installed, standalone form (CR-02 / D-01)
 

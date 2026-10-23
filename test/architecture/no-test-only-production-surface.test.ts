@@ -117,7 +117,7 @@ const FORBIDDEN_PATTERNS: ReadonlyArray<{ name: string; pattern: RegExp }> = [
 ];
 
 function describeTestOnlySurfaceViolation(offenders: ReadonlyArray<string>): string {
-  return `MF-DEC-07 / D-05-01 violation: test-only substitution surface declared on production module(s):\n  ${offenders.join("\n  ")}\n  (a production module must not carry a member whose only purpose is letting a test swap its collaborators. Give the capability a production owner instead: a named collaborator on the flow's own transaction, the form \`ReinstallTransaction.replaceOperations\` takes, or a single named typed optional member with its own type and its own doc line, the form \`cloneCacheSeam?\` takes. D-07-18 forecloses an allow-list entry, so there is no third option.)`;
+  return `MF-DEC-07 / D-05-01 violation: test-only substitution surface declared on production module(s):\n  ${offenders.join("\n  ")}\n  (a production module must not carry a member whose only purpose is letting a test swap its collaborators. Give the capability a production owner instead: a named collaborator on the flow's own transaction, the form \`InstallLedgerTransaction.runPhases\` takes, or a single named typed optional member with its own type and its own doc line, the form \`cloneCacheSeam?\` takes. D-07-18 forecloses an allow-list entry, so there is no third option.)`;
 }
 
 /** Every repository-relative `.ts` module at or below `rel`, in a stable order. */
@@ -182,9 +182,9 @@ const MARKETPLACE_UPDATE_REL: (typeof MARKETPLACE_LEDGER_TARGETS)[number] =
  * classification rather than by the pattern missing it.
  *
  * `cloneCacheSeam` is the authorized typed-optional port form, shared across the
- * install, fetch, info, and reinstall owners. `stateTransaction`,
- * `removeDataDir`, and `replaceOperations` are the promoted reinstall
- * collaborators that replaced the two `__`-prefixed bags. `credentialOps` and
+ * install, fetch, info, and reinstall owners. `stateTransaction` and
+ * `removeDataDir` are the promoted reinstall collaborators that replaced the
+ * two `__`-prefixed bags. `credentialOps` and
  * `deviceFlowHttp` are the marketplace ledgers' auth ports.
  */
 const CLASSIFIED_SEAMS: ReadonlyArray<ClassifiedSeam> = [
@@ -194,7 +194,6 @@ const CLASSIFIED_SEAMS: ReadonlyArray<ClassifiedSeam> = [
   { member: "cloneCacheSeam", target: REINSTALL_FLOW_REL },
   { member: "stateTransaction", target: REINSTALL_FLOW_REL },
   { member: "removeDataDir", target: REINSTALL_FLOW_REL },
-  { member: "replaceOperations", target: REINSTALL_FLOW_REL },
   { member: "credentialOps", target: MARKETPLACE_ADD_REL },
   { member: "deviceFlowHttp", target: MARKETPLACE_ADD_REL },
   { member: "credentialOps", target: MARKETPLACE_UPDATE_REL },

@@ -721,6 +721,10 @@ export class LayerConfigUnreadableError extends InvalidMarketplaceManifestError 
  * dependencies to cover. The whole command refuses with `{unreadable}` and
  * changes nothing, as `uninstall` and `marketplace remove` refuse.
  *
+ * D-18-17: the dependency-constraint gate's declaration walk throws it too,
+ * for `update` and `reinstall`, when it cannot read a recorded plugin's
+ * declarations. The plugin's row fails with `{unreadable}`.
+ *
  * The message IS the failed row's cause line. It names the plugin by its
  * `<plugin>@<marketplace>` key and at most a fixed reason, never the text of a
  * manifest that failed to load, so no `{ cause }` is chained behind it.

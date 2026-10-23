@@ -1,6 +1,6 @@
 Feature: Plugin reinstall
 
-  Reinstalling a plugin builds its installed version again in place.
+  Reinstalling a plugin builds it again in place at the version its marketplace offers now.
   The scenarios run the real extension in a headless Pi, read its JSON results,
   and use a local marketplace in place of a published one.
 
@@ -230,3 +230,96 @@ Feature: Plugin reinstall
       | id            |
       | demo@fixtures |
     Then the "claude-plugins.local.json" file of the project scope does not exist
+
+  Scenario: Reinstalling a plugin the marketplace now offers at a newer version installs and records that version
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the user has run "/claude:plugin marketplace update fixtures --scope project"
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | reinstalled |         | project | 1.1.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.1.0   | true    |
+
+  Scenario: The plugin list shows a plugin reinstalled at a newer version at that version
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the user has run "/claude:plugin marketplace update fixtures --scope project"
+    Given the user has run "/claude:plugin reinstall demo@fixtures --scope project"
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.1.0   |
+
+  Scenario: Info on a plugin reinstalled at a newer version shows that version
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the user has run "/claude:plugin marketplace update fixtures --scope project"
+    Given the user has run "/claude:plugin reinstall demo@fixtures --scope project"
+    When the user runs "/claude:plugin info demo@fixtures"
+    Then the result has these fields:
+      | kind                           | plugin-info   |
+      | severity                       | info          |
+      | needs reload                   | false         |
+      | marketplace name               | fixtures      |
+      | marketplace scope              | project       |
+      | marketplace details autoupdate | false         |
+      | plugin id                      | demo@fixtures |
+      | plugin name                    | demo          |
+      | plugin status                  | installed     |
+      | plugin reasons                 |               |
+      | plugin scope                   | project       |
+      | plugin version                 | 1.1.0         |
+      | plugin components resolved     | true          |
+      | plugin components skills       | demo-skill    |
+
+  Scenario: A new session offers the skills of the version a reinstall installed
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the user has run "/claude:plugin marketplace update fixtures --scope project"
+    Given the user has run "/claude:plugin reinstall demo@fixtures --scope project"
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.1.0. |
+
+  Scenario: Reinstalling and updating after the same marketplace update record the same version
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the user has run "/claude:plugin marketplace update fixtures --scope project"
+    Given the user has run "/claude:plugin marketplace update fixtures --scope user"
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | reinstalled |         | project | 1.1.0   |
+    When the user runs "/claude:plugin update demo@fixtures --scope user"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope | from  | to    |
+      | fixtures         | user              | demo@fixtures | demo | updated |         | user  | 1.0.0 | 1.1.0 |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.1.0   | true    |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.1.0   | true    |

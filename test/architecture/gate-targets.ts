@@ -45,9 +45,10 @@ export const MARKETPLACE_LEDGER_TARGETS = [
 ] as const;
 
 /**
- * WR-01 / WR-03 / D-60-05: the four lifecycle verbs that must emit a hooks
- * re-materialization signal, plus the event router where the WR-01 prefix that
- * signal carries is defined.
+ * WR-01 / WR-03 / D-60-05: the lifecycle verbs that must emit a hooks
+ * re-materialization signal -- three files, since reinstall shares
+ * update-swap's wiring (D-18-02) -- plus the event router where the WR-01
+ * prefix that signal carries is defined.
  *
  * The router belongs in the same group because the obligation is a relationship
  * between the two sides: a verb emitting a prefix the router no longer knows is
@@ -57,7 +58,6 @@ export const MARKETPLACE_LEDGER_TARGETS = [
 export const HOOKS_LIFECYCLE_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",
   "extensions/pi-claude-marketplace/bridges/hooks/event-router.ts",
 ] as const;
@@ -133,7 +133,6 @@ export const MANIFEST_LOOKUP_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/info.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts",
-  "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts",
   "extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts",
   "extensions/pi-claude-marketplace/orchestrators/edge-deps.ts",
@@ -199,6 +198,8 @@ export const LIFECYCLE_ENABLED_READ_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
+  // The shared runner holds the resolved plugin for both re-materializing verbs.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts",
 ] as const;
 
 /**

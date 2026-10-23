@@ -596,7 +596,8 @@ export interface PluginSkippedMessage extends MessageBase {
 }
 
 /**
- * A `skipped` row that carries a cause trailer: update's. Uninstall's
+ * A `skipped` row that carries a cause trailer: update's, and reinstall's,
+ * which runs the same constraint gate (D-18-07). Uninstall's
  * `PluginUninstallSkippedMessage` is the other one.
  *
  * UPDT-02 / D-10-11: the held-update remedy names the constraining plugins

@@ -88,7 +88,6 @@ test("reinstalledRowFromOutcome omits empty version, matching scope, reasons, an
     marketplace: "official",
     scope: "project",
     version: "",
-    resourcesChanged: false,
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,
@@ -118,7 +117,6 @@ test("reinstalledRowFromOutcome orders agent dependency and degraded reasons wit
     marketplace: "official",
     scope: "project",
     version: "2.0.0",
-    resourcesChanged: true,
     stagedAgentNames: ["reviewer"],
     stagedMcpServerNames: [],
     declaresAgents: true,
@@ -151,7 +149,6 @@ test("reinstalledRowFromOutcome projects an MCP-only dependency", () => {
     marketplace: "official",
     scope: "user",
     version: "1.0.0",
-    resourcesChanged: true,
     stagedAgentNames: [],
     stagedMcpServerNames: ["docs"],
     declaresAgents: false,
@@ -181,7 +178,6 @@ test("reinstalledRowFromOutcome preserves agents before MCP when both dependenci
     marketplace: "official",
     scope: "user",
     version: "1.0.0",
-    resourcesChanged: true,
     stagedAgentNames: ["reviewer"],
     stagedMcpServerNames: ["docs"],
     declaresAgents: true,
@@ -211,7 +207,6 @@ test("WDEP-02: reinstalledRowFromOutcome places the workflows dependency LAST", 
     marketplace: "official",
     scope: "user",
     version: "1.0.0",
-    resourcesChanged: true,
     stagedAgentNames: ["reviewer"],
     stagedMcpServerNames: ["docs"],
     declaresAgents: true,
@@ -242,7 +237,6 @@ test("WDEP-02: a reinstall declaring no workflow carries no host-engine dependen
     marketplace: "official",
     scope: "user",
     version: "1.0.0",
-    resourcesChanged: true,
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,
@@ -282,7 +276,6 @@ test("renderReinstallPartitionAndNotify projects a clean reinstalled row with a 
       marketplace: "official",
       scope: "project",
       version: "1.0.0",
-      resourcesChanged: true,
       stagedAgentNames: [],
       stagedMcpServerNames: [],
       declaresAgents: false,
@@ -535,6 +528,107 @@ test("FIX-03: a failed reinstall that carries a cause renders its cause line", (
   verify(harness.ui);
 });
 
+test("D-18-07: a dependents constrain skip renders its typed reason and names the holders on its cause line", () => {
+  // arrange
+  const harness = createNotifyHarness({
+    message: [
+      "A plugin operation needs attention.",
+      "",
+      "● mp [project]",
+      "  ⊘ hello (skipped) {dependents constrain}",
+      "    cause: no version satisfies ^1.0.0 (app@mp)",
+    ].join("\n"),
+    severity: "warning",
+  });
+  const outcomes: readonly ReinstallPluginOutcome[] = [
+    {
+      partition: "skipped",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      notes: ["no version satisfies ^1.0.0 (app@mp)"],
+      reasons: ["dependents constrain"],
+    },
+  ];
+
+  // act
+  renderReinstallPartitionAndNotify(harness.ctx, harness.run, outcomes, "single");
+
+  // assert
+  verify(harness.ctx);
+  verify(harness.ui);
+});
+
+test("D-18-07: a typed skip with no notes renders no cause line", () => {
+  // arrange
+  const harness = createNotifyHarness({
+    message: [
+      "A plugin operation needs attention.",
+      "",
+      "● mp [project]",
+      "  ⊘ hello (skipped) {dependents constrain}",
+    ].join("\n"),
+    severity: "warning",
+  });
+  const outcomes: readonly ReinstallPluginOutcome[] = [
+    {
+      partition: "skipped",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      notes: [],
+      reasons: ["dependents constrain"],
+    },
+  ];
+
+  // act
+  renderReinstallPartitionAndNotify(harness.ctx, harness.run, outcomes, "single");
+
+  // assert
+  verify(harness.ctx);
+  verify(harness.ui);
+});
+
+test("D-18-10: a commit failure renders the aggregate cause and one child per failed bridge", () => {
+  // arrange
+  const harness = createNotifyHarness({
+    message: [
+      "A plugin operation has failed.",
+      "",
+      "● mp [project]",
+      "  ⊘ hello (failed) {rollback partial}",
+      "    cause: replace failed",
+      "    [skills] (rollback failed)",
+      "      cause: skills refused",
+      "    [workflows] (rollback failed)",
+      "      cause: workflows refused",
+    ].join("\n"),
+    severity: "error",
+  });
+  const outcomes: readonly ReinstallFailedOutcome[] = [
+    {
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      notes: ["replace failed"],
+      reasons: ["rollback partial"],
+      cause: new Error("replace failed"),
+      rollbackPartial: [
+        { phase: "skills", cause: new Error("skills refused") },
+        { phase: "workflows", cause: new Error("workflows refused") },
+      ],
+    },
+  ];
+
+  // act
+  renderReinstallPartitionAndNotify(harness.ctx, harness.run, outcomes, "single");
+
+  // assert
+  verify(harness.ctx);
+  verify(harness.ui);
+});
+
 test("narrowReasons returns independent empty results for absent and empty notes", () => {
   // arrange
   const noNotes = undefined;
@@ -670,7 +764,6 @@ test("renderReinstallPartitionAndNotify sorts case-insensitive names and scopes 
       marketplace: "acme",
       scope: "project",
       version: "2.0.0",
-      resourcesChanged: true,
       stagedAgentNames: ["reviewer"],
       stagedMcpServerNames: ["docs"],
       declaresAgents: true,
@@ -739,7 +832,6 @@ test("WLIF-06: a retired workflow command takes the tail token and raises the ro
     marketplace: "official",
     scope: "project",
     version: "2.0.0",
-    resourcesChanged: true,
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,
@@ -773,7 +865,6 @@ test("WLIF-06: the token raises a row that has no other reason of its own", () =
     marketplace: "official",
     scope: "project",
     version: "2.0.0",
-    resourcesChanged: true,
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,
@@ -806,7 +897,6 @@ test("WLIF-06: a reinstall that retired nothing renders the row it always render
     marketplace: "official",
     scope: "project",
     version: "2.0.0",
-    resourcesChanged: true,
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,
@@ -827,6 +917,135 @@ test("WLIF-06: a reinstall that retired nothing renders the row it always render
     needsReload: true,
   });
   assert.equal(Object.hasOwn(row, "reasons"), false, "no present-and-empty reasons key");
+});
+
+test("D-18-06: a reinstall names its malformed kinds before the kinds it left out", () => {
+  // arrange
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "alpha",
+    marketplace: "official",
+    scope: "project",
+    version: "2.0.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    degradedKinds: ["skill"],
+    partialDegrade: { kinds: ["hooks"], newlyDegraded: false },
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "alpha",
+    dependencies: [],
+    version: "2.0.0",
+    reasons: ["malformed skill", "unsupported hooks"],
+    severity: "warning",
+    needsReload: true,
+  });
+});
+
+test("D-18-06: an already partial record's reinstall names the left-out kind at info", () => {
+  // arrange
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "alpha",
+    marketplace: "official",
+    scope: "project",
+    version: "2.0.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "alpha",
+    dependencies: [],
+    version: "2.0.0",
+    reasons: ["lsp"],
+    severity: "info",
+    needsReload: true,
+  });
+});
+
+test("D-18-06: a reinstall that newly left a kind out raises a row that has no other reason", () => {
+  // arrange
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "alpha",
+    marketplace: "official",
+    scope: "project",
+    version: "2.0.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "alpha",
+    dependencies: [],
+    version: "2.0.0",
+    reasons: ["lsp"],
+    severity: "warning",
+    needsReload: true,
+  });
+});
+
+test("D-10-15 / D-18-07: a reinstall that landed the marketplace's current copy names it first at info", () => {
+  // arrange
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "alpha",
+    marketplace: "official",
+    scope: "project",
+    version: "1.1.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    constraint: {
+      disclosure: 'constrained to the combined range (^1.0.0) -- required by "app@official"',
+      fellBackToCurrentCopy: true,
+    },
+    partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "alpha",
+    dependencies: [],
+    version: "1.1.0",
+    reasons: ["dependency current copy", "lsp"],
+    severity: "info",
+    needsReload: true,
+  });
 });
 
 test("REINSTALL_CONTEXT declares complete row policies", () => {

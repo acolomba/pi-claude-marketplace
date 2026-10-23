@@ -25,7 +25,6 @@ export interface ReinstallOutcomeBase {
 export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly partition: "reinstalled";
   readonly version: string;
-  readonly resourcesChanged: boolean;
   /**
    * WLIF-06: the reinstall's new source did not re-place at least one workflow
    * envelope the record named, so the command that envelope registered is still
@@ -39,7 +38,25 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    */
   readonly staleWorkflowCommand?: boolean;
   /**
-   * D-99-02c: the GENERATED NAMES the reinstall ledger staged. The `Names`
+   * D-18-06 / D-18-08: the component kinds the reinstall left out because its
+   * source now resolves partially-available, carried from the shared runner's
+   * `updated` outcome. `newlyDegraded` is true when the record left nothing
+   * out before, which raises the row to `warning`. Omitted for a clean
+   * candidate (NREG-01).
+   */
+  readonly partialDegrade?: {
+    readonly kinds: readonly string[];
+    readonly newlyDegraded: boolean;
+  };
+  /**
+   * D-18-07: the constraint gate's disclosure when a dependent's range chose
+   * what landed, carried from the shared runner's `updated` outcome. The row
+   * reads `fellBackToCurrentCopy`, as update's row does. Omitted for an
+   * unconstrained reinstall (NREG-01).
+   */
+  readonly constraint?: UpdateConstraintDisclosure;
+  /**
+   * D-99-02c: the GENERATED NAMES the reinstall staged. The `Names`
    * suffix keeps them spelled apart from the same-subject presence FLAGS on
    * `LedgerDegradationSignals` (`plugin/shared.ts`), which carry a count
    * verdict only. A name list and a boolean answer different questions --
@@ -80,8 +97,8 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * WARN-01 / WR-04 / D-86-03: the component kinds whose SOURCE frontmatter
    * could not be parsed and which re-materialized in degraded form. The
    * reinstall primitive drives the load-time backfill, so without this the
-   * backfill projection renders a clean row over a ledger that just degraded a
-   * component -- the contradiction the install and enable arms already avoid by
+   * backfill projection renders a clean row over a reinstall that just
+   * degraded a component -- the contradiction the install and enable arms already avoid by
    * carrying the same signal. Omitted when nothing degraded, so a clean
    * reinstall's outcome shape is unchanged (NREG-01).
    */
@@ -91,14 +108,16 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * D-141-03 / D-141-05: the DISCOVERY half of this reinstall's staging
    * warnings, unprefixed, carried separately from `notes`.
    *
-   * `notes` folds all three halves (discovery + hygiene + maintenance) behind
-   * a `warning: ` prefix for orchestrated consumers, so a reader cannot tell
-   * the halves apart again. `reinstallPlugins` needs exactly the discovery
-   * half to render after its cascade, and the boundary forces the carrier:
-   * the warnings originate inside the locked ledger while the rows are not
-   * rendered until `renderReinstallPartitionAndNotify` at the very end of
-   * `reinstallPlugins`, so a diagnostic fired from inside the ledger would
-   * print the detail BEFORE the row it explains.
+   * `notes` folds the discovery half and the maintenance warnings behind a
+   * `warning: ` prefix for orchestrated consumers, so a reader cannot tell
+   * them apart again. The agents and MCP hygiene half is not carried: the
+   * shared swap drops it in direct mode, as it does for `update`.
+   * `reinstallPlugins` needs exactly the discovery half to render after its
+   * cascade, and the boundary forces the carrier: the warnings originate
+   * inside the shared runner while the rows are not rendered until
+   * `renderReinstallPartitionAndNotify` at the very end of `reinstallPlugins`,
+   * so a diagnostic fired from inside the runner would print the detail
+   * BEFORE the row it explains.
    *
    * Populated only on the `render: "none"` arm, the same arm that populates
    * `notes`. The self-rendering `render !== "none"` arm leaves this undefined
@@ -114,8 +133,8 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly discoveryWarnings?: readonly string[];
   /**
    * AFILE-04 / AFILE-02: the MCP config file notices from this reinstall's
-   * MCP replace. The outcome carries them because the rows render after the
-   * locked ledger finishes. A consumer routes them through
+   * MCP commit. The outcome carries them because the rows render after the
+   * shared runner finishes. A consumer routes them through
    * `notifyMcpConfigNotices`. Populated only on the `render: "none"` arm, and
    * omitted when there are none (NREG-01).
    */
@@ -125,6 +144,13 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
 export interface ReinstallSkippedOutcome extends ReinstallOutcomeBase {
   readonly partition: "skipped";
   readonly notes: readonly string[];
+  /**
+   * D-18-07: the shared runner's typed skip reasons, such as `dependents
+   * constrain`, whose holders ride on `notes`. Absent for reinstall's own
+   * `not installed` / `already disabled` skips, whose `notes` the messaging
+   * narrows.
+   */
+  readonly reasons?: readonly ContentReason[];
 }
 
 export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
@@ -149,7 +175,7 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
    * present, `outcomeToCascadePluginMessage` prefers `reasons[0]` over
    * `narrowReasons(notes)`; when absent, the substring narrow
    * is used (for fixtures that build outcomes without
-   * `reasons`). Populated by the catch in `reinstallPlugins` so an
+   * `reasons`). Populated by `reinstall-record.ts` so an
    * EACCES / EPERM / ENOENT failure renders as the matching closed
    * Reason (`permission denied` / `source missing`) rather than the
    * permissive `not in manifest` default. Typed `ContentReason` (TYPE-02):
@@ -160,11 +186,28 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
    * LAYER-04 / CFG-03: set for a named reinstall's layer refusal. Its
    * message is the row's cause line, built from fixed text and safe names or
    * a file's basename. FLR-01: also set for a held state lock, whose cause
-   * line names the lock file the way the uninstall row does (D-01). Every
-   * other failure keeps its text in `notes` only, because that text is not
-   * prepared for a rendered cause line.
+   * line names the lock file the way the uninstall row does (D-01), and for
+   * an unreadable dependency walk, whose message names the record it could
+   * not read (D-18-17). Every other failure keeps its text in `notes` only,
+   * because that text is not prepared for a rendered cause line.
    */
   readonly cause?: Error;
+  /**
+   * D-18-10: one child per bridge whose commit or finalize failed, as update
+   * renders them. Set only for a commit or finalize failure, whose `cause` is
+   * the swap's aggregate error.
+   */
+  readonly rollbackPartial?: readonly {
+    readonly phase: UpdatePhaseBridge;
+    readonly cause: Error;
+  }[];
+  /**
+   * AFILE-04: the MCP config file notices of a commit or finalize failure
+   * that came after the MCP commit had rewritten the file. The swap does not
+   * restore that file, so the user still needs to hear what changed in it.
+   * Omitted when there are none (NREG-01).
+   */
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
 }
 
 export type ReinstallPluginOutcome =

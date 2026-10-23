@@ -804,12 +804,12 @@ test("uninstallPlugin removes the record, the staged artifacts and the routes", 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PRL-02 / D-68-02: the composed reinstall operation runs against the real
-// prepare, replace, rollback, finalize and state-lock bindings this module
-// holds. Re-materializing an edited source in place -- the replaced bytes on
-// disk, the replaced handler in the routing table, and the recorded version
-// left where it was because reinstall never upgrades -- is an effect of those
-// concrete bindings, so replacing any one of them with a no-op is visible here.
+// PRL-02: the composed reinstall operation runs the shared runner that update
+// uses, with the real bridge and state-lock bindings. Re-materializing an
+// edited source in place -- the replaced bytes on disk and the replaced handler
+// in the routing table -- is an effect of those concrete bindings, so replacing
+// any one of them with a no-op is visible here. The version stays 0.0.1
+// because the marketplace still offers 0.0.1 (D-18-08).
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("reinstallPlugin replaces the staged artifacts in place and re-routes the plugin", async (t) => {
@@ -847,7 +847,6 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
     marketplace: "mp",
     scope: "project",
     version: "0.0.1",
-    resourcesChanged: false,
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,
@@ -855,8 +854,9 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
     declaresWorkflows: false,
   });
 
-  // The whole record is pinned: D-68-02 forbids an upgrade, so `version` and
-  // the complete `resources` inventory survive the replacement unchanged.
+  // The whole record is pinned: `version` is the 0.0.1 the marketplace still
+  // offers (D-18-08), `installedAt` and `provenance` carry forward from the old
+  // record (D-18-09), and the complete `resources` inventory is unchanged.
   const afterState = await loadState(locations.extensionRoot);
   assert.deepStrictEqual(afterState.marketplaces["mp"]?.plugins["p1"], {
     version: "0.0.1",

@@ -1142,6 +1142,155 @@ void test("MIRR-02: mirror PRESENT (warm) refreshes in place via refreshGitHubCl
   assert.equal(second.resolvedSha, MIRROR_HEAD);
 });
 
+void test("D-18-04: a present mirror read with refresh: false keeps its HEAD and fetches nothing", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const { gitOps, state } = mirrorGitOps();
+  await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
+    locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    gitOps,
+  });
+  const fetchesAfterFirst = state.fetchCalls.length;
+  const clonesAfterFirst = state.cloneCalls.length;
+
+  // act
+  const second = await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
+    locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    gitOps,
+    refresh: false,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      fetches: state.fetchCalls.length - fetchesAfterFirst,
+      clones: state.cloneCalls.length - clonesAfterFirst,
+      second,
+    },
+    {
+      fetches: 0,
+      clones: 0,
+      second: {
+        pluginRoot: await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo")),
+        resolvedSha: MIRROR_HEAD,
+      },
+    },
+  );
+});
+
+void test("D-18-04 / REI-04: refresh: false answers the declared ref's last fetch, not the commit checked out for another ref", async (t) => {
+  // arrange
+  const releaseSha = "0123456789abcdef0123456789abcdef01234567";
+  const locations = await freshLocations(t);
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+  await mkdir(mirrorRoot, { recursive: true });
+  const { gitOps, state } = createGitOps({
+    head: MIRROR_HEAD,
+    localRefs: {
+      "refs/heads/main": MIRROR_HEAD,
+      "refs/remotes/origin/release": releaseSha,
+    },
+  });
+
+  // act
+  const mirror = await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
+    locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    ref: "release",
+    gitOps,
+    refresh: false,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      mirror,
+      clones: state.cloneCalls,
+      fetches: state.fetchCalls,
+      checkouts: state.checkoutCalls,
+    },
+    {
+      mirror: { pluginRoot: mirrorRoot, resolvedSha: releaseSha },
+      clones: [],
+      fetches: [],
+      checkouts: [],
+    },
+  );
+});
+
+void test("D-18-04: refresh: false refreshes a declared ref the mirror never fetched, as a cache miss", async (t) => {
+  // arrange
+  const devSha = "89abcdef0123456789abcdef0123456789abcdef";
+  const auth = publicCloneAuth();
+  const locations = await freshLocations(t);
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+  await mkdir(mirrorRoot, { recursive: true });
+  const { gitOps, state } = createGitOps({
+    head: MIRROR_HEAD,
+    localRefs: { "refs/heads/main": MIRROR_HEAD },
+    remoteRefs: { dev: devSha },
+  });
+
+  // act
+  const mirror = await materializeOrRefreshPluginMirror({
+    auth,
+    locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    ref: "dev",
+    gitOps,
+    refresh: false,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { mirror, clones: state.cloneCalls, fetches: state.fetchCalls },
+    {
+      mirror: { pluginRoot: mirrorRoot, resolvedSha: devSha },
+      clones: [],
+      fetches: [{ dir: mirrorRoot, remote: "origin", ref: "dev", auth }],
+    },
+  );
+});
+
+void test("D-18-04: refresh: false propagates a mirror ref read that fails for a reason other than a missing ref", async (t) => {
+  // arrange
+  const readFailure = Object.assign(new Error("EIO: i/o error, read"), { code: "EIO" });
+  const locations = await freshLocations(t);
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+  await mkdir(mirrorRoot, { recursive: true });
+  const { gitOps: baseGitOps, state } = createGitOps({ head: MIRROR_HEAD });
+  const gitOps: GitOps = { ...baseGitOps, resolveRef: () => Promise.reject(readFailure) };
+
+  // act & assert
+  await assert.rejects(
+    materializeOrRefreshPluginMirror({
+      auth: publicCloneAuth(),
+      locations,
+      cloneUrl: "https://example.com/repo",
+      networkUrl: "https://example.com/repo",
+      gitOps,
+      refresh: false,
+    }),
+    (error: unknown) => error === readFailure,
+  );
+  assert.deepStrictEqual(
+    { clones: state.cloneCalls, fetches: state.fetchCalls },
+    {
+      clones: [],
+      fetches: [],
+    },
+  );
+});
+
 void test("MIRR-02: two successive calls both succeed; the second refreshes rather than throwing (idempotent)", async (t) => {
   const locations = await freshLocations(t);
   const { gitOps } = mirrorGitOps();

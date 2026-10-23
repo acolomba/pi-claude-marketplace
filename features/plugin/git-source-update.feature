@@ -3,6 +3,7 @@ Feature: Plugin git source update
   Updating a plugin whose source is a git repository fetches the repository's
   new revision and installs it. A loopback https git host serves the
   marketplace and plugin repositories and logs the requests Pi makes.
+  A reinstall installs the revision the cached repository already holds, without a request.
 
   Scenario: Updating a git-source plugin fetches its new revision
     Given the git repository "ghp" holds these plugins:
@@ -97,3 +98,32 @@ Feature: Plugin git source update
       | marketplace name | marketplace scope | id       | name | status  | reasons | scope   | from  | to    |
       | gits             | project           | ghp@gits | ghp  | updated |         | project | 1.0.0 | 1.0.0 |
     Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
+
+  Scenario: Reinstalling a git-source plugin after a fetch installs the fetched revision with no request
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 2.0.0   |      |
+    Given the user has run "/claude:plugin fetch ghp@gits --scope project"
+    When the user runs "/claude:plugin reinstall ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | version |
+      | gits             | project           | ghp@gits | ghp  | reinstalled |         | project | 2.0.0   |
+    Then the git host receives no request
+    Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
+    Then the project scope holds these git clones:
+      | clone  | origin                          | revision         |
+      | plugin | https://github.com/acme/ghp.git |                  |
+      | plugin | https://github.com/acme/ghp.git | {ghp revision 2} |

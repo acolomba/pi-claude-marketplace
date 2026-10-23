@@ -45,7 +45,6 @@ import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orch
 import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
-  clonePluginRecord,
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -8081,7 +8080,7 @@ test("D-04-01: a direct install stays a direct install when a later plugin decla
         "some-other-plugin"
       ];
       assert.ok(directRecord !== undefined, "the direct install succeeded, so its record exists");
-      const directSnapshot = clonePluginRecord(directRecord);
+      const directSnapshot = structuredClone(directRecord);
 
       // act
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });

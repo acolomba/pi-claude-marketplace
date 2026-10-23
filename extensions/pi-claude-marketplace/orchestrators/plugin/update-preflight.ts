@@ -119,12 +119,40 @@ export interface PreparedPluginUpdate {
   readonly constraint: UpdateConstraintDisclosure | undefined;
 }
 
+/**
+ * D-18-04 / D-18-15: the three per-verb knobs of the shared materialization
+ * path. They are the only behavioral difference between `update` and
+ * `reinstall` inside it.
+ */
+export interface MaterializationPolicy {
+  /**
+   * `true` refreshes an unpinned git source's mirror before it reads the
+   * mirror's HEAD. `false` reads a present mirror's HEAD with no network and
+   * clones only a missing mirror (NFR-5 cache miss).
+   */
+  readonly refreshSource: boolean;
+  /**
+   * `true` returns `unchanged` for a candidate at the revision the record
+   * holds. `false` re-materializes it, which is how `reinstall` restores
+   * deleted artifacts (REI-01 / REI-02).
+   */
+  readonly skipSameRevision: boolean;
+  /**
+   * `true` lets the swap's agents commit replace this plugin's own previous
+   * agent files whose bytes a user changed, the RINST-01 repair overwrite.
+   * `false` keeps `update`'s refusal.
+   */
+  readonly overwrite: boolean;
+}
+
 /** Inputs required to classify and prepare one installed plugin update. */
 export interface PreparePluginUpdateOptions {
   readonly plugin: string;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly locations: ScopedLocations;
+  /** D-18-04: the calling verb's knobs; required so no caller inherits update's by omission. */
+  readonly policy: MaterializationPolicy;
   /** State I/O for the disabled-pin refresh; production callers omit it. */
   readonly stateTransaction?: LockedStateTransactionDeps;
   readonly partial?: boolean;
@@ -206,6 +234,9 @@ interface UpdateCloneProbe {
  * `buildStoredCredentialAuth`'s bundle: the Device Flow renders a user code
  * through the context and the cascade has none (D-3-04). Every other caller
  * gets `buildCloneAuth`'s bundle.
+ *
+ * `refreshSource` is the policy knob the unpinned arm passes to the mirror
+ * (D-18-04). The pinned arm never fetches a present clone, so it ignores it.
  */
 function makeUpdateCloneProbe(
   seam: UpdateCloneCacheSeam,
@@ -216,6 +247,7 @@ function makeUpdateCloneProbe(
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
   },
+  refreshSource: boolean,
 ): UpdateCloneProbe {
   let captured: string | undefined;
 
@@ -234,6 +266,7 @@ function makeUpdateCloneProbe(
       networkUrl: networkCloneUrl(gitSource),
       ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
       auth: authBundle,
+      refresh: refreshSource,
     });
     // GIT-01: the updated plugin runs from its own copy at the mirror's commit.
     const copyRoot = await seam.materializePluginCommitCopy({
@@ -324,6 +357,9 @@ async function deriveUpdateToVersion(
  * between a git and a `path` source adds or drops the sha, so it is a new
  * revision too. Only when neither side has a sha does the version alone
  * decide.
+ *
+ * This is the disabled branch's rule (D-99-05a). The enabled branch also
+ * compares the plugin root, through `isRecordedCandidate`.
  */
 function isSameRevision(
   record: PluginStateRecord,
@@ -331,6 +367,25 @@ function isSameRevision(
   resolvedSha: string | undefined,
 ): boolean {
   return toVersion === record.version && resolvedSha === record.resolvedSha;
+}
+
+/**
+ * D-18-11: whether an enabled record already holds the candidate. A record made
+ * before per-commit copies names the mutable mirror as its root, so the copy at
+ * the same commit is a new revision and the swap re-anchors the record onto it.
+ */
+function isRecordedCandidate(
+  record: PluginStateRecord,
+  candidate: {
+    readonly toVersion: string;
+    readonly resolvedSha: string | undefined;
+    readonly pluginRoot: string;
+  },
+): boolean {
+  return (
+    isSameRevision(record, candidate.toVersion, candidate.resolvedSha) &&
+    candidate.pluginRoot === record.resolvedSource
+  );
 }
 
 /** Whether `entry` installs from a git source (url / git-subdir / github). */
@@ -915,6 +970,7 @@ export async function preparePluginUpdate(
     },
     options.locations,
     auth,
+    options.policy.refreshSource,
   );
   const { candidate, resolvedSha, pin } = await resolvePinnedUpdateCandidate(
     triaged.entry,
@@ -949,8 +1005,13 @@ export async function preparePluginUpdate(
   }
 
   if (
-    isSameRevision(triaged.record, toVersion, resolvedSha) &&
-    !isRecordedButDisabled(triaged.record)
+    options.policy.skipSameRevision &&
+    !isRecordedButDisabled(triaged.record) &&
+    isRecordedCandidate(triaged.record, {
+      toVersion,
+      resolvedSha,
+      pluginRoot: candidate.pluginRoot,
+    })
   ) {
     return {
       partition: "unchanged",
@@ -980,8 +1041,34 @@ export async function preparePluginUpdate(
     ...(resolvedSha !== undefined && { resolvedSha }),
   };
   return isRecordedButDisabled(triaged.record)
-    ? refreshDisabledPluginUpdate(options, prepared, constraintFromVerdict(verdict))
+    ? finishDisabledPreflight(options, prepared, constraintFromVerdict(verdict))
     : prepared;
+}
+
+/**
+ * D-05 / D-18-05: the disabled-record pin refresh is update's alone. A policy
+ * that re-materializes the recorded revision (reinstall's) reaches a disabled
+ * record only when it was disabled after the verb read it, and skips it as
+ * `already disabled` without writing the record.
+ */
+async function finishDisabledPreflight(
+  options: PreparePluginUpdateOptions,
+  prepared: PreparedPluginUpdate,
+  constraint: UpdateConstraintDisclosure | undefined,
+): Promise<PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome> {
+  if (!options.policy.skipSameRevision) {
+    return {
+      partition: "skipped",
+      name: options.plugin,
+      notes: [],
+      reasons: ["already disabled"],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    };
+  }
+
+  return refreshDisabledPluginUpdate(options, prepared, constraint);
 }
 
 /**
