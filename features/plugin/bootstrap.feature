@@ -1,9 +1,8 @@
 Feature: Plugin bootstrap
 
   Bootstrap adds Claude Code's official marketplace to the user scope and turns
-  on its autoupdate. The scenarios run the real extension in a headless Pi
-  against a loopback https git host, which serves the official marketplace
-  through the GitHub base override.
+  on its autoupdate. A loopback https git host stands in for GitHub and serves
+  the official marketplace through the GitHub base override.
 
   Scenario: Bootstrapping a second time leaves the official marketplace as it is
     Given the marketplace "claude-plugins-official" is published as the official marketplace

@@ -1,9 +1,8 @@
 Feature: Marketplace failed add
 
   A marketplace add that fails leaves nothing behind, so the same add succeeds
-  once its cause is gone. The scenarios run the real extension in a headless Pi
-  and use local marketplaces, and a loopback https git host, in place of
-  published ones.
+  once its cause is gone. Local marketplaces and a loopback https git host
+  stand in for published ones.
 
   Scenario: Adding a marketplace succeeds once its invalid manifest is repaired
     Given the marketplace "tools" is published as a dir source
