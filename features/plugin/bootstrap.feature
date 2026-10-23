@@ -17,3 +17,6 @@ Feature: Plugin bootstrap
       | name                    | scope | status  | reasons            |
       | claude-plugins-official | user  | skipped | already autoupdate |
     Then the git host receives no request
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name                    | source                             | autoupdate |
+      | claude-plugins-official | anthropics/claude-plugins-official | true       |
