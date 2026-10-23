@@ -5849,6 +5849,53 @@ test("WR-02 / NFR-3: an already-current disabled record does not take the scope 
   });
 });
 
+test("FLR-01: a held scope lock fails an update that is due as lock held and keeps its cause", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-flr01-lock-held-");
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const { ctx, run, notifications } = makeCtx();
+      const release = await lockfile.lock(locations.extensionRoot, {
+        lockfilePath: locations.stateLockFile,
+        realpath: false,
+      });
+      try {
+        // act
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+      } finally {
+        await release();
+      }
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        refusedUpdateNotification(
+          "hello",
+          "lock held",
+          `Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes. -> Lock file is already being held`,
+        ),
+      ]);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("WR-08 / NFR-3: the lock-free skip survives multi-element compatibility lists", async () => {
   // The WR-02 skip compares a projection of the PERSISTED compatibility block
   // against a projection of a FRESHLY RESOLVED one. `disabledPinProjection`

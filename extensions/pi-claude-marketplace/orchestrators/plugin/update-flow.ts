@@ -74,6 +74,7 @@ import {
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
   rethrowInvalidGitHubBaseUrl,
+  StateLockHeldError,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
@@ -807,8 +808,9 @@ function rollbackPartialCauseSlot(p: UpdatePhase3Failure): { readonly cause: Err
 
 /**
  * Narrow a direct-path failure's typed error to a closed-set `Reason` for
- * the synthetic `PluginFailedMessage`. Order: typed identities first,
- * errno / stable transport fields second, honest generic fallback last.
+ * the synthetic `PluginFailedMessage`. Order: the typed identities of
+ * `typedDirectFailReason` first (a held state lock among them), errno /
+ * stable transport fields second, honest generic fallback last.
  * The fallback `"unreadable manifest"` mirrors the marketplace/update.ts
  * narrowFailReason precedent for unknown error shapes.
  */
@@ -816,6 +818,38 @@ function narrowDirectFailReason(err: Error): ContentReason {
   // Phase-3 aggregate failures are surfaced via reasonOverride; here we
   // handle the enumerate / syncClone / phase-2 paths only.
   const primary = err instanceof CleanupContextError ? err.primary : err;
+
+  const typedReason = typedDirectFailReason(primary);
+  if (typedReason !== undefined) {
+    return typedReason;
+  }
+
+  const transportReason = classifyGitTransportFailure(primary);
+  if (transportReason !== undefined) {
+    return transportReason;
+  }
+
+  const code = (primary as NodeJS.ErrnoException).code;
+  if (code === "EACCES" || code === "EPERM") {
+    return "permission denied";
+  }
+
+  if (code === "ENOENT" || code === "ENOTDIR") {
+    return "source missing";
+  }
+
+  return "unreadable manifest";
+}
+
+/**
+ * The reason a typed direct-path failure names, or `undefined` for an error
+ * no typed identity matches. FLR-01: a held state lock is `"lock held"`, as
+ * the other plugin commands report it.
+ */
+function typedDirectFailReason(primary: Error): ContentReason | undefined {
+  if (primary instanceof StateLockHeldError) {
+    return "lock held";
+  }
 
   if (primary instanceof MarketplaceNotFoundError) {
     return "not found";
@@ -845,21 +879,7 @@ function narrowDirectFailReason(err: Error): ContentReason {
     return "unreadable";
   }
 
-  const transportReason = classifyGitTransportFailure(primary);
-  if (transportReason !== undefined) {
-    return transportReason;
-  }
-
-  const code = (primary as NodeJS.ErrnoException).code;
-  if (code === "EACCES" || code === "EPERM") {
-    return "permission denied";
-  }
-
-  if (code === "ENOENT" || code === "ENOTDIR") {
-    return "source missing";
-  }
-
-  return "unreadable manifest";
+  return undefined;
 }
 
 /**
