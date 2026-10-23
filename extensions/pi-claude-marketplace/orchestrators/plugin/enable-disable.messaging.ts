@@ -9,7 +9,7 @@ import {
   type PluginSkippedMessage,
   type ContentReason,
 } from "../../shared/notification-types.ts";
-import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import { narrowUnsupportedKinds, SOURCE_DIR_MISSING_NOTE } from "../../shared/probe-classifiers.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -195,7 +195,7 @@ export function narrowEnableFailure(cause: Error): readonly ContentReason[] {
   if (
     cause instanceof PluginShapeError &&
     cause.shape.kind === "not-installable" &&
-    cause.shape.reasons.some((reason) => reason.startsWith("source dir does not exist"))
+    cause.shape.reasons.some((reason) => reason.startsWith(SOURCE_DIR_MISSING_NOTE))
   ) {
     return ["source missing"];
   }

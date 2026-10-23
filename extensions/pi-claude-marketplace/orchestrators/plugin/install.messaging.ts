@@ -17,7 +17,7 @@ import {
   type StatusToken,
 } from "../../shared/notification-types.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
-import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import { narrowUnsupportedKinds, SOURCE_DIR_MISSING_NOTE } from "../../shared/probe-classifiers.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -560,6 +560,12 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
     return ["malformed mcp"];
   }
 
+  // SRC-01: a missing plugin directory, mirroring `classifyResolverNote`.
+  // Placed before the `includes("source")` catch-all, which it also matches.
+  if (reason.startsWith(SOURCE_DIR_MISSING_NOTE)) {
+    return ["source missing"];
+  }
+
   if (reason.includes("source")) {
     return ["unsupported source"];
   }
@@ -585,7 +591,8 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
  *      set as `list`/`info` (CR-01 / D-64-02 / D-90-05); on the structural
  *      `unavailable` arm it stays on the source axis as `unsupported source`,
  *      mirroring `narrowResolverNotes`'s catch-all (SURF-01 / WR-01 / D-64-07)
- *   2. "source" substring -> `unsupported source`
+ *   2. the `source dir does not exist` note -> `source missing` (SRC-01);
+ *      any other "source" substring -> `unsupported source`
  *   3. errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError)
  *   4. permissive fallback: `unsupported source`
  * Steps 3-4 are defensive for notes already serialised by deeper helpers;

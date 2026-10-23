@@ -1083,9 +1083,20 @@ describe("resolver reason narrowing through the install failure row", () => {
     assert.deepStrictEqual(narrowedReasons, ["unsupported mcp"]);
   });
 
+  test("SRC-01: maps a missing source directory note to source missing", () => {
+    // arrange
+    const reasons = ["source dir does not exist: /mp/plugins/ghost"];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["source missing"]);
+  });
+
   test("maps a source note to unsupported source", () => {
     // arrange
-    const reasons = ["source directory does not exist"];
+    const reasons = ["unsupported source kind: npm"];
 
     // act
     const narrowedReasons = installFailureReasons(reasons);
