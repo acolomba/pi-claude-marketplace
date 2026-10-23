@@ -26,12 +26,12 @@ settle which one wins (see PROJECT.md).
 
 ### enable / disable
 
-- [ ] **ENA-01**: Enabling a disabled plugin makes a new session offer its skills again and keeps one installation record
-- [ ] **ENA-02**: Disabling an enabled plugin makes a new session offer none of its skills and keeps the plugin installed (`list` shows it disabled)
-- [ ] **ENA-03**: Enabling an enabled plugin, and disabling a disabled one, is skipped as a no-op with the matching reason
-- [ ] **ENA-04**: Enable and disable work in the user scope and the project scope, each changing only the named scope
-- [ ] **ENA-05**: Enabling a plugin whose dependencies are disabled or absent enables or installs them; disabling a plugin that an enabled plugin depends on behaves as Claude Code does (refused or cascaded, matched to upstream)
-- [ ] **ENA-06**: Enable and disable of a plugin that is not installed fail with the not-installed reason
+- [x] **ENA-01**: Enabling a disabled plugin makes a new session offer its skills again and keeps one installation record
+- [x] **ENA-02**: Disabling an enabled plugin makes a new session offer none of its skills and keeps the plugin installed (`list` shows it disabled)
+- [x] **ENA-03**: Enabling an enabled plugin, and disabling a disabled one, is skipped as a no-op with the matching reason
+- [x] **ENA-04**: Enable and disable work in the user scope and the project scope, each changing only the named scope
+- [x] **ENA-05**: Enabling a plugin whose dependencies are disabled or absent enables or installs them; disabling a plugin that an enabled plugin depends on behaves as Claude Code does (refused or cascaded, matched to upstream)
+- [x] **ENA-06**: Enable and disable of a plugin that is not installed fail with the not-installed reason
 
 ### install
 
@@ -39,20 +39,20 @@ settle which one wins (see PROJECT.md).
 - [x] **INS-02**: A dependency closure that cannot be resolved (a missing dependency, an unsatisfiable version constraint) installs nothing
 - [x] **INS-03**: Installing a partially available plugin (skills plus an unsupported component) fails without `--partial` and installs the supported part with `--partial`, and `info` names what was left out
 - [x] **INS-04**: Installing into the user scope with no `--scope` and with `--scope user` records it in the user scope only, and a new session in any project offers its skills
-- [ ] **INS-05**: A plugin with a git, a github, or a url source installs from the loopback git host; a second install of the same pinned source reuses the clone and makes no request
-- [ ] **INS-06**: A plugin source the host refuses (404, 401, connection drop) fails with the matching reason and leaves no record, clone, or skill behind
+- [x] **INS-05**: A plugin with a git, a github, or a url source installs from the loopback git host; a second install of the same pinned source reuses the clone and makes no request
+- [x] **INS-06**: A plugin source the host refuses (404, 401, connection drop) fails with the matching reason and leaves no record, clone, or skill behind
 - [x] **INS-07**: An install that fails partway (a phase cannot write its target) rolls back every artifact it wrote, and a retry succeeds once the cause is gone
 
 ### uninstall
 
 - [x] **UNI-01**: Uninstalling removes the plugin data directory, and `--keep-data` keeps it with its contents
 - [x] **UNI-02**: `uninstall --prune` also removes the dependencies that no other plugin needs, and keeps the ones another plugin still needs
-- [ ] **UNI-03**: Uninstalling a plugin installed from a git source removes its clone from `plugin-clones/` when no other installation uses it
+- [x] **UNI-03**: Uninstalling a plugin installed from a git source removes its clone from `plugin-clones/` when no other installation uses it
 
 ### update
 
 - [x] **UPD-01**: `update @<marketplace>` updates every outdated plugin of that marketplace and leaves the plugins of other marketplaces unchanged
-- [ ] **UPD-02**: Updating a git-source plugin fetches the new revision on a cache miss and makes no request when the cache already holds it
+- [x] **UPD-02**: Updating a git-source plugin fetches the new revision on a cache miss and makes no request when the cache already holds it
 - [x] **UPD-03**: A dependency whose version constraint the new version breaks blocks the update and changes nothing
 - [x] **UPD-04**: An update that fails partway keeps the installed version, its skills, and its record
 - [x] **UPD-05**: `update --partial` updates a plugin whose new version became partially available, and fails without the flag
@@ -81,15 +81,15 @@ settle which one wins (see PROJECT.md).
 
 ### pending
 
-- [ ] **PND-01**: `pending` lists the installs, uninstalls, enables, and disables a hand-edited config would cause, and is empty when config and records agree
-- [ ] **PND-02**: `pending --scope` keeps only that scope's changes
+- [x] **PND-01**: `pending` lists the installs, uninstalls, enables, and disables a hand-edited config would cause, and is empty when config and records agree
+- [x] **PND-02**: `pending --scope` keeps only that scope's changes
 
 ### Reconcile on a new session
 
-- [ ] **REC-01**: A plugin added to a config by hand is installed by the next session, which offers its skills
-- [ ] **REC-02**: A plugin removed from a config by hand is uninstalled by the next session
-- [ ] **REC-03**: A plugin set to enabled or disabled in a config by hand is enabled or disabled by the next session
-- [ ] **REC-04**: A reconcile that cannot install a plugin reports it and leaves the other changes applied
+- [x] **REC-01**: A plugin added to a config by hand is installed by the next session, which offers its skills
+- [x] **REC-02**: A plugin removed from a config by hand is uninstalled by the next session
+- [x] **REC-03**: A plugin set to enabled or disabled in a config by hand is enabled or disabled by the next session
+- [x] **REC-04**: A reconcile that cannot install a plugin reports it and leaves the other changes applied
 
 ### fetch
 
@@ -105,28 +105,28 @@ settle which one wins (see PROJECT.md).
 
 ### import
 
-- [ ] **IMP-01**: `import` reads the enabled plugins and extra known marketplaces from a Claude Code settings file in the sandbox, adds the marketplaces, and installs the plugins
-- [ ] **IMP-02**: Running `import` again is a no-op
-- [ ] **IMP-03**: An enabled plugin the marketplace cannot provide is reported unavailable and does not stop the rest
-- [ ] **IMP-04**: `import --scope` limits the import to that scope's settings
+- [x] **IMP-01**: `import` reads the enabled plugins and extra known marketplaces from a Claude Code settings file in the sandbox, adds the marketplaces, and installs the plugins
+- [x] **IMP-02**: Running `import` again is a no-op
+- [x] **IMP-03**: An enabled plugin the marketplace cannot provide is reported unavailable and does not stop the rest
+- [x] **IMP-04**: `import --scope` limits the import to that scope's settings
 
 ### bootstrap, browse, help
 
-- [ ] **BOO-01**: `bootstrap` adds the official marketplace to the user scope through the GitHub base override, and a second run is a no-op
-- [ ] **BOO-02**: `bootstrap` with an argument or `--scope` is rejected with its usage
-- [ ] **BRW-01**: `browse` outside the TUI is refused with a message that names `list`
-- [ ] **HLP-01**: `help` shows the plugin usage, and `help <unknown topic>` is rejected
+- [x] **BOO-01**: `bootstrap` adds the official marketplace to the user scope through the GitHub base override, and a second run is a no-op
+- [x] **BOO-02**: `bootstrap` with an argument or `--scope` is rejected with its usage
+- [x] **BRW-01**: `browse` outside the TUI is refused with a message that names `list`
+- [x] **HLP-01**: `help` shows the plugin usage, and `help <unknown topic>` is rejected
 
 ### Usage errors
 
-- [ ] **USE-01**: Every plugin subcommand rejects a flag it does not accept, extra positional arguments, and a bad `--scope` value, matching the marketplace usage-error feature
+- [x] **USE-01**: Every plugin subcommand rejects a flag it does not accept, extra positional arguments, and a bad `--scope` value, matching the marketplace usage-error feature
 
 ### Failure behavior
 
-- [ ] **FLR-01**: A plugin command run while another process holds the scope's state lock fails with the lock-held reason and changes nothing
-- [ ] **FLR-02**: `marketplace add`, `remove`, and `update` run while another process holds the state lock fail with the lock-held reason and change nothing
-- [ ] **FLR-03**: A `marketplace add` that fails (404, invalid manifest, connection drop) leaves no clone directory and no record behind, and a retry succeeds once the cause is gone
-- [ ] **FLR-04**: `marketplace remove` deletes the `plugin-clones/` entries of the git-source plugins it uninstalls, and keeps a clone another installation still uses
+- [x] **FLR-01**: A plugin command run while another process holds the scope's state lock fails with the lock-held reason and changes nothing
+- [x] **FLR-02**: `marketplace add`, `remove`, and `update` run while another process holds the state lock fail with the lock-held reason and change nothing
+- [x] **FLR-03**: A `marketplace add` that fails (404, invalid manifest, connection drop) leaves no clone directory and no record behind, and a retry succeeds once the cause is gone
+- [x] **FLR-04**: `marketplace remove` deletes the `plugin-clones/` entries of the git-source plugins it uninstalls, and keeps a clone another installation still uses
 
 ## Future Requirements
 
@@ -147,24 +147,24 @@ settle which one wins (see PROJECT.md).
 |-------------|-------|--------|
 | FND-01 | Phase 1 | Complete |
 | FND-02 | Phase 1 | Complete |
-| ENA-01 | Phase 2 | Pending |
-| ENA-02 | Phase 2 | Pending |
-| ENA-03 | Phase 2 | Pending |
-| ENA-04 | Phase 2 | Pending |
-| ENA-05 | Phase 2 | Pending |
-| ENA-06 | Phase 2 | Pending |
+| ENA-01 | Phase 2 | Complete |
+| ENA-02 | Phase 2 | Complete |
+| ENA-03 | Phase 2 | Complete |
+| ENA-04 | Phase 2 | Complete |
+| ENA-05 | Phase 2 | Complete |
+| ENA-06 | Phase 2 | Complete |
 | INS-01 | Phase 3 | Complete |
 | INS-02 | Phase 3 | Complete |
 | INS-03 | Phase 3 | Complete |
 | INS-04 | Phase 3 | Complete |
-| INS-05 | Phase 4 | Pending |
-| INS-06 | Phase 4 | Pending |
+| INS-05 | Phase 4 | Complete |
+| INS-06 | Phase 4 | Complete |
 | INS-07 | Phase 5 | Complete |
 | UNI-01 | Phase 6 | Complete |
 | UNI-02 | Phase 6 | Complete |
-| UNI-03 | Phase 4 | Pending |
+| UNI-03 | Phase 4 | Complete |
 | UPD-01 | Phase 7 | Complete |
-| UPD-02 | Phase 4 | Pending |
+| UPD-02 | Phase 4 | Complete |
 | UPD-03 | Phase 7 | Complete |
 | UPD-04 | Phase 5 | Complete |
 | UPD-05 | Phase 7 | Complete |
@@ -181,31 +181,31 @@ settle which one wins (see PROJECT.md).
 | INF-03 | Phase 10 | Complete |
 | INF-04 | Phase 10 | Complete |
 | INF-05 | Phase 10 | Complete |
-| PND-01 | Phase 11 | Pending |
-| PND-02 | Phase 11 | Pending |
-| REC-01 | Phase 11 | Pending |
-| REC-02 | Phase 11 | Pending |
-| REC-03 | Phase 11 | Pending |
-| REC-04 | Phase 11 | Pending |
+| PND-01 | Phase 11 | Complete |
+| PND-02 | Phase 11 | Complete |
+| REC-01 | Phase 11 | Complete |
+| REC-02 | Phase 11 | Complete |
+| REC-03 | Phase 11 | Complete |
+| REC-04 | Phase 11 | Complete |
 | FET-01 | Phase 12 | Complete |
 | FET-02 | Phase 12 | Complete |
 | FET-03 | Phase 12 | Complete |
 | PRN-01 | Phase 12 | Complete |
 | PRN-02 | Phase 12 | Complete |
 | PRN-03 | Phase 12 | Complete |
-| IMP-01 | Phase 13 | Pending |
-| IMP-02 | Phase 13 | Pending |
-| IMP-03 | Phase 13 | Pending |
-| IMP-04 | Phase 13 | Pending |
-| BOO-01 | Phase 14 | Pending |
-| BOO-02 | Phase 14 | Pending |
-| BRW-01 | Phase 14 | Pending |
-| HLP-01 | Phase 14 | Pending |
-| USE-01 | Phase 14 | Pending |
-| FLR-01 | Phase 15 | Pending |
-| FLR-02 | Phase 15 | Pending |
-| FLR-03 | Phase 15 | Pending |
-| FLR-04 | Phase 15 | Pending |
+| IMP-01 | Phase 13 | Complete |
+| IMP-02 | Phase 13 | Complete |
+| IMP-03 | Phase 13 | Complete |
+| IMP-04 | Phase 13 | Complete |
+| BOO-01 | Phase 14 | Complete |
+| BOO-02 | Phase 14 | Complete |
+| BRW-01 | Phase 14 | Complete |
+| HLP-01 | Phase 14 | Complete |
+| USE-01 | Phase 14 | Complete |
+| FLR-01 | Phase 15 | Complete |
+| FLR-02 | Phase 15 | Complete |
+| FLR-03 | Phase 15 | Complete |
+| FLR-04 | Phase 15 | Complete |
 
 **Coverage:**
 - v1 requirements: 61 total

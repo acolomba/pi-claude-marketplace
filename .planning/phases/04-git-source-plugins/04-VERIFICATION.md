@@ -1,6 +1,6 @@
 ---
 phase: 04-git-source-plugins
-verified: 2026-10-23T09:39:17Z
+verified: 2026-10-23T14:30:00Z
 status: passed
 score: 5/5 must-haves verified
 covered_files:
@@ -14,6 +14,7 @@ covered_files:
   - "extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts"
   - "extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts"
   - "extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts"
+  - "features/plugin/fetch.feature"
   - "features/plugin/git-source-update.feature"
   - "features/plugin/git-source.feature"
   - "test/orchestrators/plugin/clone-cache.test.ts"
@@ -21,17 +22,33 @@ covered_files:
   - "test/orchestrators/plugin/install-flow.test.ts"
   - "test/orchestrators/plugin/install.messaging.test.ts"
   - "test/shared/git-failure-classifiers.test.ts"
-covered_digest: "v3:sha256:f70679f9568a6bdc033cb268a8e61dc9c4ead71bde60ae7e4d1da14b4581c8ef"
+covered_digest: "v3:sha256:d1dec5c9d25f77923e60f5104371d835fda4e61f0c43385e4b7e1431893f2691"
 behavior_unverified: 0
 overrides_applied: 0
+re_verification:
+  previous_status: passed
+  previous_score: 5/5
+  gaps_closed: []
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 4: Git-Source Plugins Verification Report
 
 **Phase Goal:** A plugin whose source is a git repository installs, fails, updates, and uninstalls against the loopback git host, and the request log shows when the network is used and when the clone cache is.
-**Verified:** 2026-10-23T09:39:17Z
+**Verified:** 2026-10-23T14:30:00Z
 **Status:** passed
-**Re-verification:** No -- initial verification
+**Re-verification:** Yes -- on the combined milestone tree (all 15 phases merged), because covered files changed in later merges. The previous report passed 5/5 with no gaps, so this pass is a regression check, with fresh runs of the phase's scenarios and unit tests.
+
+## What changed since the previous verification
+
+Of the phase's product files, only `install.messaging.ts` changed after the previous verification, through the Phase 15 merge (3c5c2aa1, 4a9d5fa0). It added `StateLockHeldError` handling to Branch 4 of `composeInstallFailureMessage`. The orchestrator's merge resolution kept both sides. Read from the current file:
+
+- `runtimeFailureReasons(err, gitReason)` returns `["lock held"]` for `StateLockHeldError`, otherwise `[gitReason]` when `classifyGitHostFailure(err)` produced one, otherwise `[]`.
+- The cause gate `...(gitReason !== "authentication required" && cause !== undefined && { cause })` is unchanged, so the auth row stays bare and every other row keeps its cause chain.
+- A lock error is not a git-host failure, so `classifyGitHostFailure` returns `undefined` for it and the two paths do not collide. The git-host reasons (`source missing`, `network unreachable`, `network error`, `authentication required`) are all still produced by the ladder.
+
+`clone-cache.ts`, `fetch.ts`, `install-flow.ts`, `shared/git-failure-classifiers.ts`, `features/plugin/git-source.feature`, and `features/plugin/git-source-update.feature` have no commits since the previous verification's base (c20afb40). `features/plugin/fetch.feature` (Phase 12) and `test/orchestrators/plugin/install.messaging.test.ts` did change; both are now in `covered_files`.
 
 ## Goal Achievement
 
@@ -39,19 +56,19 @@ overrides_applied: 0
 
 | # | Truth | Status | Evidence |
 | --- | --- | --- | --- |
-| 1 | SC1 / INS-05: each git source kind (`github`, `url`, `git-subdir`) installs from the git host and a new session offers its skills; a second install of the same pinned source reuses the clone with no request | ✓ VERIFIED | `git-source.feature` Outline "Installing a plugin from a <plugin source kind> source..." (3 rows) compares the whole envelope, the whole plugin row set (version `{<repo> revision 1}`), the whole request log (exactly one GET+POST upload-pack pair), and the whole skill list of a new session. "A plugin pinned to the commit another installed plugin was cloned at installs with no request" asserts `{ requests: [], connections: 0 }` for the second install. A wrong implementation that re-clones, re-resolves the pin over the network (ls-remote), or refreshes after the clone adds rows to the log and fails. |
-| 2 | SC2 / INS-06: a 404, a 401, or a dropped connection fails the install with the matching reason and leaves no record, no `plugin-clones/` entry, and no skill in a new session | ✓ VERIFIED | Refusal Outline (404 -> `source missing`, drop -> `network unreachable`, plus 503 -> `network error`) and a separate 401 scenario (`authentication required`; the plain `answers {int}` step refuses 401, so it uses the credential arm). Each compares the whole failed row: reasons, cause chain, leaks, rollback partial. `recordTable` adds every unstated field as a column, so the 401 row also proves there is no cause (D-79-03). Each then checks the request log (one GET with the refused status), `has no installed plugins` (state records + staged skills + prompts), `holds no git clones` (every `plugin-clones/` entry, strictly), and `the session offers no skills`. The pre-fix product reported empty reasons (measured in 04-CONTEXT), which the reasons column rejects. |
-| 3 | SC3 / UPD-02: updating a git-source plugin fetches the new revision on a cache miss (request log shows it) and makes no request when the cache already holds that revision | ✓ VERIFIED | `git-source-update.feature` "Updating a git-source plugin fetches its new revision": `updated` from `{ghp revision 1}` to `{ghp revision 2}`, the whole log (marketplace pair + `ghp` pair), and the clones. "Updating a plugin to a revision the clone cache already holds makes no request": after `subp`'s update fetches `mono` revision 2, `subq`'s update reports `updated` from rev 1 to rev 2 with `{ requests: [], connections: 0 }`, and a new session offers both skills at 2.0.0. An always-fetch update fails the empty log; an update that keeps the old clone fails from/to and the skill descriptions. |
-| 4 | SC4 / UNI-03: uninstall removes the `plugin-clones/` entry when no other installation uses it and keeps it while another does | ✓ VERIFIED | "Uninstalling one of two plugins pinned to one commit keeps the clone the other still uses" compares the whole clone set (one plugin clone, mono rev 1). "Uninstalling the only installation of a git-source plugin removes its clone" asserts `holds no git clones`. Always-remove fails the first scenario and never-remove fails the second. A key derived from the full `resolvedSource` (with the subdir) would delete the shared git-subdir clone and fail the first. `clone-gc.ts` takes one path for pinned and mirror keys, so a missing pinned-only-removal scenario is a low risk (see Info). |
-| 5 | SC5: the phase's scenarios pass in `npm run test:cucumber`, and `npm run check:features` and `npm run check` stay green | ✓ VERIFIED | Orchestrator measurement: `npm run check` exit 0 at c20afb40 (static incl. check:features + fallow, unpaired, integration, 468/468 cucumber, direct coverage). f4344b14 touches only `.planning/` docs. Verifier rerun: `npx cucumber-js features/plugin/git-source.feature features/plugin/git-source-update.feature --parallel 1` -> exit 0, 12 scenarios / 160 steps passed. |
+| 1 | SC1 / INS-05: each git source kind (`github`, `url`, `git-subdir`) installs from the git host and a new session offers its skills; a second install of the same pinned source reuses the clone with no request | ✓ VERIFIED | `git-source.feature` install Outline (3 rows) compares the whole envelope, plugin rows, request log (exactly one GET+POST upload-pack pair), and the skills of a new session. The pinned-reuse scenario asserts `{ requests: [], connections: 0 }`. Re-run on the combined tree: 12 scenarios pass. `clone-cache.ts:328` still guards the refresh with `promotion !== "renamed"`. |
+| 2 | SC2 / INS-06: a 404, a 401, or a dropped connection fails the install with the matching reason and leaves no record, no `plugin-clones/` entry, and no skill in a new session | ✓ VERIFIED | Refusal Outline (404 `source missing`, drop `network unreachable`, 503 `network error`) and the 401 scenario (`authentication required`, bare row). Each checks the failed row, the request log, no installed plugins, no git clones, and no skills in a new session. Code path read: `install.messaging.ts` Branch 4 via `classifyGitHostFailure`; the Phase 15 lock branch sits in the same function and leaves the git arms intact (unit tests below pass). |
+| 3 | SC3 / UPD-02: updating a git-source plugin fetches the new revision on a cache miss (request log shows it) and makes no request when the cache already holds that revision | ✓ VERIFIED | `git-source-update.feature` "fetches its new revision" and "makes no request" scenarios pass on the combined tree. `update-flow.ts` changed in Phase 15 (held-lock reporting); the scenarios still pass, so the update path's cache behavior is intact. |
+| 4 | SC4 / UNI-03: uninstall removes the `plugin-clones/` entry when no other installation uses it and keeps it while another does | ✓ VERIFIED | Both uninstall scenarios in `git-source.feature` pass (keeps the shared clone; removes the sole one). |
+| 5 | SC5: the phase's scenarios pass in `npm run test:cucumber`, and `npm run check:features` and `npm run check` stay green | ✓ VERIFIED | Orchestrator ran `npm run check` on this exact tree: green (static, unpaired, integration, 702/702 cucumber scenarios, direct coverage). Verifier runs: `npx cucumber-js --parallel 2 features/plugin/git-source.feature features/plugin/git-source-update.feature` -> 12 scenarios, 160 steps passed; `npm run check:features` -> exit 0. |
 
 Plan-level truths (merged):
 
 | # | Truth | Status | Evidence |
 | --- | --- | --- | --- |
-| P1 | A first unpinned install clones once (D-05) | ✓ VERIFIED | `clone-cache.ts` skips `refreshGitHubClone` when `promoteStagingToClone` returns `"renamed"`. Commit 791a60dd removed the second pair from the install Outline, which shows the Outline detects the double fetch. Unit test "MIRR-01: ... returns HEAD without a refresh" asserts `fetchCalls.length === 0`. |
-| P2 | A warm mirror and a raced promotion still refresh (D-79.1-02/03) | ✓ VERIFIED | Unit tests "MIRR-02: mirror PRESENT (warm) refreshes in place", "MIRR-02: two successive calls...", "MIRR-03: ... treats the winner's dir as the warm mirror" (now asserts `fetchCalls.length === 1`). PROV-03 calls the function twice, so the refresh fetch still carries auth. Behavior check: the cucumber update scenario 1 needs the warm refresh to reach revision 2. |
-| P3 | A refused install carries its reason; auth row stays bare; others keep the cause | ✓ VERIFIED | `install.messaging.ts` branch 4 uses `classifyGitHostFailure` and keeps `cause` unless the reason is `authentication required`. Unit cases: 404, 503, ECONNRESET, a local `NotFoundError` that stays unclassified (WR-01), and the existing auth cases. `install-flow.test.ts` ENETUNREACH now reports `{network unreachable}` with its cause. |
+| P1 | A first unpinned install clones once (D-05) | ✓ VERIFIED | `clone-cache.ts` skips `refreshGitHubClone` when the promotion is `renamed`. Unit test "MIRR-01 ... returns HEAD without a refresh" passes. |
+| P2 | A warm mirror and a raced promotion still refresh (D-79.1-02/03) | ✓ VERIFIED | MIRR-02 and MIRR-03 unit cases pass in `clone-cache.test.ts`; the update scenario needs the warm refresh to reach revision 2 and passes. |
+| P3 | A refused install carries its reason; the auth row stays bare; others keep the cause | ✓ VERIFIED | `install.messaging.test.ts` (30 lines added by Phase 15 beside the git-host cases), `git-failure-classifiers.test.ts`, and `install-flow.test.ts` pass: 493 tests, 0 fail across the five unit files. |
 
 **Score:** 5/5 truths verified (0 present, behavior-unverified)
 
@@ -59,31 +76,30 @@ Plan-level truths (merged):
 
 | Artifact | Expected | Status | Details |
 | --- | --- | --- | --- |
-| `extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts` | `materializeOrRefreshPluginMirror` skips the refresh after a fresh clone | ✓ VERIFIED | `verify.artifacts` passed; `promotion !== "renamed"` guard at the refresh |
-| `features/plugin/git-source-update.feature` | warm-cache update scenario | ✓ VERIFIED | present, runs, passes |
-| `extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts` | runtime-throw branch classifies git host refusals | ✓ VERIFIED (plan pattern stale) | `verify.artifacts` reports "Missing pattern: classifyGitSourceAccessFailure". This is intentional: review fix WR-01 (c20afb40) moved install to the new `classifyGitHostFailure`, which is the same ladder without the remote-`NotFoundError` arm. Without that arm, a local read on an on-disk clone is not reported as `source missing`. The intent of the artifact holds. |
-| `features/plugin/git-source.feature` | refusal Outline + 401 scenario | ✓ VERIFIED | present, runs, passes |
+| `extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts` | `materializeOrRefreshPluginMirror` skips the refresh after a fresh clone | ✓ VERIFIED | unchanged since previous verification; `promotion !== "renamed"` guard at line 328 |
+| `features/plugin/git-source-update.feature` | warm-cache update scenario | ✓ VERIFIED | present, passes |
+| `extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts` | runtime-throw branch classifies git host refusals | ✓ VERIFIED (plan pattern stale) | uses `classifyGitHostFailure` (line 248), plus the lock-held arm from Phase 15. The 04-02 plan names `classifyGitSourceAccessFailure`; review fix WR-01 renamed it on purpose (see For the orchestrator). |
+| `features/plugin/git-source.feature` | refusal Outline + 401 scenario | ✓ VERIFIED | present, passes |
 
 ### Key Link Verification
 
-`verify.key-links` could not evaluate either link, because the plans name symbols in `from:` and the tool needs a file path. Checked by hand:
-
 | From | To | Via | Status | Details |
 | --- | --- | --- | --- | --- |
-| `materializeOrRefreshPluginMirror` | `promoteStagingToClone` | `renamed` result -> no refresh | WIRED | `promotion = await promoteStagingToClone(...)`, then `if (promotion !== "renamed") refreshGitHubClone(...)` |
-| `composeInstallFailureMessage` | `shared/git-failure-classifiers.ts` | runtime-throw branch maps the failure to a closed-set reason | WIRED | `const gitReason = classifyGitHostFailure(err)` feeds `reasons` and the cause gate. `classifyGitSourceAccessFailure` (marketplace add) now composes over it, and `add.ts:332` is unchanged. |
+| `materializeOrRefreshPluginMirror` | `promoteStagingToClone` | `renamed` result -> no refresh | WIRED | `promotion` set at line 317, guard at line 328 |
+| `composeInstallFailureMessage` | `shared/git-failure-classifiers.ts` | runtime-throw branch maps the failure to a closed-set reason | WIRED | `classifyGitHostFailure(err)` feeds `reasons` (through `runtimeFailureReasons`) and the cause gate. `classifyGitSourceAccessFailure` (marketplace add, `add.ts:335`) composes over the same ladder. |
 
 ### Data-Flow Trace (Level 4)
 
-Not applicable. No rendered dynamic data; the cucumber steps read the real product's results, state.json, `plugin-clones/`, and the git host's request log.
+Not applicable. No rendered dynamic data; the cucumber steps read the real product's results, `state.json`, `plugin-clones/`, and the git host's request log.
 
 ### Behavioral Spot-Checks
 
 | Behavior | Command | Result | Status |
 | --- | --- | --- | --- |
-| Phase scenarios | `npx cucumber-js features/plugin/git-source.feature features/plugin/git-source-update.feature --parallel 1` | exit 0, 12 scenarios, 160 steps passed | ✓ PASS |
-| Fix unit tests | `node --test test/orchestrators/plugin/install.messaging.test.ts test/shared/git-failure-classifiers.test.ts test/orchestrators/plugin/clone-cache.test.ts` | 176 pass, 0 fail | ✓ PASS |
-| Full gate | `npm run check` (orchestrator, at c20afb40) | exit 0 | ✓ PASS (not rerun, per instruction) |
+| Phase scenarios | `npx cucumber-js --parallel 2 features/plugin/git-source.feature features/plugin/git-source-update.feature` | 12 scenarios, 160 steps passed | ✓ PASS |
+| Phase unit tests | `node --test test/orchestrators/plugin/{install.messaging,clone-cache,install-flow,fetch}.test.ts test/shared/git-failure-classifiers.test.ts` | 493 pass, 0 fail | ✓ PASS |
+| Feature catalog | `npm run check:features` | exit 0 | ✓ PASS |
+| Full gate | `npm run check` (orchestrator, this tree) | green | ✓ PASS (not rerun, per instruction) |
 
 ### Probe Execution
 
@@ -96,17 +112,17 @@ Not applicable. The phase declares no probes.
 | INS-05 | 04-01 | git/github/url source installs from the loopback host; a second pinned install reuses the clone with no request | ✓ SATISFIED | Truth 1 |
 | INS-06 | 04-02 | a refused source (404, 401, drop) fails with the matching reason and leaves nothing | ✓ SATISFIED | Truth 2 |
 | UPD-02 | 04-01 | update fetches on a cache miss and makes no request on a cache hit | ✓ SATISFIED | Truth 3 |
-| UNI-03 | (Phase 1 seeds, kept per D-02) | uninstall removes the clone when no other installation uses it | ✓ SATISFIED | Truth 4. No plan's `requirements:` lists UNI-03. CONTEXT D-02 assigns it to the Phase 1 seeds, which this phase keeps, so it is not orphaned. |
+| UNI-03 | (Phase 1 seeds, kept per D-02) | uninstall removes the clone when no other installation uses it | ✓ SATISFIED | Truth 4. No plan's `requirements:` lists UNI-03; CONTEXT D-02 assigns it to the Phase 1 seeds, so it is not orphaned. |
 
 ### Anti-Patterns Found
 
 | File | Line | Pattern | Severity | Impact |
 | --- | --- | --- | --- | --- |
-| (phase diff) | -- | No TBD/FIXME/XXX/TODO/HACK on added lines | -- | none |
+| (covered files) | -- | No TBD/FIXME/XXX on lines this phase added | -- | none |
 
 ### Info (non-blocking)
 
-- `the {word} scope holds no git clones` reads `plugin-clones/` and `.git` checkouts under `sources/`, but not `sources-staging/`. A staging directory leaked by a failed clone would pass the refusal scenarios. SC2 names only `plugin-clones/`, so this is not a gap.
+- `the {word} scope holds no git clones` reads `plugin-clones/` and `.git` checkouts under `sources/`, but not `sources-staging/`. A leaked staging directory would pass the refusal scenarios. SC2 names only `plugin-clones/`, so this is not a gap.
 - UNI-03's removal is shown only for an unpinned mirror, and the kept case only for a pinned clone. `clone-gc.ts` treats both key shapes the same way, so the risk is low.
 - The refusal scenarios use only the `github` plugin source kind. SC2 does not ask for each kind.
 
@@ -116,19 +132,24 @@ None.
 
 ### Gaps Summary
 
-None. All five roadmap success criteria and all four requirements have scenarios that a plausible wrong implementation fails. Both product fixes have unit tests and cucumber coverage: the single clone of a new unpinned mirror, and install refusal reasons through `classifyGitHostFailure`. The plan 04-02 artifact pattern is stale because of the documented WR-01 rename. That is a planning-text drift, not a code gap.
+None. All five roadmap success criteria and all four requirements still hold on the combined tree. The Phase 15 lock-held handling and this phase's git-host failure reasons coexist in `composeInstallFailureMessage` Branch 4 without interfering.
 
 ## For the orchestrator
 
-- WR-02 (deferred): a dependency's refused clone in a cascade still has no reason (`handleCascadeThrow`), and shows `{unreadable}` on `/reload`.
-- WR-03 (deferred, Phase 10 surface): `info --fetch` on a cold unpinned source still contacts the host twice (direct probe, then again through `resolveStrict`).
-- IN-01 (deferred): when staging cleanup leaks, `appendLeakToError` drops the error `code`, so the install loses its reason.
-- IN-03 remainder (deferred): an install pinned to a commit the remote lacks still fails with no reason.
-- Merge note: scenarios in other parallel phases that assert two upload-pack pairs on a first unpinned clone, or an empty reason on a refused install, must be updated at merge. Found: `lc-p12-fetch-prune-7cbdf4/features/plugin/fetch.feature` (~lines 168-177) asserts two pairs each for `ghp` and `urlp` on a first unpinned `fetch`, and its comment says "cloned and then refreshed at once". Every sibling worktree still carries the Phase 1 seed of `features/plugin/git-source.feature` with two pairs (line ~28); take Phase 4's version.
-- Planning drift: the 04-02 PLAN artifact/key_link names `classifyGitSourceAccessFailure`; the code uses `classifyGitHostFailure` after WR-01. Update the plan text if plans are re-checked.
-- Info: `holds no git clones` does not inspect `sources-staging/`, so a leaked clone staging dir would go unnoticed (candidate for Phase 5 rollback coverage).
+Resolved since the previous report:
+
+- WR-03 (info `--fetch` on a cold unpinned source contacted the host twice): resolved by Phase 10, commit ef5165df "fix(info): fetch a git plugin's repository once".
+- Merge note (sibling-phase scenarios asserting two upload-pack pairs on a first unpinned clone): resolved. `features/plugin/fetch.feature` now asserts one pair each for `ghp` and `urlp` on a first unpinned `fetch` (lines ~168-176, comment "cloned once"), after 7a9b6107 and the Phase 12 merge. `git-source.feature` on this tree is Phase 4's version (one pair per install).
+
+Still open (all deferred, none is a Phase 4 success criterion):
+
+- WR-02: a dependency's refused clone in a cascade still has no reason. `handleCascadeThrow` -> `composeCascadeFailureMessage` (`install-cascade.messaging.ts`) takes its reasons from `failureFacts`, and `classifyGitHostFailure` is not called there. It shows `{unreadable}` on `/reload`.
+- IN-01: when staging cleanup leaks, `appendLeakToError` drops the error `code`, so the install loses its reason.
+- IN-03 remainder: an install pinned to a commit the remote lacks still fails with no reason.
+- Planning drift: the 04-02 PLAN artifact and key_link name `classifyGitSourceAccessFailure`; the code uses `classifyGitHostFailure` after WR-01. Update the plan text if plans are re-checked. `verify.artifacts` flags it as a missing pattern.
+- Info: `holds no git clones` does not inspect `sources-staging/` (candidate for Phase 5 rollback coverage).
 
 ---
 
-_Verified: 2026-10-23T09:39:17Z_
+_Verified: 2026-10-23T14:30:00Z_
 _Verifier: Claude (gsd-verifier)_

@@ -1,6 +1,6 @@
 ---
 phase: 01-suite-foundation
-verified: 2026-10-23T12:00:00Z
+verified: 2026-10-23T18:00:00Z
 status: passed
 score: 4/4 must-haves verified
 covered_files:
@@ -103,7 +103,7 @@ covered_files:
   - "features/support/source-kind.ts"
   - "features/support/world.ts"
   - "scripts/check-features.mjs"
-covered_digest: "v3:sha256:4390684519098f2e8977a136f2552b77e3086ff38894892d785b2412461fd245"
+covered_digest: "v3:sha256:01faa0be5b40eae3b29ebf86230bb09d9fdd1a9c58c0aaa81b030ec897fb5ec4"
 behavior_unverified: 0
 overrides_applied: 0
 ---
@@ -111,9 +111,9 @@ overrides_applied: 0
 # Phase 1: Suite Foundation Verification Report
 
 **Phase Goal:** Every later phase can write its scenarios by adding only its own feature files and phase-local steps: the drivers, fixtures, stand-ins, shared steps, and result-row support that the plugin lifecycle scenarios need all exist, and each is used by a seed scenario.
-**Verified:** 2026-10-23
+**Verified:** 2026-10-23 (re-verified on the combined 15-phase milestone tree)
 **Status:** passed
-**Re-verification:** No, initial verification
+**Re-verification:** Yes, after the later phases merged (previous status passed; no gaps, so a regression check plus a fresh run of the seed features)
 
 ## Goal Achievement
 
@@ -121,10 +121,10 @@ overrides_applied: 0
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| 1 | Every Provides capability exists with a passing seed scenario in the feature file of the later phase that needs it; every setup Given asserts its effect; every armed failure, the held lock, and the unwritable target are freed by the world's release | VERIFIED | See the Provides table. `npm run test:cucumber` re-run by the verifier: 463 scenarios, 4402 steps passed, exit 0. Setup Givens assert: `assertDeclared` in config.steps.ts; `isStateLockHeld` in scope-state.steps.ts; `EISDIR` rejection in mcp-configuration.steps.ts; the lock holder waits for a `locked` line. Releases: `armRepository` registers `disarm` via `world.onRelease`; `holdStateLock` returns a release that ends stdin, requires exit [0, null], and asserts the lock directory is gone; the blocking directory registers an `rm` release. |
+| 1 | Every Provides capability exists with a passing seed scenario in the feature file of the later phase that needs it; every setup Given asserts its effect; every armed failure, the held lock, and the unwritable target are freed by the world's release | VERIFIED | See the Provides table. Re-run on the combined tree: the orchestrator's `npm run check` was green with 702/702 scenarios; the verifier also ran the 19 seed feature files (163 scenarios, 1818 steps, exit 0) and `npm run check:features` (exit 0). Setup Givens assert: `assertDeclared` in config.steps.ts; `isStateLockHeld` in scope-state.steps.ts; `EISDIR` rejection in mcp-configuration.steps.ts; the lock holder waits for a `locked` line. Releases: `armRepository` registers `disarm` via `world.onRelease`; `holdStateLock` returns a release that ends stdin, requires exit [0, null], and asserts the lock directory is gone; the blocking directory registers an `rm` release. |
 | 2 | Result steps read the rows of every payload kind a plugin lifecycle command or new session emits; a scenario that leaves rows of any of them uncompared fails | VERIFIED | `features/lib/result-rows.ts` `ROW_FIELDS` = `marketplaces`, `blocks`; `rowArrays` feeds `world.uncomparedRows`; `pluginRowRecords` reads `plugin-info-cascade` blocks and `reconcile-applied-cascade` marketplaces. `world.ts` fails the next `When` (`recordResults`) and the scenario (`After`) on uncompared rows, MCP notices, or a session result whose fields no step stated (`uncomparedSessionResults`, review fix WR-01). Seeds: `plugin-info-cascade` (plugin/info.feature), `reconcile-applied-cascade` (plugin/reconcile.feature, configuration.feature), `reconcile-pending-empty` (plugin/pending.feature), `prune-empty` (plugin/prune.feature), `usage-info` (marketplace/help.feature). `reconcile-aborted` and `prune-committed-warning` have no row arrays, no reliable trigger, and no seed by recorded decision (CONTEXT, "Decisions after research"); generic field steps compare them. |
 | 3 | Plugin steps live under `features/step_definitions/plugin/` in topic modules with no verb or reserved name; git-host steps serve plugin repositories as well as marketplaces; the cucumber skill documents file ownership | VERIFIED | `plugin/installation.steps.ts` and `plugin/publishing.steps.ts` only; `plugin.steps.ts` no longer exists. `git-host.steps.ts` is top level and its `{git repository}` parameter resolves a plugin through `world.gitRepositoryServing` or a marketplace through `requirePublished`. `.agents/skills/cucumber/rules/layout.md` "Parallel work" section names the foundation-owned files, the one-owner rule, the follow-up-commit rule, and the reserved module names. |
-| 4 | `npm run check:features` and `npm run check` are green and every existing scenario still passes | VERIFIED (see note) | Verifier ran `npm run check:features` (exit 0) and `npm run test:cucumber` (463/463). The full `npm run check` was not run by the verifier: the orchestrator owns that run and reports it green. |
+| 4 | `npm run check:features` and `npm run check` are green and every existing scenario still passes | VERIFIED (see note) | Verifier ran `npm run check:features` (exit 0) and the 19 seed feature files (163/163). The orchestrator ran the full `npm run check` on this exact tree: green (static, unpaired, integration, 702/702 cucumber scenarios, direct coverage). The verifier did not re-run it. |
 
 **Score:** 4/4 truths verified (0 present, behavior-unverified)
 
@@ -176,7 +176,7 @@ overrides_applied: 0
 | Behavior | Command | Result | Status |
 |----------|---------|--------|--------|
 | Usage gate: no unused, undefined, or ambiguous step; layout and Gherkin rules | `npm run check:features` | exit 0 | PASS |
-| Every scenario | `npm run test:cucumber` | 463 scenarios, 4402 steps passed, exit 0 | PASS |
+| Seed scenarios | `npx cucumber-js --parallel 2` over the 19 seed feature files | 163 scenarios, 1818 steps passed, exit 0 | PASS |
 
 ### Requirements Coverage
 
@@ -191,11 +191,27 @@ No orphaned requirements: REQUIREMENTS.md maps only FND-01 and FND-02 to Phase 1
 
 None. `TBD`, `FIXME`, `XXX`, `TODO`, and `HACK` do not occur under `features/`, `scripts/check-features.mjs`, or `.agents/skills/cucumber`. No stub steps: each Given asserts its effect.
 
+### Re-verification on the combined tree
+
+Later phases extended seed feature files but did not change the foundation:
+
+- `git diff 0fc0172c HEAD` over `features/lib`, `features/support`, `cucumber.json`, `scripts/check-features.mjs`, and `.agents/skills/cucumber` is empty. No later phase edited a Phase 1 file, so the ownership rule (criterion 3) held through all 15 phases.
+- Later phases added only verb or topic step modules (`plugin/fetch`, `plugin/import`, `plugin/uninstall`, `marketplace/checkout`). `plugin.steps.ts` is still absent and `git-host.steps.ts` is still top level.
+- Seed scenarios are intact: `plugin-info-cascade` (plugin/info), `reconcile-applied-cascade` (reconcile, configuration, update, uninstall, marketplace remove and update), `reconcile-pending-empty` (pending), `prune-empty` (prune), and `usage-info` (marketplace and plugin help) are all still compared by scenarios. `reconcile-aborted` and `prune-committed-warning` still have no seed, by the recorded CONTEXT decision (no row array, no reliable trigger).
+- Release behavior is unchanged: `git-host.steps.ts` registers `world.onRelease` disarms; `state-lock-holder.ts` is unchanged (118 lines).
+
 ### Advisory Notes (not gaps)
 
 - **WR-06 skipped (network guard).** Nothing in the harness fails closed if Pi reaches beyond 127.0.0.1. The skip reason is recorded in 01-REVIEW-FIX.md: a reliable guard needs a change to the shared e2e harness and a new run-level state channel. Current mitigations are `--offline`/`PI_OFFLINE=1`, the `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` override, and the NFR-5 lint rule. It is not one of the four success criteria or a Provides item, but it weakens the milestone rule "no scenario reaches the public network". Recommend a backlog item.
-- **UPD-04 obstruction semantics.** RESEARCH measured that the `mcp-adapter.json` directory makes an update fail in its prepare phase, before the swap. That serves UPD-04's observable outcomes (old version, skills, and record kept) but not a post-swap rollback. Phase 5 owns the choice.
+- **UPD-04 obstruction semantics (resolved).** Phase 5 took the choice: the `mcp-adapter.json` obstruction fails the update in its prepare phase, and a post-swap failure is by design not rolled back (`05-VERIFICATION.md`). The foundation's obstruction step serves it unchanged.
 - **Reason quality.** Research recorded product bugs (lock-held reasons per verb, EISDIR reported as `unreadable manifest`, empty `list --remote`, and others). By decision they belong to the phases that own those verbs.
+
+### For the orchestrator
+
+- **Network guard (former WR-06) is still open.** Nothing in the harness fails closed if Pi reaches beyond 127.0.0.1 (confirmed: no loopback or network guard in `features/support`, `features/lib/pi-process.ts`, or `scripts/check-features.mjs`). `.planning/BACKLOG.md` has no entry for it (its "WR-06" lines are other reviews). Not a Phase 1 success criterion, so it does not block. Decide whether to add a backlog item before the milestone closes.
+- **Reason-quality product bugs.** The lock-held reasons per verb, `list --remote`, and others were assigned to the verb phases. Phase 5 fixed the EISDIR `unreadable manifest` bug for update (`7671e03f`); `05-VERIFICATION.md` leaves the lock-held update reason to Phase 15. Check Phase 15's record that it closed it.
+- **The previous report held no "For the orchestrator" section.** Its advisory notes above are the items carried forward, updated.
+- **Fingerprint.** `covered_files` and `covered_digest` come from `verification.fingerprint` over the phase's implementation files; the list is the previous one, and the digest is new because the seed feature files changed in later phases.
 
 ### Human Verification Required
 
@@ -203,7 +219,7 @@ None.
 
 ### Gaps Summary
 
-No gaps. The foundation exists, each capability has a passing seed in the feature file of the later phase that owns it, the result-row guards fail uncompared rows, notices, and session results, and the file ownership rule is in the cucumber skill. The only item the verifier did not run itself is the full `npm run check`, which the orchestrator reports as green.
+No gaps. The foundation exists, each capability has a passing seed in the feature file of the later phase that owns it, the result-row guards fail uncompared rows, notices, and session results, and the file ownership rule is in the cucumber skill. The foundation files are byte-identical to the Phase 1 close, later phases only added their own modules, and the seed scenarios still pass. The only item the verifier did not run itself is the full `npm run check`, which the orchestrator ran green on this tree.
 
 ---
 
