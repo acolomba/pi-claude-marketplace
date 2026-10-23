@@ -25,8 +25,6 @@ Feature: Plugin git source
       | method | path                                                     | status |
       | GET    | /acme/<repository>.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/<repository>.git/git-upload-pack                   | 200    |
-      | GET    | /acme/<repository>.git/info/refs?service=git-upload-pack | 200    |
-      | POST   | /acme/<repository>.git/git-upload-pack                   | 200    |
     When the user starts a new pi session
     Then the session offers these skills:
       | command               | description                |

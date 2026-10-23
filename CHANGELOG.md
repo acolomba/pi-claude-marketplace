@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- Installing a plugin from a git source now contacts the git host less often.
+
+  - The first install of a plugin from an unpinned git source clones its repository once. It used to fetch the repository again right after the clone.
+
 - Internal: the test suite moves from `tests/` to `test/`, and the duplication check now fails on every repeated block of code. (#272)
 
 - Adding a git marketplace now takes a `#ref` on the `owner/repo` shorthand, and a failed add, update, or fetch reports its git failure more clearly.

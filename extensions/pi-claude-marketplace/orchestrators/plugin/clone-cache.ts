@@ -255,18 +255,19 @@ export async function materializePluginClone(args: {
  *      is byte-equivalent, same url => same content): clean staging and fall
  *      through to the refresh path -- the winner's tree still needs a HEAD read
  *      (D-79.1-03).
- *   3. After the dir exists (freshly materialized OR already present), refresh
- *      it in place via `refreshGitHubClone` -- fetch + force-update ref +
- *      checkout, the SAME function marketplace update uses. A just-materialized
- *      clone is also refreshed: that is the intended marketplace parity
- *      (refresh-on-warm, D-79.1-02). Reads (list/info) never call this seam, so
- *      NFR-5 is untouched.
+ *   3. When the mirror was already present, or a concurrent create won the
+ *      rename race, refresh it in place via `refreshGitHubClone` -- fetch +
+ *      force-update ref + checkout, the SAME function marketplace update uses
+ *      (refresh-on-warm, D-79.1-02). A mirror this call just cloned is not
+ *      refreshed: the clone already fetched the remote, and `marketplace add`
+ *      and Claude Code both clone a source once. Reads (list/info) never call
+ *      this seam, so NFR-5 is untouched.
  *   4. Read the pin: resolvedSha = resolveRef({ dir: mirrorRoot, ref: "HEAD" }).
  *
  * `auth` threads into the clone and the refresh fetch the way
- * `materializePluginClone`'s bundle does (no mirror-specific auth path). The
- * refresh always reaches the network, so the caller builds the bundle up
- * front. Derive-not-persist: mirror-dir existence IS the fetched-state -- no
+ * `materializePluginClone`'s bundle does (no mirror-specific auth path). Either
+ * the clone or the refresh reaches the network, so the caller builds the bundle
+ * up front. Derive-not-persist: mirror-dir existence IS the fetched-state -- no
  * migration stamp, no refcount.
  * All git surface (refreshGitHubClone, gitOps, resolveRef, DEFAULT_GIT_OPS)
  * stays confined to this file, never surfaced to install/list/info.
@@ -299,6 +300,7 @@ export async function materializeOrRefreshPluginMirror(args: {
 
   // MIRR-01: materialize the mirror on a cold key (no fixed-pin checkout; the
   // mirror tracks a moving ref).
+  let promotion: "renamed" | "raced" | undefined;
   if (!(await pathExists(mirrorRoot))) {
     const stagingDir = await args.locations.sourcesStagingDir(randomUUID());
 
@@ -310,15 +312,22 @@ export async function materializeOrRefreshPluginMirror(args: {
     }
 
     // MIRR-03 / D-79.1-03: a `raced` promotion falls through to the refresh
-    // path exactly like a `renamed` one -- the winner's byte-equivalent tree
-    // still needs an in-place refresh plus a HEAD read.
-    await promoteStagingToClone(removalOps, stagingDir, mirrorRoot, "plugin mirror staging");
+    // path -- the winner's byte-equivalent tree still needs an in-place refresh
+    // plus a HEAD read.
+    promotion = await promoteStagingToClone(
+      removalOps,
+      stagingDir,
+      mirrorRoot,
+      "plugin mirror staging",
+    );
   }
 
-  // MIRR-02 / D-79.1-02: refresh the mirror in place (marketplace parity). A
-  // just-materialized clone is refreshed too -- refresh-on-warm. The HEAD sha
-  // read below is the fetched-state; no separate advance flag is consumed here.
-  await refreshGitHubClone(mirrorRoot, args.ref, gitOps, undefined, args.auth);
+  // MIRR-02 / D-79.1-02: refresh a warm mirror in place (marketplace parity).
+  // The HEAD sha read below is the fetched-state; no separate advance flag is
+  // consumed here.
+  if (promotion !== "renamed") {
+    await refreshGitHubClone(mirrorRoot, args.ref, gitOps, undefined, args.auth);
+  }
 
   const resolvedSha = await gitOps.resolveRef({ dir: mirrorRoot, ref: "HEAD" });
   return { pluginRoot: mirrorRoot, resolvedSha };

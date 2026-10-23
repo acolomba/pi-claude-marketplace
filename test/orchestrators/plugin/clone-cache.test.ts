@@ -1029,7 +1029,7 @@ function mirrorGitOps(): ReturnType<typeof createGitOps> {
   });
 }
 
-void test("MIRR-01/02: mirror ABSENT materializes into staging then renames to plugin-clones/<bare-key>/, refreshes, returns HEAD", async (t) => {
+void test("MIRR-01: mirror ABSENT materializes into staging then renames to plugin-clones/<bare-key>/ and returns HEAD without a refresh", async (t) => {
   const locations = await freshLocations(t);
   const { gitOps, state } = mirrorGitOps();
 
@@ -1050,6 +1050,7 @@ void test("MIRR-01/02: mirror ABSENT materializes into staging then renames to p
   assert.match(path.basename(pluginRoot), /^[0-9a-f]{12}$/, "bare 12-hex key, no sha suffix");
   assert.equal(state.cloneCalls.length, 1, "MURL-09: exactly one clone attempt");
   assert.equal(state.cloneCalls[0]?.url, "https://example.com/repo");
+  assert.equal(state.fetchCalls.length, 0, "a just-cloned mirror is not fetched again");
   // The mirror tracks a moving ref -- it MUST NOT checkout a fixed 40-hex pin.
   assert.ok(
     !state.checkoutCalls.some((c) => /^[a-f0-9]{40}$/i.test(c.ref)),
@@ -1197,14 +1198,17 @@ void test("PROV-03: a private mirror forwards auth through clone and refresh fet
     kind: "stored-credential",
   };
 
-  // act
-  const mirror = await materializeOrRefreshPluginMirror({
+  const mirrorArgs = {
     locations,
     cloneUrl: "https://gitlab.example.com/o/r",
     networkUrl: "https://gitlab.example.com/o/r",
     gitOps,
     auth,
-  });
+  };
+
+  // act
+  await materializeOrRefreshPluginMirror(mirrorArgs);
+  const mirror = await materializeOrRefreshPluginMirror(mirrorArgs);
 
   // assert
   assert.deepEqual(mirror, {
@@ -1274,6 +1278,7 @@ void test("MIRR-03: a concurrent create losing the rename race treats the winner
 
   assert.equal(pluginRoot, keyDir, "returns the winner's mirror dir");
   assert.equal(resolvedSha, MIRROR_HEAD, "still reads HEAD from the winner's tree");
+  assert.equal(base.state.fetchCalls.length, 1, "the winner's tree is refreshed in place");
 });
 
 void test("MIRR-01/03: a clone failure cleans staging and rethrows the original error", async (t) => {
