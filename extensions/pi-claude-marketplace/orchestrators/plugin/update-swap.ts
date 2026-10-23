@@ -1220,10 +1220,11 @@ function composePhase3FailureOutcome(
   versions: { readonly fromVersion: string; readonly toVersion: string },
   mcpConfigNotices: readonly McpConfigNotice[],
 ): UpdatePhase3FailedOutcome {
-  const { plugin } = args;
-  const recoveryHint = `${RECOVERY_PLUGIN_REINSTALL_PREFIX} "${plugin}".`;
-  // D-18-10: the text names no verb, because `update` and `reinstall` both run
-  // this swap.
+  const { plugin, marketplace } = args;
+  // D-18-10: running `reinstall` again repairs a partial replace for either
+  // verb, so `update` and `reinstall` share this hint, and the failure text
+  // names no verb.
+  const recoveryHint = `${RECOVERY_PLUGIN_REINSTALL_PREFIX} ${plugin}@${marketplace} to repair it.`;
   const aggregateMsg = `Plugin "${plugin}" failed during physical replace. ${recoveryHint}`;
   // CR-01: phase-3 failure text is NOT path-redacted, in `msg` or along the
   // `cause` chain. These strings ARE the manual-recovery instructions: the

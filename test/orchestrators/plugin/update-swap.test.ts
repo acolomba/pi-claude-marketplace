@@ -279,7 +279,7 @@ test("AGENT-01: update retries agent migration once the occupying target is free
       fromVersion: "1.0.0",
       toVersion: "2.0.0",
       notes: [
-        'Plugin "hello" failed during physical replace. plugin-uninstall + plugin-install for "hello".',
+        'Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it.',
         `agents: ${message}`,
       ],
       reasons: ["rollback partial"],
@@ -493,7 +493,7 @@ test("D-18-15: without an overwrite policy a user-edited previous agent file fai
     fromVersion: "1.0.0",
     toVersion: "2.0.0",
     notes: [
-      'Plugin "hello" failed during physical replace. plugin-uninstall + plugin-install for "hello".',
+      'Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it.',
       `agents: ${message}`,
     ],
     reasons: ["rollback partial"],
@@ -1012,7 +1012,7 @@ test("AFILE-04: a swap whose workflows commit fails after the MCP commit carries
         fromVersion: "1.0.0",
         toVersion: "2.0.0",
         notes: [
-          'Plugin "hello" failed during physical replace. plugin-uninstall + plugin-install for "hello".',
+          'Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it.',
           `workflows: ${refusal}`,
         ],
         reasons: ["rollback partial"],
@@ -1114,7 +1114,7 @@ test("AMIG-02: a legacy removal that fails records an mcp phase failure and keep
         fromVersion: "1.0.0",
         toVersion: "2.0.0",
         notes: [
-          'Plugin "hello" failed during physical replace. plugin-uninstall + plugin-install for "hello".',
+          'Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it.',
           `mcp: ${failureMsg}`,
         ],
         reasons: ["rollback partial"],

@@ -752,7 +752,7 @@ test("AGENT-01 / D-18-10: a reinstall refuses a file no index row names at its n
     // PI-6: no index row names the new target's file, so reinstall's overwrite
     // knob (D-18-15) does not reach it; the agents commit refuses at phase 3.
     const aggregate =
-      'Plugin "hello" failed during physical replace. plugin-uninstall + plugin-install for "hello".';
+      'Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it.';
     const refusal = `Cannot replace agent target with non-previous content at ${newTarget}`;
     assert.ok(outcome.partition === "failed");
     const { cause, rollbackPartial, ...rest } = outcome;
@@ -7739,7 +7739,7 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
       // D-18-10: every commit landed, so the refused finalize is a phase-3
       // failure, not a rollback; the swap reports it against its last bridge.
       const aggregate =
-        'Plugin "hello" failed during physical replace. plugin-uninstall + plugin-install for "hello".';
+        'Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it.';
       assert.ok(first.partition === "failed");
       const { cause, rollbackPartial, ...firstRest } = first;
       assert.deepStrictEqual(firstRest, {

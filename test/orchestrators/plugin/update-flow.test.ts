@@ -2991,7 +2991,7 @@ test("an MCP commit permission failure becomes a rollback partial and retry conv
   });
 });
 
-test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'plugin-uninstall + plugin-install for \"<plugin>\".'", async (testContext) => {
+test("PUP-6 / D-18-10 phase-3 failure: bridge commit throws -> aggregate error tells the user to run reinstall", async (testContext) => {
   // The cleanest way to force a phase-3a failure deterministically is to
   // pre-create an UNWRITEABLE file at the target path where the skills
   // bridge would `rename(staging -> target)`. On most filesystems that
@@ -3057,7 +3057,7 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
       const allText = notifications[0]?.message ?? "";
       assert.match(
         allText,
-        /plugin-uninstall \+ plugin-install for "hello"\./,
+        /Run \/claude:plugin reinstall hello@mp to repair it\./,
         `expected RECOVERY_PLUGIN_REINSTALL_PREFIX hint in notification:\n${allText}`,
       );
 
@@ -3229,7 +3229,7 @@ test("WR-01: a CLEANLY-UPDATED predecessor before a phase-3a abort stays visible
         `expected 2 notifications, got ${notifications.length.toString()}: ${notifications.map((n) => n.message).join("\n---\n")}`,
       );
       const failure = notifications.find((n) =>
-        n.message.includes('plugin-uninstall + plugin-install for "zzz".'),
+        n.message.includes("Run /claude:plugin reinstall zzz@mp to repair it."),
       );
       assert.ok(failure !== undefined, "the zzz phase-3a failure notification must be present");
       const cascade = notifications.find((n) =>
@@ -4832,7 +4832,7 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
       const allText = notifications.map((n) => n.message).join("\n");
       assert.match(
         allText,
-        /plugin-uninstall \+ plugin-install for "hello"\./,
+        /Run \/claude:plugin reinstall hello@mp to repair it\./,
         `expected RECOVERY_PLUGIN_REINSTALL_PREFIX hint somewhere in:\n${allText}`,
       );
 
@@ -4914,7 +4914,7 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
       const allText = notifications.map((n) => n.message).join("\n");
       assert.match(
         allText,
-        /plugin-uninstall \+ plugin-install for "hello"\./,
+        /Run \/claude:plugin reinstall hello@mp to repair it\./,
         `expected RECOVERY_PLUGIN_REINSTALL_PREFIX hint somewhere in:\n${allText}`,
       );
 
@@ -4989,7 +4989,7 @@ test("TR-04 matrix: skills-fails-others-succeed", async () => {
 
       assert.equal(notifications.length, 1);
       const allText = notifications[0]?.message ?? "";
-      assert.match(allText, /plugin-uninstall \+ plugin-install for "hello"\./);
+      assert.match(allText, /Run \/claude:plugin reinstall hello@mp to repair it\./);
 
       const after = await loadState(locations.extensionRoot);
       const rec = after.marketplaces["mp"]?.plugins["hello"];
@@ -5048,7 +5048,7 @@ test("TR-04 matrix: commands-fails-others-succeed", async () => {
 
       assert.equal(notifications.length, 1);
       const allText = notifications[0]?.message ?? "";
-      assert.match(allText, /plugin-uninstall \+ plugin-install for "hello"\./);
+      assert.match(allText, /Run \/claude:plugin reinstall hello@mp to repair it\./);
 
       const after = await loadState(locations.extensionRoot);
       const rec = after.marketplaces["mp"]?.plugins["hello"];
@@ -5104,7 +5104,7 @@ test("TR-04 matrix: agents-fails-others-succeed", async () => {
 
       assert.equal(notifications.length, 1);
       const allText = notifications[0]?.message ?? "";
-      assert.match(allText, /plugin-uninstall \+ plugin-install for "hello"\./);
+      assert.match(allText, /Run \/claude:plugin reinstall hello@mp to repair it\./);
 
       const after = await loadState(locations.extensionRoot);
       const rec = after.marketplaces["mp"]?.plugins["hello"];
@@ -5177,7 +5177,7 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
 
       assert.equal(notifications.length, 1);
       const call1Text = notifications[0]?.message ?? "";
-      assert.match(call1Text, /plugin-uninstall \+ plugin-install for "hello"\./);
+      assert.match(call1Text, /Run \/claude:plugin reinstall hello@mp to repair it\./);
 
       // Intermediate post-state assertion: partial-success state.
       const mid = await loadState(locations.extensionRoot);
@@ -10550,7 +10550,7 @@ test("D-03 fail-continue: a hooks write that cannot land is aggregated, not thro
       assert.match(body, /hooks/, `the failing bridge must be named in:\n${body}`);
       assert.match(
         body,
-        /plugin-uninstall \+ plugin-install for "hello"\./,
+        /Run \/claude:plugin reinstall hello@mp to repair it\./,
         `a phase-3 aggregate must carry the recovery hint in:\n${body}`,
       );
 
@@ -12215,7 +12215,7 @@ test("WR-03: a workflows failure reaches the rendered rollback-partial row", asy
       );
       assert.match(
         body,
-        /plugin-uninstall \+ plugin-install for "hello"\./,
+        /Run \/claude:plugin reinstall hello@mp to repair it\./,
         `a phase-3 aggregate must carry the recovery hint in:\n${body}`,
       );
     } finally {
@@ -12713,7 +12713,7 @@ test("AFILE-04: an update that fails after its MCP commit still reports the remo
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ hello (failed) {rollback partial}\n" +
-            `    cause: Plugin "hello" failed during physical replace. plugin-uninstall + plugin-install for "hello". -> ${refusal}\n` +
+            `    cause: Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it. -> ${refusal}\n` +
             "    [workflows] (rollback failed)\n" +
             `      cause: ${refusal}`,
           severity: "error",

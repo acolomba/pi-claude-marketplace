@@ -5,13 +5,13 @@ import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../extensions/pi-claude-mar
 
 test("exports the complete recovery reinstall prefix", () => {
   // arrange
-  const expectedPrefix = "plugin-uninstall + plugin-install for";
+  const expectedPrefix = "Run /claude:plugin reinstall";
 
   // act
   const recoveryPrefix = RECOVERY_PLUGIN_REINSTALL_PREFIX;
 
   // assert
   assert.strictEqual(recoveryPrefix, expectedPrefix);
-  assert.notStrictEqual(recoveryPrefix, "plugin-uninstall + plugin-install fo");
-  assert.notStrictEqual(recoveryPrefix, "plugin-uninstall + plugin-install for ");
+  assert.notStrictEqual(recoveryPrefix, "Run /claude:plugin reinstal");
+  assert.notStrictEqual(recoveryPrefix, "Run /claude:plugin reinstall ");
 });
