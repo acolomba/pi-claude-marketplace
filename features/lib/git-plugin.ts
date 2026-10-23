@@ -108,6 +108,16 @@ async function writeRepositoryPlugins(
   );
 }
 
+/** Replaces every file of the work tree `workTree`, but `.git`, with `plugins`. */
+async function replaceRepositoryPlugins(
+  workTree: string,
+  plugins: readonly RepositoryPlugin[],
+): Promise<void> {
+  const entries = (await readdir(workTree)).filter((entry) => entry !== ".git");
+  await Promise.all(entries.map((entry) => rm(path.join(workTree, entry), { recursive: true })));
+  await writeRepositoryPlugins(workTree, plugins);
+}
+
 /**
  * Writes `plugins` in the work tree `workTree` and publishes them as the git
  * repository `name` of the host's default owner, failing when the host
@@ -149,15 +159,38 @@ export async function pushPluginRepository(
   plugins: readonly RepositoryPlugin[],
 ): Promise<GitPluginRepository> {
   const { workTree, gitHome } = repository;
-  const entries = (await readdir(workTree)).filter((entry) => entry !== ".git");
-  await Promise.all(entries.map((entry) => rm(path.join(workTree, entry), { recursive: true })));
-  await writeRepositoryPlugins(workTree, plugins);
+  await replaceRepositoryPlugins(workTree, plugins);
   await pushGitRepository(workTree, gitHome);
   return {
     ...repository,
     plugins,
     revisions: [...repository.revisions, await runGit(workTree, gitHome, "rev-parse", "HEAD")],
   };
+}
+
+/**
+ * Commits `plugins` on a branch started from `main`, tags the commit `tag`,
+ * pushes the tag alone, and returns the work tree to `main` with the branch
+ * deleted, so only the tag reaches the commit. Returns the repository with
+ * that revision appended; its plugins stay those of `main`.
+ */
+export async function pushTagOnlyRevision(
+  repository: GitPluginRepository,
+  plugins: readonly RepositoryPlugin[],
+  tag: string,
+): Promise<GitPluginRepository> {
+  const { workTree, gitHome } = repository;
+  const branch = `tag-only-${tag}`;
+  await runGit(workTree, gitHome, "checkout", "-q", "-b", branch, "main");
+  await replaceRepositoryPlugins(workTree, plugins);
+  await runGit(workTree, gitHome, "add", "-A");
+  await runGit(workTree, gitHome, "commit", "-q", "-m", `publish ${tag}`);
+  await runGit(workTree, gitHome, "tag", tag);
+  const revision = await runGit(workTree, gitHome, "rev-parse", "HEAD");
+  await runGit(workTree, gitHome, "push", "-q", "origin", `refs/tags/${tag}`);
+  await runGit(workTree, gitHome, "checkout", "-q", "main");
+  await runGit(workTree, gitHome, "branch", "-q", "-D", branch);
+  return { ...repository, revisions: [...repository.revisions, revision] };
 }
 
 function parseGitPluginSourceKind(text: string): GitPluginSourceKind {

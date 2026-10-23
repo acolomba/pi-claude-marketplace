@@ -270,14 +270,43 @@ Feature: Plugin git source
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                                             | cause truncated |
-      | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  | A fresh clone from the git host does not hold the commit 0123456789abcdef0123456789abcdef01234567, Failed to checkout "0123456789abcdef0123456789abcdef01234567" because commit 0123456789abcdef0123456789abcdef01234567 is not available locally. Do a git fetch to make the branch available locally. | false           |
+      | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | leaks | rollback partial | cause chain                                                                                       | cause truncated |
+      | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  | A fresh clone from the git host does not hold the commit 0123456789abcdef0123456789abcdef01234567 | false           |
     Then the git host receives these requests:
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
     Then the project scope has no installed plugins
     Then the project scope holds no git clones
+
+  Scenario: A plugin pinned to a commit only a tag reaches installs through the clone of the ref the marketplace names
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the git repository "ghp" has a revision only the tag "v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | ghp  | 2.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | true   |
+    Given the marketplace "gits" names the ref "main" for the plugin "ghp"
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 2.0.0   |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+    Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command          | description           |
+      | /skill:ghp-skill | A skill of ghp 2.0.0. |
 
   Scenario: Clone cleanup keeps an installed plugin's copy and mirror and removes a mirror no installation uses
     Given the git repository "ghp" holds these plugins:

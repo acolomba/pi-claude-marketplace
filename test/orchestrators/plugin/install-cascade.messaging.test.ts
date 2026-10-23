@@ -657,7 +657,7 @@ describe("composeCascadeFailureMessage", () => {
         kind: "range-conflict",
         why: "contradictory-declarations",
         key: "formatter@tools",
-        range: "^1.0.0 ^2.0.0",
+        range: "^1.0.0, ^2.0.0",
         detail: "inputs 1 and 2 do not overlap",
       },
     };
@@ -673,7 +673,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed) {version conflict}",
-        '    cause: Dependency "formatter@tools" has contradictory version constraints "^1.0.0 ^2.0.0" (inputs 1 and 2 do not overlap).',
+        '    cause: Dependency "formatter@tools" has contradictory version constraints ^1.0.0, ^2.0.0 (inputs 1 and 2 do not overlap).',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -703,7 +703,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
-        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy "^2.0.0".',
+        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0.',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -727,7 +727,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed) {no matching version}",
-        '    cause: Dependency "formatter@tools" has no release tag satisfying "^2.0.0".',
+        '    cause: Dependency "formatter@tools" has no release tag satisfying ^2.0.0.',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -756,7 +756,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed) {authentication required}",
-        '    cause: Dependency "formatter@tools" could not be checked against "^2.0.0" (authentication required).',
+        '    cause: Dependency "formatter@tools" could not be checked against ^2.0.0 (authentication required).',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -785,7 +785,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed) {unreadable}",
-        '    cause: Dependency "formatter@tools" could not be checked against "^2.0.0" (tag listing failed).',
+        '    cause: Dependency "formatter@tools" could not be checked against ^2.0.0 (tag listing failed).',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -814,7 +814,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed) {invalid version constraint}",
-        '    cause: Dependency "formatter@tools" declares an unparseable version constraint "nope" (input 1 of 1 is not a valid version range).',
+        '    cause: Dependency "formatter@tools" declares an unparseable version constraint nope (input 1 of 1 is not a valid version range).',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -1021,7 +1021,7 @@ describe("cascadeFailureCause", () => {
     assert.strictEqual(thrown.key, "formatter@tools");
     assert.strictEqual(
       thrown.message,
-      'Dependency "formatter@tools" has no release tag satisfying "^2.0.0".',
+      'Dependency "formatter@tools" has no release tag satisfying ^2.0.0.',
     );
     assert.ok(rendered !== undefined && "cause" in rendered);
     assert.strictEqual(rendered.cause?.message, thrown.message);

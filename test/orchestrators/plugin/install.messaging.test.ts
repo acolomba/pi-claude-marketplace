@@ -1205,6 +1205,23 @@ describe("classifyInstallFailure", () => {
     });
   });
 
+  test("REC-06: carries the rollback partials of the failed install", () => {
+    // arrange
+    const failure = new Error("failed to stage skill a-fmt: EACCES");
+    const partials = [{ phase: "skills" as const, msg: "EACCES removing a-fmt" }];
+
+    // act
+    const outcome = classifyInstallFailure(failure, "formatted cause", partials);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      error: failure,
+      cause: "formatted cause",
+      rollbackPartials: partials,
+    });
+  });
+
   test("wraps a non-Error input with the formatted cause", () => {
     // arrange
     const failure = { code: "opaque" };

@@ -2483,6 +2483,37 @@ for (const { holder, title } of [
   });
 }
 
+test("MPR-01: a layer remove is not refused by a disabled plugin that declares the removed plugin", async (testContext) => {
+  // arrange
+  const disabledBeta: PluginRecord = { ...pluginRecord(), enabled: false };
+  const { cwd, locations } = await dependencyCase(
+    testContext,
+    { base: ALPHA_DECLARED, local: BETA_DECLARED },
+    { alpha: pluginRecord(), beta: disabledBeta },
+  );
+  const calls: string[] = [];
+  const notification = notificationBoundary(1);
+
+  // act
+  await removeToolsWith(cwd, notification, {
+    cascade: recordingCascade(calls),
+    declarationIndex: syntheticIndex({ "alpha@tools": [], "beta@tools": ["alpha@tools"] }),
+  });
+
+  // assert
+  assert.deepStrictEqual(calls, ["alpha"]);
+  assert.deepStrictEqual(notification.calls, [
+    {
+      message: "● tools [project] (removed)\n  ○ alpha (uninstalled)\n\n/reload to pick up changes",
+    },
+  ]);
+  assert.deepStrictEqual(
+    await loadState(locations.extensionRoot),
+    toolsState(cwd, pathSource("./tools"), { beta: disabledBeta }),
+  );
+  notification.verifyInteractions();
+});
+
 test("LAYER-03: a layer remove keeps a dependency record its target layer declares while a staying plugin needs it", async (testContext) => {
   // arrange
   const baseDeclaresLib =

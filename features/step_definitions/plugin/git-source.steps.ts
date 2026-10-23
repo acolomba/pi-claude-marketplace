@@ -12,10 +12,11 @@ import assert from "node:assert/strict";
 import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { Given, Then } from "@cucumber/cucumber";
+import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import { isPlainObject } from "../../lib/field-rows.ts";
 import { pushGitRepository } from "../../lib/git-marketplace.ts";
+import { pushTagOnlyRevision, readRepositoryPlugins } from "../../lib/git-plugin.ts";
 import { runGit } from "../../lib/hermetic-git.ts";
 import { rewritePublishedManifest } from "../../lib/published-marketplace.ts";
 
@@ -51,29 +52,69 @@ Given(
   },
 );
 
+Given(
+  "the git repository {string} has a revision only the tag {string} reaches, holding these plugins:",
+  async function (this: ScenarioWorld, name: string, tag: string, table: DataTable) {
+    const repository = await pushTagOnlyRevision(
+      this.requireGitRepository(name),
+      readRepositoryPlugins(table),
+      tag,
+    );
+    this.recordGitRepository(repository);
+    const { bareRepository, gitHome } = repository;
+    assert.deepStrictEqual(
+      [
+        await runGit(bareRepository, gitHome, "rev-parse", `refs/tags/${tag}`),
+        await runGit(bareRepository, gitHome, "branch", "--contains", `refs/tags/${tag}`),
+      ],
+      [repository.revisions.at(-1), ""],
+    );
+  },
+);
+
+/**
+ * Sets `fields` on the source of the git plugin `plugin` that the marketplace
+ * `name` offers, republishes the manifest, and asserts the entry it now holds.
+ */
+async function changeGitPluginSource(
+  world: ScenarioWorld,
+  name: string,
+  plugin: string,
+  fields: Record<string, string>,
+): Promise<void> {
+  const published = world.requirePublished(name);
+  const manifest = JSON.parse(await readFile(published.manifestPath, "utf8")) as {
+    plugins: Array<{ name: string; source: unknown }>;
+  };
+  const entry = manifest.plugins.find((candidate) => candidate.name === plugin);
+  assert.ok(
+    entry !== undefined && isPlainObject(entry.source),
+    `the marketplace ${name} offers no git plugin ${plugin}`,
+  );
+  entry.source = { ...entry.source, ...fields };
+  await rewritePublishedManifest(published, JSON.stringify(manifest, null, 2));
+  const written = JSON.parse(await readFile(published.manifestPath, "utf8")) as typeof manifest;
+  assert.deepStrictEqual(
+    written.plugins.find((candidate) => candidate.name === plugin),
+    entry,
+  );
+}
+
+Given(
+  "the marketplace {string} names the ref {string} for the plugin {string}",
+  async function (this: ScenarioWorld, name: string, ref: string, plugin: string) {
+    await changeGitPluginSource(this, name, plugin, { ref });
+  },
+);
+
 // A sha no repository revision has, so the clone the install makes lacks it.
 const ABSENT_COMMIT = "0123456789abcdef0123456789abcdef01234567";
 
 Given(
   "the marketplace {string} pins the plugin {string} to a commit its repository lacks",
   async function (this: ScenarioWorld, name: string, plugin: string) {
-    const published = this.requirePublished(name);
-    const manifest = JSON.parse(await readFile(published.manifestPath, "utf8")) as {
-      plugins: Array<{ name: string; source: unknown }>;
-    };
-    const entry = manifest.plugins.find((candidate) => candidate.name === plugin);
-    assert.ok(
-      entry !== undefined && isPlainObject(entry.source),
-      `the marketplace ${name} offers no git plugin ${plugin}`,
-    );
     assert.strictEqual(this.gitRepositoryServing(plugin).revisions.includes(ABSENT_COMMIT), false);
-    entry.source = { ...entry.source, sha: ABSENT_COMMIT };
-    await rewritePublishedManifest(published, JSON.stringify(manifest, null, 2));
-    const written = JSON.parse(await readFile(published.manifestPath, "utf8")) as typeof manifest;
-    assert.deepStrictEqual(
-      written.plugins.find((candidate) => candidate.name === plugin),
-      entry,
-    );
+    await changeGitPluginSource(this, name, plugin, { sha: ABSENT_COMMIT });
   },
 );
 

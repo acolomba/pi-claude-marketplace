@@ -39,6 +39,7 @@ import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts"
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
+import { narrowResolverReasons } from "../plugin/install.messaging.ts";
 
 import {
   DEPENDENCY_UNSATISFIED_ROW_REASONS,
@@ -199,6 +200,12 @@ export interface PluginBackfilledOutcome
 export interface PluginInstallFailedOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-install-failed";
   readonly reason: Reason;
+  /**
+   * REC-06: the row's brace when it differs from `reason` alone: the reasons
+   * `install` narrows a plugin that cannot be installed to. `reason` stays the
+   * summary token (`no longer installable`). Omitted otherwise (NREG-01).
+   */
+  readonly reasons?: readonly ContentReason[];
   /**
    * RESV-06: set ONLY when the failure is attributable to a DEPENDENCY
    * (`reason === "dependency failed"`) -- the projection surfaces it as the
@@ -656,6 +663,41 @@ export function classifyOrchestratorThrow(err: unknown): ContentReason {
   }
 
   return classifyGitHostFailure(err) ?? narrowProbeError(withoutCleanupLeaks(err));
+}
+
+/**
+ * REC-06: the reason fields of a failed install's row. A plugin that cannot be
+ * installed reads the reasons `install` and `import` narrow it to
+ * (`narrowResolverReasons`); every other throw reads its one classified reason.
+ * A reason the caller already holds (a dependency's `cross-marketplace`) wins.
+ */
+export function installFailureReasonFields(
+  err: unknown,
+  known?: ContentReason,
+): {
+  readonly reason: ContentReason;
+  readonly reasons?: readonly ContentReason[];
+} {
+  if (known !== undefined) {
+    return { reason: known };
+  }
+
+  const reason = classifyOrchestratorThrow(err);
+  if (
+    err instanceof PluginShapeError &&
+    (err.shape.kind === "not-installable" || err.shape.kind === "no-longer-installable")
+  ) {
+    return {
+      reason,
+      reasons: narrowResolverReasons(
+        err.shape.reasons,
+        err.shape.unsupportedKinds,
+        err.shape.partialable,
+      ),
+    };
+  }
+
+  return { reason };
 }
 
 /**

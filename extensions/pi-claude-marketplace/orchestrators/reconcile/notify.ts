@@ -902,6 +902,17 @@ function failedRowCause(outcome: PerEntryOutcome): { cause?: Error } {
   return {};
 }
 
+/** REC-06: a failed install's narrowed reasons when it carries them, else its one reason. */
+function failedRowReasons(
+  outcome: PerEntryOutcome & { readonly reason: Reason },
+): readonly ContentReason[] {
+  if (outcome.kind === "plugin-install-failed" && outcome.reasons !== undefined) {
+    return outcome.reasons;
+  }
+
+  return reasonAsContent(outcome.reason);
+}
+
 /**
  * Apply a PLUGIN-subject outcome: one row pushed onto the block's children.
  *
@@ -1027,7 +1038,7 @@ function applyPluginOutcomeToBlock(
       block.plugins.push({
         status: "failed",
         name: outcome.plugin,
-        reasons: reasonAsContent(outcome.reason),
+        reasons: failedRowReasons(outcome),
         // D-05-16 / RESV-06: only a refused uninstall or a dependency-cascade
         // install failure carries a cause onto this row.
         ...failedRowCause(outcome),

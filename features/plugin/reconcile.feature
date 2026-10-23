@@ -259,3 +259,20 @@ Feature: Plugin reconcile
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: A new session reports a hand-declared plugin pi supports only in part with the reason install gives
+    Given the published plugin "demo" of the marketplace "fixtures" has an output style
+    Given the marketplace "fixtures" is added to the project scope
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                        | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons               | scope   | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | unsupported component | project |       |                  |
+      | fixtures         | project           | demo@fixtures | demo | failed | unsupported component | project |       |                  |
+    Then the project scope has no installed plugins

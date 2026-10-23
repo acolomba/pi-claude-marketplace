@@ -139,10 +139,10 @@ async function cloneIntoStaging(
  * so checkout throws `CommitNotFetchedError`. The recovery applies ONLY after
  * a ref-hint clone -- a no-ref clone already fetched every head, so the same
  * error there is a genuinely unreachable sha that must fail clean. The clone
- * left the wildcard fetch refspec, so one full fetch pulls every head and the
- * retry succeeds. A sha the fresh clone still lacks, with or without the
- * refetch, throws `PinnedCommitMissingError` (INR-03) into the caller's
- * fail-clean fold.
+ * left the wildcard fetch refspec, so one full fetch pulls every head and
+ * every tag (INR-06) and the retry succeeds. A sha the fresh clone still
+ * lacks, with or without the refetch, throws `PinnedCommitMissingError`
+ * (INR-03) into the caller's fail-clean fold.
  */
 async function checkoutPinWithRefetch(
   gitOps: GitOps,
@@ -156,7 +156,7 @@ async function checkoutPinWithRefetch(
       throw asPinnedCommitMissing(checkoutErr, args.pin);
     }
 
-    await gitOps.fetch({ dir: stagingDir, remote: "origin", auth: args.auth });
+    await gitOps.fetch({ dir: stagingDir, remote: "origin", tags: true, auth: args.auth });
     try {
       await gitOps.checkout({ dir: stagingDir, ref: args.pin });
     } catch (retryErr) {
@@ -167,10 +167,12 @@ async function checkoutPinWithRefetch(
 
 /**
  * INR-03: a fresh clone that still lacks the pin means the git host does not
- * have it. Any other checkout throw passes through unchanged.
+ * have it. Any other checkout throw passes through unchanged. INR-06: the
+ * library's error is not chained, because its only addition is advice ("Do a
+ * git fetch") a Pi user cannot act on.
  */
 function asPinnedCommitMissing(err: unknown, pin: string): unknown {
-  return isGitCommitNotFetchedError(err) ? new PinnedCommitMissingError(pin, { cause: err }) : err;
+  return isGitCommitNotFetchedError(err) ? new PinnedCommitMissingError(pin) : err;
 }
 
 /**
@@ -186,10 +188,10 @@ function asPinnedCommitMissing(err: unknown, pin: string): unknown {
  *      outside the ref hint's history the singleBranch fetch never pulled the
  *      pinned commit, so the checkout throws `CommitNotFetchedError`; the
  *      clone left a wildcard fetch refspec, so one full fetch widens the
- *      staging clone to every head and the checkout is retried ONCE. A
- *      genuinely unreachable pin throws `PinnedCommitMissingError` (INR-03)
- *      and folds into the fail-clean path. A clone/checkout throw cleans staging and
- *      append-leak-rethrows (MA-9).
+ *      staging clone to every head and tag (INR-06) and the checkout is
+ *      retried ONCE. A genuinely unreachable pin throws
+ *      `PinnedCommitMissingError` (INR-03) and folds into the fail-clean path.
+ *      A clone/checkout throw cleans staging and append-leak-rethrows (MA-9).
  *   4. Atomic same-FS rename staging -> cloneRoot. An EEXIST/ENOTEMPTY rename
  *      means a concurrent install of the same url+sha already won the race;
  *      its tree is byte-equivalent (same key => same content), so clean our

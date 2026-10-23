@@ -393,14 +393,9 @@ function commitNotFetchedError(ref: string): Error {
   return err;
 }
 
-/** INR-03: the typed missing-pin error, keeping the checkout's own error as its cause. */
+/** INR-03 / INR-06: the typed missing-pin error, with no library advice chained under it. */
 function isPinnedCommitMissing(err: unknown, pin: string): boolean {
-  return (
-    err instanceof PinnedCommitMissingError &&
-    err.sha === pin &&
-    err.cause instanceof Error &&
-    err.cause.name === "CommitNotFetchedError"
-  );
+  return err instanceof PinnedCommitMissingError && err.sha === pin && err.cause === undefined;
 }
 
 void test("PURL-04: a pin outside the ref-hint closure triggers ONE full fetch then retries the checkout to success", async (t) => {
@@ -448,6 +443,7 @@ void test("PURL-04: a pin outside the ref-hint closure triggers ONE full fetch t
     undefined,
     "recovery fetch pulls every head (no ref -> wildcard refspec)",
   );
+  assert.equal(base.state.fetchCalls[0]!.tags, true, "INR-06: the recovery fetch pulls tags too");
   assert.deepEqual(
     checkouts,
     [PIN_OUTSIDE_CLOSURE, PIN_OUTSIDE_CLOSURE],

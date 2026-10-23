@@ -490,6 +490,27 @@ Feature: Marketplace remove
       | /skill:beta-skill | A skill of beta 1.0.0. |
       | /skill:lib-skill  | A skill of lib 1.0.0.  |
 
+  Scenario: Removing a marketplace from the base layer goes ahead when only a disabled plugin of the local layer needs one of its plugins
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alpha | 1.0.0   |              |
+      | beta  | 1.0.0   | alpha        |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given the user has run "/claude:plugin install alpha@tools --scope project"
+    Given the user has run "/claude:plugin install beta@tools --scope project --local"
+    Given the user has run "/claude:plugin disable beta@tools --scope project --local"
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status      | reasons | scope   |
+      | tools            | project           | removed            | alpha@tools | alpha | uninstalled |         | project |
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+
   Scenario: Removing a marketplace from the base layer fails while a plugin of the local layer still needs one of its plugins
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

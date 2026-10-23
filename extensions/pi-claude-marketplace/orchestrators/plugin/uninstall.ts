@@ -76,7 +76,6 @@ import {
 } from "../../domain/dependency-orphans.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { deletePluginConfigEntry } from "../../persistence/config-write-back.ts";
-import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { StateLockHeldError, errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
@@ -97,7 +96,7 @@ import {
 } from "../marketplace/shared.ts";
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
-import { buildScopeDeclarationIndex } from "./dependency-index.ts";
+import { buildScopeDeclarationIndex, withoutDisabledHolders } from "./dependency-index.ts";
 import {
   absentTargetReasons,
   applyPartialCascadeFold,
@@ -290,24 +289,6 @@ interface DeclarerReading {
   readonly enabledIndex: DeclarationIndex;
   /** Sorted `name@marketplace` keys of the enabled declarers, empty when none. */
   readonly dependents: readonly string[];
-}
-
-/**
- * UNI-01 / D-23-07: drops every holder the user or a config disabled. Claude
- * Code counts only enabled plugins as reverse dependents, so such a plugin
- * neither holds a named uninstall nor is named on its row. A record the
- * load-time check held down (`dependencyDisabled`) is still enabled in its
- * config, so it keeps holding, as Claude Code reads the settings.
- */
-function withoutDisabledHolders(index: DeclarationIndex, state: ExtensionState): DeclarationIndex {
-  const disabled = new Set(
-    Object.entries(state.marketplaces).flatMap(([marketplace, record]) =>
-      Object.entries(record.plugins)
-        .filter(([, plugin]) => isRecordedButDisabled(plugin) && plugin.dependencyDisabled !== true)
-        .map(([name]) => `${name}@${marketplace}`),
-    ),
-  );
-  return new Map([...index].filter(([holder]) => !disabled.has(holder)));
 }
 
 /**

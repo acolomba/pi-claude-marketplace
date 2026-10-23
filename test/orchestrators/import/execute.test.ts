@@ -1552,6 +1552,52 @@ for (const { cause, installPlugin, order, title } of [
 // IMP-09: an unclassified failure carries the reason `install`'s failure row
 // reads off the same error -- a git host's answer, or the marketplace add an
 // install ran -- and the authentication row is bare, as install's is.
+test("REC-06: names a rollback the failed install could not finish as rollback partial", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "install-rollback-partial");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const failure = new Error("failed to stage skill a-fmt: EACCES");
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: () =>
+        Promise.resolve({
+          ...failedInstallOutcome(failure, failure.message),
+          rollbackPartials: [{ phase: "skills", msg: "EACCES removing a-fmt" }],
+        }),
+      loadSettings: () => Promise.resolve(settingsForMp("broken")),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult.unexpectedPluginFailures, [
+    {
+      ...failedUnexpectedly("broken", "mp", "user", failure.message),
+      runtimeReason: "rollback partial",
+    },
+  ]);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n\n" +
+        "● mp [user] (added)\n" +
+        "  ⊘ broken (failed) {rollback partial}\n" +
+        `    cause: ${failure.message}\n\n` +
+        "Import: 1 failure, 1 success",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
 test("names the reason install gives an unclassified install failure", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "install-git-host");

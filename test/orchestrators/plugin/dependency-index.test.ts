@@ -8,6 +8,7 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import {
   buildScopeDeclarationDetail,
   buildScopeDeclarationIndex,
+  withoutDisabledHolders,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { InvalidMarketplaceManifestError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -37,6 +38,7 @@ type MarketplaceRecord = ExtensionState["marketplaces"][string];
 interface RecordSeed {
   readonly enabled?: boolean;
   readonly provenance?: PluginRecord["provenance"];
+  readonly dependencyDisabled?: true;
 }
 
 function pluginRecord(seed: RecordSeed = {}): PluginRecord {
@@ -47,6 +49,7 @@ function pluginRecord(seed: RecordSeed = {}): PluginRecord {
     resources: { workflows: [], skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
     enabled: seed.enabled ?? true,
     provenance: seed.provenance ?? "explicit",
+    ...(seed.dependencyDisabled !== undefined && { dependencyDisabled: seed.dependencyDisabled }),
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
@@ -274,6 +277,26 @@ test("D-05-04: a disabled record and a dependency-provenance record both hold th
     "helper@mp": ["base@mp"],
     "paused@mp": ["base@mp"],
   });
+});
+
+test("UNI-01 / MPR-01: dropping disabled holders keeps enabled and load-time-disabled ones", () => {
+  // arrange
+  const mp = marketplaceRecord("mp", {
+    app: {},
+    paused: { enabled: false },
+    held: { enabled: false, dependencyDisabled: true },
+  });
+  const index = new Map([
+    ["app@mp", new Set(["base@mp"])],
+    ["paused@mp", new Set(["base@mp"])],
+    ["held@mp", new Set(["base@mp"])],
+  ]);
+
+  // act
+  const enabled = withoutDisabledHolders(index, stateOf(mp));
+
+  // assert
+  assert.deepStrictEqual([...enabled.keys()], ["app@mp", "held@mp"]);
 });
 
 test("D-05-06: a record's own manifest outranks its marketplace entry", async () => {

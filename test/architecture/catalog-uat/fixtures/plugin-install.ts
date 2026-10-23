@@ -714,7 +714,7 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 name: "formatter@tools",
                 reasons: ["no matching version"],
                 cause: new Error(
-                  'Dependency "formatter@tools" has no release tag satisfying "^2.0.0".',
+                  'Dependency "formatter@tools" has no release tag satisfying ^2.0.0.',
                 ),
                 severity: "error",
                 needsReload: false,
@@ -749,7 +749,7 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 name: "formatter@tools",
                 reasons: ["version conflict"],
                 cause: new Error(
-                  'Dependency "formatter@tools" has contradictory version constraints "^1.0.0 ^2.0.0" (inputs 1 and 2 do not overlap).',
+                  'Dependency "formatter@tools" has contradictory version constraints ^1.0.0, ^2.0.0 (inputs 1 and 2 do not overlap).',
                 ),
                 severity: "error",
                 needsReload: false,
@@ -786,7 +786,7 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 version: "1.0.0",
                 reasons: ["already installed", "version conflict"],
                 cause: new Error(
-                  'Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy "^2.0.0".',
+                  'Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0.',
                 ),
                 severity: "error",
                 needsReload: false,
@@ -856,7 +856,7 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 name: "formatter@tools",
                 reasons: ["invalid version constraint"],
                 cause: new Error(
-                  'Dependency "formatter@tools" declares an unparseable version constraint "nope" (input 1 of 1 is not a valid version range).',
+                  'Dependency "formatter@tools" declares an unparseable version constraint nope (input 1 of 1 is not a valid version range).',
                 ),
                 severity: "error",
                 needsReload: false,
@@ -893,7 +893,7 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 name: "formatter@tools",
                 reasons: ["authentication required"],
                 cause: new Error(
-                  'Dependency "formatter@tools" could not be checked against "^2.0.0" (authentication required).',
+                  'Dependency "formatter@tools" could not be checked against ^2.0.0 (authentication required).',
                 ),
                 severity: "error",
                 needsReload: false,
