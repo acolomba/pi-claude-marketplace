@@ -1235,12 +1235,13 @@ test("carries the settings loader's own diagnostics onto the result", async (t) 
 // uninstallable becomes a warning row. The fault sits in the MIDDLE of a
 // three-plugin batch, so the plugin installed before it keeps its outcome and
 // the plugin after it is still attempted.
-for (const { cause, error, reason, title } of [
+for (const { cause, error, reason, token, title } of [
   {
     cause: 'Plugin "target" not found in marketplace "mp".',
     error: (): Error =>
       new PluginShapeError({ kind: "not-in-manifest", marketplace: "mp", plugin: "target" }),
     reason: "unavailable",
+    token: "not in manifest",
     title: "the plugin is absent from the manifest",
   },
   {
@@ -1253,6 +1254,7 @@ for (const { cause, error, reason, title } of [
         reasons: ["requires an unsupported tool"],
       }),
     reason: "uninstallable",
+    token: "no longer installable",
     title: "the plugin is not installable",
   },
   {
@@ -1265,12 +1267,14 @@ for (const { cause, error, reason, title } of [
         reasons: ["the marketplace dropped every supported component"],
       }),
     reason: "uninstallable",
+    token: "no longer installable",
     title: "the plugin is no longer installable",
   },
 ] satisfies readonly {
   readonly cause: string;
   readonly error: () => Error;
   readonly reason: Warning["reason"];
+  readonly token: string;
   readonly title: string;
 }[]) {
   test(`warns and keeps installing the batch when ${title}`, async (t) => {
@@ -1325,7 +1329,7 @@ for (const { cause, error, reason, title } of [
           "● mp [project] (added)\n" +
           "  ● before (installed)\n" +
           "  ● after (installed)\n" +
-          "  ⊘ target (unavailable) {no longer installable}\n\n" +
+          `  ⊘ target (unavailable) {${token}}\n\n` +
           "Import: 1 warning, 3 successes\n\n" +
           "/reload to pick up changes",
         severity: "warning",
@@ -1995,6 +1999,51 @@ for (const { declaresAgents, declaresMcp, declaresWorkflows, marker } of [
   });
 }
 
+test("shows the version the install resolved on the installed row", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "installed-version");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const expectedResult: ClaudeImportExecutionResult = {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("mp", "user")],
+    changedResources: true,
+    installedPlugins: [{ ...installed("plugin", "mp", "user"), version: "1.2.0" }],
+  };
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: () => Promise.resolve({ ...installedOutcome(), version: "1.2.0" }),
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "plugin@mp": true },
+            extraKnownMarketplaces: { mp: { directory: "./mp" } },
+          }),
+        ),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, expectedResult);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [user] (added)\n  ● plugin v1.2.0 (installed)\n\n" +
+        "Import: 2 successes\n\n" +
+        "/reload to pick up changes",
+    },
+  ]);
+  verifyBoundary();
+});
+
 test("records each post-commit warning the installed outcome carried as its own diagnostic", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "post-commit");
@@ -2256,7 +2305,7 @@ test("AVAR-04: an import reports the unset variable and the withheld credential 
     {
       message:
         "● fixture-mp [project] (added)\n" +
-        "  ● hello (installed) {requires pi-mcp-adapter}\n\n" +
+        "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -2294,7 +2343,7 @@ test("AVAR-04 / AVAR-05: with pi-mcp-adapter loaded, an import reports an info r
     {
       message:
         "● fixture-mp [project] (added)\n" +
-        "  ● hello (installed)\n\n" +
+        "  ● hello v1.0.0 (installed)\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -3253,7 +3302,10 @@ test("resolves every collaborator from production when the caller supplies no de
     ...emptyImportResult(),
     addedMarketplaces: [added("fixture-mp", "project")],
     installedPlugins: [
-      installed("sample", "fixture-mp", "project", { agents: false, mcp: false }, false),
+      {
+        ...installed("sample", "fixture-mp", "project", { agents: false, mcp: false }, false),
+        version: "1.0.0",
+      },
     ],
   };
   // The second run reads the state the first run committed, so a default state
@@ -3305,7 +3357,7 @@ test("resolves every collaborator from production when the caller supplies no de
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● fixture-mp [project] (added)\n  ● sample (installed)\n\n" +
+        "● fixture-mp [project] (added)\n  ● sample v1.0.0 (installed)\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -3359,6 +3411,7 @@ test("D-04-07: promotes a recorded dependency the imported settings name instead
       {
         ...installed("dep", "fixture-mp", "project", { agents: false, mcp: false }, false),
         promoted: true,
+        version: "1.0.0",
       },
     ],
     skippedExistingMarketplaces: [skipped("fixture-mp", "project")],
@@ -3405,7 +3458,7 @@ test("D-04-07: promotes a recorded dependency the imported settings name instead
   assert.deepStrictEqual(notifications[1], {
     message:
       "● fixture-mp [project] (updated)\n" +
-      "  ● dep (installed) {already installed, dependency promoted}\n" +
+      "  ● dep v1.0.0 (installed) {already installed, dependency promoted}\n" +
       "  ⊘ sample (skipped) {already installed}\n\n" +
       "Import: 3 successes",
   });
@@ -3461,6 +3514,7 @@ test("D-04-07: promotes a partially installed dependency the imported settings n
       {
         ...installed("dep", "fixture-mp", "project", { agents: false, mcp: false }, false),
         promoted: true,
+        version: "1.0.0",
       },
     ],
     skippedExistingMarketplaces: [skipped("fixture-mp", "project")],
@@ -3525,7 +3579,7 @@ test("D-04-07: promotes a partially installed dependency the imported settings n
   assert.deepStrictEqual(notifications[2], {
     message:
       "● fixture-mp [project] (updated)\n" +
-      "  ● dep (installed) {already installed, dependency promoted}\n" +
+      "  ● dep v1.0.0 (installed) {already installed, dependency promoted}\n" +
       "  ⊘ base (skipped) {already installed}\n" +
       "  ⊘ sample (skipped) {already installed}\n\n" +
       "Import: 4 successes",
@@ -3607,6 +3661,7 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
       {
         ...installed("dep", "fixture-mp", "project"),
         promoted: true,
+        version: "1.0.0",
         reenabled: true,
       },
     ],
@@ -3688,7 +3743,7 @@ test("D-04-07: promotes a disabled dependency the imported settings name and dec
   assert.deepStrictEqual(notifications[1], {
     message:
       "● fixture-mp [project] (updated)\n" +
-      "  ● dep (installed) {already installed, dependency promoted}\n" +
+      "  ● dep v1.0.0 (installed) {already installed, dependency promoted}\n" +
       "  ⊘ sample (skipped) {already installed}\n\n" +
       "Import: 3 successes\n\n" +
       "/reload to pick up changes",
@@ -3748,6 +3803,7 @@ test("D-04-07: declares a promoted dependency enabled in the local config when t
         ...installed("dep", "fixture-mp", "project"),
         promoted: true,
         reenabled: true,
+        version: "1.0.0",
       },
     ],
     skippedExistingMarketplaces: [skipped("fixture-mp", "project")],
@@ -3830,7 +3886,7 @@ test("D-04-07: declares a promoted dependency enabled in the local config when t
   assert.deepStrictEqual(notifications[1], {
     message:
       "● fixture-mp [project] (updated)\n" +
-      "  ● dep (installed) {already installed, dependency promoted}\n" +
+      "  ● dep v1.0.0 (installed) {already installed, dependency promoted}\n" +
       "  ⊘ sample (skipped) {already installed}\n\n" +
       "Import: 3 successes\n\n" +
       "/reload to pick up changes",
@@ -3952,10 +4008,14 @@ test("D-04-07: marks a dependency promoted at lock time by the same import's ear
     ...emptyImportResult(),
     addedMarketplaces: [added("fixture-mp", "project")],
     installedPlugins: [
-      installed("sample", "fixture-mp", "project", { agents: false, mcp: false }, false),
+      {
+        ...installed("sample", "fixture-mp", "project", { agents: false, mcp: false }, false),
+        version: "1.0.0",
+      },
       {
         ...installed("dep", "fixture-mp", "project", { agents: false, mcp: false }, false),
         promoted: true,
+        version: "1.0.0",
       },
     ],
   };
@@ -3985,8 +4045,8 @@ test("D-04-07: marks a dependency promoted at lock time by the same import's ear
     {
       message:
         "● fixture-mp [project] (added)\n" +
-        "  ● sample (installed)\n" +
-        "  ● dep (installed) {already installed, dependency promoted}\n\n" +
+        "  ● sample v1.0.0 (installed)\n" +
+        "  ● dep v1.0.0 (installed) {already installed, dependency promoted}\n\n" +
         "Import: 3 successes\n\n" +
         "/reload to pick up changes",
     },

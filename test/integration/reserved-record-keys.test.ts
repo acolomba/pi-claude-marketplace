@@ -320,7 +320,7 @@ test("D-08-07: an import of constructor@mp installs it, and disable and uninstal
     assert.deepStrictEqual(imported, [
       {
         message:
-          "● mp [project] (added)\n  ● constructor (installed)\n\nImport: 2 successes\n\n" +
+          "● mp [project] (added)\n  ● constructor v1.0.0 (installed)\n\nImport: 2 successes\n\n" +
           "/reload to pick up changes",
       },
     ]);
