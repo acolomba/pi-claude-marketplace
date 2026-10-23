@@ -78,7 +78,7 @@ import { deleteMarketplaceConfigEntryWithCascade } from "../../persistence/confi
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
+import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
@@ -1098,6 +1098,58 @@ function surfaceMarketplaceFailure(args: {
 }
 
 /**
+ * The failed outcome of a remove whose state transaction threw: each stop the
+ * lock body raised, and a held state lock (FLR-02), becomes its row.
+ * Any other throw leaves through `rethrowWithMcpConfigNotices`.
+ */
+function surfaceRemoveStop(
+  err: unknown,
+  args: {
+    readonly opts: RemoveMarketplaceOptions;
+    readonly orchestrated: boolean;
+    readonly scope: Scope;
+    readonly configBasename: string;
+    readonly cfgInvalidSentinel: Error;
+    readonly mcpConfigNotices: readonly McpConfigNotice[];
+  },
+): RemoveMarketplaceOutcome {
+  const { opts, orchestrated, scope } = args;
+  if (err instanceof LayerGateStop) {
+    return surfaceLayerGateStop(opts, scope, err.verdict);
+  }
+
+  if (err instanceof HeldRemovalStop) {
+    return surfaceHeldRemovals(opts, scope, err.held);
+  }
+
+  if (err instanceof DeclarationIndexStop) {
+    return surfaceMarketplaceFailure({
+      opts,
+      orchestrated,
+      scope,
+      reason: "unreadable",
+      error: err.unreadable,
+    });
+  }
+
+  if (err instanceof StateLockHeldError) {
+    return surfaceMarketplaceFailure({
+      opts,
+      orchestrated,
+      scope,
+      reason: "lock held",
+      error: err,
+    });
+  }
+
+  if (err !== args.cfgInvalidSentinel) {
+    rethrowWithMcpConfigNotices(err, opts, orchestrated, args.mcpConfigNotices);
+  }
+
+  return surfaceCfgInvalid({ opts, orchestrated, configBasename: args.configBasename, scope });
+}
+
+/**
  * MR-7 / MURL-04: the marketplace data dir and, for github and url sources, the
  * `sources/<name>/` clone of a marketplace whose state record is gone.
  */
@@ -1292,33 +1344,13 @@ async function runRemoveOutcome(
       opts.stateTransaction,
     );
   } catch (err) {
-    if (err instanceof LayerGateStop) {
-      return surfaceLayerGateStop(opts, resolved.scope, err.verdict);
-    }
-
-    if (err instanceof HeldRemovalStop) {
-      return surfaceHeldRemovals(opts, resolved.scope, err.held);
-    }
-
-    if (err instanceof DeclarationIndexStop) {
-      return surfaceMarketplaceFailure({
-        opts,
-        orchestrated,
-        scope: resolved.scope,
-        reason: "unreadable",
-        error: err.unreadable,
-      });
-    }
-
-    if (err !== cfgInvalidSentinel) {
-      rethrowWithMcpConfigNotices(err, opts, orchestrated, mcpConfigNotices);
-    }
-
-    return surfaceCfgInvalid({
+    return surfaceRemoveStop(err, {
       opts,
       orchestrated,
-      configBasename,
       scope: resolved.scope,
+      configBasename,
+      cfgInvalidSentinel,
+      mcpConfigNotices,
     });
   }
 
