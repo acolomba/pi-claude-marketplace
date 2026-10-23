@@ -121,7 +121,9 @@ export type Reason =
   // a reason is one to three lowercase words and this set is a literal tuple,
   // so no token can interpolate an identifier. Its subject is the DEPENDENT
   // the load-time check just disabled, never the dependency an install cascade
-  // row is about.
+  // row is about. `enable` reuses it on the failed row of the plugin it refused
+  // to enable because a dependency is not installed, upstream's
+  // `dependency_missing`: the subject is again the dependent.
   | "dependency unsatisfied"
   // LOAD-01: the same load-time check, on the arm where the dependency IS
   // recorded and enabled but its recorded version falls outside the declared

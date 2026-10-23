@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import {
   composeDisableRefusalCause,
   composeEnableCascadeRows,
+  composeEnableMissingDependencyCause,
   DISABLE_CONTEXT,
   ENABLE_CONTEXT,
   narrowDisableFailure,
@@ -675,6 +676,19 @@ test("the disable context renders the dependents-remain refusal reason", () => {
 
   // assert
   assert.equal(renderedRow, "⊘ shared-lib (failed) {dependents remain}");
+});
+
+describe("composeEnableMissingDependencyCause", () => {
+  test("names the missing dependencies, then the target", () => {
+    // act
+    const cause = composeEnableMissingDependencyCause("app@official", [
+      "lib@official",
+      "util@tools",
+    ]);
+
+    // assert
+    assert.equal(cause, "Install lib@official, util@tools first, then enable app@official.");
+  });
 });
 
 describe("composeDisableRefusalCause", () => {
