@@ -27,20 +27,17 @@
 //     orchestrators are already idempotent under `withStateGuard`, and
 //     pre-checking would introduce a TOCTOU race with concurrent install
 //     locks plus duplicate logic.
-//   - Only `MarketplaceDuplicateNameError` is swallowed from
-//     `addMarketplace`. Every other add precondition is rendered by
-//     `notifyAddFailure`, byte-identical to `marketplace add` for the same
-//     source (reason and cause), and the autoupdate step is skipped. An error
-//     that is not an add precondition propagates.
-//   - ATTR-07: `addMarketplace` now routes precondition failures
-//     (incl. duplicate name) through `notify` as a `(failed) {<reason>}` row
-//     for the public `marketplace add` command. Bootstrap MUST keep the
-//     one-signal-per-state-change contract, so it passes
-//     `rethrowPreconditionErrors: true` to restore the throw-based contract
-//     it depends on -- catching + swallowing the typed duplicate-name error so
-//     no failed row leaks on an idempotent re-run.
+//   - MPA-01: a re-run gets `marketplace add`'s own
+//     `(skipped) {already added}` row, so nothing is swallowed. Every add
+//     precondition, a different source under the official name included, is
+//     rendered by `notifyAddFailure`, byte-identical to `marketplace add` for
+//     the same source (reason and cause), and the autoupdate step is skipped.
+//     An error that is not an add precondition propagates.
+//   - ATTR-07: bootstrap passes `rethrowPreconditionErrors: true` so a failed
+//     add reaches the catch below, which is how it knows to skip the
+//     autoupdate step.
 
-import { addMarketplace, classifyAddError, notifyAddFailure } from "../marketplace/add.ts";
+import { addMarketplace, notifyAddFailure } from "../marketplace/add.ts";
 import { setMarketplaceAutoupdate } from "../marketplace/autoupdate.ts";
 
 import type { ExtensionContext } from "../../platform/pi-api.ts";
@@ -84,17 +81,15 @@ export interface BootstrapOptions {
  * Add the canonical Anthropic marketplace to user scope and enable
  * autoupdate for it. Idempotent end-to-end:
  *   - first run on clean state: emits two notifications (add + enable).
- *   - re-run on fully bootstrapped state: emits ONE idempotent
- *     "Already enabled: ..." notification from the autoupdate step.
- *     The add step's `MarketplaceDuplicateNameError` is swallowed so
- *     no duplicate "already added" message is emitted.
+ *   - re-run on fully bootstrapped state: emits the add's
+ *     `(skipped) {already added}` row, then the autoupdate step's
+ *     `(skipped) {already autoupdate}` row (MPA-01).
  *   - re-run on half-bootstrapped state (marketplace present, autoupdate
- *     off): emits ONE "Enabled autoupdate: ..." notification.
+ *     off): emits the same skipped add row, then `(autoupdate enabled)`.
  *
- * An idempotent re-run meets the duplicate-name check before any clone:
- * `addMarketplace` matches the typed source against the user scope's
- * records inside its own state lock (WR-05 in
- * `orchestrators/marketplace/add.ts`). When only the user's
+ * An idempotent re-run is recognized before any clone: `addMarketplace`
+ * matches the typed source against the user scope's records inside its own
+ * state lock (WR-05 in `orchestrators/marketplace/add.ts`). When only the user's
  * `claude-plugins.local.json` declares the marketplace, the add declares
  * it in `claude-plugins.json` too and emits its `(added)` row, still
  * without a clone (LAYER-01).
@@ -108,27 +103,17 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
     rawSource: BOOTSTRAP_SOURCE,
     completionCache: opts.completionCache,
     gitOps: opts.gitOps,
-    // ATTR-07: re-throw the typed precondition (incl. MarketplaceDuplicateName
-    // Error) instead of emitting a `(failed)` row, so the catch below can
-    // swallow the idempotent re-run and keep one-signal-per-state-change.
+    // ATTR-07: re-throw the typed precondition instead of emitting a
+    // `(failed)` row, so the catch below can skip the autoupdate step.
     rethrowPreconditionErrors: true,
   };
   try {
     await addMarketplace(addOptions);
   } catch (err) {
-    // The marketplace already exists in user scope -- idempotent path.
-    // The autoupdate step below covers the user-visible signal via its
-    // "Already enabled: ..." message. Do NOT emit any "already added"
-    // notification here to keep the single-signal-per-state-change
-    // contract from the composed orchestrators.
-    // The classifier also sees a duplicate-name error wrapped with a cleanup
-    // leak, which is still the idempotent re-run.
-    if (classifyAddError(err) !== "duplicate name") {
-      // Any other failed add reports its reason and cause as `marketplace
-      // add` does for the same source, and there is nothing to autoupdate.
-      notifyAddFailure(addOptions, err);
-      return;
-    }
+    // A failed add reports its reason and cause as `marketplace add` does for
+    // the same source, and there is nothing to autoupdate.
+    notifyAddFailure(addOptions, err);
+    return;
   }
 
   await setMarketplaceAutoupdate({

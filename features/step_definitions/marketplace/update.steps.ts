@@ -58,7 +58,7 @@ Given(
 );
 
 Given(
-  "updating the marketplace {string} in the {word} scope has failed as invalid manifest",
+  "updating the marketplace {string} in the {word} scope has failed as unparseable",
   async function (this: ScenarioWorld, name: string, scope: string) {
     const payload = await runCommand(
       this.pi,
@@ -75,7 +75,7 @@ Given(
       },
       {
         severity: "error",
-        marketplaces: [{ name, status: "failed", reasons: [["invalid manifest"]] }],
+        marketplaces: [{ name, status: "failed", reasons: [["unparseable"]] }],
       },
     );
   },

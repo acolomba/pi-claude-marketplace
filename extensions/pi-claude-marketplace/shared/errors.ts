@@ -648,11 +648,12 @@ export class InvalidGitHubBaseUrlError extends Error {
  * malformed JSON and a schema-invalid manifest. Giving the failure a typed
  * class lets consumers narrow on `instanceof` instead of substring-matching
  * the message text or sniffing for `SyntaxError`:
- *   - `orchestrators/marketplace/add.ts::classifyAddError` -> `invalid manifest`
- *     (ATTR-07).
- *   - `orchestrators/marketplace/update.ts::reasonsFromCascadeError` ->
- *     `invalid manifest` (ATTR-10), so a path-source manifest failure never
- *     falls back to the lying `network unreachable` default (NFR-5).
+ *   - `orchestrators/marketplace/add.ts::classifyAddError` and
+ *     `orchestrators/marketplace/update.ts::reasonsFromCascadeError` map it
+ *     through `narrowProbeError`: `unparseable` for malformed JSON,
+ *     `invalid manifest` for a schema-invalid manifest (ATTR-07, ATTR-10,
+ *     MPA-02), so a path-source manifest failure never falls back to the
+ *     lying `network unreachable` default (NFR-5).
  *
  * The original `SyntaxError` (when one originated the failure) is preserved via
  * `Error.cause` so the depth-5 `causeChainTrailer` walker still surfaces the
