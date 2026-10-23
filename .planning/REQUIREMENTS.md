@@ -51,11 +51,11 @@ settle which one wins (see PROJECT.md).
 
 ### update
 
-- [ ] **UPD-01**: `update @<marketplace>` updates every outdated plugin of that marketplace and leaves the plugins of other marketplaces unchanged
+- [x] **UPD-01**: `update @<marketplace>` updates every outdated plugin of that marketplace and leaves the plugins of other marketplaces unchanged
 - [ ] **UPD-02**: Updating a git-source plugin fetches the new revision on a cache miss and makes no request when the cache already holds it
-- [ ] **UPD-03**: A dependency whose version constraint the new version breaks blocks the update and changes nothing
+- [x] **UPD-03**: A dependency whose version constraint the new version breaks blocks the update and changes nothing
 - [ ] **UPD-04**: An update that fails partway keeps the installed version, its skills, and its record
-- [ ] **UPD-05**: `update --partial` updates a plugin whose new version became partially available, and fails without the flag
+- [x] **UPD-05**: `update --partial` updates a plugin whose new version became partially available, and fails without the flag
 
 ### reinstall
 
@@ -163,11 +163,11 @@ settle which one wins (see PROJECT.md).
 | UNI-01 | Phase 6 | Complete |
 | UNI-02 | Phase 6 | Complete |
 | UNI-03 | Phase 4 | Pending |
-| UPD-01 | Phase 7 | Pending |
+| UPD-01 | Phase 7 | Complete |
 | UPD-02 | Phase 4 | Pending |
-| UPD-03 | Phase 7 | Pending |
+| UPD-03 | Phase 7 | Complete |
 | UPD-04 | Phase 5 | Pending |
-| UPD-05 | Phase 7 | Pending |
+| UPD-05 | Phase 7 | Complete |
 | REI-01 | Phase 8 | Complete |
 | REI-02 | Phase 8 | Complete |
 | REI-03 | Phase 8 | Complete |

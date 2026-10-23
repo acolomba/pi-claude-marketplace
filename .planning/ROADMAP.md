@@ -118,7 +118,7 @@ Step module paths are relative to `features/step_definitions/`.
 - [ ] **Phase 4: Git-Source Plugins** — Install, refusal, update, and uninstall of git-source plugins against the loopback git host, with the request log
 - [ ] **Phase 5: Install and Update Rollback** — An install or update that fails partway leaves the scope as it was, and a retry succeeds
 - [x] **Phase 6: Uninstall Data and Prune Flags** — `uninstall` removes or keeps the plugin data directory and prunes unneeded dependencies (completed 2026-10-23)
-- [ ] **Phase 7: Plugin Update by Marketplace, Constraint, and Partial** — `update @<marketplace>`, a blocking version constraint, and `update --partial`
+- [x] **Phase 7: Plugin Update by Marketplace, Constraint, and Partial** — `update @<marketplace>`, a blocking version constraint, and `update --partial` (completed 2026-10-23)
 - [x] **Phase 8: Plugin Reinstall** — Single-plugin reinstall, restoring deleted skill files, and the not-installed failure (completed 2026-10-23)
 - [ ] **Phase 9: Plugin List** — Every row status, the filters, marketplace and scope selection, and `--remote`
 - [ ] **Phase 10: Plugin Info** — Installed, available, partial, and unavailable plugins, `--fetch`, and the not-in-manifest failure
@@ -406,7 +406,7 @@ Plans:
 | 4. Git-Source Plugins | 0/TBD | Not started | - |
 | 5. Install and Update Rollback | 0/TBD | Not started | - |
 | 6. Uninstall Data and Prune Flags | 1/1 | Complete    | 2026-10-23 |
-| 7. Plugin Update by Marketplace, Constraint, and Partial | 0/TBD | Not started | - |
+| 7. Plugin Update by Marketplace, Constraint, and Partial | 1/1 | Complete    | 2026-10-23 |
 | 8. Plugin Reinstall | 1/1 | Complete    | 2026-10-23 |
 | 9. Plugin List | 0/TBD | Not started | - |
 | 10. Plugin Info | 0/TBD | Not started | - |
