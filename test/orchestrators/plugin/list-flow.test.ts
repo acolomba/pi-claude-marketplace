@@ -2227,6 +2227,134 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
   });
 });
 
+/**
+ * Seeds the CR-01 fold shape: a user-scope `mp1` with `beta` installed in the
+ * user scope and `gamma` offered, plus a project-scope clone of that record
+ * (same `marketplaceRoot`) with `alpha` installed in the project scope.
+ */
+async function seedFoldedInstallations(home: string, cwd: string): Promise<void> {
+  const userRoot = path.join(home, ".pi", "agent");
+  await seedMarketplace({
+    scope: "user",
+    scopeRoot: userRoot,
+    cwd,
+    mpName: "mp1",
+    manifest: {
+      name: "mp1",
+      plugins: [
+        { name: "alpha", source: "./alpha", version: "1.0.0" },
+        { name: "beta", source: "./beta", version: "1.0.0" },
+        { name: "gamma", source: "./gamma", version: "1.0.0" },
+      ],
+    },
+    installed: { beta: { version: "1.0.0" } },
+    installablePluginDirs: ["alpha", "beta", "gamma"],
+  });
+  const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
+  const projectLocations = locationsFor("project", cwd);
+  await mkdir(projectLocations.extensionRoot, { recursive: true });
+  await mergeMarketplaceIntoState(projectLocations.extensionRoot, "mp1", {
+    name: "mp1",
+    scope: "project",
+    source: pathSource("./mp1-src"),
+    addedFromCwd: cwd,
+    manifestPath: path.join(sharedMpRoot, ".claude-plugin", "marketplace.json"),
+    marketplaceRoot: sharedMpRoot,
+    plugins: {
+      alpha: buildInstalledPluginRecord(
+        { version: "1.0.0" },
+        seededResources("alpha", { version: "1.0.0" }),
+      ),
+    },
+  });
+}
+
+test("SC-6 / LST-05: --scope project keeps a project installation folded under a user marketplace, and nothing else", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedFoldedInstallations(home, cwd);
+    const { ctx, run, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, run, cwd, scope: "project" });
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp1 [user]\n  ● alpha [project] v1.0.0 (installed)" },
+    ]);
+
+    verify(ctx);
+    verify(ui);
+  });
+});
+
+test("SC-6 / LST-05: --scope user drops the project installation folded under a user marketplace", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedFoldedInstallations(home, cwd);
+    const { ctx, run, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, run, cwd, scope: "user" });
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp1 [user]",
+          "  ● beta v1.0.0 (installed)",
+          "  ○ gamma v1.0.0 (available)",
+        ].join("\n"),
+      },
+    ]);
+
+    verify(ctx);
+    verify(ui);
+  });
+});
+
+test("SC-6 / LST-05: --scope project drops a user marketplace with no project installation", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp1",
+      manifest: { name: "mp1", plugins: [{ name: "beta", source: "./beta", version: "1.0.0" }] },
+      installed: { beta: { version: "1.0.0" } },
+      installablePluginDirs: ["beta"],
+    });
+    await seedMarketplace({
+      scope: "project",
+      scopeRoot: path.join(cwd, ".pi"),
+      cwd,
+      mpName: "mp2",
+      manifest: {
+        name: "mp2",
+        plugins: [
+          { name: "alpha", source: "./alpha", version: "1.0.0" },
+          { name: "gamma", source: "./gamma", version: "1.0.0" },
+        ],
+      },
+      installed: { alpha: { version: "1.0.0" } },
+      installablePluginDirs: ["alpha", "gamma"],
+    });
+    const { ctx, run, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, run, cwd, scope: "project" });
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp2 [project]",
+          "  ● alpha v1.0.0 (installed)",
+          "  ○ gamma v1.0.0 (available)",
+        ].join("\n"),
+      },
+    ]);
+
+    verify(ctx);
+    verify(ui);
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // PL-3: marketplace narrowing
 // ──────────────────────────────────────────────────────────────────────────

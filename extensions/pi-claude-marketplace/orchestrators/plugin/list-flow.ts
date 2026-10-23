@@ -710,19 +710,45 @@ export async function loadPluginListPayload(
     blocks.push(built);
   }
 
-  // SC-6 scope narrowing: if the caller restricted the scope, only emit
-  // blocks whose ORIGINATING scope matches. The fold rule still applied
-  // above so the cross-scope visibility is preserved -- but the resulting
-  // surface is filtered to the requested scope.
-  const filtered =
-    opts.scope === undefined ? blocks : blocks.filter((b) => b.emitScope === opts.scope);
+  const narrowed =
+    opts.scope === undefined ? blocks.map(({ mp }) => mp) : narrowToScope(blocks, opts.scope);
 
   // MSG-GR-3 / CMC-03 sort: pre-sort the marketplace blocks AND the plugin
   // rows within each block at the orchestrator boundary per D-13-19
   // (CMC-03). : notify does NOT sort -- the caller owns iteration
   // order. Name primary case-insensitive, scope secondary
   // project-before-user.
-  return orderPluginListBlocks(filtered.map(({ mp }) => mp));
+  return orderPluginListBlocks(narrowed);
+}
+
+/**
+ * SC-6 / LST-05 scope narrowing: `--scope` keeps that scope's installations,
+ * judged by each row's own install scope rather than by the block the fold
+ * rule grouped it under. A block of the asked scope drops the folded rows of
+ * the other scope; a block of the other scope keeps only its folded rows of
+ * the asked scope, under its own header, and is dropped when none remain.
+ * Candidate rows carry no install scope and stay with their marketplace's
+ * block.
+ */
+function narrowToScope(
+  blocks: readonly BuiltMarketplace[],
+  scope: Scope,
+): MarketplaceRows<PayloadListMsg>[] {
+  return blocks.flatMap(({ mp, emitScope }) => {
+    const plugins =
+      emitScope === scope
+        ? mp.plugins.filter((row) => rowScope(row) !== otherScope(scope))
+        : mp.plugins.filter((row) => rowScope(row) === scope);
+    return emitScope === scope || plugins.length > 0 ? [{ ...mp, plugins }] : [];
+  });
+}
+
+function rowScope(row: PayloadListMsg): Scope | undefined {
+  return "scope" in row ? row.scope : undefined;
+}
+
+function otherScope(scope: Scope): Scope {
+  return scope === "user" ? "project" : "user";
 }
 
 /**
