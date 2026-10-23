@@ -2230,6 +2230,69 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     verifyBoundary();
   });
 
+  test("BFILL-01 / D-18-07: a promotion a dependent's range holds emits no row and keeps the version gate open", async (t) => {
+    // arrange -- the D-18-12 growth fixture, with the marketplace now offering
+    // hello 2.0.0 while the recorded `app` declares `hello@^1.0.0`.
+    const { cwd, locations } = await createHermeticProjectScope(t, "held-promotion");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", workflow: true },
+      app: {},
+    });
+    await writeFile(
+      path.join(marketplaceRoot, "plugins", "app", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "app", dependencies: ["hello@^1.0.0"] }),
+    );
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "mp",
+        plugins: [
+          { name: "hello", version: "2.0.0", source: "./plugins/hello" },
+          { name: "app", version: "1.0.0", source: "./plugins/app" },
+        ],
+      }),
+    );
+    const seeded: ExtensionState = {
+      schemaVersion: 3,
+      lastReconciledExtensionVersion: STALE_STAMP,
+      marketplaces: {
+        mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+          hello: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+            installable: true,
+            supported: ["skills"],
+            unsupported: [],
+          }),
+          app: pluginRecord({
+            pluginRoot: path.join(marketplaceRoot, "plugins", "app"),
+            installable: true,
+            supported: [],
+            unsupported: [],
+          }),
+        }),
+      },
+    };
+    await seedState(locations, seeded);
+    const { ctx, verifyBoundary } = createSilentBoundary();
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await applyBackfillForScopeIsolated(
+      backfillOptions(ctx, cwd, gitOps),
+      "project",
+      readResultFor(seeded, true),
+      outcomes,
+    );
+
+    // assert -- no promotion happened, so the stamp is not written and the
+    // next load retries.
+    assert.deepStrictEqual(outcomes, []);
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), seeded);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
   test("AFILE-04: a promotion that rewrites a commented mcp-adapter.json carries the comments-removed notice", async (t) => {
     // arrange -- the workflow grows the supported set; the re-materialize then
     // restages the plugin's MCP server too.

@@ -94,7 +94,8 @@ async function applyBackfillForScope(
 
   // SF-02: a scanned plugin's backfill FAILED -- a
   // genuine `failed` partition, OR a per-plugin manifest-I/O throw caught inside
-  // the scan for a record recorded `installable: false`; not a benign no-growth /
+  // the scan for a record recorded `installable: false` -- or a dependent's range
+  // held it (D-18-07); not a benign no-growth /
   // concurrent-uninstall / unresolvable-clean-record. Leave the version
   // gate OPEN so the next load retries -- symmetric with the WR-01 self-heal (a
   // THROW from the stamp write also keeps the gate open). Skipping the stamp
@@ -225,7 +226,8 @@ function hasForceInstalledPlugin(state: ExtensionState): boolean {
  * SF-02: returns `true` iff at least one scanned plugin's backfill FAILED -- a
  * genuine `failed` partition surfaced by `maybeBackfillPlugin`, OR a THROW out of
  * `maybeBackfillPlugin` (e.g. a corrupt / permission-denied cached marketplace
- * manifest read for a record recorded `installable: false`), not a benign
+ * manifest read for a record recorded `installable: false`) -- or was held by a
+ * dependent's range (D-18-07), not a benign
  * no-growth / concurrent-uninstall -- so the caller can keep the version gate
  * OPEN and retry. A record recorded `installable: true` never reaches that arm:
  * `resolveRecordedPluginOffline` answers `undefined` for a clean record it
@@ -368,9 +370,10 @@ interface BackfillTarget {
  * (installed)-vs-(partially-installed) projection.
  *
  * SF-01 / SF-02: returns `true` iff the re-materialize FAILED (a genuine
- * failure, surfaced as a plugin-scoped (failed) row), so the caller keeps the
- * version gate OPEN and retries next load. Benign outcomes (no growth,
- * concurrent uninstall, successful promotion) return `false`.
+ * failure, surfaced as a plugin-scoped (failed) row) or a dependent's range
+ * held it (D-18-07, no row), so the caller keeps the version gate OPEN and
+ * retries next load. Benign outcomes (no growth, concurrent uninstall,
+ * successful promotion) return `false`.
  */
 async function maybeBackfillPlugin(
   opts: ApplyReconcileOptions,
@@ -427,17 +430,18 @@ async function maybeBackfillPlugin(
   });
 
   if (outcome.partition === "skipped") {
-    // Benign shapes reach here and none is a failure: the record was removed
-    // under us (concurrent uninstall), or it was disabled under us between this
-    // scan's state SNAPSHOT and reinstall's own fresh read (ENBL-05 --
-    // reinstall refuses a disabled record), or the shared runner skipped it,
-    // chiefly on a real range hold, `dependents constrain` (D-18-07). The
-    // ENBL-08 filter above reads the snapshot, so it cannot see a cross-process
-    // disable that lands after it. In every case there is no promotion row, so
-    // the gate may still close. A dependency walk that cannot read a record is
-    // a failure, not a skip (D-18-17): it reaches the failed arm below and
-    // keeps the gate open.
-    return false;
+    // D-18-07: a real range hold, `dependents constrain`, means the promotion
+    // did not happen and the plugin still lacks the kind this extension now
+    // supports. Keep the gate open with no row, so a later load retries once
+    // the dependents admit the offered version. Every other skip is benign:
+    // the record was removed under us (concurrent uninstall), or it was
+    // disabled under us between this scan's state SNAPSHOT and reinstall's own
+    // fresh read (ENBL-05 -- reinstall refuses a disabled record), or the
+    // shared runner found nothing to install. The ENBL-08 filter above reads
+    // the snapshot, so it cannot see a cross-process disable that lands after
+    // it. A dependency walk that cannot read a record is a failure, not a skip
+    // (D-18-17): it reaches the failed arm below and keeps the gate open.
+    return outcome.reasons?.includes("dependents constrain") === true;
   }
 
   if (outcome.partition === "failed") {
