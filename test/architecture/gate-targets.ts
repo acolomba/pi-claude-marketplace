@@ -199,6 +199,8 @@ export const LIFECYCLE_ENABLED_READ_TARGETS = [
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",
   "extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts",
+  // The shared runner holds the resolved plugin for both re-materializing verbs.
+  "extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts",
 ] as const;
 
 /**

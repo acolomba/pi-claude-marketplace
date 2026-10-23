@@ -119,12 +119,40 @@ export interface PreparedPluginUpdate {
   readonly constraint: UpdateConstraintDisclosure | undefined;
 }
 
+/**
+ * D-18-04 / D-18-15: the three per-verb knobs of the shared materialization
+ * path. They are the only behavioral difference between `update` and
+ * `reinstall` inside it.
+ */
+export interface MaterializationPolicy {
+  /**
+   * `true` refreshes an unpinned git source's mirror before it reads the
+   * mirror's HEAD. `false` reads a present mirror's HEAD with no network and
+   * clones only a missing mirror (NFR-5 cache miss).
+   */
+  readonly refreshSource: boolean;
+  /**
+   * `true` returns `unchanged` for a candidate at the revision the record
+   * holds. `false` re-materializes it, which is how `reinstall` restores
+   * deleted artifacts (REI-01 / REI-02).
+   */
+  readonly skipSameRevision: boolean;
+  /**
+   * `true` lets the swap's agents commit replace this plugin's own previous
+   * agent files whose bytes a user changed, the RINST-01 repair overwrite.
+   * `false` keeps `update`'s refusal.
+   */
+  readonly overwrite: boolean;
+}
+
 /** Inputs required to classify and prepare one installed plugin update. */
 export interface PreparePluginUpdateOptions {
   readonly plugin: string;
   readonly marketplace: string;
   readonly scope: Scope;
   readonly locations: ScopedLocations;
+  /** Absent is update's policy (refresh, skip the recorded revision, no overwrite). */
+  readonly policy?: MaterializationPolicy;
   /** State I/O for the disabled-pin refresh; production callers omit it. */
   readonly stateTransaction?: LockedStateTransactionDeps;
   readonly partial?: boolean;
