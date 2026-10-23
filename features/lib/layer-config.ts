@@ -47,32 +47,52 @@ function readFlag(column: string, cell: string, key: string): boolean | undefine
   }
 }
 
+// A config map keeps one entry per key, so a repeated row would vanish into
+// the last one; the table must name each key once.
+function requireDistinct(keys: readonly string[], what: string): void {
+  if (new Set(keys).size !== keys.length) {
+    throw new Error(`the table declares a ${what} twice: ${JSON.stringify(keys)}`);
+  }
+}
+
 /**
  * Reads a `| marketplace | plugin | enabled |` table, throwing on a missing or
- * unknown column and on an `enabled` cell other than `true`, `false`, or empty.
+ * unknown column, on an `enabled` cell other than `true`, `false`, or empty,
+ * and on a plugin the table declares twice.
  */
 export function readLayerPlugins(table: DataTable): LayerPlugin[] {
   requireColumns(table, PLUGIN_COLUMNS);
-  return table.hashes().map((row) => {
+  const plugins = table.hashes().map((row) => {
     const key = `${String(row.plugin)}@${String(row.marketplace)}`;
     const enabled = readFlag("enabled", String(row.enabled), key);
     return { key, entry: enabled === undefined ? {} : { enabled } };
   });
+  requireDistinct(
+    plugins.map((plugin) => plugin.key),
+    "plugin",
+  );
+  return plugins;
 }
 
 /**
  * Reads a `| name | source | autoupdate |` table, throwing on a missing or
- * unknown column and on an `autoupdate` cell other than `true`, `false`, or
- * empty. The source stays as the table states it, run tokens included.
+ * unknown column, on an `autoupdate` cell other than `true`, `false`, or
+ * empty, and on a marketplace the table declares twice. The source stays as
+ * the table states it, run tokens included.
  */
 export function readLayerMarketplaces(table: DataTable): LayerMarketplace[] {
   requireColumns(table, MARKETPLACE_COLUMNS);
-  return table.hashes().map((row) => {
+  const marketplaces = table.hashes().map((row) => {
     const name = String(row.name);
     const source = String(row.source);
     const autoupdate = readFlag("autoupdate", String(row.autoupdate), name);
     return { name, entry: autoupdate === undefined ? { source } : { source, autoupdate } };
   });
+  requireDistinct(
+    marketplaces.map((marketplace) => marketplace.name),
+    "marketplace",
+  );
+  return marketplaces;
 }
 
 // The layer config as a JSON object, or a new file's first member when it does
