@@ -30,6 +30,7 @@ import { rowArrays } from "../lib/result-rows.ts";
 
 import { currentRun } from "./pi-process.ts";
 
+import type { GitPluginRepository } from "../lib/git-plugin.ts";
 import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-git-host/server.ts";
 import type { NotificationPayload, OfferedSkill, SessionReport } from "../lib/pi-commands.ts";
 import type { PublicationSites, PublishedMarketplace } from "../lib/published-marketplace.ts";
@@ -62,6 +63,7 @@ export class ScenarioWorld extends World {
   // `support/https-git-host.ts` sets it.
   requestWindow: RequestWindow | undefined = undefined;
   private readonly published = new Map<string, PublishedMarketplace>();
+  private readonly gitRepositories = new Map<string, GitPluginRepository>();
   private readonly releases: Array<() => Promise<void> | void> = [];
 
   /** The run's Pi, which the `Before()` hook has reset for this scenario. */
@@ -224,6 +226,26 @@ export class ScenarioWorld extends World {
     }
 
     return published;
+  }
+
+  /** Records the git plugin repository `repository` under its name, replacing an earlier record. */
+  recordGitRepository(repository: GitPluginRepository): void {
+    this.gitRepositories.set(repository.name, repository);
+  }
+
+  /** Returns the git plugin repository `name` this scenario published, if it did. */
+  gitRepository(name: string): GitPluginRepository | undefined {
+    return this.gitRepositories.get(name);
+  }
+
+  /** Returns the git plugin repository `name` this scenario published, failing when it did not. */
+  requireGitRepository(name: string): GitPluginRepository {
+    const repository = this.gitRepositories.get(name);
+    if (repository === undefined) {
+      assert.fail(`the git repository ${name} is not published in this scenario`);
+    }
+
+    return repository;
   }
 
   /** Returns the skills of the last new session, which a `When` step must have started. */

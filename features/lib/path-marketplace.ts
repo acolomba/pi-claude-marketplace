@@ -24,7 +24,7 @@ export interface OfferedPlugin {
 }
 
 /** Throws unless the table's header is exactly `columns`. */
-function requireColumns(table: DataTable, columns: readonly string[]): void {
+export function requireColumns(table: DataTable, columns: readonly string[]): void {
   const [header] = table.raw();
   if (JSON.stringify(header) !== JSON.stringify(columns)) {
     throw new Error(`expected the columns ${columns.join(", ")}, got ${header?.join(", ")}`);
@@ -57,8 +57,11 @@ export function readOfferedPluginsWithDependencies(table: DataTable): OfferedPlu
   });
 }
 
-async function writePlugin(root: string, plugin: OfferedPlugin): Promise<void> {
-  const pluginRoot = path.join(root, "plugins", plugin.name);
+/**
+ * Writes the plugin `plugin` at `pluginRoot`: its `plugin.json` and one skill
+ * whose description names the plugin and its version.
+ */
+export async function writePluginFiles(pluginRoot: string, plugin: OfferedPlugin): Promise<void> {
   const skillDir = path.join(pluginRoot, "skills", `${plugin.name}-skill`);
   await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
   await mkdir(skillDir, { recursive: true });
@@ -74,6 +77,10 @@ async function writePlugin(root: string, plugin: OfferedPlugin): Promise<void> {
     path.join(skillDir, "SKILL.md"),
     `---\nname: ${plugin.name}-skill\ndescription: A skill of ${plugin.name} ${plugin.version}.\n---\n\nVersion ${plugin.version}.\n`,
   );
+}
+
+async function writePlugin(root: string, plugin: OfferedPlugin): Promise<void> {
+  await writePluginFiles(path.join(root, "plugins", plugin.name), plugin);
 }
 
 function manifestText(name: string, plugins: readonly OfferedPlugin[]): string {
