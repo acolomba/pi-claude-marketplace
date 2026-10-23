@@ -23,6 +23,17 @@ Feature: Plugin install rollback
     Then the "claude-plugins.json" file of the project scope declares no plugins
     Then the project scope has no installed plugins
 
+  Scenario: A new session after a failed install offers no skills of the plugin
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the project scope
+    Given a directory blocks the mcp-adapter.json file of the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project", which failed
+    When the user starts a new pi session
+    Then the session offers no skills
+
   Scenario: An install that failed while a directory blocked the mcp-adapter.json file succeeds once the directory is removed
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
