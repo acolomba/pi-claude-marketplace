@@ -23,13 +23,16 @@ Feature: Plugin info
       | fixtures         | project           | false                          | demo@fixtures | demo        | installed     |                | project      | 1.0.0          | true                       | demo-skill               |
       | fixtures         | user              | false                          | demo@fixtures | demo        | installed     |                | user         | 1.0.0          | true                       | demo-skill               |
 
-  Scenario: Info on an installed plugin shows its version, scope, marketplace, and skills
+  Scenario: Info on an installed plugin shows its installed version, scope, marketplace, and skills
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 2.0.0   |
     When the user runs "/claude:plugin info demo@fixtures"
     Then the result has these fields:
       | kind                           | plugin-info   |
@@ -69,7 +72,7 @@ Feature: Plugin info
       | plugin version                 | 1.0.0         |
       | severity                       | info          |
 
-  Scenario: Info on a partially available plugin names the unsupported component an install would leave out
+  Scenario: Info on a partially available plugin reports an unsupported component and the skills an install would keep
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -176,8 +179,6 @@ Feature: Plugin info
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
-      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
-      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
 
   Scenario: Info without --fetch shows the revision fetched last and makes no request
     Given the git repository "ghp" holds these plugins:
@@ -208,6 +209,40 @@ Feature: Plugin info
       | plugin version                 | {ghp revision 1} |
       | severity                       | info             |
     Then the git host receives no request
+
+  Scenario: Info with --fetch on an installed plugin shows the installed revision after the repository moves
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a url source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 2.0.0   |      |
+    When the user runs "/claude:plugin info ghp@gits --fetch"
+    Then the result has these fields:
+      | kind                           | plugin-info      |
+      | marketplace details autoupdate | false            |
+      | marketplace name               | gits             |
+      | marketplace scope              | project          |
+      | needs reload                   | false            |
+      | plugin components resolved     | true             |
+      | plugin components skills       | ghp-skill        |
+      | plugin id                      | ghp@gits         |
+      | plugin name                    | ghp              |
+      | plugin reasons                 |                  |
+      | plugin scope                   | project          |
+      | plugin status                  | installed        |
+      | plugin version                 | {ghp revision 1} |
+      | severity                       | info             |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
 
   Scenario: Info on a plugin the marketplace does not offer fails as not in manifest
     Given the marketplace "fixtures" is published as a dir source
