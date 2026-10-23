@@ -3872,8 +3872,13 @@ function createGitOps(
     readonly fixtureSourceDir?: string;
     readonly cloneThrows?: Error;
     readonly resolveRemoteRefThrows?: Error;
-    /** The commit the fake reports as `HEAD`, both before and after a clone. */
+    /**
+     * The commit the fake reports as `HEAD` and as the default branch's last
+     * fetch, both before and after a clone.
+     */
     readonly head?: string;
+    /** Remote-tracking refs a previous fetch left in the mirror. */
+    readonly fetchedRefs?: Readonly<Record<string, string>>;
   } = {},
 ): {
   readonly gitOps: ReturnType<typeof createGitOpsFake>["gitOps"];
@@ -3897,6 +3902,10 @@ function createGitOps(
       resolveRemoteRefError: options.resolveRemoteRefThrows,
     }),
     ...(options.head !== undefined && { initialOid: options.head, remoteHead: options.head }),
+    localRefs: {
+      ...(options.head !== undefined && { "refs/remotes/origin/main": options.head }),
+      ...options.fetchedRefs,
+    },
   });
   const gitOps: typeof fake.gitOps = {
     ...fake.gitOps,
@@ -4652,10 +4661,11 @@ test("a git-subdir reinstall honors clone-root subdir containment (pluginRoot un
 });
 
 // ───────────────────────────────────────────────────────────────────────────
-// MIRR-06 / D-18-04 / PRL-07 -- an unpinned git-source reinstall reads the
-// mirror's HEAD offline and copies that commit. Only a missing mirror is a
-// cache miss: reinstall clones it once (the NFR-5 cache-miss allowance) and
-// installs its HEAD; a failed clone skips the reinstall.
+// MIRR-06 / D-18-04 / PRL-07 -- an unpinned git-source reinstall reads, offline,
+// the commit the mirror last fetched for the ref the entry declares, and
+// copies that commit. Only a missing mirror is a cache miss: reinstall clones
+// it once (the NFR-5 cache-miss allowance) and installs its HEAD; a failed
+// clone skips the reinstall.
 // ───────────────────────────────────────────────────────────────────────────
 
 const MIRROR_HEAD_SHA = "b2c3d4e5f60718293a4b5c6d7e8f90123456789a";
@@ -4663,8 +4673,8 @@ const MIRROR_HEAD_SHA = "b2c3d4e5f60718293a4b5c6d7e8f90123456789a";
 /**
  * Build a git plugin tree at `pluginRoot` and stamp a minimal `.git/HEAD` at
  * `mirrorRoot` holding `headSha` (detached-HEAD form), the shape a real clone
- * leaves. The shared probe reads HEAD through the git-ops fake, which a case
- * seeds with the same sha.
+ * leaves. The shared probe reads the commit through the git-ops fake, which a
+ * case seeds with the same sha.
  */
 async function writeMirrorTree(
   mirrorRoot: string,
@@ -4740,7 +4750,7 @@ async function seedUnpinnedGitRecord(opts: {
   });
 }
 
-test("GIT-01 / D-18-04 / D-18-11: an unpinned reinstall of a record on the mirror copies the mirror's HEAD with no network call", async () => {
+test("GIT-01 / D-18-04 / D-18-11: an unpinned reinstall of a record on the mirror copies the default branch the mirror last fetched with no network call", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mirror-warm-"));
     try {
@@ -4811,6 +4821,79 @@ test("GIT-01 / D-18-04 / D-18-11: an unpinned reinstall of a record on the mirro
           resolvedSource: await locations.pluginCloneDir(pluginCloneKey(cloneUrl, MIRROR_HEAD_SHA)),
           resolvedSha: MIRROR_HEAD_SHA,
           version: "9.9.9",
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("REI-04 / D-18-04: an unpinned reinstall copies the commit the mirror last fetched for the declared ref, not the commit checked out for another ref", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mirror-ref-"));
+    try {
+      // arrange
+      const cloneUrl = "https://example.com/org/repo";
+      const releaseSha = "c3d4e5f60718293a4b5c6d7e8f90123456789abc";
+      const locations = locationsFor("project", cwd);
+      const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+      await writeMirrorTree(mirrorRoot, mirrorRoot, "gp", MIRROR_HEAD_SHA);
+      await seedUnpinnedGitRecord({
+        cwd,
+        resolvedSource: mirrorRoot,
+        resolvedSha: MIRROR_HEAD_SHA,
+        source: { source: "url", url: cloneUrl, ref: "release" },
+      });
+      // Another source of the same repository last checked out the default
+      // branch; the `release` branch was fetched earlier.
+      const { gitOps, state: gitState } = createGitOps({
+        head: MIRROR_HEAD_SHA,
+        fetchedRefs: { "refs/remotes/origin/release": releaseSha },
+        cloneThrows: new Error("network unreachable: clone"),
+        resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
+      });
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        render: "none",
+        cloneCacheSeam: reinstallSeamWith(gitOps),
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "reinstalled",
+        name: "gp",
+        marketplace: "mp",
+        scope: "project",
+        version: "9.9.9",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+      });
+      assert.deepStrictEqual(
+        {
+          clone: gitState.cloneCalls,
+          fetch: gitState.fetchCalls,
+          resolveRemoteRef: gitState.resolveRemoteRefCalls,
+        },
+        { clone: [], fetch: [], resolveRemoteRef: [] },
+      );
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
+      assert.deepStrictEqual(
+        { resolvedSource: record?.resolvedSource, resolvedSha: record?.resolvedSha },
+        {
+          resolvedSource: await locations.pluginCloneDir(pluginCloneKey(cloneUrl, releaseSha)),
+          resolvedSha: releaseSha,
         },
       );
     } finally {
@@ -6762,7 +6845,7 @@ test("LAYER-04: the plugin form of reinstall with --local refuses a plugin only 
   });
 });
 
-test("an unpinned git-subdir reinstall copies the mirror's HEAD without external calls", async () => {
+test("an unpinned git-subdir reinstall copies the default branch the mirror last fetched without external calls", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-subdir-mirror-"));
     try {
