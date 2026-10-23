@@ -75,14 +75,15 @@ The phase touches the command surface, so it was researched first.
   `collectMarketplaceRecordsByScope` decides for info. The check lives in
   `listPlugins` (the command path); the LLM tool and the browser loader keep
   the payload builder unchanged.
-- **D-02:** `--scope <s>` keeps the installations of scope `<s>` only, keyed
-  on each row's own `scope`, not on the block it is grouped under. A block of
-  scope `<s>` keeps its rows except installation rows of the other scope (the
-  fold carries those). A folded block of the other scope is kept with only
-  its rows of scope `<s>`, under its own header, and is dropped when none
-  remain. Candidate rows (available, remote, and so on) have no install scope
-  and stay with the block of their marketplace's scope. Without `--scope`,
-  output is unchanged.
+- **D-02:** `--scope <s>` keeps the installations of scope `<s>` only. The
+  cross-scope fold (a project record cloned from a user marketplace, grouped
+  under the user header) serves the both-scopes view only. Under `--scope`,
+  each block lists one scope's own records and candidates: a project clone
+  shows under its own `[project]` header, and under `--scope user` a plugin
+  installed only in the project scope is an `available` row. A clone whose
+  manifest cannot be read keeps its `(failed)` header. Without `--scope`,
+  output is unchanged. (Amended after code review CR-01..CR-03: the first
+  design filtered rows after the fold and lost rows and failed headers.)
 
 ### Not bugs (recorded so verification does not reopen them)
 - **D-03:** `--remote` is the RSTA-07 / D-80-07 filter for the `remote`
