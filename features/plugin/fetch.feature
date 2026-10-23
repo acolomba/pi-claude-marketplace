@@ -164,16 +164,12 @@ Feature: Plugin fetch
       | marketplace name | marketplace scope | id        | name | status    | reasons |
       | gits             | project           | ghp@gits  | ghp  | available |         |
       | more             | project           | urlp@more | urlp | available |         |
-    # A new copy of an unpinned plugin is cloned and then refreshed at once,
-    # so each repository answers two rounds.
+    # A new copy of an unpinned plugin is cloned once, so each repository
+    # answers one round.
     Then the git host receives these requests:
       | method | path                                             | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack  | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                    | 200    |
-      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack  | 200    |
-      | POST   | /acme/ghp.git/git-upload-pack                    | 200    |
-      | GET    | /acme/urlp.git/info/refs?service=git-upload-pack | 200    |
-      | POST   | /acme/urlp.git/git-upload-pack                   | 200    |
       | GET    | /acme/urlp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/urlp.git/git-upload-pack                   | 200    |
 
