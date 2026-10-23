@@ -78,6 +78,12 @@ and no file another phase owns.
   `unsupported mcp`), and the JSON result carries no list of component kinds.
   So the reason is the name of what was left out. Deeper `info` coverage
   belongs to Phase 10.
+- **D-10:** The update that "fails" without `--partial` reports a `warning`
+  result ("A plugin operation needs attention."), not an `error`. This is the
+  recorded SEV-04/XSURF-03 split: a targeted update decline is a warning, and a
+  bulk one is info. A `partially-available` install without `--partial` is an
+  error instead. Claude Code has no partial install, so no upstream rule
+  overrides this. The scenario asserts the warning, and this is not a bug.
 
 ### Claude's Discretion
 - Scenario titles, the order of scenarios in the file, and whether a check
