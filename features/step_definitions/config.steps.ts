@@ -2,11 +2,12 @@
  * @fileoverview Steps about the configs a user owns in a scope: the base config
  * `claude-plugins.json` and the local config `claude-plugins.local.json`.
  *
- * Two setup steps each write one layer config, to model a hand edit or a
- * version-control update. One writes the `plugins` member and keeps the
- * config's other members. The other writes the whole text, which can leave the
- * file broken. Every other step only reads, so this module writes nothing else
- * and deletes nothing. `holds this text` compares the raw text of a config, so
+ * Three setup steps each write one layer config, to model a hand edit or a
+ * version-control update. One writes the `plugins` member and one the
+ * `marketplaces` member, each keeping the config's other members; the
+ * marketplaces step expands the run tokens in each source. The third writes
+ * the whole text, which can leave the file broken. Every other step only
+ * reads, so this module writes nothing else and deletes nothing. `holds this text` compares the raw text of a config, so
  * a scenario can show that a broken config stayed as it was.
  *
  * A missing file fails every step that reads one; it never reads as zero
@@ -30,7 +31,14 @@ import path from "node:path";
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import { fieldRecord, flatten, isPlainObject, recordTable } from "../lib/field-rows.ts";
-import { readLayerPlugins, writeLayerPlugins, writeLayerText } from "../lib/layer-config.ts";
+import {
+  readLayerMarketplaces,
+  readLayerPlugins,
+  writeLayerMarketplaces,
+  writeLayerPlugins,
+  writeLayerText,
+} from "../lib/layer-config.ts";
+import { expandTokens } from "../lib/run-tokens.ts";
 
 import type { ScenarioWorld } from "../support/world.ts";
 
@@ -117,17 +125,48 @@ async function compareDeclarations(
   assert.deepStrictEqual(recordTable(stated, records), table.raw());
 }
 
+// Reads the file back and asserts that one declaration map holds exactly
+// `declarations`, so a broken write fails in the step that made it.
+async function assertDeclared(
+  file: string,
+  member: "marketplaces" | "plugins",
+  declarations: ReadonlyArray<readonly [string, object]>,
+): Promise<void> {
+  const { config, content } = await readConfigObject(file);
+  assert.deepStrictEqual(
+    Reflect.get(config, member),
+    Object.fromEntries(declarations),
+    `${file} does not declare the ${member} of the table: ${content}`,
+  );
+}
+
 Given(
   "a config in scope {word} and layer {word}, with these plugins:",
   async function (this: ScenarioWorld, scope: string, layer: string, table: DataTable) {
     const file = layerConfigPath(this, scope, layer);
     const plugins = readLayerPlugins(table);
     await writeLayerPlugins(file, plugins);
-    const { config, content } = await readConfigObject(file);
-    assert.deepStrictEqual(
-      Reflect.get(config, "plugins"),
-      Object.fromEntries(plugins.map(({ key, entry }) => [key, entry])),
-      `${file} does not declare the plugins of the table: ${content}`,
+    await assertDeclared(
+      file,
+      "plugins",
+      plugins.map(({ key, entry }) => [key, entry]),
+    );
+  },
+);
+
+Given(
+  "a config in scope {word} and layer {word}, with these marketplaces:",
+  async function (this: ScenarioWorld, scope: string, layer: string, table: DataTable) {
+    const file = layerConfigPath(this, scope, layer);
+    const marketplaces = readLayerMarketplaces(table).map(({ name, entry }) => ({
+      name,
+      entry: { ...entry, source: expandTokens(entry.source, this.tokens) },
+    }));
+    await writeLayerMarketplaces(file, marketplaces);
+    await assertDeclared(
+      file,
+      "marketplaces",
+      marketplaces.map(({ name, entry }) => [name, entry]),
     );
   },
 );
