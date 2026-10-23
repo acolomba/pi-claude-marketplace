@@ -2184,7 +2184,8 @@ async function buildInstalledGitRow(opts: {
         marketplaceRoot: mpRecord.marketplaceRoot,
         marketplaceName: mpRecord.name,
         readFileText: (filePath) => reader.readTextFile(filePath),
-        resolveGitPluginRoot: probe,
+        // The tree the probe just materialized; probing again would fetch twice.
+        resolveGitPluginRoot: () => Promise.resolve(presence),
       });
       if (resolved.state === "installable") {
         return await buildResolvedInstalledRow(reader, env, presence.pluginRoot, resolved, {
@@ -2535,14 +2536,16 @@ async function buildGitNotInstalledRow(opts: {
   }
 
   const pluginRoot = presence.pluginRoot;
-  // D-77-01: an entry that declares no version takes the warm tree's commit as
-  // its version, the version an install of that tree records.
+  // D-77-01: an entry that declares no version shows the warm tree's commit,
+  // which is what an install of that tree records; a declared version, which
+  // pins the plugin upstream, is shown as declared.
   const warmVersion = version ?? shaVersion(presence.resolvedSha);
   const ctx: ResolveContext = {
     marketplaceRoot: mpRecord.marketplaceRoot,
     marketplaceName: mpRecord.name,
     readFileText: (filePath) => reader.readTextFile(filePath),
-    resolveGitPluginRoot: probe,
+    // The tree the probe just materialized; probing again would fetch twice.
+    resolveGitPluginRoot: () => Promise.resolve(presence),
   };
   try {
     const resolved = await resolveStrict(entry, ctx);
@@ -2575,7 +2578,7 @@ async function buildGitNotInstalledRow(opts: {
     return {
       status: "remote",
       name: pluginName,
-      ...(version !== undefined && { version }),
+      version: warmVersion,
       ...(description !== undefined && { description }),
       reasons: [narrowProbeError(err)],
       componentsResolved: false,
