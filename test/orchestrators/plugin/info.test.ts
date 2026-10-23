@@ -37,6 +37,7 @@ import path from "node:path";
 import test from "node:test";
 
 import * as git from "isomorphic-git";
+import lockfile from "proper-lockfile";
 import { mock, verify, when } from "strong-mock";
 
 import {
@@ -10143,5 +10144,102 @@ test("WGATE-01: a gate note takes its place among the other advisories, in direc
         ].join("\n"),
       },
     ]);
+  });
+});
+
+test("GIT-03: `info --fetch` of a not-installed git plugin under a held state lock fails as lock held", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
+      },
+    });
+    const locations = locationsFor("user", cwd);
+    const seam: InfoCloneCacheSeam = {
+      resolvePluginPin: () => assert.fail("a held lock never resolves a pin"),
+      materializePluginClone: () => assert.fail("a held lock never clones"),
+      materializeOrRefreshPluginMirror: () => assert.fail("a held lock never refreshes the mirror"),
+    };
+    const release = await lockfile.lock(locations.extensionRoot, {
+      lockfilePath: locations.stateLockFile,
+      realpath: false,
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    try {
+      await getPluginInfo({
+        ctx,
+        run,
+        marketplace: "mp",
+        plugin: "gplug",
+        scope: "user",
+        cwd,
+        fetch: true,
+        cloneCacheSeam: seam,
+      });
+    } finally {
+      await release();
+    }
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /gplug v1\.0\.0 \(failed\) \{lock held\}/);
+  });
+});
+
+test("GIT-03: `info --fetch` of an installed git plugin under a held state lock fails as lock held", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
+      },
+      installed: { gplug: { version: "1.0.0" } },
+    });
+    const locations = locationsFor("user", cwd);
+    const seam: InfoCloneCacheSeam = {
+      resolvePluginPin: () => assert.fail("a held lock never resolves a pin"),
+      materializePluginClone: () => assert.fail("a held lock never clones"),
+      materializeOrRefreshPluginMirror: () => assert.fail("a held lock never refreshes the mirror"),
+    };
+    const release = await lockfile.lock(locations.extensionRoot, {
+      lockfilePath: locations.stateLockFile,
+      realpath: false,
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    try {
+      await getPluginInfo({
+        ctx,
+        run,
+        marketplace: "mp",
+        plugin: "gplug",
+        scope: "user",
+        cwd,
+        fetch: true,
+        cloneCacheSeam: seam,
+      });
+    } finally {
+      await release();
+    }
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /gplug v1\.0\.0 \(failed\) \{lock held\}/);
   });
 });

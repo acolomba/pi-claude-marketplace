@@ -321,3 +321,59 @@ Feature: Plugin info
       | plugin status                  | unavailable    |
       | plugin version                 | 1.0.0          |
       | severity                       | info           |
+
+  Scenario: Info with --fetch on a plugin never fetched clones its repository with one request round
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a url source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin info ghp@gits --fetch"
+    Then the result has these fields:
+      | kind                           | plugin-info |
+      | marketplace details autoupdate | false       |
+      | marketplace name               | gits        |
+      | marketplace scope              | project     |
+      | needs reload                   | false       |
+      | plugin components resolved     | true        |
+      | plugin components skills       | ghp-skill   |
+      | plugin id                      | ghp@gits    |
+      | plugin name                    | ghp         |
+      | plugin reasons                 |             |
+      | plugin status                  | available   |
+      | plugin version                 | 1.0.0       |
+      | severity                       | info        |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+
+  Scenario: Info with --fetch while another process holds the state lock fails as lock held
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given another process holds the state lock of the project scope
+    When the user runs "/claude:plugin info ghp@gits --fetch"
+    Then the result has these fields:
+      | kind                           | plugin-info                    |
+      | marketplace details autoupdate | false                          |
+      | marketplace name               | gits                           |
+      | marketplace scope              | project                        |
+      | needs reload                   | false                          |
+      | plugin components resolved     | false                          |
+      | plugin id                      | ghp@gits                       |
+      | plugin name                    | ghp                            |
+      | plugin reasons                 | lock held                      |
+      | plugin scope                   | project                        |
+      | plugin status                  | failed                         |
+      | severity                       | error                          |
+      | summary                        | A plugin operation has failed. |
+    Then the git host receives no request

@@ -74,6 +74,7 @@ import {
   errorMessage,
   isErrnoException,
   rethrowInvalidGitHubBaseUrl,
+  StateLockHeldError,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
@@ -98,6 +99,7 @@ import {
   narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
+import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 import { crossScopeFlag } from "../marketplace/shared.ts";
 import { collectMarketplaceRecordsByScope, type ScopedMarketplaceRecord } from "../scope-fanout.ts";
@@ -2111,8 +2113,27 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
     return resolveGitPluginRootWithSubdir(gitSource, cloneRoot, pin);
   };
 
+  // GIT-03: the refresh runs under the scope's state lock, so no install
+  // copies from a mirror mid-refresh; a held lock folds to `lock held`.
   return (gitSource) =>
-    gitSource.sha === undefined ? probeUnpinned(gitSource) : probePinned(gitSource);
+    withExistingScopeLock(locations, () =>
+      gitSource.sha === undefined ? probeUnpinned(gitSource) : probePinned(gitSource),
+    );
+}
+
+/**
+ * GIT-03: `info --fetch` refreshes under the scope's state lock, so a lock
+ * another process holds fails the read, as it fails every command that needs
+ * the lock, instead of degrading like a transport failure.
+ */
+function lockHeldRow(pluginName: string, version: string | undefined): PluginInfoRow {
+  return {
+    status: "failed",
+    name: pluginName,
+    ...(version !== undefined && { version }),
+    reasons: ["lock held"],
+    componentsResolved: false,
+  };
 }
 
 /**
@@ -2208,6 +2229,10 @@ async function buildInstalledGitRow(opts: {
     // closed-set reason on the recorded row (D-81-04 parity with the
     // not-installed arm) -- otherwise a failed `--fetch` would render
     // byte-identical to bare info.
+    if (err instanceof StateLockHeldError) {
+      return lockHeldRow(pluginName, version);
+    }
+
     if (fetchCtx !== undefined) {
       const base = buildNonPathInstalledRow(pluginName, version, description, installedRecord);
       return { ...base, reasons: [...(base.reasons ?? []), foldFetchOrProbeError(err)] };
@@ -2522,6 +2547,10 @@ async function buildGitNotInstalledRow(opts: {
     // `components: not resolved` arm with an existing closed-set reason
     // (network unreachable / authentication required, else the probe-error
     // ladder). The `(remote)` token is the not-installed git surface.
+    if (err instanceof StateLockHeldError) {
+      return lockHeldRow(pluginName, version);
+    }
+
     return {
       status: "remote",
       name: pluginName,
