@@ -5,16 +5,16 @@ milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 1
 current_phase_name: Suite Foundation
 status: executing
-stopped_at: Completed 01-07-PLAN.md
-last_updated: "2026-10-23T03:53:23.970Z"
+stopped_at: Completed 01-08-PLAN.md
+last_updated: "2026-10-23T04:08:56.052Z"
 last_activity: 2026-10-22
 last_activity_desc: Phase 1 execution started
-state_head: 24fbdeac486505a4fe207bac555bb00498be1ceb
+state_head: 1f3187463631b07b2dc57621ca5e7e35fd4fd099
 progress:
   total_phases: 15
   completed_phases: 0
   total_plans: 10
-  completed_plans: 7
+  completed_plans: 8
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 1 (Suite Foundation) — EXECUTING
-Plan: 8 of 10
+Plan: 9 of 10
 Status: Ready to execute
 Last activity: 2026-10-22 — Phase 1 execution started
 
@@ -186,8 +186,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-23T03:53:23.846Z
-**Stopped at:** Completed 01-07-PLAN.md
+**Last session:** 2026-10-23T04:08:39.959Z
+**Stopped at:** Completed 01-08-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -390,6 +390,7 @@ archived milestone artifacts.
 | Phase 01 P05 | 8 min | 2 tasks | 8 files |
 | Phase 01 P06 | 10 min | 3 tasks | 10 files |
 | Phase 01 P07 | 9 min | 2 tasks | 8 files |
+| Phase 01 P08 | 10 min | 2 tasks | 8 files |
 
 ## Decisions
 
@@ -559,6 +560,8 @@ archived milestone artifacts.
 - [Phase 01]: Plugin publishing steps live in features/step_definitions/plugin/publishing.steps.ts; publishOutputStyle makes a published plugin partially available on every source kind
 - [Phase 01]: [lifecycle-coverage] Git host steps name a repository through {git repository}; every arm registers a disarming release, and 'the git host serves the <repository> again' lifts it mid-scenario
 - [Phase 01]: [lifecycle-coverage] Another process holds a scope's state lock through a self-spawning features/lib holder with the product's proper-lockfile options; a directory in place of mcp-adapter.json is the rollback obstruction; {project dir} and {agent dir} state sandbox paths
+- [Phase 1]: [lifecycle-coverage 01-08] Git plugin versions are stated as {<repository> revision <n>} run tokens that the world derives from the revisions a scenario published; plugin source kinds go in a 'plugin source kind' Examples column, untagged
+- [Phase 1]: [lifecycle-coverage 01-08] One plugin git-source Outline covers github, url, and git-subdir: each unpinned install made the upload-pack pair twice (clone, then mirror refresh)
 
 ### mcp-4 decisions
 
