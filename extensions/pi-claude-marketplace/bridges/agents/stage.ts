@@ -10,8 +10,9 @@
 //      targetPaths self-heals.
 //   2. AG-5 prepare-time foreign content is SOFT-FAILED (W-08 / B-08 per
 //      D-06 corollary) -- surfaced via result.failed[].
-//      Foreign-preserved index rows survive the
-//      commit (kept in agents:[]).
+//      Foreign-preserved index rows survive the commit (kept in agents:[]),
+//      except under `force`, reinstall's repair overwrite (RINST-01), which
+//      removes their files after a containment check and drops the rows.
 //   3. AG-9 / RN-4 cross-owner conflict (a generated name is already owned
 //      by a DIFFERENT (mp, plugin)) throws -- AgentOwnershipConflictError
 //      carries the full conflict list.

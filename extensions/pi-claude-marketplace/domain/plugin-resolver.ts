@@ -777,7 +777,8 @@ export function requireInstallable(
  *
  * BFILL-01 / D-18-06: reinstall resolves through this gate (the shared
  * runner admits a partial candidate for it), so it can re-materialize a
- * partially-installed (`partially-available`) plugin in place. The `--partial` install/update flag plumbing lands later.
+ * partially-installed (`partially-available`) plugin in place. `install
+ * --partial` and `update --partial` resolve through it too.
  */
 export function requirePartialInstallable(
   r: ResolvedPlugin,

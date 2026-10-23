@@ -938,8 +938,7 @@ async function finalizeUpdateRecord(
  * preserves the OLD `resources.hooks` inventory in state.json, keeping the
  * truthful "swap incomplete" view. The /reload routing table points at the
  * partially-deleted file until the user runs reinstall
- * (RECOVERY_PLUGIN_REINSTALL_PREFIX hint). Same recovery contract as
- * `reinstall.ts::commitHooks` (WR-05).
+ * (RECOVERY_PLUGIN_REINSTALL_PREFIX hint).
  *
  * Returns the supported hook entries version B materialized (D-100-01 /
  * ENBL-10), or undefined when version B declares no hooks -- which is the

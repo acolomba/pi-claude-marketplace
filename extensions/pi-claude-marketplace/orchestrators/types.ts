@@ -56,7 +56,7 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    */
   readonly constraint?: UpdateConstraintDisclosure;
   /**
-   * D-99-02c: the GENERATED NAMES the reinstall ledger staged. The `Names`
+   * D-99-02c: the GENERATED NAMES the reinstall staged. The `Names`
    * suffix keeps them spelled apart from the same-subject presence FLAGS on
    * `LedgerDegradationSignals` (`plugin/shared.ts`), which carry a count
    * verdict only. A name list and a boolean answer different questions --
@@ -97,8 +97,8 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * WARN-01 / WR-04 / D-86-03: the component kinds whose SOURCE frontmatter
    * could not be parsed and which re-materialized in degraded form. The
    * reinstall primitive drives the load-time backfill, so without this the
-   * backfill projection renders a clean row over a ledger that just degraded a
-   * component -- the contradiction the install and enable arms already avoid by
+   * backfill projection renders a clean row over a reinstall that just
+   * degraded a component -- the contradiction the install and enable arms already avoid by
    * carrying the same signal. Omitted when nothing degraded, so a clean
    * reinstall's outcome shape is unchanged (NREG-01).
    */
@@ -111,12 +111,13 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * `notes` folds the discovery half and the maintenance warnings behind a
    * `warning: ` prefix for orchestrated consumers, so a reader cannot tell
    * them apart again. The agents and MCP hygiene half is not carried: the
-   * shared swap drops it in direct mode, as it does for `update`. `reinstallPlugins` needs exactly the discovery
-   * half to render after its cascade, and the boundary forces the carrier:
-   * the warnings originate inside the locked ledger while the rows are not
-   * rendered until `renderReinstallPartitionAndNotify` at the very end of
-   * `reinstallPlugins`, so a diagnostic fired from inside the ledger would
-   * print the detail BEFORE the row it explains.
+   * shared swap drops it in direct mode, as it does for `update`.
+   * `reinstallPlugins` needs exactly the discovery half to render after its
+   * cascade, and the boundary forces the carrier: the warnings originate
+   * inside the shared runner while the rows are not rendered until
+   * `renderReinstallPartitionAndNotify` at the very end of `reinstallPlugins`,
+   * so a diagnostic fired from inside the runner would print the detail
+   * BEFORE the row it explains.
    *
    * Populated only on the `render: "none"` arm, the same arm that populates
    * `notes`. The self-rendering `render !== "none"` arm leaves this undefined
@@ -132,8 +133,8 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly discoveryWarnings?: readonly string[];
   /**
    * AFILE-04 / AFILE-02: the MCP config file notices from this reinstall's
-   * MCP replace. The outcome carries them because the rows render after the
-   * locked ledger finishes. A consumer routes them through
+   * MCP commit. The outcome carries them because the rows render after the
+   * shared runner finishes. A consumer routes them through
    * `notifyMcpConfigNotices`. Populated only on the `render: "none"` arm, and
    * omitted when there are none (NREG-01).
    */
@@ -174,7 +175,7 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
    * present, `outcomeToCascadePluginMessage` prefers `reasons[0]` over
    * `narrowReasons(notes)`; when absent, the substring narrow
    * is used (for fixtures that build outcomes without
-   * `reasons`). Populated by the catch in `reinstallPlugins` so an
+   * `reasons`). Populated by `reinstall-record.ts` so an
    * EACCES / EPERM / ENOENT failure renders as the matching closed
    * Reason (`permission denied` / `source missing`) rather than the
    * permissive `not in manifest` default. Typed `ContentReason` (TYPE-02):

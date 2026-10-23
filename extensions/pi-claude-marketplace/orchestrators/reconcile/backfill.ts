@@ -200,8 +200,9 @@ function hasForceInstalledPlugin(state: ExtensionState): boolean {
 /**
  * BFILL-01 / WCONV-01: scan EVERY plugin in the read-pass snapshot and
  * re-materialize each whose supported set grew -- a wider population than the
- * name describes. Iterates the snapshot; reinstallPlugin self-locks and
- * re-reads fresh state per plugin (CR-01).
+ * name describes. Iterates the snapshot; reinstallPlugin re-reads fresh state
+ * per plugin, and the shared swap takes the scope lock at its intent mark and
+ * its finalize (CR-01, D-18-10).
  *
  * WCONV-01 is what makes the population every record rather than only the
  * degraded ones: a plugin declaring a component kind this extension did not
