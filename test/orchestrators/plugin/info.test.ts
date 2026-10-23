@@ -6236,7 +6236,7 @@ test("FTCH-03 / D-78-04: info --fetch on an installed git plugin with a missing 
   });
 });
 
-test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source materializes AND refreshes the mirror (probeUnpinned arm)", async () => {
+test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source clones the mirror once (probeUnpinned arm)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -6288,14 +6288,14 @@ test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source materi
       credentialOps,
     });
 
-    // Cold mirror: materialized once, then refreshed in place (MIRR-02 -- the
-    // mirror refresh IS the consented fetch on the unpinned arm). D-2-01: the
-    // COLD mirror clone sends the wire url, `.git` and all; the mirror dir is
-    // keyed on the suffix-less identity.
+    // Cold mirror: the first clone IS the consented fetch on the unpinned arm,
+    // so it is not refreshed again right away (MIRR-02). D-2-01: the COLD
+    // mirror clone sends the wire url, `.git` and all; the mirror dir is keyed
+    // on the suffix-less identity.
     // assert
     assert.equal(gitState.cloneCalls.length, 1);
     assert.equal(gitState.cloneCalls[0]?.url, "https://example.com/repo.git");
-    assert.ok(gitState.fetchCalls.length >= 1, "the fetch hook refreshed the mirror (MIRR-02)");
+    assert.equal(gitState.fetchCalls.length, 0, "a fresh clone is not fetched again (MIRR-02)");
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
     assert.match(msg, /○ gplug v1\.0\.0 \(available\)/, msg);
