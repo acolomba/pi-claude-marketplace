@@ -97,7 +97,11 @@ of `enable` and `disable`.
   whose subject is the dependent: here the dependent is the plugin the user
   named. No new token joins the closed reason set. The cause follows the
   D-08-01 plain-English form, without a chained command:
-  `Install <missing dependencies> first, then <target>.`
+  `Install <missing dependencies> first, then enable <target>.`
+- **D-09:** (code review) A root that is already enabled is skipped as
+  `{already enabled}` even when a dependency is missing, because Claude Code
+  answers `already_in_goal_state` before it reads the closure. Only an enable
+  that would turn the root on is refused.
 - **D-04:** ENA-05's enable half for a **disabled** dependency keeps the current
   behavior (EDEP-03): the dependency is enabled through its record and
   reported on its own `installed` row with `{dependency enabled}`.
