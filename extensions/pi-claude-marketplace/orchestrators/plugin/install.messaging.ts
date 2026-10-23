@@ -3,6 +3,7 @@ import {
   errorMessage,
   InstallMarketplaceAddError,
   PluginShapeError,
+  StateLockHeldError,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import {
@@ -172,6 +173,22 @@ function classifyGitAuthFailure(err: unknown): "authentication required" | undef
     : undefined;
 }
 
+/**
+ * FLR-01 / D-02: the reasons of the runtime-throw row. A held state lock reads
+ * `lock held`, as uninstall's row does; a git auth challenge reads its auth
+ * reason; any other throw has none.
+ */
+function runtimeFailureReasons(
+  err: unknown,
+  authReason: "authentication required" | undefined,
+): readonly ContentReason[] {
+  if (err instanceof StateLockHeldError) {
+    return ["lock held"];
+  }
+
+  return authReason !== undefined ? [authReason] : [];
+}
+
 export function composeInstallFailureMessage(args: {
   err: unknown;
   plugin: string;
@@ -251,14 +268,16 @@ export function composeInstallFailureMessage(args: {
   // the bare `(failed) {authentication required}` row (amended D-79-03: the
   // closed-set REASON carries the classification and NO cause line renders on
   // the install subject row -- the stored-credential cause line lives only on
-  // the update path's child row), so `cause` is omitted for it. Every other runtime
-  // throw keeps an empty reasons array and rides the cause-chain trailer (the
-  // renderer suppresses the `{}` brace per D-15-01).
+  // the update path's child row), so `cause` is omitted for it. A held state
+  // lock reads `lock held` and keeps its StateLockHeldError cause chain
+  // (FLR-01 / D-02). Every other runtime throw keeps an empty reasons array
+  // and rides the cause-chain trailer (the renderer suppresses the `{}` brace
+  // per D-15-01).
   const authReason = classifyGitAuthFailure(err);
   const failed: PluginFailedMessage = {
     status: "failed",
     name: plugin,
-    reasons: authReason !== undefined ? ([authReason] as const) : ([] as const),
+    reasons: runtimeFailureReasons(err, authReason),
     ...(version !== undefined && version !== "" && { version }),
     scope,
     ...(authReason === undefined && cause !== undefined && { cause }),
