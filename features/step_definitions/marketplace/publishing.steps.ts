@@ -1,6 +1,7 @@
 /**
- * @fileoverview Steps that publish local marketplaces by source kind and add
- * them to a scope, shared by every marketplace verb.
+ * @fileoverview Steps that publish local marketplaces by source kind, or as
+ * Claude Code's official marketplace on the git host, and add them to a
+ * scope, shared by every marketplace verb.
  *
  * A scenario publishes a marketplace once, naming its source kind, and that
  * step offers no plugins. Stating the plugins it offers, with or without the
@@ -10,7 +11,8 @@
  */
 
 import assert from "node:assert/strict";
-import { rm } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
+import path from "node:path";
 
 import { type DataTable, Given } from "@cucumber/cucumber";
 
@@ -26,6 +28,7 @@ import {
   invalidateManifest,
   publishExternalMarketplace,
   publishMarketplace,
+  publishOfficialMarketplace,
   republishMarketplace,
   requireFreeRoot,
   rewritePublishedManifest,
@@ -54,6 +57,22 @@ Given(
     const root = await requireFreeRoot(this.publicationSites, name, kind);
     this.onRelease(() => rm(root, { recursive: true, force: true }));
     this.recordPublished(name, await publishMarketplace(this.publicationSites, name, kind, []));
+  },
+);
+
+Given(
+  "the marketplace {string} is published as the official marketplace",
+  async function (this: ScenarioWorld, name: string) {
+    if (this.publishedMarketplace(name) !== undefined) {
+      assert.fail(`the marketplace ${name} is already published in this scenario`);
+    }
+
+    this.onRelease(() =>
+      rm(path.join(this.marketplacesRoot, name), { recursive: true, force: true }),
+    );
+    const published = await publishOfficialMarketplace(this.publicationSites, name);
+    this.recordPublished(name, published);
+    assert.strictEqual((await stat(published.bareRepository)).isDirectory(), true);
   },
 );
 

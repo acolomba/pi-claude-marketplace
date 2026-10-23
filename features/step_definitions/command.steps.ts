@@ -21,7 +21,7 @@ import assert from "node:assert/strict";
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
 import { namesLike, recordTable } from "../lib/field-rows.ts";
-import { runCommand, runCommandPayloads } from "../lib/pi-commands.ts";
+import { runCommandPayloads } from "../lib/pi-commands.ts";
 import {
   envelopeFields,
   marketplaceRowRecords,
@@ -31,23 +31,37 @@ import {
 } from "../lib/result-rows.ts";
 import { expandTokens } from "../lib/run-tokens.ts";
 
+import type { NotificationPayload } from "../lib/pi-commands.ts";
 import type { ScenarioWorld } from "../support/world.ts";
 
+/**
+ * Runs the setup `command` and asserts that every result it emits has
+ * `severity`, so a result that does not shows whole.
+ */
+async function runSetup(
+  world: ScenarioWorld,
+  command: string,
+  severity: NotificationPayload["severity"],
+): Promise<void> {
+  const payloads = await runCommandPayloads(world.pi, expandTokens(command, world.tokens));
+  assert.deepStrictEqual(
+    payloads.filter((payload) => payload.severity !== severity),
+    [],
+  );
+}
+
+// Setup may emit any number of results, such as the two cascades of a first
+// bootstrap, and every one must be info.
 Given("the user has run {string}", async function (this: ScenarioWorld, command: string) {
-  const payload = await runCommand(this.pi, expandTokens(command, this.tokens));
-  assert.strictEqual(payload.severity, "info", JSON.stringify(payload));
+  await runSetup(this, command, "info");
 });
 
 // A retry's first attempt: every result must be an error, so a first attempt
-// that succeeds fails here and shows its non-error results whole.
+// that succeeds fails here.
 Given(
   "the user has run {string}, which failed",
   async function (this: ScenarioWorld, command: string) {
-    const payloads = await runCommandPayloads(this.pi, expandTokens(command, this.tokens));
-    assert.deepStrictEqual(
-      payloads.filter((payload) => payload.severity !== "error"),
-      [],
-    );
+    await runSetup(this, command, "error");
   },
 );
 
