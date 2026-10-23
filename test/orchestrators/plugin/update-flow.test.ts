@@ -705,7 +705,10 @@ export async function seedPathMarketplace(opts: {
 
   const installedPlugins: Record<string, PluginRecord> = {};
   for (const [pluginName, installedVersion] of Object.entries(opts.installedVersions ?? {})) {
-    installedPlugins[pluginName] = makePluginRecord(installedVersion);
+    installedPlugins[pluginName] = {
+      ...makePluginRecord(installedVersion),
+      resolvedSource: path.join(marketplaceRoot, "plugins", pluginName),
+    };
   }
 
   await saveState(locations.extensionRoot, {
@@ -8821,7 +8824,13 @@ async function seedConstrainedPathTarget(
         addedFromCwd: cwd,
         manifestPath,
         marketplaceRoot,
-        plugins: { app: makePluginRecord("1.0.0"), pathfoo: makePluginRecord(installedVersion) },
+        plugins: {
+          app: makePluginRecord("1.0.0"),
+          pathfoo: {
+            ...makePluginRecord(installedVersion),
+            resolvedSource: path.join(marketplaceRoot, "plugins", "pathfoo"),
+          },
+        },
       },
     },
   });
@@ -9021,6 +9030,68 @@ test("GIT-01 unpinned update: refreshes the mirror in place and re-anchors the r
         cloneEntries,
         [pluginMirrorKey(cloneUrl), copyKey].sort(),
         "plugin-clones/ holds the mirror and the new copy after the sweep",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-18-11: an update moves a record that names the mirror at its HEAD onto the per-commit copy", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-git-mirror-record-");
+    try {
+      // arrange -- a record made before per-commit copies: its root is the
+      // mirror and its sha is the mirror's HEAD.
+      const cloneUrl = "https://example.com/org/repo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
+      await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: cloneUrl },
+        recordedSha: SHA_NEW,
+      });
+      const locations = locationsFor("project", cwd);
+      const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+      const before = await loadState(locations.extensionRoot);
+      const seededRecord = before.marketplaces["mp"]?.plugins["gp"];
+      assert.ok(seededRecord !== undefined);
+      seededRecord.resolvedSource = mirrorRoot;
+      await saveState(locations.extensionRoot, before);
+      const { gitOps } = createGitOps({
+        fixtureSourceDir: fixtureRepoDir,
+        head: SHA_NEW,
+        localRefs: { "refs/heads/main": SHA_NEW },
+        remoteRefs: { "refs/remotes/origin/main": SHA_NEW },
+      });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      // assert
+      assert.deepEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● gp v9.9.9 → v9.9.9 (updated)\n\n/reload to pick up changes",
+        },
+      ]);
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
+      assert.deepStrictEqual(
+        { version: record?.version, sha: record?.resolvedSha, root: record?.resolvedSource },
+        {
+          version: "9.9.9",
+          sha: SHA_NEW,
+          root: await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA_NEW)),
+        },
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });

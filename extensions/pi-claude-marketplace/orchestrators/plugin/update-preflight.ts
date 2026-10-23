@@ -234,6 +234,9 @@ interface UpdateCloneProbe {
  * `buildStoredCredentialAuth`'s bundle: the Device Flow renders a user code
  * through the context and the cascade has none (D-3-04). Every other caller
  * gets `buildCloneAuth`'s bundle.
+ *
+ * `refreshSource` is the policy knob the unpinned arm passes to the mirror
+ * (D-18-04). The pinned arm never fetches a present clone, so it ignores it.
  */
 function makeUpdateCloneProbe(
   seam: UpdateCloneCacheSeam,
@@ -244,6 +247,7 @@ function makeUpdateCloneProbe(
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
   },
+  refreshSource: boolean,
 ): UpdateCloneProbe {
   let captured: string | undefined;
 
@@ -262,6 +266,7 @@ function makeUpdateCloneProbe(
       networkUrl: networkCloneUrl(gitSource),
       ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
       auth: authBundle,
+      refresh: refreshSource,
     });
     // GIT-01: the updated plugin runs from its own copy at the mirror's commit.
     const copyRoot = await seam.materializePluginCommitCopy({
@@ -352,6 +357,9 @@ async function deriveUpdateToVersion(
  * between a git and a `path` source adds or drops the sha, so it is a new
  * revision too. Only when neither side has a sha does the version alone
  * decide.
+ *
+ * This is the disabled branch's rule (D-99-05a). The enabled branch also
+ * compares the plugin root, through `isRecordedCandidate`.
  */
 function isSameRevision(
   record: PluginStateRecord,
@@ -359,6 +367,25 @@ function isSameRevision(
   resolvedSha: string | undefined,
 ): boolean {
   return toVersion === record.version && resolvedSha === record.resolvedSha;
+}
+
+/**
+ * D-18-11: whether an enabled record already holds the candidate. A record made
+ * before per-commit copies names the mutable mirror as its root, so the copy at
+ * the same commit is a new revision and the swap re-anchors the record onto it.
+ */
+function isRecordedCandidate(
+  record: PluginStateRecord,
+  candidate: {
+    readonly toVersion: string;
+    readonly resolvedSha: string | undefined;
+    readonly pluginRoot: string;
+  },
+): boolean {
+  return (
+    isSameRevision(record, candidate.toVersion, candidate.resolvedSha) &&
+    candidate.pluginRoot === record.resolvedSource
+  );
 }
 
 /** Whether `entry` installs from a git source (url / git-subdir / github). */
@@ -943,6 +970,7 @@ export async function preparePluginUpdate(
     },
     options.locations,
     auth,
+    options.policy?.refreshSource !== false,
   );
   const { candidate, resolvedSha, pin } = await resolvePinnedUpdateCandidate(
     triaged.entry,
@@ -977,8 +1005,13 @@ export async function preparePluginUpdate(
   }
 
   if (
-    isSameRevision(triaged.record, toVersion, resolvedSha) &&
-    !isRecordedButDisabled(triaged.record)
+    options.policy?.skipSameRevision !== false &&
+    !isRecordedButDisabled(triaged.record) &&
+    isRecordedCandidate(triaged.record, {
+      toVersion,
+      resolvedSha,
+      pluginRoot: candidate.pluginRoot,
+    })
   ) {
     return {
       partition: "unchanged",

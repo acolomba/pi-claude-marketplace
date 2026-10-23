@@ -1135,6 +1135,48 @@ void test("MIRR-02: mirror PRESENT (warm) refreshes in place via refreshGitHubCl
   assert.equal(second.resolvedSha, MIRROR_HEAD);
 });
 
+void test("D-18-04: a present mirror read with refresh: false keeps its HEAD and fetches nothing", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const { gitOps, state } = mirrorGitOps();
+  await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
+    locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    gitOps,
+  });
+  const fetchesAfterFirst = state.fetchCalls.length;
+  const clonesAfterFirst = state.cloneCalls.length;
+
+  // act
+  const second = await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
+    locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    gitOps,
+    refresh: false,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      fetches: state.fetchCalls.length - fetchesAfterFirst,
+      clones: state.cloneCalls.length - clonesAfterFirst,
+      second,
+    },
+    {
+      fetches: 0,
+      clones: 0,
+      second: {
+        pluginRoot: await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo")),
+        resolvedSha: MIRROR_HEAD,
+      },
+    },
+  );
+});
+
 void test("MIRR-02: two successive calls both succeed; the second refreshes rather than throwing (idempotent)", async (t) => {
   const locations = await freshLocations(t);
   const { gitOps } = mirrorGitOps();

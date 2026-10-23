@@ -350,7 +350,9 @@ export async function materializePluginCommitCopy(args: {
  *      (refresh-on-warm, D-79.1-02). A mirror this call just cloned is not
  *      refreshed: the clone already fetched the remote, and `marketplace add`
  *      and Claude Code both clone a source once. Reads (list/info) never call
- *      this seam, so NFR-5 is untouched.
+ *      this seam, so NFR-5 is untouched. With `refresh: false` a present
+ *      mirror is read at its current HEAD with no network (reinstall,
+ *      D-18-04); a missing mirror is still cloned, the NFR-5 cache miss.
  *   4. Read the pin: resolvedSha = resolveRef({ dir: mirrorRoot, ref: "HEAD" }).
  *
  * `auth` threads into the clone and the refresh fetch the way
@@ -372,6 +374,7 @@ export async function materializeOrRefreshPluginMirror(args: {
   ref?: string;
   gitOps?: GitOps;
   auth: GitAuthBundle;
+  refresh?: boolean;
 }): Promise<{ pluginRoot: string; resolvedSha: string }> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   // D-08-12: this verb owns a staging lifecycle, so it is the composition root
@@ -414,7 +417,7 @@ export async function materializeOrRefreshPluginMirror(args: {
   // MIRR-02 / D-79.1-02: refresh a warm mirror in place (marketplace parity).
   // The HEAD sha read below is the fetched-state; no separate advance flag is
   // consumed here.
-  if (promotion !== "renamed") {
+  if (promotion !== "renamed" && args.refresh !== false) {
     await refreshGitHubClone(mirrorRoot, args.ref, gitOps, undefined, args.auth);
   }
 

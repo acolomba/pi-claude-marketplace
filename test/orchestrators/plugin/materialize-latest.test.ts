@@ -172,3 +172,40 @@ test("swaps the offered version in and records it in cascade mode", async (t) =>
     updatedAt: "2026-01-02T00:00:00.000Z",
   });
 });
+
+test("REI-01: a policy that does not skip the recorded revision restores its deleted skill", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { base, pluginRoot } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.0.0" });
+  const reinstallPolicy = {
+    refreshSource: false,
+    skipSameRevision: false,
+    overwrite: true,
+  } satisfies MaterializationPolicy;
+
+  // act
+  const outcome = await materializeLatestVersion({ ...base, cascade: true }, reinstallPolicy);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "updated",
+    name: "hello",
+    fromVersion: "1.0.0",
+    toVersion: "1.0.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+  });
+  assert.strictEqual(
+    await readFile(path.join(base.locations.skillsTargetDir, "hello-tool", "SKILL.md"), "utf8"),
+    '---\nname: hello-tool\ndescription: "No description provided."\n---\n',
+  );
+  const state = await loadState(base.locations.extensionRoot);
+  assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello, {
+    ...recordedPlugin("1.0.0", pluginRoot),
+    updatedAt: "2026-01-02T00:00:00.000Z",
+  });
+});
