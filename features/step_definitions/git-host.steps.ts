@@ -11,9 +11,9 @@ import path from "node:path";
 
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
-import { armedStatus } from "../../lib/https-git-host/server.ts";
+import { armedStatus } from "../lib/https-git-host/server.ts";
 
-import type { ScenarioWorld } from "../../support/world.ts";
+import type { ScenarioWorld } from "../support/world.ts";
 
 /** Returns the repository the git host serves the marketplace `name` from. */
 function publishedRepository(world: ScenarioWorld, name: string): string {
