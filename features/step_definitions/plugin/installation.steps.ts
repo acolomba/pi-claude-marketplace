@@ -4,7 +4,10 @@
  * A result can report a failure after the install already reached disk. These
  * steps look at what the install leaves behind: the plugins the scope's
  * installation record holds, with the version and enabled state of each, the
- * files a plugin's data directory holds, and the skills and prompts it stages.
+ * files a plugin's data directory holds, the skills and prompts it stages, and
+ * the git clones of plugins and marketplaces the scope keeps. A clone is shown
+ * by its origin URL and, when pinned, by its revision, never by its directory
+ * name, which hashes a URL with the git host's random port.
  * Two setup steps change the files of an installed plugin as a user can: one
  * plants a file in its data directory, and one deletes its installed skills.
  * The other steps only read.
@@ -21,6 +24,8 @@ import path from "node:path";
 import { type DataTable, Given, Then } from "@cucumber/cucumber";
 
 import { isPlainObject } from "../../lib/field-rows.ts";
+import { readGitClones } from "../../lib/git-clones.ts";
+import { projectTokens } from "../../lib/run-tokens.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -215,3 +220,28 @@ Then(
     assert.deepStrictEqual([["file", "text"], ...rows], table.raw());
   },
 );
+
+Then(
+  "the {word} scope holds these git clones:",
+  async function (this: ScenarioWorld, scope: string, table: DataTable) {
+    const clones = (await readGitClones(extensionRoot(this, scope))).map((clone) => ({
+      clone: clone.clone,
+      origin: projectTokens("origin", clone.origin, this.tokens),
+      revision:
+        clone.pin === undefined ? "" : projectTokens("revision", `sha-${clone.pin}`, this.tokens),
+    }));
+    const rows = clones
+      .sort(
+        (left, right) =>
+          left.clone.localeCompare(right.clone) ||
+          left.origin.localeCompare(right.origin) ||
+          left.revision.localeCompare(right.revision),
+      )
+      .map((clone) => [clone.clone, clone.origin, clone.revision]);
+    assert.deepStrictEqual([["clone", "origin", "revision"], ...rows], table.raw());
+  },
+);
+
+Then("the {word} scope holds no git clones", async function (this: ScenarioWorld, scope: string) {
+  assert.deepStrictEqual(await readGitClones(extensionRoot(this, scope)), []);
+});
