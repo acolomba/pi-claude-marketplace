@@ -466,7 +466,7 @@ test("PL-1: no flags emit the exact many-row notification for every bucket", asy
           "● mp1 [user]",
           "  ● alpha v1.0.0 (installed)",
           "  ○ beta v2.0.0 (available)",
-          "  ⊘ gamma v3.0.0 (unavailable) {unsupported source}",
+          "  ⊘ gamma v3.0.0 (unavailable) {source missing}",
           "",
           "Plugin list: 3 successes",
         ].join("\n"),
@@ -989,7 +989,7 @@ test("OUT-02: NEITHER `(unavailable)` path acquires the token -- not the structu
       [
         "● mp1 [user]",
         "  ⊘ bad/name v1.0.0 (unavailable) {unreadable}",
-        "  ⊘ gone v1.0.0 (unavailable) {unsupported source}",
+        "  ⊘ gone v1.0.0 (unavailable) {source missing}",
       ].join("\n"),
       out,
     );

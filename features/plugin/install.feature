@@ -69,6 +69,43 @@ Feature: Plugin install
     Then the "claude-plugins.json" file of the project scope declares no plugins
     Then the project scope has no installed plugins
 
+  Scenario: Installing a path-source plugin records the version its plugin.json declares over its entry's
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [{ "name": "demo", "source": "./plugins/demo", "version": "0.9.0" }]
+      }
+      """
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+
+  Scenario: Installing a path-source plugin whose directory is missing names it unavailable as source missing
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [{ "name": "ghost", "source": "./plugins/ghost", "version": "1.0.0" }]
+      }
+      """
+    When the user runs "/claude:plugin install ghost@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id             | name  | status      | reasons        |
+      | fixtures         | project           | ghost@fixtures | ghost | unavailable | source missing |
+    Then the project scope has no installed plugins
+
   Scenario: Installing a plugin that is already installed fails as already installed
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user runs "/claude:plugin install demo@fixtures --scope project"

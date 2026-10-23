@@ -289,7 +289,7 @@ for (const { label, prepare } of [
         state: "installable",
         version: "9.9.9",
         notifications: [
-          "● mp [user] <no autoupdate>\n  ○ alpha v1.0.0 (available)\n    dependencies: fresh-dep@mp",
+          "● mp [user] <no autoupdate>\n  ○ alpha v9.9.9 (available)\n    dependencies: fresh-dep@mp",
         ],
         declaration: declares("fresh-dep"),
       },
@@ -392,7 +392,7 @@ test("all four readers locate one bare manifest, and two let it outrank the entr
       defaultEnabled: false,
       version: "9.9.9",
       notifications: [
-        "● mp [user] <no autoupdate>\n  ○ alpha v1.0.0 (available)\n    dependencies: fresh-dep@mp",
+        "● mp [user] <no autoupdate>\n  ○ alpha v9.9.9 (available)\n    dependencies: fresh-dep@mp",
       ],
       declaration: declares("fresh-dep"),
     },

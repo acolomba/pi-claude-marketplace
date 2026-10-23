@@ -2731,12 +2731,19 @@ async function buildNotInstalledRow(opts: {
     };
   }
 
+  // VER-02: a resolved path tree shows its declared version (plugin.json, then
+  // the entry), the version an install of it records. `unavailable` has no root.
+  const treeVersion =
+    resolved.state === "unavailable"
+      ? version
+      : await resolveDeclaredPluginVersion(entry, resolved.pluginRoot);
+
   if (resolved.state !== "installable") {
     return buildNotInstalledNonInstallableRow(resolved, {
       reader,
       env,
       pluginName,
-      version,
+      version: treeVersion,
       description,
       entry,
       mpRecord,
@@ -2753,7 +2760,7 @@ async function buildNotInstalledRow(opts: {
     reader,
     env,
     pluginName,
-    version,
+    version: treeVersion,
     description,
     dependencies,
     pluginRoot: resolved.pluginRoot,

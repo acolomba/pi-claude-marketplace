@@ -681,3 +681,54 @@ Feature: Plugin list
       | extras           | user              | kilo@extras | kilo | available |         |       | 1.0.0   |
       | extras           | user              | lima@extras | lima | installed |         | user  | 1.0.0   |
       | extras           | user              | mike@extras | mike | available |         |       | 1.0.0   |
+
+  Scenario: The list shows the version a path-source plugin's plugin.json declares over its entry's
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | alpha | 2.0.0   |
+    Given the marketplace "tools" publishes this manifest:
+      """
+      {
+        "name": "tools",
+        "owner": { "name": "features" },
+        "plugins": [{ "name": "alpha", "source": "./plugins/alpha", "version": "1.0.0" }]
+      }
+      """
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin list --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name  | status    | reasons | version |
+      | tools            | project           | alpha@tools | alpha | available |         | 2.0.0   |
+
+  Scenario: The list names a path-source plugin whose directory is missing unavailable as source missing
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" publishes this manifest:
+      """
+      {
+        "name": "tools",
+        "owner": { "name": "features" },
+        "plugins": [{ "name": "ghost", "source": "./plugins/ghost", "version": "1.0.0" }]
+      }
+      """
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin list --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name  | status      | reasons        | version |
+      | tools            | project           | ghost@tools | ghost | unavailable | source missing | 1.0.0   |
+
+  Scenario: The list shows the plugin.json version of a fetched git-source plugin whose entry declares none
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin fetch ghp@gits --scope project"
+    When the user runs "/claude:plugin list --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status    | reasons | version |
+      | gits             | project           | ghp@gits | ghp  | available |         | 1.0.0   |
+    Then the git host receives no request

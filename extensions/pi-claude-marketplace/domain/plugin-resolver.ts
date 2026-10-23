@@ -33,6 +33,7 @@ import path from "node:path";
 
 import { errorMessage, isErrnoException, PluginShapeError } from "../shared/errors.ts";
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
+import { SOURCE_DIR_MISSING_NOTE } from "../shared/probe-classifiers.ts";
 
 import { collectStrictComponentPaths, type ComponentPathResolution } from "./component-paths.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
@@ -573,7 +574,7 @@ async function preflightStages(
       kind: "unavailable",
       result: unavailable(entry.name, [
         ...partial.notes,
-        `source dir does not exist: ${pluginRoot}`,
+        `${SOURCE_DIR_MISSING_NOTE}: ${pluginRoot}`,
       ]),
     };
   }

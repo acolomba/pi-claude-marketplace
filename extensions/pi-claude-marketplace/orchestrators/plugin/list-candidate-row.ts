@@ -42,7 +42,7 @@ type ResolvedCandidate =
   | {
       readonly kind: "resolved";
       readonly resolved: Awaited<ReturnType<typeof resolveStrict>>;
-      /** VER-01: the version of a warm git tree, which replaces the entry's. */
+      /** VER-01 / VER-02: the declared version of the tree, which replaces the entry's. */
       readonly version?: string;
     };
 
@@ -88,10 +88,14 @@ async function resolveCandidateEntry(
 ): Promise<ResolvedCandidate> {
   const parsedSource = parsePluginSource(manifestEntry.source);
   if (!isGitPluginSource(parsedSource)) {
-    return {
-      kind: "resolved",
-      resolved: await resolveStrict(manifestEntry, marketplaceContext),
-    };
+    const resolved = await resolveStrict(manifestEntry, marketplaceContext);
+    if (resolved.state === "unavailable") {
+      return { kind: "resolved", resolved };
+    }
+
+    // VER-02: a path source takes the declared version the same way.
+    const version = await resolveDeclaredPluginVersion(manifestEntry, resolved.pluginRoot);
+    return { kind: "resolved", resolved, ...(version !== undefined && { version }) };
   }
 
   const probe = makePresenceProbe(locations);

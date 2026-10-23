@@ -742,6 +742,91 @@ test("INFO-02: single-scope available (path source) renders `○ ... (available)
   });
 });
 
+test("VER-02: an available path plugin shows the version its plugin.json declares over the entry's", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "bar", source: "./bar", version: "0.5.0", skills: "skills" }],
+      },
+      installablePluginDirs: ["bar"],
+      componentDirs: { bar: ["skills/s1"] },
+    });
+    await mkdir(path.join(mpRoot, "bar", ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(mpRoot, "bar", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "bar", version: "0.6.0" }),
+    );
+
+    const { ctx, run, notifications } = makeCtx();
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "bar", scope: "user", cwd });
+    // assert
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user] <no autoupdate>", "  ○ bar v0.6.0 (available)", "    skills: s1"].join("\n"),
+    );
+  });
+});
+
+test("VER-02: a partially available path plugin shows the version its plugin.json declares", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "bar", source: "./bar", version: "0.5.0", lspServers: { bar: {} } }],
+      },
+      installablePluginDirs: ["bar"],
+    });
+    await mkdir(path.join(mpRoot, "bar", ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(mpRoot, "bar", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "bar", version: "0.6.0" }),
+    );
+
+    const { ctx, run, notifications } = makeCtx();
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "bar", scope: "user", cwd });
+    // assert
+    assert.match(
+      notifications[0]!.message,
+      /^ {2}\S+ bar v0\.6\.0 \(partially-available\) \{lsp\}$/m,
+    );
+  });
+});
+
+test("SRC-01 / VER-02: a path plugin whose directory is missing reads source missing at the entry version", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "ghost", source: "./ghost", version: "1.0.0" }] },
+    });
+
+    const { ctx, run, notifications } = makeCtx();
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "ghost", scope: "user", cwd });
+    // assert
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user] <no autoupdate>", "  ⊘ ghost v1.0.0 (unavailable) {source missing}"].join("\n"),
+    );
+  });
+});
+
 // ---------------------------------------------------------------------------
 // (c) single-scope unavailable with `{unsupported hooks}` reason.
 // ---------------------------------------------------------------------------

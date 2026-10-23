@@ -265,3 +265,59 @@ Feature: Plugin info
       | plugin status                  | failed                         |
       | severity                       | error                          |
       | summary                        | A plugin operation has failed. |
+
+  Scenario: Info on a path-source plugin shows the version its plugin.json declares over its entry's
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 2.0.0   |
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [{ "name": "demo", "source": "./plugins/demo", "version": "1.0.0" }]
+      }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin info demo@fixtures"
+    Then the result has these fields:
+      | kind                           | plugin-info   |
+      | marketplace details autoupdate | false         |
+      | marketplace name               | fixtures      |
+      | marketplace scope              | project       |
+      | needs reload                   | false         |
+      | plugin components resolved     | true          |
+      | plugin components skills       | demo-skill    |
+      | plugin id                      | demo@fixtures |
+      | plugin name                    | demo          |
+      | plugin reasons                 |               |
+      | plugin status                  | available     |
+      | plugin version                 | 2.0.0         |
+      | severity                       | info          |
+
+  Scenario: Info on a path-source plugin whose directory is missing names it unavailable as source missing
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [{ "name": "ghost", "source": "./plugins/ghost", "version": "1.0.0" }]
+      }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    When the user runs "/claude:plugin info ghost@fixtures"
+    Then the result has these fields:
+      | kind                           | plugin-info    |
+      | marketplace details autoupdate | false          |
+      | marketplace name               | fixtures       |
+      | marketplace scope              | project        |
+      | needs reload                   | false          |
+      | plugin components resolved     | true           |
+      | plugin id                      | ghost@fixtures |
+      | plugin name                    | ghost          |
+      | plugin reasons                 | source missing |
+      | plugin status                  | unavailable    |
+      | plugin version                 | 1.0.0          |
+      | severity                       | info           |
