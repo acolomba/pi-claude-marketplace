@@ -51,3 +51,22 @@ Feature: Plugin enable
       | demo@fixtures |
     When the user starts a new pi session
     Then the session offers no skills
+
+  Scenario: Enabling a disabled plugin offers its skills again and keeps one installation record
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project"
+    When the user runs "/claude:plugin enable demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
