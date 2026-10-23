@@ -112,7 +112,7 @@ Step module paths are relative to `features/step_definitions/`.
   phases can fix bugs in the same production module or add to `CHANGELOG.md`;
   the later merge resolves the overlap and runs `npm run check` again.
 
-- [ ] **Phase 1: Suite Foundation** — Every driver, fixture, stand-in, and shared step that more than one later phase needs, each with a seed scenario, so Phases 2-15 add only their own files
+- [x] **Phase 1: Suite Foundation** — Every driver, fixture, stand-in, and shared step that more than one later phase needs, each with a seed scenario, so Phases 2-15 add only their own files (completed 2026-10-23)
 - [ ] **Phase 2: Plugin Enable and Disable** — Skills come and go across sessions while the plugin stays installed, no-ops skip, scopes stay separate, and dependencies follow Claude Code
 - [ ] **Phase 3: Install Dependencies, Partial, and User Scope** — The dependency closure, an unresolvable closure, `--partial`, and the user scope
 - [ ] **Phase 4: Git-Source Plugins** — Install, refusal, update, and uninstall of git-source plugins against the loopback git host, with the request log
@@ -151,7 +151,7 @@ Step module paths are relative to `features/step_definitions/`.
 3. The plugin steps live under `features/step_definitions/plugin/` in topic modules that take no verb name and none of the reserved module names. The git-host steps serve plugin repositories as well as marketplaces. The cucumber skill documents this milestone's file ownership: a later phase adds only its own feature files and step modules, and never edits a Phase 1 file.
 4. `npm run check:features` (the usage gate: no unused, undefined, or ambiguous step) and `npm run check` are green, and every existing scenario still passes.
 
-**Plans:** 10/10 plans executed
+**Plans:** 10/10 plans complete
 
 Plans:
 **Wave 1**
@@ -400,7 +400,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Suite Foundation | 10/10 | In Progress | - |
+| 1. Suite Foundation | 10/10 | Complete    | 2026-10-23 |
 | 2. Plugin Enable and Disable | 0/TBD | Not started | - |
 | 3. Install Dependencies, Partial, and User Scope | 0/TBD | Not started | - |
 | 4. Git-Source Plugins | 0/TBD | Not started | - |
