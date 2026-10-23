@@ -61,6 +61,13 @@ the cause line `cannot read the dependencies of <key>: <why>`, instead of an
 - Added the output-catalog state and fixture, not listed in the plan: the
   catalog documents every reconcile row shape.
 
+## Follow-up: shared marketplace-manifest tokens (D-11)
+
+After the user's decision on review WR-02, a marketplace manifest that fails
+to load takes the `narrowProbeError` token (`unparseable`, `invalid manifest`,
+`source missing`, `permission denied`, `unreadable`), the same as `list` and
+`info`. New reconcile scenario for a malformed-JSON marketplace manifest.
+
 ## Threat Flags
 
 None -- no security-relevant surface outside the plan's `<threat_model>` was introduced. The cause line is the walk's fixed-phrase `Error` (T-05-04, T-17-01).
