@@ -719,9 +719,9 @@ const pluginVersionCases: readonly {
     expectedVersion: undefined,
   },
   {
-    title: "returns undefined for a will-uninstall row",
-    row: { status: "will uninstall", name: "a" },
-    expectedVersion: undefined,
+    title: "returns the recorded version of a will-uninstall row",
+    row: { status: "will uninstall", name: "a", version: "1.2.0" },
+    expectedVersion: "1.2.0",
   },
   {
     title: "returns undefined for a will-enable row",

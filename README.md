@@ -366,7 +366,7 @@ Also remove the dependencies that no remaining plugin needs with `--prune`.
 /claude:plugin uninstall context7-plugin@context7-marketplace --prune
 ```
 
-You can uninstall a plugin that another installed plugin needs. Its row names the dependents as `{dependents unsatisfied}`. At the next reload, Pi disables those dependents. For more information, see [Dependency resolution](docs/dependency-resolution.md).
+You can uninstall a plugin that another installed plugin needs. Its row names the enabled dependents as `{dependents unsatisfied}`. At the next reload, Pi disables those dependents. For more information, see [Dependency resolution](docs/dependency-resolution.md).
 
 To remove orphaned dependency installs without naming a plugin to uninstall, run `prune`. It selects the user scope by default. Use `--scope project` to select the project scope.
 

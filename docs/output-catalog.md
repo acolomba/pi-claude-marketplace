@@ -1269,7 +1269,7 @@ A plugin operation has failed.
 
 ### Success -- removed while other plugins still declared it (LOAD-03 / D-06-06)
 
-Triggered when `uninstall <plugin>@<marketplace>` names a plugin that another installed plugin in the SAME scope still declares as a dependency. The removal PROCEEDS: this is upstream's behaviour, and it is what breaks the deadlock two plugins declaring each other would otherwise create. The row is the ordinary `uninstalled` row -- `info` severity, reload-hint, the same glyph -- carrying the `dependents unsatisfied` reason, and the 4-space-indent `cause:` trailer names every dependent as a `name@marketplace` key, sorted, on the `dependency cycle` precedent: the names ride the cause line and never the token. The keys are checked against the dependency token rule first, and if any of them fails it the line reports the count instead (`required by 2 other plugins`) -- a recorded name is bounded only by `assertSafeName`, which admits quotes, commas and bidi controls. Nothing is lost: the next load gives each dependent its own row. The severity stays `info` because the uninstall was carried out in full; the consequence for the dependents is not this row's subject and is reported at the next load, at `warning`, by the load-time dependency check, which gives each dependent its own row and the full remedy (`reconcile-dependency-unsatisfied`). A DISABLED dependent still holds the target (D-05-04): installed is installed. Only the target scope's own `state.json` is consulted (D-05-05), and every declaration is read offline from the dependent's own manifest, with its marketplace entry as the fallback (D-05-06). It is catalogued here beside the fail-closed refusal below because the two are the two outcomes of the same declarer read. Under `--prune`, a declarer the same command sweeps is not named: the declarer set and the sweep share one snapshot. The reconcile-driven uninstall does NOT carry this brace -- reporting it there would state one fact twice in a single emission, since the check already reports it better.
+Triggered when `uninstall <plugin>@<marketplace>` names a plugin that another installed plugin in the SAME scope still declares as a dependency. The removal PROCEEDS: this is upstream's behaviour, and it is what breaks the deadlock two plugins declaring each other would otherwise create. The row is the ordinary `uninstalled` row -- `info` severity, reload-hint, the same glyph -- carrying the `dependents unsatisfied` reason, and the 4-space-indent `cause:` trailer names every dependent as a `name@marketplace` key, sorted, on the `dependency cycle` precedent: the names ride the cause line and never the token. The keys are checked against the dependency token rule first, and if any of them fails it the line reports the count instead (`required by 2 other plugins`) -- a recorded name is bounded only by `assertSafeName`, which admits quotes, commas and bidi controls. Nothing is lost: the next load gives each dependent its own row. The severity stays `info` because the uninstall was carried out in full; the consequence for the dependents is not this row's subject and is reported at the next load, at `warning`, by the load-time dependency check, which gives each dependent its own row and the full remedy (`reconcile-dependency-unsatisfied`). Only an enabled dependent holds the target (UNI-01, as in Claude Code): a dependent the user or a config disabled is not named, while one the load-time check held down still is. Only the target scope's own `state.json` is consulted (D-05-05), and every declaration is read offline from the dependent's own manifest, with its marketplace entry as the fallback (D-05-06). It is catalogued here beside the fail-closed refusal below because the two are the two outcomes of the same declarer read. Under `--prune`, a declarer the same command sweeps is not named: the declarer set and the sweep share one snapshot. The reconcile-driven uninstall does NOT carry this brace -- reporting it there would state one fact twice in a single emission, since the check already reports it better.
 
 <!-- catalog-state: success-dependents-unsatisfied -->
 
@@ -1341,7 +1341,7 @@ A plugin operation needs attention.
 
 ### Refused -- a plugin of the target layer needs this dependency (LAYER-08 / D-MF-03)
 
-An installed plugin that no layer declares is a dependency: the scope installed it because another plugin needs it. A named uninstall of a dependency is refused while a plugin that the target layer declares still needs it, directly or through another dependency. The `cause:` line names those plugins and the order that unblocks the uninstall. When a name could forge the sentence, the line gives a count instead (`Uninstall 2 other plugins first, then shared-lib@official.`). Claude Code uninstalls such a plugin and reports its dependents; this extension refuses instead (D-MF-03). A dependency that nothing needs is uninstalled as usual, and a plugin that a layer declares is uninstalled even when other plugins need it, as the LOAD-03 state above shows. Severity `error`; no reload-hint.
+An installed plugin that no layer declares is a dependency: the scope installed it because another plugin needs it. A named uninstall of a dependency is refused while an enabled plugin that the target layer declares still needs it, directly or through another enabled dependency; a plugin the user disabled does not count (UNI-01). The `cause:` line names those plugins and the order that unblocks the uninstall. When a name could forge the sentence, the line gives a count instead (`Uninstall 2 other plugins first, then shared-lib@official.`). Claude Code uninstalls such a plugin and reports its dependents; this extension refuses instead (D-MF-03). A dependency that nothing needs is uninstalled as usual, and a plugin that a layer declares is uninstalled even when other plugins need it, as the LOAD-03 state above shows. Severity `error`; no reload-hint.
 
 <!-- catalog-state: uninstall-dependency-needed-in-layer -->
 
@@ -1355,7 +1355,7 @@ A plugin operation has failed.
 
 ### Kept installed -- only a plugin of the other layer needs this dependency (LAYER-08)
 
-When only plugins that the other layer declares need the dependency, the uninstall removes nothing. The row is `(skipped)` with the same `{dependents remain}` token, and the `cause:` line names the other layer's file and the plugins that need the dependency. Severity `warning`; no reload-hint.
+When only enabled plugins that the other layer declares need the dependency, the uninstall removes nothing. The row is `(skipped)` with the same `{dependents remain}` token, and the `cause:` line names the other layer's file and the plugins that need the dependency. Severity `warning`; no reload-hint.
 
 <!-- catalog-state: uninstall-dependency-needed-in-other-layer -->
 
@@ -1422,7 +1422,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin prune`
 
-The standalone command sweeps orphaned dependency installs in one scope. Actual removals use `(uninstalled) {dependency pruned}` with a version and the usual `/reload` hint. `--dry-run` uses `(will uninstall) {dependency pruned}` without a version or reload hint. Both choose candidates in dependent-before-dependency order; marketplace blocks follow that order even when the same marketplace appears again later. A preview does not reserve its candidates. Concurrent changes can alter the later actual result, and a failed member remains installed while independent removals can succeed.
+The standalone command sweeps orphaned dependency installs in one scope. Actual removals use `(uninstalled) {dependency pruned}` with a version and the usual `/reload` hint. `--dry-run` uses `(will uninstall) {dependency pruned}` with the recorded version and no reload hint. Both choose candidates in dependent-before-dependency order; marketplace blocks follow that order even when the same marketplace appears again later. A preview does not reserve its candidates. Concurrent changes can alter the later actual result, and a failed member remains installed while independent removals can succeed.
 
 ### One orphan removed
 
@@ -1492,7 +1492,7 @@ A plugin operation needs attention.
 
 ```text
 ● official [user]
-  ○ shared-lib (will uninstall) {dependency pruned}
+  ○ shared-lib v2.0.0 (will uninstall) {dependency pruned}
 ```
 
 ### Interleaved marketplace fixpoint chain previewed
@@ -1501,13 +1501,13 @@ A plugin operation needs attention.
 
 ```text
 ● official [user]
-  ○ helper (will uninstall) {dependency pruned}
+  ○ helper v1.0.0 (will uninstall) {dependency pruned}
 
 ● community [user]
-  ○ tooling (will uninstall) {dependency pruned}
+  ○ tooling v3.0.0 (will uninstall) {dependency pruned}
 
 ● official [user]
-  ○ shared-lib (will uninstall) {dependency pruned}
+  ○ shared-lib v2.0.0 (will uninstall) {dependency pruned}
 ```
 
 ### No orphaned dependency installs
@@ -1569,7 +1569,7 @@ A plugin operation has failed.
 
 ### State lock held
 
-The command reports the lock failure and leaves the scope unchanged. The lock path is redacted, and there is no reload hint.
+The command reports the lock failure and leaves the scope unchanged. The cause names the lock path, as every other command does, and there is no reload hint.
 
 <!-- catalog-state: lock-held -->
 
@@ -1578,7 +1578,7 @@ A plugin operation has failed.
 
 ● (prune) [user]
   ⊘ (prune) (failed) {lock held}
-    cause: Another pi-claude-marketplace operation is in progress for user scope (.state-lock). Retry after it completes. -> Lock file is already being held
+    cause: Another pi-claude-marketplace operation is in progress for user scope (~/.pi/agent/pi-claude-marketplace/.state-lock). Retry after it completes. -> Lock file is already being held
 ```
 
 ### Prune rollback needs manual recovery
@@ -3369,7 +3369,7 @@ A plugin recorded in `state.json` but no longer declared in `claude-plugins.json
 
 ```text
 ● mp [user]
-  ○ old-plugin (will uninstall)
+  ○ old-plugin v1.0.0 (will uninstall)
 ```
 
 ### Plugin pending uninstall carrying a retained workflow staging tree (WR-06)
@@ -3380,7 +3380,7 @@ The same retained-tree advisory on the command's OTHER arm. The cascade message 
 
 ```text
 ● mp [user]
-  ○ old-plugin (will uninstall)
+  ○ old-plugin v1.0.0 (will uninstall)
 
     retained workflow staging: 9f1c4d2a-3b7e (2 envelopes) under the workflows staging directory
 ```
@@ -3393,8 +3393,8 @@ A marketplace recorded in `state.json` but no longer declared in `claude-plugins
 
 ```text
 ● old-mp [user]
-  ○ p1 (will uninstall)
-  ○ p2 (will uninstall)
+  ○ p1 v1.0.0 (will uninstall)
+  ○ p2 v2.3.0 (will uninstall)
 ```
 
 ### Enable / disable transitions

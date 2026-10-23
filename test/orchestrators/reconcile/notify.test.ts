@@ -9,6 +9,7 @@ import {
   buildReconcileAppliedCascade,
   buildReconcilePendingNotification,
   isReconcilePlanListEmpty,
+  recordedVersionEntries,
   resolvePendingForceInstalls,
   type PendingInstallCandidate,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts";
@@ -19,6 +20,7 @@ import type {
   PlannedPluginInstall,
   ReconcilePlan,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /**
@@ -1891,6 +1893,70 @@ describe("buildReconcilePendingNotification", () => {
             { status: "will uninstall", name: "p1" },
             { status: "will uninstall", name: "p2" },
           ],
+        },
+      ],
+    });
+  });
+
+  test("PRN-02: each will-uninstall row names the version its scope recorded", () => {
+    // arrange
+    const plugin = (
+      version: string,
+    ): ExtensionState["marketplaces"][string]["plugins"][string] => ({
+      version,
+      resolvedSource: "/plugins/p",
+      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+      enabled: true,
+      provenance: "explicit",
+      installedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const marketplace = (
+      name: string,
+      plugins: ExtensionState["marketplaces"][string]["plugins"],
+    ): ExtensionState["marketplaces"][string] => ({
+      name,
+      scope: "project",
+      source: { kind: "path", path: `/marketplaces/${name}` },
+      addedFromCwd: "/workspace",
+      manifestPath: `/marketplaces/${name}/.claude-plugin/marketplace.json`,
+      marketplaceRoot: `/marketplaces/${name}`,
+      plugins,
+    });
+    const state: ExtensionState = {
+      schemaVersion: 3,
+      marketplaces: {
+        "old-mp": marketplace("old-mp", { p1: plugin("1.0.0") }),
+        mp: marketplace("mp", { cr: plugin("2.1.0") }),
+      },
+    };
+    const plans = [
+      reconcilePlan("project", {
+        marketplacesToRemove: [{ scope: "project", marketplace: "old-mp", plugins: ["p1"] }],
+        pluginsToUninstall: [{ scope: "project", plugin: "cr", marketplace: "mp" }],
+      }),
+    ];
+
+    // act
+    const pending = buildReconcilePendingNotification(
+      plans,
+      new Set<string>(),
+      new Map(recordedVersionEntries("project", state)),
+    );
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [{ status: "will uninstall", name: "cr", version: "2.1.0" }],
+        },
+        {
+          name: "old-mp",
+          scope: "project",
+          plugins: [{ status: "will uninstall", name: "p1", version: "1.0.0" }],
         },
       ],
     });
