@@ -229,25 +229,37 @@ Feature: Plugin install
       | demo@fixtures |
     Then the "claude-plugins.json" file of the project scope declares no plugins
 
-  Scenario: The project-scope plugin list shows nothing of the marketplace once the user scope installs its plugin with no --scope
+  Scenario: The project-scope plugin list offers the plugin as available once the user scope installs it with no --scope
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures"
     When the user runs "/claude:plugin list --scope project"
     Then the result has these fields:
-      | kind         | cascade |
-      | severity     | info    |
-      | needs reload | false   |
-    Then the result lists no marketplaces
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | version |
+      | fixtures         | project           | demo@fixtures | demo | available |         | 1.0.0   |
 
-  Scenario: The project-scope plugin list shows nothing of the marketplace once the user scope installs its plugin with --scope user
+  Scenario: The project-scope plugin list offers the plugin as available once the user scope installs it with --scope user
     Given the marketplace "fixtures" is added to the user scope
     Given the user has run "/claude:plugin install demo@fixtures --scope user"
     When the user runs "/claude:plugin list --scope project"
     Then the result has these fields:
-      | kind         | cascade |
-      | severity     | info    |
-      | needs reload | false   |
-    Then the result lists no marketplaces
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | version |
+      | fixtures         | project           | demo@fixtures | demo | available |         | 1.0.0   |
 
   Scenario: A session in another project offers the skills of a plugin installed with no --scope
     Given the marketplace "fixtures" is added to the user scope
