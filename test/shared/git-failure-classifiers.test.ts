@@ -6,6 +6,7 @@ import {
   StoredCredentialRejectedError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
+  classifyGitHostFailure,
   classifyGitSourceAccessFailure,
   classifyGitTransportFailure,
   hostHttpFailureFrame,
@@ -338,6 +339,20 @@ for (const { title, createFailure, expectedReason } of [
     assert.strictEqual(reason, expectedReason);
   });
 }
+
+test("leaves a ref the clone on disk does not have unclassified for the host ladder", () => {
+  // arrange
+  const failure = Object.assign(new Error("Could not find HEAD."), {
+    code: "NotFoundError",
+    name: "NotFoundError",
+  });
+
+  // act
+  const reason = classifyGitHostFailure(failure);
+
+  // assert
+  assert.strictEqual(reason, undefined);
+});
 
 for (const { title, createFailure, expectedStatus } of [
   {

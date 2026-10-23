@@ -668,11 +668,6 @@ test("materializes a cold unpinned URL mirror at the typed wire url", async () =
     assert.deepStrictEqual(cache.calls, [`mirror ${cloneUrl} ref=- auth=example.com`]);
     assert.deepStrictEqual(git.schedule, [
       `clone ${networkUrl} ref=- single=false auth=example.com`,
-      "fetch remote=origin ref=- auth=example.com",
-      "resolve-local refs/remotes/origin/HEAD",
-      "current-branch",
-      `force-update refs/heads/main=${head}`,
-      "checkout main",
       "resolve-local HEAD",
     ]);
     assert.deepStrictEqual(await stagingEntries(locations), []);

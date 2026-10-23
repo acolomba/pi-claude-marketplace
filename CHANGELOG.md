@@ -4,6 +4,11 @@
 
 - `enable` now fails with `{dependency unsatisfied}` and changes nothing when a dependency of the plugin is not installed, as Claude Code does. The cause says which dependencies to install first. It used to enable the plugin and leave the dependency to the next reload.
 
+- Plugins from git sources now reach the git host less often, and an install the host refuses says why.
+
+  - A command that clones a plugin's unpinned git source for the first time clones it once. It used to fetch the repository again right after the clone.
+  - An install fails as `{source missing}` when the git host answers 404, `{network error}` for another refusal, and `{network unreachable}` when the connection drops. It used to show no reason.
+
 - Internal: the test suite moves from `tests/` to `test/`, and the duplication check now fails on every repeated block of code. (#272)
 
 - When a reload installs a plugin that you added to a config by hand, its `(installed)` row now shows the version, as `install` does.

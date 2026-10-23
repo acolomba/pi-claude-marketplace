@@ -4,7 +4,7 @@ import {
   InstallMarketplaceAddError,
   PluginShapeError,
 } from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import {
   type ContentReason,
   type PluginDisabledMessage,
@@ -143,35 +143,6 @@ function composeNotInstallableMessage(
 // interface, which is the one the tests use (FLOW-09).
 // ───────────────────────────────────────────────────────────────────────────
 
-/**
- * D-76-08 / D-79-03: classify a git-source clone auth challenge into
- * the EXISTING closed-set `authentication required` REASON -- no new token. A
- * stored credential the server rejects throws `StoredCredentialRejectedError`
- * (GAUTH-04), and a device-flow credential it rejects (a still-401 after a
- * fresh credential, D-79-02) makes `onAuthFailure` return `{ cancel: true }`,
- * which isomorphic-git throws as `UserCanceledError`. When no credential can be
- * produced at all -- an empty helper on a host the provider registry does not
- * claim (GAUTH-03), or an unsuccessful device flow (denied / expired / poll
- * network error) -- `platform/git-auth-callbacks.ts::onAuth` cancels the same
- * way. A 401/403 that no auth callback answered throws the isomorphic-git
- * `HttpError`. The seam append-leak-rethrows each up to the install catch;
- * every shape narrows through the shared `classifyGitTransportFailure` ladder.
- * Install keeps ONLY its auth classification: a network-class transport failure
- * stays undefined here so it rides the generic-runtime cause-chain fallthrough.
- *
- * D-79-03 (amended): the install row is the BARE `(failed) {authentication
- * required}` -- no `NO_STORED_CREDENTIAL_CAUSE` cause line (the plugin failure
- * grammar has no cause-chain trailer slot that renders on the SUBJECT row; that
- * cause line lives ONLY on the update path's synthetic failed-plugin child
- * row). Returns undefined for a non-auth throw so the caller
- * keeps its generic-runtime cause-chain fallthrough.
- */
-function classifyGitAuthFailure(err: unknown): "authentication required" | undefined {
-  return classifyGitTransportFailure(err) === "authentication required"
-    ? "authentication required"
-    : undefined;
-}
-
 export function composeInstallFailureMessage(args: {
   err: unknown;
   plugin: string;
@@ -247,21 +218,22 @@ export function composeInstallFailureMessage(args: {
     return failed;
   }
 
-  // Branch 4: runtime throw. A git-source clone auth challenge maps to
-  // the bare `(failed) {authentication required}` row (amended D-79-03: the
-  // closed-set REASON carries the classification and NO cause line renders on
-  // the install subject row -- the stored-credential cause line lives only on
-  // the update path's child row), so `cause` is omitted for it. Every other runtime
-  // throw keeps an empty reasons array and rides the cause-chain trailer (the
-  // renderer suppresses the `{}` brace per D-15-01).
-  const authReason = classifyGitAuthFailure(err);
+  // Branch 4: runtime throw. A git host that refused the clone maps to the
+  // reason `marketplace add` reports for the same answer (ADD-09, INS-06):
+  // `source missing`, `network unreachable`, `network error`, or
+  // `authentication required`. The auth row is bare (amended D-79-03: the
+  // stored-credential cause line lives only on the update path's child row);
+  // every other row keeps its cause chain, as fetch's failed row does. A throw
+  // the ladder leaves unclassified keeps an empty reasons array and rides the
+  // cause-chain trailer (the renderer suppresses the `{}` brace per D-15-01).
+  const gitReason = classifyGitHostFailure(err);
   const failed: PluginFailedMessage = {
     status: "failed",
     name: plugin,
-    reasons: authReason !== undefined ? ([authReason] as const) : ([] as const),
+    reasons: gitReason !== undefined ? ([gitReason] as const) : ([] as const),
     ...(version !== undefined && version !== "" && { version }),
     scope,
-    ...(authReason === undefined && cause !== undefined && { cause }),
+    ...(gitReason !== "authentication required" && cause !== undefined && { cause }),
     // D-03/D-06: a failed install -> error, no reload (nothing landed).
     severity: "error",
     needsReload: false,
