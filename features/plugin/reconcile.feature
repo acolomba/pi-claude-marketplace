@@ -140,3 +140,32 @@ Feature: Plugin reconcile
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: A new session disables a plugin that an update left needing a newer version of its dependency
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 2.0.0   | lib@^2.0.0   |
+      | lib  | 1.0.0   |              |
+    Given the user has run "/claude:plugin update app@tools --scope project"
+    When the user starts a new pi session
+    Then the result has these fields:
+      | kind           | reconcile-applied-cascade           |
+      | severity       | warning                             |
+      | needs reload   | false                               |
+      | summary        | A plugin operation needs attention. |
+      | tally label    | Reconcile                           |
+      | tally failures | 0                                   |
+      | tally warnings | 1                                   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status   | reasons                        | scope   | version | cause chain                                                               | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app  | disabled | dependency version unsatisfied | project | 2.0.0   | Update "lib@tools" to satisfy >=2.0.0 <3.0.0-0, or uninstall "app@tools" | false           |       |                  |
+    Then the session offers these skills:
+      | command          | description           |
+      | /skill:lib-skill | A skill of lib 1.0.0. |
