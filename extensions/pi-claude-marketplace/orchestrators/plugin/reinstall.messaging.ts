@@ -9,6 +9,7 @@ import {
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
+import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -186,6 +187,19 @@ export function reinstalledRowFromOutcome(
   rowScope: Scope | undefined,
 ): PluginReinstalledMessage {
   const malformed = malformedReasonsForKinds(outcome.degradedKinds);
+  // D-10-15 / D-18-07: no tag a range admits pinned this; the marketplace's
+  // current copy is what landed. Named first, and it moves no severity, as on
+  // update's row.
+  const currentCopy: readonly ContentReason[] =
+    outcome.constraint?.fellBackToCurrentCopy === true
+      ? (["dependency current copy"] as const)
+      : [];
+  // D-18-06: the kinds the reinstall left out, after the malformed kinds, in
+  // the install row's emit order.
+  const dropped: readonly ContentReason[] =
+    outcome.partialDegrade === undefined
+      ? []
+      : narrowUnsupportedKinds(outcome.partialDegrade.kinds);
   // WLIF-06: the tail token. The reinstall's new source did not re-place a
   // workflow the record named, so the command that envelope registered is still
   // live -- the host cannot unregister it, and only a reload drops it. Raises
@@ -193,7 +207,11 @@ export function reinstalledRowFromOutcome(
   // is not reached until that reload.
   const stale: readonly ContentReason[] =
     outcome.staleWorkflowCommand === true ? (["stale workflow command"] as const) : [];
-  const reasons: readonly ContentReason[] = [...malformed, ...stale];
+  const reasons: readonly ContentReason[] = [...currentCopy, ...malformed, ...dropped, ...stale];
+  // A newly left-out kind is a shortfall the user did not ask for, so it
+  // raises the row; a record that was already partial stays `info`.
+  const raised =
+    malformed.length > 0 || stale.length > 0 || outcome.partialDegrade?.newlyDegraded === true;
   return {
     status: "reinstalled",
     name: outcome.name,
@@ -211,7 +229,7 @@ export function reinstalledRowFromOutcome(
     ...(rowScope !== undefined && { scope: rowScope }),
     ...(reasons.length > 0 && { reasons }),
     // D-03/D-06: realized reinstall transition -> reloads Pi resources.
-    severity: reasons.length > 0 ? "warning" : "info",
+    severity: raised ? "warning" : "info",
     needsReload: true,
   };
 }

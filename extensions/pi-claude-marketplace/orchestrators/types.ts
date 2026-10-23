@@ -38,6 +38,24 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    */
   readonly staleWorkflowCommand?: boolean;
   /**
+   * D-18-06 / D-18-08: the component kinds the reinstall left out because its
+   * source now resolves partially-available, carried from the shared runner's
+   * `updated` outcome. `newlyDegraded` is true when the record left nothing
+   * out before, which raises the row to `warning`. Omitted for a clean
+   * candidate (NREG-01).
+   */
+  readonly partialDegrade?: {
+    readonly kinds: readonly string[];
+    readonly newlyDegraded: boolean;
+  };
+  /**
+   * D-18-07: the constraint gate's disclosure when a dependent's range chose
+   * what landed, carried from the shared runner's `updated` outcome. The row
+   * reads `fellBackToCurrentCopy`, as update's row does. Omitted for an
+   * unconstrained reinstall (NREG-01).
+   */
+  readonly constraint?: UpdateConstraintDisclosure;
+  /**
    * D-99-02c: the GENERATED NAMES the reinstall ledger staged. The `Names`
    * suffix keeps them spelled apart from the same-subject presence FLAGS on
    * `LedgerDegradationSignals` (`plugin/shared.ts`), which carry a count

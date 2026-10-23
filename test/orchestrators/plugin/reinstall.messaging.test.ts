@@ -919,6 +919,135 @@ test("WLIF-06: a reinstall that retired nothing renders the row it always render
   assert.equal(Object.hasOwn(row, "reasons"), false, "no present-and-empty reasons key");
 });
 
+test("D-18-06: a reinstall names its malformed kinds before the kinds it left out", () => {
+  // arrange
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "alpha",
+    marketplace: "official",
+    scope: "project",
+    version: "2.0.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    degradedKinds: ["skill"],
+    partialDegrade: { kinds: ["hooks"], newlyDegraded: false },
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "alpha",
+    dependencies: [],
+    version: "2.0.0",
+    reasons: ["malformed skill", "unsupported hooks"],
+    severity: "warning",
+    needsReload: true,
+  });
+});
+
+test("D-18-06: an already partial record's reinstall names the left-out kind at info", () => {
+  // arrange
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "alpha",
+    marketplace: "official",
+    scope: "project",
+    version: "2.0.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "alpha",
+    dependencies: [],
+    version: "2.0.0",
+    reasons: ["lsp"],
+    severity: "info",
+    needsReload: true,
+  });
+});
+
+test("D-18-06: a reinstall that newly left a kind out raises a row that has no other reason", () => {
+  // arrange
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "alpha",
+    marketplace: "official",
+    scope: "project",
+    version: "2.0.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "alpha",
+    dependencies: [],
+    version: "2.0.0",
+    reasons: ["lsp"],
+    severity: "warning",
+    needsReload: true,
+  });
+});
+
+test("D-10-15 / D-18-07: a reinstall that landed the marketplace's current copy names it first at info", () => {
+  // arrange
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "alpha",
+    marketplace: "official",
+    scope: "project",
+    version: "1.1.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    constraint: {
+      disclosure: 'constrained to the combined range (^1.0.0) -- required by "app@official"',
+      fellBackToCurrentCopy: true,
+    },
+    partialDegrade: { kinds: ["lspServers"], newlyDegraded: false },
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "alpha",
+    dependencies: [],
+    version: "1.1.0",
+    reasons: ["dependency current copy", "lsp"],
+    severity: "info",
+    needsReload: true,
+  });
+});
+
 test("REINSTALL_CONTEXT declares complete row policies", () => {
   // act
   const policies = REINSTALL_CONTEXT.rowPolicies;

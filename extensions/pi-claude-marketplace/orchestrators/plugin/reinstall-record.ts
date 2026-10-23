@@ -83,6 +83,8 @@ export function reinstallOutcomeFromRun(
         declaresWorkflows: run.declaresWorkflows,
         ...(run.degradedKinds !== undefined && { degradedKinds: run.degradedKinds }),
         ...(run.staleWorkflowCommand === true && { staleWorkflowCommand: true }),
+        ...(run.partialDegrade !== undefined && { partialDegrade: run.partialDegrade }),
+        ...(run.constraint !== undefined && { constraint: run.constraint }),
       };
     case "unchanged":
       // Under reinstall's policy only the preflight's disabled-record branch

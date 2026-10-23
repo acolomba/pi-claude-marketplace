@@ -121,6 +121,34 @@ export const PLUGIN_REINSTALL_FIXTURES: FixtureMap = {
       },
     },
 
+    // D-18-06: the source now resolves partially-available, so the reinstall
+    // left a kind out. A record that left nothing out before raises the row.
+    "reinstall-partial-component": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        label: "Plugin reinstall",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "reinstalled",
+                severity: "warning",
+                needsReload: true,
+                name: "alpha",
+                version: "1.1.0",
+                dependencies: [],
+                reasons: ["unsupported hooks"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // ENBL-05 / ENBL-18 / DFEN-07: a cascade reaching an already-disabled
     // record short-circuits before the resolve, so nothing is re-materialized
     // and the record keeps its component inventory. The row is benign and

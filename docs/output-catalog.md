@@ -1704,6 +1704,23 @@ The reinstall's source no longer declares a workflow the record named, or declar
 
 One token per plugin however many names were retired, at the tail of the brace. Severity `warning`: the reinstall was carried out, but the desired state is not reached until the reload the trailer names. A reinstall that re-placed everything renders the brace-less row above.
 
+### Reinstall that leaves a component out (D-18-06)
+
+<!-- catalog-state: reinstall-partial-component -->
+
+```text
+A plugin operation needs attention.
+
+● official [user]
+  ● alpha v1.1.0 (reinstalled) {unsupported hooks}
+
+Plugin reinstall: 1 warning
+
+/reload to pick up changes
+```
+
+The source the marketplace offers now resolves `partially-available`, so the reinstall installs the supported components and leaves the rest out. The row keeps `(reinstalled)` and names each left-out kind with the same token the `(partially-installed)` rows use, after any `{malformed ...}` token. Severity `warning` when the record left nothing out before the reinstall: working components were just removed, and the user did not ask for that. A record that was already partially installed renders the same token at `info`. When a dependent's range held the plugin to the marketplace's current copy, `{dependency current copy}` comes first in the brace, as on the `(updated)` row, and changes no severity.
+
 ### Reinstall over an already-disabled record inside a cascade (ENBL-05 / ENBL-18 / DFEN-07)
 
 <!-- catalog-state: reinstall-disabled-record-cascade -->

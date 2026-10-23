@@ -439,6 +439,48 @@ describe("reinstallOutcomeFromRun", () => {
     });
   });
 
+  test("D-18-06 / D-18-07: a swapped candidate carries its left-out kinds and the constraint disclosure", () => {
+    // arrange
+    const run: UpdateRunOutcome = {
+      partition: "updated",
+      name: "hello",
+      fromVersion: "1.0.0",
+      toVersion: "1.1.0",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+      constraint: {
+        disclosure: 'constrained to the combined range (^1.0.0) -- required by "app@mp"',
+        fellBackToCurrentCopy: true,
+      },
+      partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
+    };
+
+    // act
+    const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, undefined);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "reinstalled",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      version: "1.1.0",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+      partialDegrade: { kinds: ["lspServers"], newlyDegraded: true },
+      constraint: {
+        disclosure: 'constrained to the combined range (^1.0.0) -- required by "app@mp"',
+        fellBackToCurrentCopy: true,
+      },
+    });
+  });
+
   test("ENBL-05: an unchanged run is an already-disabled skip", () => {
     // arrange
     const run: UpdateRunOutcome = {
