@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { publishGitRepository, pushGitBranch, pushGitRepository } from "./git-marketplace.ts";
@@ -343,17 +343,48 @@ export async function publishUnreadableSkillFile(
 
 /**
  * Writes `text` to `file` inside the published plugin `plugin`, which must
- * not hold that file yet. It refuses a path outside the publication, and a
- * git publication commits and pushes the new file.
+ * not hold that file yet, and creates the directories above it. It refuses a
+ * path outside the publication, and a git publication commits and pushes the
+ * new file.
  */
 export async function writePublishedPluginFile(
   published: PublishedMarketplace,
   plugin: string,
   file: string,
   text: string,
-): Promise<void> {
+): Promise<string> {
   const target = ownedTarget(published, path.join(published.root, "plugins", plugin, file));
-  await changePublication(published, () => writeFile(target, text, { flag: "wx" }));
+  await changePublication(published, async () => {
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, text, { flag: "wx" });
+  });
+  return target;
+}
+
+/**
+ * Gives the published plugin `plugin` an output style and returns the path
+ * of its file. A plugin's `output-styles` directory holds its output styles,
+ * a component Pi does not support, so the plugin becomes partially
+ * available.
+ */
+export async function publishOutputStyle(
+  published: PublishedMarketplace,
+  plugin: string,
+): Promise<string> {
+  return writePublishedPluginFile(
+    published,
+    plugin,
+    path.join("output-styles", `${plugin}-style.md`),
+    [
+      "---",
+      `name: ${plugin}-style`,
+      `description: An output style of ${plugin}.`,
+      "---",
+      "",
+      "Answer in short sentences.",
+      "",
+    ].join("\n"),
+  );
 }
 
 /**
