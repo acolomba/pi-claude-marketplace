@@ -188,7 +188,7 @@ test("/claude:plugin import imports enabled Claude settings across both scopes",
     assert.match(messages, /● claude-plugins-official \[project\] \(added\)/);
     assert.match(messages, / {2}● official-plugin \(installed\)/);
     assert.match(messages, / {2}⊘ preinstalled-plugin \(skipped\) \{already installed\}/);
-    assert.match(messages, / {2}⊘ unavailable-plugin \(unavailable\) \{no longer installable\}/);
+    assert.match(messages, / {2}⊘ unavailable-plugin \(unavailable\) \{not in manifest\}/);
     assert.equal((messages.match(/\/reload to pick up changes/g) ?? []).length, 1);
   });
 });

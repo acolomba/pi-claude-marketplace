@@ -89,6 +89,8 @@ export interface PluginInstalledOutcome {
   readonly ref: string;
   readonly reason: "installed";
   readonly resourcesChanged: boolean;
+  /** The installed version, which the installed rows of `install` and `enable` show too. */
+  readonly version?: string;
   /**
    * CMC-13 / MSG-SD-1..3: per-row soft-dep predicate inputs propagated
    * from `InstallPluginOutcome.installed`. REQUIRED (mirrors D-01) so the
@@ -444,9 +446,12 @@ type RenderedWarningReason = Extract<
   "unavailable" | "uninstallable"
 >;
 
+// A plugin the marketplace does not list reads as `install` and
+// `marketplace update` report it.
 function importWarningReason(reason: RenderedWarningReason): ContentReason {
   switch (reason) {
     case "unavailable":
+      return "not in manifest";
     case "uninstallable":
       return "no longer installable";
   }
@@ -532,6 +537,7 @@ function buildImportNotificationMarketplaces(
     const row: PluginInstalledMessage = {
       status: "installed",
       name: o.plugin,
+      ...(o.version !== undefined && { version: o.version }),
       dependencies: declaredDependencies(o),
       // D-04-07: a promotion's brace is the standalone row's -- the record was
       // here before, and this command promoted it.
@@ -907,6 +913,7 @@ async function installOnePlannedPlugin(
         ref: refLabel(plugin),
         reason: "installed",
         resourcesChanged: outcome.resourcesChanged,
+        ...(outcome.version !== undefined && { version: outcome.version }),
         declaresAgents: outcome.declaresAgents,
         declaresMcp: outcome.declaresMcp,
         ...(outcome.promoted === true && { promoted: true }),
