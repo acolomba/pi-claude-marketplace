@@ -4116,7 +4116,21 @@ When the enabled plugin's MCP servers reference variables that are not set, or c
 /reload to pick up changes
 ```
 
-`helper` declares `formatter@tools`; both records are disabled. `formatter`'s record is re-materialized through the SAME `runInstallLedger` re-enable machinery `helper`'s own row already used (`pinVersionOverride` + `allowExistingRecord: true`), so its artifacts return to disk without the config file gaining a NEW key for it (D-04-02: the config still names only the plugins the user asked for by name). Where the config already declares `formatter` with `enabled: false` -- what disabling it directly writes -- this standalone command overwrites that entry to `true` instead of leaving it stale for the next reload to act on (CR-01/CR-06); a config entry the scope does not mention at all stays that way. The member row carries the new `{dependency enabled}` token (D-08-02) -- an `installed` row, not a skip, because the record changed and something was materialized. Severity `info` on both rows; the reload-hint fires per SNM-33. A closure member already enabled renders `(skipped) {already enabled}` instead (the existing idempotent-skip token, reused rather than duplicated per D-08-03's discretion); a member the scope records nothing for renders `(skipped) {not installed}` at `warning` (the enable was carried out but fell short) and does not refuse the root's own enable; the next reload holds the root down as `dependencyDisabled` until the missing dependency is installed (LOAD-01 owns reporting it). A root that declares no dependencies renders exactly the `enable-fresh` state above, byte for byte.
+`helper` declares `formatter@tools`; both records are disabled. `formatter`'s record is re-materialized through the SAME `runInstallLedger` re-enable machinery `helper`'s own row already used (`pinVersionOverride` + `allowExistingRecord: true`), so its artifacts return to disk without the config file gaining a NEW key for it (D-04-02: the config still names only the plugins the user asked for by name). Where the config already declares `formatter` with `enabled: false` -- what disabling it directly writes -- this standalone command overwrites that entry to `true` instead of leaving it stale for the next reload to act on (CR-01/CR-06); a config entry the scope does not mention at all stays that way. The member row carries the new `{dependency enabled}` token (D-08-02) -- an `installed` row, not a skip, because the record changed and something was materialized. Severity `info` on both rows; the reload-hint fires per SNM-33. A closure member already enabled renders `(skipped) {already enabled}` instead (the existing idempotent-skip token, reused rather than duplicated per D-08-03's discretion); a member the scope records nothing for refuses the whole enable (see the next state). A root that declares no dependencies renders exactly the `enable-fresh` state above, byte for byte.
+
+### Enable cascade -- refused, a dependency is not installed (EDEP-01)
+
+<!-- catalog-state: enable-refused-missing-dependency -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ helper (failed) {dependency unsatisfied}
+    cause: Install formatter@tools first, then enable helper@official.
+```
+
+`helper` is disabled and declares `formatter@tools`, which the scope has not installed. Claude Code refuses this enable as `dependency_missing`, so the enable is refused before anything changes: no member is re-materialized, `tx.save` is never called, and no config is written. The row reuses `{dependency unsatisfied}`, whose subject is the dependent, and `error` severity with no reload-hint. The `cause:` line names the missing dependencies, sorted and comma-joined, in the D-08-01 plain-English form; an unrenderable name collapses the list to a count, as the disable refusal does. A root that is already enabled is not refused: it renders `(skipped) {already enabled}`, as upstream answers it before it reads the closure.
 
 ### Partial enable -- component kinds dropped (ENBL-07)
 

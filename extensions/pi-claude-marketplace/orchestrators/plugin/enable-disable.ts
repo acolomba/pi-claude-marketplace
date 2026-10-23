@@ -615,9 +615,9 @@ function isDeclarerAbsentFromManifest(cause: Error): boolean {
  * reaches. A record the scope never installed (or whose marketplace the
  * scope never added) answers "found, declares nothing" -- NOT `{ kind:
  * "absent" }`: the question is "is there a record here to turn on", and
- * "absent" would reach the walk's `not-found` arm and refuse an enable over
- * a MISSING dependency that LOAD-01's load-time check already owns
- * reporting.
+ * "absent" would reach the walk's `not-found` arm, whose refusal names no
+ * remedy. `resolveEnableCascade` finds such a member afterwards, as one with
+ * no record, and refuses with the install-first cause itself.
  *
  * `knownMarketplaces` is a MUTABLE set this function GROWS as each record's
  * declarations are read -- see `resolveEnableCascade`'s own seed comment.
@@ -769,15 +769,19 @@ function classifyEnableCascadeMember(
  * network-free gate.
  *
  * Throws `EnableRefusedError` when the closure cannot be resolved -- an
- * unreadable declarer reached by the walk, or a cycle -- and when a member is
- * not installed in the scope. Upstream refuses that enable as
- * `dependency_missing` and enables nothing, so the root never turns on with
- * a dependency it cannot load.
+ * unreadable declarer reached by the walk, or a cycle -- and, when
+ * `refuseMissing` is set, when a member is not installed in the scope.
+ * Upstream refuses that enable as `dependency_missing` and enables nothing,
+ * so the root never turns on with a dependency it cannot load. Upstream
+ * answers an already-enabled root as already enabled before it looks at the
+ * closure, so the caller clears `refuseMissing` for one, and a missing member
+ * then has no row.
  */
 async function resolveEnableCascade(
   state: ExtensionState,
   locations: ScopedLocations,
   rootKey: string,
+  refuseMissing: boolean,
 ): Promise<EnableCascadeResolution> {
   const knownMarketplaces = enableCascadeKnownMarketplaces(state);
   const closure = await resolveDependencyClosure({
@@ -810,7 +814,7 @@ async function resolveEnableCascade(
     }
   }
 
-  if (missing.length > 0) {
+  if (refuseMissing && missing.length > 0) {
     throw new EnableRefusedError(
       "dependency unsatisfied",
       composeEnableMissingDependencyCause(rootKey, missing),
@@ -934,8 +938,8 @@ function buildEnableCascadeMemberPhase(
   locations: ScopedLocations,
   state: ExtensionState,
   member: EnableCascadeMember,
-  record: InstalledPluginRecord,
 ): Phase<EnableCascadeRun> {
+  const { record } = member;
   const partial = !record.compatibility.installable;
   return {
     name: member.key,
@@ -1093,8 +1097,8 @@ function enableCascadeSkipRow(member: EnableCascadeMember): EnableCascadeMemberR
 }
 
 /**
- * Build every `"re-enabled"` member's phase and the skip rows for every
- * other disposition, WITHOUT running them -- shared by
+ * Build every `"re-enabled"` member's phase and the skip rows for the
+ * `"already-enabled"` ones, WITHOUT running them -- shared by
  * `runEnableCascadeMembers` (the root-idempotent path, members alone) and
  * `runEnableCascadeWithRoot` (CR-03's merged path, members plus the root in
  * one ledger).
@@ -1119,15 +1123,7 @@ function buildEnableCascadeMemberPhases(
   for (const member of members) {
     if (member.disposition === "re-enabled") {
       phases.push(
-        buildEnableCascadeMemberPhase(
-          transaction,
-          opts,
-          scope,
-          locations,
-          state,
-          member,
-          member.record,
-        ),
+        buildEnableCascadeMemberPhase(transaction, opts, scope, locations, state, member),
       );
     } else {
       run.rows.push(enableCascadeSkipRow(member));
@@ -1402,8 +1398,9 @@ async function resolveEnableCascadeStep(args: {
   readonly opts: EnableDisablePluginOptions;
   readonly enable: boolean;
   readonly orchestrated: boolean;
+  readonly installed: InstalledPluginRecord;
 }): Promise<EnableCascadeResolutionStep> {
-  const { state, locations, opts, enable, orchestrated } = args;
+  const { state, locations, opts, enable, orchestrated, installed } = args;
   if (!enable || orchestrated) {
     return { kind: "skipped" };
   }
@@ -1412,6 +1409,7 @@ async function resolveEnableCascadeStep(args: {
     state,
     locations,
     `${opts.plugin}@${opts.marketplace}`,
+    isRecordedButDisabled(installed),
   );
   return { kind: "resolved", members: cascade.members };
 }
@@ -2443,6 +2441,7 @@ async function runSetEnabledOutcome(
           opts,
           enable,
           orchestrated,
+          installed,
         });
         const cascadeMembers =
           cascadeResolution.kind === "resolved" ? cascadeResolution.members : [];
@@ -2560,7 +2559,8 @@ async function runSetEnabledOutcome(
       // D-04: the `failed` row's bytes are identical across both verbs; emit it
       // through the active verb's CommandContext for naming consistency.
       // EDEP-01 / EDEP-02 / FIX-03: an `EnableRefusedError` (cycle, unreadable
-      // declarer, enabled dependents, or a local-only marketplace) is the one
+      // declarer, missing dependency, enabled dependents, or a local-only
+      // marketplace) is the one
       // transaction throw this catch classifies for standalone mode -- its
       // reason names the fact the cause line states. Every other transaction
       // throw keeps the pre-existing brace-less `(failed)` row.

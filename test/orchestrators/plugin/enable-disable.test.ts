@@ -6480,10 +6480,85 @@ test("EDEP-01: a declared dependency that is not installed refuses the enable an
         "",
         "● official [user]",
         "  ⊘ a (failed) {dependency unsatisfied}",
-        "    cause: Install formatter@tools first, then a@official.",
+        "    cause: Install formatter@tools first, then enable a@official.",
       ].join("\n"),
     );
     assert.equal((await stat(statePath)).mtimeMs, mtimeBefore);
+  });
+});
+
+test("EDEP-01: a missing dependency two edges away refuses the enable and leaves its disabled declarer off", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      {
+        name: "b",
+        version: "1.0.0",
+        dependencies: [{ name: "formatter", marketplace: "tools" }],
+        enabled: false,
+      },
+    ]);
+    const before = await readFile(statePath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(
+      notifications[0]?.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ⊘ a (failed) {dependency unsatisfied}",
+        "    cause: Install formatter@tools first, then enable a@official.",
+      ].join("\n"),
+    );
+    assert.equal(await readFile(statePath, "utf8"), before);
+  });
+});
+
+test("EDEP-01: an enabled root with a missing dependency is skipped as already enabled", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      {
+        name: "a",
+        version: "1.0.0",
+        dependencies: [{ name: "formatter", marketplace: "tools" }],
+        enabled: true,
+      },
+    ]);
+    const before = await readFile(statePath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(
+      notifications[0]?.message,
+      ["● official [user]", "  ⊘ a (skipped) {already enabled}"].join("\n"),
+    );
+    assert.equal(await readFile(statePath, "utf8"), before);
   });
 });
 

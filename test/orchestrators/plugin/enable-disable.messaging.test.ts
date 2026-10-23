@@ -687,7 +687,7 @@ describe("composeEnableMissingDependencyCause", () => {
     ]);
 
     // assert
-    assert.equal(cause, "Install lib@official, util@tools first, then app@official.");
+    assert.equal(cause, "Install lib@official, util@tools first, then enable app@official.");
   });
 });
 

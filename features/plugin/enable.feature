@@ -189,6 +189,10 @@ Feature: Plugin enable
       | id        | version | enabled |
       | app@tools | 1.0.0   | true    |
       | lib@tools | 1.2.0   | true    |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id        | enabled |
+      | app@tools | true    |
+      | lib@tools | true    |
     When the user starts a new pi session
     Then the session offers these skills:
       | command          | description           |
@@ -214,7 +218,7 @@ Feature: Plugin enable
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id        | name | status | reasons                | scope   | cause chain                              | cause truncated | leaks | rollback partial |
-      | tools            | project           | app@tools | app  | failed | dependency unsatisfied | project | Install lib@tools first, then app@tools. | false           |       |                  |
+      | tools            | project           | app@tools | app  | failed | dependency unsatisfied | project | Install lib@tools first, then enable app@tools. | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | app@tools | 1.0.0   | false   |
