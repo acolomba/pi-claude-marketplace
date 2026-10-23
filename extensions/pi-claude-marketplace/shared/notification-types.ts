@@ -285,7 +285,12 @@ export type Reason =
   // the 404/410 `source missing` answers), so the host was reached and it
   // refused. `network unreachable` stays for connection failures. A token
   // cannot interpolate, so the status and the URL ride the row's cause line.
-  | "network error";
+  | "network error"
+  // IMP-06: import found a settings marketplace the scope already records
+  // with the same source, so nothing changed. Claude Code's own `marketplace
+  // add` says "already added; nothing changed" for this case. It rides a
+  // `skipped` marketplace header and is idempotent, so the cascade stays info.
+  | "already added";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<

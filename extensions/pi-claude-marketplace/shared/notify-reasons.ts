@@ -42,6 +42,8 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 const IDEMPOTENT_REASONS = [
   "up-to-date",
   "already installed",
+  // IMP-06: import found the marketplace recorded with the same source.
+  "already added",
   "already autoupdate",
   "already no autoupdate",
   "already enabled",

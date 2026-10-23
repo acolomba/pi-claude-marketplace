@@ -118,7 +118,7 @@ Feature: Plugin import
       | id            |
       | demo@fixtures |
 
-  Scenario: Importing the same claude code settings a second time changes nothing
+  Scenario: Importing the same claude code settings a second time skips the marketplace and the plugin it already holds
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
@@ -144,8 +144,8 @@ Feature: Plugin import
       | tally warnings      | 0       |
       | tally success count | 2       |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id            | name | status  | reasons           | scope |
-      | fixtures         | user              | updated            | demo@fixtures | demo | skipped | already installed | user  |
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | status  | reasons           | scope |
+      | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | skipped | already installed | user  |
     Then the installation record of the user scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
@@ -297,3 +297,113 @@ Feature: Plugin import
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Importing a plugin of a marketplace the scope already holds installs the plugin under the skipped marketplace
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade |
+      | severity            | info    |
+      | needs reload        | true    |
+      | tally label         | Import  |
+      | tally failures      | 0       |
+      | tally warnings      | 0       |
+      | tally success count | 2       |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | version | status    | reasons | scope |
+      | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | 1.0.0   | installed |         | user  |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+
+  Scenario: Importing a plugin the scope holds disabled enables it instead of reinstalling it
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope user"
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade |
+      | severity            | info    |
+      | needs reload        | true    |
+      | tally label         | Import  |
+      | tally failures      | 0       |
+      | tally warnings      | 0       |
+      | tally success count | 2       |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | version | status    | reasons | scope |
+      | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | 1.0.0   | installed |         | user  |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id            | enabled |
+      | demo@fixtures | true    |
+    Then the user scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
+
+  Scenario: Importing while another process holds the state lock of the scope fails as lock held and changes nothing
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    Given another process holds the state lock of the user scope
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind           | cascade                      |
+      | severity       | error                        |
+      | needs reload   | false                        |
+      | summary        | Some operations have failed. |
+      | tally label    | Import                       |
+      | tally failures | 2                            |
+      | tally warnings | 0                            |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id                | name     | status | reasons   | scope | cause chain                                                                                                                                                                       | cause truncated | leaks | rollback partial |
+      | fixtures         | user              | failed             | fixtures@fixtures | fixtures | failed | lock held | user  | Another pi-claude-marketplace operation is in progress for user scope ({agent dir}/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+    Then the import leaves no installation record in the user scope
+    Then the user scope holds no marketplace checkout
+    Then the "claude-plugins.json" file of the user scope does not exist

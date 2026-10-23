@@ -2243,7 +2243,9 @@ ______________________________________________________________________
 
 ## `/claude:plugin import`
 
-Multi-marketplace + multi-plugin cascade. Each marketplace header carries its own state-change status (`added` / `skipped` is not a marketplace status in v2 -- use `updated` for "already added" or omit the marketplace from the payload; `failed` for an unreachable source). Plugin rows indent two spaces underneath.
+Multi-marketplace + multi-plugin cascade. Each marketplace header carries its own status: `added` for a marketplace this import recorded, `(skipped) {already added}` for one the scope already records with the settings' source (IMP-06; Claude Code's own `marketplace add` says "already added; nothing changed" here), and `failed` for one that could not be used. Plugin rows indent two spaces underneath.
+
+Import is reconcile with the Claude Code settings as the desired state (IMP-05): it plans with reconcile's planner and runs the same add, install, and enable operations, so a plugin already installed is never reinstalled. Unlike the silent load-time reconcile, it reports each skip: a recorded plugin reads `(skipped) {already installed}`. A plugin the scope records disabled is enabled, and its row is the `(installed)` row reconcile renders for a re-enable. The skip rows are idempotent, so a repeat import is `info` with no reload-hint.
 
 A plugin the imported settings name that is already recorded as another plugin's dependency is promoted rather than skipped (D-04-07), and its row is the standalone promotion row without the version slot: `● dep (installed) {already installed, dependency promoted}`. The brace is the same on both surfaces, so a promotion reads as one thing whichever command performed it. The row raises the reload-hint trailer only when the promotion re-materialized a disabled record, as the standalone row does; a record whose artifacts were already on disk contributes no trailer.
 
@@ -2353,6 +2355,35 @@ Import: 1 failure, 2 successes
 ```
 
 `hello@mp` declares a dependency the marketplace does not declare, so its install cascade fails before `hello`'s own ledger runs. `installOnePlannedPlugin` drives exactly one orchestrated outcome per planned plugin (it does not install the dependency separately), so the two-row standalone cascade form -- a dependency row plus a `{dependency failed}` root row -- collapses onto the ONE row import can render: `hello`'s own row carries `{dependency failed}` and the failing dependency's cause line, exactly as the "Load-time install failed by a dependency" state under [`## reconcile-applied-cascade`](#reconcile-applied-cascade) renders it. `dispatchFailedOutcome` narrows on `instanceof DependencyCascadeError` before its generic fallthrough, so a cascade failure never renders the unrelated `{not in manifest}` token the fallthrough carries for every other unclassified throw. Every other plugin in the batch is unaffected and keeps installing (D-115-08 continuation); the trailing tally counts the marketplace add and `before`'s install as successes and `hello`'s row as the one failure. Severity: `error`; reload-hint fires (`before` materialized).
+
+### A repeat import skips what the scope already holds (IMP-06)
+
+<!-- catalog-state: repeat-import-skips -->
+
+```text
+● fixtures [user] (skipped) {already added}
+  ⊘ demo (skipped) {already installed}
+
+Import: 2 successes
+```
+
+The settings name a marketplace the scope records with the same source and a plugin it has installed, so nothing runs. Both rows are idempotent skips: the header carries no severity stamp and the plugin row stamps `info`, so the cascade is `info`, the tally counts two successes, and no reload-hint fires.
+
+### Another process holds the state lock (IMP-07)
+
+<!-- catalog-state: lock-held -->
+
+```text
+Some operations have failed.
+
+⊘ fixtures [user] (failed)
+  ⊘ fixtures (failed) {lock held}
+    cause: Another pi-claude-marketplace operation is in progress for user scope (~/.pi/agent/pi-claude-marketplace/.state-lock). Retry after it completes. -> Lock file is already being held
+
+Import: 2 failures
+```
+
+Import's read pass takes the scope lock before it plans, so a held lock fails the scope before any operation runs, and nothing changes. Each marketplace the settings name gets the row `marketplace add` shows for a held lock; the plugins under it get no rows, as under any marketplace failure. Severity: `error`; no reload-hint.
 
 ______________________________________________________________________
 

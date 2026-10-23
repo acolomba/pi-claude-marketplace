@@ -117,6 +117,7 @@ const REASON_ENROLLMENT: Record<Reason, true> = {
   "disabled in local layer": true,
   "enabled in local layer": true,
   "network error": true,
+  "already added": true,
 };
 
 const STATUS_TOKEN_ENROLLMENT: Record<StatusToken, true> = {
@@ -209,7 +210,7 @@ const NOTIFICATION_KIND_ENROLLMENT: Record<
   "reconcile-applied-cascade": true,
 };
 
-test("OUT-08: Reason is the closed 77-entry reason set", () => {
+test("OUT-08: Reason is the closed 78-entry reason set", () => {
   // The set is append-only and its declared order is catalog-stable, so this
   // length is a tripwire: an additive drift has to be a deliberate bump made
   // here, in the same edit as the member. The MEMBERSHIP is pinned separately by
@@ -223,7 +224,7 @@ test("OUT-08: Reason is the closed 77-entry reason set", () => {
   const memberCount = Object.keys(REASON_ENROLLMENT).length;
 
   // assert
-  assert.strictEqual(memberCount, 77);
+  assert.strictEqual(memberCount, 78);
 });
 
 test("SNM-02: StatusToken is the closed 24-entry token set", () => {
