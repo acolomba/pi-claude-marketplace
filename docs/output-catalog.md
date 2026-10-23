@@ -3432,10 +3432,10 @@ A reconcile that materialized one new marketplace + one plugin install per scope
 
 ```text
 ● new-mp [project] (added)
-  ● new-plugin (installed)
+  ● new-plugin v1.0.0 (installed)
 
 ● other-mp [user] (added)
-  ● other-plugin (installed)
+  ● other-plugin v1.0.0 (installed)
 
 Reconcile: 4 successes
 ```

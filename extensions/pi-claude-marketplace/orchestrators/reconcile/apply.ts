@@ -705,6 +705,7 @@ async function applyPluginInstalls(
         scope: op.scope,
         marketplace: op.marketplace,
         plugin: op.plugin,
+        ...(result.version !== undefined && { version: result.version }),
         dependencies: declaredDependencies(result),
         // S2 / PR #51: propagate post-commit warnings so the cascade
         // caller can surface them to the operator (mirrors the
