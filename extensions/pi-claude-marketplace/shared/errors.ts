@@ -279,7 +279,34 @@ export function appendLeakToError(err: unknown, leak: string | undefined): Error
     return baseError;
   }
 
-  return new Error(`${baseError.message} (additionally: ${leak})`, { cause: baseError });
+  return new CleanupLeakError(baseError, leak);
+}
+
+/**
+ * MA-9 / INR-02: an error whose cleanup leaked. `cause` is the original
+ * failure, so a classifier reads the reason through the wrapper.
+ */
+export class CleanupLeakError extends Error {
+  override readonly cause: Error;
+  constructor(original: Error, leak: string) {
+    super(`${original.message} (additionally: ${leak})`, { cause: original });
+    this.name = "CleanupLeakError";
+    this.cause = original;
+  }
+}
+
+/**
+ * INR-02: the failure behind the `CleanupLeakError` wrappers, walked through
+ * `causeChain`. A chain of wrappers deeper than its cap is returned as given.
+ */
+export function withoutCleanupLeaks(err: unknown): unknown {
+  for (const link of causeChain(err)) {
+    if (!(link instanceof CleanupLeakError)) {
+      return link;
+    }
+  }
+
+  return err;
 }
 
 /** Sequential `appendLeakToError` for multiple leak sources -- chains via Error.cause. */
@@ -648,11 +675,12 @@ export class InvalidGitHubBaseUrlError extends Error {
  * malformed JSON and a schema-invalid manifest. Giving the failure a typed
  * class lets consumers narrow on `instanceof` instead of substring-matching
  * the message text or sniffing for `SyntaxError`:
- *   - `orchestrators/marketplace/add.ts::classifyAddError` -> `invalid manifest`
- *     (ATTR-07).
- *   - `orchestrators/marketplace/update.ts::reasonsFromCascadeError` ->
- *     `invalid manifest` (ATTR-10), so a path-source manifest failure never
- *     falls back to the lying `network unreachable` default (NFR-5).
+ *   - `orchestrators/marketplace/add.ts::classifyAddError` and
+ *     `orchestrators/marketplace/update.ts::reasonsFromCascadeError` map it
+ *     through `narrowProbeError`: `unparseable` for malformed JSON,
+ *     `invalid manifest` for a schema-invalid manifest (ATTR-07, ATTR-10,
+ *     MPA-02), so a path-source manifest failure never falls back to the
+ *     lying `network unreachable` default (NFR-5).
  *
  * The original `SyntaxError` (when one originated the failure) is preserved via
  * `Error.cause` so the depth-5 `causeChainTrailer` walker still surfaces the
@@ -1149,6 +1177,19 @@ export class DependencyCascadeError extends Error {
     super(message, options);
     this.name = "DependencyCascadeError";
     this.key = key;
+  }
+}
+
+/**
+ * INR-03: a fresh clone of a git plugin source does not hold the commit the
+ * marketplace pins. The message is the whole cause (INR-06).
+ */
+export class PinnedCommitMissingError extends Error {
+  readonly sha: string;
+  constructor(sha: string) {
+    super(`A fresh clone from the git host does not hold the commit ${sha}`);
+    this.name = "PinnedCommitMissingError";
+    this.sha = sha;
   }
 }
 

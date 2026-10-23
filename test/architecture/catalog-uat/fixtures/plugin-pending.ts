@@ -60,7 +60,7 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
           {
             name: "mp",
             scope: "user",
-            plugins: [{ status: "will uninstall", name: "old-plugin" }],
+            plugins: [{ status: "will uninstall", name: "old-plugin", version: "1.0.0" }],
           },
         ],
       },
@@ -73,7 +73,7 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
           {
             name: "mp",
             scope: "user",
-            plugins: [{ status: "will uninstall", name: "old-plugin" }],
+            plugins: [{ status: "will uninstall", name: "old-plugin", version: "1.0.0" }],
           },
         ],
         retainedWorkflows: [{ name: "9f1c4d2a-3b7e", envelopeCount: 2 }],
@@ -93,8 +93,8 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
             name: "old-mp",
             scope: "user",
             plugins: [
-              { status: "will uninstall", name: "p1" },
-              { status: "will uninstall", name: "p2" },
+              { status: "will uninstall", name: "p1", version: "1.0.0" },
+              { status: "will uninstall", name: "p2", version: "2.3.0" },
             ],
           },
         ],

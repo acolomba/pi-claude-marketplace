@@ -629,11 +629,12 @@ const STATUS_CASES: { readonly [S in PluginStatus]: StatusCase<S> } = {
     },
   },
   "will uninstall": {
-    row: { status: "will uninstall", name: "alpha", reasons: ["plugins remain"] },
+    row: { status: "will uninstall", name: "alpha", version: "1.2.0", reasons: ["plugins remain"] },
     expected: {
       status: "will uninstall",
       name: "alpha",
       id: "alpha@mp",
+      version: "1.2.0",
       reasons: ["plugins remain"],
       scope: "user",
     },

@@ -167,7 +167,13 @@ export interface GitOps {
     auth?: GitAuthBundle;
   }): Promise<void>;
   /** D-14 step 1: refresh remote refs (no merge, no working-tree changes). */
-  fetch(opts: { dir: string; remote?: string; ref?: string; auth?: GitAuthBundle }): Promise<void>;
+  fetch(opts: {
+    dir: string;
+    remote?: string;
+    ref?: string;
+    tags?: boolean;
+    auth?: GitAuthBundle;
+  }): Promise<void>;
   /** D-14 step 2 (symbolic HEAD): force-set local branch ref to remote SHA. */
   forceUpdateRef(opts: { dir: string; ref: string; value: string }): Promise<void>;
   /** D-14 step 3: move HEAD to ref/SHA. */

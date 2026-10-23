@@ -236,7 +236,7 @@ test("DIFF-01 / NFR-5: a repeated invocation emits the same notification and lea
   await writeUnder(project.baseConfigJsonPath, declaredConfig);
   await writeUnder(project.stateJsonPath, recordedState);
   const expectedNotification = {
-    message: "● mp [project]\n  ○ p1 (will uninstall)\n\nReconcile pending: 1 success",
+    message: "● mp [project]\n  ○ p1 v1.0.0 (will uninstall)\n\nReconcile pending: 1 success",
   };
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
 
@@ -564,7 +564,7 @@ test("FIX-02: the pending view leaves out what the local config declares, as the
 
   // assert
   assert.deepStrictEqual(notifications, [
-    { message: "● mp [project]\n  ○ p1 (will uninstall)\n\nReconcile pending: 1 success" },
+    { message: "● mp [project]\n  ○ p1 v1.0.0 (will uninstall)\n\nReconcile pending: 1 success" },
   ]);
   verifyBoundary();
 });
@@ -778,7 +778,7 @@ test("WR-06: the cascade arm carries the identical retained-tree line", async (t
   // site composes both arms, so the two cannot drift.
   assert.deepStrictEqual(notifications, [
     {
-      message: `● mp [project]\n  ○ p1 (will uninstall)\n\n${RETAINED_LINE}\n\nReconcile pending: 1 success`,
+      message: `● mp [project]\n  ○ p1 v1.0.0 (will uninstall)\n\n${RETAINED_LINE}\n\nReconcile pending: 1 success`,
     },
   ]);
   verifyBoundary();

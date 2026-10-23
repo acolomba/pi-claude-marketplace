@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { publishGitRepository, pushGitBranch, pushGitRepository } from "./git-marketplace.ts";
@@ -360,6 +360,19 @@ export async function invalidateManifest(
   problem: ManifestProblem,
 ): Promise<void> {
   await changePublication(published, () => MANIFEST_WRITERS[problem](published.manifestPath, name));
+}
+
+/**
+ * Takes away every permission on the manifest of a local publication, so
+ * reading it fails with EACCES. Git stores no file mode that denies reading,
+ * so a git publication refuses.
+ */
+export async function makeManifestUnreadable(published: PublishedMarketplace): Promise<void> {
+  if (published.kind === "url" || published.kind === "github") {
+    throw new Error("a git repository cannot hold a file nobody may read");
+  }
+
+  await chmod(published.manifestPath, 0o000);
 }
 
 /**

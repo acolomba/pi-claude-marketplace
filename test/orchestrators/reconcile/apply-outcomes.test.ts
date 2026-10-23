@@ -5,6 +5,7 @@ import { UninstallRefusedError } from "../../../extensions/pi-claude-marketplace
 import {
   carriedMcpConfigNotices,
   classifyOrchestratorThrow,
+  installFailureReasonFields,
   classifyReadPassThrow,
   dependencyDisabledOutcome,
   MigrateConfigSaveError,
@@ -33,7 +34,9 @@ import {
   type SourceMismatchOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import {
+  appendLeakToError,
   DependencyCascadeError,
+  InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
   PluginShapeError,
   StateLockHeldError,
@@ -537,6 +540,81 @@ describe("sourceMismatchOutcomeSubject", () => {
   });
 });
 
+describe("installFailureReasonFields", () => {
+  test("REC-06: narrows a plugin that cannot be installed as install does", () => {
+    // arrange
+    const error = new PluginShapeError({
+      kind: "not-installable",
+      plugin: "formatter",
+      reasons: [],
+      unsupportedKinds: ["hooks"],
+      partialable: true,
+    });
+
+    // act
+    const fields = installFailureReasonFields(error);
+
+    // assert
+    assert.deepStrictEqual(fields, {
+      reason: "no longer installable",
+      reasons: ["unsupported hooks"],
+    });
+  });
+
+  test("REC-06: narrows a plugin no longer installable as install does", () => {
+    // arrange
+    const error = new PluginShapeError({
+      kind: "no-longer-installable",
+      plugin: "formatter",
+      reasons: ["contains lspServers"],
+      partialable: false,
+    });
+
+    // act
+    const fields = installFailureReasonFields(error);
+
+    // assert
+    assert.deepStrictEqual(fields, { reason: "no longer installable", reasons: ["lsp"] });
+  });
+
+  test("keeps the one reason of a plugin missing from its manifest", () => {
+    // arrange
+    const error = new PluginShapeError({
+      kind: "not-in-manifest",
+      plugin: "formatter",
+      marketplace: "official",
+    });
+
+    // act
+    const fields = installFailureReasonFields(error);
+
+    // assert
+    assert.deepStrictEqual(fields, { reason: "not in manifest" });
+  });
+
+  test("keeps a reason the caller already holds", () => {
+    // arrange
+    const error = new Error("cross-marketplace dependency");
+
+    // act
+    const fields = installFailureReasonFields(error, "cross-marketplace");
+
+    // assert
+    assert.deepStrictEqual(fields, { reason: "cross-marketplace" });
+  });
+
+  test("keeps the one classified reason of any other failure", () => {
+    // arrange
+    const error = new StateLockHeldError("project", "/work/project/.state-lock");
+
+    // act
+    const fields = installFailureReasonFields(error);
+
+    // assert
+    assert.deepStrictEqual(fields, { reason: "lock held" });
+  });
+});
+
 describe("classifyOrchestratorThrow", () => {
   test("classifies a dependency-cascade failure", () => {
     // arrange
@@ -623,6 +701,45 @@ describe("classifyOrchestratorThrow", () => {
 
     // assert
     assert.strictEqual(reason, "lock held");
+  });
+
+  test("INR-01: classifies a clone the git host refused with the host's reason", () => {
+    // arrange
+    const error = Object.assign(new Error("HTTP Error: 404 Not Found"), {
+      code: "HttpError",
+      data: { statusCode: 404 },
+    });
+
+    // act
+    const reason = classifyOrchestratorThrow(error);
+
+    // assert
+    assert.strictEqual(reason, "source missing");
+  });
+
+  test("INR-02: classifies a filesystem error behind a cleanup leak through the probe fallback", () => {
+    // arrange
+    const error = appendLeakToError(
+      Object.assign(new Error("EACCES failure"), { code: "EACCES" }),
+      "staging leaked",
+    );
+
+    // act
+    const reason = classifyOrchestratorThrow(error);
+
+    // assert
+    assert.strictEqual(reason, "permission denied");
+  });
+
+  test("INR-01: classifies a failed marketplace add with the reason it carries", () => {
+    // arrange
+    const error = new InstallMarketplaceAddError("authentication required", "add failed");
+
+    // act
+    const reason = classifyOrchestratorThrow(error);
+
+    // assert
+    assert.strictEqual(reason, "authentication required");
   });
 
   for (const { code, reason } of [

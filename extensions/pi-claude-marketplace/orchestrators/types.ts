@@ -13,6 +13,7 @@ import type { CleanupFailure } from "../shared/errors.ts";
 import type { McpConfigNotice } from "../shared/notification-types.ts";
 import type { DegradeKind } from "../shared/notify-reasons.ts";
 import type { Scope } from "../shared/types.ts";
+import type { RollbackPartial } from "../transaction/phase-ledger.ts";
 import type { LedgerDegradationSignals } from "./plugin/shared.ts";
 
 export interface ReinstallOutcomeBase {
@@ -619,6 +620,12 @@ export type InstallPluginOutcome =
       readonly status: "failed";
       readonly error: Error;
       readonly cause: string;
+      /**
+       * REC-06: the undo steps the failed install's own ledger could not
+       * finish, so an orchestrated caller reports `{rollback partial}` as the
+       * standalone row does. Omitted when every undo finished (NREG-01).
+       */
+      readonly rollbackPartials?: readonly RollbackPartial[];
       /**
        * AFILE-04: the MCP config file notices of the dependencies that
        * committed before a later cascade member failed. Omitted when there

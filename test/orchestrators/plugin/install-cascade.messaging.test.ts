@@ -10,6 +10,7 @@ import {
 import {
   causeChainTrailer,
   DependencyCascadeError,
+  InstallMarketplaceAddError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notifyWithContext } from "../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import { runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
@@ -656,7 +657,7 @@ describe("composeCascadeFailureMessage", () => {
         kind: "range-conflict",
         why: "contradictory-declarations",
         key: "formatter@tools",
-        range: "^1.0.0 ^2.0.0",
+        range: "^1.0.0, ^2.0.0",
         detail: "inputs 1 and 2 do not overlap",
       },
     };
@@ -672,7 +673,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed) {version conflict}",
-        '    cause: Dependency "formatter@tools" has contradictory version constraints "^1.0.0 ^2.0.0" (inputs 1 and 2 do not overlap).',
+        '    cause: Dependency "formatter@tools" has contradictory version constraints ^1.0.0, ^2.0.0 (inputs 1 and 2 do not overlap).',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -702,7 +703,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
-        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy "^2.0.0".',
+        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0.',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -726,7 +727,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed) {no matching version}",
-        '    cause: Dependency "formatter@tools" has no release tag satisfying "^2.0.0".',
+        '    cause: Dependency "formatter@tools" has no release tag satisfying ^2.0.0.',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -755,7 +756,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed) {authentication required}",
-        '    cause: Dependency "formatter@tools" could not be checked against "^2.0.0" (authentication required).',
+        '    cause: Dependency "formatter@tools" could not be checked against ^2.0.0 (authentication required).',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -784,7 +785,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed) {unreadable}",
-        '    cause: Dependency "formatter@tools" could not be checked against "^2.0.0" (tag listing failed).',
+        '    cause: Dependency "formatter@tools" could not be checked against ^2.0.0 (tag listing failed).',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -813,7 +814,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed) {invalid version constraint}",
-        '    cause: Dependency "formatter@tools" declares an unparseable version constraint "nope" (input 1 of 1 is not a valid version range).',
+        '    cause: Dependency "formatter@tools" declares an unparseable version constraint nope (input 1 of 1 is not a valid version range).',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -869,6 +870,61 @@ describe("composeCascadeFailureMessage", () => {
         "● official [user]",
         "  ⊘ formatter@tools (failed)",
         "    cause: failed to stage skill a-fmt: EACCES",
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("INR-01 a member whose clone the git host refused names the host's reason", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "member",
+      key: "formatter@tools",
+      error: Object.assign(new Error("HTTP Error: 404 Not Found"), {
+        code: "HttpError",
+        data: { statusCode: 404 },
+      }),
+      rollbackPartials: [],
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools (failed) {source missing}",
+        "    cause: HTTP Error: 404 Not Found",
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("INR-01 a member whose marketplace add failed names the add's reason", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "member",
+      key: "formatter@tools",
+      error: new InstallMarketplaceAddError("source missing", "marketplace add failed"),
+      rollbackPartials: [],
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools (failed) {source missing}",
+        "    cause: marketplace add failed",
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -965,7 +1021,7 @@ describe("cascadeFailureCause", () => {
     assert.strictEqual(thrown.key, "formatter@tools");
     assert.strictEqual(
       thrown.message,
-      'Dependency "formatter@tools" has no release tag satisfying "^2.0.0".',
+      'Dependency "formatter@tools" has no release tag satisfying ^2.0.0.',
     );
     assert.ok(rendered !== undefined && "cause" in rendered);
     assert.strictEqual(rendered.cause?.message, thrown.message);

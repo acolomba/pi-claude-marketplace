@@ -160,7 +160,93 @@ test("composes structural unavailability without an installs-disabled claim", as
     message: {
       status: "unavailable",
       name: "missing",
-      reasons: ["unsupported source"],
+      reasons: ["source missing"],
+    },
+    bucket: "unavailable",
+  });
+});
+
+async function writePluginJson(pluginRoot: string, manifest: object): Promise<void> {
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(path.join(pluginRoot, ".claude-plugin", "plugin.json"), JSON.stringify(manifest));
+}
+
+test("VER-02: an available path row shows the version its plugin.json declares over the entry's", async (testContext) => {
+  // arrange
+  const composeCandidateListRow = await loadComposeCandidateListRow();
+  const environment = await candidateEnvironment(testContext);
+  await writePluginJson(path.join(environment.marketplaceRoot, "alpha"), {
+    name: "alpha",
+    version: "2.0.0",
+  });
+  const entry: ManifestPluginEntry = { name: "alpha", source: "./alpha", version: "1.0.0" };
+
+  // act
+  const row = await composeCandidateListRow(
+    entry,
+    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
+    environment.locations,
+    undefined,
+  );
+
+  // assert
+  assert.deepStrictEqual(row, {
+    message: { status: "available", name: "alpha", version: "2.0.0" },
+    bucket: "available",
+  });
+});
+
+test("VER-02: a partially available path row shows the version its plugin.json declares", async (testContext) => {
+  // arrange
+  const composeCandidateListRow = await loadComposeCandidateListRow();
+  const environment = await candidateEnvironment(testContext);
+  await writePluginJson(path.join(environment.marketplaceRoot, "alpha"), {
+    name: "alpha",
+    version: "2.0.0",
+  });
+  const entry: ManifestPluginEntry = {
+    name: "alpha",
+    source: "./alpha",
+    version: "1.0.0",
+    lspServers: { alpha: {} },
+  };
+
+  // act
+  const row = await composeCandidateListRow(
+    entry,
+    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
+    environment.locations,
+    undefined,
+  );
+
+  // assert
+  assert.deepStrictEqual(row, {
+    message: { status: "partially-available", name: "alpha", version: "2.0.0", reasons: ["lsp"] },
+    bucket: "partially-available",
+  });
+});
+
+test("VER-02: an unavailable path row keeps the entry version", async (testContext) => {
+  // arrange
+  const composeCandidateListRow = await loadComposeCandidateListRow();
+  const environment = await candidateEnvironment(testContext);
+  const entry: ManifestPluginEntry = { name: "ghost", source: "./ghost", version: "1.0.0" };
+
+  // act
+  const row = await composeCandidateListRow(
+    entry,
+    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
+    environment.locations,
+    undefined,
+  );
+
+  // assert
+  assert.deepStrictEqual(row, {
+    message: {
+      status: "unavailable",
+      name: "ghost",
+      version: "1.0.0",
+      reasons: ["source missing"],
     },
     bucket: "unavailable",
   });

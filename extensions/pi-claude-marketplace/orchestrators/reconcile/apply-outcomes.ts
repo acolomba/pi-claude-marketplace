@@ -30,12 +30,16 @@ import { isRenderablePluginKey } from "../../domain/dependencies.ts";
 import { renderConstraintRange } from "../../domain/dependency-range.ts";
 import {
   DependencyCascadeError,
+  InstallMarketplaceAddError,
   PluginShapeError,
   StateLockHeldError,
+  withoutCleanupLeaks,
 } from "../../shared/errors.ts";
+import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
+import { narrowResolverReasons } from "../plugin/install.messaging.ts";
 
 import {
   DEPENDENCY_UNSATISFIED_ROW_REASONS,
@@ -196,6 +200,12 @@ export interface PluginBackfilledOutcome
 export interface PluginInstallFailedOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-install-failed";
   readonly reason: Reason;
+  /**
+   * REC-06: the row's brace when it differs from `reason` alone: the reasons
+   * `install` narrows a plugin that cannot be installed to. `reason` stays the
+   * summary token (`no longer installable`). Omitted otherwise (NREG-01).
+   */
+  readonly reasons?: readonly ContentReason[];
   /**
    * RESV-06: set ONLY when the failure is attributable to a DEPENDENCY
    * (`reason === "dependency failed"`) -- the projection surfaces it as the
@@ -611,14 +621,18 @@ export type PerEntryOutcome =
  * instead of flattening to the misleading `{unreadable}` fallback. Mirrors
  * the instanceof ladder in `import/execute.ts::dispatchFailedOutcome`; the
  * `not-installable` and `no-longer-installable` shape kinds collapse to the
- * single `no longer installable` token used by import's
- * `importWarningReason("uninstallable")` so the cross-surface reason stays
- * identical for the same underlying failure.
+ * single `no longer installable` token. Import instead narrows them to the
+ * resolver reasons `install` renders (IMP-08).
  *
  * RESV-06: a `DependencyCascadeError` is checked FIRST -- an install failure
  * attributable to one of the plugin's dependencies otherwise falls through to
  * `{unreadable}`, losing the closure/constraint arms' `name@marketplace`
  * cause entirely.
+ *
+ * INR-01: a git host that refused a clone reads the reason a direct install
+ * reads (`classifyGitHostFailure`) before the probe fallback, which would call
+ * it `{unreadable}`, and a failed marketplace add reads the reason it carries.
+ * The probe fallback classifies the error behind a cleanup leak (INR-02).
  *
  * Exported for direct unit-test exercise of the closed-set mapping
  * (the function is otherwise module-private).
@@ -630,6 +644,10 @@ export function classifyOrchestratorThrow(err: unknown): ContentReason {
 
   if (err instanceof StateLockHeldError) {
     return "lock held";
+  }
+
+  if (err instanceof InstallMarketplaceAddError) {
+    return err.reason;
   }
 
   if (err instanceof PluginShapeError) {
@@ -644,7 +662,42 @@ export function classifyOrchestratorThrow(err: unknown): ContentReason {
     }
   }
 
-  return narrowProbeError(err);
+  return classifyGitHostFailure(err) ?? narrowProbeError(withoutCleanupLeaks(err));
+}
+
+/**
+ * REC-06: the reason fields of a failed install's row. A plugin that cannot be
+ * installed reads the reasons `install` and `import` narrow it to
+ * (`narrowResolverReasons`); every other throw reads its one classified reason.
+ * A reason the caller already holds (a dependency's `cross-marketplace`) wins.
+ */
+export function installFailureReasonFields(
+  err: unknown,
+  known?: ContentReason,
+): {
+  readonly reason: ContentReason;
+  readonly reasons?: readonly ContentReason[];
+} {
+  if (known !== undefined) {
+    return { reason: known };
+  }
+
+  const reason = classifyOrchestratorThrow(err);
+  if (
+    err instanceof PluginShapeError &&
+    (err.shape.kind === "not-installable" || err.shape.kind === "no-longer-installable")
+  ) {
+    return {
+      reason,
+      reasons: narrowResolverReasons(
+        err.shape.reasons,
+        err.shape.unsupportedKinds,
+        err.shape.partialable,
+      ),
+    };
+  }
+
+  return { reason };
 }
 
 /**

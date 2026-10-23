@@ -30,14 +30,14 @@ settle which one wins (see PROJECT.md).
 - [x] **ENA-02**: Disabling an enabled plugin makes a new session offer none of its skills and keeps the plugin installed (`list` shows it disabled)
 - [x] **ENA-03**: Enabling an enabled plugin, and disabling a disabled one, is skipped as a no-op with the matching reason
 - [x] **ENA-04**: Enable and disable work in the user scope and the project scope, each changing only the named scope
-- [x] **ENA-05**: Enabling a plugin whose dependencies are disabled or absent enables or installs them; disabling a plugin that an enabled plugin depends on behaves as Claude Code does (refused or cascaded, matched to upstream)
+- [x] **ENA-05**: Enabling a plugin whose dependencies are disabled enables them, and one whose dependency is absent is refused with `{dependency unsatisfied}` as Claude Code does; disabling a plugin that an enabled plugin depends on behaves as Claude Code does (refused or cascaded, matched to upstream)
 - [x] **ENA-06**: Enable and disable of a plugin that is not installed fail with the not-installed reason
 
 ### install
 
-- [x] **INS-01**: Installing a plugin that declares dependencies installs the whole closure in dependency order and reports each member
+- [x] **INS-01**: Installing a plugin that declares dependencies installs the whole closure in dependency order (order proven by the `RESV-01` unit tests) and reports each member
 - [x] **INS-02**: A dependency closure that cannot be resolved (a missing dependency, an unsatisfiable version constraint) installs nothing
-- [x] **INS-03**: Installing a partially available plugin (skills plus an unsupported component) fails without `--partial` and installs the supported part with `--partial`, and `info` names what was left out
+- [x] **INS-03**: Installing a partially available plugin (skills plus an unsupported component) fails without `--partial` and installs the supported part with `--partial`, and `info` reports the left-out part as `unsupported component`
 - [x] **INS-04**: Installing into the user scope with no `--scope` and with `--scope user` records it in the user scope only, and a new session in any project offers its skills
 - [x] **INS-05**: A plugin with a git, a github, or a url source installs from the loopback git host; a second install of the same pinned source reuses the clone and makes no request
 - [x] **INS-06**: A plugin source the host refuses (404, 401, connection drop) fails with the matching reason and leaves no record, clone, or skill behind
@@ -53,9 +53,9 @@ settle which one wins (see PROJECT.md).
 
 - [x] **UPD-01**: `update @<marketplace>` updates every outdated plugin of that marketplace and leaves the plugins of other marketplaces unchanged
 - [x] **UPD-02**: Updating a git-source plugin fetches the new revision on a cache miss and makes no request when the cache already holds it
-- [x] **UPD-03**: A dependency whose version constraint the new version breaks blocks the update and changes nothing
+- [x] **UPD-03**: An update whose new version a dependent's version constraint does not accept is blocked and changes nothing
 - [x] **UPD-04**: An update that fails partway keeps the installed version, its skills, and its record
-- [x] **UPD-05**: `update --partial` updates a plugin whose new version became partially available, and fails without the flag
+- [x] **UPD-05**: `update --partial` updates a plugin whose new version became partially available; without the flag the update is not applied and is reported as a `partially-upgradable` warning
 
 ### reinstall
 
@@ -68,12 +68,12 @@ settle which one wins (see PROJECT.md).
 - [x] **LST-01**: `list` shows installed, available, unavailable, and partially available plugins with their status and scope
 - [x] **LST-02**: `--installed`, `--available`, `--unavailable`, and `--partial` each keep only their rows, and combined filters keep the union
 - [x] **LST-03**: `list <marketplace>` keeps only that marketplace's plugins, and an unknown marketplace fails as not added
-- [x] **LST-04**: `list --remote` reports plugins whose source has a newer revision on the git host, and `list` without it makes no request
+- [x] **LST-04**: `list --remote` filters to plugins from remote (git) sources (RSTA-07), and `list` makes no network request (NFR-5)
 - [x] **LST-05**: `list --scope user` and `--scope project` keep only that scope's installations
 
 ### info
 
-- [x] **INF-01**: `info` on an installed plugin shows its version, scope, source, and the skills it provides
+- [x] **INF-01**: `info` on an installed plugin shows its version, marketplace, scope, and the skills it provides
 - [x] **INF-02**: `info` on an available but not installed plugin shows what installing it would provide
 - [x] **INF-03**: `info` on a partially available or unavailable plugin names the reasons
 - [x] **INF-04**: `info --fetch` reads the remote source and reports a newer revision, and `info` without it makes no request
@@ -139,6 +139,34 @@ settle which one wins (see PROJECT.md).
 - [ ] **IMP-05**: `import` applies the Claude Code settings through the same desired-state path as reconcile, and never reinstalls a plugin that is already installed
 - [ ] **IMP-06**: `import` reports a plugin it already has as `skipped {already installed}`, and a marketplace already added with the same source as a skipped no-op at `info` severity, not `(updated)`
 - [ ] **IMP-07**: `import` run while another process holds the state lock fails with the lock-held reason and changes nothing, instead of `unexpected-failure`
+
+### Decisions applied, second round (2026-10-23)
+
+- [ ] **VER-02**: Path-source plugins follow the VER-01 version rule too: `list` and `info` candidate rows show plugin.json's declared version before the marketplace entry's
+- [ ] **SRC-01**: A path-source plugin whose directory is missing reads `{source missing}` in `info`, `install`, and `list`, not `{unsupported source}`
+- [ ] **MPA-01**: `marketplace add` and `bootstrap` of a marketplace already added with the same source succeed as a no-op, reported `(skipped) {already added}` at `info` (Claude Code: "already added; nothing changed")
+- [ ] **MPA-02**: `marketplace add` and `marketplace update` report a marketplace manifest fault with the same token `list`/`info` use (`{unparseable}`, `{source missing}`, `{permission denied}`, `{invalid manifest}`, D-11)
+- [ ] **MPA-03**: `marketplace help` with an unknown flag reports `Unknown flag: "<flag>".` as `help marketplace` does
+- [ ] **INR-01**: A dependency whose clone the git host refuses during an install cascade reports its reason (as a direct install does), in the command and on `/reload`
+- [ ] **INR-02**: A staging cleanup leak keeps the original failure's reason
+- [ ] **INR-03**: An install pinned to a commit the remote lacks fails with a reason
+- [ ] **INR-04**: Both `{version conflict}` causes print a version range in the same form
+- [ ] **PRN-02**: `prune --dry-run` (and every `will uninstall` row) shows the plugin's version, as Claude Code's preview prints `name (version)`
+- [ ] **PRN-03**: `prune` under a held lock prints the lock path in its cause the same way every other command does
+- [ ] **UNI-01**: `uninstall` of a dependency whose only dependents are disabled behaves as Claude Code does
+- [ ] **IMP-08**: A first-time `import` of a plugin that cannot be installed reports the same narrowed reason `install` reports
+- [ ] **IMP-09**: An unclassified `import` failure is not reported as `{not in manifest}`
+- [ ] **IMP-10**: `import` re-enabling a partially installed plugin reports `(partially-installed)`, as reconcile does
+- [ ] **UPR-02**: An `update` row whose declared version did not change shows the commits: `1.0.0 (abc1234) → 1.0.0 (def5678)`
+- [ ] **UPR-03**: `partially-installed` and `failed` update rows carry the version (and from/to where known) as `updated` and failed install rows do
+- [ ] **UPR-04**: `reinstall` of a plugin that is not installed reports `failed {not installed}`, as `uninstall` does
+- [ ] **GIT-03**: `fetch` and `info --fetch` refresh the mirror under the state lock, so an install never copies from a mirror mid-refresh
+- [ ] **GIT-04**: One copy-and-checkout helper serves per-commit copies and tag clones, and it handles a directory that holds only a symlink
+- [ ] **GIT-05**: `info --fetch` on a cold unpinned source contacts the git host once
+- [ ] **INR-05**: Every dependency-range cause (`{version conflict}`, `{no matching version}`) prints the declared ranges as Claude Code does: joined with `, `, unquoted
+- [ ] **INR-06**: A failed pinned-commit install's cause carries no git-library advice the user cannot act on, and a pin reachable only from a tag installs on the ref-hint clone path
+- [ ] **REC-06**: Reconcile's own failed install reports the narrowed resolver reasons `install` and `import` report, and `import` reports a rollback-partial install as `{rollback partial}` as `install` does
+- [ ] **MPR-01**: `marketplace remove`'s dependents refusal ignores disabled holders, as a named `uninstall` does
 
 ## Future Requirements
 
@@ -227,10 +255,35 @@ settle which one wins (see PROJECT.md).
 | IMP-05 | Phase 19 | Pending |
 | IMP-06 | Phase 19 | Pending |
 | IMP-07 | Phase 19 | Pending |
+| VER-02 | Phase 20 | Pending |
+| SRC-01 | Phase 20 | Pending |
+| MPA-01 | Phase 21 | Pending |
+| MPA-02 | Phase 21 | Pending |
+| MPA-03 | Phase 21 | Pending |
+| INR-01 | Phase 22 | Pending |
+| INR-02 | Phase 22 | Pending |
+| INR-03 | Phase 22 | Pending |
+| INR-04 | Phase 22 | Pending |
+| PRN-02 | Phase 23 | Pending |
+| PRN-03 | Phase 23 | Pending |
+| UNI-01 | Phase 23 | Pending |
+| IMP-08 | Phase 24 | Pending |
+| IMP-09 | Phase 24 | Pending |
+| IMP-10 | Phase 24 | Pending |
+| UPR-02 | Phase 25 | Pending |
+| UPR-03 | Phase 25 | Pending |
+| UPR-04 | Phase 25 | Pending |
+| GIT-03 | Phase 26 | Pending |
+| GIT-04 | Phase 26 | Pending |
+| GIT-05 | Phase 26 | Pending |
+| INR-05 | Phase 27 | Pending |
+| INR-06 | Phase 27 | Pending |
+| REC-06 | Phase 27 | Pending |
+| MPR-01 | Phase 27 | Pending |
 
 **Coverage:**
-- v1 requirements: 70 total
-- Mapped to phases: 70
+- v1 requirements: 95 total
+- Mapped to phases: 95
 - Unmapped: 0
 
 ---

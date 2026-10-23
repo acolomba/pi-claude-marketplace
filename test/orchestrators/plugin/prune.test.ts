@@ -290,7 +290,7 @@ test("previews an orphan without writing state or taking a lock", async () => {
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), before);
     await assert.rejects(stat(locations.stateLockFile), { code: "ENOENT" });
     assert.deepStrictEqual(notifications, [
-      { message: "● mp [user]\n  ○ orphan (will uninstall) {dependency pruned}" },
+      { message: "● mp [user]\n  ○ orphan v1.0.0 (will uninstall) {dependency pruned}" },
     ]);
   });
 });
@@ -444,10 +444,10 @@ test("removes the whole project-scope fixpoint in literal order and leaves held 
     assert.deepStrictEqual(preview.notifications, [
       {
         message:
-          "● alpha [project]\n  ○ a (will uninstall) {dependency pruned}\n\n" +
-          "● beta [project]\n  ○ z (will uninstall) {dependency pruned}\n\n" +
-          "● beta [project]\n  ○ b (will uninstall) {dependency pruned}\n\n" +
-          "● alpha [project]\n  ○ c (will uninstall) {dependency pruned}",
+          "● alpha [project]\n  ○ a v1.0.0 (will uninstall) {dependency pruned}\n\n" +
+          "● beta [project]\n  ○ z v1.0.0 (will uninstall) {dependency pruned}\n\n" +
+          "● beta [project]\n  ○ b v1.0.0 (will uninstall) {dependency pruned}\n\n" +
+          "● alpha [project]\n  ○ c v1.0.0 (will uninstall) {dependency pruned}",
       },
     ]);
 
@@ -643,7 +643,9 @@ test("actual prune reports a held lock without changing state", async () => {
       assert.equal(notifications[0]?.severity, "error");
       assert.match(notifications[0]?.message ?? "", /\(prune\) \[user\].*failed.*lock held/s);
       assert.match(notifications[0]?.message ?? "", /operation is in progress/);
-      assert.doesNotMatch(notifications[0]?.message ?? "", /\/reload|\/tmp\//);
+      // PRN-03: the held lock's absolute path, as every other command prints it.
+      assert.ok(notifications[0]?.message.includes(`(${locations.stateLockFile})`));
+      assert.doesNotMatch(notifications[0]?.message ?? "", /\/reload/);
     } finally {
       await release();
     }
@@ -1494,7 +1496,7 @@ test("AFILE-04: a dry-run prune sends no notice", async () => {
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● mp [project]\n  ○ orphan (will uninstall) {dependency pruned}" },
+      { message: "● mp [project]\n  ○ orphan v1.0.0 (will uninstall) {dependency pruned}" },
     ]);
     assert.strictEqual(
       await readFile(locations.mcpAdapterJsonPath, "utf8"),

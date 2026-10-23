@@ -96,7 +96,7 @@ import {
 } from "../marketplace/shared.ts";
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
-import { buildScopeDeclarationIndex } from "./dependency-index.ts";
+import { buildScopeDeclarationIndex, withoutDisabledHolders } from "./dependency-index.ts";
 import {
   absentTargetReasons,
   applyPartialCascadeFold,
@@ -280,7 +280,14 @@ type DeclarationSnapshot = Extract<ScopeDeclarationIndexResult, { readonly ok: t
 /** The declaration walk, plus the records that declare the plugin being removed. */
 interface DeclarerReading {
   readonly snapshot: DeclarationSnapshot;
-  /** Sorted `name@marketplace` keys, empty when nothing declares the target. */
+  /**
+   * UNI-01 / D-23-07: the snapshot's index without its disabled holders, the
+   * index the dependents report and the LAYER-08 needer walk read. The orphan
+   * sweep keeps reading `snapshot.index`, where a disabled plugin still holds
+   * its declarations (D-05-04).
+   */
+  readonly enabledIndex: DeclarationIndex;
+  /** Sorted `name@marketplace` keys of the enabled declarers, empty when none. */
   readonly dependents: readonly string[];
 }
 
@@ -294,9 +301,10 @@ interface DeclarerReading {
  *
  * A non-empty dependent set does not block the removal (D-06-06): it is reported on the success row, and each dependent is disabled
  * with a remedy at the next load by the load-time check. Who counts as a
- * declarer: a disabled record still holds its declarations
- * (D-05-04), only this scope is consulted (D-05-05), and every declaration is
- * read offline (D-05-06).
+ * dependent: only an enabled record (UNI-01 / D-23-07, Claude Code's reverse
+ * dependents), only this scope is consulted (D-05-05), and every declaration
+ * is read offline (D-05-06). The returned snapshot keeps every holder for the
+ * orphan sweep (D-05-04).
  */
 async function readDeclarers(args: {
   readonly state: ExtensionState;
@@ -316,7 +324,8 @@ async function readDeclarers(args: {
     throw new UninstallRefusedError("unreadable", result.cause.message);
   }
 
-  return { snapshot: result, dependents: findDependents(args.key, result.index) };
+  const enabledIndex = withoutDisabledHolders(result.index, args.state);
+  return { snapshot: result, enabledIndex, dependents: findDependents(args.key, enabledIndex) };
 }
 
 /** The layer configs a named uninstall reads: its target and, standalone, the other one. */
@@ -545,7 +554,7 @@ async function decideRemoval(args: {
     locations,
     key: `${plugin}@${marketplace}`,
   });
-  const row = checkDependencyNeeders(layers, reading.snapshot.index, {
+  const row = checkDependencyNeeders(layers, reading.enabledIndex, {
     local,
     marketplace,
     plugin,

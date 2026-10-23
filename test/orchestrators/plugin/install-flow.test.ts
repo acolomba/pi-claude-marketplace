@@ -5243,7 +5243,7 @@ test("RESV-03 regression: an unreadable version constraint still fails the insta
       // ledger phase, so state.json and the scope root are byte-identical.
       assertRetryFailure(
         outcome,
-        'Dependency "some-other-plugin@mp" declares an unparseable version constraint "not-a-version-range" (input 1 of 1 is not a valid version range).',
+        'Dependency "some-other-plugin@mp" declares an unparseable version constraint not-a-version-range (input 1 of 1 is not a valid version range).',
       );
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
@@ -16020,7 +16020,7 @@ test("D-09-05: the declarers' ranges reach the cascade as the root range", async
       assert.ok(outcome.status === "failed" && outcome.error instanceof DependencyCascadeError);
       assert.match(
         (outcome as { cause: string }).cause,
-        /^Dependency "secrets-vault@mp" has contradictory version constraints "\^1\.0\.0 \^2\.0\.0"/,
+        /^Dependency "secrets-vault@mp" has contradictory version constraints \^1\.0\.0, \^2\.0\.0 /,
       );
       const after = await loadState(locations.extensionRoot);
       assert.equal(after.marketplaces["mp"]?.plugins["secrets-vault"], undefined);

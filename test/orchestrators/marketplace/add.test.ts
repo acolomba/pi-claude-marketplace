@@ -37,6 +37,7 @@ import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/pl
 import { listRemotes } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
+  CleanupLeakError,
   FetchedUrlCause,
   InvalidGitHubBaseUrlError,
   MarketplaceDuplicateNameError,
@@ -1214,9 +1215,10 @@ test("MA-14: orchestrated mode carries the leftover cleanup failure in the cause
     assert.deepStrictEqual(outcome, {
       status: "failed",
       reason: "stale clone",
-      error: new Error(cause, {
-        cause: new UnremovableLeftoverCloneError(finalDir, "valid-marketplace", leak),
-      }),
+      error: new CleanupLeakError(
+        new UnremovableLeftoverCloneError(finalDir, "valid-marketplace", leak),
+        leak,
+      ),
       cause,
     });
     assert.deepStrictEqual(notifications, []);
@@ -1254,9 +1256,10 @@ test("MA-14: orchestrated mode joins both cleanup failures behind one Error.caus
     assert.deepStrictEqual(outcome, {
       status: "failed",
       reason: "stale clone",
-      error: new Error(cause, {
-        cause: new UnremovableLeftoverCloneError(finalDir, "valid-marketplace", leak),
-      }),
+      error: new CleanupLeakError(
+        new UnremovableLeftoverCloneError(finalDir, "valid-marketplace", leak),
+        `${leak}; failed to clean up marketplace clone staging at ${staging}: EACCES: permission denied, rm '${staging}'`,
+      ),
       cause,
     });
     assert.deepStrictEqual(notifications, []);
@@ -1268,8 +1271,8 @@ test("MA-14: orchestrated mode joins both cleanup failures behind one Error.caus
   });
 });
 
-test("MA-8 / ATTR-07: a same-source add into the declaring layer renders (failed) {duplicate name} before any clone", async () => {
-  await withTmpScope(async ({ cwd }) => {
+test("MPA-01: a same-source add into the declaring layer is skipped as already added before any clone", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, run } = makeCtx();
     const { gitOps: gitOps1 } = createGitOps({
@@ -1286,11 +1289,12 @@ test("MA-8 / ATTR-07: a same-source add into the declaring layer renders (failed
       gitOps: gitOps1,
     });
 
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+    const configBefore = await readFile(locations.baseConfigJsonPath, "utf8");
     const { ctx: ctx2, run: run2, notifications: n2 } = makeCtx();
     const { gitOps: gitOps2, state: gitState2 } = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
     });
-    // ATTR-07: second add for same name routes through notify, no raw throw.
     await addMarketplace({
       ctx: ctx2,
       run: run2,
@@ -1300,16 +1304,13 @@ test("MA-8 / ATTR-07: a same-source add into the declaring layer renders (failed
       gitOps: gitOps2,
     });
 
-    const note = n2[0];
     // assert
-    assert.ok(note);
-    // Post-manifest failure: subject is the derived marketplace name (A2).
-    assert.equal(
-      note.message,
-      "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {duplicate name}",
-    );
-    assert.equal(note.severity, "error");
+    assert.deepStrictEqual(n2, [
+      { message: "● valid-marketplace [project] (skipped) {already added}" },
+    ]);
     assert.deepStrictEqual(gitState2.cloneCalls, []);
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), configBefore);
   });
 });
 
@@ -1373,7 +1374,7 @@ test("D-08-07: adds a path marketplace named constructor", async (t) => {
   });
 });
 
-test("MA-8 / D-08-07: refuses a second add of a marketplace named constructor", async (t) => {
+test("MPA-01 / D-08-07: skips a second add of a marketplace named constructor", async (t) => {
   await createHermeticEnvironment(t, "mp-add-constructor-dup-home-");
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
@@ -1401,11 +1402,7 @@ test("MA-8 / D-08-07: refuses a second add of a marketplace named constructor", 
 
     // assert
     assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "A marketplace operation has failed.\n\n⊘ constructor [project] (failed) {duplicate name}",
-        severity: "error",
-      },
+      { message: "● constructor [project] (skipped) {already added}" },
     ]);
     assert.deepStrictEqual(Object.keys((await loadState(locations.extensionRoot)).marketplaces), [
       "constructor",
@@ -1502,7 +1499,7 @@ test("rejects a path marketplace with a scalar dependency allowlist", async () =
   });
 });
 
-test("MA-9 / ATTR-07: invalid manifest after clone renders (failed) {invalid manifest}; cleanupStaging still runs", async () => {
+test("MA-9 / MPA-02: a malformed manifest after clone renders (failed) {unparseable}; cleanupStaging still runs", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, run, notifications } = makeCtx();
@@ -1521,7 +1518,7 @@ test("MA-9 / ATTR-07: invalid manifest after clone renders (failed) {invalid man
       gitOps,
     });
 
-    // (1) Routed through notify as a structured (failed) {invalid manifest} row.
+    // (1) Routed through notify as a structured (failed) {unparseable} row.
     //     Pre-name failure (manifest unreadable, so no derived name) -> subject
     //     is the raw source string (A2).
     const note = notifications[0];
@@ -1530,7 +1527,7 @@ test("MA-9 / ATTR-07: invalid manifest after clone renders (failed) {invalid man
     assert.equal(
       note.message,
       "A marketplace operation has failed.\n\n" +
-        "⊘ anthropics/claude-plugins-official [project] (failed) {invalid manifest}",
+        "⊘ anthropics/claude-plugins-official [project] (failed) {unparseable}",
     );
     assert.equal(note.severity, "error");
 
@@ -1564,7 +1561,7 @@ test("MA-9 / ATTR-07: invalid manifest after clone renders (failed) {invalid man
   });
 });
 
-test("classifies an invalid manifest through a staging-cleanup leak and preserves the leaked tree", async () => {
+test("classifies a malformed manifest through a staging-cleanup leak and preserves the leaked tree", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
     const { ctx, run, notifications } = makeCtx();
@@ -1598,7 +1595,7 @@ test("classifies an invalid manifest through a staging-cleanup leak and preserve
       {
         message:
           "A marketplace operation has failed.\n\n" +
-          "⊘ anthropics/claude-plugins-official [project] (failed) {invalid manifest}",
+          "⊘ anthropics/claude-plugins-official [project] (failed) {unparseable}",
         severity: "error",
       },
     ]);
@@ -2449,9 +2446,7 @@ test("ATTR-07: a missing path source (ENOENT) renders (failed) {source missing}"
   });
 });
 
-// ATTR-07 (path source): second path-source add of the same name renders the
-// structured (failed) {duplicate name} row, not a raw throw.
-test("MA-8 (path source) / ATTR-07: duplicate name in same scope renders (failed) {duplicate name}", async () => {
+test("MPA-01 (path source): a same-source add in the same scope is skipped as already added", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
     const { ctx: ctx1, run: run1 } = makeCtx();
@@ -2481,15 +2476,10 @@ test("MA-8 (path source) / ATTR-07: duplicate name in same scope renders (failed
         gitOps: gitOps2,
       });
 
-      const note = n2[0];
       // assert
-      assert.ok(note);
-      // Post-manifest failure -> subject is the derived marketplace name (A2).
-      assert.equal(
-        note.message,
-        "A marketplace operation has failed.\n\n⊘ valid-marketplace [project] (failed) {duplicate name}",
-      );
-      assert.equal(note.severity, "error");
+      assert.deepStrictEqual(n2, [
+        { message: "● valid-marketplace [project] (skipped) {already added}" },
+      ]);
     } finally {
       await rm(localMpDir, { recursive: true, force: true });
     }
@@ -4961,4 +4951,77 @@ test("notifyAddFailure rethrows an error that is not an add precondition", () =>
     },
     (error: unknown) => error === unexpected,
   );
+});
+
+test("MPA-01 / D-03: a same-source add refuses as a duplicate name when the target layer declares the name with another source", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = await writeNamedPathMarketplace(cwd, "tools");
+    const first = makeCtx();
+    await addMarketplace({
+      ctx: first.ctx,
+      run: first.run,
+      scope: "project",
+      cwd,
+      rawSource: marketplaceRoot,
+      gitOps: createGitOps().gitOps,
+    });
+    await writeFile(
+      locations.baseConfigJsonPath,
+      JSON.stringify({ schemaVersion: 1, marketplaces: { tools: { source: "./elsewhere" } } }),
+    );
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: marketplaceRoot,
+      gitOps: createGitOps().gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n⊘ tools [project] (failed) {duplicate name}",
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("MPA-02: a path manifest nobody may read renders (failed) {permission denied}", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = await writeNamedPathMarketplace(cwd, "tools");
+    const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+    await chmod(manifestPath, 0o000);
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    try {
+      await addMarketplace({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        rawSource: marketplaceRoot,
+        gitOps: createGitOps().gitOps,
+      });
+    } finally {
+      await chmod(manifestPath, 0o644);
+    }
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `A marketplace operation has failed.\n\n⊘ ${marketplaceRoot} [project] (failed) {permission denied}`,
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+  });
 });

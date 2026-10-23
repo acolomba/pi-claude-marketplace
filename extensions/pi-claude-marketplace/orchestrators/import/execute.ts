@@ -1,11 +1,16 @@
 import { addMarketplace as defaultAddMarketplace } from "../../orchestrators/marketplace/add.ts";
 import { type InstallPluginOptions } from "../../orchestrators/plugin/install-flow.ts";
-import { PROMOTED_ROW_REASONS } from "../../orchestrators/plugin/install.messaging.ts";
+import {
+  narrowResolverReasons,
+  PROMOTED_ROW_REASONS,
+} from "../../orchestrators/plugin/install.messaging.ts";
 import {
   createEnableOperation,
   createInstallOperation,
 } from "../../orchestrators/plugin/operations.ts";
+import { degradationFromEnable } from "../../orchestrators/plugin/shared.ts";
 import { buildScopeSatisfactionVerdict } from "../../orchestrators/reconcile/dependency-verdict.ts";
+import { enabledRowFromOutcome } from "../../orchestrators/reconcile/notify.ts";
 import { planReconcile } from "../../orchestrators/reconcile/plan.ts";
 import { loadConfig, type PluginConfigEntry } from "../../persistence/config-io.ts";
 import {
@@ -27,16 +32,19 @@ import {
   DependencyCascadeError,
   errorMessage,
   hasFetchedUrlCause,
+  InstallMarketplaceAddError,
   PluginShapeError,
   rethrowInvalidGitHubBaseUrl,
   StateLockHeldError,
 } from "../../shared/errors.ts";
+import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import { notifyDiagnostic, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type MarketplaceStatus,
   type PluginFailedMessage,
   type PluginInstalledMessage,
+  type PluginPartiallyInstalledMessage,
   type PluginSkippedMessage,
   type PluginUnavailableMessage,
 } from "../../shared/notification-types.ts";
@@ -65,6 +73,7 @@ import type {
   AddMarketplaceOutcome,
 } from "../../orchestrators/marketplace/add.ts";
 import type {
+  EnableDegradationSignals,
   EnableDisablePluginOptions,
   EnableDisablePluginOutcome,
 } from "../../orchestrators/plugin/enable-disable.ts";
@@ -128,6 +137,12 @@ export interface PluginInstalledOutcome {
    * import enabled. Omitted otherwise.
    */
   readonly reenabled?: true;
+  /**
+   * IMP-10: the degradation signals of an enable, present only on the enable
+   * path. They select reconcile's enable row, so a re-enabled partial record
+   * reads `(partially-installed)` as it does on a reload.
+   */
+  readonly enableSignals?: EnableDegradationSignals;
   readonly declaresWorkflows: boolean;
 }
 
@@ -140,16 +155,23 @@ export interface PluginSkipOutcome {
   readonly reason: "already-installed";
 }
 
-export interface ImportWarningOutcome {
+/**
+ * IMP-08: an `uninstallable` warning carries the reasons `install` renders for
+ * the same resolver verdict, so its row cannot fall back to a generic token.
+ */
+export type ImportWarningOutcome = {
   readonly kind: "plugin-warning";
   readonly scope: Scope;
   readonly plugin: string;
   readonly marketplace: string;
   readonly ref: string;
-  readonly reason:
-    "unmappable-marketplace-source" | "marketplace-failed" | "unavailable" | "uninstallable";
   readonly cause?: string;
-}
+} & (
+  | { readonly reason: "unmappable-marketplace-source" }
+  | { readonly reason: "marketplace-failed" }
+  | { readonly reason: "unavailable" }
+  | { readonly reason: "uninstallable"; readonly reasons: readonly ContentReason[] }
+);
 
 export interface MarketplaceFailureOutcome {
   readonly kind: "marketplace-failure";
@@ -190,10 +212,16 @@ export interface UnexpectedPluginFailureOutcome {
   /**
    * RESV-06: `"dependency-failed"` marks a `DependencyCascadeError` throw (a
    * cascade closure/constraint/member failure), so the row renders
-   * `{dependency failed}` instead of the `{not in manifest}` token
-   * `"unexpected-failure"` carries.
+   * `{dependency failed}`. IMP-09: `"unexpected-failure"` is a failure no
+   * other arm classifies; its row carries `runtimeReason` or no reason at all.
    */
   readonly reason: "unexpected-failure" | "dependency-failed" | "lock-held" | "not-installed";
+  /**
+   * IMP-09: the reason `install` reads off the same unclassified error -- the
+   * reason of the marketplace add an install ran, or the git host's answer.
+   * Omitted when the error carries neither.
+   */
+  readonly runtimeReason?: ContentReason;
   readonly cause: string;
   /**
    * T-55-02-02 / T-53-02-02: the redacted, rebuilt onward cause chain beyond
@@ -341,21 +369,27 @@ function pluginsForMarketplace(
   return plugins.filter((plugin) => plugin.ref.marketplace === marketplace);
 }
 
-function pushPluginWarning(
-  result: MutableImportResult,
+function warningBase(
   plugin: PlannedPluginImport,
-  reason: ImportWarningOutcome["reason"],
   cause?: string,
-): void {
-  result.warnings.push({
+): Omit<Extract<ImportWarningOutcome, { reason: "unavailable" }>, "reason"> {
+  return {
     kind: "plugin-warning",
     scope: plugin.scope,
     plugin: plugin.ref.plugin,
     marketplace: plugin.ref.marketplace,
     ref: refLabel(plugin),
-    reason,
     ...(cause !== undefined && { cause }),
-  });
+  };
+}
+
+function pushPluginWarning(
+  result: MutableImportResult,
+  plugin: PlannedPluginImport,
+  reason: Exclude<ImportWarningOutcome["reason"], "uninstallable">,
+  cause?: string,
+): void {
+  result.warnings.push({ ...warningBase(plugin, cause), reason });
 }
 
 /** IMP-06: a settings plugin the scope already holds, reported `skipped {already installed}`. */
@@ -479,26 +513,24 @@ function pushMarketplaceRow(
 }
 
 /**
- * The two warning reasons that reach a cascade row. D-05: the advisory
- * `marketplace-failed` / `unmappable-marketplace-source` reasons are dropped
+ * The two warnings that reach a cascade row. D-05: the advisory
+ * `marketplace-failed` / `unmappable-marketplace-source` warnings are dropped
  * before this point (the failing marketplace's own `(failed)` header carries
  * their structural signal), so this function never sees them. The
- * parameter is narrowed to the reasons that survive, which makes routing a new
+ * parameter is narrowed to the warnings that survive, which makes routing a new
  * reason to a row a compile error at the call site.
  */
-type RenderedWarningReason = Extract<
-  ImportWarningOutcome["reason"],
-  "unavailable" | "uninstallable"
->;
+type RenderedWarning = Extract<ImportWarningOutcome, { reason: "unavailable" | "uninstallable" }>;
 
 // A plugin the marketplace does not list takes the `not in manifest` reason
-// that `install`, `marketplace update`, and `list` give it.
-function importWarningReason(reason: RenderedWarningReason): ContentReason {
-  switch (reason) {
+// that `install`, `marketplace update`, and `list` give it. IMP-08: a plugin
+// that cannot be installed takes the narrowed reasons `install` gives it.
+function importWarningReasons(warning: RenderedWarning): readonly ContentReason[] {
+  switch (warning.reason) {
     case "unavailable":
-      return "not in manifest";
+      return ["not in manifest"];
     case "uninstallable":
-      return "no longer installable";
+      return warning.reasons;
   }
 }
 
@@ -519,18 +551,59 @@ function failureCause(
     : new Error(outcome.cause, { cause: outcome.causeChain });
 }
 
-/** Maps an `UnexpectedPluginFailureOutcome.reason` onto its rendered token. */
-function unexpectedFailureReason(reason: UnexpectedPluginFailureOutcome["reason"]): ContentReason {
-  switch (reason) {
+/**
+ * Maps an `UnexpectedPluginFailureOutcome` onto its rendered reasons. IMP-09:
+ * an unclassified failure carries the reasons `install`'s runtime-throw row
+ * carries -- its git host's answer, or none -- so `{not in manifest}` stays
+ * the reason of a plugin the marketplace does not list.
+ */
+function unexpectedFailureReasons(
+  outcome: UnexpectedPluginFailureOutcome,
+): readonly ContentReason[] {
+  switch (outcome.reason) {
     case "unexpected-failure":
-      return "not in manifest";
+      return outcome.runtimeReason === undefined ? [] : [outcome.runtimeReason];
     case "dependency-failed":
-      return "dependency failed";
+      return ["dependency failed"];
     case "lock-held":
-      return "lock held";
+      return ["lock held"];
     case "not-installed":
-      return "not installed";
+      return ["not installed"];
   }
+}
+
+/**
+ * The row of an installed plugin. IMP-10: an enable takes the row reconcile
+ * renders for the same re-enable, so a partial record reads
+ * `(partially-installed)`.
+ */
+function installedRow(
+  o: PluginInstalledOutcome,
+): PluginInstalledMessage | PluginPartiallyInstalledMessage {
+  if (o.enableSignals !== undefined) {
+    return enabledRowFromOutcome({
+      kind: "plugin-enabled",
+      scope: o.scope,
+      marketplace: o.marketplace,
+      plugin: o.plugin,
+      ...(o.version !== undefined && { version: o.version }),
+      ...o.enableSignals,
+    });
+  }
+
+  return {
+    status: "installed",
+    name: o.plugin,
+    ...(o.version !== undefined && { version: o.version }),
+    dependencies: declaredDependencies(o),
+    // D-04-07: a promotion's brace is the standalone row's -- the record was
+    // here before, and this command promoted it.
+    ...(o.promoted === true && { reasons: PROMOTED_ROW_REASONS }),
+    // D-03/D-06: realized install transition -> info, reloads Pi resources.
+    // A promotion (D-04-07) reloads only when it re-materialized the record.
+    severity: "info",
+    needsReload: o.promoted !== true || o.resourcesChanged,
+  };
 }
 
 /** IMP-07: the cause row of a marketplace failure names a held lock. */
@@ -552,7 +625,7 @@ function marketplaceFailureReasons(
  * Outcome mapping: added -> "added"; already-present -> "skipped" with
  * "already added" (IMP-06);
  * marketplace failure or source mismatch -> "failed"; installed plugin ->
- * PluginInstalledMessage; already-installed plugin -> PluginSkippedMessage
+ * PluginInstalledMessage, or reconcile's enable row for an enable (IMP-10); already-installed plugin -> PluginSkippedMessage
  * with "already installed"; failed/unavailable plugin -> PluginFailedMessage
  * or PluginUnavailableMessage. Advisory-only warnings and orphan diagnostics
  * are silently dropped (the marketplace status row already carries the
@@ -599,20 +672,7 @@ function buildImportNotificationMarketplaces(
   // because the row's scope matches its marketplace's scope by
   // construction (the import cascade groups outcomes by their owning scope).
   for (const o of result.installedPlugins) {
-    const row: PluginInstalledMessage = {
-      status: "installed",
-      name: o.plugin,
-      ...(o.version !== undefined && { version: o.version }),
-      dependencies: declaredDependencies(o),
-      // D-04-07: a promotion's brace is the standalone row's -- the record was
-      // here before, and this command promoted it.
-      ...(o.promoted === true && { reasons: PROMOTED_ROW_REASONS }),
-      // D-03/D-06: realized install transition -> info, reloads Pi resources.
-      // A promotion (D-04-07) reloads only when it re-materialized the record.
-      severity: "info",
-      needsReload: o.promoted !== true || o.resourcesChanged,
-    };
-    pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, row);
+    pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, installedRow(o));
   }
 
   for (const o of result.skippedExistingPlugins) {
@@ -644,8 +704,9 @@ function buildImportNotificationMarketplaces(
     const row: PluginFailedMessage = {
       status: "failed",
       name: o.plugin,
-      reasons: [unexpectedFailureReason(o.reason)],
-      cause: failureCause(o),
+      reasons: unexpectedFailureReasons(o),
+      // IMP-09: install's authentication row is bare, so this one is too.
+      ...(o.runtimeReason !== "authentication required" && { cause: failureCause(o) }),
       // D-03/D-06: an unexpected import failure -> error, no reload.
       severity: "error",
       needsReload: false,
@@ -665,7 +726,7 @@ function buildImportNotificationMarketplaces(
     const row: PluginUnavailableMessage = {
       status: "unavailable",
       name: o.plugin,
-      reasons: [importWarningReason(o.reason)],
+      reasons: importWarningReasons(o),
       // WR-02: import unavailable/dependency rows are actionable -- the user
       // cannot complete the install without addressing them -> warning. Without
       // the stamp `cascadeSeverity` defaults them to `info`, so the envelope
@@ -980,7 +1041,9 @@ async function installOnePlannedPlugin(
       // The collapsed `failed` status carries the typed Error directly. Narrow
       // on `instanceof PluginShapeError` plus `.kind` to recover the specific
       // failure class; everything else falls through to the unexpected bucket.
-      dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause);
+      dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause, {
+        rolledBackPartial: (outcome.rollbackPartials?.length ?? 0) > 0,
+      });
       return "install-failed";
     case "installed":
       result.installedPlugins.push({
@@ -1013,7 +1076,8 @@ async function installOnePlannedPlugin(
  * answer with the result bucket it was recorded in.
  *
  * An enable re-materializes the record through the install ledger, so the row
- * is `(installed)`, the row reconcile renders for the same transition. The
+ * is the one reconcile renders for the same transition: `(installed)`, or
+ * `(partially-installed)` for a partial record (IMP-10). The
  * outcome is marked `reenabled`: the disable verb left `{ enabled: false }`
  * under this key, and the post-pass declares it `{ enabled: true }` the way
  * the enable path does. A failure takes the install failure's ladder, so a
@@ -1067,6 +1131,7 @@ async function enableOnePlannedPlugin(
         declaresAgents: outcome.stagedAgents === true,
         declaresMcp: outcome.stagedMcpServers === true,
         reenabled: true,
+        enableSignals: degradationFromEnable(outcome),
         declaresWorkflows: outcome.stagedWorkflows === true,
       });
       result.changedResources = true;
@@ -1074,7 +1139,9 @@ async function enableOnePlannedPlugin(
     case "failed":
       // AFILE-04: a failed enable can still have rewritten the MCP config.
       result.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
-      dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause);
+      dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause, {
+        rolledBackPartial: outcome.reason === "rollback partial",
+      });
       return "install-failed";
     case "skipped":
       // A race another process won: the record is enabled already, or gone.
@@ -1742,8 +1809,11 @@ function pushUnexpectedFailure(
   plugin: PlannedPluginImport,
   reason: UnexpectedPluginFailureOutcome["reason"],
   error: Error,
+  rolledBackPartial = false,
 ): void {
   const causeChain = redactCauseChain(error.cause);
+  const runtimeReason =
+    reason === "unexpected-failure" ? runtimeFailureReason(error, rolledBackPartial) : undefined;
   result.unexpectedPluginFailures.push({
     kind: "plugin-failure",
     scope: plugin.scope,
@@ -1751,9 +1821,24 @@ function pushUnexpectedFailure(
     marketplace: plugin.ref.marketplace,
     ref: refLabel(plugin),
     reason,
+    ...(runtimeReason !== undefined && { runtimeReason }),
     cause: redactAbsolutePaths(errorMessage(error)),
     ...(causeChain !== undefined && { causeChain }),
   });
+}
+
+/**
+ * IMP-09: the reason `install`'s failure row gives an error its shape ladder
+ * leaves unclassified: a rollback that could not finish (REC-06, install's
+ * row names it first), the reason of the marketplace add the install ran
+ * (LAYER-07), or the git host's answer.
+ */
+function runtimeFailureReason(error: Error, rolledBackPartial: boolean): ContentReason | undefined {
+  if (rolledBackPartial) {
+    return "rollback partial";
+  }
+
+  return error instanceof InstallMarketplaceAddError ? error.reason : classifyGitHostFailure(error);
 }
 
 /**
@@ -1779,6 +1864,7 @@ function dispatchFailedOutcome(
   plugin: PlannedPluginImport,
   error: Error,
   cause: string,
+  options: { readonly rolledBackPartial: boolean },
 ): void {
   if (error instanceof DependencyCascadeError) {
     pushUnexpectedFailure(result, plugin, "dependency-failed", error);
@@ -1817,12 +1903,22 @@ function dispatchFailedOutcome(
         return;
       case "not-installable":
       case "no-longer-installable":
-        pushPluginWarning(result, plugin, "uninstallable", cause);
+        // IMP-08: install's own narrowing, so a fresh import reads what
+        // `install` reads for the same plugin.
+        result.warnings.push({
+          ...warningBase(plugin, cause),
+          reason: "uninstallable",
+          reasons: narrowResolverReasons(
+            error.shape.reasons,
+            error.shape.unsupportedKinds,
+            error.shape.partialable,
+          ),
+        });
         return;
     }
   }
 
-  pushUnexpectedFailure(result, plugin, "unexpected-failure", error);
+  pushUnexpectedFailure(result, plugin, "unexpected-failure", error, options.rolledBackPartial);
 }
 
 /**

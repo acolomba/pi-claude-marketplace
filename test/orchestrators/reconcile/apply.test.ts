@@ -3118,12 +3118,12 @@ describe("applyReconcile", () => {
     {
       name: "first",
       keys: ["gone", "mike", "alfa"],
-      rows: "  ⊘ gone (failed) {no longer installable}\n  ● mike v1.0.0 (installed)\n  ● alfa v1.0.0 (installed)",
+      rows: "  ⊘ gone (failed) {source missing}\n  ● mike v1.0.0 (installed)\n  ● alfa v1.0.0 (installed)",
     },
     {
       name: "middle",
       keys: ["mike", "gone", "alfa"],
-      rows: "  ● mike v1.0.0 (installed)\n  ⊘ gone (failed) {no longer installable}\n  ● alfa v1.0.0 (installed)",
+      rows: "  ● mike v1.0.0 (installed)\n  ⊘ gone (failed) {source missing}\n  ● alfa v1.0.0 (installed)",
     },
   ] as const satisfies readonly {
     readonly name: string;

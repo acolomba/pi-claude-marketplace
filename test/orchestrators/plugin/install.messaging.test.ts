@@ -11,6 +11,7 @@ import {
   PROMOTED_ROW_REASONS,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 import {
+  appendLeakToError,
   InstallMarketplaceAddError,
   PluginShapeError,
   StateLockHeldError,
@@ -440,6 +441,39 @@ describe("composeInstallFailureMessage", () => {
       reasons: ["authentication required"],
       version: "1.2.3",
       scope: "user",
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("INR-02: keeps the cause of an authentication failure whose cleanup leaked", () => {
+    // arrange
+    const failure = appendLeakToError(
+      Object.assign(new Error("HTTP 401 for private clone"), {
+        code: "HttpError",
+        data: { statusCode: 401 },
+      }),
+      "plugin clone staging left behind",
+    );
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "user",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["authentication required"],
+      scope: "user",
+      cause: failure,
       severity: "error",
       needsReload: false,
     });
@@ -1083,9 +1117,20 @@ describe("resolver reason narrowing through the install failure row", () => {
     assert.deepStrictEqual(narrowedReasons, ["unsupported mcp"]);
   });
 
+  test("SRC-01: maps a missing source directory note to source missing", () => {
+    // arrange
+    const reasons = ["source dir does not exist: /mp/plugins/ghost"];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["source missing"]);
+  });
+
   test("maps a source note to unsupported source", () => {
     // arrange
-    const reasons = ["source directory does not exist"];
+    const reasons = ["unsupported source kind: npm"];
 
     // act
     const narrowedReasons = installFailureReasons(reasons);
@@ -1157,6 +1202,23 @@ describe("classifyInstallFailure", () => {
       status: "failed",
       error: failure,
       cause: "formatted cause",
+    });
+  });
+
+  test("REC-06: carries the rollback partials of the failed install", () => {
+    // arrange
+    const failure = new Error("failed to stage skill a-fmt: EACCES");
+    const partials = [{ phase: "skills" as const, msg: "EACCES removing a-fmt" }];
+
+    // act
+    const outcome = classifyInstallFailure(failure, "formatted cause", partials);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      error: failure,
+      cause: "formatted cause",
+      rollbackPartials: partials,
     });
   });
 

@@ -136,6 +136,7 @@ export const PLUGIN_PRUNE_FIXTURES: FixtureMap = {
               {
                 status: "will uninstall",
                 name: "shared-lib",
+                version: "2.0.0",
                 reasons: ["dependency pruned"],
                 severity: "info",
                 needsReload: false,
@@ -158,6 +159,7 @@ export const PLUGIN_PRUNE_FIXTURES: FixtureMap = {
               {
                 status: "will uninstall",
                 name: "helper",
+                version: "1.0.0",
                 reasons: ["dependency pruned"],
                 severity: "info",
                 needsReload: false,
@@ -171,6 +173,7 @@ export const PLUGIN_PRUNE_FIXTURES: FixtureMap = {
               {
                 status: "will uninstall",
                 name: "tooling",
+                version: "3.0.0",
                 reasons: ["dependency pruned"],
                 severity: "info",
                 needsReload: false,
@@ -184,6 +187,7 @@ export const PLUGIN_PRUNE_FIXTURES: FixtureMap = {
               {
                 status: "will uninstall",
                 name: "shared-lib",
+                version: "2.0.0",
                 reasons: ["dependency pruned"],
                 severity: "info",
                 needsReload: false,
@@ -305,7 +309,7 @@ export const PLUGIN_PRUNE_FIXTURES: FixtureMap = {
                 name: "(prune)",
                 reasons: ["lock held"],
                 cause: new Error(
-                  "Another pi-claude-marketplace operation is in progress for user scope (.state-lock). Retry after it completes.",
+                  "Another pi-claude-marketplace operation is in progress for user scope (~/.pi/agent/pi-claude-marketplace/.state-lock). Retry after it completes.",
                   { cause: new Error("Lock file is already being held") },
                 ),
                 severity: "error",

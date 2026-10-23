@@ -1133,7 +1133,7 @@ for (const { label, declared, expected } of [
       kind: "range-conflict",
       why: "contradictory-declarations",
       key: `bar@${MARKETPLACE}`,
-      range: "^1.0.0 ^2.0.0",
+      range: "^1.0.0, ^2.0.0",
       detail: "no version satisfies all 2 declared ranges",
     },
   },
@@ -1422,7 +1422,7 @@ test("D-09-05 / T-06-10: contradictory root ranges fail the cascade as a range c
       kind: "range-conflict",
       why: "contradictory-declarations",
       key: `bar@${MARKETPLACE}`,
-      range: ">=2.0.0 <1.0.0",
+      range: ">=2.0.0, <1.0.0",
       detail: "no version satisfies all 2 declared ranges",
     },
   });
@@ -1882,7 +1882,7 @@ test("RESV-03 a constrained dependency whose marketplace entry is npm-sourced re
   // assert
   assert.deepStrictEqual(cascade, {
     kind: "constraint-failed",
-    failure: { kind: "no-matching-tag", key: `bar@${MARKETPLACE}`, range: ">=1.0.0 <2.0.0-0" },
+    failure: { kind: "no-matching-tag", key: `bar@${MARKETPLACE}`, range: "^1.0.0" },
   });
 });
 
@@ -1996,7 +1996,7 @@ test("RESV-03 a no-matching-tag answer fails the cascade with the constraint nam
     failure: {
       kind: "no-matching-tag",
       key: `bar@${MARKETPLACE}`,
-      range: ">=3.0.0 <4.0.0-0",
+      range: "^3.0.0",
     },
   });
   assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
@@ -2034,7 +2034,7 @@ test("RESV-03 a listing failure surfaces as its own arm carrying the transport c
     failure: {
       kind: "tag-listing-failed",
       key: `bar@${MARKETPLACE}`,
-      range: ">=1.0.0 <2.0.0-0",
+      range: "^1.0.0",
       classification: "network unreachable",
     },
   });
@@ -2091,7 +2091,7 @@ for (const { label, pluginNames, gitSourced, knownMarketplaces, dependencyMarket
     // parsed and no fallthrough to a repository head.
     assert.deepStrictEqual(cascade, {
       kind: "constraint-failed",
-      failure: { kind: "no-matching-tag", key: dependencyKey, range: ">=1.0.0 <2.0.0-0" },
+      failure: { kind: "no-matching-tag", key: dependencyKey, range: "^1.0.0" },
     });
     assert.deepStrictEqual(
       seen,
@@ -2270,7 +2270,7 @@ test("D-09-04 / RESV-05: a walled disabled record still answers to the root's co
       kind: "range-conflict",
       why: "installed-unsatisfied",
       key: `bar@${MARKETPLACE}`,
-      range: ">=2.0.0 <3.0.0-0",
+      range: "^2.0.0",
       recordedVersion: "0.0.1",
     },
   });
@@ -2666,7 +2666,7 @@ test("RESV-05 / EDEP-03 a disabled dependency's recorded version answers to a co
       kind: "range-conflict",
       why: "installed-unsatisfied",
       key: `baz@${MARKETPLACE}`,
-      range: ">=1.0.0 <2.0.0-0",
+      range: "^1.0.0",
       recordedVersion: "0.0.1",
     },
   });
@@ -2709,7 +2709,7 @@ test("RESV-03 / EDEP-03 contradictory ranges two disabled dependencies declare o
       kind: "range-conflict",
       why: "contradictory-declarations",
       key: `qux@${MARKETPLACE}`,
-      range: "^1.0.0 ^2.0.0",
+      range: "^1.0.0, ^2.0.0",
       detail: "no version satisfies all 2 declared ranges",
     },
   });
@@ -3187,7 +3187,7 @@ test("EDEP-03 a constraint conflict on a disabled already-installed member fails
       kind: "range-conflict",
       why: "installed-unsatisfied",
       key: `bar@${MARKETPLACE}`,
-      range: ">=2.0.0 <3.0.0-0",
+      range: "^2.0.0",
       recordedVersion: "1.0.0",
     },
   });
@@ -3527,19 +3527,19 @@ for (const { label, declared, recorded, expectedRange } of [
     label: "a plain recorded version below the constraint",
     declared: "^2.0.0",
     recorded: "1.4.0",
-    expectedRange: ">=2.0.0 <3.0.0-0",
+    expectedRange: "^2.0.0",
   },
   {
     label: "a content-hash recorded version whose coerced digits miss the constraint",
     declared: "^1.0.0",
     recorded: "hash-123456789abc",
-    expectedRange: ">=1.0.0 <2.0.0-0",
+    expectedRange: "^1.0.0",
   },
   {
     label: "a git-sha recorded version that normalizes to nothing",
     declared: "^1.0.0",
     recorded: "sha-0123456789ab",
-    expectedRange: ">=1.0.0 <2.0.0-0",
+    expectedRange: "^1.0.0",
   },
 ]) {
   test(`RESV-05 ${label} fails the cascade naming both the version and the constraint`, async (t) => {
@@ -3650,9 +3650,92 @@ test("RESV-05 an already-installed dependency's contradictory declarations fail 
       kind: "range-conflict",
       why: "contradictory-declarations",
       key: `shared@${MARKETPLACE}`,
-      range: "^1.0.0 ^2.0.0",
+      range: "^1.0.0, ^2.0.0",
       detail: "no version satisfies all 2 declared ranges",
     },
   });
   assert.deepStrictEqual(seen, []);
 });
+
+test("INR-05 a conflict names each declared range apart, so a range with || keeps its meaning", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-cascade-or-range-conflict-");
+  const state = await seedMarketplace(environment.cwd, ["left", "right", "root", "shared"], {
+    preinstalled: ["shared"],
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `root@${MARKETPLACE}`,
+    lookup: catalog({
+      [`root@${MARKETPLACE}`]: [{ name: "left" }, { name: "right" }],
+      [`left@${MARKETPLACE}`]: [{ name: "shared", version: "^1.0.0 || ^2.0.0" }],
+      [`right@${MARKETPLACE}`]: [{ name: "shared", version: "^3.0.0" }],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set([`shared@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.deepStrictEqual(cascade, {
+    kind: "constraint-failed",
+    failure: {
+      kind: "range-conflict",
+      why: "contradictory-declarations",
+      key: `shared@${MARKETPLACE}`,
+      range: "^1.0.0 || ^2.0.0, ^3.0.0",
+      detail: "no version satisfies all 2 declared ranges",
+    },
+  });
+});
+
+for (const { label, probed, failure } of [
+  {
+    label: "no matching tag",
+    probed: { kind: "no-matching-tag", range: "unreachable" },
+    failure: { kind: "no-matching-tag", key: `bar@${MARKETPLACE}`, range: "^1.0.0" },
+  },
+  {
+    label: "a tag listing that failed",
+    probed: {
+      kind: "tag-listing-failed",
+      cause: new Error("connect ECONNREFUSED"),
+      classification: "network unreachable",
+    },
+    failure: {
+      kind: "tag-listing-failed",
+      key: `bar@${MARKETPLACE}`,
+      range: "^1.0.0",
+      classification: "network unreachable",
+    },
+  },
+] as const) {
+  test(`INR-05 / D-09-05: a root range the probe answers with ${label} names the caller's range`, async (t) => {
+    // arrange: the root declares nothing, so the caller's range is its only one.
+    const environment = await createHermeticEnvironment(t, "install-cascade-root-range-cause-");
+    const state = await seedMarketplace(environment.cwd, ["bar"], { gitSourced: ["bar"] });
+    const locations = locationsFor("project", environment.cwd);
+
+    // act
+    const cascade = await runInstallCascade({
+      state,
+      locations,
+      rootKey: `bar@${MARKETPLACE}`,
+      rootRanges: ["^1.0.0"],
+      lookup: catalog({ [`bar@${MARKETPLACE}`]: [] }),
+      ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+      rootAllowedMarketplaces: new Set<string>(),
+      installedKeys: new Set(),
+      knownMarketplaces: new Set([MARKETPLACE]),
+      tagProbe: tagProbeAnswering(probed, []),
+    });
+
+    // assert
+    assert.deepStrictEqual(cascade, { kind: "constraint-failed", failure });
+  });
+}

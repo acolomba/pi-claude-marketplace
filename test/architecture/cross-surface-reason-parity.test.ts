@@ -75,6 +75,11 @@ for (const { note, reason } of [
     reason: "malformed mcp",
   },
   { note: 'malformed mcp server "source": /url: must be string', reason: "malformed mcp" },
+  { note: "source dir does not exist: /mp/plugins/ghost", reason: "source missing" },
+  {
+    note: "source dir does not exist: /home/u/lspServers-kit/plugins/ghost",
+    reason: "source missing",
+  },
   { note: "some other unsupported source detail", reason: "unsupported source" },
 ] as const) {
   test(`keeps the install and read-only note surfaces equal for ${reason}: ${note}`, () => {

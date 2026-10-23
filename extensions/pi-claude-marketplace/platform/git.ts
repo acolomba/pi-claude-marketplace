@@ -87,6 +87,8 @@ export interface FetchOptions {
   remote?: string;
   /** Optional ref to fetch. */
   ref?: string;
+  /** INR-06: also fetch tags (isomorphic-git fetches only branches by default). */
+  tags?: boolean;
 }
 
 export interface CheckoutOptions {
@@ -493,6 +495,7 @@ export async function fetch(opts: FetchOptions): Promise<void> {
       ...(opts.remote !== undefined && { remote: opts.remote }),
       ...(wireUrl !== url && { remote, url: wireUrl }),
       ...(opts.ref !== undefined && { ref: opts.ref }),
+      ...(opts.tags !== undefined && { tags: opts.tags }),
       ...(authCbs !== undefined && {
         onAuth: authCbs.onAuth,
         onAuthFailure: authCbs.onAuthFailure as git.AuthFailureCallback,

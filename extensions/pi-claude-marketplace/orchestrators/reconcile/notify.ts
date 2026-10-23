@@ -85,6 +85,7 @@ import type {
 import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { MarketplaceRows } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
 
@@ -239,6 +240,7 @@ function applySourceMismatch(
 function pushMarketplaceRemoveCascade(
   byMp: Map<string, MarketplaceBlock<PendingMsg>>,
   o: ReconcilePlan["marketplacesToRemove"][number],
+  recordedVersions: ReadonlyMap<string, string>,
 ): void {
   if (o.plugins.length === 0) {
     return;
@@ -246,11 +248,35 @@ function pushMarketplaceRemoveCascade(
 
   const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
   for (const pluginName of o.plugins) {
-    block.plugins.push({
-      status: "will uninstall",
-      name: pluginName,
-    });
+    block.plugins.push(willUninstallRow(recordedVersions, o.scope, o.marketplace, pluginName));
   }
+}
+
+/** PRN-02: a `will uninstall` row naming the plugin's recorded version. */
+function willUninstallRow(
+  recordedVersions: ReadonlyMap<string, string>,
+  scope: Scope,
+  marketplace: string,
+  plugin: string,
+): PendingMsg {
+  const version = recordedVersions.get(forceInstallKey(scope, marketplace, plugin));
+  return { status: "will uninstall", name: plugin, ...(version !== undefined && { version }) };
+}
+
+/**
+ * PRN-02: the recorded version of every plugin in one scope's state,
+ * keyed by `(scope, marketplace, plugin)` for `buildReconcilePendingNotification`.
+ */
+export function recordedVersionEntries(
+  scope: Scope,
+  state: ExtensionState,
+): readonly (readonly [string, string])[] {
+  return Object.entries(state.marketplaces).flatMap(([marketplace, record]) =>
+    Object.entries(record.plugins).map(
+      ([plugin, pluginRecord]) =>
+        [forceInstallKey(scope, marketplace, plugin), pluginRecord.version] as const,
+    ),
+  );
 }
 
 /**
@@ -279,7 +305,8 @@ export type PendingInstallCandidateLocator = (
 /**
  * Canonical partial-install key over the `(scope, marketplace, plugin)` tuple
  * shared between the async resolver (`resolvePendingForceInstalls`) and the
- * pure projection (`buildReconcilePendingNotification`). NUL-delimited so a
+ * pure projection (`buildReconcilePendingNotification`); the recorded-version
+ * map (`recordedVersionEntries`) reuses it. NUL-delimited so a
  * name carrying a delimiter character cannot collide two distinct installs.
  */
 function forceInstallKey(scope: Scope, marketplace: string, plugin: string): string {
@@ -400,6 +427,7 @@ export async function resolvePendingForceInstalls(
 export function buildReconcilePendingNotification(
   plans: readonly ReconcilePlan[],
   forceInstallKeys: ReadonlySet<string> = new Set<string>(),
+  recordedVersions: ReadonlyMap<string, string> = new Map<string, string>(),
 ): {
   readonly marketplaces: readonly MarketplaceRows<PendingMsg>[];
 } {
@@ -411,7 +439,7 @@ export function buildReconcilePendingNotification(
     // surfaced through the pluginsToInstall loop below.
 
     for (const o of plan.marketplacesToRemove) {
-      pushMarketplaceRemoveCascade(byMp, o);
+      pushMarketplaceRemoveCascade(byMp, o, recordedVersions);
     }
 
     for (const o of plan.sourceMismatches) {
@@ -446,10 +474,7 @@ export function buildReconcilePendingNotification(
 
     for (const o of plan.pluginsToUninstall) {
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
-      block.plugins.push({
-        status: "will uninstall",
-        name: o.plugin,
-      });
+      block.plugins.push(willUninstallRow(recordedVersions, o.scope, o.marketplace, o.plugin));
     }
 
     // LOAD-01 / WR-02: the held-down bucket previews the same action the
@@ -635,7 +660,7 @@ function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstall
  * degrade the ledger just produced, exactly as on the `plugin-installed` arm
  * above (WARN-01 / D-86-03).
  */
-function enabledRowFromOutcome(
+export function enabledRowFromOutcome(
   outcome: PluginEnabledOutcome,
 ): PluginInstalledMessage | PluginPartiallyInstalledMessage {
   const unsupported = outcome.unsupported ?? [];
@@ -877,6 +902,17 @@ function failedRowCause(outcome: PerEntryOutcome): { cause?: Error } {
   return {};
 }
 
+/** REC-06: a failed install's narrowed reasons when it carries them, else its one reason. */
+function failedRowReasons(
+  outcome: PerEntryOutcome & { readonly reason: Reason },
+): readonly ContentReason[] {
+  if (outcome.kind === "plugin-install-failed" && outcome.reasons !== undefined) {
+    return outcome.reasons;
+  }
+
+  return reasonAsContent(outcome.reason);
+}
+
 /**
  * Apply a PLUGIN-subject outcome: one row pushed onto the block's children.
  *
@@ -1002,7 +1038,7 @@ function applyPluginOutcomeToBlock(
       block.plugins.push({
         status: "failed",
         name: outcome.plugin,
-        reasons: reasonAsContent(outcome.reason),
+        reasons: failedRowReasons(outcome),
         // D-05-16 / RESV-06: only a refused uninstall or a dependency-cascade
         // install failure carries a cause onto this row.
         ...failedRowCause(outcome),

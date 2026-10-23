@@ -604,7 +604,8 @@ function ownScopeOr(scope: Scope | undefined, blockScope: Scope): Scope {
 
 /**
  * D-04: the raw version, or `from` and `to` on an updated row. The groups
- * follow `pluginVersion`: a manual-recovery or pending row carries none.
+ * follow `pluginVersion`: a manual-recovery row and every pending row but
+ * `will uninstall` carry none.
  */
 function wireVersion(row: ResolvedRow): {
   readonly version?: string;
@@ -625,12 +626,12 @@ function wireVersion(row: ResolvedRow): {
     case "partially-upgradable":
     case "failed":
     case "skipped":
+    case "will uninstall":
       return versionField(row.version);
     case "updated":
       return { from: row.from, to: row.to };
     case "manual recovery":
     case "will install":
-    case "will uninstall":
     case "will enable":
     case "will disable":
       return {};

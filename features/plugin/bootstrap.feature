@@ -28,13 +28,14 @@ Feature: Plugin bootstrap
     Given the marketplace "claude-plugins-official" is published as the official marketplace
     Given the user has run "/claude:plugin bootstrap"
     When the user runs "/claude:plugin bootstrap"
-    Then the result has these fields:
-      | kind         | cascade |
-      | severity     | info    |
-      | needs reload | false   |
-    Then the result lists these marketplaces:
-      | name                    | scope | status  | reasons            |
-      | claude-plugins-official | user  | skipped | already autoupdate |
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | false        |
+      | cascade | info     | false        |
+    Then the results list these marketplaces and plugins:
+      | marketplace name        | marketplace scope | marketplace status | marketplace reasons |
+      | claude-plugins-official | user              | skipped            | already added       |
+      | claude-plugins-official | user              | skipped            | already autoupdate  |
     Then the git host receives no request
     Then the "claude-plugins.json" file of the user scope declares these marketplaces:
       | name                    | source                             | autoupdate |

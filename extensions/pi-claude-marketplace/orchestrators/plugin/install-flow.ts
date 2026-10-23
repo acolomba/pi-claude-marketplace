@@ -1589,7 +1589,7 @@ function handleInstallThrow(args: {
   if (orchestrated) {
     // The typed Error remains the dispatch surface; `cause` is the formatted
     // text for callers that render it directly.
-    return classifyInstallFailure(err, formatOrchestratedCause(err));
+    return classifyInstallFailure(err, formatOrchestratedCause(err), capture.rollbackPartials);
   }
 
   notifyWithContext(

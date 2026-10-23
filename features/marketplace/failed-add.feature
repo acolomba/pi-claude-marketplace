@@ -86,8 +86,8 @@ Feature: Marketplace failed add
       | needs reload | false                               |
       | summary      | A marketplace operation has failed. |
     Then the result lists these marketplaces:
-      | name                              | scope   | status | reasons          |
-      | https://{git host}/acme/tools.git | project | failed | invalid manifest |
+      | name                              | scope   | status | reasons     |
+      | https://{git host}/acme/tools.git | project | failed | unparseable |
     Then the git host receives these requests:
       | method | path                                              | status |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |

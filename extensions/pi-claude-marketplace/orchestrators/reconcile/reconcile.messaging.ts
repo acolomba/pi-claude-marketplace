@@ -22,7 +22,8 @@ import type { Scope } from "../../shared/types.ts";
 
 /**
  * The plugin-row statuses the pending diff emits. The pending-tense rows carry
- * no `version` slot and no `reasons` (they are pre-transition); the `failed`
+ * no `reasons` (they are pre-transition), and only `will uninstall` carries the
+ * recorded version (PRN-02); the `failed`
  * row (source-mismatch dangling reference) carries its `reasons` via the shared
  * row grammar.
  */

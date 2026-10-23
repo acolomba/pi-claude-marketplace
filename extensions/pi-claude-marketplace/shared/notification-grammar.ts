@@ -407,7 +407,7 @@ const PLUGIN_ROW_LAYOUT = {
   failed: { icon: ICON_UNINSTALLABLE, scope: true, version: "single" },
   "manual recovery": { icon: ICON_UNINSTALLABLE, scope: true, version: "single" },
   "will install": { icon: ICON_INSTALLED, scope: true, version: "none" },
-  "will uninstall": { icon: ICON_AVAILABLE, scope: true, version: "none" },
+  "will uninstall": { icon: ICON_AVAILABLE, scope: true, version: "single" },
   "will enable": { icon: ICON_INSTALLED, scope: true, version: "none" },
   "will disable": { icon: ICON_DISABLED, scope: true, version: "none" },
   disabled: { icon: ICON_DISABLED, scope: true, version: "single" },

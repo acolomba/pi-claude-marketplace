@@ -197,6 +197,7 @@ const MARKER_POLICY_TABLE = [
     name: "IMPORT_CONTEXT (import/execute.messaging.ts)",
     markers: {
       installed: { markers: true, contentReasons: true },
+      "partially-installed": { markers: true, contentReasons: true },
       skipped: { markers: false, contentReasons: true },
       failed: { markers: false, contentReasons: true },
       unavailable: { markers: false, contentReasons: true },

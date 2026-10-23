@@ -190,6 +190,29 @@ Feature: Plugin uninstall
       | /skill:app-skill | A skill of app 1.0.0. |
       | /skill:lib-skill | A skill of lib 1.0.0. |
 
+  Scenario: Uninstalling a dependency whose only dependent is disabled uninstalls it
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin disable app@tools --scope project"
+    When the user runs "/claude:plugin uninstall lib@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons | scope   | version |
+      | tools            | project           | lib@tools | lib  | uninstalled |         | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | app@tools | 1.0.0   | false   |
+    When the user starts a new pi session
+    Then the session offers no skills
+
   Scenario: Uninstalling a dependency that nothing needs uninstalls it
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

@@ -98,11 +98,13 @@ import {
   createInstallOperation,
   createUninstallOperation,
 } from "../plugin/operations.ts";
+import { degradationFromEnable } from "../plugin/shared.ts";
 import { UninstallRefusedError } from "../plugin/uninstall.ts";
 
 import {
   carriedMcpConfigNotices,
   classifyOrchestratorThrow,
+  installFailureReasonFields,
   classifyReadPassThrow,
   dependencyDisabledOutcome,
   MigrateConfigSaveError,
@@ -128,10 +130,7 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { loadState } from "../../persistence/state-io.ts";
 import type { McpConfigNotice, McpMigrationRow } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
-import type {
-  EnableDegradationSignals,
-  EnableDisablePluginOutcome,
-} from "../plugin/enable-disable.ts";
+import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
 
 /** Reads the one state snapshot selected by the reconcile read pass. */
@@ -724,7 +723,7 @@ async function applyPluginInstalls(
         scope: op.scope,
         marketplace: op.marketplace,
         plugin: op.plugin,
-        reason: classifyOrchestratorThrow(result.error),
+        ...installFailureReasonFields(result.error),
         // RESV-06: only a dependency-cascade failure carries a cause onto
         // this row. Redact defensively (T-55-02-02 / T-53-02-02) -- the
         // closure/constraint arms build their message from keys and version
@@ -840,7 +839,7 @@ async function applyDependencyInstalls(
       scope: op.scope,
       marketplace: op.marketplace,
       plugin: op.plugin,
-      reason: result.reason ?? classifyOrchestratorThrow(result.error),
+      ...installFailureReasonFields(result.error, result.reason),
       ...(result.error instanceof DependencyCascadeError && {
         cause: redactedDependencyCascadeError(result.error),
       }),
@@ -916,28 +915,6 @@ interface PluginToggleAxes {
     plugin: string;
     reason: Reason;
   }) => PerEntryOutcome;
-}
-
-/**
- * Lift the enable arm's degradation signals off the orchestrated outcome. Each
- * field is omitted when empty (`exactOptionalPropertyTypes`), so a clean enable
- * yields `{}` and its projected row gains no markers (NREG-01).
- *
- * SEV-01 / D-98-02: the staged-count verdicts ride here too -- they drive the
- * projected row's dependency list, mirroring the install arm's
- * `dependenciesFromInstall` derivation.
- */
-function degradationFromEnable(
-  result: Extract<EnableDisablePluginOutcome, { status: "enabled" }>,
-): EnableDegradationSignals {
-  return {
-    ...(result.unsupported !== undefined && { unsupported: result.unsupported }),
-    ...(result.orphanRewake === true && { orphanRewake: true }),
-    ...(result.degradedKinds !== undefined && { degradedKinds: result.degradedKinds }),
-    ...(result.stagedAgents === true && { stagedAgents: true }),
-    ...(result.stagedMcpServers === true && { stagedMcpServers: true }),
-    ...(result.stagedWorkflows === true && { stagedWorkflows: true }),
-  };
 }
 
 /**

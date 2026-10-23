@@ -537,6 +537,15 @@ interface CascadeRun {
 }
 
 /**
+ * INR-05: the member's declared ranges as a cause shows them, joined with
+ * `, ` as Claude Code joins them, so a `||` range keeps its meaning, and
+ * bounded like any other rendered range.
+ */
+function renderDeclaredRanges(ranges: readonly string[]): string {
+  return renderConstraintRange(ranges.join(", "));
+}
+
+/**
  * Map an intersection failure onto the cascade's own discriminant.
  *
  * The DECLARED ranges are what the row reports here, because an intersection
@@ -551,7 +560,7 @@ function toIntersectionFailure(
   ranges: readonly string[],
   failed: Extract<DependencyRangeIntersection, { readonly ok: false }>,
 ): CascadeConstraintFailure {
-  const range = renderConstraintRange(ranges.join(" "));
+  const range = renderDeclaredRanges(ranges);
   if (failed.reason === "disjoint") {
     return {
       kind: "range-conflict",
@@ -640,7 +649,7 @@ type MemberConstraintOutcome =
  */
 function toMemberConstraintOutcome(
   member: ClosureMember,
-  range: string,
+  declared: string,
   probed:
     | { readonly kind: "pinned"; readonly oid: string; readonly version: string }
     | { readonly kind: "no-matching-tag"; readonly range: string }
@@ -659,7 +668,11 @@ function toMemberConstraintOutcome(
   if (probed.kind === "no-matching-tag") {
     return {
       kind: "failed",
-      failure: { kind: "no-matching-tag", key: member.key, range: probed.range },
+      failure: {
+        kind: "no-matching-tag",
+        key: member.key,
+        range: declared,
+      },
     };
   }
 
@@ -668,7 +681,7 @@ function toMemberConstraintOutcome(
     failure: {
       kind: "tag-listing-failed",
       key: member.key,
-      range: renderConstraintRange(range),
+      range: declared,
       classification: probed.classification,
     },
   };
@@ -678,12 +691,13 @@ async function probeMemberPin(
   options: MemberConstraintOptions,
   member: ClosureMember,
   range: string,
+  declared: string,
 ): Promise<MemberConstraintOutcome> {
   const tagSource = await resolveMemberTagSource(options, member);
   if (tagSource.kind === "absent") {
     return {
       kind: "failed",
-      failure: { kind: "no-matching-tag", key: member.key, range: renderConstraintRange(range) },
+      failure: { kind: "no-matching-tag", key: member.key, range: declared },
     };
   }
 
@@ -709,7 +723,7 @@ async function probeMemberPin(
       return { kind: "resolved", member: { ...member, fellBackToCurrentCopy: true } };
     }
 
-    return toMemberConstraintOutcome(member, range, probed);
+    return toMemberConstraintOutcome(member, declared, probed);
   }
 
   const ledger = options.ledgerOptionsFor(member);
@@ -726,7 +740,7 @@ async function probeMemberPin(
       ...(ledger.authMemo !== undefined && { authMemo: ledger.authMemo }),
     },
   });
-  return toMemberConstraintOutcome(member, range, probed);
+  return toMemberConstraintOutcome(member, declared, probed);
 }
 
 /**
@@ -766,7 +780,7 @@ async function resolveOneMember(
 
   return isUnconstrainedRange(intersected.range)
     ? { kind: "resolved", member }
-    : probeMemberPin(options, member, intersected.range);
+    : probeMemberPin(options, member, intersected.range, renderDeclaredRanges(ranges));
 }
 
 /**
@@ -848,6 +862,9 @@ function liveInstalledKeys(
  * A member the snapshot records no version for is left alone. It is not
  * installed in this state after all, so there is nothing for a constraint to
  * conflict with.
+ *
+ * INR-04: a conflict reports the DECLARED ranges, as the contradictory
+ * declarations arm does and as Claude Code does, not their intersection.
  */
 function checkInstalledMember(
   state: ExtensionState,
@@ -869,7 +886,7 @@ function checkInstalledMember(
         kind: "range-conflict",
         why: "installed-unsatisfied",
         key: member.key,
-        range: renderConstraintRange(intersected.range),
+        range: renderDeclaredRanges(member.ranges),
         recordedVersion: recorded,
       };
 }

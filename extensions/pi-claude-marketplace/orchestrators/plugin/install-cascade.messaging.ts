@@ -1,5 +1,6 @@
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
-import { DependencyCascadeError } from "../../shared/errors.ts";
+import { DependencyCascadeError, InstallMarketplaceAddError } from "../../shared/errors.ts";
+import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
 
 import { INSTALL_CONTEXT } from "./install.messaging.ts";
@@ -338,7 +339,7 @@ function rangeConflictFacts(
         version: failure.recordedVersion,
         reasons: ["already installed", "version conflict"],
         cause: new DependencyCascadeError(
-          `Dependency "${failure.key}" is installed at version ${failure.recordedVersion}, which does not satisfy "${failure.range}".`,
+          `Dependency "${failure.key}" is installed at version ${failure.recordedVersion}, which does not satisfy ${failure.range}.`,
           failure.key,
         ),
       }
@@ -346,7 +347,7 @@ function rangeConflictFacts(
         key: failure.key,
         reasons: ["version conflict"],
         cause: new DependencyCascadeError(
-          `Dependency "${failure.key}" has contradictory version constraints "${failure.range}" (${failure.detail}).`,
+          `Dependency "${failure.key}" has contradictory version constraints ${failure.range} (${failure.detail}).`,
           failure.key,
         ),
       };
@@ -369,7 +370,7 @@ function constraintFailureFacts(failure: CascadeConstraintFailure): CascadeFailu
         key: failure.key,
         reasons: ["no matching version"],
         cause: new DependencyCascadeError(
-          `Dependency "${failure.key}" has no release tag satisfying "${failure.range}".`,
+          `Dependency "${failure.key}" has no release tag satisfying ${failure.range}.`,
           failure.key,
         ),
       };
@@ -383,7 +384,7 @@ function constraintFailureFacts(failure: CascadeConstraintFailure): CascadeFailu
         // `unreadable`.
         reasons: [failure.classification ?? "unreadable"],
         cause: new DependencyCascadeError(
-          `Dependency "${failure.key}" could not be checked against "${failure.range}" (${failure.classification ?? "tag listing failed"}).`,
+          `Dependency "${failure.key}" could not be checked against ${failure.range} (${failure.classification ?? "tag listing failed"}).`,
           failure.key,
         ),
       };
@@ -392,7 +393,7 @@ function constraintFailureFacts(failure: CascadeConstraintFailure): CascadeFailu
         key: failure.key,
         reasons: ["invalid version constraint"],
         cause: new DependencyCascadeError(
-          `Dependency "${failure.key}" declares an unparseable version constraint "${failure.range}" (${failure.detail}).`,
+          `Dependency "${failure.key}" declares an unparseable version constraint ${failure.range} (${failure.detail}).`,
           failure.key,
         ),
       };
@@ -438,6 +439,25 @@ function memberCause(
   );
 }
 
+/**
+ * The member arm's brace: a rollback partial, else the reason a direct install
+ * reads -- a failed marketplace add's own reason, or the git host's refusal.
+ */
+function memberReasons(
+  subject: Extract<CascadeFailureSubject, { readonly kind: "member" }>,
+): readonly ContentReason[] {
+  if (subject.rollbackPartials.length > 0) {
+    return ["rollback partial"];
+  }
+
+  if (subject.error instanceof InstallMarketplaceAddError) {
+    return [subject.error.reason];
+  }
+
+  const gitReason = classifyGitHostFailure(subject.error);
+  return gitReason !== undefined ? [gitReason] : [];
+}
+
 /** The subject, brace and cause any cascade failure resolves to. */
 function failureFacts(subject: CascadeFailureSubject, rootKey: string): CascadeFailureFacts {
   if (subject.kind === "closure") {
@@ -449,13 +469,14 @@ function failureFacts(subject: CascadeFailureSubject, rootKey: string): CascadeF
   }
 
   // The member resolved cleanly and its own six-phase ledger then failed, so
-  // there is no cascade reason to add -- the ledger's error IS the fact, and the
-  // renderer suppresses the empty brace. A rollback that could not finish is the
-  // one thing worth naming on top of it, on the same terms the single-plugin
-  // failure row names it.
+  // there is no cascade reason to add -- the ledger's error IS the fact. A
+  // rollback that could not finish is named on the same terms the
+  // single-plugin failure row names it; otherwise a git host that refused the
+  // member's clone reads the reason a direct install reads (INR-01), and any
+  // other throw leaves the empty brace the renderer suppresses.
   return {
     key: subject.key,
-    reasons: subject.rollbackPartials.length > 0 ? ["rollback partial"] : [],
+    reasons: memberReasons(subject),
     cause: memberCause(subject, rootKey),
     ...(subject.rollbackPartials.length > 0 && { rollbackPartials: subject.rollbackPartials }),
   };

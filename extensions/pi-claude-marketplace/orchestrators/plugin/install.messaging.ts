@@ -1,5 +1,6 @@
 import {
   causeChainTrailer,
+  CleanupLeakError,
   errorMessage,
   InstallMarketplaceAddError,
   PluginShapeError,
@@ -17,7 +18,7 @@ import {
   type StatusToken,
 } from "../../shared/notification-types.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
-import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import { narrowUnsupportedKinds, SOURCE_DIR_MISSING_NOTE } from "../../shared/probe-classifiers.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -160,6 +161,15 @@ function runtimeFailureReasons(
   return gitReason !== undefined ? [gitReason] : [];
 }
 
+/**
+ * The runtime row keeps its cause chain, except the bare auth row (amended
+ * D-79-03). A cleanup leak keeps it even then, because the cause carries the
+ * manual-cleanup hint (MA-9, INR-02).
+ */
+function keepsRuntimeCause(err: unknown, gitReason: ContentReason | undefined): boolean {
+  return gitReason !== "authentication required" || err instanceof CleanupLeakError;
+}
+
 export function composeInstallFailureMessage(args: {
   err: unknown;
   plugin: string;
@@ -252,7 +262,7 @@ export function composeInstallFailureMessage(args: {
     reasons: runtimeFailureReasons(err, gitReason),
     ...(version !== undefined && version !== "" && { version }),
     scope,
-    ...(gitReason !== "authentication required" && cause !== undefined && { cause }),
+    ...(keepsRuntimeCause(err, gitReason) && cause !== undefined && { cause }),
     // D-03/D-06: a failed install -> error, no reload (nothing landed).
     severity: "error",
     needsReload: false,
@@ -560,6 +570,12 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
     return ["malformed mcp"];
   }
 
+  // SRC-01: a missing plugin directory, mirroring `classifyResolverNote`.
+  // Placed before the `includes("source")` catch-all, which it also matches.
+  if (reason.startsWith(SOURCE_DIR_MISSING_NOTE)) {
+    return ["source missing"];
+  }
+
   if (reason.includes("source")) {
     return ["unsupported source"];
   }
@@ -585,7 +601,8 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
  *      set as `list`/`info` (CR-01 / D-64-02 / D-90-05); on the structural
  *      `unavailable` arm it stays on the source axis as `unsupported source`,
  *      mirroring `narrowResolverNotes`'s catch-all (SURF-01 / WR-01 / D-64-07)
- *   2. "source" substring -> `unsupported source`
+ *   2. the `source dir does not exist` note -> `source missing` (SRC-01);
+ *      any other "source" substring -> `unsupported source`
  *   3. errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError)
  *   4. permissive fallback: `unsupported source`
  * Steps 3-4 are defensive for notes already serialised by deeper helpers;
@@ -608,7 +625,7 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
  * such a note ONLY on the partially-available arm; the structural arm keeps it on
  * the source axis (`unsupported source`), agreeing with `narrowResolverNotes`.
  */
-function narrowResolverReasons(
+export function narrowResolverReasons(
   reasons: readonly string[],
   unsupportedKinds: readonly string[] = [],
   partialable = false,
@@ -631,12 +648,23 @@ function narrowResolverReasons(
   return [...new Set(out)];
 }
 
-export function classifyInstallFailure(err: unknown, formattedCause: string): InstallPluginOutcome {
+export function classifyInstallFailure(
+  err: unknown,
+  formattedCause: string,
+  rollbackPartials: readonly RollbackPartial[] = [],
+): InstallPluginOutcome {
   // All failure variants collapse to `{ status: "failed"; error; cause }`.
   // `error` is the dispatch surface (narrow on `instanceof PluginShapeError`
   // to recover `.shape.kind`); `cause` is the formatted user-visible text.
   // `ConcurrentInstallError` is preserved as a distinct typed branch (PI-15);
   // non-Error inputs are wrapped so the contract guarantees `error instanceof Error`.
+  // REC-06: the rollback partials ride along, so an orchestrated caller can
+  // name them as the standalone row does.
   const wrapped = err instanceof Error ? err : new Error(formattedCause);
-  return { status: "failed", error: wrapped, cause: formattedCause };
+  return {
+    status: "failed",
+    error: wrapped,
+    cause: formattedCause,
+    ...(rollbackPartials.length > 0 && { rollbackPartials }),
+  };
 }

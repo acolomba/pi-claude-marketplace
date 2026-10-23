@@ -150,12 +150,13 @@ function refsBody(refs: readonly string[]): Buffer {
   return Buffer.concat([...refs.map((ref) => packet(`${ref}\n`)), FLUSH]);
 }
 
-function uploadPackAdvertisementBody(oid: string): Buffer {
+function uploadPackAdvertisementBody(oid: string, tag?: string): Buffer {
   return Buffer.concat([
     packet("# service=git-upload-pack\n"),
     FLUSH,
     packet(`${oid} HEAD\0multi_ack_detailed side-band-64k ofs-delta symref=HEAD:refs/heads/main\n`),
     packet(`${oid} refs/heads/main\n`),
+    ...(tag === undefined ? [] : [packet(`${oid} refs/tags/${tag}\n`)]),
     FLUSH,
   ]);
 }
@@ -304,6 +305,7 @@ function installFailedDiscoveryTransport(
 async function installRepositoryTransport(
   t: TestContext,
   repository: Awaited<ReturnType<typeof createGitTestRepository>>,
+  tag?: string,
 ): Promise<void> {
   const { oid, packfile } = await repository.pack();
   const refs = [
@@ -322,7 +324,7 @@ async function installRepositoryTransport(
         200,
         "OK",
         "application/x-git-upload-pack-advertisement",
-        protocolV2 ? advertisementBody() : uploadPackAdvertisementBody(oid),
+        protocolV2 ? advertisementBody() : uploadPackAdvertisementBody(oid, tag),
       );
     }
 
@@ -1192,6 +1194,25 @@ describe("fetch", () => {
       kind: "origin",
       url: GITHUB_REMOTE_URL,
     });
+  });
+
+  test("INR-06: a fetch asked for tags also fetches the remote's tags", async (t) => {
+    // arrange
+    const remote = await createGitTestRepository(t, { boundary: "local" });
+    const taggedOid = await remote.commit(
+      [{ filepath: "README.md", contents: "# tagged\n" }],
+      "tagged",
+    );
+    const worktree = await createGitTestRepository(t, { boundary: "local" });
+    await git.addRemote({ fs, dir: worktree.dir, remote: "origin", url: GITHUB_REMOTE_URL });
+    await installRepositoryTransport(t, remote, "v1.0.0");
+    setGitHubBaseUrl(t, `https://${HOST}`);
+
+    // act
+    await fetch({ dir: worktree.dir, remote: "origin", tags: true });
+
+    // assert
+    assert.strictEqual(await resolveRef({ dir: worktree.dir, ref: "refs/tags/v1.0.0" }), taggedOid);
   });
 
   test("D-10: a failed fetch from the base names the fetched URL", async (t) => {
