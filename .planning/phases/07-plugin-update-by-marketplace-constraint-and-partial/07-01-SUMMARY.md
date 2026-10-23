@@ -51,9 +51,9 @@ None found. Two observed behaviors that look like gaps follow recorded decisions
 ## For the orchestrator
 
 - No shared GSD file was changed or committed.
-- After the code review (07-REVIEW-FIX.md), the file has 3 more scenarios,
-  8 in all: an in-range dependency update, a `list` after `--partial`, and
-  new-session skill checks on both `--partial` scenarios. Two titles changed.
+- After the code review (07-REVIEW-FIX.md), the file has 2 more scenarios,
+  7 in all: an in-range dependency update and a `list` after `--partial`.
+  Both `--partial` update scenarios also gained new-session skill checks. Two titles changed.
 - IN-02: UPD-03 and success criterion 2 read as if the update's own new
   version broke a dependency's range. The scenarios cover the gated
   direction: a dependent's range holds a dependency's new version (D-04).
