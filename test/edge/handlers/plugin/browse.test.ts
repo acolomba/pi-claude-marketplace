@@ -140,13 +140,15 @@ test("browse rejects non-empty arguments with usage error", async () => {
   verify(ui);
 });
 
-for (const args of ["--bogus", "foo --scope user"]) {
+for (const { args, flag } of [
+  { args: "--bogus", flag: "--bogus" },
+  { args: "foo --scope user", flag: "--scope" },
+]) {
   test(`browse rejects the flag in ${args} as an unknown flag`, async () => {
     // arrange
     const { handlers } = createMockActionHandlers();
     const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
     const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
-    const flag = args.split(" ").find((token) => token.startsWith("--"));
     when(() => ctx.mode)
       .thenReturn("tui")
       .times(1);

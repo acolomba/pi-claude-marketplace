@@ -18,6 +18,7 @@
 import { pendingReconcile } from "../../../orchestrators/reconcile/pending.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
+import { rejectUnknownFlag } from "../shared.ts";
 
 import { withParsedArgs } from "./shared.ts";
 
@@ -35,14 +36,12 @@ export function makePendingHandler(): SubcommandHandler {
     // `pending` takes NO positional arguments. Any non-flag token (or an
     // unknown long flag passed through parseArgs as a positional) is a
     // usage error.
-    const [first] = parsed.positional;
-    if (first !== undefined) {
-      if (first.startsWith("--")) {
-        notifyUsageError(ctx, run, { message: `Unknown flag: "${first}".`, usage: USAGE });
-      } else {
-        notifyUsageError(ctx, run, { message: "Too many arguments.", usage: USAGE });
-      }
+    if (rejectUnknownFlag(parsed.positional, { ctx, run, usage: USAGE })) {
+      return;
+    }
 
+    if (parsed.positional.length > 0) {
+      notifyUsageError(ctx, run, { message: "Too many arguments.", usage: USAGE });
       return;
     }
 

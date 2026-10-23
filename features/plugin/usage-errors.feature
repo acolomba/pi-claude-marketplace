@@ -109,6 +109,11 @@ Feature: Plugin usage errors
       | browse --scope user            | --scope     | Usage: /claude:plugin browse                                                                                                          |
       | help marketplace --scope user  | --scope     | Usage: /claude:plugin help [marketplace]                                                                                              |
       | list tools --bogus --other     | --bogus     | Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--remote] [--scope user\|project] |
+      | bootstrap extra --bogus        | --bogus     | Usage: /claude:plugin bootstrap                                                                                             |
+      | import extra --bogus           | --bogus     | Usage: /claude:plugin import [--scope user\|project]                                                                        |
+      | browse extra --bogus           | --bogus     | Usage: /claude:plugin browse                                                                                                |
+      | pending extra --bogus          | --bogus     | Usage: /claude:plugin pending [--scope user\|project]                                                                       |
+      | help marketplace extra --bogus | --bogus     | Usage: /claude:plugin help [marketplace]                                                                                    |
 
   Scenario Outline: A plugin subcommand rejects more arguments than it takes
     When the user runs "/claude:plugin <arguments>"

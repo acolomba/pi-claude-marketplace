@@ -78,8 +78,9 @@ export function makeBootstrapHandler(
       // becoming the causeless failed row below, so the user sees the variable.
       rethrowInvalidGitHubBaseUrl(err);
       // `bootstrapClaudePlugin` renders every add precondition failure itself
-      // (ATTR-07), so only an error outside that closed set reaches here, and
-      // it still needs routing through the notify path as a failed
+      // (ATTR-07), so only an error outside that closed set, or a failure of
+      // the autoupdate step after a successful add, reaches here, and it still
+      // needs routing through the notify path as a failed
       // marketplace row (IL-2). The row stamps caller `severity: "error"`
       // (SEV-02). The marketplace-level row carries no cause chain -- SNM-10
       // confines `cause` to plugin-level variants.

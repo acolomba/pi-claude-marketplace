@@ -40,8 +40,7 @@
 //     it depends on -- catching + swallowing the typed duplicate-name error so
 //     no failed row leaks on an idempotent re-run.
 
-import { MarketplaceDuplicateNameError } from "../../shared/errors.ts";
-import { addMarketplace, notifyAddFailure } from "../marketplace/add.ts";
+import { addMarketplace, classifyAddError, notifyAddFailure } from "../marketplace/add.ts";
 import { setMarketplaceAutoupdate } from "../marketplace/autoupdate.ts";
 
 import type { ExtensionContext } from "../../platform/pi-api.ts";
@@ -122,7 +121,9 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
     // "Already enabled: ..." message. Do NOT emit any "already added"
     // notification here to keep the single-signal-per-state-change
     // contract from the composed orchestrators.
-    if (!(err instanceof MarketplaceDuplicateNameError)) {
+    // The classifier also sees a duplicate-name error wrapped with a cleanup
+    // leak, which is still the idempotent re-run.
+    if (classifyAddError(err) !== "duplicate name") {
       // Any other failed add reports its reason and cause as `marketplace
       // add` does for the same source, and there is nothing to autoupdate.
       notifyAddFailure(addOptions, err);

@@ -25,6 +25,8 @@
 
 import { notifyUsageError } from "../shared/notification-dispatch.ts";
 
+import { tokenizeArgs } from "./args.ts";
+
 import type { ExtensionCommandContext } from "../platform/pi-api.ts";
 import type { NotificationRun } from "../shared/notification-run.ts";
 
@@ -265,7 +267,7 @@ export function selectClaudePluginRoute(
       return { commandId: "plugin browse", handler: handlers.browse, args: rest };
     case "help":
       return {
-        commandId: rest.trim() === "marketplace" ? "marketplace help" : "plugin help",
+        commandId: isMarketplaceHelpTopic(rest) ? "marketplace help" : "plugin help",
         handler: handlers.help,
         args: rest,
       };
@@ -276,6 +278,13 @@ export function selectClaudePluginRoute(
         usage: TOP_LEVEL_USAGE,
       };
   }
+}
+
+// The help handler tokenizes its topic, so the identity reads the same tokens:
+// `help "marketplace"` is the marketplace topic too.
+function isMarketplaceHelpTopic(args: string): boolean {
+  const tokens = tokenizeArgs(args);
+  return tokens.length === 1 && tokens[0]?.value === "marketplace";
 }
 
 const MARKETPLACE_HELP_USAGE = "Usage: /claude:plugin marketplace help";
