@@ -151,14 +151,14 @@ Step module paths are relative to `features/step_definitions/`.
 3. The plugin steps live under `features/step_definitions/plugin/` in topic modules that take no verb name and none of the reserved module names. The git-host steps serve plugin repositories as well as marketplaces. The cucumber skill documents this milestone's file ownership: a later phase adds only its own feature files and step modules, and never edits a Phase 1 file.
 4. `npm run check:features` (the usage gate: no unused, undefined, or ambiguous step) and `npm run check` are green, and every existing scenario still passes.
 
-**Plans:** 1/10 plans executed
+**Plans:** 2/10 plans executed
 
 Plans:
 **Wave 1**
 - [x] 01-01-PLAN.md — Tracer: move the plugin steps into the topic module `plugin/installation.steps.ts` and the git host steps to the top level, each a move-only commit; the parallel-work ownership rule in the cucumber skill
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 01-02-PLAN.md — Tracer: a new session's payloads reach the steps through `get_entries`; the row steps read `reconcile-applied-cascade`; `the session reports these results:`; the six existing session reports compared; seed in `plugin/reconcile.feature`
+- [x] 01-02-PLAN.md — Tracer: a new session's payloads reach the steps through `get_entries`; the row steps read `reconcile-applied-cascade`; `the session reports these results:`; the six existing session reports compared; seed in `plugin/reconcile.feature`
 
 **Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 01-03-PLAN.md — Tracer: a setup command that must fail, seeded in `marketplace/failed-add.feature`; `plugin-info-cascade` rows and `prune-empty`, seeded in `plugin/info.feature` and `plugin/prune.feature`
@@ -400,7 +400,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Suite Foundation | 1/10 | In Progress | - |
+| 1. Suite Foundation | 2/10 | In Progress | - |
 | 2. Plugin Enable and Disable | 0/TBD | Not started | - |
 | 3. Install Dependencies, Partial, and User Scope | 0/TBD | Not started | - |
 | 4. Git-Source Plugins | 0/TBD | Not started | - |

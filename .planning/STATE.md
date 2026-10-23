@@ -5,16 +5,16 @@ milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 1
 current_phase_name: Suite Foundation
 status: executing
-stopped_at: Completed 01-01-PLAN.md
-last_updated: "2026-10-23T02:34:37.508Z"
+stopped_at: Completed 01-02-PLAN.md
+last_updated: "2026-10-23T02:49:14.690Z"
 last_activity: 2026-10-22
 last_activity_desc: Phase 1 execution started
-state_head: 319f4979669bb967cf8133fc8144b0cf1f8fe293
+state_head: a754ed12d2adaf419683ce3fdc7b2e5f0ebd3691
 progress:
   total_phases: 15
   completed_phases: 0
   total_plans: 10
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 1 (Suite Foundation) — EXECUTING
-Plan: 2 of 10
+Plan: 3 of 10
 Status: Ready to execute
 Last activity: 2026-10-22 — Phase 1 execution started
 
@@ -186,8 +186,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-23T02:34:37.392Z
-**Stopped at:** Completed 01-01-PLAN.md
+**Last session:** 2026-10-23T02:49:14.585Z
+**Stopped at:** Completed 01-02-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -384,6 +384,7 @@ archived milestone artifacts.
 | Phase 10 P06 | 14min | 2 tasks | 8 files |
 | Phase 10 P07 | 13min | 2 tasks | 2 files |
 | Phase 01 P01 | 9 min | 3 tasks | 3 files |
+| Phase 01 P02 | 11 min | 2 tasks | 14 files |
 
 ## Decisions
 
@@ -542,6 +543,8 @@ archived milestone artifacts.
 - [Phase 10]: A failed add or install that compares its result but no persisted state is a cucumber BLOCKER; a failed update that does not restate the declaration is a WARNING
 - [Phase 10]: The Phase 9 review ledger's IN rows were closed by hand with commit SHAs in the Source cell, matching the WR rows
 - [Phase 01]: Plugin topic module named installation (not a reserved verb); step module moves are rename-only commits (D-08)
+- [Phase 01]: New-session payloads are read through RPC get_entries and kept as the last results; a lasting reconcile failure appears twice and scenarios state both rows
+- [Phase 01]: Result projections shared by command and session steps live in features/lib/result-rows.ts; row steps read reconcile-applied-cascade wherever they read a cascade
 
 ### mcp-4 decisions
 
