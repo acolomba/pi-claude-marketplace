@@ -28,3 +28,30 @@ Feature: Plugin reconcile
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: A new session adds a marketplace that a config declares by hand and installs its plugin
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given a config in scope project and layer base, with these marketplaces:
+      | name     | source                       | autoupdate |
+      | fixtures | {home}/marketplaces/fixtures |            |
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    When the user starts a new pi session
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | false                     |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 2                         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | status    | reasons | scope   |
+      | fixtures         | project           | added              | demo@fixtures | demo | installed |         | project |
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
