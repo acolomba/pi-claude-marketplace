@@ -7655,6 +7655,49 @@ test("FORCE-02: --partial on a candidate that became partially available degrade
   });
 });
 
+test("D-18-06: an update --partial of a clean record records the degraded plugin as not installable", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-partial-record-");
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        partial: true,
+      });
+
+      // assert -- the flag install writes for the same resolution, which
+      // enable, install and backfill read as the partial-consent marker.
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.deepStrictEqual(record?.compatibility, {
+        installable: false,
+        notes: ["contains monitors", "contains themes"],
+        supported: ["skills"],
+        unsupported: ["monitors", "themes"],
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("XSURF-03 / FORCE-03: without --partial the partially-upgradable candidate declines `(partially-upgradable)` + the --partial trailer at warning", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-force03-");
