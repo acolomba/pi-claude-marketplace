@@ -147,6 +147,15 @@ function isLayerRefusal(error: unknown): error is LayerRefusal {
   );
 }
 
+/**
+ * The failures whose message is safe as a rendered cause line: a layer
+ * refusal, and a held state lock, which names the lock file as the uninstall
+ * row does (D-01).
+ */
+function isRenderedCause(error: unknown): error is LayerRefusal | StateLockHeldError {
+  return isLayerRefusal(error) || error instanceof StateLockHeldError;
+}
+
 function layerRefusalReason(error: LayerRefusal): ContentReason {
   if (error instanceof PluginInLocalLayerOnlyError) {
     return "plugin in local layer only";
@@ -181,7 +190,7 @@ function failedOutcome(input: RecordFailedOutcomeInput): ReinstallFailedOutcome 
     notes: [message],
     ...(isManualRecovery && { failureClass: "manual-recovery" as const }),
     ...(typedReasons !== undefined && { reasons: typedReasons }),
-    ...(isLayerRefusal(input.error) && { cause: input.error }),
+    ...(isRenderedCause(input.error) && { cause: input.error }),
   };
 }
 

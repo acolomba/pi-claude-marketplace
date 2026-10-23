@@ -568,6 +568,36 @@ for (const { refusal, reason, note } of [
   });
 }
 
+test("FLR-01: a held state lock carries lock held and its cause", () => {
+  // arrange
+  const error = new StateLockHeldError("project", "/tmp/scope/.state-lock", {
+    cause: Object.assign(new Error("Lock file is already being held"), { code: "ELOCKED" }),
+  });
+  const lockMessage =
+    "Another pi-claude-marketplace operation is in progress for project scope (/tmp/scope/.state-lock). Retry after it completes.";
+
+  // act
+  const outcome = recordReinstallOutcome({
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    error,
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    notes: [`${lockMessage}\n\ncause: ${lockMessage} -> Lock file is already being held`],
+    reasons: ["lock held"],
+    cause: error,
+  });
+  assert.strictEqual(outcome.cause, error);
+});
+
 test("a manifest parse failure carries no cause and no layer reason", () => {
   // arrange
   const error = new InvalidMarketplaceManifestError(
