@@ -28,8 +28,10 @@
 //     pre-checking would introduce a TOCTOU race with concurrent install
 //     locks plus duplicate logic.
 //   - Only `MarketplaceDuplicateNameError` is swallowed from
-//     `addMarketplace`. All other errors propagate so the surface
-//     matches existing orchestrator behavior.
+//     `addMarketplace`. Every other add precondition is rendered by
+//     `notifyAddFailure`, byte-identical to `marketplace add` for the same
+//     source (reason and cause), and the autoupdate step is skipped. An error
+//     that is not an add precondition propagates.
 //   - ATTR-07: `addMarketplace` now routes precondition failures
 //     (incl. duplicate name) through `notify` as a `(failed) {<reason>}` row
 //     for the public `marketplace add` command. Bootstrap MUST keep the
@@ -39,12 +41,13 @@
 //     no failed row leaks on an idempotent re-run.
 
 import { MarketplaceDuplicateNameError } from "../../shared/errors.ts";
-import { addMarketplace } from "../marketplace/add.ts";
+import { addMarketplace, notifyAddFailure } from "../marketplace/add.ts";
 import { setMarketplaceAutoupdate } from "../marketplace/autoupdate.ts";
 
 import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
+import type { AddMarketplaceOptions } from "../marketplace/add.ts";
 import type { GitOps } from "../marketplace/shared.ts";
 
 /**
@@ -98,20 +101,21 @@ export interface BootstrapOptions {
  * without a clone (LAYER-01).
  */
 export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<void> {
+  const addOptions: AddMarketplaceOptions = {
+    ctx: opts.ctx,
+    run: opts.run,
+    scope: "user",
+    cwd: opts.cwd,
+    rawSource: BOOTSTRAP_SOURCE,
+    completionCache: opts.completionCache,
+    gitOps: opts.gitOps,
+    // ATTR-07: re-throw the typed precondition (incl. MarketplaceDuplicateName
+    // Error) instead of emitting a `(failed)` row, so the catch below can
+    // swallow the idempotent re-run and keep one-signal-per-state-change.
+    rethrowPreconditionErrors: true,
+  };
   try {
-    await addMarketplace({
-      ctx: opts.ctx,
-      run: opts.run,
-      scope: "user",
-      cwd: opts.cwd,
-      rawSource: BOOTSTRAP_SOURCE,
-      completionCache: opts.completionCache,
-      gitOps: opts.gitOps,
-      // ATTR-07: re-throw the typed precondition (incl. MarketplaceDuplicateName
-      // Error) instead of emitting a `(failed)` row, so the catch below can
-      // swallow the idempotent re-run and keep one-signal-per-state-change.
-      rethrowPreconditionErrors: true,
-    });
+    await addMarketplace(addOptions);
   } catch (err) {
     // The marketplace already exists in user scope -- idempotent path.
     // The autoupdate step below covers the user-visible signal via its
@@ -119,7 +123,10 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
     // notification here to keep the single-signal-per-state-change
     // contract from the composed orchestrators.
     if (!(err instanceof MarketplaceDuplicateNameError)) {
-      throw err;
+      // Any other failed add reports its reason and cause as `marketplace
+      // add` does for the same source, and there is nothing to autoupdate.
+      notifyAddFailure(addOptions, err);
+      return;
     }
   }
 

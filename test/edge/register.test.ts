@@ -3173,7 +3173,6 @@ const COMMAND_ARGUMENT_CASES = [
     operand: "",
     usage: "bootstrap",
     surplus: "bootstrap takes no arguments.",
-    unknown: "bootstrap takes no arguments.",
   },
   {
     verb: "install",

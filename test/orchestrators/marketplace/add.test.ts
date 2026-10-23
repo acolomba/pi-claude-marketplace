@@ -23,6 +23,7 @@ import { NO_STORED_CREDENTIAL_CAUSE } from "../../../extensions/pi-claude-market
 import {
   addMarketplace as addMarketplaceWithCache,
   addMarketplaceToState,
+  notifyAddFailure,
   parseAddableSource,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import { loadConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
@@ -4742,3 +4743,54 @@ for (const { rawSource, host } of [
     });
   });
 }
+
+test("notifyAddFailure renders a caught add failure as the public add command does", () => {
+  // arrange
+  const { ctx, run, notifications } = makeCtx();
+
+  // act
+  notifyAddFailure(
+    {
+      ctx,
+      run,
+      scope: "user",
+      cwd: "/unused",
+      rawSource: "acme/tools",
+      completionCache: createCompletionCache(),
+    },
+    httpError(404),
+  );
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A marketplace operation has failed.\n\n⊘ acme/tools [user] (failed) {source missing}",
+      severity: "error",
+    },
+  ]);
+});
+
+test("notifyAddFailure rethrows an error that is not an add precondition", () => {
+  // arrange
+  const { ctx, run } = makeCtx(0);
+  const unexpected = new Error("unexpected");
+
+  // act & assert
+  assert.throws(
+    () => {
+      notifyAddFailure(
+        {
+          ctx,
+          run,
+          scope: "user",
+          cwd: "/unused",
+          rawSource: "acme/tools",
+          completionCache: createCompletionCache(),
+        },
+        unexpected,
+      );
+    },
+    (error: unknown) => error === unexpected,
+  );
+});
