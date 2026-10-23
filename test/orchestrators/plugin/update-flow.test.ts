@@ -3867,6 +3867,21 @@ for (const { title, makeFailure, reason } of [
     reason: "source missing",
   },
   {
+    title: "classifies EISDIR marketplace refresh failures",
+    makeFailure: () => Object.assign(new Error("is a directory"), { code: "EISDIR" }),
+    reason: "unreadable",
+  },
+  {
+    title: "classifies EIO marketplace refresh failures",
+    makeFailure: () => Object.assign(new Error("input/output error"), { code: "EIO" }),
+    reason: "unreadable",
+  },
+  {
+    title: "classifies EBADF marketplace refresh failures",
+    makeFailure: () => Object.assign(new Error("bad file descriptor"), { code: "EBADF" }),
+    reason: "unreadable",
+  },
+  {
     title: "classifies stable network errno marketplace refresh failures",
     makeFailure: () =>
       Object.assign(new Error("opaque transport failure"), { code: "ENETUNREACH" }),
