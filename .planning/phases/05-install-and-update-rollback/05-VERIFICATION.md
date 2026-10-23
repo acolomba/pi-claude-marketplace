@@ -32,7 +32,11 @@ D-03) and is outside UPD-04 (CONTEXT D-02).
 
 ## For the orchestrator
 
-- REQUIREMENTS INS-07 and UPD-04 can be marked complete; ROADMAP Phase 5 has
-  one plan (05-01).
-- Lock-held update row still reaches the `unreadable manifest` fallback; owner
-  Phase 15.
+- UPD-04 is exercised ONLY by the `mcp-adapter.json` obstruction, which fails the update in its prepare phase, BEFORE the swap. No scenario fails an update after the swap: that path is by design not rolled back (`rollback partial` + reinstall hint, update-swap D-03), and no filesystem obstruction reaches it without failing prepare first (CONTEXT D-02).
+- Product bug fixed: an update failing on EISDIR/EIO/EBADF reported `{unreadable manifest}`; now `{unreadable}` (`7671e03f`, `orchestrators/plugin/update-flow.ts` `narrowErrnoFailReason`).
+- Product bug not fixed: an update failing with the state lock held still reports `{unreadable manifest}` (no errno code reaches the fallback); owner Phase 15.
+- Assumption / parity: install EISDIR failure keeps empty reasons with the error only in the cause chain (D-15-01 design); treated as parity because Claude Code 2.1.308 prints the raw `Failed to install plugin X: <message>`.
+- Info, not fixed: a failed update row carries no version or from/to, while a failed install row carries its version (05-REVIEW IN-02).
+- Info, not fixed: the Phase 1 install-retry seed scenario uses two `When` steps (install, then new session) (05-REVIEW IN-01).
+- Tracking: INS-07 and UPD-04 can be marked complete; ROADMAP Phase 5 has one plan (05-01). Shared GSD files untouched.
+- Incident: a commit killed (exit 137) by the host restart left an unstaged edit in pre-commit's stash; restored from `~/.cache/pre-commit/patch1792740996-1509500`, nothing lost. Untracked `.agents/skills/fallow-setup/` and `.claude/skills/fallow-setup/` in the worktree are not mine and are not committed.
