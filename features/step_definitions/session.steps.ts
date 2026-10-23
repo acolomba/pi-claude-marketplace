@@ -61,4 +61,5 @@ Then("the session reports these results:", function (this: ScenarioWorld, table:
   const [stated = []] = table.raw();
   assert.deepStrictEqual(resultsTable(stated, this.resultsOf("session"), this.tokens), table.raw());
   this.markNoticesCompared();
+  this.markResultsCompared();
 });

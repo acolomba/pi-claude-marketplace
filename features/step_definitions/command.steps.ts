@@ -77,6 +77,7 @@ Then("the result has these fields:", function (this: ScenarioWorld, table: DataT
   const fields = envelopeFields(this.lastResult(), this.tokens);
   const rows = namesLike(stated, new Set(fields.keys())).map((name) => [name, fields.get(name)]);
   assert.deepStrictEqual(rows, table.raw());
+  this.markResultsCompared();
 });
 
 Then("the result lists these plugins:", function (this: ScenarioWorld, table: DataTable) {
@@ -115,6 +116,7 @@ Then("the command reports these results:", function (this: ScenarioWorld, table:
   const [stated = []] = table.raw();
   assert.deepStrictEqual(resultsTable(stated, this.resultsOf("command"), this.tokens), table.raw());
   this.markNoticesCompared();
+  this.markResultsCompared();
 });
 
 // D-02: the marketplace and plugin rows of every result, in emission order.

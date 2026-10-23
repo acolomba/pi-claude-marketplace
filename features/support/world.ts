@@ -7,8 +7,9 @@
  * hook creates registers its release here, and the world runs those releases
  * in reverse order when the scenario ends. A passing scenario also fails
  * there when a row array or an MCP config notice of its last results went
- * uncompared. The last results are those of the last `When` step: a command
- * or a new session.
+ * uncompared, or when a new session reported a result whose fields no step
+ * stated. The last results are those of the last `When` step: a command or a
+ * new session.
  */
 
 import assert from "node:assert/strict";
@@ -54,6 +55,11 @@ export class ScenarioWorld extends World {
   // by kind. Only `the command reports these results:` states their fields,
   // and it calls `markNoticesCompared()`.
   uncomparedNotices: readonly string[] = [];
+  // The results of the last new session whose fields no step has stated yet,
+  // by kind. A command is always followed by a field step, a session is not,
+  // so a session payload without rows would otherwise pass unseen. The steps
+  // that state the fields of every result call `markResultsCompared()`.
+  uncomparedSessionResults: readonly string[] = [];
   // Cucumber builds the world before any `Before()` hook, so the
   // `{scenario time}` window opens before any setup command runs (D-05).
   readonly startedAt = Date.now();
@@ -125,7 +131,8 @@ export class ScenarioWorld extends World {
 
   /**
    * Keeps `results` as the last results, from `source`, after asserting that
-   * a step compared the rows and MCP config notices of the previous ones.
+   * a step compared the rows and MCP config notices of the previous ones, and
+   * the fields of a previous session's results.
    */
   recordResults(results: readonly NotificationPayload[], source: "command" | "session"): void {
     assert.deepStrictEqual(
@@ -138,12 +145,19 @@ export class ScenarioWorld extends World {
       [],
       "no step compared these MCP config notices of the previous results",
     );
+    assert.deepStrictEqual(
+      this.uncomparedSessionResults,
+      [],
+      "no step compared the fields of these results of the previous session",
+    );
     this.results = results;
     this.resultsSource = source;
     this.uncomparedRows = rowArrays(results);
     this.uncomparedNotices = results
       .map((result) => result.kind)
       .filter((kind) => kind === "mcp-config-notices");
+    this.uncomparedSessionResults =
+      source === "session" ? results.map((result) => result.kind) : [];
   }
 
   /**
@@ -214,6 +228,11 @@ export class ScenarioWorld extends World {
    */
   markNoticesCompared(): void {
     this.uncomparedNotices = [];
+  }
+
+  /** Records that a step compared the fields of every result of the last `When` step. */
+  markResultsCompared(): void {
+    this.uncomparedSessionResults = [];
   }
 
   /** Records how this scenario published the marketplace `name`. */
@@ -331,6 +350,7 @@ setWorldConstructor(ScenarioWorld);
 After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): Promise<void> {
   const uncompared = this.uncomparedRows;
   const uncomparedNotices = this.uncomparedNotices;
+  const uncomparedSessionResults = this.uncomparedSessionResults;
   await this.release();
   if (result?.status === Status.PASSED) {
     assert.deepStrictEqual(uncompared, [], "no step compared these rows of the last results");
@@ -338,6 +358,11 @@ After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): 
       uncomparedNotices,
       [],
       "no step compared these MCP config notices of the last results",
+    );
+    assert.deepStrictEqual(
+      uncomparedSessionResults,
+      [],
+      "no step compared the fields of these results of the last session",
     );
   }
 });
