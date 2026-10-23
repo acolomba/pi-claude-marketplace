@@ -2079,7 +2079,7 @@ test("ANAME-03: an install whose two servers share one key refuses before any wr
 /** A full 40-hex commit id, so the `sha-<12hex>` derivation has real bytes to cut. */
 const RESOLVED_SHA = "0123456789abcdef0123456789abcdef01234567";
 
-test("PURL-09 / D-77-01 / D-77-02: a git-source install takes its root and its version from the clone probe", async (t) => {
+test("PURL-09 / VER-01 / D-77-02: a git-source install takes its root from the clone probe and its declared version", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-git-");
   const seeded = await seedPlugin(environment.cwd, {
@@ -2123,12 +2123,45 @@ test("PURL-09 / D-77-01 / D-77-02: a git-source install takes its root and its v
   ]);
   assert.ok(ledgerOutcome.kind === "installed");
   assert.equal(ledgerOutcome.summary.resolved.pluginRoot, seeded.pluginRoot);
-  // D-77-01: a git source takes the `sha-<12hex>` version over the 3-tier
-  // ladder, and D-77-02 persists the full 40-hex sha beside it.
-  assert.equal(ledgerOutcome.summary.version, "sha-0123456789ab");
+  // VER-01: the declared version wins over the commit, and D-77-02 persists
+  // the full 40-hex sha beside it.
+  assert.equal(ledgerOutcome.summary.version, "0.0.1");
   const record = seeded.state.marketplaces.marketplace?.plugins.empty;
-  assert.equal(record?.version, "sha-0123456789ab");
+  assert.equal(record?.version, "0.0.1");
   assert.equal(record?.resolvedSha, RESOLVED_SHA);
+});
+
+test("VER-01: a git-source install that declares no version records sha-<12hex>", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-git-unversioned-");
+  const seeded = await seedPlugin(environment.cwd, {
+    gitSource: { source: "url", url: "https://example.com/org/repo", sha: RESOLVED_SHA },
+    components: { skills: ["alpha"] },
+    pluginJson: { version: undefined },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+    cloneProbe: () =>
+      Promise.resolve({
+        result: { kind: "materialized", pluginRoot: seeded.pluginRoot, resolvedSha: RESOLVED_SHA },
+        resolvedSha: RESOLVED_SHA,
+      }),
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.version, "sha-0123456789ab");
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty?.resolvedSha, RESOLVED_SHA);
 });
 
 test("RESV-03: a source pin override materializes the pinned commit, not the entry's own ref", async (t) => {
@@ -2165,7 +2198,7 @@ test("RESV-03: a source pin override materializes the pinned commit, not the ent
   // assert: the override rides the source's `sha`, which is what routes the
   // probe down its already-pinned arm rather than adding a second one.
   assert.ok(ledgerOutcome.kind === "installed");
-  assert.equal(ledgerOutcome.summary.version, "sha-0123456789ab");
+  assert.equal(ledgerOutcome.summary.version, "0.0.1");
   assert.deepStrictEqual(probed, [
     {
       kind: "url",
@@ -2234,7 +2267,7 @@ test("the callback reaches the real clone probe through the ledger's own cache, 
   assert.deepStrictEqual(cloned, [{ cloneUrl: "https://example.com/org/repo", pin: RESOLVED_SHA }]);
   assert.ok(ledgerOutcome.kind === "installed");
   assert.equal(ledgerOutcome.summary.resolved.pluginRoot, seeded.pluginRoot);
-  assert.equal(ledgerOutcome.summary.version, "sha-0123456789ab");
+  assert.equal(ledgerOutcome.summary.version, "0.0.1");
   // A path source needs no credential, so the device flow is threaded but
   // never consulted.
   assert.deepStrictEqual(deviceFlow.calls.requestCode, []);

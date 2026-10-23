@@ -11303,7 +11303,7 @@ test("RESV-03/RESV-05: a tag-pinned dependency records the tag's own version, an
   });
 });
 
-test("PURL-01/02/09: url-source install materializes a clone, records sha-<12hex> + resolvedSha", async () => {
+test("PURL-01/02/09 / VER-01: url-source install materializes a clone, records the declared version + resolvedSha", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-url-"));
     try {
@@ -11336,13 +11336,8 @@ test("PURL-01/02/09: url-source install materializes a clone, records sha-<12hex
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.ok(record !== undefined, "a state record must be written for a url-source install");
-      assert.match(record.version, /^sha-[0-9a-f]{12}$/, "version is sha-<12hex>");
+      assert.equal(record.version, "9.9.9", "VER-01: the declared version wins over the sha");
       assert.equal(record.resolvedSha, GIT_SOURCE_SHA, "full 40-hex resolvedSha recorded");
-      assert.equal(
-        record.version,
-        `sha-${GIT_SOURCE_SHA.slice(0, 12)}`,
-        "version 12-hex == resolvedSha first-12",
-      );
       // One clone (cold cache) and one checkout at the pin.
       assert.equal(gitState.cloneCalls.length, 1, "one clone on cold cache");
       assert.equal(
@@ -11683,11 +11678,7 @@ test("GIT-01: an unpinned url source installs a per-commit copy at the mirror HE
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.ok(record !== undefined, "unpinned install records");
       assert.equal(record.resolvedSha, headSha, "records the mirror HEAD sha");
-      assert.equal(
-        record.version,
-        `sha-${headSha.slice(0, 12)}`,
-        "version from the mirror HEAD sha",
-      );
+      assert.equal(record.version, "9.9.9", "VER-01: the declared version");
 
       // GIT-01: the record anchors to the per-commit copy at the mirror's HEAD,
       // never to the bare mirror key a later fetch refreshes.
@@ -11749,11 +11740,7 @@ test("GIT-01: an unpinned git-subdir source installs under the per-commit copy",
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.ok(record !== undefined, "unpinned git-subdir install records");
       assert.equal(record.resolvedSha, headSha, "records the mirror HEAD sha");
-      assert.equal(
-        record.version,
-        `sha-${headSha.slice(0, 12)}`,
-        "version from the mirror HEAD sha",
-      );
+      assert.equal(record.version, "9.9.9", "VER-01: the declared version");
 
       // GIT-01: resolvedSource is the subdir under the per-commit copy.
       const copyRoot = await locations.pluginCloneDir(
@@ -11854,7 +11841,7 @@ test("PURL-09 / sha over ref: a source with both ref and sha records the sha's v
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.equal(record?.resolvedSha, GIT_SOURCE_SHA, "sha wins over ref");
-      assert.equal(record?.version, `sha-${GIT_SOURCE_SHA.slice(0, 12)}`, "version from the sha");
+      assert.equal(record?.version, "9.9.9", "VER-01: the declared version");
       // resolveRemoteRef is NOT consulted when a sha is set.
       assert.equal(
         gitState.resolveRemoteRefCalls.length,
@@ -12337,7 +12324,7 @@ test("plugin install authentication: threads a GitHub provider bundle to the pin
         declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
-        version: "sha-a1b2c3d4e5f6",
+        version: "9.9.9",
       });
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(authCapture.calls.length, 1);
@@ -12744,7 +12731,7 @@ test("plugin install authentication: threads a host-keyed bundle for a host the 
         declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
-        version: "sha-a1b2c3d4e5f6",
+        version: "9.9.9",
       });
       assert.deepStrictEqual(notifications, []);
       assert.deepStrictEqual(
@@ -12831,7 +12818,7 @@ test("plugin install authentication: threads the GitLab provider bundle onto the
         declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
-        version: "sha-a1b2c3d4e5f6",
+        version: "9.9.9",
       });
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(authCapture.calls.length, 1);
@@ -12937,7 +12924,7 @@ test("plugin install authentication: memoizes one Device Flow result across same
             declaresWorkflows: false,
             resourcesChanged: true,
             status: "installed",
-            version: "sha-a1b2c3d4e5f6",
+            version: "9.9.9",
           },
           {
             declaresAgents: false,
@@ -12945,7 +12932,7 @@ test("plugin install authentication: memoizes one Device Flow result across same
             declaresWorkflows: false,
             resourcesChanged: true,
             status: "installed",
-            version: "sha-b2c3d4e5f607",
+            version: "9.9.9",
           },
         ],
       );
@@ -13933,7 +13920,7 @@ test("an unpinned ref-only source forwards the moving ref to its cold mirror clo
         declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
-        version: `sha-${headSha.slice(0, 12)}`,
+        version: "9.9.9",
       });
       assert.deepStrictEqual(
         git.state.cloneCalls.map(({ ref, singleBranch, url }) => ({ ref, singleBranch, url })),

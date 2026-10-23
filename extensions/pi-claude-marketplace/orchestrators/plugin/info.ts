@@ -113,6 +113,7 @@ import {
 import { makePresenceProbe } from "./git-source-probe.ts";
 import { withMcpServerStatus } from "./info-mcp-status.ts";
 import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging.ts";
+import { resolveDeclaredPluginVersion } from "./shared.ts";
 
 import type {
   GitPluginRootResult,
@@ -2536,10 +2537,10 @@ async function buildGitNotInstalledRow(opts: {
   }
 
   const pluginRoot = presence.pluginRoot;
-  // D-77-01: an entry that declares no version shows the warm tree's commit,
-  // which is what an install of that tree records; a declared version, which
-  // pins the plugin upstream, is shown as declared.
-  const warmVersion = version ?? shaVersion(presence.resolvedSha);
+  // VER-01: the warm tree's version by the rule an install of it records --
+  // the declared version (plugin.json, then the entry), else its commit.
+  const warmVersion =
+    (await resolveDeclaredPluginVersion(entry, pluginRoot)) ?? shaVersion(presence.resolvedSha);
   const ctx: ResolveContext = {
     marketplaceRoot: mpRecord.marketplaceRoot,
     marketplaceName: mpRecord.name,

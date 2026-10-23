@@ -1,6 +1,7 @@
 /**
- * @fileoverview Steps about git-source plugins: the commit the copy an
- * installed plugin runs from holds.
+ * @fileoverview Steps about git-source plugins: a repository plugin that
+ * declares no version, and the commit the copy an installed plugin runs from
+ * holds.
  *
  * An installed git plugin runs from its own copy under `plugin-clones/`,
  * named by a hash of the clone URL and the commit, never from the URL-keyed
@@ -8,17 +9,46 @@
  */
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { Then } from "@cucumber/cucumber";
+import { Given, Then } from "@cucumber/cucumber";
 
 import { isPlainObject } from "../../lib/field-rows.ts";
+import { pushGitRepository } from "../../lib/git-marketplace.ts";
 import { runGit } from "../../lib/hermetic-git.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
 const PER_COMMIT_KEY = /^[0-9a-f]{12}-[0-9a-f]{12}$/u;
+
+Given(
+  "the git-source plugin {string} of the git repository {string} declares no version",
+  async function (this: ScenarioWorld, plugin: string, name: string) {
+    const repository = this.requireGitRepository(name);
+    const offered = repository.plugins.find((candidate) => candidate.name === plugin);
+    assert.ok(offered !== undefined, `the git repository ${name} holds no plugin ${plugin}`);
+    const manifestFile = path.join(
+      repository.workTree,
+      offered.path,
+      ".claude-plugin",
+      "plugin.json",
+    );
+    const manifest = JSON.parse(await readFile(manifestFile, "utf8")) as Record<string, unknown>;
+    const { version: _version, ...unversioned } = manifest;
+    await writeFile(manifestFile, JSON.stringify(unversioned));
+    await pushGitRepository(repository.workTree, repository.gitHome);
+    const revision = await runGit(repository.workTree, repository.gitHome, "rev-parse", "HEAD");
+    this.recordGitRepository({ ...repository, revisions: [...repository.revisions, revision] });
+    const published = await runGit(
+      repository.bareRepository,
+      repository.gitHome,
+      "show",
+      `main:${path.posix.join(offered.path, ".claude-plugin", "plugin.json")}`,
+    );
+    assert.deepStrictEqual(JSON.parse(published), unversioned);
+  },
+);
 
 Then(
   "the git-source plugin {string} installed in the {word} scope runs revision {int} of its repository",

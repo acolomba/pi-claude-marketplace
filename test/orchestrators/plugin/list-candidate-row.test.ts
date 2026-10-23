@@ -210,6 +210,7 @@ test("resolves a warm git mirror into an available row", async (testContext) => 
     message: "initial",
     author: { name: "test", email: "test@example.com" },
   });
+  const head = await git.resolveRef({ fs, dir: mirrorDirectory, ref: "HEAD" });
   const entry: ManifestPluginEntry = { name: "warm-plugin", source: canonicalUrl };
 
   // act
@@ -221,10 +222,86 @@ test("resolves a warm git mirror into an available row", async (testContext) => 
   );
 
   // assert
+  // VER-01: a warm tree that declares no version shows its commit.
   assert.deepStrictEqual(row, {
-    message: { status: "available", name: "warm-plugin" },
+    message: { status: "available", name: "warm-plugin", version: `sha-${head.slice(0, 12)}` },
     bucket: "available",
   });
+});
+
+test("VER-01: a warm git mirror shows the version its plugin.json declares over the entry's", async (testContext) => {
+  // arrange
+  const composeCandidateListRow = await loadComposeCandidateListRow();
+  const environment = await candidateEnvironment(testContext);
+  const canonicalUrl = "https://example.com/warm-plugin";
+  const mirrorDirectory = await environment.locations.pluginCloneDir(pluginMirrorKey(canonicalUrl));
+  await mkdir(path.join(mirrorDirectory, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(mirrorDirectory, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "warm-plugin", version: "2.0.0" }),
+  );
+  await git.init({ fs, dir: mirrorDirectory, defaultBranch: "main" });
+  await git.add({ fs, dir: mirrorDirectory, filepath: ".claude-plugin/plugin.json" });
+  await git.commit({
+    fs,
+    dir: mirrorDirectory,
+    message: "initial",
+    author: { name: "test", email: "test@example.com" },
+  });
+  const entry: ManifestPluginEntry = {
+    name: "warm-plugin",
+    source: canonicalUrl,
+    version: "1.0.0",
+  };
+
+  // act
+  const row = await composeCandidateListRow(
+    entry,
+    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
+    environment.locations,
+    undefined,
+  );
+
+  // assert
+  assert.deepStrictEqual(row, {
+    message: { status: "available", name: "warm-plugin", version: "2.0.0" },
+    bucket: "available",
+  });
+});
+
+test("VER-01: a warm git-subdir mirror that lacks the subdir keeps the entry version", async (testContext) => {
+  // arrange
+  const composeCandidateListRow = await loadComposeCandidateListRow();
+  const environment = await candidateEnvironment(testContext);
+  const canonicalUrl = "https://example.com/mono";
+  const mirrorDirectory = await environment.locations.pluginCloneDir(pluginMirrorKey(canonicalUrl));
+  await mkdir(mirrorDirectory, { recursive: true });
+  await writeFile(path.join(mirrorDirectory, "README.md"), "no plugins here");
+  await git.init({ fs, dir: mirrorDirectory, defaultBranch: "main" });
+  await git.add({ fs, dir: mirrorDirectory, filepath: "README.md" });
+  await git.commit({
+    fs,
+    dir: mirrorDirectory,
+    message: "initial",
+    author: { name: "test", email: "test@example.com" },
+  });
+  const entry: ManifestPluginEntry = {
+    name: "sub-plugin",
+    source: { source: "git-subdir", url: canonicalUrl, path: "plugins/sub" },
+    version: "1.0.0",
+  };
+
+  // act
+  const row = await composeCandidateListRow(
+    entry,
+    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: "third-party" },
+    environment.locations,
+    undefined,
+  );
+
+  // assert
+  assert.strictEqual(row.message.version, "1.0.0");
+  assert.strictEqual(row.bucket, "unavailable");
 });
 
 const COLD_GIT_ENTRIES: readonly ManifestPluginEntry[] = [

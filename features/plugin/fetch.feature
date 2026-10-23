@@ -81,8 +81,8 @@ Feature: Plugin fetch
       | tally warnings      | 0           |
       | tally success count | 1           |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version          |
-      | gits             | project           | ghp@gits | ghp  | installed |         | project | {ghp revision 1} |
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
     Then the git host receives no request
 
   Scenario: A fetch leaves the installed plugin running the revision it installed until an update

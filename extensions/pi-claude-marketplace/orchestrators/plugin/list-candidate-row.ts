@@ -1,6 +1,7 @@
 import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { rowClaimsInstallDisabled } from "../../domain/unsupported-components.ts";
+import { shaVersion } from "../../domain/version.ts";
 import {
   narrowProbeError,
   narrowResolverNotes,
@@ -9,6 +10,7 @@ import {
 
 import { makePresenceProbe } from "./git-source-probe.ts";
 import { classifyManifestEntry } from "./plugin-state-classifier.ts";
+import { resolveDeclaredPluginVersion } from "./shared.ts";
 
 import type { ManifestPluginEntry } from "../../domain/manifest-lookup.ts";
 import type { ResolveContext } from "../../domain/resolver-types.ts";
@@ -37,16 +39,26 @@ export interface CandidateRow {
 
 type ResolvedCandidate =
   | { readonly kind: "cold" }
-  | { readonly kind: "resolved"; readonly resolved: Awaited<ReturnType<typeof resolveStrict>> };
+  | {
+      readonly kind: "resolved";
+      readonly resolved: Awaited<ReturnType<typeof resolveStrict>>;
+      /** VER-01: the version of a warm git tree, which replaces the entry's. */
+      readonly version?: string;
+    };
 
-function candidateRowFields(manifestEntry: ManifestPluginEntry): {
+interface CandidateRowFields {
   readonly name: string;
   readonly version?: string;
   readonly description?: string;
-} {
+}
+
+function candidateRowFields(
+  manifestEntry: ManifestPluginEntry,
+  version: string | undefined = manifestEntry.version,
+): CandidateRowFields {
   return {
     name: manifestEntry.name,
-    ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
+    ...(version !== undefined && { version }),
     ...(manifestEntry.description !== undefined && { description: manifestEntry.description }),
   };
 }
@@ -88,13 +100,20 @@ async function resolveCandidateEntry(
     return { kind: "cold" };
   }
 
-  return {
-    kind: "resolved",
-    resolved: await resolveStrict(manifestEntry, {
-      ...marketplaceContext,
-      resolveGitPluginRoot: probe,
-    }),
-  };
+  const resolved = await resolveStrict(manifestEntry, {
+    ...marketplaceContext,
+    resolveGitPluginRoot: probe,
+  });
+  if (presence.kind !== "materialized") {
+    return { kind: "resolved", resolved };
+  }
+
+  // VER-01: the version an install of the warm tree records -- the declared
+  // version (plugin.json, then the entry), else its commit.
+  const version =
+    (await resolveDeclaredPluginVersion(manifestEntry, presence.pluginRoot)) ??
+    shaVersion(presence.resolvedSha);
+  return { kind: "resolved", resolved, version };
 }
 
 function partialCandidateReasons(
@@ -108,7 +127,7 @@ function partialCandidateReasons(
 }
 
 function resolvedCandidateRow(
-  manifestEntry: ManifestPluginEntry,
+  fields: CandidateRowFields,
   resolved: Awaited<ReturnType<typeof resolveStrict>>,
   claimsInstallDisabled: boolean,
 ): CandidateRow {
@@ -119,7 +138,7 @@ function resolvedCandidateRow(
       return {
         message: {
           status: "available",
-          ...candidateRowFields(manifestEntry),
+          ...fields,
           ...installsDisabledField(claimsInstallDisabled),
         },
         bucket,
@@ -128,7 +147,7 @@ function resolvedCandidateRow(
       return {
         message: {
           status: "partially-available",
-          ...candidateRowFields(manifestEntry),
+          ...fields,
           reasons: partialCandidateReasons(resolved.unsupported, claimsInstallDisabled),
         },
         bucket,
@@ -137,7 +156,7 @@ function resolvedCandidateRow(
       return {
         message: {
           status: "unavailable",
-          ...candidateRowFields(manifestEntry),
+          ...fields,
           reasons: narrowResolverNotes(resolved.notes),
         },
         bucket,
@@ -183,7 +202,11 @@ export async function availableRowMessage(
       };
     }
 
-    return resolvedCandidateRow(manifestEntry, outcome.resolved, claimsInstallDisabled);
+    return resolvedCandidateRow(
+      candidateRowFields(manifestEntry, outcome.version ?? manifestEntry.version),
+      outcome.resolved,
+      claimsInstallDisabled,
+    );
   } catch (probeErr) {
     return probeFailureRow(manifestEntry, probeErr);
   }

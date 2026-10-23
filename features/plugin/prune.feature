@@ -51,8 +51,8 @@ Feature: Plugin prune
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status      | reasons           | scope   | version          |
-      | gits             | project           | ghp@gits | ghp  | uninstalled | dependency pruned | project | {ghp revision 1} |
+      | marketplace name | marketplace scope | id       | name | status      | reasons           | scope   | version |
+      | gits             | project           | ghp@gits | ghp  | uninstalled | dependency pruned | project | 1.0.0   |
     Then the project scope has no installed plugins
     Then the project scope holds no git clones
     Then the git host receives no request

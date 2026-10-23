@@ -460,7 +460,7 @@ async function seedGitUpdateMarketplace(opts: {
         marketplaceRoot,
         plugins: {
           gp: {
-            version: `sha-${opts.recordedSha.slice(0, 12)}`,
+            version: opts.versionTag,
             installedAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
             enabled: true,
@@ -7958,7 +7958,9 @@ async function seedGitPluginMarketplace(opts: {
     // Copy the fixture tree into the clone root directly (warm cache seed).
     await mkdir(path.dirname(cloneRoot), { recursive: true });
     await cp(opts.fixtureRepoDir, cloneRoot, { recursive: true });
-    const record = makePluginRecord(`sha-${sha.slice(0, 12)}`);
+    // VER-01: a record made by an install of the fixture tree, which
+    // declares `versionTag`.
+    const record = makePluginRecord(opts.versionTag);
     plugins[name] = {
       ...record,
       resolvedSource: cloneRoot,
@@ -7996,7 +7998,7 @@ async function seedGitPluginMarketplace(opts: {
     : { marketplaceRoot, manifestPath, oldCloneRoot };
 }
 
-test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded -> swap; resolvedSha + shaVersion updated, old clone GC'd, new clone present", async () => {
+test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded -> swap; resolvedSha updated at the same declared version, old clone GC'd, new clone present", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await createCaseDir("update-git-pinned-swap-");
@@ -8036,7 +8038,8 @@ test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded ->
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.ok(record !== undefined, "a state record must survive the swap");
       assert.equal(record.resolvedSha, SHA_NEW, "resolvedSha swaps to the new manifest sha");
-      assert.equal(record.version, `sha-${SHA_NEW.slice(0, 12)}`, "version is shaVersion(new)");
+      // D-16-09: the commit moved, so it is an update at the same declared version.
+      assert.equal(record.version, "9.9.9", "VER-01: version is the declared version");
 
       const newCloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA_NEW));
       assert.equal(record.resolvedSource, newCloneRoot, "resolvedSource points at the new clone");
@@ -8228,7 +8231,7 @@ test("PURL-06 / D-78-05 pinned unchanged: manifest sha equals recorded -> outcom
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.equal(record?.resolvedSha, SHA_OLD, "recorded sha unchanged");
-      assert.equal(record?.version, `sha-${SHA_OLD.slice(0, 12)}`, "version unchanged");
+      assert.equal(record?.version, "9.9.9", "version unchanged");
       // The warm-cache clone was never re-cloned, and the (unchanged) short-
       // circuit did not GC the still-referenced clone.
       assert.equal(gitState.cloneCalls.length, 0, "no clone on an equal-sha (unchanged) update");
@@ -8249,11 +8252,11 @@ test("PURL-06 / D-78-05 pinned unchanged: manifest sha equals recorded -> outcom
   });
 });
 
-test("ENBL-09 / PURL-09: refreshing a DISABLED git-source record moves resolvedSha with the sha-derived version", async () => {
-  // For a git source `toVersion` is shaVersion(resolvedSha), so a refresh that
-  // bumps `version` without `resolvedSha` leaves the record advertising the new
-  // commit while `reinstall` still pins its re-clone to the OLD one -- a silent
-  // revert of the update. The two fields must agree after the refresh.
+test("ENBL-09 / PURL-09: refreshing a DISABLED git-source record moves resolvedSha with its version", async () => {
+  // A refresh that moves the commit without `resolvedSha` leaves the record
+  // naming the new tree while `reinstall` still pins its re-clone to the OLD
+  // commit -- a silent revert of the update. The two fields must agree after
+  // the refresh.
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-git-disabled-refresh-");
     try {
@@ -8303,11 +8306,12 @@ test("ENBL-09 / PURL-09: refreshing a DISABLED git-source record moves resolvedS
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.ok(record !== undefined);
-      assert.equal(record.version, `sha-${SHA_NEW.slice(0, 12)}`, "version is shaVersion(new)");
+      // D-16-09: the commit moved, so it is an update at the same declared version.
+      assert.equal(record.version, "9.9.9", "VER-01: version is the declared version");
       assert.equal(record.resolvedSha, SHA_NEW, "the pin moves with the sha-derived version");
-      assert.equal(
-        record.version,
-        `sha-${(record.resolvedSha ?? "").slice(0, 12)}`,
+      assert.deepEqual(
+        { version: record.version, resolvedSha: record.resolvedSha },
+        { version: "9.9.9", resolvedSha: SHA_NEW },
         "version and resolvedSha must describe the SAME commit after the refresh",
       );
       // The refresh never re-materializes: the record stays disabled and empty.
@@ -8994,7 +8998,7 @@ test("GIT-01 unpinned update: refreshes the mirror in place and re-anchors the r
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.equal(record?.resolvedSha, SHA_NEW, "records the refreshed mirror HEAD sha");
-      assert.equal(record?.version, `sha-${SHA_NEW.slice(0, 12)}`, "version is shaVersion(HEAD)");
+      assert.equal(record?.version, "9.9.9", "VER-01: version is the declared version");
 
       // GIT-01: the record anchors to the per-commit copy at the mirror HEAD.
       const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
@@ -9117,11 +9121,7 @@ test("MIRR-01 / NFR-3 vanished repo: unpinned mirror update whose clone throws -
       const record = after.marketplaces["mp"]?.plugins["gp"];
       // NFR-3 fail-clean: the plugin STAYS on its recorded sha (no swap).
       assert.equal(record?.resolvedSha, SHA_OLD, "plugin stays on its recorded sha");
-      assert.equal(
-        record?.version,
-        `sha-${SHA_OLD.slice(0, 12)}`,
-        "version stays at the recorded sha",
-      );
+      assert.equal(record?.version, "9.9.9", "version stays at the recorded version");
       // The old clone is untouched (still referenced).
       assert.equal(await pathExists(seeded.oldCloneRoot ?? ""), true, "recorded clone untouched");
       // A failure surfaced through the EXISTING network-unreachable REASON token
@@ -9238,7 +9238,8 @@ test("PURL-03 pinned git-subdir update: the new clone's subdir anchors the plugi
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.ok(record !== undefined, "a state record survives the swap");
       assert.equal(record.resolvedSha, SHA_NEW, "resolvedSha swaps to the new manifest sha");
-      assert.equal(record.version, `sha-${SHA_NEW.slice(0, 12)}`, "version is shaVersion(new)");
+      // D-16-09: the commit moved, so it is an update at the same declared version.
+      assert.equal(record.version, "9.9.9", "VER-01: version is the declared version");
 
       const newCloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA_NEW));
       assert.equal(
@@ -9601,8 +9602,8 @@ test("updateSinglePlugin keeps a recorded provider SHA offline without an auth c
     assert.deepEqual(outcome, {
       partition: "unchanged",
       name: "gp",
-      fromVersion: "sha-111111111111",
-      toVersion: "sha-111111111111",
+      fromVersion: "9.9.9",
+      toVersion: "9.9.9",
       declaresAgents: false,
       declaresMcp: false,
       constraint: undefined,
@@ -10736,7 +10737,7 @@ test("a disabled update accepts a concurrent writer that already stored the next
           const state = await loadState(locations.extensionRoot);
           const record = state.marketplaces["mp"]?.plugins["gp"];
           assert.ok(record !== undefined);
-          record.version = "sha-222222222222";
+          record.version = "9.9.9";
           record.resolvedSource = nextCloneRoot;
           record.resolvedSha = SHA_NEW;
           record.compatibility = {
@@ -10753,7 +10754,7 @@ test("a disabled update accepts a concurrent writer that already stored the next
       assert.equal(notifications.length, 1);
       const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
       assert.ok(record !== undefined);
-      assert.equal(record.version, "sha-222222222222");
+      assert.equal(record.version, "9.9.9");
       assert.equal(record.resolvedSource, nextCloneRoot);
       assert.equal(record.resolvedSha, SHA_NEW);
       assert.equal(record.enabled, false);

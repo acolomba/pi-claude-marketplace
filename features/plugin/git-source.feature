@@ -19,8 +19,8 @@ Feature: Plugin git source
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name     | status    | reasons | scope   | version                   |
-      | gits             | project           | <plugin>@gits | <plugin> | installed |         | project | {<repository> revision 1} |
+      | marketplace name | marketplace scope | id            | name     | status    | reasons | scope   | version |
+      | gits             | project           | <plugin>@gits | <plugin> | installed |         | project | 1.0.0   |
     Then the git host receives these requests:
       | method | path                                                     | status |
       | GET    | /acme/<repository>.git/info/refs?service=git-upload-pack | 200    |
@@ -54,8 +54,8 @@ Feature: Plugin git source
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status    | reasons | scope   | version           |
-      | gits             | project           | subq@gits | subq | installed |         | project | {mono revision 1} |
+      | marketplace name | marketplace scope | id        | name | status    | reasons | scope   | version |
+      | gits             | project           | subq@gits | subq | installed |         | project | 1.0.0   |
     Then the git host receives no request
 
   Scenario: Uninstalling one of two plugins pinned to one commit keeps the clone the other still uses
@@ -77,8 +77,8 @@ Feature: Plugin git source
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status      | reasons | scope   | version           |
-      | gits             | project           | subp@gits | subp | uninstalled |         | project | {mono revision 1} |
+      | marketplace name | marketplace scope | id        | name | status      | reasons | scope   | version |
+      | gits             | project           | subp@gits | subp | uninstalled |         | project | 1.0.0   |
     Then the project scope holds these git clones:
       | clone  | origin                           | revision          |
       | plugin | https://{git host}/acme/mono.git | {mono revision 1} |
@@ -99,8 +99,8 @@ Feature: Plugin git source
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | version          |
-      | gits             | project           | ghp@gits | ghp  | uninstalled |         | project | {ghp revision 1} |
+      | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | version |
+      | gits             | project           | ghp@gits | ghp  | uninstalled |         | project | 1.0.0   |
     Then the project scope holds no git clones
 
   Scenario Outline: An install fails as <reason> when the git host <refusal> and leaves nothing behind
@@ -191,3 +191,38 @@ Feature: Plugin git source
       | plugin | https://{git host}/acme/urlp.git |                   |
       | plugin | https://{git host}/acme/urlp.git | {urlp revision 1} |
     Then the git-source plugin "urlp" installed in the project scope runs revision 1 of its repository
+
+  Scenario: A git-source plugin that declares no version is shown by its commit
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the git-source plugin "ghp" of the git repository "ghp" declares no version
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version          |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | {ghp revision 2} |
+    When the user runs "/claude:plugin list --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version          |
+      | gits             | project           | ghp@gits | ghp  | installed |         | project | {ghp revision 2} |
+    When the user runs "/claude:plugin info ghp@gits"
+    Then the result has these fields:
+      | kind                           | plugin-info      |
+      | marketplace details autoupdate | false            |
+      | marketplace name               | gits             |
+      | marketplace scope              | project          |
+      | needs reload                   | false            |
+      | plugin components resolved     | true             |
+      | plugin components skills       | ghp-skill        |
+      | plugin id                      | ghp@gits         |
+      | plugin name                    | ghp              |
+      | plugin reasons                 |                  |
+      | plugin scope                   | project          |
+      | plugin status                  | installed        |
+      | plugin version                 | {ghp revision 2} |
+      | severity                       | info             |

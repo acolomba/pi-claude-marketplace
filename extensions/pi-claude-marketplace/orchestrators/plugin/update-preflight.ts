@@ -6,7 +6,6 @@ import {
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
-import { shaVersion } from "../../domain/version.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
@@ -311,12 +310,40 @@ async function deriveUpdateToVersion(
     return pinnedVersion;
   }
 
-  const kind = parsePluginSource(entry.source).kind;
-  if ((kind === "url" || kind === "git-subdir" || kind === "github") && resolvedSha !== undefined) {
-    return shaVersion(resolvedSha);
+  return resolvePluginVersion(
+    entry,
+    installable,
+    isGitSourceEntry(entry) ? resolvedSha : undefined,
+  );
+}
+
+/**
+ * D-16-09: whether an update candidate is the revision the record holds. A git
+ * source that moved to a new commit is a new revision even when its declared
+ * version did not change, because the stored sha is the revision; a record
+ * that stores no sha leaves the version alone to decide.
+ */
+function isSameRevision(
+  entry: PluginEntry,
+  record: PluginStateRecord,
+  toVersion: string,
+  resolvedSha: string | undefined,
+): boolean {
+  if (toVersion !== record.version) {
+    return false;
   }
 
-  return resolvePluginVersion(entry, installable);
+  return (
+    !isGitSourceEntry(entry) ||
+    record.resolvedSha === undefined ||
+    resolvedSha === record.resolvedSha
+  );
+}
+
+/** Whether `entry` installs from a git source (url / git-subdir / github). */
+function isGitSourceEntry(entry: PluginEntry): boolean {
+  const kind = parsePluginSource(entry.source).kind;
+  return kind === "url" || kind === "git-subdir" || kind === "github";
 }
 
 function isPartialableUpdateShapeError(error: unknown): error is PartialableUpdateShapeError {
@@ -684,7 +711,9 @@ async function refreshDisabledPluginUpdate(
     }
   }
 
-  if (preflight.toVersion === preflight.fromVersion) {
+  if (
+    isSameRevision(preflight.entry, preflight.record, preflight.toVersion, preflight.resolvedSha)
+  ) {
     return {
       partition: "unchanged",
       name: options.plugin,
@@ -928,7 +957,10 @@ export async function preparePluginUpdate(
     return stageTwoHold;
   }
 
-  if (toVersion === triaged.record.version && !isRecordedButDisabled(triaged.record)) {
+  if (
+    isSameRevision(triaged.entry, triaged.record, toVersion, resolvedSha) &&
+    !isRecordedButDisabled(triaged.record)
+  ) {
     return {
       partition: "unchanged",
       name: options.plugin,

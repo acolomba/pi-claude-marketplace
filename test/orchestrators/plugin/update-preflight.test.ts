@@ -787,10 +787,11 @@ test("prepares pinned and unpinned URL clones with their exact resolved sha", as
   // assert
   assert.ok(!("partition" in pinnedPrepared));
   assert.strictEqual(pinnedPrepared.resolvedSha, pinnedSha);
-  assert.strictEqual(pinnedPrepared.toVersion, "sha-111111111111");
+  // VER-01: the declared version, not the sha, names the update target.
+  assert.strictEqual(pinnedPrepared.toVersion, "2.0.0");
   assert.ok(!("partition" in unpinnedPrepared));
   assert.strictEqual(unpinnedPrepared.resolvedSha, unpinnedSha);
-  assert.strictEqual(unpinnedPrepared.toVersion, "sha-222222222222");
+  assert.strictEqual(unpinnedPrepared.toVersion, "2.0.0");
 });
 
 test("UPDT-01: a tag-pinned update records the tag's version, not a sha", async (t) => {
@@ -1207,7 +1208,7 @@ test("swallows disabled clone cleanup failure after persisting the new pin", asy
   assert.strictEqual(outcome.partition, "skipped");
   const refreshed = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
   assert.strictEqual(refreshed?.resolvedSha, sha);
-  assert.strictEqual(refreshed?.version, "sha-333333333333");
+  assert.strictEqual(refreshed?.version, "2.0.0");
 });
 
 test("cleans obsolete clones after persisting a disabled git pin", async (t) => {
@@ -1597,7 +1598,7 @@ test("does not rewrite a concurrently converged disabled pin", async (t) => {
   const state = await loadState(seed.locations.extensionRoot);
   const record = state.marketplaces.mp?.plugins.hello;
   assert.ok(record !== undefined);
-  record.version = "sha-999999999999";
+  record.version = "2.0.0";
   record.resolvedSource = seed.pluginRoot;
   record.resolvedSha = sha;
   record.compatibility = { installable: true, notes: [], supported: ["skills"], unsupported: [] };
@@ -1612,3 +1613,36 @@ test("does not rewrite a concurrently converged disabled pin", async (t) => {
   assert.strictEqual(outcome.partition, "skipped");
   assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), converged);
 });
+
+for (const { label, recordedSha, partition } of [
+  {
+    label: "is unchanged at the recorded commit",
+    recordedSha: "1".repeat(40),
+    partition: "unchanged",
+  },
+  { label: "updates to a new commit", recordedSha: "0".repeat(40), partition: undefined },
+]) {
+  test(`D-16-09: a git source at the same declared version ${label}`, async (t) => {
+    // arrange
+    const sha = "1".repeat(40);
+    const seed = await seedUpdate({
+      installed: { ...pluginRecord("2.0.0"), resolvedSha: recordedSha },
+      source: { source: "url", url: "https://example.com/pinned", sha },
+    });
+    t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+    const cloneCacheSeam: UpdateCloneCacheSeam = {
+      resolvePluginPin: () => Promise.resolve({ cloneUrl: "https://example.com/pinned", pin: sha }),
+      materializePluginClone: () => Promise.resolve(seed.pluginRoot),
+      materializeOrRefreshPluginMirror: () =>
+        Promise.reject(new Error("unexpected mirror refresh")),
+      materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
+    };
+
+    // act
+    const outcome = await prepare(seed, { cloneCacheSeam });
+
+    // assert
+    assert.strictEqual("partition" in outcome ? outcome.partition : undefined, partition);
+    assert.strictEqual("toVersion" in outcome ? outcome.toVersion : undefined, "2.0.0");
+  });
+}
