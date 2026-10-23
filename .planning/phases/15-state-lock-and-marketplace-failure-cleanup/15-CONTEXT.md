@@ -77,6 +77,11 @@ Owned files: `features/plugin/state-lock.feature`,
   chain. Never `internal-error`. Reuse the marketplace-failure row helper that
   update/autoupdate already use rather than a new renderer. For `add`, the
   row names the marketplace the add would have created.
+- **D-04 (amended):** The lock-held `marketplace add` rows are named by the
+  typed source, not by the marketplace the add would have created, because
+  the add takes the lock before it reads a manifest (ATTR-07 A2). The child
+  row is a marketplace subject, so its JSON id is the bare source (ADD-10),
+  like every other failed-add child row, not `<source>@<source>`.
 - **D-05:** `reinstall`'s lock-held row also carries the StateLockHeldError
   cause chain, like uninstall. If the planner finds this needs more than a
   local change in the reinstall failure projection, leave it as is and record

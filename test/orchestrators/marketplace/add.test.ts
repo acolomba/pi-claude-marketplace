@@ -2902,6 +2902,82 @@ test("FLR-02: an orchestrated add under a held state lock returns lock held and 
   });
 });
 
+test("FLR-02: a lock-held add's JSON child row takes the source as typed as its id", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-lock-held-json-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    when(() => ctx.mode)
+      .thenReturn("json")
+      .once();
+    const inventory = mock<
+      Pick<Parameters<typeof openNotificationRun>[0], "getAllTools" | "getCommands">
+    >({ exactParams: true, name: "inventory" });
+    when(() => inventory.getAllTools())
+      .thenReturn([])
+      .times(3);
+    when(() => inventory.getCommands())
+      .thenReturn([])
+      .once();
+    const run = openNotificationRun(
+      {
+        getAllTools: () => inventory.getAllTools(),
+        getCommands: () => inventory.getCommands(),
+        appendEntry: capture.entrySink.appendEntry,
+      },
+      { kind: "command", commandId: "plugin", invocationId: "test-run" },
+    );
+    const { gitOps, state } = createGitOps();
+
+    // act
+    await whileLockHeld(locations, () =>
+      addMarketplace({ ctx, run, scope: "project", cwd, rawSource: "owner/repo", gitOps }),
+    );
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+          kind: "cascade",
+          severity: "error",
+          needsReload: false,
+          summary: "Some operations have failed.",
+          marketplaces: [
+            {
+              name: "owner/repo",
+              scope: "project",
+              status: "failed",
+              plugins: [
+                {
+                  status: "failed",
+                  name: "owner/repo",
+                  id: "owner/repo",
+                  reasons: ["lock held"],
+                  scope: "project",
+                  cause: {
+                    causeChain: [lockHeldCause(locations), "Lock file is already being held"],
+                    truncated: false,
+                  },
+                  leaks: [],
+                  rollbackPartial: [],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    ]);
+    capture.assertValid();
+    assert.deepStrictEqual(state, NO_GIT_CALLS);
+    verify(inventory);
+    verify(ctx);
+  });
+});
+
 test("orchestrated mode normalizes a non-Error opaque failure without mutation", async (t) => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange

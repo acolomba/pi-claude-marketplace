@@ -134,8 +134,8 @@ Feature: Marketplace state lock
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id                | name     | status | reasons   | scope   | cause chain                                                                                                                                                                           | cause truncated | leaks | rollback partial |
-      | <source>         | <scope>           | failed             | <source>@<source> | <source> | failed | lock held | <scope> | Another pi-claude-marketplace operation is in progress for <scope> scope (<scope root>/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id       | name     | status | reasons   | scope   | cause chain                                                                                                                                                                           | cause truncated | leaks | rollback partial |
+      | <source>         | <scope>           | failed             | <source> | <source> | failed | lock held | <scope> | Another pi-claude-marketplace operation is in progress for <scope> scope (<scope root>/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
     Then the "claude-plugins.json" file of the <scope> scope does not exist
     Then the <scope> scope holds no git clones
 

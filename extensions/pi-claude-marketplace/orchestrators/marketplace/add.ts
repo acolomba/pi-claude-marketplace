@@ -820,8 +820,9 @@ function hostErrorFrame(
  * failed child carrying `lock held` and the lock error as its cause. The add
  * takes the lock before it reads a manifest, so the row names the marketplace
  * by the typed source, as every failure before the manifest read does
- * (ATTR-07 A2). The caller tests the raw error: `unwrapAddError` would read
- * its ELOCKED cause instead.
+ * (ATTR-07 A2). Its child names that source, not a plugin, so the child's
+ * JSON id is the source alone, as on every failed add (ADD-10). The caller
+ * tests the raw error: `unwrapAddError` would read its ELOCKED cause instead.
  */
 function surfaceLockHeldAdd(
   opts: AddMarketplaceOptions,
@@ -829,11 +830,13 @@ function surfaceLockHeldAdd(
   orchestrated: boolean,
 ): AddMarketplaceOutcome {
   if (!orchestrated) {
+    const [block] = marketplaceFailureRows(opts.rawSource, opts.scope, "lock held", err);
+    const plugins = block.plugins.map((row) => ({ ...row, marketplaceSubject: true as const }));
     notifyWithContext(
       opts.ctx,
       opts.run,
       ADD_CONTEXT,
-      marketplaceFailureRows(opts.rawSource, opts.scope, "lock held", err),
+      [{ ...block, plugins }],
       undefined,
       "single",
     );
