@@ -60,6 +60,7 @@ import {
   type PathSource,
 } from "../../domain/source.ts";
 import { rowClaimsInstallDisabled } from "../../domain/unsupported-components.ts";
+import { shaVersion } from "../../domain/version.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import {
   isRecordedButDisabled,
@@ -2534,6 +2535,9 @@ async function buildGitNotInstalledRow(opts: {
   }
 
   const pluginRoot = presence.pluginRoot;
+  // D-77-01: an entry that declares no version takes the warm tree's commit as
+  // its version, the version an install of that tree records.
+  const warmVersion = version ?? shaVersion(presence.resolvedSha);
   const ctx: ResolveContext = {
     marketplaceRoot: mpRecord.marketplaceRoot,
     marketplaceName: mpRecord.name,
@@ -2549,7 +2553,7 @@ async function buildGitNotInstalledRow(opts: {
         reader,
         env,
         pluginName,
-        version,
+        version: warmVersion,
         description,
         pluginRoot,
       });
@@ -2559,7 +2563,7 @@ async function buildGitNotInstalledRow(opts: {
       reader,
       env,
       pluginName,
-      version,
+      version: warmVersion,
       description,
       dependencies,
       pluginRoot,

@@ -9405,6 +9405,43 @@ test("D-01-32: a WARM git clone's plugin.json supplies the dependency list, not 
   });
 });
 
+test("D-77-01: a WARM git clone whose entry declares no version shows the clone's commit", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "gplug", source: cloneUrl }] },
+    });
+    await seedWarmMirror({
+      scope: "user",
+      cwd,
+      cloneUrl,
+      pluginJson: { name: "gplug" },
+      componentDirs: ["skills/warm-skill"],
+    });
+    const mirrorDir = await locationsFor("user", cwd).pluginCloneDir(pluginMirrorKey(cloneUrl));
+    const head = await git.resolveRef({ fs, dir: mirrorDir, ref: "HEAD" });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(
+      notifications.map(({ message }) => message),
+      [
+        "● mp [user] <no autoupdate>\n" +
+          `  ○ gplug v#${head.slice(0, 7)} (available)\n` +
+          "    skills: warm-skill",
+      ],
+    );
+  });
+});
+
 test("D-01-32 / NFR-5: a COLD git source renders the entry's list and creates no clone directory", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
