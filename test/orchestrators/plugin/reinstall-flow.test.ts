@@ -6371,6 +6371,83 @@ test("LAYER-04: the plugin form of reinstall with --local refuses a plugin only 
   });
 });
 
+/**
+ * Fresh maintenance/persistence collaborator set for one retry case. Each
+ * call returns new closures bound to that case's schedule and fault cells;
+ * nothing is shared between cases.
+ *
+ * D-18-10: the shared swap writes state twice per reinstall, its intent mark
+ * and its finalize. A persistence fault with an `ordinal` refuses only the
+ * save at that position in the active schedule (1 is the intent mark, 2 the
+ * finalize); without one it refuses every save.
+ */
+function observeRetryCollaborators(
+  schedule: { current: string[] },
+  faults?: {
+    readonly data?: { enabled: boolean; readonly message: string };
+    readonly persistence?: {
+      enabled: boolean;
+      readonly message: string;
+      readonly ordinal?: number;
+    };
+  },
+  loadStateOverride?: typeof loadState,
+): Required<Pick<ReinstallPluginOptions, "removeDataDir" | "stateTransaction">> {
+  return {
+    removeDataDir: async (target, options) => {
+      schedule.current.push("remove:data");
+      if (faults?.data?.enabled === true) {
+        throw new Error(faults.data.message);
+      }
+
+      await rm(target, options);
+    },
+    stateTransaction: {
+      ...(loadStateOverride !== undefined && { loadState: loadStateOverride }),
+      saveState: async (extensionRoot, state) => {
+        schedule.current.push("save:state");
+        const persistence = faults?.persistence;
+        const saves = schedule.current.filter((entry) => entry === "save:state").length;
+        if (
+          persistence?.enabled === true &&
+          (persistence.ordinal === undefined || persistence.ordinal === saves)
+        ) {
+          throw new Error(persistence.message);
+        }
+
+        await saveState(extensionRoot, state);
+      },
+    },
+  };
+}
+
+/** A reinstall whose completion-cache drops record into the case's schedule. */
+function createRetryReinstall(schedule: {
+  current: string[];
+}): ReturnType<typeof createReinstallPlugin> {
+  const delegate = createCompletionCache();
+  const completionCache = createCompletionCacheWithDrop(async (cachePath, scope, marketplace) => {
+    schedule.current.push("drop:cache");
+    await delegate.dropMarketplaceCache(cachePath, scope, marketplace);
+  });
+  return createReinstallPlugin(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache,
+  );
+}
+
+/** The doubled `<message>\n\ncause: <message>` shape reinstall folds onto `notes`. */
+function retryCauseChain(message: string): string {
+  return `${message}\n\ncause: ${message}`;
+}
+
+/**
+ * The schedule of a reinstall that converged: the swap's intent mark and
+ * finalize, its completion-cache refresh, then reinstall's own maintenance
+ * (D-18-05, D-18-10).
+ */
+const CONVERGED_SCHEDULE = ["save:state", "save:state", "drop:cache", "drop:cache", "remove:data"];
+
 // ──────────────────────────────────────────────────────────────────────────
 // NFR-3 failure-then-retry proof: every operation is safe to retry --
 // idempotent or fail-clean. NFR-2 bounds the recovery model: nothing below
@@ -6379,14 +6456,764 @@ test("LAYER-04: the plugin form of reinstall with --local refuses a plugin only 
 // Every case below calls the SAME exported reinstall entrypoint twice inside
 // one test, over one case-owned root, in one mode, against one target or
 // ordered target set. Between the two calls it repairs only the injected
-// collaborator or the case-owned fault fixture -- never the bytes, tree, or
-// residue the first call left behind.
+// fault -- never the bytes, tree, or residue the first call left behind.
 //
-// The mcp and hooks bridges write through `write-file-atomic`, so their
-// commits carry no observable `node:fs/promises` signature; those two are
-// proven by the authoritative bytes and the owned-tree inventory instead of
-// by a schedule entry.
+// The schedule records the state writes, the completion-cache drops, and the
+// plugin-data removal. The bridge commits carry no schedule entry; they are
+// proven by the authoritative bytes and the owned-tree inventory.
 // ──────────────────────────────────────────────────────────────────────────
+
+test("retry proof: reinstall: skills prepare failure with no prepared handles converges on the same root", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-skills-prepare-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { command: "old command", skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        command: "new command",
+        skill: "new skill",
+      });
+      const manifestBytes = await readFile(seeded.manifestPath, "utf8");
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const configBytes = await readFile(locations.baseConfigJsonPath, "utf8");
+      const oldSkill = await readSkill(cwd);
+      const oldCommand = await readCommand(cwd);
+      await rm(locations.skillsStagingDir, { force: true, recursive: true });
+      await writeFile(locations.skillsStagingDir, "fault: skills staging is not a directory");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
+      const reinstall = createRetryReinstall(activeSchedule);
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
+      });
+
+      // act
+      const first = await reinstall({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        run,
+        plugin: "hello",
+        removeDataDir,
+        render: "none",
+        scope: "project",
+        stateTransaction,
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstSkill = await readSkill(cwd);
+      const firstCommand = await readCommand(cwd);
+      await rm(locations.skillsStagingDir, { force: true });
+      activeSchedule.current = secondSchedule;
+      const second = await reinstall({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        run,
+        plugin: "hello",
+        removeDataDir,
+        render: "none",
+        scope: "project",
+        stateTransaction,
+      });
+
+      // assert
+      assert.equal(first.partition, "failed");
+      assert.deepStrictEqual(Object.keys(first).sort(), [
+        "marketplace",
+        "name",
+        "notes",
+        "partition",
+        "reasons",
+        "scope",
+      ]);
+      assert.deepStrictEqual(first.reasons, ["source missing"]);
+      assert.match(
+        first.notes[0] ?? "",
+        new RegExp(
+          `^ENOTDIR: not a directory, mkdir '${locations.skillsStagingDir}/[0-9a-f-]+'\\n\\ncause: ENOTDIR: not a directory, mkdir '${locations.skillsStagingDir}/[0-9a-f-]+'$`,
+        ),
+      );
+      assert.equal(first.notes.length, 1);
+      assert.equal(second.partition, "reinstalled");
+      assert.deepStrictEqual(second, {
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        marketplace: "mp",
+        name: "hello",
+        partition: "reinstalled",
+        scope: "project",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        version: "1.0.0",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.equal(firstStateBytes, stateBytes);
+      assert.equal(await readFile(seeded.manifestPath, "utf8"), manifestBytes);
+      assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), configBytes);
+      assert.equal(firstSkill, oldSkill);
+      assert.equal(firstCommand, oldCommand);
+      assert.deepStrictEqual(firstSchedule, []);
+      assert.deepStrictEqual(secondSchedule, CONVERGED_SCHEDULE);
+      assert.deepStrictEqual(firstTree, [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.match(await readSkill(cwd), /new skill/);
+      assert.match(await readCommand(cwd), /new command/);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.resources,
+        {
+          agents: [],
+          hooks: [],
+          mcpServers: [],
+          prompts: ["hello:deploy"],
+          skills: ["hello-tool"],
+          workflows: [],
+        },
+      );
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: reinstall: commands prepare failure aborts the one prepared handle and converges", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-commands-prepare-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { command: "old command", skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        command: "new command",
+        skill: "new skill",
+      });
+      const manifestBytes = await readFile(seeded.manifestPath, "utf8");
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const oldSkill = await readSkill(cwd);
+      await rm(locations.commandsStagingDir, { force: true, recursive: true });
+      await writeFile(locations.commandsStagingDir, "fault: commands staging is not a directory");
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
+      const reinstall = createRetryReinstall(activeSchedule);
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
+      });
+
+      // act
+      const first = await reinstall({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        run,
+        plugin: "hello",
+        removeDataDir,
+        render: "none",
+        scope: "project",
+        stateTransaction,
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstSkill = await readSkill(cwd);
+      await rm(locations.commandsStagingDir, { force: true });
+      activeSchedule.current = secondSchedule;
+      const second = await reinstall({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        run,
+        plugin: "hello",
+        removeDataDir,
+        render: "none",
+        scope: "project",
+        stateTransaction,
+      });
+
+      // assert
+      assert.equal(first.partition, "failed");
+      assert.equal(first.failureClass, undefined);
+      assert.deepStrictEqual(first.reasons, ["source missing"]);
+      assert.match(
+        first.notes[0] ?? "",
+        new RegExp(
+          `^ENOTDIR: not a directory, mkdir '${locations.commandsStagingDir}/[0-9a-f-]+'\\n\\ncause: `,
+        ),
+      );
+      assert.equal(second.partition, "reinstalled");
+      assert.deepStrictEqual(second, {
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        marketplace: "mp",
+        name: "hello",
+        partition: "reinstalled",
+        scope: "project",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        version: "1.0.0",
+      });
+      assert.deepStrictEqual(notifications, []);
+      assert.equal(firstStateBytes, stateBytes);
+      assert.equal(await readFile(seeded.manifestPath, "utf8"), manifestBytes);
+      assert.equal(firstSkill, oldSkill);
+      assert.deepStrictEqual(firstSchedule, []);
+      assert.deepStrictEqual(secondSchedule, CONVERGED_SCHEDULE);
+      assert.deepStrictEqual(firstTree, [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.match(await readSkill(cwd), /new skill/);
+      assert.match(await readCommand(cwd), /new command/);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: reinstall: MCP prepare failure aborts three prepared handles newest first", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-mcp-prepare-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { agent: "old agent", command: "old command", mcp: true, skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        agent: "new agent",
+        command: "new command",
+        mcp: true,
+        skill: "new skill",
+      });
+      const agentPath = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const mcpBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+      const oldAgent = await readFile(agentPath, "utf8");
+      await rm(locations.mcpAdapterJsonPath, { force: true });
+      await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
+      // Read back the runtime's own errno wording: later majors append the offending path to it.
+      // The failure's IDENTITY is not runtime-owned, so it is pinned here rather than left to the
+      // composition: the probe is the same read production makes, so it moves with whatever is on
+      // disk. A fixture that drifted to a missing file would report ENOENT on both sides and leave
+      // this case green against a different failure entirely.
+      const readFailure = await readFile(locations.mcpAdapterJsonPath, "utf8").catch(
+        (error: unknown) => {
+          const errno = error as NodeJS.ErrnoException;
+          assert.deepStrictEqual(
+            { code: errno.code, syscall: errno.syscall },
+            { code: "EISDIR", syscall: "read" },
+          );
+          return errno.message;
+        },
+      );
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule);
+      const reinstall = createRetryReinstall(activeSchedule);
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
+      });
+
+      // act
+      const first = await reinstall({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        run,
+        plugin: "hello",
+        removeDataDir,
+        render: "none",
+        scope: "project",
+        stateTransaction,
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstAgent = await readFile(agentPath, "utf8");
+      await rm(locations.mcpAdapterJsonPath, { force: true, recursive: true });
+      activeSchedule.current = secondSchedule;
+      const second = await reinstall({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        run,
+        plugin: "hello",
+        removeDataDir,
+        render: "none",
+        scope: "project",
+        stateTransaction,
+      });
+
+      // assert
+      assert.equal(first.partition, "failed");
+      assert.equal(first.failureClass, undefined);
+      assert.equal(first.reasons, undefined);
+      assert.deepStrictEqual(first.notes, [retryCauseChain(readFailure)]);
+      assert.equal(second.partition, "reinstalled");
+      assert.deepStrictEqual(second.stagedMcpServerNames, ["server1"]);
+      assert.deepStrictEqual(second.stagedAgentNames, ["pi-claude-marketplace-hello-bot"]);
+      assert.equal(second.version, "1.0.0");
+      // D-18-02: the agents hygiene warning does not ride `notes` in direct mode.
+      assert.equal(second.notes, undefined);
+      assert.deepStrictEqual(notifications, []);
+      assert.equal(firstStateBytes, stateBytes);
+      assert.equal(firstAgent, oldAgent);
+      assert.deepStrictEqual(firstSchedule, []);
+      assert.deepStrictEqual(secondSchedule, CONVERGED_SCHEDULE);
+      assert.deepStrictEqual(firstTree, [
+        "agents/",
+        "agents/pi-claude-marketplace-hello-bot.md",
+        "claude-plugins.json",
+        "mcp-adapter.json/",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/agents-index.json",
+        "pi-claude-marketplace/agents-staging/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "agents/",
+        "agents/pi-claude-marketplace-hello-bot.md",
+        "claude-plugins.json",
+        "mcp-adapter.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/agents-index.json",
+        "pi-claude-marketplace/agents-staging/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.equal(await readFile(locations.mcpAdapterJsonPath, "utf8"), mcpBytes);
+      assert.match(await readFile(agentPath, "utf8"), /new agent/);
+      assert.match(await readSkill(cwd), /new skill/);
+    } finally {
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: reinstall: a refused intent-mark save changes nothing and the retry converges the record", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-hooks-window-"));
+    const persistenceFault = { enabled: true, message: "state persistence refused", ordinal: 1 };
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: {
+          hooksJson: {
+            hooks: {
+              PreToolUse: [{ hooks: [{ command: "echo ok", type: "command" }], matcher: "Bash" }],
+            },
+          },
+          skill: "old skill",
+        },
+        install: true,
+      });
+      await rm(path.join(seeded.pluginRoot, "hooks"), { force: true, recursive: true });
+      await writePluginTree(seeded.pluginRoot, "hello", { skill: "new skill" });
+      const stateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const hooksPath = path.join(locations.hooksDir, "hello", "hooks.json");
+      const hooksBytes = await readFile(hooksPath, "utf8");
+      const oldSkill = await readSkill(cwd);
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule, {
+        persistence: persistenceFault,
+      });
+      const reinstall = createRetryReinstall(activeSchedule);
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
+      });
+
+      // act
+      const first = await reinstall({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        run,
+        plugin: "hello",
+        removeDataDir,
+        render: "none",
+        scope: "project",
+        stateTransaction,
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstStateBytes = await readFile(locations.stateJsonPath, "utf8");
+      const firstRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      const firstSkill = await readSkill(cwd);
+      const firstHooks = await readFile(hooksPath, "utf8");
+      persistenceFault.enabled = false;
+      activeSchedule.current = secondSchedule;
+      const second = await reinstall({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        run,
+        plugin: "hello",
+        removeDataDir,
+        render: "none",
+        scope: "project",
+        stateTransaction,
+      });
+
+      // assert
+      assert.equal(first.partition, "failed");
+      assert.equal(first.failureClass, undefined);
+      assert.deepStrictEqual(first.notes, [retryCauseChain("state persistence refused")]);
+      assert.equal(second.partition, "reinstalled");
+      assert.equal(second.version, "1.0.0");
+      assert.deepStrictEqual(notifications, []);
+      assert.equal(firstStateBytes, stateBytes);
+      assert.equal(firstSkill, oldSkill);
+      // D-18-10: the first save is the swap's intent mark, so the refusal
+      // lands before any commit: the hooks subtree and the record's hooks
+      // inventory are both untouched.
+      assert.deepStrictEqual(firstRecord?.resources.hooks, ["hello"]);
+      assert.equal(firstHooks, hooksBytes);
+      assert.deepStrictEqual(firstSchedule, ["save:state"]);
+      assert.deepStrictEqual(secondSchedule, CONVERGED_SCHEDULE);
+      assert.deepStrictEqual(firstTree, [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/hooks/",
+        "pi-claude-marketplace/hooks/hello/",
+        "pi-claude-marketplace/hooks/hello/hooks.json",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "claude-plugins.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/hooks/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(
+        (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["hello"]?.resources,
+        {
+          agents: [],
+          hooks: [],
+          mcpServers: [],
+          prompts: [],
+          skills: ["hello-tool"],
+          workflows: [],
+        },
+      );
+      assert.match(await readSkill(cwd), /new skill/);
+    } finally {
+      persistenceFault.enabled = false;
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("retry proof: reinstall: a refused finalize save after every commit fails rollback partial and the retry converges", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-persistence-"));
+    const persistenceFault = { enabled: true, message: "state persistence refused", ordinal: 2 };
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { agent: "old agent", command: "old command", mcp: true, skill: "old skill" },
+        install: true,
+      });
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        agent: "new agent",
+        command: "new command",
+        mcp: true,
+        skill: "new skill",
+      });
+      const agentPath = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
+      const recordBefore = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.ok(recordBefore !== undefined);
+      const firstSchedule: string[] = [];
+      const secondSchedule: string[] = [];
+      const activeSchedule = { current: firstSchedule };
+      const { removeDataDir, stateTransaction } = observeRetryCollaborators(activeSchedule, {
+        persistence: persistenceFault,
+      });
+      const reinstall = createRetryReinstall(activeSchedule);
+      const { ctx, notifications, run } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
+      });
+
+      // act
+      const first = await reinstall({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        run,
+        plugin: "hello",
+        removeDataDir,
+        render: "none",
+        scope: "project",
+        stateTransaction,
+      });
+      const firstTree = await retryTree(locations.scopeRoot);
+      const firstRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      const firstMcpBytes = await readFile(locations.mcpAdapterJsonPath, "utf8");
+      const firstAgent = await readFile(agentPath, "utf8");
+      const firstSkill = await readSkill(cwd);
+      const firstCommand = await readCommand(cwd);
+      persistenceFault.enabled = false;
+      activeSchedule.current = secondSchedule;
+      const second = await reinstall({
+        ctx,
+        cwd,
+        marketplace: "mp",
+        run,
+        plugin: "hello",
+        removeDataDir,
+        render: "none",
+        scope: "project",
+        stateTransaction,
+      });
+
+      // assert
+      // D-18-10: every commit landed, so the refused finalize is a phase-3
+      // failure, not a rollback; the swap reports it against its last bridge.
+      const aggregate =
+        'Plugin "hello" failed during physical replace. plugin-uninstall + plugin-install for "hello".';
+      assert.ok(first.partition === "failed");
+      const { cause, rollbackPartial, ...firstRest } = first;
+      assert.deepStrictEqual(firstRest, {
+        partition: "failed",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        notes: [aggregate, "mcp: state finalize failed: state persistence refused"],
+        reasons: ["rollback partial"],
+      });
+      assert.ok(cause instanceof PluginUpdatePhase3Error);
+      assert.strictEqual(cause.message, aggregate);
+      assert.deepStrictEqual(
+        rollbackPartial?.map((child) => ({ phase: child.phase, message: child.cause.message })),
+        [{ phase: "mcp", message: "state persistence refused" }],
+      );
+      // The new bytes are committed, and the record still carries the swap's
+      // in-progress marker from the intent mark.
+      assert.deepStrictEqual(JSON.parse(firstMcpBytes), {
+        mcpServers: {
+          plugin_hello_server1_: {
+            command: "node",
+            args: ["server.js"],
+            env: {
+              CLAUDE_PLUGIN_ROOT: seeded.pluginRoot,
+              CLAUDE_PLUGIN_DATA: await locations.pluginDataDir("mp", "hello"),
+            },
+            directTools: "search",
+            toolPrefix: "mcp",
+            _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" },
+          },
+        },
+      });
+      assert.match(firstAgent, /new agent/);
+      assert.match(firstSkill, /new skill/);
+      assert.match(firstCommand, /new command/);
+      assert.deepStrictEqual(firstRecord, {
+        ...recordBefore,
+        compatibility: {
+          installable: false,
+          notes: ["update-in-progress"],
+          supported: ["skills", "commands", "agents"],
+          unsupported: [],
+        },
+      });
+      assert.deepStrictEqual(second, {
+        partition: "reinstalled",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        version: "1.0.0",
+        stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
+        stagedMcpServerNames: ["server1"],
+        declaresAgents: true,
+        declaresMcp: true,
+        declaresWorkflows: false,
+      });
+      const finalRecord = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.ok(finalRecord !== undefined);
+      const { updatedAt: _finalStamp, ...finalFields } = finalRecord;
+      const { updatedAt: _beforeStamp, ...beforeFields } = recordBefore;
+      assert.deepStrictEqual(finalFields, beforeFields);
+      assert.deepStrictEqual(notifications, []);
+      assert.deepStrictEqual(firstSchedule, ["save:state", "save:state"]);
+      assert.deepStrictEqual(secondSchedule, CONVERGED_SCHEDULE);
+      assert.deepStrictEqual(firstTree, [
+        "agents/",
+        "agents/pi-claude-marketplace-hello-bot.md",
+        "claude-plugins.json",
+        "mcp-adapter.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/agents-index.json",
+        "pi-claude-marketplace/agents-staging/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/data/mp/hello/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.deepStrictEqual(await retryTree(locations.scopeRoot), [
+        "agents/",
+        "agents/pi-claude-marketplace-hello-bot.md",
+        "claude-plugins.json",
+        "mcp-adapter.json",
+        "pi-claude-marketplace/",
+        "pi-claude-marketplace/agents-index.json",
+        "pi-claude-marketplace/agents-staging/",
+        "pi-claude-marketplace/commands-staging/",
+        "pi-claude-marketplace/data/",
+        "pi-claude-marketplace/data/mp/",
+        "pi-claude-marketplace/resources/",
+        "pi-claude-marketplace/resources/prompts/",
+        "pi-claude-marketplace/resources/prompts/hello:deploy.md",
+        "pi-claude-marketplace/resources/skills/",
+        "pi-claude-marketplace/resources/skills/hello-tool/",
+        "pi-claude-marketplace/resources/skills/hello-tool/SKILL.md",
+        "pi-claude-marketplace/skills-staging/",
+        "pi-claude-marketplace/state.json",
+      ]);
+      assert.match(await readFile(agentPath, "utf8"), /new agent/);
+      assert.match(await readSkill(cwd), /new skill/);
+      assert.match(await readCommand(cwd), /new command/);
+    } finally {
+      persistenceFault.enabled = false;
+      await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
 
 test("retry proof: reinstall: a post-save hook-cache read failure stays silent and the retry re-materializes once", async (t) => {
   await withHermeticHome(async () => {
