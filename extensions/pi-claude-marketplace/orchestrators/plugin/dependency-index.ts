@@ -67,6 +67,7 @@
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { InvalidMarketplaceManifestError, isErrnoException } from "../../shared/errors.ts";
+import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
 import { readDependencyDeclaration } from "./dependency-declaration-read.ts";
 
@@ -79,15 +80,15 @@ import type { Reason } from "../../shared/notification-types.ts";
 
 /**
  * REC-05: why a declarer's declarations could not be established, as the
- * token its own row renders. A dropped catalog entry is `not in manifest`; an
- * invalid marketplace manifest or a declaration the parser rejects is `invalid
- * manifest`; a marketplace manifest that is missing or cannot be read, or an own
- * manifest that is present but cannot be used, is `unreadable manifest`.
+ * token its own row renders. A dropped catalog entry is `not in manifest`; a
+ * declaration the parser rejects is `invalid manifest`; an own manifest that is
+ * present but cannot be used is `unreadable manifest`. A marketplace manifest
+ * that fails to load takes the token `list` and `info` give the same fault
+ * (`narrowProbeError`), so one fault reads the same on every surface.
  */
-export type DeclarerReadFailure = Extract<
-  Reason,
-  "not in manifest" | "invalid manifest" | "unreadable manifest"
->;
+export type DeclarerReadFailure =
+  | Extract<Reason, "not in manifest" | "invalid manifest" | "unreadable manifest">
+  | ReturnType<typeof narrowProbeError>;
 
 /**
  * One marketplace's record in the state document. Exported because the
@@ -202,23 +203,19 @@ function unreadableDeclarer(
 }
 
 /**
- * D-04 / T-05-04: the failure for a marketplace manifest that failed to load,
- * its token and phrase picked by the error's class or errno code. The error's
- * own message never reaches the cause line.
+ * D-04 / T-05-04: why a marketplace manifest failed to load, as a fixed phrase
+ * picked by the error's class or errno code. The error's own message never
+ * reaches the cause line.
  */
-function manifestLoadFailure(key: string, err: unknown): IndexFailure {
+function manifestLoadPhrase(err: unknown): string {
   if (err instanceof InvalidMarketplaceManifestError) {
-    return unreadableDeclarer(key, "invalid manifest", "its marketplace manifest is invalid");
+    return "its marketplace manifest is invalid";
   }
 
   const code = isErrnoException(err) ? err.code : undefined;
-  return unreadableDeclarer(
-    key,
-    "unreadable manifest",
-    code === "ENOENT" || code === "ENOTDIR"
-      ? "its marketplace manifest is missing"
-      : "its marketplace manifest cannot be read",
-  );
+  return code === "ENOENT" || code === "ENOTDIR"
+    ? "its marketplace manifest is missing"
+    : "its marketplace manifest cannot be read";
 }
 
 /**
@@ -242,7 +239,7 @@ export async function readRecordDeclarations(
   try {
     manifest = await (options.loadManifest ?? loadMarketplaceManifest)(marketplace.manifestPath);
   } catch (err) {
-    return manifestLoadFailure(key, err);
+    return unreadableDeclarer(key, narrowProbeError(err), manifestLoadPhrase(err));
   }
 
   const declared = lookupDeclaredPlugin(manifest, name);

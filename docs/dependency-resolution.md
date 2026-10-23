@@ -238,7 +238,7 @@ A dependency can go missing after the install that brought it in. You can uninst
 
 A declaration is unsatisfied in three cases: the dependency is not installed, the dependency is installed but disabled, or the dependency's recorded version falls outside the declared range.
 
-The check needs to read what every plugin in the scope declares. When it cannot read that for one plugin, it disables nothing in the scope on that reload, because it cannot tell which plugins are safe. It reports that plugin as a warning instead. The plugin stays installed and keeps loading. The brace names the fault: `{not in manifest}` when the marketplace no longer lists the plugin, `{invalid manifest}` when the marketplace manifest or the plugin's `dependencies` value is invalid, and `{unreadable manifest}` when a manifest is missing or cannot be read. The warning returns at every reload until you update or repair the marketplace, or uninstall the plugin:
+The check needs to read what every plugin in the scope declares. When it cannot read that for one plugin, it disables nothing in the scope on that reload, because it cannot tell which plugins are safe. It reports that plugin as a warning instead. The plugin stays installed and keeps loading. The brace names the fault: `{not in manifest}` when the marketplace no longer lists the plugin. A marketplace manifest fault gets the same token `list` and `info` show for it, such as `{unparseable}` for malformed JSON, `{invalid manifest}` for a schema-invalid manifest, or `{source missing}` for a missing one. The warning returns at every reload until you update or repair the marketplace, or uninstall the plugin:
 
 ```text
 ● mp [project]
