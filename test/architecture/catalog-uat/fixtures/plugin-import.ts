@@ -21,6 +21,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "official-plugin",
                 dependencies: [],
                 severity: "info",
@@ -35,6 +36,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "official-plugin",
                 dependencies: [],
                 severity: "info",
@@ -49,6 +51,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "local-plugin",
                 dependencies: [],
                 severity: "info",
@@ -63,6 +66,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "local-plugin",
                 dependencies: [],
                 severity: "info",
@@ -88,6 +92,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "github-plugin",
                 dependencies: [],
                 severity: "info",
@@ -102,6 +107,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "github-plugin",
                 dependencies: [],
                 severity: "info",
@@ -126,6 +132,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "official-plugin",
                 dependencies: [],
                 severity: "info",
@@ -140,6 +147,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "local-plugin",
                 dependencies: [],
                 severity: "info",
@@ -154,6 +162,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "github-plugin",
                 dependencies: [],
                 severity: "info",
@@ -178,6 +187,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 severity: "info",
                 needsReload: true,
                 name: "agent-only-plugin",
@@ -185,6 +195,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
               },
               {
                 status: "installed",
+                version: "1.0.0",
                 severity: "info",
                 needsReload: true,
                 name: "dual-plugin",
@@ -209,6 +220,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "alpha",
                 dependencies: [],
                 severity: "info",
@@ -223,6 +235,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "beta",
                 dependencies: [],
                 severity: "info",
@@ -248,6 +261,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "before",
                 dependencies: [],
                 severity: "info",

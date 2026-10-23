@@ -2255,23 +2255,23 @@ A plugin the imported settings name that is already recorded as another plugin's
 A plugin operation needs attention.
 
 ● claude-plugins-official [project] (added)
-  ● official-plugin (installed)
+  ● official-plugin v1.0.0 (installed)
 
 ● claude-plugins-official [user] (added)
-  ● official-plugin (installed)
+  ● official-plugin v1.0.0 (installed)
 
 ● directory-marketplace [project] (added)
-  ● local-plugin (installed)
+  ● local-plugin v1.0.0 (installed)
 
 ● directory-marketplace [user] (added)
-  ● local-plugin (installed)
+  ● local-plugin v1.0.0 (installed)
   ⊘ unavailable-plugin (unavailable) {unsupported hooks}
 
 ● github-marketplace [project] (added)
-  ● github-plugin (installed)
+  ● github-plugin v1.0.0 (installed)
 
 ● github-marketplace [user] (added)
-  ● github-plugin (installed)
+  ● github-plugin v1.0.0 (installed)
 
 Import: 1 warning, 12 successes
 
@@ -2286,13 +2286,13 @@ Six marketplace blocks joined by blank lines (D-16-07). WR-02: the import produc
 
 ```text
 ● claude-plugins-official [project] (added)
-  ● official-plugin (installed)
+  ● official-plugin v1.0.0 (installed)
 
 ● directory-marketplace [project] (added)
-  ● local-plugin (installed)
+  ● local-plugin v1.0.0 (installed)
 
 ● github-marketplace [project] (added)
-  ● github-plugin (installed)
+  ● github-plugin v1.0.0 (installed)
 
 Import: 6 successes
 
@@ -2307,8 +2307,8 @@ Three project-scope marketplace blocks. OUT-03/D-04: three `added` marketplace r
 
 ```text
 ● claude-plugins-official [project] (added)
-  ● agent-only-plugin (installed) {requires pi-subagents}
-  ● dual-plugin (installed) {requires pi-subagents, requires pi-mcp-adapter}
+  ● agent-only-plugin v1.0.0 (installed) {requires pi-subagents}
+  ● dual-plugin v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}
 
 Import: 3 successes
 
@@ -2323,10 +2323,10 @@ OUT-03/D-04: one `added` marketplace row plus two `installed` plugin rows yield 
 
 ```text
 ● official [project] (added)
-  ● alpha (installed)
+  ● alpha v1.0.0 (installed)
 
 ● official [user] (added)
-  ● beta (installed)
+  ● beta v1.0.0 (installed)
 
 Import: 4 successes
 
@@ -2343,7 +2343,7 @@ Per-scope marketplace blocks. OUT-03/D-04: two `added` marketplace rows plus two
 A plugin operation has failed.
 
 ● mp [user] (added)
-  ● before (installed)
+  ● before v1.0.0 (installed)
   ⊘ hello (failed) {dependency failed}
     cause: Dependency "missing@mp" is not declared by its marketplace.
 

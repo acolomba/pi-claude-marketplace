@@ -186,7 +186,7 @@ test("/claude:plugin import imports enabled Claude settings across both scopes",
     // child rows; plugin rows carry neither a [scope] bracket nor an
     // @marketplace suffix (the scope and marketplace live on the parent header).
     assert.match(messages, /● claude-plugins-official \[project\] \(added\)/);
-    assert.match(messages, / {2}● official-plugin \(installed\)/);
+    assert.match(messages, / {2}● official-plugin v1\.0\.0 \(installed\)/);
     assert.match(messages, / {2}⊘ preinstalled-plugin \(skipped\) \{already installed\}/);
     assert.match(messages, / {2}⊘ unavailable-plugin \(unavailable\) \{not in manifest\}/);
     assert.equal((messages.match(/\/reload to pick up changes/g) ?? []).length, 1);
@@ -210,7 +210,7 @@ test("/claude:plugin import --scope project narrows writes to project scope", as
     const messages = notifications.map((notification) => notification.message).join("\n");
     // Folded under the `● directory-marketplace [project] (added)` header; the
     // child row carries no [scope] bracket (scope lives on the parent header).
-    assert.match(messages, / {2}● local-plugin \(installed\)/);
+    assert.match(messages, / {2}● local-plugin v1\.0\.0 \(installed\)/);
     assert.doesNotMatch(messages, /local-plugin \[user\]/);
   });
 });

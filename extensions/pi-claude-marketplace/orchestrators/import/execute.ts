@@ -446,8 +446,8 @@ type RenderedWarningReason = Extract<
   "unavailable" | "uninstallable"
 >;
 
-// A plugin the marketplace does not list reads as `install` and
-// `marketplace update` report it.
+// A plugin the marketplace does not list takes the `not in manifest` reason
+// that `install`, `marketplace update`, and `list` give it.
 function importWarningReason(reason: RenderedWarningReason): ContentReason {
   switch (reason) {
     case "unavailable":
