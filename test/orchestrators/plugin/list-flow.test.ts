@@ -2275,6 +2275,59 @@ test("PL-3: opts.marketplace narrows to a single marketplace; other marketplaces
   });
 });
 
+test("PL-3: a marketplace neither scope records fails as not added", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "official",
+      manifest: { name: "official", plugins: [] },
+    });
+    const { ctx, run, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, run, cwd, marketplace: "nosuch" });
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: "A marketplace operation has failed.\n\n⊘ nosuch (failed) {marketplace not added}",
+        severity: "error",
+      },
+    ]);
+
+    verify(ctx);
+    verify(ui);
+  });
+});
+
+test("PL-3: a marketplace only the other scope records fails as not added to the asked scope", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedMarketplace({
+      scope: "project",
+      scopeRoot: path.join(cwd, ".pi"),
+      cwd,
+      mpName: "official",
+      manifest: { name: "official", plugins: [] },
+    });
+    const { ctx, run, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, run, cwd, scope: "user", marketplace: "official" });
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n⊘ official [user] (failed) {marketplace not added to user scope}",
+        severity: "error",
+      },
+    ]);
+
+    verify(ctx);
+    verify(ui);
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // PL-5: upgradable via STRING comparison (NOT semver)
 // ──────────────────────────────────────────────────────────────────────────

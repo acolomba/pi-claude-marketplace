@@ -59,6 +59,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { notify } from "../../shared/notification-dispatch.ts";
 import {
   type MarketplaceDetails,
   type PluginFailedMessage,
@@ -70,6 +71,8 @@ import {
 } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { narrowProbeError as sharedNarrowProbeError } from "../../shared/probe-classifiers.ts";
+import { crossScopeFlag } from "../marketplace/shared.ts";
+import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
 
 import { availableRowMessage, type FilterBucket } from "./list-candidate-row.ts";
 import { composeInstalledListRow } from "./list-installed-row.ts";
@@ -755,6 +758,20 @@ const SYNTHETIC_LIST_FAILURE_MARKETPLACE_NAME = "(list)";
 const SYNTHETIC_LIST_FAILURE_PLUGIN_NAME = "(list)";
 
 /**
+ * PL-3: a named marketplace must be recorded in a consulted scope, the same
+ * presence test `plugin info` and `marketplace info` apply before they fail
+ * with `{marketplace not added}`.
+ */
+async function marketplaceAdded(opts: ListPluginsOptions, marketplace: string): Promise<boolean> {
+  const found = await collectMarketplaceRecordsByScope({
+    cwd: opts.cwd,
+    scope: opts.scope,
+    marketplace,
+  });
+  return found.length > 0;
+}
+
+/**
  * D-06 orchestrator entrypoint. Read-only listing of plugins. Constructs
  * the `NotificationMessage` payload inline and forwards it to a single
  * `notifyWithContext(ctx, run, ...)` call per orchestration arm (success or
@@ -765,6 +782,20 @@ const SYNTHETIC_LIST_FAILURE_PLUGIN_NAME = "(list)";
 export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
   const { ctx, run } = opts;
   try {
+    if (opts.marketplace !== undefined && !(await marketplaceAdded(opts, opts.marketplace))) {
+      notify(ctx, run, {
+        kind: "marketplace-not-added",
+        name: opts.marketplace,
+        ...(opts.scope !== undefined && { scope: opts.scope }),
+        ...(await crossScopeFlag({
+          cwd: opts.cwd,
+          marketplace: opts.marketplace,
+          scope: opts.scope,
+        })),
+      });
+      return;
+    }
+
     // OUT-07 / D-12: the list surface is a bulk op, so its row slot is typed
     // `Plural<Row>` (a readonly array). Additive typing only.
     // WR-01: loadPluginListPayload is typed to `MarketplaceRows<ListMsg>`, so the
