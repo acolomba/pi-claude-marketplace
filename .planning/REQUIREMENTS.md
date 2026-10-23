@@ -45,8 +45,8 @@ settle which one wins (see PROJECT.md).
 
 ### uninstall
 
-- [ ] **UNI-01**: Uninstalling removes the plugin data directory, and `--keep-data` keeps it with its contents
-- [ ] **UNI-02**: `uninstall --prune` also removes the dependencies that no other plugin needs, and keeps the ones another plugin still needs
+- [x] **UNI-01**: Uninstalling removes the plugin data directory, and `--keep-data` keeps it with its contents
+- [x] **UNI-02**: `uninstall --prune` also removes the dependencies that no other plugin needs, and keeps the ones another plugin still needs
 - [ ] **UNI-03**: Uninstalling a plugin installed from a git source removes its clone from `plugin-clones/` when no other installation uses it
 
 ### update
@@ -59,9 +59,9 @@ settle which one wins (see PROJECT.md).
 
 ### reinstall
 
-- [ ] **REI-01**: Reinstalling one installed plugin rewrites its artifacts at the same version and reports it reinstalled
-- [ ] **REI-02**: Reinstalling a plugin whose skill files were deleted restores them, and a new session offers the skills again
-- [ ] **REI-03**: Reinstalling a plugin that is not installed fails with the not-installed reason
+- [x] **REI-01**: Reinstalling one installed plugin rewrites its artifacts at the same version and reports it reinstalled
+- [x] **REI-02**: Reinstalling a plugin whose skill files were deleted restores them, and a new session offers the skills again
+- [x] **REI-03**: Reinstalling a plugin that is not installed fails with the not-installed reason
 
 ### list
 
@@ -160,17 +160,17 @@ settle which one wins (see PROJECT.md).
 | INS-05 | Phase 4 | Pending |
 | INS-06 | Phase 4 | Pending |
 | INS-07 | Phase 5 | Pending |
-| UNI-01 | Phase 6 | Pending |
-| UNI-02 | Phase 6 | Pending |
+| UNI-01 | Phase 6 | Complete |
+| UNI-02 | Phase 6 | Complete |
 | UNI-03 | Phase 4 | Pending |
 | UPD-01 | Phase 7 | Pending |
 | UPD-02 | Phase 4 | Pending |
 | UPD-03 | Phase 7 | Pending |
 | UPD-04 | Phase 5 | Pending |
 | UPD-05 | Phase 7 | Pending |
-| REI-01 | Phase 8 | Pending |
-| REI-02 | Phase 8 | Pending |
-| REI-03 | Phase 8 | Pending |
+| REI-01 | Phase 8 | Complete |
+| REI-02 | Phase 8 | Complete |
+| REI-03 | Phase 8 | Complete |
 | LST-01 | Phase 9 | Pending |
 | LST-02 | Phase 9 | Pending |
 | LST-03 | Phase 9 | Pending |
