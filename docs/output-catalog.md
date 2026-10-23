@@ -1829,7 +1829,7 @@ Plugin reinstall: 2 successes
 
 The marketplaces never collapse -- each per-scope header is a distinct marketplace block. OUT-03/D-04: the plural tally counts the two `reinstalled` rows across the per-scope blocks as two successes.
 
-### Reinstall held by a dependent's version range (D-07 / D-18-07)
+### Reinstall held by a dependent's version range (D-18-07)
 
 <!-- catalog-state: reinstall-held-by-dependents -->
 
