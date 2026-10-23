@@ -565,4 +565,42 @@ describe("reinstallOutcomeFromRun", () => {
     assert.ok(outcome.partition === "failed");
     assert.strictEqual(outcome.cause, aggregate);
   });
+
+  test("AFILE-04: a failure after the MCP commit carries the notices of the rewritten file", () => {
+    // arrange
+    const finalizeCause = new Error("state finalize failed: refused");
+    const aggregate = new Error("replace failed");
+    const run: UpdateRunOutcome = {
+      partition: "failed",
+      name: "hello",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
+      notes: ["replace failed", "mcp: state finalize failed: refused"],
+      reasons: ["rollback partial"],
+      phaseFailures: [{ phase: "mcp", msg: "state finalize failed: refused" }],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+      mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+    };
+
+    // act
+    const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, {
+      error: aggregate,
+      failures: [{ phase: "mcp", msg: "state finalize failed: refused", cause: finalizeCause }],
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      notes: ["replace failed", "mcp: state finalize failed: refused"],
+      reasons: ["rollback partial"],
+      cause: aggregate,
+      rollbackPartial: [{ phase: "mcp", cause: finalizeCause }],
+      mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+    });
+  });
 });

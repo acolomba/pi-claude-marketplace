@@ -258,7 +258,10 @@ interface ReinstallReached {
   readonly outcome: ReinstallPluginOutcome;
   /** D-141-03: the discovery half of the staging warnings; reaches both modes. */
   readonly discoveryWarnings: readonly string[];
-  /** AFILE-04: the MCP commit's file notices; empty unless the plugin was reinstalled. */
+  /**
+   * AFILE-04: the MCP commit's file notices. Empty unless the MCP commit ran:
+   * on a reinstalled plugin, or on a failure after the commit rewrote the file.
+   */
   readonly mcpConfigNotices: readonly McpConfigNotice[];
 }
 
@@ -294,6 +297,8 @@ async function reinstallPluginWith(
     // return silently. The bulk mapper composes it, so the two agree.
     if (render !== "none") {
       renderReinstallPartitionAndNotify(ctx, run, [outcome], "single");
+      // AFILE-04: a failure after the MCP commit leaves the rewritten file.
+      notifyMcpConfigNotices(ctx, run, reached.mcpConfigNotices);
     }
 
     return outcome;
@@ -417,7 +422,8 @@ async function runReinstall(
   return {
     outcome: reinstallOutcomeFromRun(target, run, phaseFailure),
     discoveryWarnings: run.partition === "updated" ? (run.notes ?? []) : [],
-    mcpConfigNotices: run.partition === "updated" ? (run.mcpConfigNotices ?? []) : [],
+    mcpConfigNotices:
+      run.partition === "updated" || run.partition === "failed" ? (run.mcpConfigNotices ?? []) : [],
   };
 }
 
@@ -583,10 +589,10 @@ async function selectTargets(
 }
 
 /**
- * AFILE-04: show the MCP config file notices of every reinstalled plugin, in
- * outcome order, after the cascade and the discovery diagnostics. A failed
- * reinstall restores the file's exact bytes, so only reinstalled outcomes
- * carry notices.
+ * AFILE-04: show the MCP config file notices of every reinstalled or failed
+ * plugin, in outcome order, after the cascade and the discovery diagnostics.
+ * The shared swap does not restore the MCP config file, so a failure after the
+ * MCP commit carries the notices of the write it left in place.
  */
 function surfaceReinstallMcpConfigNotices(
   ctx: NotificationContext,
@@ -597,7 +603,7 @@ function surfaceReinstallMcpConfigNotices(
     ctx,
     run,
     outcomes.flatMap((outcome) =>
-      outcome.partition === "reinstalled" ? (outcome.mcpConfigNotices ?? []) : [],
+      outcome.partition === "skipped" ? [] : (outcome.mcpConfigNotices ?? []),
     ),
   );
 }

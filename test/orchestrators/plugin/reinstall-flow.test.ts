@@ -9288,6 +9288,12 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through reinstall", 
   });
 });
 
+/** The failed row of a reinstall of `hello@mp` whose finalize save was refused. */
+const FINALIZE_FAILED_ROW =
+  "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {rollback partial}\n" +
+  '    cause: Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it. -> finalize refused\n' +
+  "    [mcp] (rollback failed)\n      cause: finalize refused";
+
 /** AFILE-04: the exact comments-dropped notice for the project-scope adapter file. */
 const PROJECT_COMMENTS_DROPPED_NOTICE: NotifyRecord = {
   severity: "warning",
@@ -9343,7 +9349,7 @@ test("AFILE-04: reinstall over a commented mcp-adapter.json shows the comments-r
   });
 });
 
-test("AFILE-04: a rolled-back reinstall restores the comments and shows no notice", async () => {
+test("AFILE-04: a reinstall refused at its intent mark keeps the comments and shows no notice", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-afile04-rollback-"));
@@ -9370,6 +9376,55 @@ test("AFILE-04: a rolled-back reinstall restores the comments and shows no notic
         },
       ]);
       assert.strictEqual(await readFile(locations.mcpAdapterJsonPath, "utf8"), commentedText);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+/** A state save that refuses only the shared swap's second write, its finalize. */
+function refuseFinalizeSave(): typeof saveState {
+  let saves = 0;
+  return async (extensionRoot, state) => {
+    saves += 1;
+    if (saves === 2) {
+      throw new Error("finalize refused");
+    }
+
+    await saveState(extensionRoot, state);
+  };
+}
+
+test("AFILE-04: a reinstall whose finalize fails after the MCP commit shows the notice after its failed row", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-afile04-finalize-"));
+    try {
+      const { locations, commentedText } = await seedCommentedMcpReinstall(cwd);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await reinstallPlugins({
+        ctx,
+        run,
+        cwd,
+        scope: "project",
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        stateTransaction: { saveState: refuseFinalizeSave() },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: FINALIZE_FAILED_ROW,
+          severity: "error",
+        },
+        PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+      assert.strictEqual(
+        await readFile(locations.mcpAdapterJsonPath, "utf8"),
+        commentedText.replace("// mine\n", ""),
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

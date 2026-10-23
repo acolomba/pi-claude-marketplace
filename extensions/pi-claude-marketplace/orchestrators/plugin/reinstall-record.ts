@@ -100,6 +100,9 @@ export function reinstallOutcomeFromRun(
           cause: phaseFailure.error,
           rollbackPartial: phaseFailure.failures.map((f) => ({ phase: f.phase, cause: f.cause })),
         }),
+        // AFILE-04: a later bridge or the finalize failed after the MCP commit
+        // rewrote the file, which the swap does not restore.
+        ...(run.mcpConfigNotices !== undefined && { mcpConfigNotices: run.mcpConfigNotices }),
       };
   }
 }

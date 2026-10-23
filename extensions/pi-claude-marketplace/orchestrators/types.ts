@@ -182,6 +182,13 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
     readonly phase: UpdatePhaseBridge;
     readonly cause: Error;
   }[];
+  /**
+   * AFILE-04: the MCP config file notices of a commit or finalize failure
+   * that came after the MCP commit had rewritten the file. The swap does not
+   * restore that file, so the user still needs to hear what changed in it.
+   * Omitted when there are none (NREG-01).
+   */
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
 }
 
 export type ReinstallPluginOutcome =
