@@ -5,16 +5,16 @@ milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 1
 current_phase_name: Suite Foundation
 status: executing
-stopped_at: lifecycle-coverage roadmap created (15 phases); Phase 1 ready to plan
-last_updated: "2026-10-23T02:22:30.921Z"
+stopped_at: Completed 01-01-PLAN.md
+last_updated: "2026-10-23T02:34:37.508Z"
 last_activity: 2026-10-22
-last_activity_desc: "Roadmap created: 15 phases, 61/61 requirements mapped"
-state_head: 6f7bd94b763dfcc9ab14b3c1b391c0ee72fbd536
+last_activity_desc: Phase 1 execution started
+state_head: 319f4979669bb967cf8133fc8144b0cf1f8fe293
 progress:
   total_phases: 15
   completed_phases: 0
   total_plans: 10
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-10-22 at the lifecycle-coverage start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 1 — Suite Foundation (then Phases 2-15 in parallel)
+**Current focus:** Phase 1 — Suite Foundation
 
 ## Current Position
 
-Phase: 1 (Suite Foundation) — READY TO EXECUTE
-Plan: Not started
+Phase: 1 (Suite Foundation) — EXECUTING
+Plan: 2 of 10
 Status: Ready to execute
-Last activity: 2026-10-22 — Roadmap created: 15 phases, 61/61 requirements mapped
+Last activity: 2026-10-22 — Phase 1 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
@@ -186,8 +186,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-23T00:03:10.000Z
-**Stopped at:** lifecycle-coverage roadmap created (15 phases); Phase 1 ready to plan
+**Last session:** 2026-10-23T02:34:37.392Z
+**Stopped at:** Completed 01-01-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -383,6 +383,7 @@ archived milestone artifacts.
 | Phase 10 P05 | 5min | 2 tasks | 4 files |
 | Phase 10 P06 | 14min | 2 tasks | 8 files |
 | Phase 10 P07 | 13min | 2 tasks | 2 files |
+| Phase 01 P01 | 9 min | 3 tasks | 3 files |
 
 ## Decisions
 
@@ -540,6 +541,7 @@ archived milestone artifacts.
 - [Phase 10]: cucumber.json excludes no tag; a future source kind without a stand-in excludes its tag until its stand-in lands (D-07)
 - [Phase 10]: A failed add or install that compares its result but no persisted state is a cucumber BLOCKER; a failed update that does not restate the declaration is a WARNING
 - [Phase 10]: The Phase 9 review ledger's IN rows were closed by hand with commit SHAs in the Source cell, matching the WR rows
+- [Phase 01]: Plugin topic module named installation (not a reserved verb); step module moves are rename-only commits (D-08)
 
 ### mcp-4 decisions
 
