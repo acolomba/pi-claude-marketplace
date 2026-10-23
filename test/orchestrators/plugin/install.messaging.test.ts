@@ -472,9 +472,12 @@ describe("composeInstallFailureMessage", () => {
     });
   });
 
-  test("keeps a network errno failure on the generic runtime cause path", () => {
+  test("INS-06: classifies a git host 404 as source missing and keeps its cause", () => {
     // arrange
-    const failure = Object.assign(new Error("network unreachable"), { code: "ENETUNREACH" });
+    const failure = Object.assign(new Error("HTTP Error: 404 Not Found"), {
+      code: "HttpError",
+      data: { statusCode: 404 },
+    });
 
     // act
     const message = composeInstallFailureMessage({
@@ -491,7 +494,34 @@ describe("composeInstallFailureMessage", () => {
     assert.deepStrictEqual(message, {
       status: "failed",
       name: "helper",
-      reasons: [],
+      reasons: ["source missing"],
+      scope: "project",
+      cause: failure,
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("INS-06: classifies a network errno failure as network unreachable and keeps its cause", () => {
+    // arrange
+    const failure = Object.assign(new Error("socket hang up"), { code: "ECONNRESET" });
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["network unreachable"],
       scope: "project",
       cause: failure,
       severity: "error",
