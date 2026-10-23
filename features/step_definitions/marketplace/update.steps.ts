@@ -82,21 +82,6 @@ Given(
 );
 
 Given(
-  "the marketplace {string} source is repaired with a changed valid manifest",
-  async function (this: ScenarioWorld, name: string) {
-    await rewritePublishedManifest(
-      this.requirePublished(name),
-      JSON.stringify({
-        name,
-        owner: { name: "features" },
-        plugins: [],
-        description: "Repaired marketplace",
-      }),
-    );
-  },
-);
-
-Given(
   "the published source of the marketplace {string} is removed",
   async function (this: ScenarioWorld, name: string) {
     await removePublishedSource(this.requirePublished(name));
