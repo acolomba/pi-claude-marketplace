@@ -381,9 +381,9 @@ async function materializeEnableRoot(
   // availability discriminant. A record disabled while soft-degraded
   // (`installable: false`) must re-materialize in place, so it resolves
   // through `requirePartialInstallable` -- the same partial-capable stance
-  // reinstall takes for backfill (D-68-02). The structurally `unavailable`
-  // arm is still rejected by that gate, and a record that was fully
-  // installable keeps the strict gate.
+  // reinstall takes for backfill (BFILL-01 / D-18-06). The structurally
+  // `unavailable` arm is still rejected by that gate, and a record that was
+  // fully installable keeps the strict gate.
   //
   // FORCE-05 / D-69-01: this is a DELIBERATE departure from the "--partial is an
   // explicit opt-in" rule, and it applies to the load-time reconcile enable

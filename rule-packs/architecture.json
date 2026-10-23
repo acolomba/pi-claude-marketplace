@@ -122,7 +122,6 @@
       "files": ["extensions/pi-claude-marketplace/**"],
       "exclude": [
         "extensions/pi-claude-marketplace/shared/atomic-json.ts",
-        "extensions/pi-claude-marketplace/bridges/agents/stage.ts",
         "extensions/pi-claude-marketplace/bridges/mcp/stage.ts",
         "extensions/pi-claude-marketplace/orchestrators/plugin/prune-rollback.ts"
       ],
