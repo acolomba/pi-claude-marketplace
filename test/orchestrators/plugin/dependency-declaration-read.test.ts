@@ -272,6 +272,7 @@ for (const { label, wrapped } of [
     assert.deepStrictEqual(declaration, {
       kind: "unusable",
       detail: "its own manifest is present but cannot be read",
+      ownManifest: true,
     });
     assert.deepStrictEqual(reader.opened, [WRAPPED], "the walk must end at the unusable candidate");
   });

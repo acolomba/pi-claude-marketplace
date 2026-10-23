@@ -169,3 +169,64 @@ Feature: Plugin reconcile
     Then the session offers these skills:
       | command          | description           |
       | /skill:lib-skill | A skill of lib 1.0.0. |
+
+  Scenario: Every new session warns about an installed plugin that its catalog no longer offers and keeps it working
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name  | version |
+      | alpha | 1.0.0   |
+    Given the user has run "/claude:plugin marketplace update fixtures --scope project"
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons         | scope   | cause chain                                                                    | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | not in manifest | project | cannot read the dependencies of demo@fixtures: not declared by its marketplace | false           |       |                  |
+      | fixtures         | project           | demo@fixtures | demo | failed | not in manifest | project | cannot read the dependencies of demo@fixtures: not declared by its marketplace | false           |       |                  |
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons         | scope   | cause chain                                                                    | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | not in manifest | project | cannot read the dependencies of demo@fixtures: not declared by its marketplace | false           |       |                  |
+      | fixtures         | project           | demo@fixtures | demo | failed | not in manifest | project | cannot read the dependencies of demo@fixtures: not declared by its marketplace | false           |       |                  |
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Every new session warns about an installed plugin whose marketplace manifest is invalid and keeps it working
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the manifest of the marketplace "fixtures" has become invalid
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                                                        | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | invalid manifest | project | cannot read the dependencies of demo@fixtures: its marketplace manifest is invalid | false           |       |                  |
+      | fixtures         | project           | demo@fixtures | demo | failed | invalid manifest | project | cannot read the dependencies of demo@fixtures: its marketplace manifest is invalid | false           |       |                  |
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                                                        | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | invalid manifest | project | cannot read the dependencies of demo@fixtures: its marketplace manifest is invalid | false           |       |                  |
+      | fixtures         | project           | demo@fixtures | demo | failed | invalid manifest | project | cannot read the dependencies of demo@fixtures: its marketplace manifest is invalid | false           |       |                  |
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |

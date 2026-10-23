@@ -3653,6 +3653,22 @@ A plugin operation needs attention.
 Reconcile: 1 warning
 ```
 
+### Load-time check, a declarer's dependencies cannot be read (REC-05)
+
+The load-time dependency check could not read what one installed plugin declares, so it held no plugin in the scope down on this pass (D-05-07). The usual cause is a marketplace that no longer lists the plugin, or a marketplace manifest that became invalid. The plugin stays installed and keeps loading; only the check is lost, so the row keeps the `(failed)` token at `warning` severity rather than `error`. The brace names the fault: `{not in manifest}` when the catalog dropped the plugin, `{invalid manifest}` when the marketplace manifest or the plugin's `dependencies` value is invalid, and `{unreadable manifest}` when the marketplace manifest is missing or cannot be read, or the plugin's own manifest is present but cannot be used. The `cause:` trailer names the plugin and says why in fixed words this extension writes; it never carries manifest text. The check is re-run on every load and nothing is stored, so the row returns at each new session until the marketplace is repaired, the plugin is uninstalled, or the marketplace is removed. Only the first such plugin in a scope is reported per pass. A plugin this pass already reported as failed, or uninstalled, gets no second row; a success row for it (for example a config-driven disable) does not replace the warning. The trailing tally counts the row as one warning; no reload-hint.
+
+<!-- catalog-state: reconcile-dependency-declarer-unreadable -->
+
+```text
+A plugin operation needs attention.
+
+● mp [project]
+  ⊘ deploy-kit (failed) {not in manifest}
+    cause: cannot read the dependencies of deploy-kit@mp: not declared by its marketplace
+
+Reconcile: 1 warning
+```
+
 ### Load-time install failed by a dependency (RESV-06)
 
 The load-time counterpart of the standalone dependency-cascade `{dependency failed}` row. The user declared `hello@mp` in `claude-plugins.json` and reloaded; `hello` declares a dependency the marketplace does not declare, so the cascade fails before `hello`'s own ledger runs. Reconcile drives exactly one orchestrated outcome for `hello@mp` (it does not install the dependency separately), so the two-row standalone form -- a dependency row plus a `{dependency failed}` root row -- collapses onto the ONE row reconcile can render: the requesting plugin's own row carries `{dependency failed}` and the failing dependency's own cause line, sourced from the SAME `DependencyCascadeError` the standalone cascade's dependency row carries (`orchestrators/plugin/install-cascade.messaging.ts::cascadeFailureCause`). Every reason the closed-set dependency-cascade vocabulary can classify a cascade failure with (`{dependency cycle}`, `{dependency marketplace not added}`, `{no matching version}`, `{version conflict}`, ...) reaches this surface the same way; only `{dependency failed}` is shown here. A plugin's own (non-dependency) failure is unaffected and keeps its ordinary reason (e.g. `{not in manifest}`, `{source missing}`) with no cause line. The trailing tally counts the row as one failure. Severity: `error`; no reload-hint.

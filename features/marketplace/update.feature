@@ -811,13 +811,13 @@ Feature: Marketplace update
       | tools            | project           | true                           | other@tools | other | available |                 |         | 1.0.0   |
     When the user starts a new pi session
     Then the session reports these results:
-      | kind                      | severity | needs reload | summary                        | tally label | tally failures | tally warnings |
-      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
-      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+      | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id         | name | status | reasons    | scope   | leaks | rollback partial |
-      | tools            | project           | demo@tools | demo | failed | unreadable | project |       |                  |
-      | tools            | project           | demo@tools | demo | failed | unreadable | project |       |                  |
+      | marketplace name | marketplace scope | id         | name | status | reasons         | scope   | leaks | rollback partial | cause chain                                                                 | cause truncated |
+      | tools            | project           | demo@tools | demo | failed | not in manifest | project |       |                  | cannot read the dependencies of demo@tools: not declared by its marketplace | false           |
+      | tools            | project           | demo@tools | demo | failed | not in manifest | project |       |                  | cannot read the dependencies of demo@tools: not declared by its marketplace | false           |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -918,13 +918,13 @@ Feature: Marketplace update
       | demo@tools |
     When the user starts a new pi session
     Then the session reports these results:
-      | kind                      | severity | needs reload | summary                        | tally label | tally failures | tally warnings |
-      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
-      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+      | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id         | name | status | reasons    | scope   | leaks | rollback partial |
-      | tools            | <scope>           | demo@tools | demo | failed | unreadable | <scope> |       |                  |
-      | tools            | <scope>           | demo@tools | demo | failed | unreadable | <scope> |       |                  |
+      | marketplace name | marketplace scope | id         | name | status | reasons          | scope   | leaks | rollback partial | cause chain                                                                     | cause truncated |
+      | tools            | <scope>           | demo@tools | demo | failed | invalid manifest | <scope> |       |                  | cannot read the dependencies of demo@tools: its marketplace manifest is invalid | false           |
+      | tools            | <scope>           | demo@tools | demo | failed | invalid manifest | <scope> |       |                  | cannot read the dependencies of demo@tools: its marketplace manifest is invalid | false           |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |

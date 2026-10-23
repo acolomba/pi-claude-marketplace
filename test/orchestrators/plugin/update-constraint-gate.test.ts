@@ -121,7 +121,8 @@ function seamReturning(
 
 function seamFailingWith(declarer: string, cause: Error): UpdateConstraintSeam {
   return {
-    buildScopeDeclarationDetail: () => Promise.resolve({ ok: false, declarer, cause }),
+    buildScopeDeclarationDetail: () =>
+      Promise.resolve({ ok: false, declarer, reason: "unreadable manifest", cause }),
     probeDependencyTags: noMatchingGitTag,
     probeMarketplaceTags: noMatchingMarketplaceTag,
   };

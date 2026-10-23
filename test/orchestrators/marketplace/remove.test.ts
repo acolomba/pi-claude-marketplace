@@ -2594,7 +2594,12 @@ const UNREADABLE_CAUSE =
   "cannot read the dependencies of alpha@tools: not declared by its marketplace";
 
 const unreadableIndex: typeof buildScopeDeclarationIndex = () =>
-  Promise.resolve({ ok: false, declarer: "alpha@tools", cause: new Error(UNREADABLE_CAUSE) });
+  Promise.resolve({
+    ok: false,
+    declarer: "alpha@tools",
+    reason: "not in manifest",
+    cause: new Error(UNREADABLE_CAUSE),
+  });
 
 for (const { mode, orchestrated, expectedCalls } of [
   { mode: "a standalone", orchestrated: false, expectedCalls: 1 },

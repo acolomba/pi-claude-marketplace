@@ -44,6 +44,10 @@
 // distinguishable. It is built WITHOUT `{ cause }` chaining, so the renderer's
 // cause-chain walk has no raw message to print behind it.
 //
+// The failure arm's `reason` is the closed-set token of the same fault, picked
+// by the same branch as the phrase. Only the row whose subject is the declarer
+// itself renders it: the load-time stale-declarer warning (REC-05).
+//
 // A declaration HOLDS its key whatever `version` or `sha` constraint it
 // carries. The closure walk's refusal of a `sha` pin is an install-time rule;
 // here the fail-closed direction is to treat every named key as held.
@@ -71,6 +75,19 @@ import type { DeclaredDependency } from "../../domain/dependencies.ts";
 import type { DeclarationIndex, OrphanCandidate } from "../../domain/dependency-orphans.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { Reason } from "../../shared/notification-types.ts";
+
+/**
+ * REC-05: why a declarer's declarations could not be established, as the
+ * token its own row renders. A dropped catalog entry is `not in manifest`; an
+ * invalid marketplace manifest or a declaration the parser rejects is `invalid
+ * manifest`; a marketplace manifest that is missing or cannot be read, or an own
+ * manifest that is present but cannot be used, is `unreadable manifest`.
+ */
+export type DeclarerReadFailure = Extract<
+  Reason,
+  "not in manifest" | "invalid manifest" | "unreadable manifest"
+>;
 
 /**
  * One marketplace's record in the state document. Exported because the
@@ -122,12 +139,13 @@ export interface ScopeDeclarationIndexOptions extends ScopeDeclarationDetailOpti
  * could not be established (D-05-07). `cause.message` names the declarer and
  * says why it could not be read -- its marketplace does not list it, its
  * declaration is unusable, its marketplace manifest is missing, cannot be read,
- * or is invalid, or its own manifest is present but cannot be read. No classified token rides along: the
- * row a caller renders is about the TARGET, and the declarer's read-failure
- * token would make a false claim about the target's own manifest (the row
- * grammar's brace states a fact about the row's subject). `candidates` holds
- * every indexed record (the excluded target omitted) in walk order, enabled or
- * disabled, whatever its provenance.
+ * or is invalid, or its own manifest is present but cannot be read. `reason`
+ * is the same fault as a closed-set token. A row about the TARGET never
+ * renders it: the declarer's read-failure token would make a false claim about
+ * the target's own manifest (the row grammar's brace states a fact about the
+ * row's subject). Only a row whose subject is the declarer does (REC-05).
+ * `candidates` holds every indexed record (the excluded target omitted) in walk
+ * order, enabled or disabled, whatever its provenance.
  */
 export type ScopeDeclarationIndexResult =
   | {
@@ -138,6 +156,7 @@ export type ScopeDeclarationIndexResult =
   | {
       readonly ok: false;
       readonly declarer: string;
+      readonly reason: DeclarerReadFailure;
       readonly cause: Error;
     };
 
@@ -157,6 +176,7 @@ export type ScopeDeclarationDetailResult =
   | {
       readonly ok: false;
       readonly declarer: string;
+      readonly reason: DeclarerReadFailure;
       readonly cause: Error;
     };
 
@@ -165,31 +185,40 @@ export type RecordDeclarations =
   { readonly ok: true; readonly declared: readonly AddressedDependency[] } | IndexFailure;
 
 /**
- * The failure that names `key`. `reason` is a fixed phrase or field path this
+ * The failure that names `key`. `phrase` is a fixed phrase or field path this
  * extension writes, never the text of a thrown error or of a file (T-05-04).
  */
-function unreadableDeclarer(key: string, reason: string): IndexFailure {
+function unreadableDeclarer(
+  key: string,
+  reason: DeclarerReadFailure,
+  phrase: string,
+): IndexFailure {
   return {
     ok: false,
     declarer: key,
-    cause: new Error(`cannot read the dependencies of ${key}: ${reason}`),
+    reason,
+    cause: new Error(`cannot read the dependencies of ${key}: ${phrase}`),
   };
 }
 
 /**
- * D-04 / T-05-04: why a marketplace manifest failed to load, as a fixed reason
- * picked by the error's class or errno code. The error's own message never
- * reaches the cause line.
+ * D-04 / T-05-04: the failure for a marketplace manifest that failed to load,
+ * its token and phrase picked by the error's class or errno code. The error's
+ * own message never reaches the cause line.
  */
-function manifestLoadReason(err: unknown): string {
+function manifestLoadFailure(key: string, err: unknown): IndexFailure {
   if (err instanceof InvalidMarketplaceManifestError) {
-    return "its marketplace manifest is invalid";
+    return unreadableDeclarer(key, "invalid manifest", "its marketplace manifest is invalid");
   }
 
   const code = isErrnoException(err) ? err.code : undefined;
-  return code === "ENOENT" || code === "ENOTDIR"
-    ? "its marketplace manifest is missing"
-    : "its marketplace manifest cannot be read";
+  return unreadableDeclarer(
+    key,
+    "unreadable manifest",
+    code === "ENOENT" || code === "ENOTDIR"
+      ? "its marketplace manifest is missing"
+      : "its marketplace manifest cannot be read",
+  );
 }
 
 /**
@@ -213,12 +242,12 @@ export async function readRecordDeclarations(
   try {
     manifest = await (options.loadManifest ?? loadMarketplaceManifest)(marketplace.manifestPath);
   } catch (err) {
-    return unreadableDeclarer(key, manifestLoadReason(err));
+    return manifestLoadFailure(key, err);
   }
 
   const declared = lookupDeclaredPlugin(manifest, name);
   if (declared.kind === "absent") {
-    return unreadableDeclarer(key, "not declared by its marketplace");
+    return unreadableDeclarer(key, "not in manifest", "not declared by its marketplace");
   }
 
   const read = await readDependencyDeclaration({
@@ -229,7 +258,11 @@ export async function readRecordDeclarations(
     refuseUnusableOwnManifest: true,
   });
   if (read.kind === "unusable") {
-    return unreadableDeclarer(key, read.detail);
+    return unreadableDeclarer(
+      key,
+      "ownManifest" in read ? "unreadable manifest" : "invalid manifest",
+      read.detail,
+    );
   }
 
   return {

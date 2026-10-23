@@ -57,7 +57,7 @@ import type { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { DependencyDeclarationReader } from "../plugin/dependency-declaration-read.ts";
-import type { AddressedDependency } from "../plugin/dependency-index.ts";
+import type { AddressedDependency, DeclarerReadFailure } from "../plugin/dependency-index.ts";
 
 /** Inputs of one scope-wide satisfaction verdict. */
 export interface ScopeSatisfactionOptions {
@@ -105,6 +105,7 @@ export type ScopeSatisfactionVerdict =
   | {
       readonly ok: false;
       readonly declarer: string;
+      readonly reason: DeclarerReadFailure;
       readonly cause: Error;
     };
 
