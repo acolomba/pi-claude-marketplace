@@ -37,6 +37,7 @@ import {
   LayerConfigUnreadableError,
   PluginInBaseLayerOnlyError,
   PluginInLocalLayerOnlyError,
+  PluginUpdatePhase3Error,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
@@ -718,6 +719,74 @@ async function assertReinstallPreservedLegacyState(params: {
   assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
 }
 
+test("AGENT-01 / D-18-10: a reinstall refuses a file no index row names at its new agent target and keeps the legacy and foreign bytes", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-agent-protection-"));
+    t.after(() => rm(cwd, { recursive: true, force: true }));
+    const { locations, oldTarget, newTarget, oldBytes } = await seedLegacyReinstall(cwd, false);
+    await writeFile(newTarget, "Other owner's bytes.\n");
+    const indexBefore = await readFile(locations.agentsIndexPath, "utf8");
+    const recordBefore = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+    assert.ok(recordBefore !== undefined);
+    const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
+
+    // act
+    const outcome = await reinstallPlugin({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "hello",
+      render: "none",
+    });
+
+    // assert
+    // PI-6: no index row names the new target's file, so reinstall's overwrite
+    // knob (D-18-15) does not reach it; the agents commit refuses at phase 3.
+    const aggregate =
+      'Plugin "hello" failed during physical replace. plugin-uninstall + plugin-install for "hello".';
+    const refusal = `Cannot replace agent target with non-previous content at ${newTarget}`;
+    assert.ok(outcome.partition === "failed");
+    const { cause, rollbackPartial, ...rest } = outcome;
+    assert.deepStrictEqual(rest, {
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      notes: [aggregate, `agents: ${refusal}`],
+      reasons: ["rollback partial"],
+    });
+    assert.ok(cause instanceof PluginUpdatePhase3Error);
+    assert.strictEqual(cause.message, aggregate);
+    assert.deepStrictEqual(
+      rollbackPartial?.map((child) => ({ phase: child.phase, message: child.cause.message })),
+      [{ phase: "agents", message: refusal }],
+    );
+    assert.deepStrictEqual(notifications, []);
+    assert.strictEqual(await readFile(newTarget, "utf8"), "Other owner's bytes.\n");
+    assert.strictEqual(await readFile(oldTarget, "utf8"), oldBytes);
+    assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), indexBefore);
+    // D-18-10: the record keeps the swap's intent mark until a retry finalizes
+    // it; apart from the write stamp, every other field is the record before
+    // the reinstall.
+    const recordAfter = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+    assert.ok(recordAfter !== undefined);
+    const { updatedAt: _stampAfter, ...markedRecord } = recordAfter;
+    const { updatedAt: _stampBefore, ...unmarkedRecord } = recordBefore;
+    assert.deepStrictEqual(markedRecord, {
+      ...unmarkedRecord,
+      compatibility: {
+        installable: false,
+        notes: ["update-in-progress"],
+        supported: ["agents"],
+        unsupported: [],
+      },
+    });
+  });
+});
+
 test("AGENT-01: reinstall preserves legacy bytes and state when another plugin owns the new target name", async (t) => {
   await withHermeticHome(async () => {
     // arrange
@@ -822,6 +891,126 @@ test("AGENT-01: reinstall preserves legacy bytes and state when the post-migrati
       notes: ["save failure after migration\n\ncause: save failure after migration"],
     });
     await assert.rejects(readFile(newTarget), { code: "ENOENT" });
+  });
+});
+
+test("PDEF-01: reinstall preview detects an agent conflict from a later resolved directory", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-agent-dir-preview-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        agentDirectories: ["declared-agents"],
+        resources: {
+          agents: [
+            { directory: "declared-agents", sourceName: "first", body: "First agent.\n" },
+            { sourceName: "later", body: "Later agent.\n" },
+          ],
+        },
+        install: true,
+      });
+      // D-18-17: the dependency walk reads every recorded plugin of the scope,
+      // so `world` needs a marketplace that declares it; without one the
+      // reinstall fails as unreadable before it reaches the conflict.
+      const otherRoot = path.join(cwd, "other-mp");
+      await writePluginTree(path.join(otherRoot, "plugins", "world"), "world", {});
+      const otherManifestPath = await writeManifest(otherRoot, "other-mp", { world: "1.0.0" });
+      const state = await loadState(locations.extensionRoot);
+      const installed = state.marketplaces.mp?.plugins.hello;
+      assert.ok(installed !== undefined);
+      state.marketplaces["other-mp"] = {
+        name: "other-mp",
+        scope: "project",
+        source: pathSource("./other-mp"),
+        addedFromCwd: cwd,
+        manifestPath: otherManifestPath,
+        marketplaceRoot: otherRoot,
+        plugins: {
+          world: {
+            ...installed,
+            resources: {
+              ...installed.resources,
+              agents: ["pi-claude-marketplace-hello-later"],
+            },
+          },
+        },
+      };
+      await saveState(locations.extensionRoot, state);
+      const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.strictEqual(outcome.partition, "failed");
+      assert.match(outcome.notes?.[0] ?? "", /Cross-plugin name conflict/);
+      assert.match(outcome.notes?.[0] ?? "", /pi-claude-marketplace-hello-later/);
+      assert.strictEqual(notifications.length, 1);
+      assert.strictEqual(notifications[0]?.severity, "error");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("PRL-10: a plugin missing from the cached manifest is skipped and leaves state, resources, and data unchanged", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-missing-entry-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", command: "old command" },
+        install: true,
+      });
+      const dataDir = await locations.pluginDataDir("mp", "hello");
+      await mkdir(dataDir, { recursive: true });
+      await writeFile(path.join(dataDir, "state.txt"), "plugin data");
+      const beforeState = await readFile(locations.stateJsonPath, "utf8");
+      const beforeSkill = await readSkill(cwd);
+      await writeFile(
+        path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json"),
+        JSON.stringify({ name: "mp", plugins: [] }),
+      );
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await reinstallDefault(cwd, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "skipped",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        notes: ["not in manifest"],
+        reasons: ["not in manifest"],
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ hello (skipped) {not in manifest}",
+          severity: "warning",
+        },
+      ]);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), beforeState);
+      assert.equal(await readSkill(cwd), beforeSkill);
+      assert.equal(await readFile(path.join(dataDir, "state.txt"), "utf8"), "plugin data");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
   });
 });
 
@@ -1716,6 +1905,50 @@ test("GAP-01: an empty bulk reinstall emits only its sentinel", async () => {
       assert.deepEqual([...outcomes], []);
       assert.equal(notifications.length, 1);
       assert.equal(notifications[0]?.message, "(no marketplaces)");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GAP-03: reinstallPlugin render=none returns a not-in-manifest skip without notifying", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-none-fail-"));
+    try {
+      // arrange
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old" },
+        install: true,
+      });
+      await writeFile(
+        path.join(cwd, "mp-src", ".claude-plugin", "marketplace.json"),
+        JSON.stringify({ name: "mp", plugins: [] }),
+      );
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "skipped",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        notes: ["not in manifest"],
+        reasons: ["not in manifest"],
+      });
+      assert.deepStrictEqual(notifications, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -4432,6 +4665,86 @@ test("LAYER-04: a reinstall over an unreadable base layer reinstalls, renders on
   });
 });
 
+test("PRL-10: a source that stopped being installable skips the reinstall with the typed reason", async () => {
+  // The manifest entry's source is rewritten to an unsupported kind after the
+  // path-source install. The preflight maps the resolver's typed shape to the
+  // reason; the notes-substring fallback would land on the permissive
+  // `not in manifest` and misdescribe the skip.
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-shape-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { manifestPath } = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      await writeFile(
+        manifestPath,
+        JSON.stringify({
+          name: "mp",
+          plugins: [{ name: "hello", version: "1.0.0", source: { source: "unsupported-kind" } }],
+        }),
+        "utf8",
+      );
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const cloneCalls: string[] = [];
+      function refuseClone(member: string): () => Promise<never> {
+        return () => {
+          cloneCalls.push(member);
+          return Promise.reject(new Error(`${member} must not run`));
+        };
+      }
+
+      const cloneCacheSeam: UpdateCloneCacheSeam = {
+        resolvePluginPin: refuseClone("resolvePluginPin"),
+        materializePluginClone: refuseClone("materializePluginClone"),
+        materializeOrRefreshPluginMirror: refuseClone("materializeOrRefreshPluginMirror"),
+        materializePluginCommitCopy: refuseClone("materializePluginCommitCopy"),
+      };
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        cloneCacheSeam,
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "skipped",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        notes: [
+          'Plugin "hello" is no longer installable: unsupported source kind: unknown (unrecognized source kind: unsupported-kind)',
+        ],
+        reasons: ["no longer installable"],
+      });
+      assert.doesNotMatch(notifications.map((n) => n.message).join("\n"), /\{not in manifest\}/);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ hello (skipped) {no longer installable}",
+          severity: "warning",
+        },
+      ]);
+      assert.deepStrictEqual(cloneCalls, []);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+      assert.match(await readSkill(cwd), /old skill/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ───────────────────────────────────────────────────────────────────────────
 // ENBL-05: reinstall over a record the user disabled
 // ───────────────────────────────────────────────────────────────────────────
@@ -6311,6 +6624,103 @@ test("WLIF-01: a reinstall with no workflows records an empty array, not an abse
       assert.deepStrictEqual(await entriesOf(locations.workflowsSavedDir), []);
     } finally {
       await rm(cwd, { force: true, recursive: true });
+    }
+  });
+});
+
+test("PRL-08 / PRL-11 / REI-04: a reinstall records the version its source now declares, keeps installedAt and provenance, removes plugin data, and renders the exact row", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-flow-success-"));
+    try {
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old skill", command: "old command", agent: "old agent", mcp: true },
+        install: true,
+      });
+      const dataDir = await locations.pluginDataDir("mp", "hello");
+      await mkdir(dataDir, { recursive: true });
+      await writeFile(path.join(dataDir, "state.txt"), "plugin data");
+      await writePluginTree(seeded.pluginRoot, "hello", {
+        skill: "new skill",
+        command: "new command",
+        agent: "new agent",
+        mcp: true,
+      });
+      await writeManifest(path.join(cwd, "mp-src"), "mp", { hello: "9.9.9" });
+      const beforeRecord = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins
+        .hello;
+      assert.ok(beforeRecord !== undefined);
+      const { ctx, run, notifications } = makeCtx({
+        piMcpAdapterLoaded: true,
+        piSubagentsLoaded: true,
+      });
+      const reinstall = createReinstallPlugin(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+      );
+
+      // act
+      const outcome = await reinstall({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "reinstalled",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        version: "9.9.9",
+        stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
+        stagedMcpServerNames: ["server1"],
+        declaresAgents: true,
+        declaresMcp: true,
+        declaresWorkflows: false,
+      });
+      const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+      assert.ok(record !== undefined);
+      assert.deepStrictEqual(
+        {
+          version: record.version,
+          installedAt: record.installedAt,
+          provenance: record.provenance,
+        },
+        {
+          version: "9.9.9",
+          installedAt: beforeRecord.installedAt,
+          provenance: beforeRecord.provenance,
+        },
+      );
+      assert.deepStrictEqual(record.resources, {
+        skills: ["hello-tool"],
+        prompts: ["hello:deploy"],
+        agents: ["pi-claude-marketplace-hello-bot"],
+        mcpServers: ["server1"],
+        hooks: [],
+        workflows: [],
+      });
+      assert.strictEqual(
+        await readFile(path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md"), "utf8"),
+        '---\nname: hello-tool\ndescription: "new skill"\n---\n\nnew skill\n',
+      );
+      await assert.rejects(() => readFile(path.join(dataDir, "state.txt"), "utf8"), {
+        code: "ENOENT",
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● hello v9.9.9 (reinstalled)\n\n/reload to pick up changes",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
     }
   });
 });
