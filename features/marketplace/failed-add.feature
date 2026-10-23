@@ -37,3 +37,17 @@ Feature: Marketplace failed add
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source                            |
       | tools | https://{git host}/acme/tools.git |
+
+  Scenario: A url marketplace add that the git host answered with 404 leaves no marketplace behind
+    Given the marketplace "tools" is published as a url source
+    Given the git host answers 404 for the marketplace "tools"
+    Given the user has run "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project", which failed
+    When the user runs "/claude:plugin marketplace list"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists no marketplaces
+    Then the project scope holds no marketplace checkout
+    Then the project scope holds no git clones
+    Then the "claude-plugins.json" file of the project scope does not exist
