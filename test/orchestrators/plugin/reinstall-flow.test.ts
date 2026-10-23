@@ -69,7 +69,6 @@ import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketp
 import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
-  materializePluginCommitCopy,
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
@@ -100,6 +99,7 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
+import { materializeCommitCopyWith } from "./mirror-checkout.ts";
 import { retryTree } from "./scope-tree-inventory.ts";
 import {
   createStateFifo,
@@ -4059,14 +4059,14 @@ function installSeamWith(gitOps: GitOps): InstallCloneCacheSeam {
     materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
     materializeOrRefreshPluginMirror: (args) =>
       materializeOrRefreshPluginMirror({ ...args, gitOps }),
-    materializePluginCommitCopy: (args) => materializePluginCommitCopy({ ...args, gitOps }),
+    materializePluginCommitCopy: (args) => materializeCommitCopyWith(gitOps, args),
   };
 }
 
 /** Bind reinstall's clone-cache seam (commit copy only) to a mock gitOps. */
 function reinstallSeamWith(gitOps: GitOps): ReinstallCloneCacheSeam {
   return {
-    materializePluginCommitCopy: (args) => materializePluginCommitCopy({ ...args, gitOps }),
+    materializePluginCommitCopy: (args) => materializeCommitCopyWith(gitOps, args),
   };
 }
 
@@ -4082,7 +4082,7 @@ function capturingReinstallSeam(gitOps: GitOps): {
     materializePluginCommitCopy: (args) => {
       captured.auth = args.resolveAuth();
       captured.count += 1;
-      return materializePluginCommitCopy({ ...args, gitOps });
+      return materializeCommitCopyWith(gitOps, args);
     },
   };
   return { seam, captured };
@@ -4400,7 +4400,7 @@ test("plugin reinstall authentication: a bulk cold-cache sweep shares one host m
       const seam: ReinstallCloneCacheSeam = {
         materializePluginCommitCopy: (args) => {
           bundles.push(args.resolveAuth());
-          return materializePluginCommitCopy({ ...args, gitOps });
+          return materializeCommitCopyWith(gitOps, args);
         },
       };
       const { credentialOps } = createCredentialOpsFake({ boundary: "memory" });

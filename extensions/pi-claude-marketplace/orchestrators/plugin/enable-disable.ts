@@ -412,6 +412,7 @@ async function materializeEnableRoot(
       marketplace: opts.marketplace,
       plugin: opts.plugin,
       pinVersionOverride: recordedVersion,
+      ...recordedSourcePin(installed),
       allowExistingRecord: true,
       partial,
       // D-08-12: the enable branch reaches the ledger without going through
@@ -916,6 +917,17 @@ async function unstageBackToDisabled(
 }
 
 /**
+ * GIT-01: an enable re-materializes the commit the record names, never the
+ * mirror's fresher HEAD or a newer tag; only update and reinstall move it. A
+ * record that stores no commit has nothing to pin.
+ */
+function recordedSourcePin(record: { readonly resolvedSha?: string }): {
+  readonly sourcePinOverride?: string;
+} {
+  return record.resolvedSha === undefined ? {} : { sourcePinOverride: record.resolvedSha };
+}
+
+/**
  * One `"re-enabled"` member's phase. `do` calls `runInstallLedger` on the
  * OUTER transaction's state snapshot with the exact argument set
  * `runEnableBranch` already passes, now per member: `pinVersionOverride` set
@@ -958,6 +970,7 @@ function buildEnableCascadeMemberPhase(
             marketplace: member.marketplace,
             plugin: member.name,
             pinVersionOverride: record.version,
+            ...recordedSourcePin(record),
             allowExistingRecord: true,
             partial,
             removalOps: createRemovalOps(),

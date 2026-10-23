@@ -203,7 +203,7 @@ export async function availableRowMessage(
     }
 
     return resolvedCandidateRow(
-      candidateRowFields(manifestEntry, outcome.version ?? manifestEntry.version),
+      candidateRowFields(manifestEntry, outcome.version),
       outcome.resolved,
       claimsInstallDisabled,
     );

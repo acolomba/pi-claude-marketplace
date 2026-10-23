@@ -318,26 +318,19 @@ async function deriveUpdateToVersion(
 }
 
 /**
- * D-16-09: whether an update candidate is the revision the record holds. A git
+ * D-16-09: whether an update candidate is the revision the record holds. A
  * source that moved to a new commit is a new revision even when its declared
- * version did not change, because the stored sha is the revision; a record
- * that stores no sha leaves the version alone to decide.
+ * version did not change, because the stored sha is the revision; a switch
+ * between a git and a `path` source adds or drops the sha, so it is a new
+ * revision too. Only when neither side has a sha does the version alone
+ * decide.
  */
 function isSameRevision(
-  entry: PluginEntry,
   record: PluginStateRecord,
   toVersion: string,
   resolvedSha: string | undefined,
 ): boolean {
-  if (toVersion !== record.version) {
-    return false;
-  }
-
-  return (
-    !isGitSourceEntry(entry) ||
-    record.resolvedSha === undefined ||
-    resolvedSha === record.resolvedSha
-  );
+  return toVersion === record.version && resolvedSha === record.resolvedSha;
 }
 
 /** Whether `entry` installs from a git source (url / git-subdir / github). */
@@ -711,9 +704,7 @@ async function refreshDisabledPluginUpdate(
     }
   }
 
-  if (
-    isSameRevision(preflight.entry, preflight.record, preflight.toVersion, preflight.resolvedSha)
-  ) {
+  if (isSameRevision(preflight.record, preflight.toVersion, preflight.resolvedSha)) {
     return {
       partition: "unchanged",
       name: options.plugin,
@@ -958,7 +949,7 @@ export async function preparePluginUpdate(
   }
 
   if (
-    isSameRevision(triaged.entry, triaged.record, toVersion, resolvedSha) &&
+    isSameRevision(triaged.record, toVersion, resolvedSha) &&
     !isRecordedButDisabled(triaged.record)
   ) {
     return {

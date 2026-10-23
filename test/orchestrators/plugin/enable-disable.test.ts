@@ -8836,3 +8836,49 @@ test("AFILE-04: an orchestrated enable returns the notice on its outcome and sen
     assert.deepStrictEqual(notifications, []);
   });
 });
+
+test("GIT-01: enable re-materializes the commit the record names", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const recordedSha = "1".repeat(40);
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: Record<string, { plugins: Record<string, Record<string, unknown>> }>;
+    };
+    const record = state.marketplaces["mp"]?.plugins["foo"];
+    assert.ok(record !== undefined);
+    record["resolvedSha"] = recordedSha;
+    await writeFile(statePath, JSON.stringify(state), "utf8");
+    const pins: (string | undefined)[] = [];
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      runInstallLedger(_state, _locations, options) {
+        pins.push(options.sourcePinOverride);
+        return Promise.reject(new Error("stop after the pin is read"));
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      run: runWithNothingLoaded(),
+      plugin: "foo",
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(pins, [recordedSha]);
+  });
+});

@@ -1172,13 +1172,13 @@ async function manifestCandidateExists(manifestPath: string): Promise<boolean> {
 }
 
 /**
- * Tier 1 of {@link resolvePluginVersion}: the `version` the plugin's own
+ * The first tier of {@link resolveDeclaredPluginVersion}: the `version` the plugin's own
  * manifest declares, or `undefined` when it declares none usable.
  *
  * MANF-01: the walk is the shared `MANIFEST_CANDIDATES` ordering, so this
  * reader and the resolver read the same file. D-01-07: a candidate that
  * EXISTS ends the walk -- if it cannot be read, cannot be parsed, or carries
- * no usable `version`, the answer falls to tier 2, never to a sibling
+ * no usable `version`, the answer falls to the marketplace entry, never to a sibling
  * candidate. Never throws (D-23-02 / D-23-03).
  */
 async function readDeclaredPluginVersion(pluginRoot: string): Promise<string | undefined> {
@@ -1195,7 +1195,7 @@ async function readDeclaredPluginVersion(pluginRoot: string): Promise<string | u
       // eslint-disable-next-line no-await-in-loop -- D-01-07: only the first existing candidate is read
       parsed = JSON.parse(await readFile(manifestPath, "utf8"));
     } catch (err) {
-      // Present and unusable: tier 2 / tier 3 cover it.
+      // Present and unusable: the entry, the commit, or the hash covers it.
       hookDebugLog(`resolvePluginVersion: plugin.json read/parse failed: ${errorMessage(err)}`);
       return undefined;
     }

@@ -39,7 +39,6 @@ import {
 import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
-  materializePluginCommitCopy,
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
@@ -68,6 +67,8 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
+
+import { materializeCommitCopyWith } from "./mirror-checkout.ts";
 
 import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
@@ -403,7 +404,7 @@ function capturingUpdateSeam(gitOps: GitOps): {
       captured.cloneAuth = args.auth;
       return materializeOrRefreshPluginMirror({ ...args, gitOps });
     },
-    materializePluginCommitCopy: (args) => materializePluginCommitCopy({ ...args, gitOps }),
+    materializePluginCommitCopy: (args) => materializeCommitCopyWith(gitOps, args),
   };
   return { seam, captured };
 }
@@ -7894,7 +7895,7 @@ function seamWith(gitOps: GitOps): UpdateCloneCacheSeam {
     materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
     materializeOrRefreshPluginMirror: (args) =>
       materializeOrRefreshPluginMirror({ ...args, gitOps }),
-    materializePluginCommitCopy: (args) => materializePluginCommitCopy({ ...args, gitOps }),
+    materializePluginCommitCopy: (args) => materializeCommitCopyWith(gitOps, args),
   };
 }
 

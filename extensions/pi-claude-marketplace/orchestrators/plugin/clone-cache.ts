@@ -20,7 +20,7 @@
 // (sha over ref; unpinned resolves remote HEAD via resolveRemoteRef, D-77-05).
 
 import { randomUUID } from "node:crypto";
-import { cp, mkdir, readFile, rename } from "node:fs/promises";
+import { cp, mkdir, readFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -71,6 +71,11 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
  */
 function isGitCommitNotFetchedError(err: unknown): boolean {
   return err instanceof Error && err.name === "CommitNotFetchedError";
+}
+
+/** isomorphic-git's `NotFoundError`: the object a checkout names is absent. */
+function isGitNotFoundError(err: unknown): boolean {
+  return err instanceof Error && err.name === "NotFoundError";
 }
 
 /**
@@ -236,9 +241,16 @@ export async function materializePluginClone(args: {
 }
 
 /**
- * GIT-01: copy the URL-keyed mirror of `cloneUrl` into `dest` at `sha`, local
- * only. Returns false when there is no mirror or the mirror does not hold
- * `sha`, so the caller clones instead.
+ * GIT-01: check out `sha` into `dest` from the URL-keyed mirror of
+ * `cloneUrl`, local only. Returns false when there is no mirror or the mirror
+ * does not hold `sha`, so the caller clones instead.
+ *
+ * Only the mirror's `.git` is copied, and its index is dropped, so the
+ * checkout writes exactly the commit's tree into an empty work tree: no
+ * untracked or edited mirror file rides along, and a relative symlink stays
+ * relative instead of pointing back into the mirror (NFR-10). A checkout
+ * failure other than a missing commit propagates with the staging leak
+ * appended (MA-9).
  */
 async function copyMirrorAtCommit(
   ops: RemovalOps,
@@ -257,18 +269,20 @@ async function copyMirrorAtCommit(
 
   const staging = await args.locations.sourcesStagingDir(randomUUID());
   try {
-    await mkdir(path.dirname(staging), { recursive: true });
-    await cp(mirrorRoot, staging, { recursive: true });
+    await mkdir(staging, { recursive: true });
+    await cp(path.join(mirrorRoot, ".git"), path.join(staging, ".git"), {
+      recursive: true,
+      verbatimSymlinks: true,
+    });
+    await rm(path.join(staging, ".git", "index"), { force: true });
+    await args.gitOps.checkout({ dir: staging, ref: args.sha });
   } catch (err) {
     const leak = await cleanupStaging(ops, staging, "plugin commit copy staging");
-    throw appendLeakToError(err, leak);
-  }
+    if (isGitCommitNotFetchedError(err) || isGitNotFoundError(err)) {
+      return false;
+    }
 
-  try {
-    await args.gitOps.checkout({ dir: staging, ref: args.sha });
-  } catch {
-    await cleanupStaging(ops, staging, "plugin commit copy staging");
-    return false;
+    throw appendLeakToError(err, leak);
   }
 
   await promoteStagingToClone(ops, staging, dest, "plugin commit copy staging");
