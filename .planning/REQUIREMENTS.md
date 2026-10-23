@@ -21,8 +21,8 @@ settle which one wins (see PROJECT.md).
 
 ### Suite foundation
 
-- [ ] **FND-01**: Step definitions and driver support that more than one later phase needs (plugin fixtures with dependencies, unsupported components, git-source plugins, hand-edited configs, an occupied state lock, a planted plugin data file) exist before the phases that use them, so each later phase adds only its own feature file and steps local to it
-- [ ] **FND-02**: The usage gate (`cucumber-js --dry-run --format usage`) stays green: no unused, undefined, or ambiguous step
+- [x] **FND-01**: Step definitions and driver support that more than one later phase needs (plugin fixtures with dependencies, unsupported components, git-source plugins, hand-edited configs, an occupied state lock, a planted plugin data file) exist before the phases that use them, so each later phase adds only its own feature file and steps local to it
+- [x] **FND-02**: The usage gate (`cucumber-js --dry-run --format usage`) stays green: no unused, undefined, or ambiguous step
 
 ### enable / disable
 
@@ -145,8 +145,8 @@ settle which one wins (see PROJECT.md).
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FND-01 | Phase 1 | Pending |
-| FND-02 | Phase 1 | Pending |
+| FND-01 | Phase 1 | Complete |
+| FND-02 | Phase 1 | Complete |
 | ENA-01 | Phase 2 | Pending |
 | ENA-02 | Phase 2 | Pending |
 | ENA-03 | Phase 2 | Pending |

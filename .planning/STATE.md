@@ -4,17 +4,17 @@ milestone: lifecycle-coverage
 milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 1
 current_phase_name: Suite Foundation
-status: executing
-stopped_at: Completed 01-09-PLAN.md
-last_updated: "2026-10-23T04:23:45.725Z"
+status: verifying
+stopped_at: Completed 01-10-PLAN.md
+last_updated: "2026-10-23T04:38:10.268Z"
 last_activity: 2026-10-22
 last_activity_desc: Phase 1 execution started
-state_head: eebf46aadd86a83de43749056021f2ee609d22ff
+state_head: 29da6e54b6e484ad545a335286fa9f3c37da79e5
 progress:
   total_phases: 15
   completed_phases: 0
   total_plans: 10
-  completed_plans: 9
+  completed_plans: 10
   percent: 0
 ---
 
@@ -33,7 +33,7 @@ component as a working Pi artifact.
 
 Phase: 1 (Suite Foundation) — EXECUTING
 Plan: 10 of 10
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-10-22 — Phase 1 execution started
 
 Progress: [░░░░░░░░░░] 0%
@@ -186,8 +186,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-23T04:23:45.608Z
-**Stopped at:** Completed 01-09-PLAN.md
+**Last session:** 2026-10-23T04:38:10.148Z
+**Stopped at:** Completed 01-10-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -392,6 +392,7 @@ archived milestone artifacts.
 | Phase 01 P07 | 9 min | 2 tasks | 8 files |
 | Phase 01 P08 | 10 min | 2 tasks | 8 files |
 | Phase 01 P09 | 12 min | 2 tasks | 6 files |
+| Phase 01 P10 | 10 min | 3 tasks | 10 files |
 
 ## Decisions
 
@@ -566,6 +567,8 @@ archived milestone artifacts.
 - [Phase 01]: 01-09: The marketplaces config writer expands the run tokens in each source in its step; readLayerMarketplaces keeps the table's text
 - [Phase 01]: 01-09: The Claude Code settings step lives in claude-code-settings.steps.ts (named after the file, not the import verb) and builds its path only from the sandbox tokens
 - [Phase 01]: 01-09: pending never reads the source of a marketplace it would add, so the writer's token expansion is carried to a Phase 11 reconcile seed (WINDOWS #110)
+- [Phase 01]: 01-10: The plugin form of {git repository} resolves through gitRepositoryServing, which fails when no recorded repository or more than one holds the plugin
+- [Phase 01]: 01-10: Git clones are stated by origin URL and revision token, never by their directory key; the clone reader fails on a stray plugin-clones entry or a checkout with no origin
 
 ### mcp-4 decisions
 

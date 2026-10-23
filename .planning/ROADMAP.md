@@ -151,7 +151,7 @@ Step module paths are relative to `features/step_definitions/`.
 3. The plugin steps live under `features/step_definitions/plugin/` in topic modules that take no verb name and none of the reserved module names. The git-host steps serve plugin repositories as well as marketplaces. The cucumber skill documents this milestone's file ownership: a later phase adds only its own feature files and step modules, and never edits a Phase 1 file.
 4. `npm run check:features` (the usage gate: no unused, undefined, or ambiguous step) and `npm run check` are green, and every existing scenario still passes.
 
-**Plans:** 9/10 plans executed
+**Plans:** 10/10 plans executed
 
 Plans:
 **Wave 1**
@@ -174,7 +174,7 @@ Plans:
 - [x] 01-09-PLAN.md — Tracer: hand-edited config marketplaces, seeded in `plugin/pending.feature` with the empty pending result; a Claude Code settings file in the sandbox, seeded in `plugin/import.feature`
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 01-10-PLAN.md — Tracer: the git host arms plugin repositories, seeded by a retried fetch in `plugin/fetch.feature`; the git clones of a scope, seeded by two uninstalls in `plugin/git-source.feature` and an update in `plugin/git-source-update.feature`
+- [x] 01-10-PLAN.md — Tracer: the git host arms plugin repositories, seeded by a retried fetch in `plugin/fetch.feature`; the git clones of a scope, seeded by two uninstalls in `plugin/git-source.feature` and an update in `plugin/git-source-update.feature`
 
 ### Phase 2: Plugin Enable and Disable
 
@@ -400,7 +400,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Suite Foundation | 9/10 | In Progress | - |
+| 1. Suite Foundation | 10/10 | In Progress | - |
 | 2. Plugin Enable and Disable | 0/TBD | Not started | - |
 | 3. Install Dependencies, Partial, and User Scope | 0/TBD | Not started | - |
 | 4. Git-Source Plugins | 0/TBD | Not started | - |
