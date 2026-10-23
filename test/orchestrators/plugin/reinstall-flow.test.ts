@@ -11,7 +11,10 @@ import {
   createHooksRuntime,
   readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
-import { pluginCloneKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
+import {
+  pluginCloneKey,
+  pluginMirrorKey,
+} from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { loadMarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -3869,11 +3872,14 @@ function createGitOps(
     readonly fixtureSourceDir?: string;
     readonly cloneThrows?: Error;
     readonly resolveRemoteRefThrows?: Error;
+    /** The commit the fake reports as `HEAD`, both before and after a clone. */
+    readonly head?: string;
   } = {},
 ): {
   readonly gitOps: ReturnType<typeof createGitOpsFake>["gitOps"];
   readonly state: {
     readonly cloneCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["clone"];
+    readonly fetchCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["fetch"];
     readonly checkoutCalls: ReturnType<typeof createGitOpsFake>["state"]["calls"]["checkout"];
     readonly resolveRemoteRefCalls: ReturnType<
       typeof createGitOpsFake
@@ -3890,6 +3896,7 @@ function createGitOps(
     ...(options.resolveRemoteRefThrows !== undefined && {
       resolveRemoteRefError: options.resolveRemoteRefThrows,
     }),
+    ...(options.head !== undefined && { initialOid: options.head, remoteHead: options.head }),
   });
   const gitOps: typeof fake.gitOps = {
     ...fake.gitOps,
@@ -3914,6 +3921,7 @@ function createGitOps(
     gitOps,
     state: {
       cloneCalls: fake.state.calls.clone,
+      fetchCalls: fake.state.calls.fetch,
       checkoutCalls: fake.state.calls.checkout,
       resolveRemoteRefCalls: fake.state.calls.resolveRemoteRef,
     },
@@ -4532,6 +4540,283 @@ test("a git-subdir reinstall honors clone-root subdir containment (pluginRoot un
         path.join(cloneRoot, "packages/gp"),
         "pluginRoot = cloneRoot + subdir (containment honored)",
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// MIRR-06 / D-18-04 / PRL-07 -- an unpinned git-source reinstall reads the
+// mirror's HEAD offline and copies that commit. Only a missing mirror is a
+// cache miss: reinstall clones it once (the NFR-5 cache-miss allowance) and
+// installs its HEAD; a failed clone skips the reinstall.
+// ───────────────────────────────────────────────────────────────────────────
+
+const MIRROR_HEAD_SHA = "b2c3d4e5f60718293a4b5c6d7e8f90123456789a";
+
+/**
+ * Build a git plugin tree at `pluginRoot` and stamp a minimal `.git/HEAD` at
+ * `mirrorRoot` holding `headSha` (detached-HEAD form), the shape a real clone
+ * leaves. The shared probe reads HEAD through the git-ops fake, which a case
+ * seeds with the same sha.
+ */
+async function writeMirrorTree(
+  mirrorRoot: string,
+  pluginRoot: string,
+  pluginName: string,
+  headSha: string,
+): Promise<void> {
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: pluginName, version: "9.9.9" }),
+  );
+  const skillDir = path.join(pluginRoot, "skills", "greet");
+  await mkdir(skillDir, { recursive: true });
+  await writeFile(path.join(skillDir, "SKILL.md"), `---\nname: greet\n---\n\nHello.\n`);
+  await mkdir(path.join(mirrorRoot, ".git"), { recursive: true });
+  await writeFile(path.join(mirrorRoot, ".git", "HEAD"), `${headSha}\n`);
+}
+
+/**
+ * Seed an UNPINNED git-source install record (manifest entry carries no `sha`)
+ * whose `resolvedSource`/`resolvedSha` are supplied by the caller, so a reinstall
+ * routes through the unpinned mirror arm.
+ */
+async function seedUnpinnedGitRecord(opts: {
+  cwd: string;
+  resolvedSource: string;
+  resolvedSha: string;
+  source: unknown;
+}): Promise<void> {
+  const marketplaceRoot = path.join(opts.cwd, "mp-src");
+  await mkdir(path.join(marketplaceRoot, ".claude-plugin"), { recursive: true });
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await writeFile(
+    manifestPath,
+    JSON.stringify({ name: "mp", plugins: [{ name: "gp", source: opts.source }] }),
+  );
+
+  const locations = locationsFor("project", opts.cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 2,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "project",
+        source: pathSource("./mp-src"),
+        addedFromCwd: opts.cwd,
+        manifestPath,
+        marketplaceRoot,
+        plugins: {
+          gp: {
+            version: `sha-${opts.resolvedSha.slice(0, 12)}`,
+            resolvedSource: opts.resolvedSource,
+            resolvedSha: opts.resolvedSha,
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: [],
+            },
+            enabled: true,
+            provenance: "explicit",
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  });
+}
+
+test("GIT-01 / D-18-04 / D-18-11: an unpinned reinstall of a record on the mirror copies the mirror's HEAD with no network call", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mirror-warm-"));
+    try {
+      // arrange
+      // IN-01: the record names the mirror as its `resolvedSource`, the shape a
+      // record made before per-commit copies has.
+      const cloneUrl = "https://example.com/org/repo";
+      const locations = locationsFor("project", cwd);
+      const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+      await writeMirrorTree(mirrorRoot, mirrorRoot, "gp", MIRROR_HEAD_SHA);
+      await seedUnpinnedGitRecord({
+        cwd,
+        resolvedSource: mirrorRoot,
+        resolvedSha: MIRROR_HEAD_SHA,
+        source: { source: "url", url: cloneUrl },
+      });
+      // A gitOps whose clone AND resolveRemoteRef both throw: any network touch
+      // fails the reinstall.
+      const { gitOps, state: gitState } = createGitOps({
+        head: MIRROR_HEAD_SHA,
+        cloneThrows: new Error("network unreachable: clone"),
+        resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
+      });
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        render: "none",
+        cloneCacheSeam: reinstallSeamWith(gitOps),
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "reinstalled",
+        name: "gp",
+        marketplace: "mp",
+        scope: "project",
+        version: "9.9.9",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+      });
+      assert.deepStrictEqual(
+        {
+          clone: gitState.cloneCalls,
+          fetch: gitState.fetchCalls,
+          resolveRemoteRef: gitState.resolveRemoteRefCalls,
+        },
+        { clone: [], fetch: [], resolveRemoteRef: [] },
+      );
+      // D-18-11: a record on the mirror moves onto its own copy of the commit.
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
+      assert.deepStrictEqual(
+        {
+          resolvedSource: record?.resolvedSource,
+          resolvedSha: record?.resolvedSha,
+          version: record?.version,
+        },
+        {
+          resolvedSource: await locations.pluginCloneDir(pluginCloneKey(cloneUrl, MIRROR_HEAD_SHA)),
+          resolvedSha: MIRROR_HEAD_SHA,
+          version: "9.9.9",
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MIRR-06 / D-18-04: an unpinned reinstall with no mirror clones it once and installs its HEAD", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mirror-persha-"));
+    try {
+      // arrange
+      const cloneUrl = "https://example.com/org/repo";
+      const locations = locationsFor("project", cwd);
+      // Old-design record: anchored to a per-sha clone, no mirror directory.
+      const perShaRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, GIT_SOURCE_SHA));
+      await writeMirrorTree(perShaRoot, perShaRoot, "gp", GIT_SOURCE_SHA);
+      await seedUnpinnedGitRecord({
+        cwd,
+        resolvedSource: perShaRoot,
+        resolvedSha: GIT_SOURCE_SHA,
+        source: { source: "url", url: cloneUrl },
+      });
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await writeMirrorTree(fixtureRepoDir, fixtureRepoDir, "gp", MIRROR_HEAD_SHA);
+      const { gitOps, state: gitState } = createGitOps({
+        head: MIRROR_HEAD_SHA,
+        fixtureSourceDir: fixtureRepoDir,
+        resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
+      });
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        render: "none",
+        cloneCacheSeam: reinstallSeamWith(gitOps),
+      });
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      assert.deepStrictEqual(
+        gitState.cloneCalls.map((call) => call.url),
+        [cloneUrl],
+      );
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
+      assert.deepStrictEqual(
+        { resolvedSource: record?.resolvedSource, resolvedSha: record?.resolvedSha },
+        {
+          resolvedSource: await locations.pluginCloneDir(pluginCloneKey(cloneUrl, MIRROR_HEAD_SHA)),
+          resolvedSha: MIRROR_HEAD_SHA,
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-18-04: an unpinned reinstall whose mirror clone fails is skipped and materializes nothing", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mirror-cold-"));
+    try {
+      // arrange
+      const cloneUrl = "https://example.com/org/repo";
+      const locations = locationsFor("project", cwd);
+      // The record points at a per-sha clone that does NOT exist on disk, and
+      // there is no mirror directory: a truly cold source.
+      const perShaRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, GIT_SOURCE_SHA));
+      await seedUnpinnedGitRecord({
+        cwd,
+        resolvedSource: perShaRoot,
+        resolvedSha: GIT_SOURCE_SHA,
+        source: { source: "url", url: cloneUrl },
+      });
+      const { gitOps, state: gitState } = createGitOps({
+        cloneThrows: new Error("network unreachable: clone"),
+        resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
+      });
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        render: "none",
+        cloneCacheSeam: reinstallSeamWith(gitOps),
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "skipped",
+        name: "gp",
+        marketplace: "mp",
+        scope: "project",
+        notes: ["network unreachable: clone"],
+        reasons: ["no longer installable"],
+      });
+      assert.equal(gitState.cloneCalls.length, 1);
+      // Neither a mirror nor a per-commit copy is left behind.
+      assert.deepStrictEqual(await entriesOf(locations.pluginClonesDir), []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -6366,6 +6651,69 @@ test("LAYER-04: the plugin form of reinstall with --local refuses a plugin only 
       ]);
       assert.equal(await readFile(locations.baseConfigJsonPath, "utf8"), baseConfigBefore);
       assert.equal(await pathExists(locations.localConfigJsonPath), false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("an unpinned git-subdir reinstall copies the mirror's HEAD without external calls", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-subdir-mirror-"));
+    try {
+      // arrange
+      const cloneUrl = "https://example.com/org/mono";
+      const locations = locationsFor("project", cwd);
+      const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+      const pluginRoot = path.join(mirrorRoot, "packages", "gp");
+      await writeMirrorTree(mirrorRoot, pluginRoot, "gp", MIRROR_HEAD_SHA);
+      await seedUnpinnedGitRecord({
+        cwd,
+        resolvedSource: pluginRoot,
+        resolvedSha: MIRROR_HEAD_SHA,
+        source: { source: "git-subdir", url: cloneUrl, path: "packages/gp" },
+      });
+      const { gitOps, state: gitState } = createGitOps({
+        head: MIRROR_HEAD_SHA,
+        cloneThrows: new Error("unexpected clone"),
+        resolveRemoteRefThrows: new Error("unexpected remote resolution"),
+      });
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        render: "none",
+        cloneCacheSeam: reinstallSeamWith(gitOps),
+      });
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      assert.deepStrictEqual(
+        {
+          clone: gitState.cloneCalls,
+          fetch: gitState.fetchCalls,
+          resolveRemoteRef: gitState.resolveRemoteRefCalls,
+        },
+        { clone: [], fetch: [], resolveRemoteRef: [] },
+      );
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
+      assert.deepStrictEqual(
+        { resolvedSource: record?.resolvedSource, resolvedSha: record?.resolvedSha },
+        {
+          resolvedSource: path.join(
+            await locations.pluginCloneDir(pluginCloneKey(cloneUrl, MIRROR_HEAD_SHA)),
+            "packages",
+            "gp",
+          ),
+          resolvedSha: MIRROR_HEAD_SHA,
+        },
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
