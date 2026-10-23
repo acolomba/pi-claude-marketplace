@@ -1,9 +1,7 @@
-import { canonicalCloneUrl, networkCloneUrl, pluginMirrorKey } from "../../domain/clone-key.ts";
-import { pathExists } from "../../shared/fs-utils.ts";
+import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
 import { buildCloneAuth } from "../auth-host.ts";
 
-import { materializePluginClone, resolveGitSubdirRoot } from "./clone-cache.ts";
-import { readMirrorHeadSha } from "./git-source-probe.ts";
+import { materializePluginCommitCopy, resolveGitSubdirRoot } from "./clone-cache.ts";
 
 import type { GitPluginRootResult } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
@@ -14,7 +12,7 @@ import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-h
 
 /** Clone-cache operation used to materialize a reinstall source. */
 export interface ReinstallCloneCacheSeam {
-  readonly materializePluginClone: typeof materializePluginClone;
+  readonly materializePluginCommitCopy: typeof materializePluginCommitCopy;
 }
 
 /** Inputs required to probe one reinstall source at its recorded sha. */
@@ -33,17 +31,17 @@ export interface ReinstallCloneProbeOptions {
 }
 
 const REAL_REINSTALL_CLONE_CACHE_SEAM: ReinstallCloneCacheSeam = {
-  materializePluginClone,
+  materializePluginCommitCopy,
 };
 
 /**
- * Probes one reinstall source from a warm mirror or its recorded-sha clone.
+ * Probes one reinstall source at its recorded sha (PURL-07, GIT-01).
  *
- * Unpinned sources prefer a mirror whose HEAD reads without network access.
- * A missing mirror, or one whose HEAD cannot be read, falls back to the
- * recorded-sha clone. A reinstall re-clones that sha on a cache miss, so a
- * retry is safe (D-08-05, NFR-3, NFR-5). Clone and subdirectory failures
- * retain their original classification.
+ * The reinstall restores the per-commit copy the record names: the copy
+ * itself when present, else a copy of the mirror at that sha, else a clone of
+ * that sha, so a retry is safe (D-08-05, NFR-3, NFR-5). A mirror a `fetch`
+ * moved past the recorded sha never replaces the recorded commit. Clone and
+ * subdirectory failures retain their original classification.
  */
 export async function probeReinstallClone(
   options: ReinstallCloneProbeOptions,
@@ -52,23 +50,11 @@ export async function probeReinstallClone(
   const { source, locations, recordedSha } = options;
   const cloneUrl = canonicalCloneUrl(source);
 
-  if (source.sha === undefined) {
-    const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
-    const mirrorSha = await readUsableMirrorSha(mirrorRoot);
-    if (mirrorSha !== undefined) {
-      if (source.kind === "git-subdir") {
-        return resolveSubdir(source.path, mirrorRoot, mirrorSha);
-      }
-
-      return { kind: "materialized", pluginRoot: mirrorRoot, resolvedSha: mirrorSha };
-    }
-  }
-
-  const cloneRoot = await seam.materializePluginClone({
+  const cloneRoot = await seam.materializePluginCommitCopy({
     locations,
     cloneUrl,
     networkUrl: networkCloneUrl(source),
-    pin: recordedSha,
+    sha: recordedSha,
     resolveAuth: () => buildCloneAuth(cloneUrl, source.kind, options.auth),
   });
   if (source.kind === "git-subdir") {
@@ -76,18 +62,6 @@ export async function probeReinstallClone(
   }
 
   return { kind: "materialized", pluginRoot: cloneRoot, resolvedSha: recordedSha };
-}
-
-async function readUsableMirrorSha(mirrorRoot: string): Promise<string | undefined> {
-  if (!(await pathExists(mirrorRoot))) {
-    return undefined;
-  }
-
-  try {
-    return await readMirrorHeadSha(mirrorRoot);
-  } catch {
-    return undefined;
-  }
 }
 
 async function resolveSubdir(

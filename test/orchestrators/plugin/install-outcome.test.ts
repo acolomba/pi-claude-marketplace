@@ -2223,6 +2223,8 @@ test("the callback reaches the real clone probe through the ledger's own cache, 
       },
       materializeOrRefreshPluginMirror: () =>
         Promise.reject(new Error("a sha-pinned source must not reach the mirror path")),
+      materializePluginCommitCopy: () =>
+        Promise.reject(new Error("a sha-pinned source must not reach the commit copy")),
     },
   });
 

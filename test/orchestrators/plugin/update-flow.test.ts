@@ -39,6 +39,7 @@ import {
 import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
+  materializePluginCommitCopy,
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
@@ -402,6 +403,7 @@ function capturingUpdateSeam(gitOps: GitOps): {
       captured.cloneAuth = args.auth;
       return materializeOrRefreshPluginMirror({ ...args, gitOps });
     },
+    materializePluginCommitCopy: (args) => materializePluginCommitCopy({ ...args, gitOps }),
   };
   return { seam, captured };
 }
@@ -7892,6 +7894,7 @@ function seamWith(gitOps: GitOps): UpdateCloneCacheSeam {
     materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
     materializeOrRefreshPluginMirror: (args) =>
       materializeOrRefreshPluginMirror({ ...args, gitOps }),
+    materializePluginCommitCopy: (args) => materializePluginCommitCopy({ ...args, gitOps }),
   };
 }
 
@@ -8947,7 +8950,7 @@ test("a disabled pin refresh swallows post-commit clone cleanup failure", async 
   });
 });
 
-test("MIRR-01/MIRR-03 unpinned update: refreshes the mirror in place and re-anchors the record to the bare mirror key with the HEAD sha", async () => {
+test("GIT-01 unpinned update: refreshes the mirror in place and re-anchors the record to the per-commit copy at its HEAD sha", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-git-unpinned-swap-");
     try {
@@ -8993,27 +8996,26 @@ test("MIRR-01/MIRR-03 unpinned update: refreshes the mirror in place and re-anch
       assert.equal(record?.resolvedSha, SHA_NEW, "records the refreshed mirror HEAD sha");
       assert.equal(record?.version, `sha-${SHA_NEW.slice(0, 12)}`, "version is shaVersion(HEAD)");
 
-      // The record re-anchors to the BARE mirror key `plugin-clones/<12hex>/`.
+      // GIT-01: the record anchors to the per-commit copy at the mirror HEAD.
       const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
-      assert.equal(record?.resolvedSource, mirrorRoot, "resolvedSource re-anchors to the mirror");
-      assert.match(
-        path.basename(record?.resolvedSource ?? ""),
-        /^[0-9a-f]{12}$/,
-        "resolvedSource segment is a bare 12-hex mirror key",
+      const copyKey = pluginCloneKey(cloneUrl, SHA_NEW);
+      assert.equal(
+        record?.resolvedSource,
+        await locations.pluginCloneDir(copyKey),
+        "resolvedSource anchors to the per-commit copy",
       );
       assert.equal(await pathExists(mirrorRoot), true, "the mirror clone materialized");
       // The old per-sha clone is no longer referenced -> GC sweeps it.
       assert.equal(await pathExists(seeded.oldCloneRoot ?? ""), false, "old per-sha clone GC'd");
 
-      // MIRR-06 derive-not-persist: the post-swap GC leaves ONLY the bare mirror
-      // dir under plugin-clones/ -- no per-sha orphan, and no persisted migration
-      // artifact (refcount file / migration stamp) is written anywhere.
+      // GIT-02 derive-not-persist: the post-swap GC leaves the new copy and the
+      // mirror of its URL, and no persisted migration artifact.
       const { readdir } = await import("node:fs/promises");
       const cloneEntries = (await readdir(locations.pluginClonesDir)).sort();
       assert.deepEqual(
         cloneEntries,
-        [pluginMirrorKey(cloneUrl)],
-        "plugin-clones/ holds only the bare mirror key after re-anchor + sweep (no migration state)",
+        [pluginMirrorKey(cloneUrl), copyKey].sort(),
+        "plugin-clones/ holds the mirror and the new copy after the sweep",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -9297,7 +9299,7 @@ test("PURL-03 pinned git-subdir update whose declared path is ABSENT in the new 
   });
 });
 
-test("MIRR-01 unpinned git-subdir update: the refreshed mirror's subdir anchors the pluginRoot and the record re-anchors to the mirror HEAD sha", async () => {
+test("GIT-01 unpinned git-subdir update: the per-commit copy's subdir anchors the pluginRoot at the mirror HEAD sha", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-git-subdir-unpinned-");
     try {
@@ -9333,11 +9335,11 @@ test("MIRR-01 unpinned git-subdir update: the refreshed mirror's subdir anchors 
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.equal(record?.resolvedSha, SHA_NEW, "records the refreshed mirror HEAD sha");
-      const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+      const copyRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA_NEW));
       assert.equal(
         record?.resolvedSource,
-        path.join(mirrorRoot, "plugins", "p"),
-        "resolvedSource anchors to the SUBDIR under the mirror root",
+        path.join(copyRoot, "plugins", "p"),
+        "resolvedSource anchors to the SUBDIR under the per-commit copy",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });

@@ -33,6 +33,7 @@ import {
   materializeMarketplaceTagClone,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
+  materializePluginCommitCopy,
   networkCloneUrl,
   resolveGitSubdirRoot,
   resolvePluginPin,
@@ -76,6 +77,7 @@ export interface UpdateCloneCacheSeam {
   readonly resolvePluginPin: typeof resolvePluginPin;
   readonly materializePluginClone: typeof materializePluginClone;
   readonly materializeOrRefreshPluginMirror: typeof materializeOrRefreshPluginMirror;
+  readonly materializePluginCommitCopy: typeof materializePluginCommitCopy;
 }
 
 /** Direct update request validated and classified by the update flow. */
@@ -227,29 +229,33 @@ function makeUpdateCloneProbe(
   async function probeUnpinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
     const cloneUrl = canonicalCloneUrl(gitSource);
     const authBundle = cloneAuth(cloneUrl, gitSource.kind);
-    const materialized = await seam.materializeOrRefreshPluginMirror({
+    const mirror = await seam.materializeOrRefreshPluginMirror({
       locations,
       cloneUrl,
       networkUrl: networkCloneUrl(gitSource),
       ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
       auth: authBundle,
     });
+    // GIT-01: the updated plugin runs from its own copy at the mirror's commit.
+    const copyRoot = await seam.materializePluginCommitCopy({
+      locations,
+      cloneUrl,
+      networkUrl: networkCloneUrl(gitSource),
+      sha: mirror.resolvedSha,
+      resolveAuth: () => authBundle,
+    });
     if (gitSource.kind === "git-subdir") {
-      const subdir = await resolveGitSubdirRoot(materialized.pluginRoot, gitSource.path);
+      const subdir = await resolveGitSubdirRoot(copyRoot, gitSource.path);
       if (subdir.kind !== "materialized") {
         return subdir;
       }
 
-      captured = materialized.resolvedSha;
-      return { ...subdir, resolvedSha: materialized.resolvedSha };
+      captured = mirror.resolvedSha;
+      return { ...subdir, resolvedSha: mirror.resolvedSha };
     }
 
-    captured = materialized.resolvedSha;
-    return {
-      kind: "materialized",
-      pluginRoot: materialized.pluginRoot,
-      resolvedSha: materialized.resolvedSha,
-    };
+    captured = mirror.resolvedSha;
+    return { kind: "materialized", pluginRoot: copyRoot, resolvedSha: mirror.resolvedSha };
   }
 
   async function probePinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
@@ -885,6 +891,7 @@ export async function preparePluginUpdate(
       resolvePluginPin,
       materializePluginClone,
       materializeOrRefreshPluginMirror,
+      materializePluginCommitCopy,
     },
     options.locations,
     auth,

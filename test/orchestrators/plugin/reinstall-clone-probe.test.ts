@@ -44,16 +44,6 @@ function auth(): Parameters<typeof probeReinstallClone>[0]["auth"] {
   return { ctx, run: runWithNothingLoaded(), credentialOps };
 }
 
-async function writeMirrorHead(mirrorRoot: string, sha: string): Promise<void> {
-  await mkdir(path.join(mirrorRoot, ".git"), { recursive: true });
-  await writeFile(path.join(mirrorRoot, ".git", "HEAD"), `${sha}\n`);
-}
-
-async function writeHeadlessMirror(mirrorRoot: string): Promise<void> {
-  await mkdir(path.join(mirrorRoot, ".git"), { recursive: true });
-  await writeFile(path.join(mirrorRoot, ".git", "HEAD"), "ref: refs/heads/main\n");
-}
-
 test("uses the production seam for a warm pinned clone", async (testContext) => {
   // arrange
   const { locations } = await freshLocations(testContext);
@@ -78,6 +68,29 @@ test("uses the production seam for a warm pinned clone", async (testContext) => 
   });
 });
 
+test("GIT-01: restores an unpinned source's copy at the recorded sha, not the moved mirror", async (testContext) => {
+  // arrange
+  const { locations } = await freshLocations(testContext);
+  const cloneUrl = "https://example.com/mirror-plugin";
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+  await mkdir(path.join(mirrorRoot, ".git"), { recursive: true });
+  await writeFile(path.join(mirrorRoot, ".git", "HEAD"), `${MIRROR_SHA}\n`);
+  const copyRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA));
+  await mkdir(copyRoot, { recursive: true });
+  const source: GitBackedSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
+
+  // act
+  const outcome = await probeReinstallClone({
+    source,
+    locations,
+    recordedSha: SHA,
+    auth: auth(),
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, { kind: "materialized", pluginRoot: copyRoot, resolvedSha: SHA });
+});
+
 test("NFR-5: a pinned GitHub source the seam finds warm never reads an invalid base", async (testContext) => {
   // arrange
   await createHermeticEnvironment(testContext, "reinstall-clone-probe-warm-home-");
@@ -93,7 +106,7 @@ test("NFR-5: a pinned GitHub source the seam finds warm never reads an invalid b
     sha: SHA,
   };
   const seam: ReinstallCloneCacheSeam = {
-    materializePluginClone() {
+    materializePluginCommitCopy() {
       return Promise.resolve(cloneRoot);
     },
   };
@@ -115,235 +128,36 @@ test("NFR-5: a pinned GitHub source the seam finds warm never reads an invalid b
   });
 });
 
-test("repairs an unpinned url source from the warm mirror", async (testContext) => {
-  // arrange
-  const { locations } = await freshLocations(testContext);
-  const cloneUrl = "https://example.com/warm-mirror";
-  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
-  await writeMirrorHead(mirrorRoot, MIRROR_SHA);
-  const source: GitBackedSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
-  const seam: ReinstallCloneCacheSeam = {
-    materializePluginClone() {
-      return Promise.reject(new Error("unexpected clone"));
-    },
-  };
-
-  // act
-  const outcome = await probeReinstallClone({
-    source,
-    seam,
-    locations,
-    recordedSha: SHA,
-    auth: auth(),
-  });
-
-  // assert
-  assert.deepStrictEqual(outcome, {
-    kind: "materialized",
-    pluginRoot: mirrorRoot,
-    resolvedSha: MIRROR_SHA,
-  });
-});
-
-test("resolves an unpinned git-subdir inside the warm mirror", async (testContext) => {
-  // arrange
-  const { locations } = await freshLocations(testContext);
-  const cloneUrl = "https://example.com/mono";
-  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
-  const pluginRoot = path.join(mirrorRoot, "plugins", "one");
-  await Promise.all([
-    writeMirrorHead(mirrorRoot, MIRROR_SHA),
-    mkdir(pluginRoot, { recursive: true }),
-  ]);
-  const source: GitBackedSource = {
-    kind: "git-subdir",
-    raw: `${cloneUrl}:plugins/one`,
-    url: cloneUrl,
-    path: "plugins/one",
-  };
-  const seam: ReinstallCloneCacheSeam = {
-    materializePluginClone() {
-      return Promise.reject(new Error("unexpected clone"));
-    },
-  };
-
-  // act
-  const outcome = await probeReinstallClone({
-    source,
-    seam,
-    locations,
-    recordedSha: SHA,
-    auth: auth(),
-  });
-
-  // assert
-  assert.deepStrictEqual(outcome, {
-    kind: "materialized",
-    pluginRoot,
-    resolvedSha: MIRROR_SHA,
-  });
-});
-
-test("classifies a missing unpinned mirror subdirectory without cloning", async (testContext) => {
-  // arrange
-  const { locations } = await freshLocations(testContext);
-  const cloneUrl = "https://example.com/mono";
-  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
-  await writeMirrorHead(mirrorRoot, MIRROR_SHA);
-  const source: GitBackedSource = {
-    kind: "git-subdir",
-    raw: `${cloneUrl}:plugins/missing`,
-    url: cloneUrl,
-    path: "plugins/missing",
-  };
-  const seam: ReinstallCloneCacheSeam = {
-    materializePluginClone() {
-      return Promise.reject(new Error("unexpected clone"));
-    },
-  };
-
-  // act
-  const outcome = await probeReinstallClone({
-    source,
-    seam,
-    locations,
-    recordedSha: SHA,
-    auth: auth(),
-  });
-
-  // assert
-  assert.deepStrictEqual(outcome, {
-    kind: "missing-subdir",
-    detail: 'git-subdir path "plugins/missing" does not exist in the plugin clone',
-  });
-});
-
-test("falls back from an absent unpinned mirror to the recorded sha", async (testContext) => {
+test("asks for the copy at the recorded sha with the identity and wire urls", async (testContext) => {
   // arrange
   const { locations, root } = await freshLocations(testContext);
-  const cloneUrl = "https://example.com/cold-mirror";
-  const rawUrl = "https://example.com/cold-mirror.git";
-  const cloneRoot = path.join(root, "recorded-clone");
-  await mkdir(cloneRoot, { recursive: true });
+  const cloneUrl = "https://example.com/plugin";
+  const rawUrl = "https://example.com/plugin.git";
   const source: GitBackedSource = { kind: "url", raw: rawUrl, url: cloneUrl };
-  const calls: unknown[] = [];
   const pluginAuth = auth();
+  const calls: unknown[] = [];
   const seam: ReinstallCloneCacheSeam = {
-    // The bundle carries closures, so the recorded call keeps only the two
-    // comparable fields: the bound host and the injected credential ops.
-    materializePluginClone({ resolveAuth, ...cloneOptions }) {
+    materializePluginCommitCopy({ resolveAuth, ...copyOptions }) {
       const bundle = resolveAuth();
-      calls.push({
-        ...cloneOptions,
-        auth: { credentialOps: bundle.credentialOps, host: bundle.host },
-      });
-      return Promise.resolve(cloneRoot);
+      calls.push({ ...copyOptions, credentialOps: bundle.credentialOps, host: bundle.host });
+      return Promise.resolve(root);
     },
   };
 
   // act
-  const outcome = await probeReinstallClone({
-    source,
-    seam,
-    locations,
-    recordedSha: SHA,
-    auth: pluginAuth,
-  });
+  await probeReinstallClone({ source, seam, locations, recordedSha: SHA, auth: pluginAuth });
 
   // assert
-  assert.deepStrictEqual(outcome, {
-    kind: "materialized",
-    pluginRoot: cloneRoot,
-    resolvedSha: SHA,
-  });
   assert.deepStrictEqual(calls, [
     {
-      auth: { credentialOps: pluginAuth.credentialOps, host: "example.com" },
+      locations,
       cloneUrl,
       networkUrl: rawUrl,
-      locations,
-      pin: SHA,
+      sha: SHA,
+      credentialOps: pluginAuth.credentialOps,
+      host: "example.com",
     },
   ]);
-});
-
-test("D-08-05: falls back from a headless unpinned mirror to the recorded sha", async (testContext) => {
-  // arrange
-  const { locations, root } = await freshLocations(testContext);
-  const cloneUrl = "https://example.com/headless-mirror";
-  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
-  await writeHeadlessMirror(mirrorRoot);
-  const cloneRoot = path.join(root, "recorded-clone");
-  await mkdir(cloneRoot, { recursive: true });
-  const source: GitBackedSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
-  const calls: unknown[] = [];
-  const seam: ReinstallCloneCacheSeam = {
-    materializePluginClone({ resolveAuth: _resolveAuth, ...cloneOptions }) {
-      calls.push(cloneOptions);
-      return Promise.resolve(cloneRoot);
-    },
-  };
-
-  // act
-  const outcome = await probeReinstallClone({
-    source,
-    seam,
-    locations,
-    recordedSha: SHA,
-    auth: auth(),
-  });
-
-  // assert
-  assert.deepStrictEqual(outcome, {
-    kind: "materialized",
-    pluginRoot: cloneRoot,
-    resolvedSha: SHA,
-  });
-  assert.deepStrictEqual(calls, [{ cloneUrl, networkUrl: cloneUrl, locations, pin: SHA }]);
-});
-
-test("D-08-05: resolves a git-subdir under the recorded-sha clone behind a headless mirror", async (testContext) => {
-  // arrange
-  const { locations, root } = await freshLocations(testContext);
-  const cloneUrl = "https://example.com/headless-mono";
-  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
-  await Promise.all([
-    writeHeadlessMirror(mirrorRoot),
-    mkdir(path.join(mirrorRoot, "plugins", "one"), { recursive: true }),
-  ]);
-  const cloneRoot = path.join(root, "recorded-clone");
-  const pluginRoot = path.join(cloneRoot, "plugins", "one");
-  await mkdir(pluginRoot, { recursive: true });
-  const source: GitBackedSource = {
-    kind: "git-subdir",
-    raw: `${cloneUrl}:plugins/one`,
-    url: cloneUrl,
-    path: "plugins/one",
-  };
-  const calls: unknown[] = [];
-  const seam: ReinstallCloneCacheSeam = {
-    materializePluginClone({ resolveAuth: _resolveAuth, ...cloneOptions }) {
-      calls.push(cloneOptions);
-      return Promise.resolve(cloneRoot);
-    },
-  };
-
-  // act
-  const outcome = await probeReinstallClone({
-    source,
-    seam,
-    locations,
-    recordedSha: SHA,
-    auth: auth(),
-  });
-
-  // assert
-  assert.deepStrictEqual(outcome, {
-    kind: "materialized",
-    pluginRoot,
-    resolvedSha: SHA,
-  });
-  assert.deepStrictEqual(calls, [{ cloneUrl, networkUrl: cloneUrl, locations, pin: SHA }]);
 });
 
 test("threads provider auth while resolving a pinned git-subdir", async (testContext) => {
@@ -361,7 +175,7 @@ test("threads provider auth while resolving a pinned git-subdir", async (testCon
   };
   const calls: unknown[] = [];
   const seam: ReinstallCloneCacheSeam = {
-    materializePluginClone(options) {
+    materializePluginCommitCopy(options) {
       calls.push({ auth: options.resolveAuth() });
       return Promise.resolve(cloneRoot);
     },
@@ -399,7 +213,7 @@ test("classifies a missing pinned git-subdir", async (testContext) => {
     sha: SHA,
   };
   const seam: ReinstallCloneCacheSeam = {
-    materializePluginClone() {
+    materializePluginCommitCopy() {
       return Promise.resolve(cloneRoot);
     },
   };
@@ -431,7 +245,7 @@ test("preserves clone failure attribution", async (testContext) => {
     sha: SHA,
   };
   const seam: ReinstallCloneCacheSeam = {
-    materializePluginClone() {
+    materializePluginCommitCopy() {
       return Promise.reject(cloneFailure);
     },
   };

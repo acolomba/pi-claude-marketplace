@@ -4,6 +4,7 @@ import { buildCloneAuth } from "../auth-host.ts";
 import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
+  materializePluginCommitCopy,
   resolveGitPluginRootWithSubdir,
   resolvePluginPin,
 } from "./clone-cache.ts";
@@ -20,6 +21,7 @@ export interface InstallCloneCacheSeam {
   readonly resolvePluginPin: typeof resolvePluginPin;
   readonly materializePluginClone: typeof materializePluginClone;
   readonly materializeOrRefreshPluginMirror: typeof materializeOrRefreshPluginMirror;
+  readonly materializePluginCommitCopy: typeof materializePluginCommitCopy;
 }
 
 /** Inputs required to materialize and classify one install clone. */
@@ -40,6 +42,7 @@ const REAL_INSTALL_CLONE_CACHE_SEAM: InstallCloneCacheSeam = {
   resolvePluginPin,
   materializePluginClone,
   materializeOrRefreshPluginMirror,
+  materializePluginCommitCopy,
 };
 
 /**
@@ -58,21 +61,27 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
   const cloneUrl = canonicalCloneUrl(source);
 
   if (source.sha === undefined) {
-    const materialized = await seam.materializeOrRefreshPluginMirror({
+    const auth = buildCloneAuth(cloneUrl, source.kind, options.auth);
+    const mirror = await seam.materializeOrRefreshPluginMirror({
       locations,
       cloneUrl,
       networkUrl: networkCloneUrl(source),
       ...(source.ref !== undefined && { ref: source.ref }),
-      auth: buildCloneAuth(cloneUrl, source.kind, options.auth),
+      auth,
     });
-    const result = await resolveGitPluginRootWithSubdir(
-      source,
-      materialized.pluginRoot,
-      materialized.resolvedSha,
-    );
+    // GIT-01: the install runs from its own copy at the mirror's commit, so a
+    // later refresh of the mirror never changes the installed files.
+    const copyRoot = await seam.materializePluginCommitCopy({
+      locations,
+      cloneUrl,
+      networkUrl: networkCloneUrl(source),
+      sha: mirror.resolvedSha,
+      resolveAuth: () => auth,
+    });
+    const result = await resolveGitPluginRootWithSubdir(source, copyRoot, mirror.resolvedSha);
     return {
       result,
-      resolvedSha: result.kind === "materialized" ? materialized.resolvedSha : undefined,
+      resolvedSha: result.kind === "materialized" ? mirror.resolvedSha : undefined,
     };
   }
 

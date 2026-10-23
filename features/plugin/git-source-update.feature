@@ -32,9 +32,11 @@ Feature: Plugin git source update
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack  | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                    | 200    |
     Then the project scope holds these git clones:
-      | clone       | origin                           | revision |
-      | marketplace | https://{git host}/acme/gits.git |          |
-      | plugin      | https://github.com/acme/ghp.git  |          |
+      | clone       | origin                           | revision         |
+      | marketplace | https://{git host}/acme/gits.git |                  |
+      | plugin      | https://github.com/acme/ghp.git  |                  |
+      | plugin      | https://github.com/acme/ghp.git  | {ghp revision 2} |
+    Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
 
   Scenario: Updating a plugin to a revision the clone cache already holds makes no request
     Given the git repository "mono" holds these plugins:

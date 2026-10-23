@@ -21,6 +21,7 @@ import {
   materializeMarketplaceTagClone,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
+  materializePluginCommitCopy,
   resolveGitPluginRootWithSubdir,
   resolveGitSubdirRoot,
   resolvePluginPin,
@@ -2007,4 +2008,145 @@ void test("materializeMarketplaceTagClone: a marketplace checkout with no discov
 
   // assert: materialization still succeeds off the name-keyed fallback.
   assert.equal(tagClone.kind, "materialized");
+});
+
+/** Seeds the URL-keyed mirror of `cloneUrl` with one file, returning its root. */
+async function seedMirror(locations: ScopedLocations, cloneUrl: string): Promise<string> {
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+  await mkdir(path.join(mirrorRoot, ".git"), { recursive: true });
+  await writeFile(path.join(mirrorRoot, "plugin.txt"), "mirror tree");
+  return mirrorRoot;
+}
+
+void test("GIT-01: a present per-commit copy uses the default git surface without a git call", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  const copyRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, PIN_40));
+  await mkdir(copyRoot, { recursive: true });
+
+  // act
+  const result = await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha: PIN_40,
+    resolveAuth: () => assert.fail("a present copy never builds clone auth"),
+  });
+
+  // assert
+  assert.strictEqual(result, copyRoot);
+});
+
+void test("GIT-01: a per-commit copy is made from the mirror at the commit, offline", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  const mirrorRoot = await seedMirror(locations, cloneUrl);
+  const { gitOps, state } = createGitOps({ remoteRefs: { [PIN_40]: PIN_40 } });
+
+  // act
+  const result = await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha: PIN_40,
+    gitOps,
+    resolveAuth: () => assert.fail("a mirror copy never builds clone auth"),
+  });
+
+  // assert
+  assert.strictEqual(result, await locations.pluginCloneDir(pluginCloneKey(cloneUrl, PIN_40)));
+  assert.strictEqual(await readFile(path.join(result, "plugin.txt"), "utf8"), "mirror tree");
+  assert.strictEqual(await readFile(path.join(mirrorRoot, "plugin.txt"), "utf8"), "mirror tree");
+  assert.deepStrictEqual(
+    state.checkoutCalls.map((call) => call.ref),
+    [PIN_40],
+  );
+  assert.strictEqual(state.cloneCalls.length, 0);
+  assert.deepStrictEqual(await readdir(path.join(locations.extensionRoot, "sources-staging")), []);
+});
+
+void test("GIT-01: a mirror that lacks the commit falls back to a clone of it", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  await seedMirror(locations, cloneUrl);
+  let checkouts = 0;
+  const { gitOps: inner, state } = createGitOps({ remoteRefs: { [PIN_40]: PIN_40 } });
+  const gitOps: GitOps = {
+    ...inner,
+    checkout(options) {
+      checkouts += 1;
+      return checkouts === 1
+        ? Promise.reject(new Error("commit not in the mirror"))
+        : inner.checkout(options);
+    },
+  };
+
+  // act
+  const result = await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha: PIN_40,
+    gitOps,
+    resolveAuth: publicCloneAuth,
+  });
+
+  // assert
+  assert.strictEqual(result, await locations.pluginCloneDir(pluginCloneKey(cloneUrl, PIN_40)));
+  assert.strictEqual(await pathExists(path.join(result, "plugin.txt")), false);
+  assert.strictEqual(state.cloneCalls.length, 1);
+  assert.deepStrictEqual(await readdir(path.join(locations.extensionRoot, "sources-staging")), []);
+});
+
+void test("GIT-01: with no mirror the per-commit copy is cloned at the commit", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  const { gitOps, state } = createGitOps({ remoteRefs: { [PIN_40]: PIN_40 } });
+
+  // act
+  const result = await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha: PIN_40,
+    gitOps,
+    resolveAuth: publicCloneAuth,
+  });
+
+  // assert
+  assert.strictEqual(result, await locations.pluginCloneDir(pluginCloneKey(cloneUrl, PIN_40)));
+  assert.strictEqual(state.cloneCalls.length, 1);
+  assert.deepStrictEqual(
+    state.checkoutCalls.map((call) => call.ref),
+    [PIN_40],
+  );
+});
+
+void test("GIT-01: a mirror that cannot be copied fails the copy and leaves no staging", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  const mirrorRoot = await seedMirror(locations, cloneUrl);
+  const unreadable = path.join(mirrorRoot, "plugin.txt");
+  await chmod(unreadable, 0o000);
+  const { gitOps, state } = createGitOps();
+
+  // act & assert
+  await assert.rejects(
+    materializePluginCommitCopy({
+      locations,
+      cloneUrl,
+      networkUrl: cloneUrl,
+      sha: PIN_40,
+      gitOps,
+      resolveAuth: publicCloneAuth,
+    }),
+    (error: unknown) => (error as NodeJS.ErrnoException).code === "EACCES",
+  );
+  assert.strictEqual(state.cloneCalls.length, 0);
+  assert.deepStrictEqual(await readdir(path.join(locations.extensionRoot, "sources-staging")), []);
 });

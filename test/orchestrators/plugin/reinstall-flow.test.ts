@@ -69,6 +69,7 @@ import { WORKFLOW_SCRIPT_MAX_BYTES } from "../../../extensions/pi-claude-marketp
 import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
+  materializePluginCommitCopy,
   resolvePluginPin,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
@@ -4058,13 +4059,14 @@ function installSeamWith(gitOps: GitOps): InstallCloneCacheSeam {
     materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
     materializeOrRefreshPluginMirror: (args) =>
       materializeOrRefreshPluginMirror({ ...args, gitOps }),
+    materializePluginCommitCopy: (args) => materializePluginCommitCopy({ ...args, gitOps }),
   };
 }
 
-/** Bind reinstall's clone-cache seam (materialize only) to a mock gitOps. */
+/** Bind reinstall's clone-cache seam (commit copy only) to a mock gitOps. */
 function reinstallSeamWith(gitOps: GitOps): ReinstallCloneCacheSeam {
   return {
-    materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
+    materializePluginCommitCopy: (args) => materializePluginCommitCopy({ ...args, gitOps }),
   };
 }
 
@@ -4077,10 +4079,10 @@ function capturingReinstallSeam(gitOps: GitOps): {
     count: 0,
   };
   const seam: ReinstallCloneCacheSeam = {
-    materializePluginClone: (args) => {
+    materializePluginCommitCopy: (args) => {
       captured.auth = args.resolveAuth();
       captured.count += 1;
-      return materializePluginClone({ ...args, gitOps });
+      return materializePluginCommitCopy({ ...args, gitOps });
     },
   };
   return { seam, captured };
@@ -4188,7 +4190,7 @@ test("a clone-cache seam non-Error rejection becomes a complete failed outcome",
         plugin: "gp",
         render: "none",
         cloneCacheSeam: {
-          materializePluginClone: () => rejectNonError("clone-cache string failure"),
+          materializePluginCommitCopy: () => rejectNonError("clone-cache string failure"),
         },
       });
 
@@ -4396,9 +4398,9 @@ test("plugin reinstall authentication: a bulk cold-cache sweep shares one host m
       const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
       const bundles: (GitAuthBundle | undefined)[] = [];
       const seam: ReinstallCloneCacheSeam = {
-        materializePluginClone: (args) => {
+        materializePluginCommitCopy: (args) => {
           bundles.push(args.resolveAuth());
-          return materializePluginClone({ ...args, gitOps });
+          return materializePluginCommitCopy({ ...args, gitOps });
         },
       };
       const { credentialOps } = createCredentialOpsFake({ boundary: "memory" });
@@ -4831,7 +4833,7 @@ async function seedUnpinnedGitRecord(opts: {
   });
 }
 
-test("MIRR-06 / PRL-07: an unpinned reinstall repairs fs-only from the warm mirror with no network call", async () => {
+test("GIT-01 / PRL-07: an unpinned reinstall copies the recorded commit from the warm mirror with no network call", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mirror-warm-"));
     try {
@@ -4873,15 +4875,14 @@ test("MIRR-06 / PRL-07: an unpinned reinstall repairs fs-only from the warm mirr
       assert.equal(gitState.resolveRemoteRefCalls.length, 0, "no ref re-resolution (no network)");
 
       const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
-      // The record stays anchored to the BARE mirror key with the HEAD sha read
-      // off disk (reinstall does NOT re-anchor -- the mirror key is unchanged).
-      assert.equal(record?.resolvedSource, mirrorRoot, "resolvedSource is the bare mirror root");
-      assert.match(
-        path.basename(record?.resolvedSource ?? ""),
-        /^[0-9a-f]{12}$/,
-        "resolvedSource segment is a bare 12-hex mirror key",
+      // GIT-01: a record made when installs ran from the mirror moves to its
+      // own copy of the recorded commit, copied from the mirror offline.
+      assert.equal(
+        record?.resolvedSource,
+        await locations.pluginCloneDir(pluginCloneKey(cloneUrl, MIRROR_HEAD_SHA)),
+        "resolvedSource is the per-commit copy",
       );
-      assert.equal(record?.resolvedSha, MIRROR_HEAD_SHA, "resolvedSha = mirror HEAD");
+      assert.equal(record?.resolvedSha, MIRROR_HEAD_SHA, "resolvedSha = the recorded sha");
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -7017,7 +7018,7 @@ test("LAYER-04: the plugin form of reinstall with --local refuses a plugin only 
   });
 });
 
-test("an unpinned git-subdir reinstall repairs from the warm mirror without external calls", async () => {
+test("an unpinned git-subdir reinstall copies the recorded commit from the warm mirror without external calls", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-subdir-mirror-"));
     try {
@@ -7057,7 +7058,14 @@ test("an unpinned git-subdir reinstall repairs from the warm mirror without exte
       assert.deepEqual(gitState.cloneCalls, []);
       assert.deepEqual(gitState.resolveRemoteRefCalls, []);
       const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
-      assert.equal(record?.resolvedSource, pluginRoot);
+      assert.equal(
+        record?.resolvedSource,
+        path.join(
+          await locations.pluginCloneDir(pluginCloneKey(cloneUrl, MIRROR_HEAD_SHA)),
+          "packages",
+          "gp",
+        ),
+      );
       assert.equal(record?.resolvedSha, MIRROR_HEAD_SHA);
     } finally {
       await rm(cwd, { recursive: true, force: true });

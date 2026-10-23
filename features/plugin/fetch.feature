@@ -85,6 +85,34 @@ Feature: Plugin fetch
       | gits             | project           | ghp@gits | ghp  | installed |         | project | {ghp revision 1} |
     Then the git host receives no request
 
+  Scenario: A fetch leaves the installed plugin running the revision it installed until an update
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 2.0.0   |      |
+    When the user runs "/claude:plugin fetch ghp@gits --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status    | reasons |
+      | gits             | project           | ghp@gits | ghp  | available |         |
+    Then the fetched copy of the plugin "ghp" in the project scope holds revision 2 of its repository
+    Then the git-source plugin "ghp" installed in the project scope runs revision 1 of its repository
+    Then the project scope holds these git clones:
+      | clone  | origin                          | revision         |
+      | plugin | https://github.com/acme/ghp.git |                  |
+      | plugin | https://github.com/acme/ghp.git | {ghp revision 1} |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command          | description           |
+      | /skill:ghp-skill | A skill of ghp 1.0.0. |
+
   Scenario: Fetching a marketplace fetches each git-source plugin and reports the one the git host refuses
     Given the git repository "ghp" holds these plugins:
       | name | version | path |

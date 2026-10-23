@@ -162,3 +162,32 @@ Feature: Plugin git source
     Then the project scope holds no git clones
     When the user starts a new pi session
     Then the session offers no skills
+
+  Scenario: Clone cleanup keeps an installed plugin's copy and mirror and removes a mirror no installation uses
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the git repository "urlp" holds these plugins:
+      | name | version | path |
+      | urlp | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+      | urlp | url         | urlp       | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install demo@gits --scope project"
+    Given the user has run "/claude:plugin install urlp@gits --scope project"
+    Given the user has run "/claude:plugin fetch ghp@gits --scope project"
+    When the user runs "/claude:plugin uninstall demo@gits --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons | scope   | version |
+      | gits             | project           | demo@gits | demo | uninstalled |         | project | 1.0.0   |
+    Then the project scope holds these git clones:
+      | clone  | origin                           | revision          |
+      | plugin | https://{git host}/acme/urlp.git |                   |
+      | plugin | https://{git host}/acme/urlp.git | {urlp revision 1} |
+    Then the git-source plugin "urlp" installed in the project scope runs revision 1 of its repository
