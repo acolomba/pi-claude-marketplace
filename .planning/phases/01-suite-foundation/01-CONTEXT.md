@@ -113,6 +113,39 @@ section are the scope. Test plugins carry skills only.
   different seed. Starting a slow process per scenario is allowed only under
   the slow-process rule in `rules/world-and-stand-ins.md`.
 
+### Decisions after research (orchestrator, autonomous run, 2026-10-22)
+- `startSession()` reads a new session's payloads through the RPC
+  `get_entries` request, so the reconcile report reaches the driver. The six
+  existing scenarios that then get an uncompared reconcile report gain the
+  missing comparison in Phase 1. That includes the two in
+  `plugin/configuration.feature` and `marketplace/update.feature`, which the
+  ROADMAP otherwise leaves untouched. Phase 1 finishes before phases 2-15
+  start, so this edit does not break their file ownership.
+- A session in another project directory uses a second `PiProcess` with the
+  same HOME and agent directory and a fresh cwd, started only by the scenario
+  that needs it and released by the world.
+- The state-lock helper is one `features/lib/` module that the step imports
+  and also runs as a child process (fallow flags a lib file that nothing
+  imports). The child keeps its stdin open, holds the lock, and exits when
+  stdin closes. The Phase 1 seed uses `uninstall`, which already reports
+  `lock held`. Inconsistent lock-held reasons on other verbs belong to
+  Phase 15 under the bug policy.
+- The rollback obstruction is a directory in place of
+  `<scopeRoot>/mcp-adapter.json` (EISDIR in the mcp phase after skills
+  commit; it does not depend on file mode). One obstruction serves INS-07
+  and UPD-04.
+- Git versions (`sha-<hash>`) and clone keys (a URL hash that includes the
+  random port) get run tokens. Clones are shown by origin URL. The git host
+  serves owner `anthropics` as well as `acme`, for the official marketplace.
+- `reconcile-aborted` and `prune-committed-warning` have no reliable trigger
+  and no row arrays. The field steps already compare them, so they get no
+  seed scenario.
+- Product bugs that research found (lock-held reasons, EISDIR reported as
+  `unreadable manifest`, no reason on a git 404 install, `installed` rows
+  without a version, empty `list --remote`, `info --fetch` missing the new
+  revision) belong to the phases that own those verbs. Phase 1 fixes only a
+  bug that blocks one of its own seeds.
+
 ### Claude's Discretion
 - Exact step text, module names (within the rules above), and how the fixture
   builders are split inside `features/lib/`.
