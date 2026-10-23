@@ -1024,7 +1024,7 @@ describe("applyReconcile", () => {
           "Some operations have failed.\n" +
           "\n" +
           "● mp [project]\n" +
-          "  ● hello (installed)\n" +
+          "  ● hello v1.0.0 (installed)\n" +
           "\n" +
           "⊘ nowhere [project] (failed) {dangling reference}\n" +
           "  ⊘ ghost (failed) {dangling reference}\n" +
@@ -2222,7 +2222,7 @@ describe("applyReconcile", () => {
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● mp [project]\n  ● hello (installed)\n\nReconcile: 1 success" },
+      { message: "● mp [project]\n  ● hello v1.0.0 (installed)\n\nReconcile: 1 success" },
     ]);
     const record = await recordFor(project, "mp", "hello");
     assert.deepStrictEqual(record?.resources, {
@@ -2479,7 +2479,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● canonical-name [project]\n" +
-          "  ● formatter (installed)\n" +
+          "  ● formatter v1.0.0 (installed)\n" +
           "\n" +
           "Reconcile: 1 success",
       },
@@ -2589,7 +2589,7 @@ describe("applyReconcile", () => {
           "A plugin operation needs attention.\n" +
           "\n" +
           "● mp [project]\n" +
-          "  ● soft (installed) {malformed skill}\n" +
+          "  ● soft v1.0.0 (installed) {malformed skill}\n" +
           "\n" +
           "Reconcile: 1 warning",
         severity: "warning",
@@ -2659,7 +2659,8 @@ describe("applyReconcile", () => {
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: "● mp [project]\n  ● orphan (installed) {orphan rewake}\n\nReconcile: 1 success",
+        message:
+          "● mp [project]\n  ● orphan v1.0.0 (installed) {orphan rewake}\n\nReconcile: 1 success",
       },
     ]);
     assert.deepStrictEqual((await recordFor(project, "mp", "orphan"))?.resources.hooks, ["orphan"]);
@@ -2710,7 +2711,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● rich (installed) {requires pi-subagents, requires pi-mcp-adapter}\n" +
+          "  ● rich v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}\n" +
           "\n" +
           "Reconcile: 1 success",
       },
@@ -2809,6 +2810,7 @@ describe("applyReconcile", () => {
                     id: "duo@mp",
                     scope: "project",
                     status: "installed",
+                    version: "1.0.0",
                     reasons: ["requires pi-subagents"],
                   },
                 ],
@@ -2915,6 +2917,7 @@ describe("applyReconcile", () => {
                   id: "duo@mp",
                   scope: "project",
                   status: "installed",
+                  version: "1.0.0",
                   reasons: ["requires pi-subagents"],
                 },
               ],
@@ -2970,7 +2973,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● duo (installed) {requires pi-subagents}\n" +
+          "  ● duo v1.0.0 (installed) {requires pi-subagents}\n" +
           "\n" +
           "Reconcile: 1 success",
       },
@@ -3114,12 +3117,12 @@ describe("applyReconcile", () => {
     {
       name: "first",
       keys: ["gone", "mike", "alfa"],
-      rows: "  ⊘ gone (failed) {no longer installable}\n  ● mike (installed)\n  ● alfa (installed)",
+      rows: "  ⊘ gone (failed) {no longer installable}\n  ● mike v1.0.0 (installed)\n  ● alfa v1.0.0 (installed)",
     },
     {
       name: "middle",
       keys: ["mike", "gone", "alfa"],
-      rows: "  ● mike (installed)\n  ⊘ gone (failed) {no longer installable}\n  ● alfa (installed)",
+      rows: "  ● mike v1.0.0 (installed)\n  ⊘ gone (failed) {no longer installable}\n  ● alfa v1.0.0 (installed)",
     },
   ] as const satisfies readonly {
     readonly name: string;
@@ -3790,7 +3793,10 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "● mp [project] (added)\n" + "  ● hello (installed)\n" + "\n" + "Reconcile: 2 successes",
+          "● mp [project] (added)\n" +
+          "  ● hello v1.0.0 (installed)\n" +
+          "\n" +
+          "Reconcile: 2 successes",
       },
     ]);
     assert.deepStrictEqual((await recordFor(project, "mp", "hello"))?.resources.skills, [
@@ -3932,7 +3938,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● fresh (installed)\n" +
+          "  ● fresh v1.0.0 (installed)\n" +
           // WCONV-03: the promotion row says why it appeared; the fresh install
           // beside it has no such brace, which is the whole point of the marker.
           "  ● promoted v1.0.0 (installed) {components now supported}\n" +
@@ -6042,7 +6048,8 @@ describe("applyReconcile", () => {
     // materialized once, and deploy-kit is left untouched.
     assert.deepStrictEqual(notifications, [
       {
-        message: "● mp [project]\n" + "  ● app (installed)\n" + "\n" + "Reconcile: 1 success",
+        message:
+          "● mp [project]\n" + "  ● app v1.0.0 (installed)\n" + "\n" + "Reconcile: 1 success",
       },
     ]);
     const helper = await recordFor(project, "mp", "helper");
@@ -6686,7 +6693,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● hello (installed) {requires pi-mcp-adapter}\n" +
+          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
           "\n" +
           "Reconcile: 1 success",
       },
@@ -6753,7 +6760,7 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● hello (installed) {requires pi-mcp-adapter}\n" +
+          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
           "\n" +
           "Reconcile: 1 success",
       },
@@ -7085,7 +7092,7 @@ describe("applyReconcile", () => {
         message:
           "● mp [project]\n" +
           "  ○ alfa v1.0.0 (uninstalled)\n" +
-          "  ● bravo (installed) {requires pi-mcp-adapter}\n" +
+          "  ● bravo v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
           "\n" +
           "Reconcile: 2 successes",
       },
