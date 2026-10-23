@@ -163,6 +163,122 @@ Feature: Plugin git source
     When the user starts a new pi session
     Then the session offers no skills
 
+  Scenario Outline: An install fails on the dependency as <reason> when the git host <refusal> for the dependency and installs nothing
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | ghp          |
+      | ghp  | 1.0.0   |              |
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the git host <refusal> for the plugin "ghp"
+    When the user runs "/claude:plugin install app@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name     | status | reasons           | scope   | leaks | rollback partial | cause chain   | cause truncated |
+      | gits             | project           | app@gits | app      | failed | dependency failed | project |       |                  |               |                 |
+      | gits             | project           | ghp@gits | ghp@gits | failed | <reason>          | project |       |                  | <cause chain> | false           |
+    Then the git host receives these requests:
+      | method | path                                            | status   |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | <status> |
+    Then the project scope has no installed plugins
+    Then the project scope holds no git clones
+
+    Examples:
+      | refusal              | reason              | status  | cause chain                                                                  |
+      | answers 404          | source missing      | 404     | HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git           |
+      | drops the connection | network unreachable | dropped | socket hang up, fetched https://{git host}/acme/ghp.git                      |
+      | answers 503          | network error       | 503     | HTTP Error: 503 Service Unavailable, fetched https://{git host}/acme/ghp.git |
+
+  Scenario: A new session reports a declared plugin whose clone the git host refuses as source missing
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the git host answers 404 for the plugin "ghp"
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | gits        | ghp    |         |
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                        | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | leaks | rollback partial |
+      | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  |
+      | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  |
+    Then the project scope has no installed plugins
+    Then the session offers no skills
+
+  Scenario: A new session reports a declared plugin whose dependency's clone the git host refuses as dependency failed
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | ghp          |
+      | ghp  | 1.0.0   |              |
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the git host answers 404 for the plugin "ghp"
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | gits        | app    |         |
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                        | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id       | name | status | reasons           | scope   | leaks | rollback partial | cause chain                                                        | cause truncated |
+      | gits             | project           | app@gits | app  | failed | dependency failed | project |       |                  | HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git | false           |
+      | gits             | project           | app@gits | app  | failed | dependency failed | project |       |                  | HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git | false           |
+    Then the project scope has no installed plugins
+    Then the session offers no skills
+
+  Scenario: An install of a plugin pinned to a commit its repository lacks fails as source missing and leaves nothing behind
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | true   |
+    Given the marketplace "gits" pins the plugin "ghp" to a commit its repository lacks
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status | reasons        | scope   | leaks | rollback partial | cause chain                                                                                                                                                                                                                                                                                             | cause truncated |
+      | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  | A fresh clone from the git host does not hold the commit 0123456789abcdef0123456789abcdef01234567, Failed to checkout "0123456789abcdef0123456789abcdef01234567" because commit 0123456789abcdef0123456789abcdef01234567 is not available locally. Do a git fetch to make the branch available locally. | false           |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+    Then the project scope has no installed plugins
+    Then the project scope holds no git clones
+
   Scenario: Clone cleanup keeps an installed plugin's copy and mirror and removes a mirror no installation uses
     Given the git repository "ghp" holds these plugins:
       | name | version | path |

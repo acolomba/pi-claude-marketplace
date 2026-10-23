@@ -11,6 +11,7 @@ import {
   PROMOTED_ROW_REASONS,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 import {
+  appendLeakToError,
   InstallMarketplaceAddError,
   PluginShapeError,
   StateLockHeldError,
@@ -440,6 +441,39 @@ describe("composeInstallFailureMessage", () => {
       reasons: ["authentication required"],
       version: "1.2.3",
       scope: "user",
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("INR-02: keeps the cause of an authentication failure whose cleanup leaked", () => {
+    // arrange
+    const failure = appendLeakToError(
+      Object.assign(new Error("HTTP 401 for private clone"), {
+        code: "HttpError",
+        data: { statusCode: 401 },
+      }),
+      "plugin clone staging left behind",
+    );
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "user",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["authentication required"],
+      scope: "user",
+      cause: failure,
       severity: "error",
       needsReload: false,
     });

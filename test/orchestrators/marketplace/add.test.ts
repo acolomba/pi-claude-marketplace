@@ -37,6 +37,7 @@ import { buildAuthCallbacks } from "../../../extensions/pi-claude-marketplace/pl
 import { listRemotes } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
+  CleanupLeakError,
   FetchedUrlCause,
   InvalidGitHubBaseUrlError,
   MarketplaceDuplicateNameError,
@@ -1214,9 +1215,10 @@ test("MA-14: orchestrated mode carries the leftover cleanup failure in the cause
     assert.deepStrictEqual(outcome, {
       status: "failed",
       reason: "stale clone",
-      error: new Error(cause, {
-        cause: new UnremovableLeftoverCloneError(finalDir, "valid-marketplace", leak),
-      }),
+      error: new CleanupLeakError(
+        new UnremovableLeftoverCloneError(finalDir, "valid-marketplace", leak),
+        leak,
+      ),
       cause,
     });
     assert.deepStrictEqual(notifications, []);
@@ -1254,9 +1256,10 @@ test("MA-14: orchestrated mode joins both cleanup failures behind one Error.caus
     assert.deepStrictEqual(outcome, {
       status: "failed",
       reason: "stale clone",
-      error: new Error(cause, {
-        cause: new UnremovableLeftoverCloneError(finalDir, "valid-marketplace", leak),
-      }),
+      error: new CleanupLeakError(
+        new UnremovableLeftoverCloneError(finalDir, "valid-marketplace", leak),
+        `${leak}; failed to clean up marketplace clone staging at ${staging}: EACCES: permission denied, rm '${staging}'`,
+      ),
       cause,
     });
     assert.deepStrictEqual(notifications, []);

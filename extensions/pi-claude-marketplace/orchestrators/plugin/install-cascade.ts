@@ -848,6 +848,9 @@ function liveInstalledKeys(
  * A member the snapshot records no version for is left alone. It is not
  * installed in this state after all, so there is nothing for a constraint to
  * conflict with.
+ *
+ * INR-04: a conflict reports the DECLARED ranges, as the contradictory
+ * declarations arm does and as Claude Code does, not their intersection.
  */
 function checkInstalledMember(
   state: ExtensionState,
@@ -869,7 +872,7 @@ function checkInstalledMember(
         kind: "range-conflict",
         why: "installed-unsatisfied",
         key: member.key,
-        range: renderConstraintRange(intersected.range),
+        range: renderConstraintRange(member.ranges.join(" ")),
         recordedVersion: recorded,
       };
 }

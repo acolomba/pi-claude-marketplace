@@ -1,5 +1,6 @@
 import {
   causeChainTrailer,
+  CleanupLeakError,
   errorMessage,
   InstallMarketplaceAddError,
   PluginShapeError,
@@ -160,6 +161,15 @@ function runtimeFailureReasons(
   return gitReason !== undefined ? [gitReason] : [];
 }
 
+/**
+ * The runtime row keeps its cause chain, except the bare auth row (amended
+ * D-79-03). A cleanup leak keeps it even then, because the cause carries the
+ * manual-cleanup hint (MA-9, INR-02).
+ */
+function keepsRuntimeCause(err: unknown, gitReason: ContentReason | undefined): boolean {
+  return gitReason !== "authentication required" || err instanceof CleanupLeakError;
+}
+
 export function composeInstallFailureMessage(args: {
   err: unknown;
   plugin: string;
@@ -252,7 +262,7 @@ export function composeInstallFailureMessage(args: {
     reasons: runtimeFailureReasons(err, gitReason),
     ...(version !== undefined && version !== "" && { version }),
     scope,
-    ...(gitReason !== "authentication required" && cause !== undefined && { cause }),
+    ...(keepsRuntimeCause(err, gitReason) && cause !== undefined && { cause }),
     // D-03/D-06: a failed install -> error, no reload (nothing landed).
     severity: "error",
     needsReload: false,

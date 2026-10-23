@@ -36,6 +36,7 @@ import {
   MarketplaceNotFoundError,
   MarketplaceSourceUndeclarableError,
   MarketplaceUpdateError,
+  PinnedCommitMissingError,
   PluginInBaseLayerOnlyError,
   PluginInLocalLayerOnlyError,
   PluginShapeError,
@@ -53,6 +54,7 @@ import {
   UnsupportedModeError,
   UnsafeGeneratedNameError,
   WorkflowNameCollisionError,
+  withoutCleanupLeaks,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 describe("DeviceFlowUnavailableError", () => {
@@ -546,7 +548,7 @@ describe("appendLeakToError", () => {
     // assert
     assert.deepStrictEqual(
       { name: appended.name, message: appended.message, cause: appended.cause },
-      { name: "Error", message: "base (additionally: tmp leaked)", cause: error },
+      { name: "CleanupLeakError", message: "base (additionally: tmp leaked)", cause: error },
     );
   });
 
@@ -558,9 +560,66 @@ describe("appendLeakToError", () => {
     const appended = appendLeakToError(thrownValue, "tmp leaked");
 
     // assert
-    assert.strictEqual(appended.name, "Error");
+    assert.strictEqual(appended.name, "CleanupLeakError");
     assert.strictEqual(appended.message, "base (additionally: tmp leaked)");
     assert.deepStrictEqual(appended.cause, new Error("base"));
+  });
+});
+
+describe("withoutCleanupLeaks", () => {
+  test("returns the failure behind every leak wrapper", () => {
+    // arrange
+    const error = new Error("base");
+    const wrapped = appendLeaks(error, ["first leaked", "second leaked"]);
+
+    // act
+    const original = withoutCleanupLeaks(wrapped);
+
+    // assert
+    assert.strictEqual(original, error);
+  });
+
+  test("returns a chain of leak wrappers deeper than the cause-chain cap as given", () => {
+    // arrange
+    const wrapped = appendLeaks(new Error("base"), ["1", "2", "3", "4", "5", "6"]);
+
+    // act
+    const original = withoutCleanupLeaks(wrapped);
+
+    // assert
+    assert.strictEqual(original, wrapped);
+  });
+
+  test("returns a failure no leak wrapped unchanged", () => {
+    // arrange
+    const error = new Error("base", { cause: new Error("inner") });
+
+    // act
+    const original = withoutCleanupLeaks(error);
+
+    // assert
+    assert.strictEqual(original, error);
+  });
+});
+
+describe("PinnedCommitMissingError", () => {
+  test("names the commit the git host does not have and keeps its cause", () => {
+    // arrange
+    const cause = new Error("not available locally");
+
+    // act
+    const error = new PinnedCommitMissingError("0123abc", { cause });
+
+    // assert
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, sha: error.sha, cause: error.cause },
+      {
+        name: "PinnedCommitMissingError",
+        message: "A fresh clone from the git host does not hold the commit 0123abc",
+        sha: "0123abc",
+        cause,
+      },
+    );
   });
 });
 

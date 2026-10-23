@@ -32,7 +32,7 @@ import {
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { appendLeakToError } from "../../shared/errors.ts";
+import { appendLeakToError, PinnedCommitMissingError } from "../../shared/errors.ts";
 import {
   cleanupStaging,
   createRemovalOps,
@@ -140,8 +140,9 @@ async function cloneIntoStaging(
  * a ref-hint clone -- a no-ref clone already fetched every head, so the same
  * error there is a genuinely unreachable sha that must fail clean. The clone
  * left the wildcard fetch refspec, so one full fetch pulls every head and the
- * retry succeeds; a still-unreachable sha throws the same class again and
- * falls through to the caller's fail-clean fold.
+ * retry succeeds. A sha the fresh clone still lacks, with or without the
+ * refetch, throws `PinnedCommitMissingError` (INR-03) into the caller's
+ * fail-clean fold.
  */
 async function checkoutPinWithRefetch(
   gitOps: GitOps,
@@ -152,12 +153,24 @@ async function checkoutPinWithRefetch(
     await gitOps.checkout({ dir: stagingDir, ref: args.pin });
   } catch (checkoutErr) {
     if (args.ref === undefined || !isGitCommitNotFetchedError(checkoutErr)) {
-      throw checkoutErr;
+      throw asPinnedCommitMissing(checkoutErr, args.pin);
     }
 
     await gitOps.fetch({ dir: stagingDir, remote: "origin", auth: args.auth });
-    await gitOps.checkout({ dir: stagingDir, ref: args.pin });
+    try {
+      await gitOps.checkout({ dir: stagingDir, ref: args.pin });
+    } catch (retryErr) {
+      throw asPinnedCommitMissing(retryErr, args.pin);
+    }
   }
+}
+
+/**
+ * INR-03: a fresh clone that still lacks the pin means the git host does not
+ * have it. Any other checkout throw passes through unchanged.
+ */
+function asPinnedCommitMissing(err: unknown, pin: string): unknown {
+  return isGitCommitNotFetchedError(err) ? new PinnedCommitMissingError(pin, { cause: err }) : err;
 }
 
 /**
@@ -174,8 +187,8 @@ async function checkoutPinWithRefetch(
  *      pinned commit, so the checkout throws `CommitNotFetchedError`; the
  *      clone left a wildcard fetch refspec, so one full fetch widens the
  *      staging clone to every head and the checkout is retried ONCE. A
- *      genuinely unreachable pin throws the same class on the retry and folds
- *      into the fail-clean path. A clone/checkout throw cleans staging and
+ *      genuinely unreachable pin throws `PinnedCommitMissingError` (INR-03)
+ *      and folds into the fail-clean path. A clone/checkout throw cleans staging and
  *      append-leak-rethrows (MA-9).
  *   4. Atomic same-FS rename staging -> cloneRoot. An EEXIST/ENOTEMPTY rename
  *      means a concurrent install of the same url+sha already won the race;

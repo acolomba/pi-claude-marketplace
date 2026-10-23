@@ -17,6 +17,7 @@ import { Given, Then } from "@cucumber/cucumber";
 import { isPlainObject } from "../../lib/field-rows.ts";
 import { pushGitRepository } from "../../lib/git-marketplace.ts";
 import { runGit } from "../../lib/hermetic-git.ts";
+import { rewritePublishedManifest } from "../../lib/published-marketplace.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
 
@@ -47,6 +48,32 @@ Given(
       `main:${path.posix.join(offered.path, ".claude-plugin", "plugin.json")}`,
     );
     assert.deepStrictEqual(JSON.parse(published), unversioned);
+  },
+);
+
+// A sha no repository revision has, so the clone the install makes lacks it.
+const ABSENT_COMMIT = "0123456789abcdef0123456789abcdef01234567";
+
+Given(
+  "the marketplace {string} pins the plugin {string} to a commit its repository lacks",
+  async function (this: ScenarioWorld, name: string, plugin: string) {
+    const published = this.requirePublished(name);
+    const manifest = JSON.parse(await readFile(published.manifestPath, "utf8")) as {
+      plugins: Array<{ name: string; source: unknown }>;
+    };
+    const entry = manifest.plugins.find((candidate) => candidate.name === plugin);
+    assert.ok(
+      entry !== undefined && isPlainObject(entry.source),
+      `the marketplace ${name} offers no git plugin ${plugin}`,
+    );
+    assert.strictEqual(this.gitRepositoryServing(plugin).revisions.includes(ABSENT_COMMIT), false);
+    entry.source = { ...entry.source, sha: ABSENT_COMMIT };
+    await rewritePublishedManifest(published, JSON.stringify(manifest, null, 2));
+    const written = JSON.parse(await readFile(published.manifestPath, "utf8")) as typeof manifest;
+    assert.deepStrictEqual(
+      written.plugins.find((candidate) => candidate.name === plugin),
+      entry,
+    );
   },
 );
 

@@ -33,7 +33,9 @@ import {
   type SourceMismatchOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import {
+  appendLeakToError,
   DependencyCascadeError,
+  InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
   PluginShapeError,
   StateLockHeldError,
@@ -623,6 +625,45 @@ describe("classifyOrchestratorThrow", () => {
 
     // assert
     assert.strictEqual(reason, "lock held");
+  });
+
+  test("INR-01: classifies a clone the git host refused with the host's reason", () => {
+    // arrange
+    const error = Object.assign(new Error("HTTP Error: 404 Not Found"), {
+      code: "HttpError",
+      data: { statusCode: 404 },
+    });
+
+    // act
+    const reason = classifyOrchestratorThrow(error);
+
+    // assert
+    assert.strictEqual(reason, "source missing");
+  });
+
+  test("INR-02: classifies a filesystem error behind a cleanup leak through the probe fallback", () => {
+    // arrange
+    const error = appendLeakToError(
+      Object.assign(new Error("EACCES failure"), { code: "EACCES" }),
+      "staging leaked",
+    );
+
+    // act
+    const reason = classifyOrchestratorThrow(error);
+
+    // assert
+    assert.strictEqual(reason, "permission denied");
+  });
+
+  test("INR-01: classifies a failed marketplace add with the reason it carries", () => {
+    // arrange
+    const error = new InstallMarketplaceAddError("authentication required", "add failed");
+
+    // act
+    const reason = classifyOrchestratorThrow(error);
+
+    // assert
+    assert.strictEqual(reason, "authentication required");
   });
 
   for (const { code, reason } of [
