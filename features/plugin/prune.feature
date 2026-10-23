@@ -1,8 +1,8 @@
 Feature: Plugin prune
 
   Pruning a scope uninstalls the dependencies that no installed plugin needs
-  any more. The scenarios run the real extension in a headless Pi and use a
-  local marketplace in place of a published one.
+  any more, with their clones. The scenarios run the real extension in a headless
+  Pi, with local marketplaces and a loopback https git host for git sources.
 
   Scenario: Pruning a scope with nothing to remove reports the empty result
     When the user runs "/claude:plugin prune --scope project"
@@ -53,7 +53,9 @@ Feature: Plugin prune
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id       | name | status      | reasons           | scope   | version          |
       | gits             | project           | ghp@gits | ghp  | uninstalled | dependency pruned | project | {ghp revision 1} |
+    Then the project scope has no installed plugins
     Then the project scope holds no git clones
+    Then the git host receives no request
 
   Scenario: Previewing a prune lists the dependency it would uninstall and removes nothing
     Given the marketplace "tools" is published as a dir source
@@ -75,6 +77,9 @@ Feature: Plugin prune
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | lib@tools | 1.2.0   | true    |
+    Then the project scope stages these skills and prompts:
+      | kind  | name      |
+      | skill | lib-skill |
 
   Scenario: Pruning keeps a dependency that an installed plugin still needs
     Given the marketplace "tools" is published as a dir source
@@ -90,6 +95,10 @@ Feature: Plugin prune
       | severity     | info        |
       | needs reload | false       |
       | scope        | project     |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | app@tools | 1.0.0   | true    |
+      | lib@tools | 1.2.0   | true    |
 
   Scenario: Pruning keeps a plugin the user installed by name
     Given the marketplace "tools" is published as a dir source
@@ -107,3 +116,6 @@ Feature: Plugin prune
       | severity     | info        |
       | needs reload | false       |
       | scope        | project     |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | lib@tools | 1.2.0   | true    |

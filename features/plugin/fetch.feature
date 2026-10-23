@@ -1,8 +1,8 @@
 Feature: Plugin fetch
 
-  Fetch refreshes the cached source of an installed git-source plugin without
-  installing a new version. A loopback https git host serves the plugin
-  repositories and logs the requests Pi makes.
+  Fetch refreshes the cached copy of each git-source plugin a marketplace offers,
+  installed or not, without installing a new version. A loopback https git host
+  serves the plugin repositories and logs the requests Pi makes.
 
   Scenario: Fetching a plugin succeeds again once the git host serves its repository again
     Given the git repository "ghp" holds these plugins:
@@ -55,6 +55,7 @@ Feature: Plugin fetch
       | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+    Then the fetched copy of the plugin "ghp" in the project scope holds revision 2 of its repository
 
   Scenario: A fetch installs no new version, so the plugin list still shows the installed one
     Given the git repository "ghp" holds these plugins:
@@ -82,6 +83,7 @@ Feature: Plugin fetch
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version          |
       | gits             | project           | ghp@gits | ghp  | installed |         | project | {ghp revision 1} |
+    Then the git host receives no request
 
   Scenario: Fetching a marketplace fetches each git-source plugin and reports the one the git host refuses
     Given the git repository "ghp" holds these plugins:
@@ -120,6 +122,9 @@ Feature: Plugin fetch
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack  | 404    |
       | GET    | /acme/urlp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/urlp.git/git-upload-pack                   | 200    |
+    Then the project scope holds these git clones:
+      | clone  | origin                           | revision          |
+      | plugin | https://{git host}/acme/urlp.git | {urlp revision 1} |
 
   Scenario: A bare fetch fetches the git-source plugins of every marketplace in the scope
     Given the git repository "ghp" holds these plugins:
@@ -136,8 +141,16 @@ Feature: Plugin fetch
     Given the marketplace "more" offers these plugins from git repositories:
       | name | source kind | repository | pinned |
       | urlp | url         | urlp       | false  |
+    Given the git repository "mono" holds these plugins:
+      | name | version | path         |
+      | subp | 1.0.0   | plugins/subp |
+    Given the marketplace "others" is published as a dir source
+    Given the marketplace "others" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | subp | git-subdir  | mono       | false  |
     Given the marketplace "gits" is added to the project scope
     Given the marketplace "more" is added to the project scope
+    Given the marketplace "others" is added to the user scope
     When the user runs "/claude:plugin fetch --scope project"
     Then the result has these fields:
       | kind                | cascade      |
@@ -151,6 +164,8 @@ Feature: Plugin fetch
       | marketplace name | marketplace scope | id        | name | status    | reasons |
       | gits             | project           | ghp@gits  | ghp  | available |         |
       | more             | project           | urlp@more | urlp | available |         |
+    # A new copy of an unpinned plugin is cloned and then refreshed at once,
+    # so each repository answers two rounds.
     Then the git host receives these requests:
       | method | path                                             | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack  | 200    |
