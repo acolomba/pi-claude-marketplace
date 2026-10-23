@@ -7,8 +7,11 @@ Feature: Plugin pending
   Background:
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
+      | name  | version |
+      | demo  | 1.0.0   |
+      | alpha | 1.0.0   |
+      | beta  | 1.0.0   |
+      | gamma | 1.0.0   |
 
   Scenario: Pending lists the install that a marketplace and a plugin declared by hand in the base config would cause
     Given a config in scope project and layer base, with these marketplaces:
@@ -58,3 +61,74 @@ Feature: Plugin pending
       | kind         | reconcile-pending-empty |
       | severity     | info                    |
       | needs reload | false                   |
+
+  Scenario: Pending lists the install, uninstall, disable, and enable that one hand edit of the base config would cause
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin install beta@fixtures --scope project"
+    Given the user has run "/claude:plugin install gamma@fixtures --scope project"
+    Given the user has run "/claude:plugin disable gamma@fixtures --scope project"
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | alpha  |         |
+      | fixtures    | beta   | false   |
+      | fixtures    | gamma  | true    |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 4                 |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id             | name  | status         | reasons | scope   |
+      | fixtures         | project           | alpha@fixtures | alpha | will install   |         | project |
+      | fixtures         | project           | demo@fixtures  | demo  | will uninstall |         | project |
+      | fixtures         | project           | beta@fixtures  | beta  | will disable   |         | project |
+      | fixtures         | project           | gamma@fixtures | gamma | will enable    |         | project |
+
+  Scenario: Pending with --scope user lists only the changes of the user scope
+    Given the marketplace "fixtures" is added to the project scope
+    Given the marketplace "fixtures" is added to the user scope
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    Given a config in scope user and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | alpha  |         |
+    When the user runs "/claude:plugin pending --scope user"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 1                 |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id             | name  | status       | reasons | scope |
+      | fixtures         | user              | alpha@fixtures | alpha | will install |         | user  |
+
+  Scenario: Pending with --scope project lists only the changes of the project scope
+    Given the marketplace "fixtures" is added to the project scope
+    Given the marketplace "fixtures" is added to the user scope
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    Given a config in scope user and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | alpha  |         |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 1                 |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status       | reasons | scope   |
+      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
