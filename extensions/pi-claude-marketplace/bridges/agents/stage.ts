@@ -301,6 +301,28 @@ function partitionPreviousEntries(
 }
 
 /**
+ * NFR-10 / RINST-01: a forced commit removes index rows that failed the AG-5
+ * ownership check, so the marker cannot vouch for their `targetPath`. Each
+ * one must resolve inside `<scopeRoot>/agents/` before anything is removed;
+ * a hand-edited index, or a project `.pi/` moved with absolute paths in it,
+ * would otherwise point the removal at any file.
+ */
+async function assertForcedTargetsContained(
+  prepared: PreparedAgentsStaged,
+  previous: { readonly replaced: readonly AgentsIndexEntry[] },
+  options: { readonly force?: boolean } | undefined,
+): Promise<void> {
+  if (options?.force !== true) {
+    return;
+  }
+
+  for (const entry of previous.replaced) {
+    // eslint-disable-next-line no-await-in-loop -- the first escaping row throws before any removal
+    await assertPathInside(prepared.locations.agentsDir, entry.targetPath, "previous agent file");
+  }
+}
+
+/**
  * Phase 2: reject occupied new targets before removing old owned files,
  * rename staged files into <scopeRoot>/agents/, persist the index, clean up.
  *
@@ -341,6 +363,7 @@ export async function commitPreparedAgents(
   // forced) are INTENTIONALLY excluded -- those targets stay untouched on disk
   // and their rows stay in the index.
   try {
+    await assertForcedTargetsContained(prepared, previous, options);
     const previousTargets = new Set(previous.replaced.map((entry) => entry.targetPath));
     for (const entry of prepared.newEntries) {
       // eslint-disable-next-line no-await-in-loop -- the first non-previous target throws before any rm

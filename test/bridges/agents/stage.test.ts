@@ -27,6 +27,7 @@ import {
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { AgentOwnershipConflictError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import { createRemovalOps } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
+import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-safety.ts";
 
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 
@@ -1711,6 +1712,72 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     );
     assert.strictEqual(await readFile(currentTarget, "utf8"), intruderBytes);
     assert.strictEqual(await readFile(orphanTarget, "utf8"), orphanBytes);
+    assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), indexBytes);
+    assert.strictEqual(await exists(prepared.stagingDir), false);
+  });
+
+  test("NFR-10: force refuses an index row whose target is outside the agents directory and removes nothing", async (t) => {
+    // arrange
+    const { scopeRoot, pluginRoot, agentsSourceDir, locations, pluginDataDir } =
+      await createStageTree(t, "agents-commit-force-escape-");
+    const sourcePath = path.join(agentsSourceDir, "current.md");
+    await writeFile(
+      sourcePath,
+      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
+    );
+    const outsideTarget = path.join(scopeRoot, "pi-claude-marketplace-acme-outside.md");
+    const outsideBytes = "---\nname: outside\n---\nNot an agent file.\n";
+    await writeFile(outsideTarget, outsideBytes);
+    await mkdir(locations.agentsDir, { recursive: true });
+    await mkdir(locations.extensionRoot, { recursive: true });
+    const indexBytes = JSON.stringify({
+      schemaVersion: 1,
+      agents: [
+        {
+          plugin: "acme",
+          marketplace: "catalog",
+          sourceAgent: "outside",
+          generatedName: "pi-claude-marketplace-acme-outside",
+          sourcePath: "/previous/outside.md",
+          targetPath: outsideTarget,
+          sourceHash: "hash-outside",
+          droppedFields: [],
+          droppedTools: [],
+          warnings: [],
+        },
+      ],
+    });
+    await writeFile(locations.agentsIndexPath, indexBytes);
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+
+    // act
+    const error = await commitPreparedAgents(createRemovalOps(), prepared, { force: true }).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+
+    // assert
+    assert.ok(error instanceof PathContainmentError);
+    assert.deepStrictEqual(
+      { name: error.name, parent: error.parent, child: error.child, message: error.message },
+      {
+        name: "PathContainmentError",
+        parent: locations.agentsDir,
+        child: outsideTarget,
+        message: `previous agent file escapes ${locations.agentsDir} (resolved: ${outsideTarget}).`,
+      },
+    );
+    assert.strictEqual(await readFile(outsideTarget, "utf8"), outsideBytes);
+    assert.deepStrictEqual(await readdir(locations.agentsDir), []);
     assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), indexBytes);
     assert.strictEqual(await exists(prepared.stagingDir), false);
   });
