@@ -1099,8 +1099,9 @@ function surfaceMarketplaceFailure(args: {
 
 /**
  * The failed outcome of a remove whose state transaction threw: each stop the
- * lock body raised, and a held state lock (FLR-02), becomes its row.
- * Any other throw leaves through `rethrowWithMcpConfigNotices`.
+ * lock body raised, the CFG-03 sentinel, and a held state lock (FLR-02)
+ * becomes its row. Any other throw leaves through
+ * `rethrowWithMcpConfigNotices`.
  */
 function surfaceRemoveStop(
   err: unknown,
