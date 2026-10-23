@@ -6,6 +6,7 @@ import {
 import { errorMessage } from "../../../shared/errors.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
+import { rejectUnknownFlag } from "../shared.ts";
 
 import type { GitOps } from "../../../orchestrators/marketplace/shared.ts";
 import type { InstallHooksRouting } from "../../../orchestrators/plugin/install-disable-cascade.ts";
@@ -39,6 +40,10 @@ export function makeImportHandler(
         message: errorMessage(err),
         usage: USAGE,
       });
+      return;
+    }
+
+    if (rejectUnknownFlag(parsed.positional, { ctx, run, usage: USAGE })) {
       return;
     }
 

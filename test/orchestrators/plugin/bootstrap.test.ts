@@ -512,3 +512,35 @@ test("propagates a clone failure silently and never reaches the autoupdate step"
   assert.deepStrictEqual(clonedUrls(), [BOOTSTRAP_REMOTE]);
   verifyBoundary();
 });
+
+test("renders a failed add as marketplace add does and never reaches the autoupdate step", async (t) => {
+  // arrange
+  const { cwd, locations } = await createHermeticUserScope(t, "missing-source");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const cloneError = Object.assign(new Error("HTTP Error: 404"), {
+    code: "HttpError",
+    data: { statusCode: 404 },
+  });
+  const { gitOps, clonedUrls } = createBootstrapGitOps({ cloneError });
+  const completionCache = createCompletionCache();
+
+  // act
+  await bootstrapClaudePlugin({ completionCache, ctx, run: runWithNothingLoaded(), cwd, gitOps });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A marketplace operation has failed.\n\n" +
+        "⊘ anthropics/claude-plugins-official [user] (failed) {source missing}",
+      severity: "error",
+    },
+  ]);
+  assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+    schemaVersion: 3,
+    marketplaces: {},
+  });
+  assert.deepStrictEqual(await retryTree(locations.scopeRoot), ["pi-claude-marketplace/"]);
+  assert.deepStrictEqual(clonedUrls(), [BOOTSTRAP_REMOTE]);
+  verifyBoundary();
+});

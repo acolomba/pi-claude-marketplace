@@ -30,7 +30,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { passThroughFlagNames } from "../../../extensions/pi-claude-marketplace/edge/flag-catalog.ts";
-import { extractLocalFlag } from "../../../extensions/pi-claude-marketplace/edge/handlers/shared.ts";
+import {
+  extractLocalFlag,
+  rejectUnknownFlag,
+} from "../../../extensions/pi-claude-marketplace/edge/handlers/shared.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 import { createMachineNotificationBoundary } from "../notification-boundary.ts";
 import { createNotificationBoundary } from "../notification-boundary.ts";
@@ -563,3 +566,38 @@ for (const mode of ["json", "rpc"] as const) {
     verifyBoundary();
   });
 }
+
+test("rejectUnknownFlag passes tokens with no long flag and stays silent", () => {
+  // arrange
+  const { ctx, verifyBoundary } = createNotificationBoundary(0);
+
+  // act
+  const rejected = rejectUnknownFlag(["marketplace", "-x"], {
+    ctx,
+    run: runWithNothingLoaded(),
+    usage: ENABLE_USAGE,
+  });
+
+  // assert
+  assert.strictEqual(rejected, false);
+  verifyBoundary();
+});
+
+test("rejectUnknownFlag names the first long flag with the caller's usage", () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  const rejected = rejectUnknownFlag(["extra", "--bogus", "--other"], {
+    ctx,
+    run: runWithNothingLoaded(),
+    usage: ENABLE_USAGE,
+  });
+
+  // assert
+  assert.strictEqual(rejected, true);
+  assert.deepStrictEqual(notifications, [
+    { message: `Unknown flag: "--bogus".\n\n${ENABLE_USAGE}`, severity: "error" },
+  ]);
+  verifyBoundary();
+});

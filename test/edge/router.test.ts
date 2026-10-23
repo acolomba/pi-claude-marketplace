@@ -311,6 +311,12 @@ for (const mode of ["json", "rpc"] as const) {
       expectedArgs: "marketplace",
     },
     {
+      subcommand: 'help "marketplace"',
+      handler: "help",
+      commandId: "marketplace help",
+      expectedArgs: '"marketplace"',
+    },
+    {
       subcommand: "help marketplace extra",
       handler: "help",
       commandId: "plugin help",

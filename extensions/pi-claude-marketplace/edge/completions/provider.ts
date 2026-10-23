@@ -101,8 +101,8 @@ function catalogVerbForPositionals(positionals: readonly string[]): CatalogVerb 
 
 /**
  * Verbs that accept no flag at all, not even the global `--scope`. `bootstrap`,
- * `browse` and `marketplace help` reject every argument; `help` reads what
- * follows as a topic name rather than parsing flags. Suggesting `--scope` for
+ * `browse` and `marketplace help` reject every argument; `help` takes one
+ * topic name and rejects every flag. Suggesting `--scope` for
  * any of them would offer a token its handler answers with a usage error.
  */
 const NO_FLAG_VERBS: ReadonlySet<CatalogVerb> = new Set([

@@ -49,7 +49,7 @@ export function makeListHandler(): SubcommandHandler {
         filterFlags.add(token);
       } else if (token.startsWith("--")) {
         // Unknown long flag -- surface USAGE.
-        notifyUsageError(ctx, run, { message: `Unknown option: "${token}".`, usage: USAGE });
+        notifyUsageError(ctx, run, { message: `Unknown flag: "${token}".`, usage: USAGE });
         return;
       } else {
         nonFlagPositionals.push(token);

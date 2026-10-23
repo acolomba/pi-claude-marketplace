@@ -140,6 +140,34 @@ test("browse rejects non-empty arguments with usage error", async () => {
   verify(ui);
 });
 
+for (const { args, flag } of [
+  { args: "--bogus", flag: "--bogus" },
+  { args: "foo --scope user", flag: "--scope" },
+]) {
+  test(`browse rejects the flag in ${args} as an unknown flag`, async () => {
+    // arrange
+    const { handlers } = createMockActionHandlers();
+    const ui = mock<ExtensionCommandContext["ui"]>({ exactParams: true, name: "UI" });
+    const ctx = mock<ExtensionCommandContext>({ exactParams: true, name: "command context" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .times(1);
+    when(() => ctx.ui).thenReturn(ui);
+    when(() => {
+      ui.notify(`Unknown flag: "${flag}".\n\nUsage: /claude:plugin browse`, "error");
+    }).thenReturn();
+
+    const browseHandler = makeBrowseHandler(handlers);
+
+    // act
+    await browseHandler(args, ctx, runWithNothingLoaded());
+
+    // assert
+    verify(ctx);
+    verify(ui);
+  });
+}
+
 for (const mode of ["json", "rpc"] as const) {
   test(`refuses browse in ${mode} before list, state, or picker access`, async () => {
     // arrange

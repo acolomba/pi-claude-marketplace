@@ -265,17 +265,29 @@ for (const { args, label, position } of [
   });
 }
 
-for (const { args, label, summary } of [
+const MISSING_REFERENCE = "info requires exactly one <plugin>@<marketplace> argument.";
+
+for (const { args, label, summary, sentence = MISSING_REFERENCE } of [
   { args: "", label: "arity-zero", summary: "no positional at all" },
   {
     args: ACCEPTED_FLAGS,
     label: "arity-flags-only",
     summary: "the accepted flags with no reference",
   },
-  { args: "alpha@mp gitp@mp", label: "arity-two", summary: "two references" },
-  { args: "alpha@mp gitp@mp alpha@mp", label: "arity-three", summary: "three references" },
+  {
+    args: "alpha@mp gitp@mp",
+    label: "arity-two",
+    summary: "two references",
+    sentence: "Too many arguments.",
+  },
+  {
+    args: "alpha@mp gitp@mp alpha@mp",
+    label: "arity-three",
+    summary: "three references",
+    sentence: "Too many arguments.",
+  },
 ]) {
-  test(`rejects ${summary} with the exactly-one-argument sentence (MSG-NC-2)`, async (t) => {
+  test(`rejects ${summary} with the sentence for its arity (MSG-NC-2)`, async (t) => {
     // arrange
     const workspace = await createHermeticWorkspace(t, label);
     await seedBothScopes(workspace);
@@ -288,8 +300,7 @@ for (const { args, label, summary } of [
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message:
-          "info requires exactly one <plugin>@<marketplace> argument.\n\nUsage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]",
+        message: `${sentence}\n\nUsage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user|project]`,
         severity: "error",
       },
     ]);

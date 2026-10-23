@@ -882,6 +882,15 @@ function handleAddFailure(
 }
 
 /**
+ * Renders a failed add exactly as the public `marketplace add` command does,
+ * for a composer that passed `rethrowPreconditionErrors` and caught the error
+ * (bootstrap). An error that is not an add precondition is rethrown.
+ */
+export function notifyAddFailure(opts: AddMarketplaceOptions, err: unknown): void {
+  handleAddFailure(opts, err, false);
+}
+
+/**
  * RECON-03: returns `AddMarketplaceOutcome` in orchestrated mode and
  * `undefined` in standalone mode (after firing the standalone notify()).
  * Callers in orchestrated mode know the outcome is defined; standalone
