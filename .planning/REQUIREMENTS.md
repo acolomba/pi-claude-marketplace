@@ -99,7 +99,7 @@ settle which one wins (see PROJECT.md).
 
 ### prune
 
-- [x] **PRN-01**: `prune` removes orphaned dependencies and unused clones and reports each one
+- [x] **PRN-01**: `prune` removes orphaned dependencies and the clones of the dependencies it removes, and reports each one (as `claude plugin prune` does; clones of plugins that are not installed are a cache that clone cleanup deletes, decision 2026-10-23)
 - [x] **PRN-02**: `prune --dry-run` reports the same rows and removes nothing
 - [x] **PRN-03**: `prune` with nothing to remove reports an empty result
 
@@ -127,6 +127,18 @@ settle which one wins (see PROJECT.md).
 - [x] **FLR-02**: `marketplace add`, `remove`, and `update` run while another process holds the state lock fail with the lock-held reason and change nothing
 - [x] **FLR-03**: A `marketplace add` that fails (404, invalid manifest, connection drop) leaves no clone directory and no record behind, and a retry succeeds once the cause is gone
 - [x] **FLR-04**: `marketplace remove` deletes the `plugin-clones/` entries of the git-source plugins it uninstalls, and keeps a clone another installation still uses
+
+### Decisions applied (2026-10-23)
+
+- [ ] **GIT-01**: An unpinned git-source install gets its own copy at the commit it installs; `fetch` refreshes only the download cache, and installed code changes only through `update` or `reinstall`
+- [ ] **GIT-02**: Clone cleanup keeps every per-commit copy an installation uses and deletes unused clones, including caches `fetch` warmed for plugins that are not installed
+- [ ] **VER-01**: `install`, `info`, and `list` derive a plugin's version with one rule: the declared version (plugin.json, then the marketplace entry) first, and `sha-<12hex>` only for a git plugin that declares none; the full commit sha stays stored
+- [ ] **REC-05**: A plugin that stays installed after its marketplace's catalog drops it, or whose marketplace manifest is invalid, is reported at each new session as a `warning` with the real reason (`{not in manifest}` or `{invalid manifest}`) and a cause chain
+- [ ] **REI-04**: `reinstall` installs whatever version the marketplace currently offers, the same or newer, and records and reports that version
+- [ ] **UPR-01**: `update` and `reinstall` materialize the latest known version through one shared code path, with no per-plugin version pinning
+- [ ] **IMP-05**: `import` applies the Claude Code settings through the same desired-state path as reconcile, and never reinstalls a plugin that is already installed
+- [ ] **IMP-06**: `import` reports a plugin it already has as `skipped {already installed}`, and a marketplace already added with the same source as a skipped no-op at `info` severity, not `(updated)`
+- [ ] **IMP-07**: `import` run while another process holds the state lock fails with the lock-held reason and changes nothing, instead of `unexpected-failure`
 
 ## Future Requirements
 
@@ -206,12 +218,21 @@ settle which one wins (see PROJECT.md).
 | FLR-02 | Phase 15 | Complete |
 | FLR-03 | Phase 15 | Complete |
 | FLR-04 | Phase 15 | Complete |
+| GIT-01 | Phase 16 | Pending |
+| GIT-02 | Phase 16 | Pending |
+| VER-01 | Phase 16 | Pending |
+| REC-05 | Phase 17 | Pending |
+| REI-04 | Phase 18 | Pending |
+| UPR-01 | Phase 18 | Pending |
+| IMP-05 | Phase 19 | Pending |
+| IMP-06 | Phase 19 | Pending |
+| IMP-07 | Phase 19 | Pending |
 
 **Coverage:**
-- v1 requirements: 61 total
-- Mapped to phases: 61
+- v1 requirements: 70 total
+- Mapped to phases: 70
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-10-22*
-*Last updated: 2026-10-22 after roadmap creation (15 phases)*
+*Last updated: 2026-10-23 after adding the decision phases (16-19)*

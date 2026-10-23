@@ -123,10 +123,14 @@ Step module paths are relative to `features/step_definitions/`.
 - [x] **Phase 9: Plugin List** — Every row status, the filters, marketplace and scope selection, and `--remote` (completed 2026-10-23)
 - [x] **Phase 10: Plugin Info** — Installed, available, partial, and unavailable plugins, `--fetch`, and the not-in-manifest failure (completed 2026-10-23)
 - [x] **Phase 11: Pending and Reconcile** — `pending` after hand-edited configs, and a new session converging on them (completed 2026-10-23)
-- [x] **Phase 12: Fetch and Prune** — Refreshing git-source plugin caches, and removing orphaned dependencies and unused clones (completed 2026-10-23)
+- [x] **Phase 12: Fetch and Prune** — Refreshing git-source plugin caches, and removing orphaned dependencies and their clones (completed 2026-10-23)
 - [x] **Phase 13: Plugin Import** — Importing enabled plugins and marketplaces from a Claude Code settings file (completed 2026-10-23)
 - [x] **Phase 14: Bootstrap, Browse, Help, and Usage Errors** — `bootstrap`, the non-TUI `browse` refusal, plugin `help`, and every plugin usage rejection (completed 2026-10-23)
 - [x] **Phase 15: State Lock and Marketplace Failure Cleanup** — A held state lock refuses plugin and marketplace commands, a failed `marketplace add` leaves nothing, and `marketplace remove` cleans plugin clones (completed 2026-10-23)
+- [ ] **Phase 16: Git Plugin Copies and Version Rule** — Unpinned git installs get their own per-commit copy, the mirror becomes a cache, and one version rule serves install, info, and list
+- [ ] **Phase 17: Reconcile Stale-Declarer Warning** — A plugin whose catalog dropped it or whose manifest broke is reported as a warning with its real reason and cause
+- [ ] **Phase 18: Update and Reinstall Unification** — `reinstall` takes the latest known version and reports it, through one code path shared with `update`
+- [ ] **Phase 19: Import on the Reconcile Path** — `import` uses reconcile's desired-state path, reports what it skipped, and refuses under a held state lock
 
 ## Phase Details
 
@@ -334,7 +338,7 @@ Plans:
 
 ### Phase 12: Fetch and Prune
 
-**Goal:** `fetch` refreshes the cached sources of git-source plugins without installing new versions, and `prune` removes orphaned dependencies and unused clones.
+**Goal:** `fetch` refreshes the cached sources of git-source plugins without installing new versions, and `prune` removes orphaned dependencies and the clones of the dependencies it removes.
 **Depends on:** Phase 1
 **Requirements:** FET-01, FET-02, FET-03, PRN-01, PRN-02, PRN-03
 **Files:** `features/plugin/fetch.feature`, `features/plugin/prune.feature`; `plugin/fetch.steps.ts` and `plugin/prune.steps.ts` if needed.
@@ -342,7 +346,7 @@ Plans:
 
 1. `fetch <plugin>@<marketplace>` refreshes a git-source plugin's cached source from the git host, as the request log shows, and installs no new version: `list` still shows the installed version (FET-01).
 2. `fetch @<marketplace>` and a bare `fetch` refresh every git-source plugin in scope. When the host refuses one plugin, the others are still fetched and the failure is reported. A path-source plugin makes no request and reports nothing to fetch (FET-02, FET-03).
-3. `prune` removes orphaned dependencies and unused clones and reports a row for each one. `prune --dry-run` reports the same rows and removes nothing (PRN-01, PRN-02).
+3. `prune` removes orphaned dependencies and the clones of the dependencies it removes, and reports a row for each one. `prune --dry-run` reports the same rows and removes nothing (PRN-01, PRN-02).
 4. `prune` with nothing to remove reports the empty result (PRN-03).
 5. The phase's scenarios pass in `npm run test:cucumber`, and `npm run check:features` and `npm run check` stay green.
 
@@ -396,6 +400,61 @@ Plans:
 
 **Plans:** TBD
 
+### Phase 16: Git Plugin Copies and Version Rule
+
+**Goal:** An installed git-source plugin runs exactly the code its record names, and every command reports a plugin's version the same way.
+**Depends on:** Phase 15 (merged milestone tree)
+**Decision:** 2026-10-23 (user): no per-plugin version pinning; install the latest version the scope knows about. Unpinned installs get a per-commit copy like pinned ones; the URL-keyed mirror is only a download cache. One version rule: declared version first, `sha-<12hex>` only when none is declared (supersedes D-77-01's "sha replaces the ladder"; verify upstream precedence in the Claude Code binary first).
+**Requirements:** GIT-01, GIT-02, VER-01
+**Files:** `orchestrators/plugin/clone-cache.ts`, `clone-gc.ts`, `install-outcome.ts` (`deriveInstallVersion`), `domain/version.ts`, the list and info row builders; `features/plugin/git-source.feature`, `git-source-update.feature`, `fetch.feature`, and the `info`/`list` scenarios that state git versions.
+**Success Criteria** (what must be TRUE):
+
+1. After `fetch` refreshes an unpinned plugin's mirror, the installed plugin's files and the code a session runs are unchanged until `update` or `reinstall` (GIT-01).
+2. Clone cleanup keeps the per-commit copy of every installed plugin and deletes clones no installation uses (GIT-02).
+3. A git plugin that declares a version is recorded and shown with that version by `install`, `info`, and `list`; one that declares none shows `sha-<12hex>`; `update` still detects a new revision through the stored sha (VER-01).
+4. `npm run check` stays green.
+
+### Phase 17: Reconcile Stale-Declarer Warning
+
+**Goal:** A new session tells the truth about a plugin that is still installed but whose marketplace no longer describes it.
+**Depends on:** Phase 15 (merged milestone tree)
+**Decision:** 2026-10-23 (user): replace `failed {unreadable}` with a `warning` naming the real fault and its cause, still emitted every session until fixed (BACKLOG STALE-DECLARER-01, D-10).
+**Requirements:** REC-05
+**Files:** `orchestrators/reconcile/apply.ts` (`reportUnreadableDeclarer`); the rows in `features/marketplace/update.feature`, `features/marketplace/remove.feature`, `features/plugin/uninstall.feature`, `features/plugin/update.feature`, `features/plugin/reinstall.feature`, `features/plugin/reconcile.feature`.
+**Success Criteria** (what must be TRUE):
+
+1. A plugin whose marketplace catalog dropped it is reported at each new session as a `warning` row with `{not in manifest}` and a cause chain, and it keeps working (REC-05).
+2. A plugin whose marketplace manifest is invalid is reported the same way with `{invalid manifest}` (REC-05).
+3. `npm run check` stays green.
+
+### Phase 18: Update and Reinstall Unification
+
+**Goal:** After a marketplace update, `update` and `reinstall` behave as one operation that installs the latest known version and reports it truthfully.
+**Depends on:** Phase 16, Phase 17
+**Decision:** 2026-10-23 (user): reinstall installs whatever version the marketplace offers (same or newer) and must record and report it (supersedes D-68-02); unify the `update` and `reinstall` paths as much as possible.
+**Requirements:** REI-04, UPR-01
+**Files:** `orchestrators/plugin/update-flow.ts`, `update-swap.ts`, `reinstall-flow.ts` and its `reinstall-*` leaves; `features/plugin/reinstall.feature`, `features/plugin/update.feature`.
+**Success Criteria** (what must be TRUE):
+
+1. When the marketplace now offers a newer version, `reinstall` installs it and its row, the record, `list`, `info`, and the next session all show the new version (REI-04).
+2. `reinstall` of an up-to-date plugin still restores deleted artifacts at the same version (REI-01/REI-02 hold).
+3. `update` and `reinstall` share one materialization path; their remaining differences (target selection, messaging) are the only per-verb code (UPR-01).
+4. `npm run check` stays green.
+
+### Phase 19: Import on the Reconcile Path
+
+**Goal:** `import` is reconcile with Claude Code settings as its source: it never reinstalls, reports what it skipped, and respects the state lock.
+**Depends on:** Phase 17
+**Decision:** 2026-10-23 (user): import shares reconcile's desired-state path; unlike reconcile's silent startup no-op, it reports skips (`skipped {already installed}`, and a marketplace already added as a skipped no-op at `info`). Fix the bug that import under a held lock reports `unexpected-failure`.
+**Requirements:** IMP-05, IMP-06, IMP-07
+**Files:** `orchestrators/import/*`, the reconcile entry points it reuses; `features/plugin/import.feature`.
+**Success Criteria** (what must be TRUE):
+
+1. `import` installs, enables, and adds marketplaces through the reconcile desired-state path, and an already-installed plugin is not reinstalled (IMP-05).
+2. A second `import` reports each plugin as `skipped {already installed}` and each marketplace as a skipped no-op, with the result at `info` severity (IMP-06).
+3. `import` run while another process holds the state lock fails with `lock held` and its cause chain, and changes nothing (IMP-07).
+4. `npm run check` stays green.
+
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
@@ -415,6 +474,10 @@ Plans:
 | 13. Plugin Import | 1/1 | Complete    | 2026-10-23 |
 | 14. Bootstrap, Browse, Help, and Usage Errors | 3/3 | Complete    | 2026-10-23 |
 | 15. State Lock and Marketplace Failure Cleanup | 4/4 | Complete    | 2026-10-23 |
+| 16. Git Plugin Copies and Version Rule | 0/TBD | Not started | - |
+| 17. Reconcile Stale-Declarer Warning | 0/TBD | Not started | - |
+| 18. Update and Reinstall Unification | 0/TBD | Not started | - |
+| 19. Import on the Reconcile Path | 0/TBD | Not started | - |
 
 ## Carried Forward
 
