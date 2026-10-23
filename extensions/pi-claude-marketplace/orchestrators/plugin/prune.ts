@@ -94,7 +94,12 @@ function notifyUnreadable(
 
 /** Reports a prune operation failure without attributing it to a declaration. */
 function notifyOperationFailure(options: PrunePluginOptions, scope: Scope, error: unknown): void {
-  const cause = redactCauseChain(error) ?? new Error(errorMessage(error));
+  // PRN-03: the held lock's path is the recovery hint, printed as every other
+  // command prints it; every other cause keeps its paths redacted.
+  const cause =
+    error instanceof StateLockHeldError
+      ? error
+      : (redactCauseChain(error) ?? new Error(errorMessage(error)));
   const rollbackError = findRollbackError(error);
   const rollbackPartial =
     rollbackError !== undefined
@@ -245,6 +250,7 @@ export function createPrunePlugin(
                 {
                   status: "will uninstall" as const,
                   name: candidate.plugin,
+                  version: candidate.record.version,
                   reasons: ["dependency pruned" as const],
                   severity: "info" as const,
                   needsReload: false,

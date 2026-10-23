@@ -83,11 +83,33 @@ Feature: Plugin pending
       | tally warnings      | 0                 |
       | tally success count | 4                 |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id             | name  | status         | reasons | scope   |
-      | fixtures         | project           | alpha@fixtures | alpha | will install   |         | project |
-      | fixtures         | project           | demo@fixtures  | demo  | will uninstall |         | project |
-      | fixtures         | project           | beta@fixtures  | beta  | will disable   |         | project |
-      | fixtures         | project           | gamma@fixtures | gamma | will enable    |         | project |
+      | marketplace name | marketplace scope | id             | name  | status         | reasons | scope   | version |
+      | fixtures         | project           | alpha@fixtures | alpha | will install   |         | project |         |
+      | fixtures         | project           | demo@fixtures  | demo  | will uninstall |         | project | 1.0.0   |
+      | fixtures         | project           | beta@fixtures  | beta  | will disable   |         | project |         |
+      | fixtures         | project           | gamma@fixtures | gamma | will enable    |         | project |         |
+
+  Scenario: Pending lists an uninstall with its version for each plugin of a marketplace the base config no longer declares
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin install alpha@fixtures --scope project"
+    Given a config in scope project and layer base, with this text:
+      """
+      {}
+      """
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 2                 |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id             | name  | status         | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures  | demo  | will uninstall |         | project | 1.0.0   |
+      | fixtures         | project           | alpha@fixtures | alpha | will uninstall |         | project | 1.0.0   |
 
   Scenario: Pending with --scope user lists only the changes of the user scope
     Given the marketplace "fixtures" is added to the project scope

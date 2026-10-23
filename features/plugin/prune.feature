@@ -72,8 +72,8 @@ Feature: Plugin prune
       | severity     | info    |
       | needs reload | false   |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status         | reasons           | scope   |
-      | tools            | project           | lib@tools | lib  | will uninstall | dependency pruned | project |
+      | marketplace name | marketplace scope | id        | name | status         | reasons           | scope   | version |
+      | tools            | project           | lib@tools | lib  | will uninstall | dependency pruned | project | 1.2.0   |
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | lib@tools | 1.2.0   | true    |

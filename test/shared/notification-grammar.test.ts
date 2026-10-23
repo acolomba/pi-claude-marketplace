@@ -312,6 +312,10 @@ const ROW_CASES = [
     expected: "○ alpha (will uninstall)",
   },
   {
+    plugin: { status: "will uninstall", name: "alpha", version: "1.2.0", reasons: [] },
+    expected: "○ alpha v1.2.0 (will uninstall)",
+  },
+  {
     plugin: { status: "will enable", name: "alpha", scope: "user", reasons: [] },
     expected: "● alpha (will enable)",
   },

@@ -55,6 +55,7 @@ import { scanRetainedWorkflowsStaging } from "../plugin/workflows-staging-gc.ts"
 import {
   buildReconcilePendingNotification,
   isReconcilePlanListEmpty,
+  recordedVersionEntries,
   resolvePendingForceInstalls,
   type PendingInstallCandidate,
 } from "./notify.ts";
@@ -251,6 +252,7 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
     string,
     { readonly marketplaceRoot: string; readonly manifestPath: string }
   >();
+  const recordedVersions: (readonly [string, string])[] = [];
 
   for (const scope of scopes) {
     const loc = locationsFor(scope, opts.cwd);
@@ -309,6 +311,9 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
         manifestPath: record.manifestPath,
       });
     }
+
+    // PRN-02: each `will uninstall` row names the recorded version.
+    recordedVersions.push(...recordedVersionEntries(scope, state));
 
     // MIG-01 pre-migration window (DIFF-01): plan against what the next
     // load's reconcile would actually see (the apply path migrates first),
@@ -371,7 +376,11 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   };
 
   const forceInstallKeys = await resolvePendingForceInstalls(plans, locateCandidate);
-  const projection = buildReconcilePendingNotification(plans, forceInstallKeys);
+  const projection = buildReconcilePendingNotification(
+    plans,
+    forceInstallKeys,
+    new Map(recordedVersions),
+  );
   // D-12 / OUT-07: the pending diff is bulk (it spans both scopes and many
   // marketplaces) -> Plural row cardinality. D-02: thread PENDING_CONTEXT so the
   // pending-tense rows resolve through reconcile's own row policies (MOD-03).

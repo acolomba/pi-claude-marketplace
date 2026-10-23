@@ -651,6 +651,7 @@ export interface PluginWillInstallMessage extends MessageBase {
 export interface PluginWillUninstallMessage extends MessageBase {
   readonly status: "will uninstall";
   readonly name: string;
+  readonly version?: string;
   readonly scope?: Scope;
   readonly reasons?: readonly ContentReason[];
 }
@@ -772,12 +773,12 @@ export function pluginVersion(row: PluginNotificationMessage): string | undefine
     case "partially-upgradable":
     case "failed":
     case "skipped":
+    case "will uninstall":
       return row.version;
     case "updated":
       return row.to;
     case "manual recovery":
     case "will install":
-    case "will uninstall":
     case "will enable":
     case "will disable":
       return undefined;
