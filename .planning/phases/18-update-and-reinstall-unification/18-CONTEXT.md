@@ -76,8 +76,9 @@ tests, the architecture gates that name these files, and
   `PLUGIN_LEDGERS`), so neither may import the other; the leaf is not a
   ledger, joins no `NETWORK_SEAMS` entry (it names no git surface), and is
   absent from the ledger lists.
-- **D-04:** The shared runner takes a per-verb policy with exactly two knobs,
-  and those knobs are the only behavioral difference inside it:
+- **D-04:** The shared runner takes a per-verb policy with exactly three
+  knobs (the third is D-15's), and those knobs are the only behavioral
+  difference inside it:
   - **source refresh:** `update` refreshes a git plugin's mirror before it
     reads its HEAD (today's behavior, network). `reinstall` reads the
     mirror's current HEAD offline and copies that commit; only a missing
@@ -143,6 +144,33 @@ tests, the architecture gates that name these files, and
   Backfill triggers only when a plugin's supported set grew; on that path the
   constraint gate and a cold mirror may reach the network, which the
   reconcile network seam already admits.
+
+### Gaps the plan check found (recorded before execution)
+- **D-15:** RINST-01 (force-install milestone, shipped) stays: `reinstall`
+  always overwrites collisions and foreign content as a repair primitive.
+  The policy's third knob, `overwrite`, is `true` for reinstall and `false`
+  for update, and the shared swap passes it to the agents commit (the
+  `force` option the plan adds to `commitPreparedAgents`, as the old
+  replace path took). RINST-01 as shipped: the workflows commit (WR-06,
+  occupied target, possibly a user's hand-saved workflow) and the MCP commit
+  (ANAME-03, colliding keys) refused for reinstall before and still refuse;
+  skills and commands already replace stray content. Update keeps its
+  refusal. A
+  shipped requirement is superseded only by a user decision, and the
+  2026-10-23 decision does not mention RINST-01.
+- **D-16:** An invalid GitHub base override fails a GitHub-source `reinstall`
+  even with a warm cache, as it already fails `update` (GHB-03). It is a
+  misconfiguration the user must fix, the failure is loud and changes
+  nothing, and keeping a warm-cache exemption would be per-verb code inside
+  the shared path.
+- **D-17:** A dependency walk that cannot read a recorded plugin's
+  declarations fails closed (the house rule: refuse on corrupt data) for
+  both verbs, and the row names the true cause: `unreadable`, never
+  `dependents constrain`. The constraint gate's hold reason is reserved for
+  a real range hold (D-07).
+- **D-18:** D-06's second clause gets a unit test: a clean record whose
+  source lost a supported kind is reinstalled as partial and recorded
+  `installable: false`.
 
 ### Scenarios
 - **D-13:** `reinstall.feature` gains the REI-04 scenarios: after the
