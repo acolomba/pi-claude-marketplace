@@ -12,6 +12,7 @@
  */
 
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -23,13 +24,14 @@ import {
   World,
 } from "@cucumber/cucumber";
 
+import { readSession } from "../lib/pi-commands.ts";
+import { PiProcess } from "../lib/pi-process.ts";
 import { rowArrays } from "../lib/result-rows.ts";
 
 import { currentRun } from "./pi-process.ts";
 
 import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-git-host/server.ts";
-import type { NotificationPayload, OfferedSkill } from "../lib/pi-commands.ts";
-import type { PiProcess } from "../lib/pi-process.ts";
+import type { NotificationPayload, OfferedSkill, SessionReport } from "../lib/pi-commands.ts";
 import type { PublicationSites, PublishedMarketplace } from "../lib/published-marketplace.ts";
 import type { RunTokens } from "../lib/run-tokens.ts";
 
@@ -229,6 +231,27 @@ export class ScenarioWorld extends World {
     }
 
     return this.skills;
+  }
+
+  /**
+   * Starts a second Pi with the run's HOME and agent directory in a new,
+   * empty project directory, and returns what its first session offers and
+   * reports. The run's Pi keeps its own working directory for its whole
+   * life, so a session in another project needs a process of its own. This
+   * one lives only until its session is read.
+   */
+  async startSessionInAnotherProject(): Promise<SessionReport> {
+    const run = currentRun();
+    const cwd = await mkdtemp(path.join(run.root, "other-project-"));
+    this.onRelease(() => rm(cwd, { recursive: true, force: true }));
+    const { home, agentDir } = run.sandbox;
+    const pi = await PiProcess.start({ home, agentDir, cwd }, run.piEnvironment);
+    // Stopping a stopped Pi does nothing, so this only matters when reading
+    // the session fails.
+    this.onRelease(() => pi.stop());
+    const report = await readSession(pi);
+    await pi.stop();
+    return report;
   }
 
   /** Registers `release` to run when the scenario ends, before anything registered earlier. */

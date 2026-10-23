@@ -128,16 +128,29 @@ export async function runCommand(pi: PiProcess, command: string): Promise<Cascad
 }
 
 /**
- * Starts a new session in `pi` and returns every skill it offers, in Pi's
- * order, and every payload it emitted, in session order, each valid against
- * the payload schema (DRV-01). A session may emit none. A new session
- * rebuilds the extension runtime and discovers its resources again, which is
- * what makes installed plugins visible, as `/reload` does.
+ * Starts a new session in `pi` and returns what `readSession` reads from it.
+ * A new session rebuilds the extension runtime and discovers its resources
+ * again, which is what makes installed plugins visible, as `/reload` does.
  */
 export async function startSession(pi: PiProcess): Promise<SessionReport> {
   const started = await pi.request({ type: "new_session" });
   assertQuiet(started);
   assert.deepStrictEqual(started.response.data, { cancelled: false });
+  // Pi's RPC `new_session` binds the extension twice and subscribes to the
+  // session only after the first bind (rpc-mode.js, the `new_session` case),
+  // so the stream misses the first reconcile pass and repeats a lasting
+  // failure. The session's own entries hold both passes, duplicates kept.
+  return readSession(pi);
+}
+
+/**
+ * Returns every skill the current session of `pi` offers, in Pi's order, and
+ * every payload the session emitted, in session order, each valid against the
+ * payload schema (DRV-01). A session may emit none. The first session of a
+ * Pi that has just started holds the payloads of its startup, such as its
+ * reconcile report.
+ */
+export async function readSession(pi: PiProcess): Promise<SessionReport> {
   const listed = await pi.request({ type: "get_commands" });
   assertQuiet(listed);
   const { response } = listed;
@@ -148,10 +161,6 @@ export async function startSession(pi: PiProcess): Promise<SessionReport> {
   const skills = response.data.commands
     .filter((command) => command.source === "skill")
     .map(({ name, description }) => ({ command: `/${name}`, description }));
-  // Pi's RPC `new_session` binds the extension twice and subscribes to the
-  // session only after the first bind (rpc-mode.js, the `new_session` case),
-  // so the stream misses the first reconcile pass and repeats a lasting
-  // failure. The session's own entries hold both passes, duplicates kept.
   const read = await pi.request({ type: "get_entries" });
   assertQuiet(read);
   const entries = read.response;

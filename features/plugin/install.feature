@@ -28,6 +28,19 @@ Feature: Plugin install
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
+  Scenario: A session in another project offers the skills of a plugin installed into the user scope and none of a project-scope plugin
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | pp   | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has run "/claude:plugin install pp@fixtures --scope project"
+    When the user starts a new pi session in another project
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
   Scenario: The plugin list shows the installed plugin
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user runs "/claude:plugin list --scope project"
