@@ -16,7 +16,7 @@ Feature: Plugin bootstrap
       | claude-plugins-official | user              | added              |
       | claude-plugins-official | user              | autoupdate enabled |
     Then the git host receives these requests:
-      | method | path                                                                   | status |
+      | method | path                                                                      | status |
       | GET    | /anthropics/claude-plugins-official.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /anthropics/claude-plugins-official.git/git-upload-pack                   | 200    |
     Then the "claude-plugins.json" file of the user scope declares these marketplaces:
@@ -50,7 +50,7 @@ Feature: Plugin bootstrap
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name                   | marketplace scope | marketplace status | id                                 | name                               | status | reasons        | scope | cause chain                                                                                 | cause truncated | leaks | rollback partial |
+      | marketplace name                   | marketplace scope | marketplace status | id                                 | name                               | status | reasons        | scope | cause chain                                                                                  | cause truncated | leaks | rollback partial |
       | anthropics/claude-plugins-official | user              | failed             | anthropics/claude-plugins-official | anthropics/claude-plugins-official | failed | source missing | user  | HTTP Error: 404 Not Found, fetched https://{git host}/anthropics/claude-plugins-official.git | false           |       |                  |
     Then the "claude-plugins.json" file of the user scope does not exist
     Then the user scope holds no git clones
@@ -65,11 +65,11 @@ Feature: Plugin bootstrap
       | usage        | Usage: /claude:plugin bootstrap |
 
     Examples:
-      | rejected                | arguments       | message                                                           |
-      | an argument             | official        | bootstrap takes no arguments.                                     |
-      | a flag it does not take | --bogus         | Unknown flag: "--bogus".                                          |
-      | the --local flag        | --local         | Unknown flag: "--local".                                          |
+      | rejected                | arguments       | message                                                          |
+      | an argument             | official        | bootstrap takes no arguments.                                    |
+      | a flag it does not take | --bogus         | Unknown flag: "--bogus".                                         |
+      | the --local flag        | --local         | Unknown flag: "--local".                                         |
       | the user scope          | --scope user    | bootstrap does not accept --scope; it always targets user scope. |
       | the project scope       | --scope project | bootstrap does not accept --scope; it always targets user scope. |
-      | a bad scope value       | --scope bad     | Invalid --scope value: "bad". Must be "user" or "project".        |
-      | a scope with no value   | --scope         | --scope requires a value: "user" or "project".                    |
+      | a bad scope value       | --scope bad     | Invalid --scope value: "bad". Must be "user" or "project".       |
+      | a scope with no value   | --scope         | --scope requires a value: "user" or "project".                   |
