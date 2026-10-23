@@ -5,16 +5,16 @@ milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 1
 current_phase_name: Suite Foundation
 status: executing
-stopped_at: Completed 01-03-PLAN.md
-last_updated: "2026-10-23T03:04:09.906Z"
+stopped_at: Completed 01-04-PLAN.md
+last_updated: "2026-10-23T03:15:22.206Z"
 last_activity: 2026-10-22
 last_activity_desc: Phase 1 execution started
-state_head: 121215ebd9bd73bf295fbeb3e26edbbcd3b7fad7
+state_head: f1bc48d4345f967335ebabf61f8204d027f39f68
 progress:
   total_phases: 15
   completed_phases: 0
   total_plans: 10
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 1 (Suite Foundation) — EXECUTING
-Plan: 4 of 10
+Plan: 5 of 10
 Status: Ready to execute
 Last activity: 2026-10-22 — Phase 1 execution started
 
@@ -186,8 +186,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-23T03:04:09.798Z
-**Stopped at:** Completed 01-03-PLAN.md
+**Last session:** 2026-10-23T03:15:22.101Z
+**Stopped at:** Completed 01-04-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -386,6 +386,7 @@ archived milestone artifacts.
 | Phase 01 P01 | 9 min | 3 tasks | 3 files |
 | Phase 01 P02 | 11 min | 2 tasks | 14 files |
 | Phase 01 P03 | 10 min | 2 tasks | 9 files |
+| Phase 01 P04 | 8 min | 2 tasks | 4 files |
 
 ## Decisions
 
@@ -549,6 +550,8 @@ archived milestone artifacts.
 - [Phase 01]: Retry scenarios state a failed first attempt with Given the user has run <command>, which failed (every payload must be an error)
 - [Phase 01]: The marketplace repair step moved to marketplace/publishing.steps.ts because marketplace add and update both use it (D-08)
 - [Phase 01]: the result lists these plugins: reads plugin-info-cascade blocks with the column names of a single plugin-info result
+- [Phase 01]: The installed-skills deletion step removes each recorded skill directory without force, so a skill the install did not stage fails the setup
+- [Phase 01]: The plugin data and skill steps accept only single directory entries for the id parts, the planted file name, and each recorded skill name (T-01-07)
 
 ### mcp-4 decisions
 
