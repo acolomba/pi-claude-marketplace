@@ -563,10 +563,11 @@ type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
  * truthful current view during the intent-mark window; `finalizeUpdateRecord`
  * rewrites them on the all-success branch.
  *
- * No mutation to `sRecord.version`, `sRecord.resolvedSource`, or
- * `sRecord.updatedAt` -- those are the finalize step's responsibility.
- * `sRecord.resources.workflows` is the ONE exception, and CR-02 below says
- * why.
+ * No mutation to `sRecord.version` or `sRecord.resolvedSource` -- those are
+ * the finalize step's responsibility. `sRecord.updatedAt` is restamped here
+ * so the ST-9 check sees an overlapping run even when the version and the sha
+ * stay the same, and `sRecord.resources.workflows` is widened, as CR-02 below
+ * says.
  */
 async function markUpdateInProgress(
   args: ThreePhaseArgs,
@@ -590,12 +591,21 @@ async function markUpdateInProgress(
 
       // ST-9: stale-version check. Two git revisions can share a declared
       // version (D-16-09), so the recorded commit must not have moved either.
-      if (sRecord.version !== fromVersion || sRecord.resolvedSha !== preflight.record.resolvedSha) {
+      // A same-revision run (every reinstall, D-18-04) moves neither, so the
+      // write stamp must not have moved too: the stamp below is what a second
+      // process that read the record before this mark then fails on.
+      if (
+        sRecord.version !== fromVersion ||
+        sRecord.resolvedSha !== preflight.record.resolvedSha ||
+        sRecord.updatedAt !== preflight.record.updatedAt
+      ) {
         throw new PluginUpdateConcurrencyError("plugin-updated", plugin, marketplace, {
           expectedVersion: fromVersion,
           actualVersion: sRecord.version,
         });
       }
+
+      sRecord.updatedAt = new Date().toISOString();
 
       sRecord.compatibility = {
         installable: false,

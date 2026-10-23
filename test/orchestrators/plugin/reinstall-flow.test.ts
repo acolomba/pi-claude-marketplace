@@ -7755,8 +7755,13 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
       assert.match(firstAgent, /new agent/);
       assert.match(firstSkill, /new skill/);
       assert.match(firstCommand, /new command/);
-      assert.deepStrictEqual(firstRecord, {
-        ...recordBefore,
+      // ST-9: the intent mark also restamps the record, so a run that read it
+      // before the mark fails as concurrently updated.
+      assert.ok(firstRecord !== undefined);
+      const { updatedAt: markedStamp, ...markedFields } = firstRecord;
+      const { updatedAt: readStamp, ...readFields } = recordBefore;
+      assert.deepStrictEqual(markedFields, {
+        ...readFields,
         compatibility: {
           installable: false,
           notes: ["update-in-progress"],
@@ -7764,6 +7769,7 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
           unsupported: [],
         },
       });
+      assert.ok(markedStamp > readStamp, `${markedStamp} is not later than ${readStamp}`);
       assert.deepStrictEqual(second, {
         partition: "reinstalled",
         name: "hello",
@@ -7781,8 +7787,7 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
       ];
       assert.ok(finalRecord !== undefined);
       const { updatedAt: _finalStamp, ...finalFields } = finalRecord;
-      const { updatedAt: _beforeStamp, ...beforeFields } = recordBefore;
-      assert.deepStrictEqual(finalFields, beforeFields);
+      assert.deepStrictEqual(finalFields, readFields);
       assert.deepStrictEqual(notifications, []);
       assert.deepStrictEqual(firstSchedule, ["save:state", "save:state"]);
       assert.deepStrictEqual(secondSchedule, CONVERGED_SCHEDULE);

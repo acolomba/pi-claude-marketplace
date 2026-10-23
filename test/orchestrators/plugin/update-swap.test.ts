@@ -18,6 +18,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { PluginUpdateConcurrencyError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
@@ -343,6 +344,74 @@ test("D-18-06: a partially available candidate's swap records the plugin as not 
     notes: ["contains themes"],
     supported: ["skills"],
     unsupported: ["themes"],
+  });
+});
+
+test("ST-9: a same-revision swap prepared before another swap's intent mark fails concurrently updated and a fresh run converges", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-overlap-");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const args = cascadeSwapArgs(cwd);
+  const policy = { refreshSource: false, skipSameRevision: false, overwrite: true } as const;
+  const first = await preparePluginUpdate({ ...args, policy });
+  const second = await preparePluginUpdate({ ...args, policy });
+  assert.ok(!("partition" in first));
+  assert.ok(!("partition" in second));
+  let saves = 0;
+  const refuseFinalize: typeof saveState = async (extensionRoot, state) => {
+    saves += 1;
+    if (saves === 2) {
+      throw new Error("finalize refused");
+    }
+
+    await saveState(extensionRoot, state);
+  };
+
+  const firstOutcome = await swapPluginUpdate(
+    { ...args, stateTransaction: { saveState: refuseFinalize } },
+    first,
+    policy,
+  );
+  assert.strictEqual(firstOutcome.partition, "failed");
+  const markedState = await readFile(args.locations.stateJsonPath, "utf8");
+
+  // act & assert
+  await assert.rejects(swapPluginUpdate(args, second, policy), (error: unknown) => {
+    assert.ok(error instanceof PluginUpdateConcurrencyError);
+    assert.deepStrictEqual(
+      {
+        kind: error.kind,
+        plugin: error.plugin,
+        marketplace: error.marketplace,
+        lifecycle: error.lifecycle,
+      },
+      { kind: "plugin-updated", plugin: "hello", marketplace: "mp", lifecycle: "intent" },
+    );
+    return true;
+  });
+  assert.strictEqual(await readFile(args.locations.stateJsonPath, "utf8"), markedState);
+
+  // arrange: a run that reads the marked record afterwards
+  const retry = await preparePluginUpdate({ ...args, policy });
+  assert.ok(!("partition" in retry));
+
+  // act
+  const retryOutcome = await swapPluginUpdate(args, retry, policy);
+
+  // assert
+  assert.strictEqual(retryOutcome.partition, "updated");
+  const record = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.deepStrictEqual(record?.compatibility, {
+    installable: true,
+    notes: [],
+    supported: ["skills"],
+    unsupported: [],
   });
 });
 
