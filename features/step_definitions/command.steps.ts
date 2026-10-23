@@ -2,8 +2,9 @@
  * @fileoverview Steps that run `/claude:plugin` commands in a headless Pi and
  * check the JSON results of the last `When` step, a command or a new session.
  *
- * A `Given` command is setup and must succeed. A `When` command is the action
- * under test, and its result is kept on the world for the `Then` steps.
+ * A `Given` command is setup and must succeed, unless its text says it failed.
+ * A `When` command is the action under test, and its result is kept on the
+ * world for the `Then` steps.
  *
  * The `Then` steps compare the whole result. A field becomes lower-case words
  * (`needsReload` is `needs reload`), a nested object adds its own words
@@ -36,6 +37,19 @@ Given("the user has run {string}", async function (this: ScenarioWorld, command:
   const payload = await runCommand(this.pi, expandTokens(command, this.tokens));
   assert.strictEqual(payload.severity, "info", JSON.stringify(payload));
 });
+
+// A retry's first attempt: every result must be an error, so a first attempt
+// that succeeds fails here and shows its non-error results whole.
+Given(
+  "the user has run {string}, which failed",
+  async function (this: ScenarioWorld, command: string) {
+    const payloads = await runCommandPayloads(this.pi, expandTokens(command, this.tokens));
+    assert.deepStrictEqual(
+      payloads.filter((payload) => payload.severity !== "error"),
+      [],
+    );
+  },
+);
 
 When("the user runs {string}", async function (this: ScenarioWorld, command: string) {
   this.recordResults(
