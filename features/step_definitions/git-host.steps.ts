@@ -1,9 +1,10 @@
 /**
- * @fileoverview Steps about the https git host that serves git marketplace
- * sources: arming one repository to fail or to require a credential, letting
- * it serve again, the credential a user stores for the host, and the requests
- * the host receives. A step names a repository through the `git repository`
- * parameter type. Every arm is released with its scenario (HOST-03).
+ * @fileoverview Steps about the https git host that serves the repositories
+ * of git marketplaces and git plugins: arming one repository to fail or to
+ * require a credential, letting it serve again, the credential a user stores
+ * for the host, and the requests the host receives. A step names a repository
+ * through the `git repository` parameter type, by the marketplace or the
+ * plugin it serves. Every arm is released with its scenario (HOST-03).
  */
 
 import assert from "node:assert/strict";
@@ -28,6 +29,11 @@ function servedRepository(
   world: ScenarioWorld,
   reference: GitRepositoryReference,
 ): ServedRepository {
+  if (reference.subject === "plugin") {
+    const repository = world.gitRepositoryServing(reference.name);
+    return { owner: repository.owner, directory: repository.name };
+  }
+
   const published = world.requirePublished(reference.name);
   if (published.kind === "url" || published.kind === "github") {
     return { owner: published.owner, directory: published.repository };

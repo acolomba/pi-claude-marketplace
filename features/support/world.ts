@@ -256,6 +256,24 @@ export class ScenarioWorld extends World {
     return repository;
   }
 
+  /**
+   * Returns the one git plugin repository this scenario published that holds
+   * the plugin `plugin` now, failing when none or more than one does.
+   */
+  gitRepositoryServing(plugin: string): GitPluginRepository {
+    const serving = [...this.gitRepositories.values()].filter((repository) =>
+      repository.plugins.some((candidate) => candidate.name === plugin),
+    );
+    const [repository, ...others] = serving;
+    if (repository === undefined || others.length > 0) {
+      assert.fail(
+        `expected one git repository to hold the plugin ${plugin}, got ${JSON.stringify(serving.map((candidate) => candidate.name))}`,
+      );
+    }
+
+    return repository;
+  }
+
   /** Returns the skills of the last new session, which a `When` step must have started. */
   sessionSkills(): readonly OfferedSkill[] {
     if (this.skills === undefined) {
