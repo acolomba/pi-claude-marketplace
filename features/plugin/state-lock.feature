@@ -24,6 +24,12 @@ Feature: Plugin state lock
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the project scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
 
   Scenario: Uninstalling a plugin from the user scope while another process holds its state lock fails as lock held
     Given the marketplace "fixtures" is published as a dir source
@@ -45,3 +51,9 @@ Feature: Plugin state lock
     Then the installation record of the user scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the user scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |

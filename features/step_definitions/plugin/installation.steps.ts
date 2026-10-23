@@ -187,6 +187,19 @@ Then(
 );
 
 Then(
+  "the {word} scope stages these skills and prompts:",
+  async function (this: ScenarioWorld, scope: string, table: DataTable) {
+    const resources = path.join(extensionRoot(this, scope), "resources");
+    const staged = async (kind: string): Promise<string[][]> =>
+      [...(await stagedEntries(path.join(resources, `${kind}s`)))]
+        .sort((left, right) => left.localeCompare(right))
+        .map((name) => [kind, name]);
+    const rows = [...(await staged("skill")), ...(await staged("prompt"))];
+    assert.deepStrictEqual([["kind", "name"], ...rows], table.raw());
+  },
+);
+
+Then(
   "the installation record of the {word} scope holds these plugins:",
   async function (this: ScenarioWorld, scope: string, table: DataTable) {
     const recorded = await recordedPlugins(extensionRoot(this, scope));
