@@ -1,5 +1,5 @@
 /**
- * @fileoverview Steps about what a failed marketplace add leaves in a scope.
+ * @fileoverview Steps about the marketplace checkouts a scope holds.
  *
  * An add stages its checkout under `sources-staging/` and moves it to
  * `sources/` once it succeeds (FLR-03). A partial checkout may hold no `.git`
