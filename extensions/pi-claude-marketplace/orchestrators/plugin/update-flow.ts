@@ -850,16 +850,28 @@ function narrowDirectFailReason(err: Error): ContentReason {
     return transportReason;
   }
 
-  const code = (primary as NodeJS.ErrnoException).code;
-  if (code === "EACCES" || code === "EPERM") {
-    return "permission denied";
-  }
+  return narrowErrnoFailReason((primary as NodeJS.ErrnoException).code);
+}
 
-  if (code === "ENOENT" || code === "ENOTDIR") {
-    return "source missing";
+function narrowErrnoFailReason(code: string | undefined): ContentReason {
+  switch (code) {
+    case "EACCES":
+    case "EPERM":
+      return "permission denied";
+    case "ENOENT":
+    case "ENOTDIR":
+      return "source missing";
+    // A local file the update could not read or write, such as a directory in
+    // place of mcp-adapter.json: naming the marketplace manifest would blame
+    // the wrong file (the marketplace/shared.ts errno precedent).
+    case "EISDIR":
+    case "EIO":
+    case "EBADF":
+      return "unreadable";
+    case undefined:
+    default:
+      return "unreadable manifest";
   }
-
-  return "unreadable manifest";
 }
 
 /**
