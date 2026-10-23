@@ -34,6 +34,12 @@ Feature: Plugin import
     Then the result lists these plugins:
       | marketplace name | marketplace scope | marketplace status | id            | name | status    | reasons | scope |
       | fixtures         | user              | added              | demo@fixtures | demo | installed |         | user  |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id            |
+      | demo@fixtures |
     When the user starts a new pi session
     Then the session offers these skills:
       | command           | description            |
@@ -63,6 +69,12 @@ Feature: Plugin import
     Then the result lists these plugins:
       | marketplace name | marketplace scope | marketplace status | id            | name | status    | reasons | scope   |
       | fixtures         | project           | added              | demo@fixtures | demo | installed |         | project |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
     When the user starts a new pi session
     Then the session offers these skills:
       | command           | description            |
