@@ -29,6 +29,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { PinnedCommitMissingError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
@@ -392,6 +393,16 @@ function commitNotFetchedError(ref: string): Error {
   return err;
 }
 
+/** INR-03: the typed missing-pin error, keeping the checkout's own error as its cause. */
+function isPinnedCommitMissing(err: unknown, pin: string): boolean {
+  return (
+    err instanceof PinnedCommitMissingError &&
+    err.sha === pin &&
+    err.cause instanceof Error &&
+    err.cause.name === "CommitNotFetchedError"
+  );
+}
+
 void test("PURL-04: a pin outside the ref-hint closure triggers ONE full fetch then retries the checkout to success", async (t) => {
   const locations = await freshLocations(t);
   const base = createGitOps();
@@ -462,7 +473,7 @@ void test("PURL-04: a pin reachable within the ref-hint closure stays on the fas
   assert.equal(state.fetchCalls.length, 0, "no recovery fetch when the pin is already present");
 });
 
-void test("PURL-04: a still-unreachable pin fails clean after the retry (fetch does not make it appear)", async (t) => {
+void test("PURL-04 / INR-03: a still-unreachable pin fails clean after the retry as a commit the host lacks", async (t) => {
   const locations = await freshLocations(t);
   const base = createGitOps();
   const gitOps = {
@@ -489,13 +500,13 @@ void test("PURL-04: a still-unreachable pin fails clean after the retry (fetch d
         ref: "v1.5.5",
         gitOps,
       }),
-    /is not available locally/,
-    "the original CommitNotFetchedError survives the fail-clean fold",
+    (err: unknown) => isPinnedCommitMissing(err, PIN_OUTSIDE_CLOSURE),
+    "INR-03: the unreachable pin reads as a commit the git host does not have",
   );
   assert.equal(base.state.fetchCalls.length, 1, "exactly one recovery fetch was attempted");
 });
 
-void test("PURL-04: a NO-ref clone whose checkout throws CommitNotFetchedError fails immediately with zero recovery fetches", async (t) => {
+void test("PURL-04 / INR-03: a NO-ref clone whose checkout throws CommitNotFetchedError fails immediately as a commit the host lacks", async (t) => {
   const locations = await freshLocations(t);
   const base = createGitOps();
   const gitOps = {
@@ -518,8 +529,8 @@ void test("PURL-04: a NO-ref clone whose checkout throws CommitNotFetchedError f
         pin: PIN_OUTSIDE_CLOSURE,
         gitOps,
       }),
-    /is not available locally/,
-    "the CommitNotFetchedError rethrows through the fail-clean fold",
+    (err: unknown) => isPinnedCommitMissing(err, PIN_OUTSIDE_CLOSURE),
+    "INR-03: the unreachable pin reads as a commit the git host does not have",
   );
   assert.equal(base.state.fetchCalls.length, 0, "the no-ref arm never attempts a recovery fetch");
   const stagingDir = base.state.cloneCalls[0]!.dir;

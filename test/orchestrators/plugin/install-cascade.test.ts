@@ -2270,7 +2270,7 @@ test("D-09-04 / RESV-05: a walled disabled record still answers to the root's co
       kind: "range-conflict",
       why: "installed-unsatisfied",
       key: `bar@${MARKETPLACE}`,
-      range: ">=2.0.0 <3.0.0-0",
+      range: "^2.0.0",
       recordedVersion: "0.0.1",
     },
   });
@@ -2666,7 +2666,7 @@ test("RESV-05 / EDEP-03 a disabled dependency's recorded version answers to a co
       kind: "range-conflict",
       why: "installed-unsatisfied",
       key: `baz@${MARKETPLACE}`,
-      range: ">=1.0.0 <2.0.0-0",
+      range: "^1.0.0",
       recordedVersion: "0.0.1",
     },
   });
@@ -3187,7 +3187,7 @@ test("EDEP-03 a constraint conflict on a disabled already-installed member fails
       kind: "range-conflict",
       why: "installed-unsatisfied",
       key: `bar@${MARKETPLACE}`,
-      range: ">=2.0.0 <3.0.0-0",
+      range: "^2.0.0",
       recordedVersion: "1.0.0",
     },
   });
@@ -3527,19 +3527,19 @@ for (const { label, declared, recorded, expectedRange } of [
     label: "a plain recorded version below the constraint",
     declared: "^2.0.0",
     recorded: "1.4.0",
-    expectedRange: ">=2.0.0 <3.0.0-0",
+    expectedRange: "^2.0.0",
   },
   {
     label: "a content-hash recorded version whose coerced digits miss the constraint",
     declared: "^1.0.0",
     recorded: "hash-123456789abc",
-    expectedRange: ">=1.0.0 <2.0.0-0",
+    expectedRange: "^1.0.0",
   },
   {
     label: "a git-sha recorded version that normalizes to nothing",
     declared: "^1.0.0",
     recorded: "sha-0123456789ab",
-    expectedRange: ">=1.0.0 <2.0.0-0",
+    expectedRange: "^1.0.0",
   },
 ]) {
   test(`RESV-05 ${label} fails the cascade naming both the version and the constraint`, async (t) => {

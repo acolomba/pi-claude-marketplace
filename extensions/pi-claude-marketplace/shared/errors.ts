@@ -279,7 +279,34 @@ export function appendLeakToError(err: unknown, leak: string | undefined): Error
     return baseError;
   }
 
-  return new Error(`${baseError.message} (additionally: ${leak})`, { cause: baseError });
+  return new CleanupLeakError(baseError, leak);
+}
+
+/**
+ * MA-9 / INR-02: an error whose cleanup leaked. `cause` is the original
+ * failure, so a classifier reads the reason through the wrapper.
+ */
+export class CleanupLeakError extends Error {
+  override readonly cause: Error;
+  constructor(original: Error, leak: string) {
+    super(`${original.message} (additionally: ${leak})`, { cause: original });
+    this.name = "CleanupLeakError";
+    this.cause = original;
+  }
+}
+
+/**
+ * INR-02: the failure behind the `CleanupLeakError` wrappers, walked through
+ * `causeChain`. A chain of wrappers deeper than its cap is returned as given.
+ */
+export function withoutCleanupLeaks(err: unknown): unknown {
+  for (const link of causeChain(err)) {
+    if (!(link instanceof CleanupLeakError)) {
+      return link;
+    }
+  }
+
+  return err;
 }
 
 /** Sequential `appendLeakToError` for multiple leak sources -- chains via Error.cause. */
@@ -1145,6 +1172,19 @@ export class DependencyCascadeError extends Error {
     super(message, options);
     this.name = "DependencyCascadeError";
     this.key = key;
+  }
+}
+
+/**
+ * INR-03: a fresh clone of a git plugin source, which fetches every branch and
+ * tag, does not hold the commit the marketplace pins.
+ */
+export class PinnedCommitMissingError extends Error {
+  readonly sha: string;
+  constructor(sha: string, options?: ErrorOptions) {
+    super(`No branch or tag the git host serves holds the commit ${sha}`, options);
+    this.name = "PinnedCommitMissingError";
+    this.sha = sha;
   }
 }
 

@@ -30,9 +30,11 @@ import { isRenderablePluginKey } from "../../domain/dependencies.ts";
 import { renderConstraintRange } from "../../domain/dependency-range.ts";
 import {
   DependencyCascadeError,
+  InstallMarketplaceAddError,
   PluginShapeError,
   StateLockHeldError,
 } from "../../shared/errors.ts";
+import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
@@ -620,6 +622,10 @@ export type PerEntryOutcome =
  * `{unreadable}`, losing the closure/constraint arms' `name@marketplace`
  * cause entirely.
  *
+ * INR-01: a git host that refused a clone reads the reason a direct install
+ * reads (`classifyGitHostFailure`) before the probe fallback, which would call
+ * it `{unreadable}`, and a failed marketplace add reads the reason it carries.
+ *
  * Exported for direct unit-test exercise of the closed-set mapping
  * (the function is otherwise module-private).
  */
@@ -630,6 +636,10 @@ export function classifyOrchestratorThrow(err: unknown): ContentReason {
 
   if (err instanceof StateLockHeldError) {
     return "lock held";
+  }
+
+  if (err instanceof InstallMarketplaceAddError) {
+    return err.reason;
   }
 
   if (err instanceof PluginShapeError) {
@@ -644,7 +654,7 @@ export function classifyOrchestratorThrow(err: unknown): ContentReason {
     }
   }
 
-  return narrowProbeError(err);
+  return classifyGitHostFailure(err) ?? narrowProbeError(err);
 }
 
 /**

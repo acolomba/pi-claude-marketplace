@@ -158,9 +158,9 @@ Feature: Plugin install dependencies
       | needs reload | false                               |
       | summary      | Some plugin operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                                      | cause truncated | leaks | rollback partial |
-      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                                  |                 |       |                  |
-      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.2.0   | Dependency "lib@tools" is installed at version 1.2.0, which does not satisfy ">=2.0.0 <3.0.0-0". | false           |       |                  |
+      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                           | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                       |                 |       |                  |
+      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.2.0   | Dependency "lib@tools" is installed at version 1.2.0, which does not satisfy "^2.0.0". | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | lib@tools | 1.2.0   | true    |
