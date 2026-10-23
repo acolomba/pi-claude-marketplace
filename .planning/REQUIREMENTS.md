@@ -163,6 +163,10 @@ settle which one wins (see PROJECT.md).
 - [ ] **GIT-03**: `fetch` and `info --fetch` refresh the mirror under the state lock, so an install never copies from a mirror mid-refresh
 - [ ] **GIT-04**: One copy-and-checkout helper serves per-commit copies and tag clones, and it handles a directory that holds only a symlink
 - [ ] **GIT-05**: `info --fetch` on a cold unpinned source contacts the git host once
+- [ ] **INR-05**: Every dependency-range cause (`{version conflict}`, `{no matching version}`) prints the declared ranges as Claude Code does: joined with `, `, unquoted
+- [ ] **INR-06**: A failed pinned-commit install's cause carries no git-library advice the user cannot act on, and a pin reachable only from a tag installs on the ref-hint clone path
+- [ ] **REC-06**: Reconcile's own failed install reports the narrowed resolver reasons `install` and `import` report, and `import` reports a rollback-partial install as `{rollback partial}` as `install` does
+- [ ] **MPR-01**: `marketplace remove`'s dependents refusal ignores disabled holders, as a named `uninstall` does
 
 ## Future Requirements
 
@@ -272,10 +276,14 @@ settle which one wins (see PROJECT.md).
 | GIT-03 | Phase 26 | Pending |
 | GIT-04 | Phase 26 | Pending |
 | GIT-05 | Phase 26 | Pending |
+| INR-05 | Phase 27 | Pending |
+| INR-06 | Phase 27 | Pending |
+| REC-06 | Phase 27 | Pending |
+| MPR-01 | Phase 27 | Pending |
 
 **Coverage:**
-- v1 requirements: 91 total
-- Mapped to phases: 91
+- v1 requirements: 95 total
+- Mapped to phases: 95
 - Unmapped: 0
 
 ---

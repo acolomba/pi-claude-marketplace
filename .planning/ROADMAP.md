@@ -138,6 +138,7 @@ Step module paths are relative to `features/step_definitions/`.
 - [ ] **Phase 24: Import Reasons** — `import` reports the same reasons and statuses as `install` and reconcile
 - [ ] **Phase 25: Update and Reinstall Rows** — Same-version updates show commits, and update and reinstall rows carry their versions and consistent reasons
 - [ ] **Phase 26: Git Mirror Access** — Mirror refreshes take the state lock, one copy helper serves all clones, and a cold `info --fetch` contacts the host once
+- [ ] **Phase 27: Install and Reconcile Reason Residue** — Dependency ranges read as upstream, pinned-commit failures read cleanly, reconcile and import narrow reasons like install, and marketplace remove ignores disabled holders
 
 ## Phase Details
 
@@ -560,6 +561,21 @@ Plans:
 3. A cold `info --fetch` of an unpinned source makes one request round to the host (GIT-05).
 4. `npm run check` stays green.
 
+### Phase 27: Install and Reconcile Reason Residue
+
+**Goal:** The reasons phases 22-24 aligned read the same in every remaining command.
+**Depends on:** Phase 22, Phase 23, Phase 24
+**Decision:** 2026-10-23 (orchestrator, from phase 22-24 reports): follow Claude Code's range form; carry install's narrowed reasons into reconcile and import; match named uninstall's disabled-holder rule.
+**Requirements:** INR-05, INR-06, REC-06, MPR-01
+**Files:** `orchestrators/plugin/install-cascade.ts`, `install.messaging.ts`, `platform/git.ts` (fetch tags), `orchestrators/reconcile/apply-outcomes.ts`, `orchestrators/import/execute.ts`, `orchestrators/marketplace/remove.ts`; matching features.
+**Success Criteria** (what must be TRUE):
+
+1. `{version conflict}` and `{no matching version}` causes print declared ranges joined with `, ` and unquoted, so a `||` range keeps its meaning (INR-05).
+2. A pin the remote lacks fails with a cause that names the commit without git-library advice; a pin reachable only from a tag installs through the ref-hint clone (INR-06).
+3. Reconcile's failed install shows install's narrowed reasons, and `import` shows `{rollback partial}` (REC-06).
+4. `marketplace remove` is not refused by a dependent that is disabled (MPR-01).
+5. `npm run check` stays green.
+
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
@@ -590,6 +606,7 @@ Plans:
 | 24. Import Reasons | 0/TBD | Not started | - |
 | 25. Update and Reinstall Rows | 0/TBD | Not started | - |
 | 26. Git Mirror Access | 0/TBD | Not started | - |
+| 27. Install and Reconcile Reason Residue | 0/TBD | Not started | - |
 
 ## Carried Forward
 
