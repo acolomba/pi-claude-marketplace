@@ -329,11 +329,16 @@ function selectMarketplaceRoute(args: string, handlers: SubcommandHandlers): Sel
       // The topic is fixed by the spelling, so there is nothing left to
       // consume. Every sibling verb rejects what it cannot use; silently
       // discarding `rest` here would make this the one spelling where a
-      // mistyped argument reads as success.
+      // mistyped argument reads as success. MPA-03: a flag is named first, as
+      // `help marketplace` and `bootstrap` name it.
       if (rest.trim() !== "") {
+        const flag = tokenizeArgs(rest).find((token) => token.value.startsWith("--"));
         return {
           commandId: "marketplace help",
-          message: "marketplace help takes no arguments.",
+          message:
+            flag === undefined
+              ? "marketplace help takes no arguments."
+              : `Unknown flag: "${flag.value}".`,
           usage: MARKETPLACE_HELP_USAGE,
         };
       }

@@ -790,6 +790,28 @@ test("refuses an argument after marketplace help rather than discarding it (AP-3
   verify(handlers);
 });
 
+for (const args of ["--bogus", "official --bogus"]) {
+  test(`MPA-03: names the flag in marketplace help ${args} as help marketplace does`, async () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const run = runWithNothingLoaded();
+    const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+
+    // act
+    await routeClaudePlugin(`marketplace help ${args}`, handlers, ctx, run);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: 'Unknown flag: "--bogus".\n\nUsage: /claude:plugin marketplace help',
+        severity: "error",
+      },
+    ]);
+    verifyBoundary();
+    verify(handlers);
+  });
+}
+
 test("names an unrecognized marketplace token back to the operator with the marketplace usage block (AP-3)", async () => {
   // arrange
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);

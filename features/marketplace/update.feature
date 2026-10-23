@@ -909,7 +909,7 @@ Feature: Marketplace update
       | tally warnings | 0                            |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons          | scope   | leaks | rollback partial | cause chain   | cause truncated |
-      | tools            | <scope>           | failed             | tools@tools | tools | failed | invalid manifest | <scope> |       |                  | <cause chain> | false           |
+      | tools            | <scope>           | failed             | tools@tools | tools | failed | <reason>         | <scope> |       |                  | <cause chain> | false           |
     Then the "claude-plugins.json" file of the <scope> scope declares these marketplaces:
       | name  | source   | autoupdate |
       | tools | <source> | true       |
@@ -923,14 +923,14 @@ Feature: Marketplace update
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id         | name | status | reasons           | scope   | leaks | rollback partial | cause chain                                                                     | cause truncated |
-      | tools            | <scope>           | demo@tools | demo | failed | <declarer reason> | <scope> |       |                  | cannot read the dependencies of demo@tools: its marketplace manifest is invalid | false           |
-      | tools            | <scope>           | demo@tools | demo | failed | <declarer reason> | <scope> |       |                  | cannot read the dependencies of demo@tools: its marketplace manifest is invalid | false           |
+      | tools            | <scope>           | demo@tools | demo | failed | <reason>          | <scope> |       |                  | cannot read the dependencies of demo@tools: its marketplace manifest is invalid | false           |
+      | tools            | <scope>           | demo@tools | demo | failed | <reason>          | <scope> |       |                  | cannot read the dependencies of demo@tools: its marketplace manifest is invalid | false           |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
     Examples:
-      | source kind | scope   | manifest problem           | source                                                    | cause chain                                                                                                                                                                                                                                                    | declarer reason  |
+      | source kind | scope   | manifest problem           | source                                                    | cause chain                                                                                                                                                                                                                                                    | reason           |
       | dir         | project | is not valid json          | {home}/marketplaces/tools                                 | Failed to update marketplace "tools"., marketplace.json is not valid JSON: SyntaxError: Expected ',' or '}' after property value in JSON at position 56 (line 1 column 57), Expected ',' or '}' after property value in JSON at position 56 (line 1 column 57) | unparseable      |
       | file        | project | breaks the manifest schema | {home}/marketplaces/tools/.claude-plugin/marketplace.json | Failed to update marketplace "tools"., marketplace.json schema invalid: /plugins: must be array                                                                                                                                                                | invalid manifest |
       | dir         | user    | breaks the manifest schema | {home}/marketplaces/tools                                 | Failed to update marketplace "tools"., marketplace.json schema invalid: /plugins: must be array                                                                                                                                                                | invalid manifest |
@@ -940,7 +940,7 @@ Feature: Marketplace update
     Given the marketplace "tools" is published as a <source kind> source
     Given the marketplace "tools" is added to the project scope
     Given the manifest of the marketplace "tools" to update is not valid json
-    Given updating the marketplace "tools" in the project scope has failed as invalid manifest
+    Given updating the marketplace "tools" in the project scope has failed as unparseable
     Given the marketplace "tools" source is repaired with a changed valid manifest
     When the user runs "/claude:plugin marketplace update"
     Then the result has these fields:

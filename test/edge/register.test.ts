@@ -3240,7 +3240,6 @@ const COMMAND_ARGUMENT_CASES = [
     operand: "",
     usage: "marketplace help",
     surplus: "marketplace help takes no arguments.",
-    unknown: "marketplace help takes no arguments.",
   },
   {
     verb: "marketplace add",

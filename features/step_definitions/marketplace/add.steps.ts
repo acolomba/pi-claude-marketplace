@@ -8,13 +8,14 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdir, rm, stat } from "node:fs/promises";
+import { mkdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
 
 import {
   invalidateManifest,
+  makeManifestUnreadable,
   publishMarketplaceIn,
   requireFreeRoot,
 } from "../../lib/published-marketplace.ts";
@@ -48,10 +49,17 @@ Given(
   },
 );
 
-// Every row of the duplicate-name Outline runs this step, so the rows that add
-// the first marketplace again also publish this one, and never add it (ADD-04).
+Given(
+  "the manifest of the marketplace {string} to add cannot be read",
+  async function (this: ScenarioWorld, name: string) {
+    const published = this.requirePublished(name);
+    await makeManifestUnreadable(published);
+    await assert.rejects(readFile(published.manifestPath), { code: "EACCES" });
+  },
+);
+
 // It offers a plugin the first does not, so only the shared name explains the
-// failure.
+// duplicate-name failure.
 Given(
   "a second marketplace declaring the name {string} is ready to add from {string}",
   async function (this: ScenarioWorld, name: string, location: string) {
