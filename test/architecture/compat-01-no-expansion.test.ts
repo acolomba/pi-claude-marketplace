@@ -311,6 +311,8 @@ const EXPECTED_REASONS = [
   "enabled in local layer",
   // UPD-11: an update's git host answered with an HTTP status other than 401/403.
   "network error",
+  // IMP-06: import's skipped header for a marketplace already recorded with the same source.
+  "already added",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

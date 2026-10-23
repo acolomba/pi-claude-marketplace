@@ -157,6 +157,7 @@ const REASONS = {
   "disabled in local layer": true,
   "enabled in local layer": true,
   "network error": true,
+  "already added": true,
 } as const satisfies Record<Reason, true>;
 
 const SEVERITIES = {

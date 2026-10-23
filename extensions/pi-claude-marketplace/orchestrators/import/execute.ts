@@ -1,8 +1,12 @@
-import { parsePluginSource, samePlannedSource, sourceLogical } from "../../domain/source.ts";
 import { addMarketplace as defaultAddMarketplace } from "../../orchestrators/marketplace/add.ts";
 import { type InstallPluginOptions } from "../../orchestrators/plugin/install-flow.ts";
 import { PROMOTED_ROW_REASONS } from "../../orchestrators/plugin/install.messaging.ts";
-import { createInstallOperation } from "../../orchestrators/plugin/operations.ts";
+import {
+  createEnableOperation,
+  createInstallOperation,
+} from "../../orchestrators/plugin/operations.ts";
+import { buildScopeSatisfactionVerdict } from "../../orchestrators/reconcile/dependency-verdict.ts";
+import { planReconcile } from "../../orchestrators/reconcile/plan.ts";
 import { loadConfig, type PluginConfigEntry } from "../../persistence/config-io.ts";
 import {
   writeBatchedConfigEntries,
@@ -25,6 +29,7 @@ import {
   hasFetchedUrlCause,
   PluginShapeError,
   rethrowInvalidGitHubBaseUrl,
+  StateLockHeldError,
 } from "../../shared/errors.ts";
 import { notifyDiagnostic, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -59,8 +64,14 @@ import type {
   AddMarketplaceOptions,
   AddMarketplaceOutcome,
 } from "../../orchestrators/marketplace/add.ts";
+import type {
+  EnableDisablePluginOptions,
+  EnableDisablePluginOutcome,
+} from "../../orchestrators/plugin/enable-disable.ts";
 import type { InstallHooksRouting } from "../../orchestrators/plugin/install-disable-cascade.ts";
+import type { ReconcilePlan } from "../../orchestrators/reconcile/types.ts";
 import type { InstallPluginOutcome } from "../../orchestrators/types.ts";
+import type { MergedConfig } from "../../persistence/config-merge.ts";
 import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -144,13 +155,18 @@ export interface MarketplaceFailureOutcome {
   readonly kind: "marketplace-failure";
   readonly scope: Scope;
   readonly marketplace: string;
-  readonly reason: "add-failed";
+  /**
+   * IMP-07: `"lock-held"` marks a scope another process held locked, at the
+   * read pass or at the add itself; its cause row carries `{lock held}`.
+   */
+  readonly reason: "add-failed" | "lock-held";
   readonly cause: string;
   /**
    * GHB-01 / GHB-04: the redacted, rebuilt onward cause chain beyond `cause`'s
    * head, present only when the GitHub base override rewrote the URL the add
-   * fetched, so the rendered cause line ends with that URL. Omitted for every
-   * other failure, whose row renders `cause` alone.
+   * fetched, so the rendered cause line ends with that URL. IMP-07: a held
+   * lock carries the lock error's own onward chain. Omitted for every other
+   * failure, whose row renders `cause` alone.
    */
   readonly causeChain?: Error;
 }
@@ -177,7 +193,7 @@ export interface UnexpectedPluginFailureOutcome {
    * `{dependency failed}` instead of the `{not in manifest}` token
    * `"unexpected-failure"` carries.
    */
-  readonly reason: "unexpected-failure" | "dependency-failed";
+  readonly reason: "unexpected-failure" | "dependency-failed" | "lock-held" | "not-installed";
   readonly cause: string;
   /**
    * T-55-02-02 / T-53-02-02: the redacted, rebuilt onward cause chain beyond
@@ -236,6 +252,9 @@ export interface ImportDeps {
     opts: AddMarketplaceOptions,
   ) => Promise<AddMarketplaceOutcome | undefined>;
   readonly installPlugin?: (opts: InstallPluginOptions) => Promise<InstallPluginOutcome>;
+  readonly setPluginEnabled?: (
+    opts: EnableDisablePluginOptions & { notifications: { mode: "orchestrated" } },
+  ) => Promise<EnableDisablePluginOutcome>;
 }
 
 export interface ImportClaudeSettingsOptions {
@@ -308,6 +327,13 @@ function installPluginFn(
   return deps?.installPlugin ?? createInstallOperation(hooksRouting, completionCache);
 }
 
+function setPluginEnabledFn(
+  deps: ImportDeps | undefined,
+  hooksRouting: InstallHooksRouting,
+): NonNullable<ImportDeps["setPluginEnabled"]> {
+  return deps?.setPluginEnabled ?? createEnableOperation(hooksRouting);
+}
+
 function pluginsForMarketplace(
   plugins: readonly PlannedPluginImport[],
   marketplace: string,
@@ -329,6 +355,18 @@ function pushPluginWarning(
     ref: refLabel(plugin),
     reason,
     ...(cause !== undefined && { cause }),
+  });
+}
+
+/** IMP-06: a settings plugin the scope already holds, reported `skipped {already installed}`. */
+function pushAlreadyInstalled(result: MutableImportResult, plugin: PlannedPluginImport): void {
+  result.skippedExistingPlugins.push({
+    kind: "plugin-skip",
+    scope: plugin.scope,
+    plugin: plugin.ref.plugin,
+    marketplace: plugin.ref.marketplace,
+    ref: refLabel(plugin),
+    reason: "already-installed",
   });
 }
 
@@ -359,13 +397,13 @@ function pushDiagnostic(
  * the assignment site instead of a runtime signal at render time -- the same
  * narrowing `orchestrators/reconcile/notify.ts` applies to its own block type.
  */
-type ImportBlockStatus = Extract<MarketplaceStatus, "added" | "updated" | "failed">;
+type ImportBlockStatus = Extract<MarketplaceStatus, "added" | "skipped" | "failed">;
 
 /**
  * A marketplace header awaiting render. `status` is REQUIRED, which makes a
  * STATUSLESS HEADER unconstructible: every marketplace that reaches the cascade
  * carries a marketplace-level outcome, because a marketplace whose plugins were
- * allowed to run was either recorded (`added`), already present (`updated`), or
+ * allowed to run was either recorded (`added`), already present (`skipped`), or
  * failed (`failed`).
  *
  * WR-04: that is the whole of what the type enforces. It does NOT prevent the
@@ -374,7 +412,7 @@ type ImportBlockStatus = Extract<MarketplaceStatus, "added" | "updated" | "faile
  * key, so such rows would never be visited and would vanish without trace. What
  * actually rules that out is an invariant spanning four functions, not a type:
  * every `pushMarketplaceRow` call site is reachable only for a plugin in
- * `scopePlan.pluginsToInstall` that passed the `blockedMarketplaces` gate, and
+ * `scopePlan.pluginsToInstall` whose marketplace passed the usable-marketplace gate, and
  * `scopedPlan` (`import/marketplaces.ts`) derives `pluginsToInstall` and
  * `marketplacesToEnsure` from the same `refs` set under one scope, so the key
  * sets always match. A loud check here would be an arm no input can reach.
@@ -385,13 +423,20 @@ interface MarketplaceBlock {
   readonly scope: Scope;
   status: ImportBlockStatus;
   /**
-   * The `add-failed` cause for a `status: "failed"` block whose failure came
-   * from `result.marketplaceFailures` (a marketplace add attempt, or an
-   * already-present marketplace `reconcileExistingMarketplace` could not
-   * classify) -- undefined otherwise, e.g. for a source-mismatch failure,
-   * whose per-plugin child rows already carry the mismatch reason.
+   * The cause row for a `status: "failed"` block whose failure came from
+   * `result.marketplaceFailures` (a marketplace add attempt, an
+   * already-present marketplace whose stored source the planner could not
+   * classify, or a held lock) -- undefined otherwise, e.g. for a
+   * source-mismatch failure, whose per-plugin child rows already carry the
+   * mismatch reason.
    */
-  cause?: Error;
+  failure?: MarketplaceBlockFailure;
+}
+
+/** IMP-07: the cause row's reasons travel with its cause; a held lock reads `lock held`. */
+interface MarketplaceBlockFailure {
+  readonly cause: Error;
+  readonly reasons: readonly ContentReason[];
 }
 
 function setMarketplaceStatus(
@@ -399,7 +444,7 @@ function setMarketplaceStatus(
   scope: Scope,
   marketplaceName: string,
   status: ImportBlockStatus,
-  cause?: Error,
+  failure?: MarketplaceBlockFailure,
 ): void {
   const key = `${scope}:${marketplaceName}`;
   const existing = byMp.get(key);
@@ -409,7 +454,7 @@ function setMarketplaceStatus(
       name: marketplaceName,
       scope,
       status,
-      ...(cause !== undefined && { cause }),
+      ...(failure !== undefined && { failure }),
     });
     return;
   }
@@ -481,6 +526,22 @@ function unexpectedFailureReason(reason: UnexpectedPluginFailureOutcome["reason"
       return "not in manifest";
     case "dependency-failed":
       return "dependency failed";
+    case "lock-held":
+      return "lock held";
+    case "not-installed":
+      return "not installed";
+  }
+}
+
+/** IMP-07: the cause row of a marketplace failure names a held lock. */
+function marketplaceFailureReasons(
+  reason: MarketplaceFailureOutcome["reason"],
+): readonly ContentReason[] {
+  switch (reason) {
+    case "add-failed":
+      return [];
+    case "lock-held":
+      return ["lock held"];
   }
 }
 
@@ -488,7 +549,8 @@ function unexpectedFailureReason(reason: UnexpectedPluginFailureOutcome["reason"
  * Converts a `ClaudeImportExecutionResult` into the
  * `MarketplaceNotificationMessage[]` payload for `notify()`.
  *
- * Outcome mapping: added -> "added"; already-present -> "updated";
+ * Outcome mapping: added -> "added"; already-present -> "skipped" with
+ * "already added" (IMP-06);
  * marketplace failure or source mismatch -> "failed"; installed plugin ->
  * PluginInstalledMessage; already-installed plugin -> PluginSkippedMessage
  * with "already installed"; failed/unavailable plugin -> PluginFailedMessage
@@ -513,11 +575,14 @@ function buildImportNotificationMarketplaces(
   }
 
   for (const o of result.skippedExistingMarketplaces) {
-    setMarketplaceStatus(byMp, o.scope, o.marketplace, "updated");
+    setMarketplaceStatus(byMp, o.scope, o.marketplace, "skipped");
   }
 
   for (const o of result.marketplaceFailures) {
-    setMarketplaceStatus(byMp, o.scope, o.marketplace, "failed", failureCause(o));
+    setMarketplaceStatus(byMp, o.scope, o.marketplace, "failed", {
+      cause: failureCause(o),
+      reasons: marketplaceFailureReasons(o.reason),
+    });
   }
 
   // Source-mismatch supersedes any prior status (the import for that
@@ -651,11 +716,14 @@ function blockToMarketplaceMessage(
   switch (block.status) {
     case "added":
       return { name, scope, status: "added", plugins };
-    case "updated":
-      return { name, scope, status: "updated", plugins };
+    case "skipped":
+      // IMP-06: the marketplace was already recorded with the settings' source,
+      // so nothing changed. Unstamped, like `marketplace update`'s
+      // `(skipped) {up-to-date}`, so the cascade stays info.
+      return { name, scope, status: "skipped", reasons: ["already added"], plugins };
     case "failed": {
       // D-03: a failed import marketplace block -> error.
-      if (block.cause === undefined) {
+      if (block.failure === undefined) {
         return { name, scope, status: "failed", severity: "error", plugins };
       }
 
@@ -671,8 +739,8 @@ function blockToMarketplaceMessage(
       const causeRow: PluginFailedMessage = {
         status: "failed",
         name,
-        reasons: [],
-        cause: block.cause,
+        reasons: block.failure.reasons,
+        cause: block.failure.cause,
         severity: "error",
         needsReload: false,
       };
@@ -698,53 +766,74 @@ type ScopedImportPlan = ReturnType<typeof buildClaudeImportPlan>["scopes"][numbe
  */
 type ImportConfigPatch = Required<BatchedConfigPatch>;
 
+/** Why a marketplace will not be usable this run, as its failure row carries it. */
+interface MarketplaceFailure {
+  readonly reason: MarketplaceFailureOutcome["reason"];
+  readonly cause: string;
+  readonly causeChain?: Error;
+}
+
 /**
  * WR-07: shared failure bookkeeping for a marketplace that will not be
- * usable this run -- either a fresh add that did not record (typed failed
- * outcome OR unexpected throw, from `addOnePlannedMarketplace`) or an
- * already-present marketplace whose stored source `reconcileExistingMarketplace`
- * could not classify: block dependent plugin installs and attribute the
- * cause on both the marketplace row and each dependent plugin's warning row.
+ * usable this run -- a fresh add that did not record (typed failed outcome OR
+ * unexpected throw, from `addOnePlannedMarketplace`), an already-present
+ * marketplace whose stored source the planner could not classify, or a scope
+ * another process held locked at the read pass (IMP-07): block dependent
+ * plugin installs and attribute the cause on both the marketplace row and
+ * each dependent plugin's warning row.
  */
 function recordMarketplaceAddFailure(
   result: MutableImportResult,
   blockedMarketplaces: Set<string>,
   scopePlan: ScopedImportPlan,
   marketplace: ScopedImportPlan["marketplacesToEnsure"][number],
-  cause: string,
-  causeChain?: Error,
+  failure: MarketplaceFailure,
 ): void {
   blockedMarketplaces.add(marketplace.marketplace);
   result.marketplaceFailures.push({
     kind: "marketplace-failure",
     scope: marketplace.scope,
     marketplace: marketplace.marketplace,
-    reason: "add-failed",
-    cause,
-    ...(causeChain !== undefined && { causeChain }),
+    reason: failure.reason,
+    cause: failure.cause,
+    ...(failure.causeChain !== undefined && { causeChain: failure.causeChain }),
   });
   for (const plugin of pluginsForMarketplace(scopePlan.pluginsToInstall, marketplace.marketplace)) {
-    pushPluginWarning(result, plugin, "marketplace-failed", cause);
+    pushPluginWarning(result, plugin, "marketplace-failed", failure.cause);
   }
+}
+
+/**
+ * IMP-07: a held lock renders the way every other lock-held row does -- the
+ * lock error's own message and its onward chain, unredacted, because the
+ * path it names is the scope's own lock file.
+ */
+function lockHeldFailure(error: StateLockHeldError): MarketplaceFailure {
+  return {
+    reason: "lock-held",
+    cause: error.message,
+    ...(error.cause instanceof Error && { causeChain: error.cause }),
+  };
 }
 
 type PlannedMarketplace = ScopedImportPlan["marketplacesToEnsure"][number];
 type PlannedPlugin = ScopedImportPlan["pluginsToInstall"][number];
+type PlannedMismatch = ReconcilePlan["sourceMismatches"][number];
+type SettledMismatch = Extract<PlannedMismatch, { cause: "source-mismatch" | "unknown-stored" }>;
 
 /**
- * Classify an ALREADY-PRESENT marketplace against the Claude-settings source
- * and record the settled outcome (skip or block) directly on `result` /
- * `blockedMarketplaces`. The ensure-loop moves on to the next marketplace
- * without calling `addMarketplace`.
+ * IMP-05: settle a planned marketplace the reconcile planner reported as a
+ * source mismatch, recording the blocked outcome directly on `result` /
+ * `blockedMarketplaces`.
  */
-function reconcileExistingMarketplace(
+function recordPlannedMismatch(
   result: MutableImportResult,
   blockedMarketplaces: Set<string>,
   scopePlan: ScopedImportPlan,
   marketplace: PlannedMarketplace,
-  existingSource: unknown,
+  mismatch: SettledMismatch,
 ): void {
-  switch (samePlannedSource(existingSource, marketplace.source)) {
+  switch (mismatch.cause) {
     case "unknown-stored":
       // The stored source record is in an unrecognized format (e.g. a
       // hand-edited state.json). Block dependent plugins and emit a clear
@@ -760,13 +849,10 @@ function reconcileExistingMarketplace(
       // `marketplaceFailures -> setMarketplaceStatus("failed")` path with no new
       // vocabulary, and silences the dependent plugins' advisory rows the same
       // way a genuine add failure does.
-      recordMarketplaceAddFailure(
-        result,
-        blockedMarketplaces,
-        scopePlan,
-        marketplace,
-        "unrecognized stored source format",
-      );
+      recordMarketplaceAddFailure(result, blockedMarketplaces, scopePlan, marketplace, {
+        reason: "add-failed",
+        cause: "unrecognized stored source format",
+      });
       pushDiagnostic(
         result,
         marketplace.scope,
@@ -774,18 +860,10 @@ function reconcileExistingMarketplace(
         `Marketplace "${marketplace.marketplace}" has an unrecognized stored source format. Verify state.json or remove and re-add the marketplace.`,
         { marketplace: marketplace.marketplace },
       );
-      break;
-    case "same":
-      result.skippedExistingMarketplaces.push({
-        kind: "marketplace-skip",
-        scope: marketplace.scope,
-        marketplace: marketplace.marketplace,
-        reason: "already-present",
-      });
-      break;
-    case "different": {
+      return;
+    case "source-mismatch": {
       blockedMarketplaces.add(marketplace.marketplace);
-      const cause = `Existing marketplace source ${sourceLogical(parsePluginSource(existingSource))} does not match Claude settings source ${marketplace.source}.`;
+      const cause = `Existing marketplace source ${mismatch.recordedSource} does not match Claude settings source ${marketplace.source}.`;
       for (const plugin of pluginsForMarketplace(
         scopePlan.pluginsToInstall,
         marketplace.marketplace,
@@ -801,7 +879,7 @@ function reconcileExistingMarketplace(
         });
       }
 
-      break;
+      return;
     }
   }
 }
@@ -815,7 +893,7 @@ function reconcileExistingMarketplace(
  * with a missing arm compiles clean. Naming the bucket makes the outcome switch
  * below TS2366-checked.
  */
-type PlannedPluginBucket = "install-failed" | "installed" | "unexpected-failure";
+type PlannedPluginBucket = "install-failed" | "installed" | "skipped" | "unexpected-failure";
 
 /**
  * Record the outcome of installing ONE planned plugin and answer with the
@@ -930,6 +1008,95 @@ async function installOnePlannedPlugin(
 }
 
 /**
+ * IMP-05 / D-06: enable ONE planned plugin the scope records disabled, through
+ * the enable operation reconcile drives for its `pluginsToEnable` bucket, and
+ * answer with the result bucket it was recorded in.
+ *
+ * An enable re-materializes the record through the install ledger, so the row
+ * is `(installed)`, the row reconcile renders for the same transition. The
+ * outcome is marked `reenabled`: the disable verb left `{ enabled: false }`
+ * under this key, and the post-pass declares it `{ enabled: true }` the way
+ * the enable path does. A failure takes the install failure's ladder, so a
+ * held lock reads `lock held`. The `skipped` arm is a race another process
+ * won; `disabled` cannot answer an enable, and reads as the already-enabled
+ * skip.
+ */
+async function enableOnePlannedPlugin(
+  opts: ImportClaudeSettingsOptions,
+  result: MutableImportResult,
+  plugin: PlannedPlugin,
+): Promise<PlannedPluginBucket> {
+  const setPluginEnabled = setPluginEnabledFn(opts.deps, opts.hooksRouting);
+  let outcome: EnableDisablePluginOutcome;
+  try {
+    outcome = await setPluginEnabled({
+      ctx: opts.ctx,
+      run: opts.run,
+      cwd: opts.cwd,
+      marketplace: plugin.ref.marketplace,
+      plugin: plugin.ref.plugin,
+      enable: true,
+      scope: plugin.scope,
+      notifications: { mode: "orchestrated" },
+    });
+  } catch (err) {
+    // The same defensive arm as the install's: an invalid GitHub base override
+    // ends the import (GHB-03), anything else becomes this plugin's row.
+    rethrowInvalidGitHubBaseUrl(err);
+    pushUnexpectedFailure(
+      result,
+      plugin,
+      "unexpected-failure",
+      err instanceof Error ? err : new Error(errorMessage(err)),
+    );
+    return "unexpected-failure";
+  }
+
+  switch (outcome.status) {
+    case "enabled":
+      result.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
+      result.installedPlugins.push({
+        kind: "plugin-installed",
+        scope: plugin.scope,
+        plugin: plugin.ref.plugin,
+        marketplace: plugin.ref.marketplace,
+        ref: refLabel(plugin),
+        reason: "installed",
+        resourcesChanged: true,
+        ...(outcome.version !== undefined && { version: outcome.version }),
+        declaresAgents: outcome.stagedAgents === true,
+        declaresMcp: outcome.stagedMcpServers === true,
+        reenabled: true,
+        declaresWorkflows: outcome.stagedWorkflows === true,
+      });
+      result.changedResources = true;
+      return "installed";
+    case "failed":
+      // AFILE-04: a failed enable can still have rewritten the MCP config.
+      result.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
+      dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause);
+      return "install-failed";
+    case "skipped":
+      // A race another process won: the record is enabled already, or gone.
+      if (outcome.reason === "not installed") {
+        pushUnexpectedFailure(
+          result,
+          plugin,
+          "not-installed",
+          new Error(`${refLabel(plugin)} is not installed in the ${plugin.scope} scope.`),
+        );
+        return "unexpected-failure";
+      }
+
+      pushAlreadyInstalled(result, plugin);
+      return "skipped";
+    case "disabled":
+      pushAlreadyInstalled(result, plugin);
+      return "skipped";
+  }
+}
+
+/**
  * WR-07: add ONE planned marketplace in ORCHESTRATED mode and dispatch on the
  * typed outcome.
  *
@@ -973,8 +1140,7 @@ async function addOnePlannedMarketplace(
       blockedMarketplaces,
       scopePlan,
       marketplace,
-      outcome?.cause ?? "addMarketplace returned no outcome in orchestrated mode",
-      outcome === undefined ? undefined : fetchedUrlCauseChain(outcome.error),
+      addFailure(outcome),
     );
   } catch (err) {
     rethrowInvalidGitHubBaseUrl(err);
@@ -982,14 +1148,37 @@ async function addOnePlannedMarketplace(
     // outcomes, and the line above rethrows an invalid GitHub base override so
     // the whole import fails (GHB-03). Only a genuinely unexpected throw is
     // recorded here.
-    recordMarketplaceAddFailure(
-      result,
-      blockedMarketplaces,
-      scopePlan,
-      marketplace,
-      errorMessage(err),
-    );
+    recordMarketplaceAddFailure(result, blockedMarketplaces, scopePlan, marketplace, {
+      reason: "add-failed",
+      cause: errorMessage(err),
+    });
   }
+}
+
+/**
+ * The failure row of an add that did not record. IMP-07: an add another
+ * process's lock stopped carries `lock held` and the lock error's chain.
+ */
+function addFailure(
+  outcome: Exclude<AddMarketplaceOutcome, { status: "added" }> | undefined,
+): MarketplaceFailure {
+  if (outcome === undefined) {
+    return {
+      reason: "add-failed",
+      cause: "addMarketplace returned no outcome in orchestrated mode",
+    };
+  }
+
+  if (outcome.error instanceof StateLockHeldError) {
+    return lockHeldFailure(outcome.error);
+  }
+
+  const causeChain = fetchedUrlCauseChain(outcome.error);
+  return {
+    reason: "add-failed",
+    cause: outcome.cause,
+    ...(causeChain !== undefined && { causeChain }),
+  };
 }
 
 /**
@@ -1002,19 +1191,203 @@ function fetchedUrlCauseChain(error: Error): Error | undefined {
   return hasFetchedUrlCause(error) ? redactCauseChain(error.cause) : undefined;
 }
 
-// The import workflow is intentionally linear: ensure marketplaces, record
-// diagnostics, then install plugins while preserving per-item continuation
-// semantics.
+/**
+ * IMP-05 / D-01: the desired state a scope's settings name -- each planned
+ * marketplace with its settings source, and each enabled plugin enabled -- in
+ * the merged-config shape reconcile's planner reads.
+ */
+function desiredConfigFor(scopePlan: ScopedImportPlan): MergedConfig {
+  const marketplaces: MergedConfig["marketplaces"] = {};
+  for (const marketplace of scopePlan.marketplacesToEnsure) {
+    setOwn(marketplaces, marketplace.marketplace, {
+      entry: { source: marketplace.source },
+      source: "base",
+    });
+  }
+
+  const plugins: MergedConfig["plugins"] = {};
+  for (const plugin of scopePlan.pluginsToInstall) {
+    setOwn(plugins, `${plugin.ref.plugin}@${plugin.ref.marketplace}`, {
+      entry: { enabled: true },
+      source: "base",
+    });
+  }
+
+  return { marketplaces, plugins };
+}
+
+type ImportReadPass =
+  | { readonly kind: "planned"; readonly state: ExtensionState; readonly plan: ReconcilePlan }
+  | { readonly kind: "lock-held"; readonly error: StateLockHeldError };
+
+/**
+ * IMP-05 / IMP-07: reconcile's read pass, with the settings as the desired
+ * state. It holds the scope lock while it reads the state snapshot and plans
+ * against it with reconcile's own planner, saves nothing, and returns before
+ * any operation runs, so a held lock fails the scope with nothing changed. As
+ * in reconcile, the apply pass then runs with no outer lock, because each
+ * operation takes the scope lock itself and the lock is not re-entrant
+ * (CR-01).
+ */
+async function readPassForImport(
+  opts: ImportClaudeSettingsOptions,
+  scopePlan: ScopedImportPlan,
+): Promise<ImportReadPass> {
+  const loadState = stateLoader(opts.deps);
+  const scope = scopePlan.scope;
+  try {
+    const locations = locationsFor(scope, opts.cwd);
+    return await withLockedStateTransaction(
+      locations,
+      async (tx): Promise<ImportReadPass> => {
+        // LOAD-01 / D-06-04: computed inside the lock, as reconcile's read
+        // pass computes it, so it reads the same snapshot the planner sees.
+        const verdict = await buildScopeSatisfactionVerdict({ state: tx.state, locations });
+        return {
+          kind: "planned",
+          state: tx.state,
+          plan: planReconcile(desiredConfigFor(scopePlan), tx.state, scope, verdict),
+        };
+      },
+      { loadState: async () => loadState(scope, opts.cwd) },
+    );
+  } catch (err) {
+    if (err instanceof StateLockHeldError) {
+      return { kind: "lock-held", error: err };
+    }
+
+    throw err;
+  }
+}
+
+function pushSkippedPluginWarnings(result: MutableImportResult, scopePlan: ScopedImportPlan): void {
+  for (const skipped of scopePlan.skippedPlugins) {
+    pushPluginWarning(
+      result,
+      { scope: skipped.scope, ref: skipped.ref },
+      "unmappable-marketplace-source",
+      skipped.reason,
+    );
+  }
+}
+
+/**
+ * Import builds every plugin key from a parsed `plugin@marketplace` ref and
+ * declares every marketplace its plugins name, so of the planner's four
+ * mismatch causes only these two can name a settings marketplace.
+ */
+function plannedMismatchFor(plan: ReconcilePlan, marketplace: string): SettledMismatch | undefined {
+  return plan.sourceMismatches.find(
+    (mismatch): mismatch is SettledMismatch =>
+      (mismatch.cause === "source-mismatch" || mismatch.cause === "unknown-stored") &&
+      mismatch.marketplace === marketplace,
+  );
+}
+
+/**
+ * IMP-05 / IMP-06: settle the settings' marketplaces against the plan. A
+ * marketplace the scope does not record under the settings' name is added, as
+ * before this path existed: that covers the planner's add bucket and its
+ * source claims, which import does not follow (D-07). A recorded one is either
+ * a planner source mismatch, which blocks it, or already recorded with the
+ * settings' source, which is reported as a skip. Answers the names whose
+ * plugins may run.
+ */
+async function ensurePlannedMarketplaces(
+  opts: ImportClaudeSettingsOptions,
+  result: MutableImportResult,
+  scopePlan: ScopedImportPlan,
+  read: Extract<ImportReadPass, { kind: "planned" }>,
+): Promise<ReadonlySet<string>> {
+  const blockedMarketplaces = new Set<string>();
+  for (const marketplace of scopePlan.marketplacesToEnsure) {
+    const mismatch = plannedMismatchFor(read.plan, marketplace.marketplace);
+    if (ownValue(read.state.marketplaces, marketplace.marketplace) === undefined) {
+      // eslint-disable-next-line no-await-in-loop -- each add locks the scope (retries: 0)
+      await addOnePlannedMarketplace(opts, result, blockedMarketplaces, scopePlan, marketplace);
+    } else if (mismatch !== undefined) {
+      recordPlannedMismatch(result, blockedMarketplaces, scopePlan, marketplace, mismatch);
+    } else {
+      result.skippedExistingMarketplaces.push({
+        kind: "marketplace-skip",
+        scope: marketplace.scope,
+        marketplace: marketplace.marketplace,
+        reason: "already-present",
+      });
+    }
+  }
+
+  return new Set(
+    scopePlan.marketplacesToEnsure
+      .map((marketplace) => marketplace.marketplace)
+      .filter((name) => !blockedMarketplaces.has(name)),
+  );
+}
+
+/**
+ * IMP-05: settle the settings' plugins, in settings order. A plugin the scope
+ * does not record is installed; one the plan's enable bucket names is enabled
+ * (D-06); any other recorded plugin is reported `skipped {already installed}`
+ * (IMP-06) and never reinstalled. The read pass hands the planner reconcile's
+ * own satisfaction verdict, so a record the load-time dependency check holds
+ * down is not in the enable bucket and stays a skip (LOAD-02).
+ *
+ * D-04-07 / D-03: a record that arrived as another plugin's dependency is not
+ * a skip, although the planner reads it as steady state. The imported settings
+ * naming it IS the user asking for it by name, so it goes to the install,
+ * whose orchestrated promotion arm flips the record to a direct install.
+ */
+async function applyPlannedPlugins(
+  opts: ImportClaudeSettingsOptions,
+  result: MutableImportResult,
+  scopePlan: ScopedImportPlan,
+  read: Extract<ImportReadPass, { kind: "planned" }>,
+  usable: ReadonlySet<string>,
+): Promise<void> {
+  const enableKeys = new Set(
+    read.plan.pluginsToEnable.map((op) => `${op.plugin}@${op.marketplace}`),
+  );
+  for (const plugin of scopePlan.pluginsToInstall) {
+    if (!usable.has(plugin.ref.marketplace)) {
+      continue;
+    }
+
+    const record = ownValue(
+      ownValue(read.state.marketplaces, plugin.ref.marketplace)?.plugins,
+      plugin.ref.plugin,
+    );
+    if (record === undefined || record.provenance === "dependency") {
+      // eslint-disable-next-line no-await-in-loop -- each install locks the scope (retries: 0)
+      await installOnePlannedPlugin(opts, result, plugin, record);
+    } else if (enableKeys.has(`${plugin.ref.plugin}@${plugin.ref.marketplace}`)) {
+      // eslint-disable-next-line no-await-in-loop -- each enable locks the scope (retries: 0)
+      await enableOnePlannedPlugin(opts, result, plugin);
+    } else {
+      pushAlreadyInstalled(result, plugin);
+    }
+  }
+}
+
+/**
+ * IMP-05: one scope of the import, on reconcile's path -- the locked read pass
+ * plans the settings against the recorded state, then the marketplace and
+ * plugin buckets run, then the config post-pass declares what landed. A scope
+ * whose settings name nothing takes no lock, so a pristine scope stays
+ * untouched.
+ */
 async function executeScopedPlan(
   opts: ImportClaudeSettingsOptions,
   result: MutableImportResult,
   scopePlan: ScopedImportPlan,
 ): Promise<void> {
-  const loadState = stateLoader(opts.deps);
+  if (scopePlan.marketplacesToEnsure.length === 0) {
+    pushSkippedPluginWarnings(result, scopePlan);
+    return;
+  }
 
-  let state: ExtensionState;
+  let read: ImportReadPass;
   try {
-    state = await loadState(scopePlan.scope, opts.cwd);
+    read = await readPassForImport(opts, scopePlan);
   } catch (err) {
     pushDiagnostic(
       result,
@@ -1025,64 +1398,28 @@ async function executeScopedPlan(
     return;
   }
 
-  const blockedMarketplaces = new Set<string>();
-
-  for (const marketplace of scopePlan.marketplacesToEnsure) {
-    const existing = ownValue(state.marketplaces, marketplace.marketplace);
-    if (existing !== undefined) {
-      reconcileExistingMarketplace(
+  if (read.kind === "lock-held") {
+    // IMP-07 / D-08: nothing ran, so nothing changed. Every marketplace the
+    // settings name fails with the lock error; their plugins are silenced as
+    // under any marketplace failure, and there is nothing to declare.
+    const blockedMarketplaces = new Set<string>();
+    for (const marketplace of scopePlan.marketplacesToEnsure) {
+      recordMarketplaceAddFailure(
         result,
         blockedMarketplaces,
         scopePlan,
         marketplace,
-        existing.source,
+        lockHeldFailure(read.error),
       );
-      continue;
     }
 
-    // eslint-disable-next-line no-await-in-loop -- each add locks the scope (retries: 0)
-    await addOnePlannedMarketplace(opts, result, blockedMarketplaces, scopePlan, marketplace);
+    pushSkippedPluginWarnings(result, scopePlan);
+    return;
   }
 
-  for (const skipped of scopePlan.skippedPlugins) {
-    pushPluginWarning(
-      result,
-      { scope: skipped.scope, ref: skipped.ref },
-      "unmappable-marketplace-source",
-      skipped.reason,
-    );
-  }
-
-  for (const plugin of scopePlan.pluginsToInstall) {
-    if (blockedMarketplaces.has(plugin.ref.marketplace)) {
-      continue;
-    }
-
-    // D-04-07: a record that arrived as another plugin's dependency is not a
-    // skip. The imported settings naming it IS the user asking for it by name,
-    // so it falls through to the install, whose orchestrated promotion arm
-    // flips the record to a direct install and returns `installed` with no
-    // resource change. Every other existing record is already what the
-    // settings ask for and is skipped here.
-    const existingPlugin = ownValue(
-      ownValue(state.marketplaces, plugin.ref.marketplace)?.plugins,
-      plugin.ref.plugin,
-    );
-    if (existingPlugin !== undefined && existingPlugin.provenance !== "dependency") {
-      result.skippedExistingPlugins.push({
-        kind: "plugin-skip",
-        scope: plugin.scope,
-        plugin: plugin.ref.plugin,
-        marketplace: plugin.ref.marketplace,
-        ref: refLabel(plugin),
-        reason: "already-installed",
-      });
-      continue;
-    }
-
-    // eslint-disable-next-line no-await-in-loop -- each install locks the scope (retries: 0)
-    await installOnePlannedPlugin(opts, result, plugin, existingPlugin);
-  }
+  const usable = await ensurePlannedMarketplaces(opts, result, scopePlan, read);
+  pushSkippedPluginWarnings(result, scopePlan);
+  await applyPlannedPlugins(opts, result, scopePlan, read, usable);
 
   // WB-03: after all per-entry orchestrated-mode addMarketplace
   // + installPlugin calls complete for THIS scope, run a per-scope batched
@@ -1449,13 +1786,22 @@ function dispatchFailedOutcome(
   }
 
   if (error instanceof ConcurrentInstallError) {
-    result.skippedExistingPlugins.push({
-      kind: "plugin-skip",
+    pushAlreadyInstalled(result, plugin);
+    return;
+  }
+
+  if (error instanceof StateLockHeldError) {
+    // IMP-07 / D-09: another process took the lock after the read pass.
+    const { cause, causeChain } = lockHeldFailure(error);
+    result.unexpectedPluginFailures.push({
+      kind: "plugin-failure",
       scope: plugin.scope,
       plugin: plugin.ref.plugin,
       marketplace: plugin.ref.marketplace,
       ref: refLabel(plugin),
-      reason: "already-installed",
+      reason: "lock-held",
+      cause,
+      ...(causeChain !== undefined && { causeChain }),
     });
     return;
   }
@@ -1464,14 +1810,7 @@ function dispatchFailedOutcome(
     // Switch on `error.shape.kind` for compile-time exhaustiveness.
     switch (error.shape.kind) {
       case "already-installed":
-        result.skippedExistingPlugins.push({
-          kind: "plugin-skip",
-          scope: plugin.scope,
-          plugin: plugin.ref.plugin,
-          marketplace: plugin.ref.marketplace,
-          ref: refLabel(plugin),
-          reason: "already-installed",
-        });
+        pushAlreadyInstalled(result, plugin);
         return;
       case "not-in-manifest":
         pushPluginWarning(result, plugin, "unavailable", cause);

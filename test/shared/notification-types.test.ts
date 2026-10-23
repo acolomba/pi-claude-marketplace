@@ -158,6 +158,7 @@ const EXPECTED_REASONS = [
   "disabled in local layer",
   "enabled in local layer",
   "network error",
+  "already added",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [

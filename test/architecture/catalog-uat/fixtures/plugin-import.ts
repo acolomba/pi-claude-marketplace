@@ -284,5 +284,60 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    "repeat-import-skips": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Import",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "fixtures",
+            scope: "user",
+            status: "skipped",
+            reasons: ["already added"],
+            plugins: [
+              {
+                status: "skipped",
+                name: "demo",
+                reasons: ["already installed"],
+                severity: "info",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "lock-held": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Import",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "fixtures",
+            scope: "user",
+            status: "failed",
+            severity: "error",
+            plugins: [
+              {
+                status: "failed",
+                name: "fixtures",
+                reasons: ["lock held"],
+                cause: new Error(
+                  "Another pi-claude-marketplace operation is in progress for user scope (~/.pi/agent/pi-claude-marketplace/.state-lock). Retry after it completes.",
+                  { cause: new Error("Lock file is already being held") },
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };
