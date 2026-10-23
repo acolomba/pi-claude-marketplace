@@ -51,6 +51,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   CleanupContextError,
+  DependencyDeclarationsUnreadableError,
   InvalidGitHubBaseUrlError,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
@@ -5696,6 +5697,92 @@ for (const { form, target, rowName, blockName } of [
     });
   });
 }
+
+/**
+ * Install `hello` and `gone` from marketplace `mp` in the project scope, with
+ * `gone` no longer in the marketplace, so the dependency walk cannot read it.
+ */
+async function seedUnreadableSiblingRecord(cwd: string): Promise<ReturnType<typeof locationsFor>> {
+  const locations = locationsFor("project", cwd);
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+    installedVersions: { hello: "1.0.0", gone: "1.0.0" },
+  });
+  return locations;
+}
+
+test("D-18-17: an update whose dependency walk cannot read another recorded plugin fails as unreadable and names it", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-walk-unreadable-");
+    try {
+      // arrange
+      const locations = await seedUnreadableSiblingRecord(cwd);
+      const filesBefore = await updateFileSnapshot(locations);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        refusedUpdateNotification(
+          "hello",
+          "unreadable",
+          "cannot read the dependencies of gone@mp: not declared by its marketplace",
+        ),
+      ]);
+      assert.deepStrictEqual(await updateFileSnapshot(locations), filesBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-18-17: an autoupdate cascade fails a plugin whose dependency walk cannot read another record as unreadable", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-cascade-walk-unreadable-");
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      const locations = await seedUnreadableSiblingRecord(cwd);
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      process.chdir(cwd);
+
+      // act
+      const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+      // assert
+      assert.ok(outcome.partition === "failed");
+      const { cause, ...failure } = outcome;
+      const walkMessage =
+        "cannot read the dependencies of gone@mp: not declared by its marketplace";
+      assert.deepStrictEqual(failure, {
+        partition: "failed",
+        name: "hello",
+        notes: [`${walkMessage}\n\ncause: ${walkMessage}`],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        reasons: ["unreadable"],
+      });
+      assert.ok(cause instanceof DependencyDeclarationsUnreadableError);
+      assert.deepStrictEqual([cause.declarer, cause.message], ["gone@mp", walkMessage]);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 test("FIX-03: a bare update under a marketplace only the local config declares updates and writes no declaration", async () => {
   await withHermeticHome(async () => {

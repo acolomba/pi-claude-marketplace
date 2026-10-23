@@ -28,6 +28,7 @@ import {
 } from "../../domain/dependency-range.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+import { DependencyDeclarationsUnreadableError } from "../../shared/errors.ts";
 
 import { buildScopeDeclarationDetail } from "./dependency-index.ts";
 import { probeDependencyTags } from "./dependency-tag-probe.ts";
@@ -99,7 +100,11 @@ export interface UpdateTagPin {
   readonly version: string;
 }
 
-/** What the target's installed dependents hold it to. */
+/**
+ * What the target's installed dependents hold it to. `held` is a hold over a
+ * declared range only (D-18-07); a declaration walk that cannot read a record
+ * produces no verdict and rejects instead (D-18-17).
+ */
 export type UpdateConstraintVerdict =
   | { readonly kind: "unconstrained" }
   | {
@@ -436,6 +441,9 @@ async function probePathStageOne(
  * are scope-local by construction (D-10-07). A constrained range reaches
  * stage one: the entry source decides which tag listing to probe, and the
  * highest satisfying tag -- if any -- pins the admitted range.
+ *
+ * Rejects with `DependencyDeclarationsUnreadableError` when the walk cannot
+ * read a recorded plugin's declarations (D-18-17).
  */
 export async function evaluateUpdateConstraint(
   options: UpdateConstraintOptions,
@@ -448,14 +456,13 @@ export async function evaluateUpdateConstraint(
     locations: options.locations,
   });
   if (!walked.ok) {
-    // D-10-05: the walk's own message IS the rendered cause line -- it
-    // carries no load-error text and no chained `{ cause }`, so the
-    // renderer's cause-chain walk cannot print a path or parser text behind it.
-    // Re-wrapping it here would reintroduce exactly that. This is the same
-    // fail-closed model the uninstall refusal uses on an unreadable
-    // declarer, and differs from it only in outcome: an update is SKIPPED
-    // here, never refused.
-    return { kind: "held", cause: walked.cause.message };
+    // D-10-05 / D-18-17: a walk that cannot read a record fails the operation
+    // closed, as the uninstall refusal does on an unreadable declarer, and the
+    // row names the true cause, `unreadable`. The walk's own message IS the
+    // rendered cause line: it carries no load-error text and chains no
+    // `{ cause }`, so the renderer's cause-chain walk cannot print a path or
+    // parser text behind it.
+    throw new DependencyDeclarationsUnreadableError(walked.declarer, walked.cause.message);
   }
 
   const holders = collectHolders(walked.declarations, options.state, target);

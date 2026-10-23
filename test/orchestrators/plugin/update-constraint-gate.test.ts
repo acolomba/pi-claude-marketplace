@@ -9,6 +9,7 @@ import {
   evaluateUpdateConstraint,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { DependencyDeclarationsUnreadableError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -275,18 +276,26 @@ describe("evaluateUpdateConstraint", () => {
     assert.deepStrictEqual(directVerdict, dependencyVerdict);
   });
 
-  test("UPDT-02: an unreadable declarer holds the update and names itself", async () => {
+  test("UPDT-02 / D-18-17: an unreadable declarer fails the update closed and names itself", async () => {
     // arrange
     const cause = new Error(
       "cannot read the dependencies of alpha@mp: not declared by its marketplace",
     );
     const seam = seamFailingWith("alpha@mp", cause);
 
-    // act
-    const verdict = await evaluateUpdateConstraint(options({ seam }));
-
-    // assert
-    assert.deepStrictEqual(verdict, { kind: "held", cause: cause.message });
+    // act & assert
+    await assert.rejects(
+      () => evaluateUpdateConstraint(options({ seam })),
+      (error: unknown) => {
+        assert.ok(error instanceof DependencyDeclarationsUnreadableError);
+        assert.strictEqual(error.declarer, "alpha@mp");
+        assert.strictEqual(
+          error.message,
+          "cannot read the dependencies of alpha@mp: not declared by its marketplace",
+        );
+        return true;
+      },
+    );
   });
 
   test("UPDT-01: two overlapping declared ranges admit their intersection", async () => {
@@ -395,39 +404,42 @@ describe("evaluateUpdateConstraint", () => {
 
   for (const { title, cause } of [
     {
-      title: "D-05-07: a marketplace manifest load failure",
+      title: "D-05-07 / D-18-17: a marketplace manifest load failure",
       cause: new Error("cannot read the dependencies of app@mp"),
     },
     {
-      title: "D-05-07: a declarer its marketplace does not list",
+      title: "D-05-07 / D-18-17: a declarer its marketplace does not list",
       cause: new Error(
         "cannot read the dependencies of helper@mp: not declared by its marketplace",
       ),
     },
     {
-      title: "D-05-07: a declarer's own manifest present but unusable",
+      title: "D-05-07 / D-18-17: a declarer's own manifest present but unusable",
       cause: new Error(
         "cannot read the dependencies of helper@mp: its own manifest is present but cannot be read",
       ),
     },
     {
-      title: "D-05-07: a declaration that parses as unusable",
+      title: "D-05-07 / D-18-17: a declaration that parses as unusable",
       cause: new Error("cannot read the dependencies of helper@mp: dependencies.0: Invalid input"),
     },
   ] as const) {
-    test(`UPDT-02: ${title} holds the update and names itself, verbatim`, async () => {
+    test(`UPDT-02: ${title} fails the update closed and names itself, verbatim`, async () => {
       // arrange
       const seam = seamFailingWith("helper@mp", cause);
 
-      // act
-      const verdict = await evaluateUpdateConstraint(options({ seam }));
-
-      // assert -- a refusal short-circuits before any fold: the seam returns
-      // no declarations at all, so `intersectDependencyRanges` is never
-      // reached for this verdict. `verdict.cause` is the double's own
-      // message string, passed through unchanged.
-      assert.deepStrictEqual(verdict, { kind: "held", cause: cause.message });
-      assert.doesNotMatch(cause.message, /(^|\s)\//u);
+      // act & assert -- the error's message is the walk's own message string,
+      // passed through unchanged.
+      await assert.rejects(
+        () => evaluateUpdateConstraint(options({ seam })),
+        (error: unknown) => {
+          assert.ok(error instanceof DependencyDeclarationsUnreadableError);
+          assert.strictEqual(error.declarer, "helper@mp");
+          assert.strictEqual(error.message, cause.message);
+          assert.doesNotMatch(error.message, /(^|\s)\//u);
+          return true;
+        },
+      );
     });
   }
 

@@ -153,7 +153,7 @@ A plugin whose entry is a relative path and whose marketplace has no satisfying 
 
 When the plugin is already at the highest version its dependents admit, the row still reads `{up-to-date}`, and the `cause:` line names the range and its holders, so you can tell "nothing newer exists" from "nothing newer is allowed."
 
-When some other installed plugin's declarations cannot be established, this plugin's update is skipped and the `cause:` line names that plugin and says why -- the same fail-closed rule [the uninstall refusal](#removing-a-plugin-other-plugins-need) already follows, differing only in that an update is skipped rather than refused.
+When the declarations of some other installed plugin in the scope cannot be read, the update or reinstall fails with `{unreadable}` and changes nothing. The `cause:` line names that plugin and says why. This is the same refusal that [the uninstall guard](#removing-a-plugin-other-plugins-need) makes. Repair or remove that plugin, then run the command again.
 
 The skipped row is reported as a warning on every surface, including a background autoupdate, because the condition persists until a declaration changes.
 

@@ -683,8 +683,11 @@ async function updateSinglePluginWith(
         cause: err as Error,
         cleanupFailures,
       }),
-      // FLR-02: a held state lock renders its cause chain, as on the direct path.
-      ...(err instanceof StateLockHeldError && { cause: err }),
+      // FLR-02: a held state lock renders its cause chain, as on the direct
+      // path; D-18-17: so does an unreadable dependency walk, whose message
+      // names the record it could not read.
+      ...((err instanceof StateLockHeldError ||
+        err instanceof DependencyDeclarationsUnreadableError) && { cause: err }),
       // CMC-13: required booleans on every
       // PluginUpdateOutcome partition. `(failed)` rows do NOT render
       // the soft-dep marker (MSG-SD-3), so the value is `false`.
@@ -698,8 +701,9 @@ async function updateSinglePluginWith(
 
 /**
  * Map an exported-workflow error to a closed-set `Reason[]` for cascade-failure
- * outcomes. Typed facts (a held state lock, FLR-02, and the concurrency
- * errors) and errno codes win; the permissive fallback is `not in manifest`.
+ * outcomes. Typed facts (a held state lock, FLR-02, the concurrency errors,
+ * and an unreadable dependency walk, D-18-17) and errno codes win; the
+ * permissive fallback is `not in manifest`.
  */
 function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
   const primary = err instanceof CleanupContextError ? err.primary : err;
@@ -711,6 +715,10 @@ function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
     return [
       primary.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled",
     ] as const;
+  }
+
+  if (primary instanceof DependencyDeclarationsUnreadableError) {
+    return ["unreadable"] as const;
   }
 
   // errno-bearing FS errors map to the matching
