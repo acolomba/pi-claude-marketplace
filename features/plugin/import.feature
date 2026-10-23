@@ -6,12 +6,11 @@ Feature: Plugin import
 
   Background:
     Given the marketplace "fixtures" is published as a dir source
+
+  Scenario: Importing the user's claude code settings adds their marketplace and installs their enabled plugin
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
-      | tool | 2.0.0   |
-
-  Scenario: Importing the user's claude code settings adds their marketplace and installs their enabled plugin
     Given the claude code settings file of the user scope holds this text:
       """
       {
@@ -47,6 +46,9 @@ Feature: Plugin import
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
   Scenario: Importing the project's claude code settings adds their marketplace and installs their enabled plugin in the project scope
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
     Given the claude code settings file of the project scope holds this text:
       """
       {
@@ -81,7 +83,11 @@ Feature: Plugin import
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
-  Scenario: Importing skips a plugin the claude code settings disable
+  Scenario: Importing leaves out a plugin the claude code settings disable
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | tool | 2.0.0   |
     Given the claude code settings file of the user scope holds this text:
       """
       {
@@ -113,6 +119,9 @@ Feature: Plugin import
       | demo@fixtures |
 
   Scenario: Importing the same claude code settings a second time changes nothing
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
     Given the claude code settings file of the user scope holds this text:
       """
       {
@@ -148,6 +157,9 @@ Feature: Plugin import
       | demo@fixtures |
 
   Scenario: Importing reports an enabled plugin the marketplace does not offer and installs the rest
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
     Given the claude code settings file of the user scope holds this text:
       """
       {
@@ -185,13 +197,16 @@ Feature: Plugin import
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
   Scenario: Importing the project scope reads only the project's claude code settings and changes only the project scope
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | tool | 2.0.0   |
     Given the claude code settings file of the user scope holds this text:
       """
       {
-        "enabledPlugins": { "demo@fixtures": true },
+        "enabledPlugins": { "demo@other": true },
         "extraKnownMarketplaces": {
-          "fixtures": {
-            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          "other": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/other" }
           }
         }
       }
@@ -222,6 +237,9 @@ Feature: Plugin import
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | tool@fixtures | 2.0.0   | true    |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
     Then the "claude-plugins.json" file of the user scope does not exist
     When the user starts a new pi session
     Then the session offers these skills:
@@ -229,6 +247,9 @@ Feature: Plugin import
       | /skill:tool-skill | A skill of tool 2.0.0. |
 
   Scenario: Importing the user scope reads only the user's claude code settings and changes only the user scope
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
     Given the claude code settings file of the user scope holds this text:
       """
       {
@@ -243,10 +264,10 @@ Feature: Plugin import
     Given the claude code settings file of the project scope holds this text:
       """
       {
-        "enabledPlugins": { "tool@fixtures": true },
+        "enabledPlugins": { "tool@other": true },
         "extraKnownMarketplaces": {
-          "fixtures": {
-            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          "other": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/other" }
           }
         }
       }
@@ -266,6 +287,9 @@ Feature: Plugin import
     Then the installation record of the user scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
     Then the "claude-plugins.json" file of the project scope does not exist
     When the user starts a new pi session
     Then the session offers these skills:
