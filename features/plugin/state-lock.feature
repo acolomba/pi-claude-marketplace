@@ -327,3 +327,57 @@ Feature: Plugin state lock
     Then the user scope stages these skills and prompts:
       | kind  | name       |
       | skill | demo-skill |
+
+  Scenario: Pruning the project scope while another process holds its state lock fails as lock held
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install app@fixtures --scope project"
+    Given the user has run "/claude:plugin uninstall app@fixtures --scope project"
+    Given another process holds the state lock of the project scope
+    When the user runs "/claude:plugin prune --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id              | name    | status | reasons   | scope   | cause chain                                                                                                                                       | cause truncated | leaks | rollback partial |
+      | (prune)          | project           | (prune)@(prune) | (prune) | failed | lock held | project | Another pi-claude-marketplace operation is in progress for project scope (.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | lib@fixtures | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+    Then the project scope stages these skills and prompts:
+      | kind  | name      |
+      | skill | lib-skill |
+
+  Scenario: Pruning the user scope while another process holds its state lock fails as lock held
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install app@fixtures --scope user"
+    Given the user has run "/claude:plugin uninstall app@fixtures --scope user"
+    Given another process holds the state lock of the user scope
+    When the user runs "/claude:plugin prune --scope user"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id              | name    | status | reasons   | scope | cause chain                                                                                                                                    | cause truncated | leaks | rollback partial |
+      | (prune)          | user              | (prune)@(prune) | (prune) | failed | lock held | user  | Another pi-claude-marketplace operation is in progress for user scope (.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+    Then the installation record of the user scope holds these plugins:
+      | id           | version | enabled |
+      | lib@fixtures | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the user scope declares no plugins
+    Then the user scope stages these skills and prompts:
+      | kind  | name      |
+      | skill | lib-skill |
