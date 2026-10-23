@@ -17,6 +17,7 @@ import {
   absentTargetReasons,
   emitMarketplaceNotAdded,
   emitMarketplaceNotAddedSignal,
+  degradationFromEnable,
   enableRowDependencies,
   keepLocalLayerTargets,
   loadTargetLayers,
@@ -3341,5 +3342,37 @@ describe("sweepWorkflowsStaging", () => {
     assert.deepStrictEqual(logged, [
       `[hooks] install: workflows staging GC failed for hello@mp: ENOTDIR: not a directory, scandir '${staging}'`,
     ]);
+  });
+});
+
+describe("degradationFromEnable", () => {
+  test("lifts every signal the enable outcome carries", () => {
+    // act
+    const signals = degradationFromEnable({
+      unsupported: ["outputStyles"],
+      orphanRewake: true,
+      degradedKinds: ["skill"],
+      stagedAgents: true,
+      stagedMcpServers: true,
+      stagedWorkflows: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(signals, {
+      unsupported: ["outputStyles"],
+      orphanRewake: true,
+      degradedKinds: ["skill"],
+      stagedAgents: true,
+      stagedMcpServers: true,
+      stagedWorkflows: true,
+    });
+  });
+
+  test("lifts nothing from a clean enable", () => {
+    // act
+    const signals = degradationFromEnable({});
+
+    // assert
+    assert.deepStrictEqual(signals, {});
   });
 });

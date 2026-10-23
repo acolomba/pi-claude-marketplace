@@ -615,7 +615,7 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
  * such a note ONLY on the partially-available arm; the structural arm keeps it on
  * the source axis (`unsupported source`), agreeing with `narrowResolverNotes`.
  */
-function narrowResolverReasons(
+export function narrowResolverReasons(
   reasons: readonly string[],
   unsupportedKinds: readonly string[] = [],
   partialable = false,

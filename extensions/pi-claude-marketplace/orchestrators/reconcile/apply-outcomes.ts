@@ -611,9 +611,8 @@ export type PerEntryOutcome =
  * instead of flattening to the misleading `{unreadable}` fallback. Mirrors
  * the instanceof ladder in `import/execute.ts::dispatchFailedOutcome`; the
  * `not-installable` and `no-longer-installable` shape kinds collapse to the
- * single `no longer installable` token used by import's
- * `importWarningReason("uninstallable")` so the cross-surface reason stays
- * identical for the same underlying failure.
+ * single `no longer installable` token. Import instead narrows them to the
+ * resolver reasons `install` renders (IMP-08).
  *
  * RESV-06: a `DependencyCascadeError` is checked FIRST -- an install failure
  * attributable to one of the plugin's dependencies otherwise falls through to
