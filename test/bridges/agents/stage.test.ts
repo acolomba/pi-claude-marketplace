@@ -21,6 +21,7 @@ import { describe, test, type TestContext } from "node:test";
 
 import {
   abortPreparedAgents,
+  assertAgentCommitTargets,
   commitPreparedAgents,
   prepareStagePluginAgents,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/stage.ts";
@@ -1780,6 +1781,76 @@ You are a bot. Read from ${pluginRoot}/data and ${locations.scopeRoot}.
     assert.deepStrictEqual(await readdir(locations.agentsDir), []);
     assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), indexBytes);
     assert.strictEqual(await exists(prepared.stagingDir), false);
+  });
+});
+
+describe("assertAgentCommitTargets", () => {
+  test("accepts a no-op prepare without touching the agents directory", async (t) => {
+    // arrange
+    const { pluginRoot, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-targets-noop-",
+    );
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [],
+    });
+
+    // act & assert
+    await assert.doesNotReject(assertAgentCommitTargets(prepared, { force: true }));
+    assert.strictEqual(await exists(locations.agentsDir), false);
+  });
+
+  test("PI-6: refuses a new target holding a file no index row names and keeps the staged handle", async (t) => {
+    // arrange
+    const { pluginRoot, agentsSourceDir, locations, pluginDataDir } = await createStageTree(
+      t,
+      "agents-targets-occupied-",
+    );
+    await writeFile(
+      path.join(agentsSourceDir, "current.md"),
+      "---\nname: current\ndescription: Current agent\ntools: Read\n---\n\nCurrent.\n",
+    );
+    const currentTarget = path.join(locations.agentsDir, "pi-claude-marketplace-acme-current.md");
+    const intruderBytes = "---\nname: current\n---\nDo not overwrite.\n";
+    await mkdir(locations.agentsDir, { recursive: true });
+    await writeFile(currentTarget, intruderBytes);
+    const prepared = await prepareStagePluginAgents(createRemovalOps(), {
+      locations,
+      cwd: locations.scopeRoot,
+      marketplaceName: "catalog",
+      pluginName: "acme",
+      pluginRoot,
+      pluginDataDir,
+      agentsDirs: [agentsSourceDir],
+    });
+    assert.strictEqual(prepared.kind, "staged");
+
+    // act
+    const error = await assertAgentCommitTargets(prepared).then(
+      () => undefined,
+      (reason: unknown) => reason,
+    );
+
+    // assert
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, cause: error.cause },
+      {
+        name: "Error",
+        message: `Cannot replace agent target with non-previous content at ${currentTarget}`,
+        cause: undefined,
+      },
+    );
+    assert.strictEqual(await readFile(currentTarget, "utf8"), intruderBytes);
+    assert.deepStrictEqual(await readdir(prepared.stagingDir), [
+      "pi-claude-marketplace-acme-current.md",
+    ]);
   });
 });
 

@@ -725,7 +725,7 @@ async function assertReinstallPreservedLegacyState(params: {
   assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
 }
 
-test("AGENT-01 / D-18-10: a reinstall refuses a file no index row names at its new agent target and keeps the legacy and foreign bytes", async (t) => {
+test("AGENT-01 / NFR-3: a reinstall refuses a file no index row names at its new agent target before it changes anything", async (t) => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-agent-protection-"));
@@ -733,8 +733,7 @@ test("AGENT-01 / D-18-10: a reinstall refuses a file no index row names at its n
     const { locations, oldTarget, newTarget, oldBytes } = await seedLegacyReinstall(cwd, false);
     await writeFile(newTarget, "Other owner's bytes.\n");
     const indexBefore = await readFile(locations.agentsIndexPath, "utf8");
-    const recordBefore = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
-    assert.ok(recordBefore !== undefined);
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
     const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
 
     // act
@@ -750,46 +749,26 @@ test("AGENT-01 / D-18-10: a reinstall refuses a file no index row names at its n
 
     // assert
     // PI-6: no index row names the new target's file, so reinstall's overwrite
-    // knob (D-18-15) does not reach it; the agents commit refuses at phase 3.
-    const aggregate =
-      'Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it.';
-    const refusal = `Cannot replace agent target with non-previous content at ${newTarget}`;
-    assert.ok(outcome.partition === "failed");
-    const { cause, rollbackPartial, ...rest } = outcome;
-    assert.deepStrictEqual(rest, {
+    // knob (D-18-15) does not reach it. The swap refuses before its intent
+    // mark, so state.json, the index, and both agent files are unchanged.
+    await assertReinstallPreservedLegacyState({
+      outcome,
+      notifications,
+      locations,
+      oldTarget,
+      oldBytes,
+      indexBefore,
+      stateBefore,
+    });
+    const message = `Cannot replace agent target with non-previous content at ${newTarget}`;
+    assert.deepStrictEqual(outcome, {
       partition: "failed",
       name: "hello",
       marketplace: "mp",
       scope: "project",
-      notes: [aggregate, `agents: ${refusal}`],
-      reasons: ["rollback partial"],
+      notes: [`${message}\n\ncause: ${message}`],
     });
-    assert.ok(cause instanceof PluginUpdatePhase3Error);
-    assert.strictEqual(cause.message, aggregate);
-    assert.deepStrictEqual(
-      rollbackPartial?.map((child) => ({ phase: child.phase, message: child.cause.message })),
-      [{ phase: "agents", message: refusal }],
-    );
-    assert.deepStrictEqual(notifications, []);
     assert.strictEqual(await readFile(newTarget, "utf8"), "Other owner's bytes.\n");
-    assert.strictEqual(await readFile(oldTarget, "utf8"), oldBytes);
-    assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), indexBefore);
-    // D-18-10: the record keeps the swap's intent mark until a retry finalizes
-    // it; apart from the write stamp, every other field is the record before
-    // the reinstall.
-    const recordAfter = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
-    assert.ok(recordAfter !== undefined);
-    const { updatedAt: _stampAfter, ...markedRecord } = recordAfter;
-    const { updatedAt: _stampBefore, ...unmarkedRecord } = recordBefore;
-    assert.deepStrictEqual(markedRecord, {
-      ...unmarkedRecord,
-      compatibility: {
-        installable: false,
-        notes: ["update-in-progress"],
-        supported: ["agents"],
-        unsupported: [],
-      },
-    });
   });
 });
 

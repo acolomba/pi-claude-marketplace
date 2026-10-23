@@ -301,6 +301,37 @@ function partitionPreviousEntries(
 }
 
 /**
+ * PI-6 / NFR-10: the refusals `commitPreparedAgents` makes before it removes
+ * anything. A forced commit refuses a previous row whose target escapes
+ * `<scopeRoot>/agents/`, and every commit refuses a new target that holds a
+ * file no replaced index row names.
+ *
+ * NFR-3: a caller that writes an intent mark before it commits (the shared
+ * update and reinstall swap) runs this first, so the refusal aborts the
+ * prepared handles and changes nothing. The commit runs it again.
+ */
+export async function assertAgentCommitTargets(
+  prepared: PreparedAgentsStaging,
+  options?: { readonly force?: boolean },
+): Promise<void> {
+  if (prepared.kind === "noop") {
+    return;
+  }
+
+  const previous = partitionPreviousEntries(prepared, options);
+  await assertForcedTargetsContained(prepared, previous, options);
+  const previousTargets = new Set(previous.replaced.map((entry) => entry.targetPath));
+  for (const entry of prepared.newEntries) {
+    // eslint-disable-next-line no-await-in-loop -- the first non-previous target throws before any rm
+    if (!previousTargets.has(entry.targetPath) && (await pathExists(entry.targetPath))) {
+      throw new Error(
+        `Cannot replace agent target with non-previous content at ${entry.targetPath}`,
+      );
+    }
+  }
+}
+
+/**
  * NFR-10 / RINST-01: a forced commit removes index rows that failed the AG-5
  * ownership check, so the marker cannot vouch for their `targetPath`. Each
  * one must resolve inside `<scopeRoot>/agents/` before anything is removed;
@@ -363,17 +394,8 @@ export async function commitPreparedAgents(
   // forced) are INTENTIONALLY excluded -- those targets stay untouched on disk
   // and their rows stay in the index.
   try {
-    await assertForcedTargetsContained(prepared, previous, options);
-    const previousTargets = new Set(previous.replaced.map((entry) => entry.targetPath));
-    for (const entry of prepared.newEntries) {
-      // eslint-disable-next-line no-await-in-loop -- the first non-previous target throws before any rm
-      if (!previousTargets.has(entry.targetPath) && (await pathExists(entry.targetPath))) {
-        throw new Error(
-          `Cannot replace agent target with non-previous content at ${entry.targetPath}`,
-        );
-      }
-    }
-
+    // The backstop for a file that appeared after the caller's own probe.
+    await assertAgentCommitTargets(prepared, options);
     await Promise.all(
       previous.replaced.map(async (entry) => {
         try {

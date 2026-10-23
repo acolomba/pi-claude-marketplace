@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import { discoverPluginAgents as definingDiscoverPluginAgents } from "../../../extensions/pi-claude-marketplace/bridges/agents/discover.ts";
 import {
   abortPreparedAgents,
+  assertAgentCommitTargets,
   commitPreparedAgents,
   discoverPluginAgents,
   prepareStagePluginAgents,
@@ -11,6 +12,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/index.ts";
 import {
   abortPreparedAgents as definingAbortPreparedAgents,
+  assertAgentCommitTargets as definingAssertAgentCommitTargets,
   commitPreparedAgents as definingCommitPreparedAgents,
   prepareStagePluginAgents as definingPrepareStagePluginAgents,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/stage.ts";
@@ -55,6 +57,19 @@ describe("abortPreparedAgents", () => {
 
     // assert
     assert.strictEqual(agentsAbortPreparedAgents, expectedAbortPreparedAgents);
+  });
+});
+
+describe("assertAgentCommitTargets", () => {
+  test("re-exports the defining binding", () => {
+    // arrange
+    const expectedAssertAgentCommitTargets = definingAssertAgentCommitTargets;
+
+    // act
+    const agentsAssertAgentCommitTargets = assertAgentCommitTargets;
+
+    // assert
+    assert.strictEqual(agentsAssertAgentCommitTargets, expectedAssertAgentCommitTargets);
   });
 });
 

@@ -64,6 +64,7 @@ import path from "node:path";
 
 import {
   abortPreparedAgents,
+  assertAgentCommitTargets,
   commitPreparedAgents,
   prepareStagePluginAgents,
 } from "../../bridges/agents/index.ts";
@@ -1327,10 +1328,14 @@ export async function swapPluginUpdate(
   // are the post-phase-3a `finalizeUpdateRecord` step's responsibility.
 
   try {
+    // NFR-3 / PI-6: the agents commit's target refusals run here first, so an
+    // occupied target refuses before the intent mark and changes nothing. The
+    // commit repeats them for a file that appears in between.
+    await assertAgentCommitTargets(handles.agents, { force: policy?.overwrite === true });
     await markUpdateInProgress(args, preflight, handles);
   } catch (err) {
-    // Intent-mark failure (typically ST-9 stale-version): abort all prep
-    // handles + rethrow.
+    // A target refusal or an intent-mark failure (typically ST-9
+    // stale-version): abort all prep handles + rethrow.
     throw errorWithCleanupFailures(err, await abortHandles(removalOps, handles));
   }
 

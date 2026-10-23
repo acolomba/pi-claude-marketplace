@@ -4863,11 +4863,11 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
 
 // ─── phase 3a agents commit failure ──────────────────────────────────────────
 
-test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAgents throws", async () => {
+test("phase3a-agents-fail: a read-only agents directory -> commitPreparedAgents throws", async () => {
   // commitPreparedAgents calls rename(stagedFile.md, targetFile.md) for each
-  // agent. On Linux, rename(regular_file, existing_directory) fails with
-  // EISDIR. Pre-creating the agent target path as a DIRECTORY forces this.
-  // This exercises runThreePhaseUpdate's phase 3a aggregation.
+  // agent. A read-only agents directory makes that rename fail with EACCES
+  // after the swap's pre-intent target check found the target free. This
+  // exercises runThreePhaseUpdate's phase 3a aggregation.
   //
   // Also pre-create the skills obstacle so the test also verifies that
   // phase 3a continues across multiple bridge failures (D-03 discipline).
@@ -4890,24 +4890,25 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
       await mkdir(locations.skillsTargetDir, { recursive: true });
       await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
-      // Pre-create the agent target path as a DIRECTORY to force agents commit
-      // failure. The generated agent name for "bot" in plugin "hello" is
-      // The generated basename is pi-claude-marketplace-hello-bot.
+      // Make the agents directory read-only to force the agents commit's
+      // rename to fail.
       await mkdir(locations.agentsDir, { recursive: true });
-      await mkdir(path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"), {
-        recursive: true,
-      });
+      await chmod(locations.agentsDir, 0o500);
 
       const { ctx, run, notifications } = makeCtx();
 
       // act
-      await updatePlugins({
-        ctx,
-        run,
-        scope: "project",
-        cwd,
-        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-      });
+      try {
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+      } finally {
+        await chmod(locations.agentsDir, 0o700);
+      }
 
       // assert
       // Both skills and agents commit should fail; recovery hint appears.
@@ -5087,20 +5088,23 @@ test("TR-04 matrix: agents-fails-others-succeed", async () => {
         installedVersions: { hello: "1.0.0" },
       });
 
-      // Force agents commit failure only (DIR at agent file path -> EISDIR).
+      // Force agents commit failure only (read-only agents directory -> the
+      // rename fails with EACCES).
       await mkdir(locations.agentsDir, { recursive: true });
-      await mkdir(path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"), {
-        recursive: true,
-      });
+      await chmod(locations.agentsDir, 0o500);
 
       const { ctx, run, notifications } = makeCtx();
-      await updatePlugins({
-        ctx,
-        run,
-        scope: "project",
-        cwd,
-        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-      });
+      try {
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+      } finally {
+        await chmod(locations.agentsDir, 0o700);
+      }
 
       assert.equal(notifications.length, 1);
       const allText = notifications[0]?.message ?? "";

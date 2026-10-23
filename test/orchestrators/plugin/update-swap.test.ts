@@ -258,49 +258,33 @@ for (const scenario of ["prefixed", "coexistence"] as const) {
   });
 }
 
-test("AGENT-01: update retries agent migration once the occupying target is freed", async (t) => {
+test("AGENT-01 / NFR-3: update refuses an occupied agent target before its intent mark and the retry migrates once it is freed", async (t) => {
   await withHermeticHome(async () => {
     // arrange
     const fixture = await seedLegacyAgentUpdate(t, false);
-    const { locations, newTarget, oldTarget, oldBytes, oldIndexBytes, oldRecord, options } =
-      fixture;
+    const { locations, newTarget, oldTarget, oldBytes, oldIndexBytes, options } = fixture;
     const preflight = await preparePluginUpdate(options);
     assert.ok(!("partition" in preflight));
     await writeFile(newTarget, "Foreign new target.\n");
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
 
-    // act
-    const failure = await swapPluginUpdate(options, preflight);
-
-    // assert
-    const message = `Cannot replace agent target with non-previous content at ${newTarget}`;
-    assert.deepStrictEqual(failure, {
-      partition: "failed",
-      name: "hello",
-      fromVersion: "1.0.0",
-      toVersion: "2.0.0",
-      notes: [
-        'Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it.',
-        `agents: ${message}`,
-      ],
-      reasons: ["rollback partial"],
-      phaseFailures: [{ phase: "agents", msg: message }],
-      declaresAgents: false,
-      declaresMcp: false,
-      declaresWorkflows: false,
+    // act & assert
+    await assert.rejects(swapPluginUpdate(options, preflight), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        { name: error.name, message: error.message, cause: error.cause },
+        {
+          name: "Error",
+          message: `Cannot replace agent target with non-previous content at ${newTarget}`,
+          cause: undefined,
+        },
+      );
+      return true;
     });
     assert.strictEqual(await readFile(oldTarget, "utf8"), oldBytes);
     assert.strictEqual(await readFile(newTarget, "utf8"), "Foreign new target.\n");
     assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), oldIndexBytes);
-    const failedState = await loadState(locations.extensionRoot);
-    assert.deepStrictEqual(failedState.marketplaces.mp?.plugins.hello, {
-      ...oldRecord,
-      compatibility: {
-        ...oldRecord.compatibility,
-        installable: false,
-        notes: ["update-in-progress"],
-      },
-      updatedAt: "2026-01-02T00:00:00.000Z",
-    });
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
 
     // arrange: the occupying file is gone, so the retry can replace it
     await rm(newTarget);
@@ -478,32 +462,27 @@ test("D-18-15: an overwrite policy commits over a previous agent file a user edi
   });
 });
 
-test("D-18-15: without an overwrite policy a user-edited previous agent file fails the swap rollback partial", async (t) => {
+test("D-18-15 / NFR-3: without an overwrite policy a user-edited previous agent file refuses the swap before it changes anything", async (t) => {
   // arrange
   const { args, preflight, target, editedBytes, indexBytes } = await seedUserEditedAgentUpdate(t);
-  const message = `Cannot replace agent target with non-previous content at ${target}`;
+  const stateBefore = await readFile(args.locations.stateJsonPath, "utf8");
 
-  // act
-  const outcome = await swapPluginUpdate(args, preflight);
-
-  // assert
-  assert.deepStrictEqual(outcome, {
-    partition: "failed",
-    name: "hello",
-    fromVersion: "1.0.0",
-    toVersion: "2.0.0",
-    notes: [
-      'Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it.',
-      `agents: ${message}`,
-    ],
-    reasons: ["rollback partial"],
-    phaseFailures: [{ phase: "agents", msg: message }],
-    declaresAgents: false,
-    declaresMcp: false,
-    declaresWorkflows: false,
+  // act & assert
+  await assert.rejects(swapPluginUpdate(args, preflight), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, cause: error.cause },
+      {
+        name: "Error",
+        message: `Cannot replace agent target with non-previous content at ${target}`,
+        cause: undefined,
+      },
+    );
+    return true;
   });
   assert.strictEqual(await readFile(target, "utf8"), editedBytes);
   assert.strictEqual(await readFile(args.locations.agentsIndexPath, "utf8"), indexBytes);
+  assert.strictEqual(await readFile(args.locations.stateJsonPath, "utf8"), stateBefore);
 });
 
 test("exposes the atomic plugin update swap owner", () => {
