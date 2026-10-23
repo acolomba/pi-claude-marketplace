@@ -196,6 +196,37 @@ Feature: Plugin import
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
+  Scenario: Importing reports a plugin pi supports only in part as unavailable with the reason install gives
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has an output style
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade                             |
+      | severity            | warning                             |
+      | summary             | A plugin operation needs attention. |
+      | needs reload        | false                               |
+      | tally label         | Import                              |
+      | tally failures      | 0                                   |
+      | tally warnings      | 1                                   |
+      | tally success count | 1                                   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | status      | reasons               |
+      | fixtures         | user              | added              | demo@fixtures | demo | unavailable | unsupported component |
+    Then the user scope has no installed plugins
+
   Scenario: Importing the project scope reads only the project's claude code settings and changes only the project scope
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -372,6 +403,44 @@ Feature: Plugin import
     Then the "claude-plugins.json" file of the user scope declares these plugins:
       | id            | enabled |
       | demo@fixtures | true    |
+    Then the user scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
+
+  Scenario: Importing a partially installed plugin the scope holds disabled enables it as partially installed
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has an output style
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user --partial"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope user"
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade |
+      | severity            | info    |
+      | needs reload        | true    |
+      | tally label         | Import  |
+      | tally failures      | 0       |
+      | tally warnings      | 0       |
+      | tally success count | 2       |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | version | status              | reasons               | scope |
+      | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | 1.0.0   | partially-installed | unsupported component | user  |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
     Then the user scope stages these skills and prompts:
       | kind  | name       |
       | skill | demo-skill |

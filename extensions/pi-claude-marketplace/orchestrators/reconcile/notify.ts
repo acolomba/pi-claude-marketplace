@@ -635,7 +635,7 @@ function installedRowFromOutcome(outcome: PluginInstalledOutcome): PluginInstall
  * degrade the ledger just produced, exactly as on the `plugin-installed` arm
  * above (WARN-01 / D-86-03).
  */
-function enabledRowFromOutcome(
+export function enabledRowFromOutcome(
   outcome: PluginEnabledOutcome,
 ): PluginInstalledMessage | PluginPartiallyInstalledMessage {
   const unsupported = outcome.unsupported ?? [];

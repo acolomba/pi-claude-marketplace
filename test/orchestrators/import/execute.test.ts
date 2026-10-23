@@ -59,6 +59,7 @@ import {
   ConcurrentInstallError,
   DependencyCascadeError,
   FetchedUrlCause,
+  InstallMarketplaceAddError,
   InvalidGitHubBaseUrlError,
   PluginShapeError,
   StateLockHeldError,
@@ -78,6 +79,7 @@ import type {
   ImportDeps,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/import/execute.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import type { ContentReason } from "../../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 import type { TestContext } from "node:test";
 
 // Every collaborator shape below is derived from the module's own `ImportDeps`,
@@ -432,7 +434,7 @@ function warned(
   plugin: string,
   marketplace: string,
   scope: Scope,
-  reason: Warning["reason"],
+  reason: Exclude<Warning["reason"], "uninstallable">,
   cause: string,
 ): Warning {
   return {
@@ -1235,51 +1237,73 @@ test("carries the settings loader's own diagnostics onto the result", async (t) 
   verifyBoundary();
 });
 
+/** IMP-08: the `target@mp` warning of a plugin the resolver cannot install. */
+function uninstallable(cause: string, reasons: readonly ContentReason[]): Warning {
+  return {
+    cause,
+    kind: "plugin-warning",
+    marketplace: "mp",
+    plugin: "target",
+    reason: "uninstallable",
+    reasons,
+    ref: "target@mp",
+    scope: "project",
+  };
+}
+
 // A typed install failure the dispatcher recognises as unavailable or
-// uninstallable becomes a warning row. The fault sits in the MIDDLE of a
-// three-plugin batch, so the plugin installed before it keeps its outcome and
-// the plugin after it is still attempted.
-for (const { cause, error, reason, token, title } of [
+// uninstallable becomes a warning row. IMP-08: an uninstallable plugin carries
+// the reasons `install` narrows from the same resolver verdict. The fault sits
+// in the MIDDLE of a three-plugin batch, so the plugin installed before it
+// keeps its outcome and the plugin after it is still attempted.
+for (const { cause, error, token, title, warning } of [
   {
     cause: 'Plugin "target" not found in marketplace "mp".',
     error: (): Error =>
       new PluginShapeError({ kind: "not-in-manifest", marketplace: "mp", plugin: "target" }),
-    reason: "unavailable",
     token: "not in manifest",
     title: "the plugin is absent from the manifest",
+    warning: warned(
+      "target",
+      "mp",
+      "project",
+      "unavailable",
+      'Plugin "target" not found in marketplace "mp".',
+    ),
   },
   {
-    cause: "requires an unsupported tool",
+    cause: "unsupported hooks: PreToolUse",
     error: (): Error =>
       new PluginShapeError({
         kind: "not-installable",
         partialable: false,
         plugin: "target",
-        reasons: ["requires an unsupported tool"],
+        reasons: ["unsupported hooks: PreToolUse"],
       }),
-    reason: "uninstallable",
-    token: "no longer installable",
+    token: "unsupported hooks",
     title: "the plugin is not installable",
+    warning: uninstallable("unsupported hooks: PreToolUse", ["unsupported hooks"]),
   },
   {
-    cause: "the marketplace dropped every supported component",
+    cause: "contains outputStyles",
     error: (): Error =>
       new PluginShapeError({
         kind: "no-longer-installable",
         partialable: true,
         plugin: "target",
-        reasons: ["the marketplace dropped every supported component"],
+        reasons: ["contains outputStyles"],
+        unsupportedKinds: ["outputStyles"],
       }),
-    reason: "uninstallable",
-    token: "no longer installable",
-    title: "the plugin is no longer installable",
+    token: "unsupported component",
+    title: "the plugin is only partially available",
+    warning: uninstallable("contains outputStyles", ["unsupported component"]),
   },
 ] satisfies readonly {
   readonly cause: string;
   readonly error: () => Error;
-  readonly reason: Warning["reason"];
   readonly token: string;
   readonly title: string;
+  readonly warning: Warning;
 }[]) {
   test(`warns and keeps installing the batch when ${title}`, async (t) => {
     // arrange
@@ -1291,7 +1315,7 @@ for (const { cause, error, reason, token, title } of [
       addedMarketplaces: [added("mp", "project")],
       changedResources: true,
       installedPlugins: [installed("before", "mp", "project"), installed("after", "mp", "project")],
-      warnings: [warned("target", "mp", "project", reason, cause)],
+      warnings: [warning],
     };
 
     // act
@@ -1513,7 +1537,7 @@ for (const { cause, installPlugin, order, title } of [
           "● mp [user] (added)\n" +
           `  ● ${surviving[0]} (installed)\n` +
           `  ● ${surviving[1]} (installed)\n` +
-          "  ⊘ target (failed) {not in manifest}\n" +
+          "  ⊘ target (failed)\n" +
           `    cause: ${cause}\n\n` +
           "Import: 1 failure, 3 successes\n\n" +
           "/reload to pick up changes",
@@ -1524,6 +1548,76 @@ for (const { cause, installPlugin, order, title } of [
     verifyBoundary();
   });
 }
+
+// IMP-09: an unclassified failure carries the reason `install`'s failure row
+// reads off the same error -- a git host's answer, or the marketplace add an
+// install ran -- and the authentication row is bare, as install's is.
+test("names the reason install gives an unclassified install failure", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "install-git-host");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const unreachable = Object.assign(new Error("getaddrinfo ENOTFOUND git.example"), {
+    code: "ENOTFOUND",
+  });
+  const refused = Object.assign(new Error("HTTP Error: 401 Unauthorized"), {
+    code: "HttpError",
+    data: { statusCode: 401 },
+  });
+  const addFailure = new InstallMarketplaceAddError("source missing", "mp is gone");
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: (options) => {
+        const errors = new Map<string, Error>([
+          ["offline", unreachable],
+          ["private", refused],
+        ]);
+        const error = errors.get(options.plugin) ?? addFailure;
+        return Promise.resolve(failedInstallOutcome(error, error.message));
+      },
+      loadSettings: () => Promise.resolve(settingsForMp("offline", "private", "unlisted")),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult.unexpectedPluginFailures, [
+    {
+      ...failedUnexpectedly("offline", "mp", "user", unreachable.message),
+      runtimeReason: "network unreachable",
+    },
+    {
+      ...failedUnexpectedly("private", "mp", "user", refused.message),
+      runtimeReason: "authentication required",
+    },
+    {
+      ...failedUnexpectedly("unlisted", "mp", "user", addFailure.message),
+      runtimeReason: "source missing",
+    },
+  ]);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some plugin operations have failed.\n\n" +
+        "● mp [user] (added)\n" +
+        "  ⊘ offline (failed) {network unreachable}\n" +
+        `    cause: ${unreachable.message}\n` +
+        "  ⊘ private (failed) {authentication required}\n" +
+        "  ⊘ unlisted (failed) {source missing}\n" +
+        "    cause: mp is gone\n\n" +
+        "Import: 3 failures, 1 success",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
 
 test("GHB-03: an installer failing on an invalid base fails the whole import", async (t) => {
   // arrange
@@ -1672,9 +1766,9 @@ test("GHB-03: a marketplace add failing on an invalid base fails the whole impor
 });
 
 // A `DependencyCascadeError` thrown by a dependency cascade (closure,
-// constraint, or a dependency member's own ledger, RESV-06) must not read as
-// the generic `{not in manifest}` unexpected-failure row: the requesting
-// plugin's row is self-contradictory beside a cause line about a dependency.
+// constraint, or a dependency member's own ledger, RESV-06) must name the
+// dependency: a reasonless unexpected-failure row would leave the requesting
+// plugin's row beside a cause line about another plugin.
 test("records a dependency-cascade failure with the dependency-failed reason", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "install-dependency-cascade");
@@ -1891,7 +1985,7 @@ test("records an unexpected plugin failure whose error carries a nested cause wi
         "● mp [user] (added)\n" +
         `  ● ${surviving[0]} (installed)\n` +
         `  ● ${surviving[1]} (installed)\n` +
-        "  ⊘ target (failed) {not in manifest}\n" +
+        "  ⊘ target (failed)\n" +
         `    cause: ${headCause} -> ${redactedNestedMessage}\n\n` +
         "Import: 1 failure, 3 successes\n\n" +
         "/reload to pick up changes",
@@ -2194,7 +2288,7 @@ test("AFILE-04: import over a commented mcp-adapter.json shows the comments-remo
         "A plugin operation has failed.\n\n" +
         "● mp [user] (added)\n" +
         "  ● alpha (installed)\n" +
-        "  ⊘ target (failed) {not in manifest}\n" +
+        "  ⊘ target (failed)\n" +
         "    cause: disk full\n\n" +
         "Import: 1 failure, 2 successes\n\n" +
         "/reload to pick up changes",
@@ -4445,8 +4539,9 @@ test("IMP-05: enables a plugin the scope records disabled and declares it enable
         ...installed("alpha", "mp", "project", { agents: true, mcp: true, workflows: true }),
         version: "1.0.0",
         reenabled: true,
+        enableSignals: { stagedAgents: true, stagedMcpServers: true, stagedWorkflows: true },
       },
-      { ...installed("beta", "mp", "project"), reenabled: true },
+      { ...installed("beta", "mp", "project"), reenabled: true, enableSignals: {} },
     ],
     skippedExistingMarketplaces: [skipped("mp", "project")],
   });
@@ -4649,7 +4744,12 @@ test("IMP-05: enables a disabled plugin through the production enable operation 
     ...emptyImportResult(),
     changedResources: true,
     installedPlugins: [
-      { ...installed("sample", "fixture-mp", "project"), version: "1.0.0", reenabled: true },
+      {
+        ...installed("sample", "fixture-mp", "project"),
+        version: "1.0.0",
+        reenabled: true,
+        enableSignals: {},
+      },
     ],
     skippedExistingMarketplaces: [skipped("fixture-mp", "project")],
   });
@@ -4728,5 +4828,131 @@ test("IMP-05: an enable that throws or finds the record gone fails that plugin a
     ],
   });
   assert.strictEqual(notifications.length, 1);
+  verifyBoundary();
+});
+
+test("IMP-10: re-enabling a partially installed record shows the row reconcile shows", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "enable-partial");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      loadSettings: () => Promise.resolve(settingsForMp("partial")),
+      loadState: () => Promise.resolve(stateWithDisabled("partial")),
+      setPluginEnabled: () =>
+        Promise.resolve({
+          status: "enabled",
+          name: "partial",
+          version: "1.0.0",
+          unsupported: ["outputStyles"],
+          orphanRewake: true,
+        }),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult.installedPlugins, [
+    {
+      ...installed("partial", "mp", "project"),
+      version: "1.0.0",
+      reenabled: true,
+      enableSignals: { unsupported: ["outputStyles"], orphanRewake: true },
+    },
+  ]);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [project] (skipped) {already added}\n" +
+        "  ◉ partial v1.0.0 (partially-installed) {orphan rewake, unsupported component}\n\n" +
+        "Import: 2 successes\n\n" +
+        "/reload to pick up changes",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("leaves a record the load-time check holds down disabled and reports it already installed", async (t) => {
+  // arrange
+  // `sample` depends on `dep`. After the first import the user disables `dep`
+  // and the load-time check holds `sample` down. Settings that still enable
+  // `sample` must not bring it back: the next reload would hold it down again.
+  const { cwd, project } = await createHermeticScopes(t, "held-dependency");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+  const marketplaceRoot = path.join(cwd, "fixture-mp");
+  const dependency = { name: "dep", version: "*" };
+  await writeUnder(
+    path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "fixture-mp",
+      owner: { name: "import owner suite" },
+      plugins: [
+        {
+          name: "sample",
+          source: "./plugins/sample",
+          version: "1.0.0",
+          dependencies: [dependency],
+        },
+        { name: "dep", source: "./plugins/dep", version: "1.0.0" },
+      ],
+    }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "sample", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "sample", version: "1.0.0", dependencies: [dependency] }),
+  );
+  await writeUnder(
+    path.join(marketplaceRoot, "plugins", "dep", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "dep", version: "1.0.0" }),
+  );
+  await writeUnder(
+    path.join(cwd, ".claude", "settings.json"),
+    settingsNaming(marketplaceRoot, { "sample@fixture-mp": true }),
+  );
+  const importOptions = {
+    ctx,
+    cwd,
+    gitOps: createOfflineGitOps(),
+    run: runWithNothingLoaded(),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["project"] as const,
+  };
+  await importClaudeSettings(importOptions);
+  const state = await loadState(project.extensionRoot);
+  const plugins = state.marketplaces["fixture-mp"]?.plugins;
+  const sample = plugins?.["sample"];
+  const dep = plugins?.["dep"];
+  assert.ok(plugins !== undefined && sample !== undefined && dep !== undefined);
+  const updatedAt = "2026-01-02T00:00:00.000Z";
+  plugins["dep"] = toDisabledRecord(dep, updatedAt);
+  plugins["sample"] = { ...toDisabledRecord(sample, updatedAt), dependencyDisabled: true };
+  await saveState(project.extensionRoot, state);
+
+  // act
+  const secondResult = await importClaudeSettings(importOptions);
+
+  // assert
+  assert.deepStrictEqual(secondResult, {
+    ...emptyImportResult(),
+    skippedExistingMarketplaces: [skipped("fixture-mp", "project")],
+    skippedExistingPlugins: [skippedPlugin("sample", "fixture-mp", "project")],
+  });
+  const held = (await loadState(project.extensionRoot)).marketplaces["fixture-mp"]?.plugins[
+    "sample"
+  ];
+  assert.strictEqual(held?.enabled, false);
+  assert.strictEqual(held.dependencyDisabled, true);
+  assert.deepStrictEqual(notifications[1], {
+    message:
+      "● fixture-mp [project] (skipped) {already added}\n" +
+      "  ⊘ sample (skipped) {already installed}\n\n" +
+      "Import: 2 successes",
+  });
   verifyBoundary();
 });

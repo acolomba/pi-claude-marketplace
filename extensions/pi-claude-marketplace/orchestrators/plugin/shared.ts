@@ -131,6 +131,30 @@ export interface LedgerDegradationSignals {
 }
 
 /**
+ * Lift the ledger's degradation signals off an orchestrated enable outcome,
+ * for reconcile's enable row and import's (IMP-10). Each field is omitted when
+ * empty (`exactOptionalPropertyTypes`), so a clean enable yields `{}` and its
+ * projected row gains no markers (NREG-01). The `partition?: never` refusal
+ * keeps the update and reinstall partitions out, as on `enableRowDependencies`.
+ *
+ * SEV-01 / D-98-02: the staged-count verdicts ride here too -- they drive the
+ * projected row's dependency list, mirroring the install arm's
+ * `dependenciesFromInstall` derivation.
+ */
+export function degradationFromEnable(
+  result: LedgerDegradationSignals & { readonly partition?: never },
+): LedgerDegradationSignals {
+  return {
+    ...(result.unsupported !== undefined && { unsupported: result.unsupported }),
+    ...(result.orphanRewake === true && { orphanRewake: true }),
+    ...(result.degradedKinds !== undefined && { degradedKinds: result.degradedKinds }),
+    ...(result.stagedAgents === true && { stagedAgents: true }),
+    ...(result.stagedMcpServers === true && { stagedMcpServers: true }),
+    ...(result.stagedWorkflows === true && { stagedWorkflows: true }),
+  };
+}
+
+/**
  * SEV-01 / D-98-02: derive the closed-set `Dependency[]` an enable row declares
  * from the ledger's staged-count signals -- the same derivation `install-flow.ts`
  * runs off `installCtx.stagedAgentNames` / `stagedMcpServerNames` /
