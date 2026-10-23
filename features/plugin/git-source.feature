@@ -102,3 +102,62 @@ Feature: Plugin git source
       | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | version          |
       | gits             | project           | ghp@gits | ghp  | uninstalled |         | project | {ghp revision 1} |
     Then the project scope holds no git clones
+
+  Scenario Outline: An install fails as <reason> when the git host <refusal> and leaves nothing behind
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the git host <refusal> for the plugin "ghp"
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status | reasons  | scope   | leaks | rollback partial | cause chain   | cause truncated |
+      | gits             | project           | ghp@gits | ghp  | failed | <reason> | project |       |                  | <cause chain> | false           |
+    Then the git host receives these requests:
+      | method | path                                            | status   |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | <status> |
+    Then the project scope has no installed plugins
+    Then the project scope holds no git clones
+    When the user starts a new pi session
+    Then the session offers no skills
+
+    Examples:
+      | refusal              | reason              | status  | cause chain                                                        |
+      | answers 404          | source missing      | 404     | HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git |
+      | drops the connection | network unreachable | dropped | socket hang up, fetched https://{git host}/acme/ghp.git            |
+
+  Scenario: An install fails as authentication required when the git host asks for a credential the user has not stored
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the git host requires the user "alice" with the password "secret" for the plugin "ghp"
+    When the user runs "/claude:plugin install ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status | reasons                 | scope   | leaks | rollback partial |
+      | gits             | project           | ghp@gits | ghp  | failed | authentication required | project |       |                  |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 401    |
+    Then the project scope has no installed plugins
+    Then the project scope holds no git clones
+    When the user starts a new pi session
+    Then the session offers no skills
