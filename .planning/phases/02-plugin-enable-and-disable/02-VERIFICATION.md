@@ -158,3 +158,14 @@ _Verifier: Claude (gsd-verifier)_
 - `npm run check` on HEAD `9b58305c`: exit 0 (static checks, unpaired, integration, 475 cucumber scenarios, direct coverage). SC-5 is fully verified, so the status moves from `human_needed` to `passed`.
 - W-1 (column alignment), the catalog's "sorted" wording, and the broken comment are fixed in a follow-up commit.
 - W-2 (ROADMAP SC-4 and REQUIREMENTS ENA-05 still say an absent dependency is installed) is left to the orchestrating session, which owns those files; D-02 records the divergence.
+
+## For the orchestrator
+
+- Doc drift: ROADMAP Phase 2 SC-4 and REQUIREMENTS ENA-05 still say enable "installs" an absent dependency; per D-02 (Claude Code `dependency_missing`) enable now refuses it. Reword both to "refused when absent, as Claude Code does".
+- Product change: standalone `enable` refuses with `{dependency unsatisfied}` and cause `Install <deps> first, then enable <plugin>.` when a dependency is not installed; an already-enabled plugin still skips as `{already enabled}` (D-09). CHANGELOG has an Unreleased entry.
+- Merge conflict risk: a new output-catalog state `enable-refused-missing-dependency` raised the counts in `test/architecture/catalog-uat/catalog-{contract,parser,wire}.test.ts` (states 290→291, presented 300→301, catalog bytes 46_623→46_792); other phases adding catalog states will conflict and need the counts re-summed.
+- Assumption: D-09 (already-enabled root plus missing dependency is skipped, not refused) has a unit test only, no cucumber scenario.
+- Assumption: the "not installed" result for enable/disable is a `skipped` row at `error` severity (existing behavior); counted as "fails with the not-installed reason".
+- Upstream note (not fixed, out of scope): standalone `uninstall` of a dependency that no layer declares is refused with `{dependents remain}` even when the only dependent is disabled; Claude Code 2.1.30x lets uninstall go through and reports the reverse dependents. Belongs to Phase 6 (uninstall) if anyone owns it.
+- Upstream note (not exercised): the enable closure may read declarations from the marketplace's current copy, whereas Claude Code reads the installed `plugin.json`.
+- Skipped check: the final follow-up commit `4b756cf5` (a comment, catalog prose, table alignment) was covered by the commit hook's `check:commit`, the catalog tests and the feature run, not by a second full `npm run check`.
