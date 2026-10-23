@@ -680,6 +680,8 @@ async function updateSinglePluginWith(
         cause: err as Error,
         cleanupFailures,
       }),
+      // FLR-02: a held state lock renders its cause chain, as on the direct path.
+      ...(err instanceof StateLockHeldError && { cause: err }),
       // CMC-13: required booleans on every
       // PluginUpdateOutcome partition. `(failed)` rows do NOT render
       // the soft-dep marker (MSG-SD-3), so the value is `false`.
@@ -693,11 +695,15 @@ async function updateSinglePluginWith(
 
 /**
  * Map an exported-workflow error to a closed-set `Reason[]` for cascade-failure
- * outcomes. Typed concurrency facts and errno codes win; the permissive
- * fallback is `not in manifest`.
+ * outcomes. Typed facts (a held state lock, FLR-02, and the concurrency
+ * errors) and errno codes win; the permissive fallback is `not in manifest`.
  */
 function reasonsFromTypedError(err: unknown): readonly ContentReason[] {
   const primary = err instanceof CleanupContextError ? err.primary : err;
+  if (primary instanceof StateLockHeldError) {
+    return ["lock held"] as const;
+  }
+
   if (primary instanceof PluginUpdateConcurrencyError) {
     return [
       primary.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled",
