@@ -1,10 +1,13 @@
 /**
- * @fileoverview Steps that start a new Pi session and check the skills it offers.
+ * @fileoverview Steps that start a new Pi session and check the skills it
+ * offers and the results it reports.
  *
  * A result can claim an install that never reached disk. These steps look
  * where the user looks: the `/skill:` commands of the next session. A new
- * session can also be setup, so a scenario shows that what it set up
- * survives the session.
+ * session also reports its own payloads, such as its reconcile report. They
+ * become the last results, so the row steps compare them and a scenario
+ * fails when their rows go uncompared. A new session can also be setup, so a
+ * scenario shows that what it set up survives the session.
  */
 
 import assert from "node:assert/strict";
@@ -12,17 +15,24 @@ import assert from "node:assert/strict";
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
 import { startSession } from "../lib/pi-commands.ts";
+import { resultsTable } from "../lib/result-rows.ts";
 
 import type { ScenarioWorld } from "../support/world.ts";
 
 // startSession asserts that the session started; the setup keeps nothing on
-// the world.
+// the world, and like a setup command it must report nothing but info.
 Given("the user has started a new pi session", async function (this: ScenarioWorld) {
-  await startSession(this.pi);
+  const { payloads } = await startSession(this.pi);
+  assert.deepStrictEqual(
+    payloads.filter((payload) => payload.severity !== "info"),
+    [],
+  );
 });
 
 When("the user starts a new pi session", async function (this: ScenarioWorld) {
-  this.skills = await startSession(this.pi);
+  const report = await startSession(this.pi);
+  this.recordResults(report.payloads, "session");
+  this.skills = report.skills;
 });
 
 Then("the session offers these skills:", function (this: ScenarioWorld, table: DataTable) {
@@ -32,4 +42,12 @@ Then("the session offers these skills:", function (this: ScenarioWorld, table: D
 
 Then("the session offers no skills", function (this: ScenarioWorld) {
   assert.deepStrictEqual(this.sessionSkills(), []);
+});
+
+// D-02 for a new session: one row per payload, in session order. Pi reports a
+// lasting reconcile failure twice, and both rows are stated.
+Then("the session reports these results:", function (this: ScenarioWorld, table: DataTable) {
+  const [stated = []] = table.raw();
+  assert.deepStrictEqual(resultsTable(stated, this.resultsOf("session"), this.tokens), table.raw());
+  this.markNoticesCompared();
 });

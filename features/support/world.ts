@@ -7,7 +7,8 @@
  * hook creates registers its release here, and the world runs those releases
  * in reverse order when the scenario ends. A passing scenario also fails
  * there when a row array or an MCP config notice of its last results went
- * uncompared.
+ * uncompared. The last results are those of the last `When` step: a command
+ * or a new session.
  */
 
 import assert from "node:assert/strict";
@@ -21,6 +22,8 @@ import {
   Status,
   World,
 } from "@cucumber/cucumber";
+
+import { rowArrays } from "../lib/result-rows.ts";
 
 import { currentRun } from "./pi-process.ts";
 
@@ -38,6 +41,8 @@ setDefaultTimeout(STEP_TIMEOUT_MS);
 
 export class ScenarioWorld extends World {
   results: readonly NotificationPayload[] | undefined = undefined;
+  // What produced `results`: a command or a new session.
+  resultsSource: "command" | "session" | undefined = undefined;
   // The non-empty row arrays of `results` that no step has compared yet, as
   // `<kind> <field>`. The steps that state a result's fields hide them, so a
   // row step must read them and then call `markRowsCompared()`.
@@ -105,12 +110,36 @@ export class ScenarioWorld extends World {
   }
 
   /**
-   * Returns the one result of the last command, which a `When` step must have
-   * run. Fails when the command emitted more than one payload (DRV-01).
+   * Keeps `results` as the last results, from `source`, after asserting that
+   * a step compared the rows and MCP config notices of the previous ones.
+   */
+  recordResults(results: readonly NotificationPayload[], source: "command" | "session"): void {
+    assert.deepStrictEqual(
+      this.uncomparedRows,
+      [],
+      "no step compared these rows of the previous results",
+    );
+    assert.deepStrictEqual(
+      this.uncomparedNotices,
+      [],
+      "no step compared these MCP config notices of the previous results",
+    );
+    this.results = results;
+    this.resultsSource = source;
+    this.uncomparedRows = rowArrays(results);
+    this.uncomparedNotices = results
+      .map((result) => result.kind)
+      .filter((kind) => kind === "mcp-config-notices");
+  }
+
+  /**
+   * Returns the one result of the last command or session, which a `When`
+   * step must have run. Fails when it emitted more or fewer than one payload
+   * (DRV-01).
    */
   lastResult(): NotificationPayload {
     if (this.results === undefined) {
-      throw new Error("no command has run in this scenario");
+      throw new Error("no command or session has run in this scenario");
     }
 
     const [result, ...others] = this.results;
@@ -122,15 +151,26 @@ export class ScenarioWorld extends World {
   }
 
   /**
-   * Returns every result of the last command in emission order, which a
-   * `When` step must have run. The driver guarantees at least one (DRV-01).
+   * Returns every result of the last command or session in emission order,
+   * which a `When` step must have run. The driver guarantees a command at
+   * least one (DRV-01); a session may report none.
    */
   allResults(): readonly NotificationPayload[] {
     if (this.results === undefined) {
-      throw new Error("no command has run in this scenario");
+      throw new Error("no command or session has run in this scenario");
     }
 
     return this.results;
+  }
+
+  /** Returns every result of the last `When` step, failing unless it came from `source`. */
+  resultsOf(source: "command" | "session"): readonly NotificationPayload[] {
+    const results = this.allResults();
+    if (this.resultsSource !== source) {
+      assert.fail(`the last results came from a ${this.resultsSource}, not a ${source}`);
+    }
+
+    return results;
   }
 
   /**

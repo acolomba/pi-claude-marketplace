@@ -180,6 +180,14 @@ Feature: Plugin update
       | marketplace name | marketplace scope | id                | name     | status | reasons    | scope   | cause chain                                                                    | cause truncated | leaks | rollback partial |
       | (update)         | project           | (update)@(update) | (update) | failed | unreadable | project | cannot read the dependencies of app@tools: its marketplace manifest is invalid | false           |       |                  |
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                        | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id        | name | status | reasons    | scope   | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | failed | unreadable | project |       |                  |
+      | tools            | project           | lib@tools | lib  | failed | unreadable | project |       |                  |
     Then the session offers these skills:
       | command           | description            |
       | /skill:app-skill  | A skill of app 1.0.0.  |

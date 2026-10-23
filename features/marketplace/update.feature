@@ -810,6 +810,14 @@ Feature: Marketplace update
       | tools            | project           | true                           | demo@tools  | demo  | installed | not in manifest | project | 1.0.0   |
       | tools            | project           | true                           | other@tools | other | available |                 |         | 1.0.0   |
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                        | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id         | name | status | reasons    | scope   | leaks | rollback partial |
+      | tools            | project           | demo@tools | demo | failed | unreadable | project |       |                  |
+      | tools            | project           | demo@tools | demo | failed | unreadable | project |       |                  |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -909,6 +917,14 @@ Feature: Marketplace update
       | id         |
       | demo@tools |
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                        | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id         | name | status | reasons    | scope   | leaks | rollback partial |
+      | tools            | <scope>           | demo@tools | demo | failed | unreadable | <scope> |       |                  |
+      | tools            | <scope>           | demo@tools | demo | failed | unreadable | <scope> |       |                  |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |

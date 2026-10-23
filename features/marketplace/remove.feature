@@ -593,6 +593,14 @@ Feature: Marketplace remove
       | id          |
       | alpha@tools |
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                        | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id        | name | status | reasons    | scope   | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | failed | unreadable | project |       |                  |
+      | tools            | project           | lib@tools | lib  | failed | unreadable | project |       |                  |
     Then the session offers these skills:
       | command            | description             |
       | /skill:alpha-skill | A skill of alpha 1.0.0. |

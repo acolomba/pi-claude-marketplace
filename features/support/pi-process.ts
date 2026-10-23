@@ -7,8 +7,9 @@
  * starts, so the sandbox lasts the whole run. Before each scenario the
  * `Before()` hook empties every sandbox directory and starts a new Pi session,
  * which rebuilds the extension runtime, then checks that no plugin,
- * marketplace, or skill is left. So no scenario sees the state of another,
- * and the run order is random to prove it.
+ * marketplace, or skill is left and that the session reported no payload. So
+ * no scenario sees the state of another, and the run order is random to
+ * prove it.
  *
  * The run also starts the https git host that git marketplace sources clone
  * from, before Pi, because Pi fixes the host's CA file and port when it
@@ -132,12 +133,13 @@ Before(async (): Promise<void> => {
     ),
   );
   await Promise.all(entries.flat().map((entry) => rm(entry, { recursive: true, force: true })));
-  const skills = await startSession(run.pi);
+  const { skills, payloads } = await startSession(run.pi);
   const listed = await runCommand(run.pi, "/claude:plugin list");
   assert.deepStrictEqual(
-    { skills, marketplaces: listed.marketplaces, gitHost: await run.gitHost.snapshot() },
+    { skills, payloads, marketplaces: listed.marketplaces, gitHost: await run.gitHost.snapshot() },
     {
       skills: [],
+      payloads: [],
       marketplaces: [],
       gitHost: { repositories: [], arms: [], requests: [], connections: 0, children: 0 },
     },
