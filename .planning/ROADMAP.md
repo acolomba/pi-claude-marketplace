@@ -148,7 +148,30 @@ Step module paths are relative to `features/step_definitions/`.
 3. The plugin steps live under `features/step_definitions/plugin/` in topic modules that take no verb name and none of the reserved module names. The git-host steps serve plugin repositories as well as marketplaces. The cucumber skill documents this milestone's file ownership: a later phase adds only its own feature files and step modules, and never edits a Phase 1 file.
 4. `npm run check:features` (the usage gate: no unused, undefined, or ambiguous step) and `npm run check` are green, and every existing scenario still passes.
 
-**Plans:** TBD
+**Plans:** 10 plans
+
+Plans:
+**Wave 1**
+- [ ] 01-01-PLAN.md — Tracer: move the plugin steps into the topic module `plugin/installation.steps.ts` and the git host steps to the top level, each a move-only commit; the parallel-work ownership rule in the cucumber skill
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 01-02-PLAN.md — Tracer: a new session's payloads reach the steps through `get_entries`; the row steps read `reconcile-applied-cascade`; `the session reports these results:`; the six existing session reports compared; seed in `plugin/reconcile.feature`
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 01-03-PLAN.md — Tracer: a setup command that must fail, seeded in `marketplace/failed-add.feature`; `plugin-info-cascade` rows and `prune-empty`, seeded in `plugin/info.feature` and `plugin/prune.feature`
+- [ ] 01-04-PLAN.md — Tracer: the installation record table, seeded in `plugin/enable.feature`; plant and list plugin data files and delete installed skills, seeded in `plugin/uninstall.feature` and `plugin/reinstall.feature`
+- [ ] 01-05-PLAN.md — Tracer: a new session in another project (a second Pi), seeded in `plugin/install.feature`; a partially available plugin and a constrained dependency, seeded in `plugin/partial-install.feature` and `plugin/install-dependencies.feature`
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 01-06-PLAN.md — Tracer: the git host arms and disarms any owner's repositories through `{git repository}`, every arm released by the world, seeded by a retried add in `marketplace/failed-add.feature`; the official marketplace and multi-payload setup, seeded in `plugin/bootstrap.feature`
+- [ ] 01-07-PLAN.md — Tracer: `{project dir}` and `{agent dir}` tokens and another process holding a scope's state lock, seeded in `plugin/state-lock.feature`; a directory blocking `mcp-adapter.json`, seeded by a retried install in `plugin/install-rollback.feature`
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 01-08-PLAN.md — Tracer: plugin repositories on the git host offered as github, url, and git-subdir sources, pinned or not, with revision tokens, seeded in `plugin/git-source.feature`
+- [ ] 01-09-PLAN.md — Tracer: hand-edited config marketplaces, seeded in `plugin/pending.feature` with the empty pending result; a Claude Code settings file in the sandbox, seeded in `plugin/import.feature`
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 01-10-PLAN.md — Tracer: the git host arms plugin repositories, seeded by a retried fetch in `plugin/fetch.feature`; the git clones of a scope, seeded by two uninstalls in `plugin/git-source.feature` and an update in `plugin/git-source-update.feature`
 
 ### Phase 2: Plugin Enable and Disable
 
@@ -374,7 +397,7 @@ Step module paths are relative to `features/step_definitions/`.
 
 | Phase | Plans Complete | Status | Completed |
 | --- | --- | --- | --- |
-| 1. Suite Foundation | 0/TBD | Not started | - |
+| 1. Suite Foundation | 0/10 | Planned | - |
 | 2. Plugin Enable and Disable | 0/TBD | Not started | - |
 | 3. Install Dependencies, Partial, and User Scope | 0/TBD | Not started | - |
 | 4. Git-Source Plugins | 0/TBD | Not started | - |
