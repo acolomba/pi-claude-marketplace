@@ -41,13 +41,18 @@ Feature: Marketplace failed add
   Scenario: A url marketplace add that the git host answered with 404 leaves no marketplace behind
     Given the marketplace "tools" is published as a url source
     Given the git host answers 404 for the marketplace "tools"
-    Given the user has run "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project", which failed
-    When the user runs "/claude:plugin marketplace list"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project"
     Then the result has these fields:
-      | kind         | cascade |
-      | severity     | info    |
-      | needs reload | false   |
-    Then the result lists no marketplaces
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name                              | scope   | status | reasons        |
+      | https://{git host}/acme/tools.git | project | failed | source missing |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 404    |
     Then the project scope holds no marketplace checkout
     Then the project scope holds no git clones
     Then the "claude-plugins.json" file of the project scope does not exist
@@ -55,13 +60,18 @@ Feature: Marketplace failed add
   Scenario: A url marketplace add whose connection dropped leaves no marketplace behind
     Given the marketplace "tools" is published as a url source
     Given the git host drops the connection for the marketplace "tools"
-    Given the user has run "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project", which failed
-    When the user runs "/claude:plugin marketplace list"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project"
     Then the result has these fields:
-      | kind         | cascade |
-      | severity     | info    |
-      | needs reload | false   |
-    Then the result lists no marketplaces
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name                              | scope   | status | reasons             |
+      | https://{git host}/acme/tools.git | project | failed | network unreachable |
+    Then the git host receives these requests:
+      | method | path                                              | status  |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | dropped |
     Then the project scope holds no marketplace checkout
     Then the project scope holds no git clones
     Then the "claude-plugins.json" file of the project scope does not exist
@@ -69,13 +79,19 @@ Feature: Marketplace failed add
   Scenario: A url marketplace add whose manifest is not valid json leaves no marketplace behind
     Given the marketplace "tools" is published as a url source
     Given the manifest of the marketplace "tools" to add is not valid json
-    Given the user has run "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project", which failed
-    When the user runs "/claude:plugin marketplace list"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools.git --scope project"
     Then the result has these fields:
-      | kind         | cascade |
-      | severity     | info    |
-      | needs reload | false   |
-    Then the result lists no marketplaces
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name                              | scope   | status | reasons          |
+      | https://{git host}/acme/tools.git | project | failed | invalid manifest |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
     Then the project scope holds no marketplace checkout
     Then the project scope holds no git clones
     Then the "claude-plugins.json" file of the project scope does not exist
