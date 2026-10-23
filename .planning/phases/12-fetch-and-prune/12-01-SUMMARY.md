@@ -40,7 +40,7 @@ completed: 2026-10-23
 
 - **Executed inline by the orchestrating agent**, not a spawned executor: the planner subagent stopped before writing plans, so the plans were written and executed in the main session from the prototype results in CONTEXT.md.
 - **Bare-fetch request log has two round trips per repository.** A cold unpinned mirror is cloned and then refreshed in place (`clone-cache.ts` `materializeOrRefreshPluginMirror`, D-79.1-02 "a just-materialized clone is refreshed too"). That is a recorded decision, not a bug, and install shows the same pair in `git-source.feature`. The scenario states all eight requests.
-- No new step module was needed (D-10). No product code changed (D-11).
+- No product code changed (D-11). The review fix for CR-01 later added the phase-local step module `features/step_definitions/plugin/fetch.steps.ts` (12-REVIEW-FIX.md).
 
 ## Threat Flags
 

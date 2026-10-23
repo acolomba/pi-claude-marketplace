@@ -89,6 +89,16 @@ grepped 2026-10-23.
   product bug. A bug found during execution is fixed in this phase with Claude
   Code as the reference (milestone bug policy).
 
+### Decisions after verification (autonomous run, 2026-10-23)
+
+- **D-12:** PRN-01's "unused clones" is read as the clones that pruning
+  leaves unused, the clones of the dependencies it removes. Prune does not
+  sweep clones that no installed plugin uses when it removes nothing, and it
+  reports no row for a clone. Claude Code's `claude plugin prune` removes only
+  auto-installed plugins that are no longer needed, so a general cache sweep
+  would be a divergence with no license. Recorded as a verification override;
+  the user may narrow the PRN-01 wording or ask for a product change.
+
 ### Claude's Discretion
 
 Scenario titles, feature descriptions, and the order of scenarios in each file.
