@@ -5,17 +5,17 @@ milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 29
 current_phase_name: Apply Command and Read-Only Reload
 status: executing
-stopped_at: Completed 29-04-PLAN.md
-last_updated: "2026-10-24T16:16:36.336Z"
+stopped_at: Completed 29-05-PLAN.md
+last_updated: "2026-10-24T17:01:50.706Z"
 last_activity: 2026-10-24
-last_activity_desc: Plan 29-04 complete (the apply empty pass)
-state_head: e1dda350aa6f035e25c70fb8448c6133d3d4d42c
+last_activity_desc: Plan 29-05 complete (the apply reload hint and dependency installs)
+state_head: f78a3844b37b52fc9e5584e513f9dd3cdc6d8093
 progress:
   total_phases: 29
   completed_phases: 28
   total_plans: 74
-  completed_plans: 64
-  percent: 86
+  completed_plans: 65
+  percent: 88
 ---
 
 # Project State
@@ -32,11 +32,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 29 (Apply Command and Read-Only Reload) — EXECUTING
-Plan: 5 of 14
+Plan: 6 of 14
 Status: Ready to execute
-Last activity: 2026-10-24 — Plan 29-04 complete (the apply empty pass)
+Last activity: 2026-10-24 — Plan 29-05 complete (the apply reload hint and dependency installs)
 
-Progress: [█████████░] 86%
+Progress: [█████████░] 88%
 
 Phases 2-15 depend only on Phase 1 and may run in parallel once it lands. Each
 owns its own feature files and step modules (the file ownership table in
@@ -187,8 +187,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-24T16:16:30.175Z
-**Stopped at:** Completed 29-04-PLAN.md
+**Last session:** 2026-10-24T17:01:44.547Z
+**Stopped at:** Completed 29-05-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -398,6 +398,7 @@ archived milestone artifacts.
 | Phase 29 P02 | 46 min | 2 tasks | 17 files |
 | Phase 29 P03 | 27 min | 2 tasks | 24 files |
 | Phase 29 P04 | 29 min | 2 tasks | 27 files |
+| Phase 29 P05 | 40 min | 2 tasks | 24 files |
 
 ## Decisions
 
@@ -582,6 +583,8 @@ archived milestone artifacts.
 - [Phase 29]: A new optional cascade wire field needs its docs/json-output.md row in the same commit as the schema change, because the hook's json-output-docs gate fails otherwise
 - [Phase 29]: An empty apply reports Apply: nothing to change. through the reconcile-pending-empty kind with a required text-only command member; the JSON payload omits it and origin.commandId names the command
 - [Phase 29]: The apply-empty advisory is sent in applyReconcileWithReader, not in the shared notifyScopePasses, so the load stays silent on an empty pass (D-05)
+- [Phase 29]: Every apply report with a realized row ends with the reload trailer: shouldEmitReloadHint reads reconcile-applied-cascade rows through rowsNeedReload, the cascade's RLD-02 OR-reduce (D-08)
+- [Phase 29]: The reason option is gone from ApplyReconcileOptions, McpMigrationInput and ScopePassInput; every apply installs missing declared dependencies and the MCP move skips planned dependency installs (D-02, D-22)
 
 ### mcp-4 decisions
 
