@@ -45,7 +45,7 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
     // FSTAT-06 / D-66-04: a pending child install whose no-network candidate
     // resolves `partially-available` carries the `partial` modifier, rendering
     // `(will partially install)` in place of `(will install)`. A render modifier,
-    // not a new token; no `will partially update` analog exists (D-66-05).
+    // not a new token; a catalog move is its own `will update` token (D-14).
     "mp-add-plugin-partial-install": {
       pi: piWithBothLoaded(),
       message: {
@@ -132,6 +132,47 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
             plugins: [
               { status: "will enable", name: "to-enable" },
               { status: "will disable", name: "to-disable" },
+            ],
+          },
+        ],
+      },
+    },
+    // APL-02 / D-10 / D-14: a recorded plugin whose catalog candidate differs
+    // from its record is a move `apply` makes, previewed with the updated row's
+    // version arrow.
+    "plugin-pending-update": {
+      pi: piWithBothLoaded(),
+      message: {
+        needsApply: true,
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [{ status: "will update", name: "demo", from: "1.0.0", to: "1.1.0" }],
+          },
+        ],
+      },
+    },
+    // UPR-02: a move at the same version to a new commit names both commits.
+    "plugin-pending-update-same-version-commits": {
+      pi: piWithBothLoaded(),
+      message: {
+        needsApply: true,
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "will update",
+                name: "demo",
+                from: "1.0.0",
+                to: "1.0.0",
+                commits: {
+                  from: "a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0",
+                  to: "2222333344445555666677778888999900001111",
+                },
+              },
             ],
           },
         ],
