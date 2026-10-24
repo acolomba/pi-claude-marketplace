@@ -18,6 +18,7 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import { MigrateConfigSaveError } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
 import {
   closeScopePass,
+  notifyScopeOutcomes,
   notifyScopePasses,
   openScopePass,
   readPassForScope,
@@ -425,6 +426,33 @@ describe("openScopePass", () => {
     );
   });
 
+  test("D-06: an invalid config's rows go to the caller's config outcomes, not the shared outcomes", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "open-invalid-apart");
+    await seedRecordedState(scope);
+    await writeUnder(scope.project.baseConfigJsonPath, "{");
+    const pass = accumulators();
+    const configOutcomes: PerEntryOutcome[] = [];
+
+    // act
+    const readResult = await openScopePass({
+      ...pass,
+      reader,
+      scope: "project",
+      cwd: scope.cwd,
+      migrateMcpEntries: recordingMove([]),
+      configOutcomes,
+    });
+
+    // assert
+    assert.equal(readResult, undefined);
+    assert.deepStrictEqual(pass.outcomes, []);
+    assert.deepStrictEqual(
+      configOutcomes.map((outcome) => outcome.kind),
+      ["invalid-block"],
+    );
+  });
+
   test("S3: a refused first-run config write stops the scope with a row naming the base config and runs no MCP move", async (t) => {
     // arrange
     const scope = await createProjectScope(t, "open-first-run-refused");
@@ -712,6 +740,38 @@ describe("closeScopePass", () => {
     // assert
     assert.deepStrictEqual(outcomes, [LOCK_HELD_ROW]);
     verify(hooksRouting);
+  });
+});
+
+describe("notifyScopeOutcomes", () => {
+  test("RECON-05: no outcome sends nothing", () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+
+    // act
+    const cascaded = notifyScopeOutcomes(ctx, runWithNothingLoaded(), []);
+
+    // assert
+    assert.equal(cascaded, false);
+    assert.deepStrictEqual(notifications, []);
+    verifyBoundary();
+  });
+
+  test("IL-2: the outcomes go out as one cascade", () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    const cascaded = notifyScopeOutcomes(ctx, runWithNothingLoaded(), [
+      { kind: "mp-added", scope: "project", marketplace: "mp" },
+    ]);
+
+    // assert
+    assert.equal(cascaded, true);
+    assert.deepStrictEqual(notifications, [
+      { message: "● mp [project] (added)\n\nReconcile: 1 success" },
+    ]);
+    verifyBoundary();
   });
 });
 

@@ -1,10 +1,11 @@
 // Owner suite for orchestrators/reconcile/load.ts.
 //
 // APL-03 / D-02: the load's contract is what it leaves on disk -- nothing --
-// and the one cascade it renders for the rows that return every session. Each
-// case shapes a project scope on a case-owned temporary tree and runs the real
-// read pass, the real routing owner and the real persistence. The MCP move is
-// injected only where its input is the promise.
+// and what it prints: the block `pending` prints for the same tree (D-05 /
+// D-06), then the cascade of the warnings that return every session (D-18).
+// Each case shapes a project scope on a case-owned temporary tree and runs the
+// real read pass, the real routing owner and the real persistence. The MCP
+// move is injected only where its input is the promise.
 //
 // IL-2 is proved by sizing the notification boundary: each case promises the
 // exact number of emissions it expects, so an unexpected one throws where it is
@@ -22,6 +23,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { createLoadReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/load.ts";
+import { pendingReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -154,10 +156,109 @@ async function scopeFiles(locations: ScopedLocations): Promise<readonly unknown[
   ];
 }
 
-test("APL-03: a config that declares a plugin the scope never installed installs nothing and stays silent", async (t) => {
+const APPLY_TRAILER = "\n\n/claude:plugin apply to make these changes";
+
+test("APL-03 / D-05: a config that declares a plugin the scope never installed prints pending's block and changes nothing", async (t) => {
   // arrange
   const scope = await createLoadScope(t, "declared-only");
   await seedInstalled(scope, scope.project, {}, ["hello"]);
+  await writeUnder(
+    scope.project.baseConfigJsonPath,
+    declaring(scope.marketplaceRoot, { "hello@mp": {} }),
+  );
+  const before = await scopeFiles(scope.project);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await load({ ctx, cwd: scope.cwd });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [project]\n  ● hello (will install)\n\nReconcile pending: 1 success" + APPLY_TRAILER,
+    },
+  ]);
+  assert.deepStrictEqual(await scopeFiles(scope.project), before);
+  assert.deepStrictEqual(await retryTree(scope.project.scopeRoot), [
+    "claude-plugins.json",
+    "pi-claude-marketplace/",
+    "pi-claude-marketplace/state.json",
+  ]);
+  verifyBoundary();
+});
+
+test("D-06: the load's block and pending's output over the same tree are byte-identical", async (t) => {
+  // arrange
+  const scope = await createLoadScope(t, "same-bytes");
+  await seedInstalled(scope, scope.project, { gone: {}, kept: {} }, ["gone", "hello", "kept"]);
+  await writeUnder(
+    scope.project.baseConfigJsonPath,
+    declaring(scope.marketplaceRoot, { "hello@mp": {}, "kept@mp": { enabled: false } }),
+  );
+  const loaded = createNotificationBoundary(1);
+  const pending = createNotificationBoundary(1);
+
+  // act
+  await load({ ctx: loaded.ctx, cwd: scope.cwd });
+  await pendingReconcile({ ctx: pending.ctx, run: runWithNothingLoaded(), cwd: scope.cwd });
+
+  // assert
+  assert.deepStrictEqual(loaded.notifications, pending.notifications);
+  loaded.verifyBoundary();
+  pending.verifyBoundary();
+});
+
+for (const { name, plugins, installed, rows } of [
+  {
+    name: "a record its config no longer declares stays installed",
+    plugins: {},
+    installed: { hello: {} },
+    rows: "  ○ hello v1.0.0 (will uninstall)",
+  },
+  {
+    name: "a record its config declares disabled stays enabled",
+    plugins: { "hello@mp": { enabled: false } },
+    installed: { hello: {} },
+    rows: "  ◍ hello (will disable)",
+  },
+  {
+    name: "a disabled record its config declares enabled stays disabled",
+    plugins: { "hello@mp": {} },
+    installed: { hello: { enabled: false } },
+    rows: "  ● hello (will enable)",
+  },
+  {
+    name: "D-21: a record whose declared dependency is missing stays enabled",
+    plugins: { "hello@mp": {} },
+    installed: { hello: { dependencies: ["helper"] } },
+    rows: "  ● helper (will install)",
+  },
+] as const) {
+  test(`APL-03: ${name} and the load prints the change pending lists`, async (t) => {
+    // arrange
+    const scope = await createLoadScope(t, "kept-record");
+    await seedInstalled(scope, scope.project, installed, ["hello", "helper"]);
+    await writeUnder(scope.project.baseConfigJsonPath, declaring(scope.marketplaceRoot, plugins));
+    const before = await scopeFiles(scope.project);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    await load({ ctx, cwd: scope.cwd });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: `● mp [project]\n${rows}\n\nReconcile pending: 1 success` + APPLY_TRAILER },
+    ]);
+    assert.deepStrictEqual(await scopeFiles(scope.project), before);
+    verifyBoundary();
+  });
+}
+
+test("RECON-05 / D-05: a config that matches the records prints nothing and changes nothing", async (t) => {
+  // arrange
+  const scope = await createLoadScope(t, "matching");
+  await seedInstalled(scope, scope.project, { hello: {} }, ["hello"]);
   await writeUnder(
     scope.project.baseConfigJsonPath,
     declaring(scope.marketplaceRoot, { "hello@mp": {} }),
@@ -171,53 +272,8 @@ test("APL-03: a config that declares a plugin the scope never installed installs
   // assert
   assert.deepStrictEqual(notifications, []);
   assert.deepStrictEqual(await scopeFiles(scope.project), before);
-  assert.deepStrictEqual(await retryTree(scope.project.scopeRoot), [
-    "claude-plugins.json",
-    "pi-claude-marketplace/",
-    "pi-claude-marketplace/state.json",
-  ]);
   verifyBoundary();
 });
-
-for (const { name, plugins, installed } of [
-  {
-    name: "a record its config no longer declares stays installed",
-    plugins: {},
-    installed: { hello: {} },
-  },
-  {
-    name: "a record its config declares disabled stays enabled",
-    plugins: { "hello@mp": { enabled: false } },
-    installed: { hello: {} },
-  },
-  {
-    name: "a disabled record its config declares enabled stays disabled",
-    plugins: { "hello@mp": {} },
-    installed: { hello: { enabled: false } },
-  },
-  {
-    name: "D-21: a record whose declared dependency is missing stays enabled",
-    plugins: { "hello@mp": {} },
-    installed: { hello: { dependencies: ["helper"] } },
-  },
-] as const) {
-  test(`APL-03: ${name} and the load stays silent`, async (t) => {
-    // arrange
-    const scope = await createLoadScope(t, "kept-record");
-    await seedInstalled(scope, scope.project, installed, ["hello", "helper"]);
-    await writeUnder(scope.project.baseConfigJsonPath, declaring(scope.marketplaceRoot, plugins));
-    const before = await scopeFiles(scope.project);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
-
-    // act
-    await load({ ctx, cwd: scope.cwd });
-
-    // assert
-    assert.deepStrictEqual(notifications, []);
-    assert.deepStrictEqual(await scopeFiles(scope.project), before);
-    verifyBoundary();
-  });
-}
 
 test("D-18: a recorded plugin its marketplace no longer lists gets the not-in-manifest warning on every load", async (t) => {
   // arrange
@@ -287,7 +343,7 @@ test("D-18 / REC-05: a declarer whose own manifest cannot be read gets its warni
   verifyBoundary();
 });
 
-test("CFG-03: an unparseable config reports its row and changes nothing", async (t) => {
+test("CFG-03 / D-06: an unparseable config is reported once, by pending's block with its parse cause", async (t) => {
   // arrange
   const scope = await createLoadScope(t, "invalid-config");
   await seedInstalled(scope, scope.project, { hello: {} }, ["hello"]);
@@ -308,7 +364,7 @@ test("CFG-03: an unparseable config reports its row and changes nothing", async 
         "  ⊘ claude-plugins.json (failed) {invalid manifest}\n" +
         "    cause: JSON parse failed: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n" +
         "\n" +
-        "Reconcile: 2 failures",
+        "Reconcile pending: 2 failures",
       severity: "error",
     },
   ]);
@@ -316,7 +372,7 @@ test("CFG-03: an unparseable config reports its row and changes nothing", async 
   verifyBoundary();
 });
 
-test("a marketplace declared from another source than the one recorded reports a source mismatch and changes nothing", async (t) => {
+test("D-06: a marketplace declared from another source than the one recorded is reported once, by pending's block", async (t) => {
   // arrange
   const scope = await createLoadScope(t, "source-mismatch");
   await seedInstalled(scope, scope.project, { hello: {} }, ["hello"]);
@@ -338,7 +394,7 @@ test("a marketplace declared from another source than the one recorded reports a
         "\n" +
         "⊘ mp [project] (failed) {source mismatch}\n" +
         "\n" +
-        "Reconcile: 1 failure",
+        "Reconcile pending: 1 failure",
       severity: "error",
     },
   ]);
@@ -361,19 +417,24 @@ test("WR-05: a pristine workspace stays silent and creates nothing in either sco
   verifyBoundary();
 });
 
-test("WR-01: a project state file that cannot be parsed still lets the user scope's warning through", async (t) => {
+test("WR-01: a project state file that cannot be parsed is one warning row, out of the block, and the user scope still reports", async (t) => {
   // arrange
   const scope = await createLoadScope(t, "one-scope-fails");
   await writeUnder(scope.project.stateJsonPath, "{ not json");
   await seedInstalled(scope, scope.user, { gone: {} }, []);
   await writeUnder(scope.user.baseConfigJsonPath, declaring(scope.marketplaceRoot, {}));
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
 
   // act
   await load({ ctx, cwd: scope.cwd });
 
   // assert
   assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [user]\n  ○ gone v1.0.0 (will uninstall)\n\nReconcile pending: 1 success" +
+        APPLY_TRAILER,
+    },
     {
       message:
         "Some operations have failed.\n" +
@@ -412,16 +473,42 @@ test("D-22 / AMIG-04: the MCP move runs for each readable scope with the plan it
     return Promise.resolve();
   };
 
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+  const { ctx, verifyBoundary } = createNotificationBoundary(1);
 
   // act
   await load({ ctx, cwd: scope.cwd, migrateMcpEntries });
 
   // assert
-  assert.deepStrictEqual(notifications, []);
   assert.deepStrictEqual(moves, [
     { scope: "project", cwd: scope.cwd, installs: ["hello"] },
     { scope: "user", cwd: scope.cwd, installs: undefined },
   ]);
+  verifyBoundary();
+});
+
+test("IL-2: the migration notice, the pending block and the warnings go out in that order", async (t) => {
+  // arrange
+  const scope = await createLoadScope(t, "all-payloads");
+  await seedInstalled(scope, scope.project, { gone: {} }, ["hello"]);
+  await writeUnder(
+    scope.project.baseConfigJsonPath,
+    declaring(scope.marketplaceRoot, { "gone@mp": {}, "hello@mp": {} }),
+  );
+  const migrateMcpEntries: McpMigrationStep = () => Promise.reject(new Error("cannot read"));
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3);
+
+  // act
+  await load({ ctx, cwd: scope.cwd, migrateMcpEntries });
+
+  // assert
+  // The notice names each scope's stopped move; the user scope's comes last.
+  assert.deepStrictEqual(
+    notifications.map(({ message }) => message.split("\n").at(-1)),
+    [
+      "  The user-scope move stopped: cannot read. The next /reload tries again.",
+      "/claude:plugin apply to make these changes",
+      "Reconcile: 1 warning",
+    ],
+  );
   verifyBoundary();
 });

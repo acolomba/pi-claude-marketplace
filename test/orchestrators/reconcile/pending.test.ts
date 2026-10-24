@@ -18,12 +18,15 @@
 // no-mutation assertions from racing a fire-and-forget write.
 
 import assert from "node:assert/strict";
-import fs, { mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
+import fs, { chmod, mkdir, readdir, readFile, utimes, writeFile } from "node:fs/promises";
 import { syncBuiltinESMExports } from "node:module";
 import path from "node:path";
 import { test } from "node:test";
 
-import { pendingReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts";
+import {
+  composePendingReport,
+  pendingReconcile,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -288,7 +291,7 @@ const invalidConfigRows = [
 }[];
 
 for (const { reported, files } of invalidConfigRows) {
-  test(`CFG-03: a malformed ${reported} reports its basename as a failed block and plans nothing for that scope`, async (t) => {
+  test(`CFG-03 / I5: a malformed ${reported} reports its basename as a failed block with its parse cause and plans nothing for that scope`, async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "invalid-config");
     await writeUnder(
@@ -310,9 +313,11 @@ for (const { reported, files } of invalidConfigRows) {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          `A marketplace operation has failed.\n\n` +
-          `⊘ ${reported} [project] (failed) {invalid manifest}\n\n` +
-          "Reconcile pending: 1 failure",
+          `Some operations have failed.\n\n` +
+          `⊘ ${reported} [project] (failed) {invalid manifest}\n` +
+          `  ⊘ ${reported} (failed) {invalid manifest}\n` +
+          "    cause: JSON parse failed: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n\n" +
+          "Reconcile pending: 2 failures",
         severity: "error",
       },
     ]);
@@ -443,10 +448,12 @@ test("MSG-GR-3: a failed configuration block sorts among the plan blocks by name
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "A marketplace operation has failed.\n\n" +
-        "⊘ claude-plugins.json [project] (failed) {invalid manifest}\n\n" +
+        "Some operations have failed.\n\n" +
+        "⊘ claude-plugins.json [project] (failed) {invalid manifest}\n" +
+        "  ⊘ claude-plugins.json (failed) {invalid manifest}\n" +
+        "    cause: JSON parse failed: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n\n" +
         "● zzz-mp [user] (will add)\n  ● pp (will install)\n\n" +
-        "Reconcile pending: 1 failure, 2 successes\n\n/claude:plugin apply to make these changes",
+        "Reconcile pending: 2 failures, 2 successes\n\n/claude:plugin apply to make these changes",
       severity: "error",
     },
   ]);
@@ -1234,4 +1241,101 @@ test("WR-06: a staging directory that cannot be read leaves the command's own ou
     { message: "Pending: /claude:plugin apply has nothing to change." },
   ]);
   verifyBoundary();
+});
+
+test("D-05: composePendingReport returns an empty report when no scope has pending work", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "compose-empty");
+
+  // act
+  const report = await composePendingReport({ cwd, scopes: ["project", "user"] });
+
+  // assert
+  assert.deepStrictEqual(report, { marketplaces: [], retained: {}, needsApply: false });
+});
+
+test("D-06: composePendingReport returns the change apply would make and asks for apply", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "compose-change");
+  await writeUnder(
+    project.baseConfigJsonPath,
+    configBytes("mp", "acme/tools", [{ key: "p-proj@mp", enabled: true }]),
+  );
+
+  // act
+  const report = await composePendingReport({ cwd, scopes: ["project", "user"] });
+
+  // assert
+  assert.deepStrictEqual(report, {
+    marketplaces: [
+      {
+        name: "mp",
+        scope: "project",
+        status: "will add",
+        severity: "info",
+        needsReload: false,
+        plugins: [{ status: "will install", name: "p-proj" }],
+      },
+    ],
+    retained: {},
+    needsApply: true,
+  });
+});
+
+test("D-06: composePendingReport reads only the scopes it is given", async (t) => {
+  // arrange
+  const { cwd, project, user } = await createHermeticScopes(t, "compose-scopes");
+  await writeUnder(
+    project.baseConfigJsonPath,
+    configBytes("mp", "acme/tools", [{ key: "p-proj@mp", enabled: true }]),
+  );
+  await writeUnder(user.baseConfigJsonPath, "{");
+
+  // act
+  const userOnly = await composePendingReport({ cwd, scopes: ["user"] });
+  const none = await composePendingReport({ cwd, scopes: [] });
+
+  // assert
+  assert.deepStrictEqual(
+    userOnly.marketplaces.map(({ name, scope }) => ({ name, scope })),
+    [{ name: "claude-plugins.json", scope: "user" }],
+  );
+  assert.equal(userOnly.needsApply, false);
+  assert.deepStrictEqual(none, { marketplaces: [], retained: {}, needsApply: false });
+});
+
+test("I5 / T-53-02-02: an unreadable config's cause names its basename and no absolute path", async (t) => {
+  // arrange
+  // A mode does not bind uid 0, so the EACCES never happens under root.
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    throw new Error("permission cases cannot run as root");
+  }
+
+  const { cwd, project } = await createHermeticScopes(t, "compose-unreadable");
+  await writeUnder(project.baseConfigJsonPath, configBytes("mp", "acme/tools", []));
+  await chmod(project.baseConfigJsonPath, 0o000);
+
+  // act
+  const report = await composePendingReport({ cwd, scopes: ["project"] });
+
+  // assert
+  assert.deepStrictEqual(report.marketplaces, [
+    {
+      name: "claude-plugins.json",
+      scope: "project",
+      status: "failed",
+      reasons: ["invalid manifest"],
+      severity: "error",
+      plugins: [
+        {
+          status: "failed",
+          name: "claude-plugins.json",
+          reasons: ["invalid manifest"],
+          cause: new Error("read failed: EACCES: permission denied, open 'claude-plugins.json'"),
+          severity: "error",
+          needsReload: false,
+        },
+      ],
+    },
+  ]);
 });

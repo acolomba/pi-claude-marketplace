@@ -19,7 +19,7 @@
 //     plugins and rebuilds the hook routing table. A caller's own steps run
 //     between the two.
 //   - IL-2 / RECON-04: `notifyScopePasses` sends the one migration notice and
-//     at most one cascade for both scopes.
+//     at most one cascade for both scopes (`notifyScopeOutcomes`).
 //
 // NFR-5: this module is outside `NETWORK_SEAMS` in eslint.config.js. It names
 // no git surface; BLOCK F rejects any `platform/git` import here.
@@ -356,6 +356,11 @@ export interface ScopePassInput extends ScopePassAccumulators {
   readonly cwd: string;
   /** AMIG-01: the injected MCP move; `migrateLegacyMcpEntries` when absent. */
   readonly migrateMcpEntries?: McpMigrationStep | undefined;
+  /**
+   * D-06: where the invalid-config and layer-gap rows go; `outcomes` when
+   * absent. The load collects them apart, because pending's block reports them.
+   */
+  readonly configOutcomes?: PerEntryOutcome[] | undefined;
 }
 
 /**
@@ -385,7 +390,7 @@ export async function openScopePass(input: ScopePassInput): Promise<ScopeReadRes
   });
 
   if (readResult.invalidOutcomes.length > 0) {
-    input.outcomes.push(...readResult.invalidOutcomes);
+    (input.configOutcomes ?? input.outcomes).push(...readResult.invalidOutcomes);
     return undefined;
   }
 
@@ -413,20 +418,18 @@ export async function closeScopePass(
 }
 
 /**
- * AMIG-03 / IL-2 / RECON-04: sends the one migration notice for both scopes,
- * which speaks even when the pass has no other row, then at most one cascade
- * through reconcile's own row policies (D-02 / MOD-03). A pass with no outcome
- * sends no cascade (NFR-2 / RECON-05). Returns whether the cascade was sent.
- * The projection reads only each outcome's closed-set reason, never a raw
- * error message (T-55-02-02).
+ * IL-2 / RECON-04: sends at most one cascade for the outcomes of both scopes,
+ * through reconcile's own row policies (D-02 / MOD-03). No outcome sends no
+ * cascade (NFR-2 / RECON-05). Returns whether the cascade was sent. The
+ * projection reads only each outcome's closed-set reason, never a raw error
+ * message (T-55-02-02).
  */
-export function notifyScopePasses(
+export function notifyScopeOutcomes(
   ctx: NotificationContext,
   run: NotificationRun,
-  accumulators: ScopePassAccumulators,
+  outcomes: readonly PerEntryOutcome[],
 ): boolean {
-  notifyMcpMigration(ctx, run, accumulators.migration);
-  if (accumulators.outcomes.length === 0) {
+  if (outcomes.length === 0) {
     return false;
   }
 
@@ -434,7 +437,21 @@ export function notifyScopePasses(
     ctx,
     run,
     RECONCILE_APPLIED_CONTEXT,
-    buildReconcileAppliedCascade(accumulators.outcomes),
+    buildReconcileAppliedCascade(outcomes),
   );
   return true;
+}
+
+/**
+ * AMIG-03 / IL-2: sends the one migration notice for both scopes, which speaks
+ * even when the pass has no other row, then the outcomes' cascade
+ * (`notifyScopeOutcomes`). Returns whether the cascade was sent.
+ */
+export function notifyScopePasses(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  accumulators: ScopePassAccumulators,
+): boolean {
+  notifyMcpMigration(ctx, run, accumulators.migration);
+  return notifyScopeOutcomes(ctx, run, accumulators.outcomes);
 }

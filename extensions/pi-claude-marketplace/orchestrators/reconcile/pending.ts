@@ -17,9 +17,9 @@
 // `planReconcile` for it. Invalid input is NEVER silently coerced to empty
 // desired state (which would render as a mass-uninstall pending list).
 //
-// IL-2: exactly ONE `notify()` call per invocation -- the orchestrator
-// accumulates per-scope plans + invalid-config rows, builds a single
-// `NotificationMessage`, and dispatches once.
+// IL-2: exactly ONE `notify()` call per invocation -- the composer
+// accumulates per-scope plans + invalid-config rows into a single report, and
+// `pendingReconcile` dispatches it once.
 //
 // Empty-plan case (DIFF-01 SC #2): when every plan is empty AND no scope
 // surfaced an invalid-config failure, the orchestrator dispatches the
@@ -33,6 +33,10 @@
 // APL-04 / D-14: `pending` lists what the next `/claude:plugin apply` would
 // change, since a load changes no installation state. A list that holds such a
 // change ends with the `/claude:plugin apply to make these changes` trailer.
+//
+// D-05 / D-06: a load prints this same block. `composePendingReport` builds it
+// and `notifyPendingReport` sends it, for `pending` and the load alike, so the
+// two cannot drift.
 //
 // D-21 (superseding PENDING-VERDICT-01 / D-06-25): `apply` makes the LOAD-01
 // dependency disable and the MISS-01 missing-dependency install, so `pending`
@@ -62,6 +66,7 @@ import {
 } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { scanRetainedWorkflowsStaging } from "../plugin/workflows-staging-gc.ts";
 
 import { buildScopeSatisfactionVerdict } from "./dependency-verdict.ts";
@@ -105,16 +110,35 @@ export interface PendingReconcileOptions {
  * {invalid manifest}` marketplace row. The marketplace `name` carries the
  * file's BASENAME (never the absolute path -- information-disclosure
  * mitigation T-53-02-02).
+ *
+ * I5: only a plugin row can carry a cause, so one failed child named by the
+ * basename carries the config's parse detail, with every absolute path
+ * redacted (T-53-02-02). The load prints this block, so this is where its
+ * invalid-config cause now appears (D-06).
  */
-function buildInvalidConfigBlock(scope: Scope, filePath: string): MarketplaceRows<PendingMsg> {
+function buildInvalidConfigBlock(
+  scope: Scope,
+  filePath: string,
+  detail: string,
+): MarketplaceRows<PendingMsg> {
+  const name = path.basename(filePath);
   return {
-    name: path.basename(filePath),
+    name,
     scope,
     status: "failed",
     reasons: ["invalid manifest"],
     // D-03: an invalid-config pending block -> error.
     severity: "error",
-    plugins: [],
+    plugins: [
+      {
+        status: "failed",
+        name,
+        reasons: ["invalid manifest"],
+        cause: new Error(redactAbsolutePaths(detail)),
+        severity: "error",
+        needsReload: false,
+      },
+    ],
   };
 }
 
@@ -153,7 +177,9 @@ function invalidConfigBlocks(
   outcome: ScopeLoadOutcome,
 ): MarketplaceRows<PendingMsg>[] {
   return [outcome.base, outcome.local].flatMap((result) =>
-    result.status === "invalid" ? [buildInvalidConfigBlock(scope, result.filePath)] : [],
+    result.status === "invalid"
+      ? [buildInvalidConfigBlock(scope, result.filePath, result.error)]
+      : [],
   );
 }
 
@@ -356,11 +382,29 @@ async function retainedWorkflowsFacts(
   return retainedWorkflows.length === 0 ? {} : { retainedWorkflows };
 }
 
-export async function pendingReconcile(opts: PendingReconcileOptions): Promise<void> {
-  // Project-first per MSG-GR-3 when both scopes are searched; otherwise the
-  // explicit scope only.
-  const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
+/**
+ * D-05 / D-06: what `pending` prints, before it is sent. `pending` and the load
+ * both build it here and send it through `notifyPendingReport`, so their blocks
+ * cannot drift.
+ */
+export interface PendingReport {
+  /** The sorted, merged blocks; empty when nothing is pending. */
+  readonly marketplaces: Plural<MarketplaceRows<PendingMsg>>;
+  /** WR-06: the retained workflow staging trees, when there are any. */
+  readonly retained: Pick<ReconcilePendingEmptyMessage, "retainedWorkflows">;
+  /** APL-04 / D-14: whether some block names a change `apply` would make. */
+  readonly needsApply: boolean;
+}
 
+/**
+ * D-05 / D-06: reads each scope's config and state, plans it the way `apply`
+ * would, and folds the plans and the failed blocks into one report. Offline
+ * (NFR-5) and write-free. `scopes` is read in the order given (MSG-GR-3).
+ */
+export async function composePendingReport(opts: {
+  readonly cwd: string;
+  readonly scopes: readonly Scope[];
+}): Promise<PendingReport> {
   const plans: ReconcilePlan[] = [];
   const invalidBlocks: MarketplaceRows<PendingMsg>[] = [];
   // FSTAT-06: the recorded marketplace clone roots + manifest paths, keyed by
@@ -374,7 +418,7 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   >();
   const recordedVersions: (readonly [string, string])[] = [];
 
-  for (const scope of scopes) {
+  for (const scope of opts.scopes) {
     const loc = locationsFor(scope, opts.cwd);
     // eslint-disable-next-line no-await-in-loop -- at most two scopes, one config read each
     const outcome = await loadMergedScopeConfig(loc);
@@ -459,25 +503,17 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   // their `.previous/` holds the only surviving copy of the user's previous
   // workflow scripts and no other surface reaches them.
   //
-  // Called ONCE per invocation, deliberately OUTSIDE the per-scope loop above:
+  // Called ONCE per report, deliberately OUTSIDE the per-scope loop above:
   // `workflowsStagingDir` and `workflowsHomeDir` are scope-INDEPENDENT, so the
   // scope handed to `locationsFor` is immaterial and a call inside the loop
   // would render the identical advisory twice whenever no scope was given.
   const retained = await retainedWorkflowsFacts(opts.cwd);
 
   // DIFF-01 SC #2 empty-steady-state: no invalid-config rows AND every plan
-  // is empty -> dispatch the dedicated ReconcilePendingEmptyMessage variant
-  // (the renderer hard-codes the catalog-locked advisory body line, so the
-  // byte form cannot drift from docs/output-catalog.md). IL-2 preserved by
-  // routing through notify() exactly once. WR-06: the retained-tree lines ride
-  // the same variant, so the steady-state reader meets the identical trailer.
+  // is empty -> no block. Every non-empty bucket yields a block, so an empty
+  // list is exactly the empty case.
   if (invalidBlocks.length === 0 && isReconcilePlanListEmpty(plans)) {
-    notify(opts.ctx, opts.run, {
-      kind: "reconcile-pending-empty",
-      command: "pending",
-      ...retained,
-    });
-    return;
+    return { marketplaces: [], retained, needsApply: false };
   }
 
   // Compose the cascade message: the projection emits the per-scope plan
@@ -531,11 +567,46 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
     ...invalidBlocks,
   ].sort((a, b) => compareByNameThenScope(a, b));
 
-  // WR-06: both message arms carry the same observations from the single scan.
   // APL-04 / D-14: a list with a change `apply` would make ends with the apply
   // trailer; a list of failures alone does not, since `apply` cannot fix them.
-  notifyWithContext(opts.ctx, opts.run, PENDING_CONTEXT, marketplaces, undefined, "plural", {
-    ...retained,
-    ...(planListNeedsApply(plans) && { needsApply: true }),
+  return { marketplaces, retained, needsApply: planListNeedsApply(plans) };
+}
+
+/**
+ * D-05 / D-06: sends a non-empty report as the pending cascade. `pending` and
+ * the load both send it here, so the two print the same bytes.
+ */
+export function notifyPendingReport(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  report: PendingReport,
+): void {
+  // WR-06: both message arms carry the same observations from the single scan.
+  notifyWithContext(ctx, run, PENDING_CONTEXT, report.marketplaces, undefined, "plural", {
+    ...report.retained,
+    ...(report.needsApply && { needsApply: true }),
   });
+}
+
+export async function pendingReconcile(opts: PendingReconcileOptions): Promise<void> {
+  // Project-first per MSG-GR-3 when both scopes are searched; otherwise the
+  // explicit scope only.
+  const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
+  const report = await composePendingReport({ cwd: opts.cwd, scopes });
+
+  // DIFF-01 SC #2: the empty case is the dedicated ReconcilePendingEmptyMessage
+  // variant (the renderer hard-codes the catalog-locked advisory body line, so
+  // the byte form cannot drift from docs/output-catalog.md). IL-2 preserved by
+  // routing through notify() exactly once. WR-06: the retained-tree lines ride
+  // the same variant, so the steady-state reader meets the identical trailer.
+  if (report.marketplaces.length === 0) {
+    notify(opts.ctx, opts.run, {
+      kind: "reconcile-pending-empty",
+      command: "pending",
+      ...report.retained,
+    });
+    return;
+  }
+
+  notifyPendingReport(opts.ctx, opts.run, report);
 }

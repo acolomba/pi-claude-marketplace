@@ -187,13 +187,13 @@ const RECONCILE_CASCADE_FOR_TWO_UNREADABLE_STATES =
   "    cause: state.json at state.json has an unsupported schema version\n\n" +
   "Reconcile: 4 failures";
 
-/** The cascade the reconcile renders for a project scope whose config is invalid. */
-const RECONCILE_CASCADE_FOR_INVALID_CONFIG =
+/** D-06: the pending block the load prints for a project scope whose config is invalid. */
+const PENDING_BLOCK_FOR_INVALID_CONFIG =
   "Some operations have failed.\n\n" +
   "⊘ claude-plugins.json [project] (failed) {invalid manifest}\n" +
   "  ⊘ claude-plugins.json (failed) {invalid manifest}\n" +
   "    cause: schema validation failed: /schemaVersion: must be equal to constant\n\n" +
-  "Reconcile: 2 failures";
+  "Reconcile pending: 2 failures";
 
 /**
  * A notification function that records every message the module tries to emit
@@ -1330,14 +1330,14 @@ test("APL-03: the discover handler hands the load reconcile the event's cwd and 
   assert.equal(loadCalls.length, 1);
 });
 
-test("APL-03 / D-21: a reload event leaves a missing dependency uninstalled and its dependent's record unchanged", async (t) => {
+test("APL-03 / D-05 / D-21: a reload event lists the missing dependency's install, leaves it uninstalled and its dependent's record unchanged", async (t) => {
   // arrange
   const scope = await createHermeticScope(t, "dep-reload");
   await seedEnabledPluginWithMissingDependency(scope.cwd);
   const extensionRoot = path.join(scope.cwd, ".pi", "pi-claude-marketplace");
   const before = await loadState(extensionRoot);
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
-    0,
+    1,
     PROBES_PER_DISCOVER,
   );
 
@@ -1345,7 +1345,13 @@ test("APL-03 / D-21: a reload event leaves a missing dependency uninstalled and 
   await discover(discoverEvent(scope.cwd, "reload"), ctx);
 
   // assert
-  assert.deepStrictEqual(notifications, []);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [project]\n  ● helper (will install)\n\n" +
+        "Reconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
+    },
+  ]);
   const after = await loadState(extensionRoot);
   assert.equal(after.marketplaces["mp"]?.plugins["helper"], undefined);
   assert.deepStrictEqual(after, before);
@@ -1724,7 +1730,7 @@ test("still answers when the deferred project-scope hydrate fails (NFR-2)", asyn
   const refusal = eventRefusingCwdRead(discoverEvent(scope.cwd), CWD_READ_DEFERRED_HYDRATE);
   const expectedReads = { refused: true, reads: CWD_READS_PER_DISCOVER };
   const expectedNotifications: readonly Notification[] = [
-    { message: RECONCILE_CASCADE_FOR_INVALID_CONFIG, severity: "error" },
+    { message: PENDING_BLOCK_FOR_INVALID_CONFIG, severity: "error" },
   ];
 
   // act
@@ -1853,7 +1859,7 @@ test("still answers when the last-ditch reconcile notification is also refused (
   const attempted: Notification[] = [];
   const refusing = contextNotifyingThrough(ctx, refuseEveryNotification(attempted));
   const expectedAttempts: readonly Notification[] = [
-    { message: RECONCILE_CASCADE_FOR_INVALID_CONFIG, severity: "error" },
+    { message: PENDING_BLOCK_FOR_INVALID_CONFIG, severity: "error" },
     { message: "reconcile aborted: host notification refused", severity: "error" },
   ];
 

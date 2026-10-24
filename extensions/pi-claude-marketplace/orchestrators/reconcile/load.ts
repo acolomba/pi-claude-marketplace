@@ -11,21 +11,32 @@
 //     LOAD-01 verdict and the plan. It writes nothing to state.json (WR-05);
 //   - the AMIG-01 MCP move (D-22), which skips the owners the plan names
 //     because `apply` installs or rewrites them (AMIG-04);
-//   - the report-only rows: an invalid config (CFG-03), a layer gap
-//     (LAYER-06), a source mismatch, the unreadable declarer and the
-//     `{not in manifest}` warning (D-18), which return every session;
+//   - the per-session warnings: the unreadable declarer and the
+//     `{not in manifest}` warning (D-18);
 //   - the hook routing rebuild (DISP-02).
 //
+// D-05 / D-06: after the passes, the load prints the block `pending` prints,
+// built by the same composer (`composePendingReport`) over every scope whose
+// read pass did not throw. It ends with the apply trailer and never with the
+// `/reload` hint, since the load changed nothing. A matching state prints no
+// block. The block reports an invalid config (CFG-03), a layer gap (LAYER-06)
+// and a source mismatch, so the load does not report them a second time. A
+// scope whose read pass threw (a corrupt state.json, a held lock) keeps its row
+// among the warnings and stays out of the block, so it is reported once.
+//
 // WR-01: one scope's failure becomes one row and the other scope still runs.
-// IL-2: one migration notice, then at most one cascade; a load with nothing to
-// report is silent (RECON-05).
+// IL-2: one migration notice, then the pending block, then the warnings; a load
+// with nothing to report is silent (RECON-05).
 //
 // NFR-5: this module is outside `NETWORK_SEAMS` in eslint.config.js. It names
 // no git surface, and it calls no operation that clones.
 
-import { sourceMismatchOutcomes } from "./apply-outcomes.ts";
-import { closeScopePass, notifyScopePasses, openScopePass } from "./read-pass.ts";
+import { notifyMcpMigration } from "../../shared/notification-dispatch.ts";
 
+import { composePendingReport, notifyPendingReport } from "./pending.ts";
+import { closeScopePass, notifyScopeOutcomes, openScopePass } from "./read-pass.ts";
+
+import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ReconcileStateReader, ScopePassAccumulators } from "./read-pass.ts";
 import type { McpMigrationStep } from "./types.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
@@ -58,8 +69,11 @@ async function loadReconcileWithReader(
     outcomes: [],
     migration: { rows: [], notices: [] },
   };
+  const readableScopes: Scope[] = [];
 
   for (const scope of SCOPES) {
+    // D-06: pending's block reports these rows, so the load drops them.
+    const configOutcomes: PerEntryOutcome[] = [];
     // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing
     const readResult = await openScopePass({
       ...accumulators,
@@ -67,21 +81,25 @@ async function loadReconcileWithReader(
       scope,
       cwd: opts.cwd,
       migrateMcpEntries: opts.migrateMcpEntries,
+      configOutcomes,
     });
-    if (readResult === undefined) {
-      continue;
+    if (readResult !== undefined || configOutcomes.length > 0) {
+      readableScopes.push(scope);
     }
 
-    // A pristine scope has no plan and so no source mismatch.
-    if (readResult.plan !== undefined) {
-      accumulators.outcomes.push(...sourceMismatchOutcomes(readResult.plan));
+    if (readResult !== undefined) {
+      // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing
+      await closeScopePass(scope, readResult, opts.cwd, opts.hooksRouting, accumulators.outcomes);
     }
-
-    // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing
-    await closeScopePass(scope, readResult, opts.cwd, opts.hooksRouting, accumulators.outcomes);
   }
 
-  notifyScopePasses(opts.ctx, opts.run, accumulators);
+  const report = await composePendingReport({ cwd: opts.cwd, scopes: readableScopes });
+  notifyMcpMigration(opts.ctx, opts.run, accumulators.migration);
+  if (report.marketplaces.length > 0) {
+    notifyPendingReport(opts.ctx, opts.run, report);
+  }
+
+  notifyScopeOutcomes(opts.ctx, opts.run, accumulators.outcomes);
 }
 
 /**
