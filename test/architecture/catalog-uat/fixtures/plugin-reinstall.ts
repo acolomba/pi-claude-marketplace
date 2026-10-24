@@ -149,6 +149,64 @@ export const PLUGIN_REINSTALL_FIXTURES: FixtureMap = {
       },
     },
 
+    // REI-04 / UPR-03: a reinstall that installed a newer version names the
+    // version it replaced, as the update row does.
+    "reinstall-newer-version": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Plugin reinstall",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "reinstalled",
+                severity: "info",
+                needsReload: true,
+                name: "alpha",
+                from: "1.0.0",
+                version: "1.1.0",
+                dependencies: [],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // UPR-02: a reinstall onto a new commit at the same declared version names
+    // both commits.
+    "reinstall-same-version-new-commit": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Plugin reinstall",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "reinstalled",
+                severity: "info",
+                needsReload: true,
+                name: "git-plugin",
+                from: "1.0.0",
+                version: "1.0.0",
+                commits: {
+                  from: "a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0",
+                  to: "2222333344445555666677778888999900001111",
+                },
+                dependencies: [],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // ENBL-05 / ENBL-18 / DFEN-07: a cascade reaching an already-disabled
     // record short-circuits before the resolve, so nothing is re-materialized
     // and the record keeps its component inventory. The row is benign and
@@ -488,6 +546,7 @@ export const PLUGIN_REINSTALL_FIXTURES: FixtureMap = {
               {
                 status: "failed",
                 name: "hello",
+                version: "1.0.0",
                 reasons: ["rollback partial"],
                 cause: new Error(
                   'Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it.',

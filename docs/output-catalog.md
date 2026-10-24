@@ -1635,6 +1635,8 @@ ______________________________________________________________________
 
 Multi-plugin cascade. One marketplace header per affected marketplace; plugin rows indent two spaces underneath.
 
+A reinstall row shows the version and commit it moved, with the same arrow the `update` rows use (UPR-02 / UPR-03). A repair at the recorded revision shows the single version.
+
 A reinstall changes the installation and its record only. It writes no declaration to either layer, so a reinstalled dependency stays undeclared (LAYER-04 / D-MF-03). A named `reinstall <plugin>@<marketplace>` acts on the base layer, or on the local layer with `--local`. It refuses a plugin that only the other layer declares, and a layer config it cannot read, with the rows of the `uninstall-plugin-in-local-layer-only` state under `/claude:plugin uninstall`. The forms that name no plugin cover the plugins of both layers. With `--local`, they cover the plugins the local layer declares and the dependencies those plugins need, but not a dependency that only base-layer plugins need. When they cannot read the dependencies of one of those plugins, they change nothing and fail with one `{unreadable}` row whose cause names that plugin.
 
 ### Single marketplace, all reinstalled
@@ -1720,6 +1722,32 @@ Plugin reinstall: 1 warning
 ```
 
 The source the marketplace offers now resolves `partially-available`, so the reinstall installs the supported components and leaves the rest out. The row keeps `(reinstalled)` and names each left-out kind with the same token the `(partially-installed)` rows use, after any `{malformed ...}` token. Severity `warning` when the record left nothing out before the reinstall: working components were just removed, and the user did not ask for that. A record that was already partially installed renders the same token at `info`. When a dependent's range held the plugin to the marketplace's current copy, `{dependency current copy}` comes first in the brace, as on the `(updated)` row, and changes no severity.
+
+### Reinstall that installed a newer version (REI-04 / UPR-03)
+
+<!-- catalog-state: reinstall-newer-version -->
+
+```text
+● official [user]
+  ● alpha v1.0.0 → v1.1.0 (reinstalled)
+
+/reload to pick up changes
+```
+
+REI-04: a reinstall installs the version the marketplace offers now, which can differ from the recorded one. The row names the version it replaced on the left of the arrow, as the `(updated)` row does. A single-target reinstall, so no tally. Severity: info. Reload-hint fires because `alpha` was reinstalled.
+
+### Reinstall onto a new commit at the same version (UPR-02)
+
+<!-- catalog-state: reinstall-same-version-new-commit -->
+
+```text
+● official [user]
+  ● git-plugin v1.0.0 (a1b2c3d) → v1.0.0 (2222333) (reinstalled)
+
+/reload to pick up changes
+```
+
+UPR-02: `fetch` moved an unpinned git source to a new commit while its declared version stayed `1.0.0`, and the reinstall installed that commit. As on the `update-same-version-new-commit` row, the row names the record's commit and the candidate's, each shortened to its first 7 hex characters. The JSON row carries the full commits as `fromCommit` and `toCommit`. Severity: info.
 
 ### Reinstall over an already-disabled record inside a cascade (ENBL-05 / ENBL-18 / DFEN-07)
 
@@ -1881,13 +1909,13 @@ The constraint gate reads the dependency declarations of every plugin the scope 
 A plugin operation has failed.
 
 ● mp [project]
-  ⊘ hello (failed) {rollback partial}
+  ⊘ hello v1.0.0 (failed) {rollback partial}
     cause: Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it. -> EACCES: permission denied, rename
     [agents] (rollback failed)
       cause: EACCES: permission denied, rename
 ```
 
-A reinstall replaces the plugin through the same three-phase swap `update` runs. A failure while it commits the bridges, or while it writes the final record, leaves the plugin partly replaced: the swap reports one child per bridge that failed, and the record keeps the in-progress marker its intent mark wrote. The cause line is the swap's own message, which `update` shares, and its recovery hint is to run `reinstall` again, which repairs it. Severity `error`; no reload-hint. A failure before the intent mark, such as an agent target that holds a file no index row names, changes nothing and renders an ordinary `(failed)` row instead.
+A reinstall replaces the plugin through the same three-phase swap `update` runs. A failure while it commits the bridges, or while it writes the final record, leaves the plugin partly replaced: the swap reports one child per bridge that failed, and the record keeps the in-progress marker its intent mark wrote. The cause line is the swap's own message, which `update` shares, and its recovery hint is to run `reinstall` again, which repairs it. A failure after the candidate names the version it attempted: here the single `v1.0.0`, because the reinstall was repairing the recorded revision, and the arrow when the revision moved (UPR-03). Severity `error`; no reload-hint. A failure before the intent mark, such as an agent target that holds a file no index row names, changes nothing and renders an ordinary `(failed)` row instead.
 
 ### Failure -- plugin not installed, standalone form (CR-02 / D-01)
 
