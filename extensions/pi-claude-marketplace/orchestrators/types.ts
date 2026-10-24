@@ -108,12 +108,13 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly declaresWorkflows: boolean;
   /**
    * WARN-01 / WR-04 / D-86-03: the component kinds whose SOURCE frontmatter
-   * could not be parsed and which re-materialized in degraded form. The
-   * reinstall primitive drives the load-time backfill, so without this the
-   * backfill projection renders a clean row over a reinstall that just
-   * degraded a component -- the contradiction the install and enable arms already avoid by
-   * carrying the same signal. Omitted when nothing degraded, so a clean
-   * reinstall's outcome shape is unchanged (NREG-01).
+   * could not be parsed and which re-materialized in degraded form. Without
+   * this the reinstall row renders clean over a reinstall that just degraded a
+   * component -- the contradiction the install and enable arms already avoid
+   * by carrying the same signal. (`apply`'s growth move, which re-materializes
+   * a grown plugin, reads the update runner's own `degradedKinds`.) Omitted
+   * when nothing degraded, so a clean reinstall's outcome shape is unchanged
+   * (NREG-01).
    */
   readonly degradedKinds?: readonly DegradeKind[];
   readonly notes?: readonly string[];

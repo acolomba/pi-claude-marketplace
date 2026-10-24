@@ -159,26 +159,25 @@ export interface PluginInstalledOutcome
 }
 
 /**
- * Plugin re-materialized in place by load-time backfill (BFILL-01). A recorded
- * plugin -- any recorded plugin, not only a partially-installed one (WCONV-01) --
- * is re-resolved offline (NFR-5) and its now-fuller
- * supported set is materialized via the reinstall primitive; this outcome folds
- * the promotion into the single applied cascade (D-68-04 / RECON-04). `version`
+ * Plugin re-materialized in place by `apply`'s growth move (BFILL-01, D-08,
+ * D-10). A recorded plugin -- any enabled one, not only a partially-installed
+ * one (WCONV-01) -- whose supported set grew is re-materialized at its recorded
+ * revision through the update runner (D-25, D-26); this outcome folds the
+ * promotion into the single applied cascade (D-68-04 / RECON-04). `version`
  * mirrors the unchanged recorded version (a promotion is NOT an upgrade);
  * `dependencies` drives the soft-dep markers like the install arm. The required
  * `installable` is the RE-RESOLVED installability: `true` selects the
  * `(installed)` row (unsupported set now empty -> fully promoted), `false`
  * selects the `(partially-installed)` row (partial re-materialize, still degraded).
  *
- * WR-04: the backfill runs the same class of ledger the install and enable arms
- * run, so it INHERITS the same two ledger-degradation signals rather than
- * declaring a narrower vocabulary of its own. Without them, a backfill of a
+ * WR-04: the growth move runs the same class of ledger the install and enable
+ * arms run, so it INHERITS the same two ledger-degradation signals rather than
+ * declaring a narrower vocabulary of its own. Without them, a promotion of a
  * plugin whose `hooks.json` declares `rewakeMessage` without `asyncRewake: true`
- * -- or whose skill frontmatter is unparseable -- rendered a clean row naming
- * neither fact, which is the contradiction the shared shape exists to prevent.
- * The dropped-kind list is NOT inherited: this arm carries the re-resolved
- * `unsupported` kind list below, which is that same fact read off the backfill's
- * own offline resolution.
+ * -- or whose skill frontmatter is unparseable -- would render a clean row
+ * naming neither fact, which is the contradiction the shared shape exists to
+ * prevent. The dropped-kind list is NOT inherited: this arm carries the
+ * `unsupported` kind list below, read off the runner's partial-degrade result.
  */
 export interface PluginBackfilledOutcome
   extends PluginOutcomeBase, Pick<EnableDegradationSignals, "orphanRewake" | "degradedKinds"> {
@@ -673,9 +672,9 @@ export type PerEntryOutcome =
 
 // ───────────────────────────────────────────────────────────────────────────
 // Throw classification and the install-outcome dependency derivation, moved
-// from apply.ts. Both the apply pass and the backfill pass narrow the same
-// throws into the same closed set, so the classifiers sit beside the outcome
-// shapes they feed rather than inside one of their two callers (FLOW-09).
+// from apply.ts. The apply pass and the read pass narrow throws into the same
+// closed set, so the classifiers sit beside the outcome shapes they feed
+// rather than inside one of their callers (FLOW-09).
 // ───────────────────────────────────────────────────────────────────────────
 
 /**

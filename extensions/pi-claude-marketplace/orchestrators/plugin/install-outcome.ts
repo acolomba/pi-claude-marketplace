@@ -1338,9 +1338,9 @@ async function runInstallLedgerBody(
           // resolve, not a hardcoded `true`. A `--partial` install of an
           // `partially-available` plugin persists `installable: false` with the still-
           // unsupported set (mirrors reinstall.ts::updateStateRecord), so the
-          // partially-installed derivation stays truthful AND load-time backfill
-          // (which keys on `!compatibility.installable`) can later promote it
-          // when its supported set grows. A clean install persists `true`.
+          // partially-installed derivation stays truthful AND `apply`'s growth
+          // move (which compares the recorded `supported` set) can later
+          // promote it when its supported set grows. A clean install persists `true`.
           installable: c.resolved.state === "installable",
           notes: [...c.resolved.notes],
           supported: [...c.resolved.supported],

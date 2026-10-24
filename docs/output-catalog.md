@@ -3866,9 +3866,9 @@ Reconcile: 3 failures, 1 success
 
 OUT-03/D-04: the plural tally counts the failed mp header + the two failed plugin rows as three failures and the `uninstalled` plugin row as one success (`uninstalled` stamps info), all under the `Reconcile` operation name.
 
-### Apply backfill -- partially-installed promotion carries the dropped-kinds brace (SEV-05)
+### Apply growth move -- partially-installed promotion carries the dropped-kinds brace (SEV-05)
 
-BFILL-01 / WCONV-03 / SEV-05 / D-69-04: a load-time backfill re-materialized a recorded partially-installed plugin in place (its supported set grew, but it still re-resolves `partially-available`). The promotion row reuses the `◉` `(partially-installed)` byte form. Its brace leads with `components now supported`, the WCONV-03 convergence marker every backfilled row carries, so a reload the user did not initiate never renders byte-identically to a fresh install; the re-resolved dropped-component kinds follow, composed through the SAME shared `narrowUnsupportedKinds` seam the install / list / info surfaces use -- no per-state reasons mechanism (`installed` / `partially-installed` / `partially-upgradable` rows all route through `composeReasons`). The marketplace was already added, so its header is the bare always-marketplace-header form (no status token). SEV-03 / A3 / D-68-04: a backfill is a benign promotion (re-materializing now-supported components), NOT a new degradation, so the row stays `info` -- the SEV-03 newly-degrades warning fires only on the autoupdate cascade. The trailing tally counts the row as one success, and the reload trailer follows it (D-08).
+BFILL-01 / WCONV-03 / SEV-05 / D-69-04: the supported component set of a recorded partially-installed plugin grew, so `apply` re-materialized it in place at its recorded revision (D-10, D-25). It still re-resolves `partially-available`. `apply` weighs growth on every run, with no extension-version gate. The promotion row reuses the `◉` `(partially-installed)` byte form. Its brace leads with `components now supported`, the WCONV-03 convergence marker every backfilled row carries, so a promotion never renders byte-identically to a fresh install; the re-resolved dropped-component kinds follow, composed through the SAME shared `narrowUnsupportedKinds` seam the install / list / info surfaces use -- no per-state reasons mechanism (`installed` / `partially-installed` / `partially-upgradable` rows all route through `composeReasons`). The marketplace was already added, so its header is the bare always-marketplace-header form (no status token). SEV-03 / A3 / D-68-04: a backfill is a benign promotion (re-materializing now-supported components), NOT a new degradation, so the row stays `info` -- the SEV-03 newly-degrades warning fires only on the autoupdate cascade. The trailing tally counts the row as one success, and the reload trailer follows it (D-08).
 
 <!-- catalog-state: backfill-partially-installed -->
 
@@ -3881,9 +3881,9 @@ Reconcile: 1 success
 /reload to pick up changes
 ```
 
-### Apply backfill -- no dropped kinds leaves the convergence marker alone in the brace (WCONV-03)
+### Apply growth move -- no dropped kinds leaves the convergence marker alone in the brace (WCONV-03)
 
-The degenerate case: a backfill `(partially-installed)` row whose re-resolved dropped-kind set is empty. `narrowUnsupportedKinds([])` returns `[]`, so nothing follows the `components now supported` marker and the brace holds that one token. A backfilled row has no brace-less shape at all -- the projection places the marker ahead of any dropped kind (WCONV-03 / D-69-04), and that is what separates this row from a fresh install of the same plugin.
+The degenerate case: a growth move's `(partially-installed)` row whose re-resolved dropped-kind set is empty. `narrowUnsupportedKinds([])` returns `[]`, so nothing follows the `components now supported` marker and the brace holds that one token. A backfilled row has no brace-less shape at all -- the projection places the marker ahead of any dropped kind (WCONV-03 / D-69-04), and that is what separates this row from a fresh install of the same plugin.
 
 <!-- catalog-state: backfill-partially-installed-marker-only -->
 
@@ -3896,9 +3896,9 @@ Reconcile: 1 success
 /reload to pick up changes
 ```
 
-### Apply backfill -- the fully promoted arm carries the convergence marker alone (WCONV-03)
+### Apply growth move -- the fully promoted arm carries the convergence marker alone (WCONV-03)
 
-The arm the convergence marker exists for: the extension's supported component set grew, so a recorded plugin re-resolved clean and was re-materialized in place at load time, without the user running any command. The row reuses the `●` `(installed)` byte form a fresh install renders, and the marker in the brace is the ONLY thing that separates the two -- which is why `backfilledRowFromOutcome` places it unconditionally on this arm (WCONV-03 / D-69-04). Without it, the commands that appeared after a reload nobody initiated could not be attributed to anything the user could name. The probe reports every companion loaded, so no soft-dep marker fires and this state isolates the marker. The marketplace was already added, so its header is the bare always-marketplace-header form (no status token). SEV-03 / A3 / D-68-04: a benign promotion is not a new degradation, so the row stays `info`; the trailing tally counts the row as one success, and the reload trailer follows it (D-08).
+The arm the convergence marker exists for: the extension's supported component set grew, so a recorded plugin re-resolved clean and `apply` re-materialized it in place at its recorded revision (D-10, D-25). The row reuses the `●` `(installed)` byte form a fresh install renders, and the marker in the brace is the ONLY thing that separates the two -- which is why `backfilledRowFromOutcome` places it unconditionally on this arm (WCONV-03 / D-69-04). Without it, the user could not tell the commands that a promotion brought from a plugin installed for the first time. The probe reports every companion loaded, so no soft-dep marker fires and this state isolates the marker. The marketplace was already added, so its header is the bare always-marketplace-header form (no status token). SEV-03 / A3 / D-68-04: a benign promotion is not a new degradation, so the row stays `info`; the trailing tally counts the row as one success, and the reload trailer follows it (D-08).
 
 <!-- catalog-state: backfill-installed -->
 
@@ -3911,9 +3911,9 @@ Reconcile: 1 success
 /reload to pick up changes
 ```
 
-### Apply backfill -- fully promoted in a session with no host workflow engine (WCONV-03 / WDEP-04)
+### Apply growth move -- fully promoted in a session with no host workflow engine (WCONV-03 / WDEP-04)
 
-The same promotion in the session the real population most likely renders it in first: the plugin declares `workflows`, the host workflow engine is not loaded, and both tokens land in ONE brace. The order is contractual, and these bytes are where it is pinned for a backfilled row: the convergence marker comes FIRST because the projection writes it into `reasons[]` as the caller, and `requires pi-dynamic-workflows` comes LAST because the resolve step appends the soft-dep markers after every caller-placed reason (MSG-GR-4 / D-16-15). `composeReasons` formats that resolved list. Severity stays `info` rather than the `warning` the standalone install row stamps for the same marker: this projection raises only on a malformed-frontmatter degrade its own re-materialization produced, so the SEV-01 companion raise does not fire here -- the same stance the sibling load-time enable row takes.
+The same promotion in the session the real population most likely renders it in first: the plugin declares `workflows`, the host workflow engine is not loaded, and both tokens land in ONE brace. The order is contractual, and these bytes are where it is pinned for a backfilled row: the convergence marker comes FIRST because the projection writes it into `reasons[]` as the caller, and `requires pi-dynamic-workflows` comes LAST because the resolve step appends the soft-dep markers after every caller-placed reason (MSG-GR-4 / D-16-15). `composeReasons` formats that resolved list. Severity stays `info` rather than the `warning` the standalone install row stamps for the same marker: this projection raises only on a malformed-frontmatter degrade its own re-materialization produced, so the SEV-01 companion raise does not fire here -- the same stance the sibling apply enable row takes.
 
 <!-- catalog-state: backfill-installed-workflow-engine-absent -->
 

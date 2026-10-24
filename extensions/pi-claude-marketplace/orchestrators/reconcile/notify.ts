@@ -942,14 +942,15 @@ export function enabledRowFromOutcome(
 }
 
 /**
- * Build the row for a load-time backfill.
+ * Build the row for `apply`'s growth move (D-08).
  *
  * WCONV-03: every backfilled row carries at least one reason. The row exists
- * because a reload the user did not initiate re-materialized the record, so it
- * leads with `{components now supported}` on BOTH arms and can never render
+ * because the plugin's supported set grew and `apply` re-materialized the
+ * record at its recorded revision (D-10, D-25), so it leads with
+ * `{components now supported}` on BOTH arms and can never render
  * byte-identically to a fresh install.
  *
- * WR-04: the backfill runs the same class of ledger as the install and enable
+ * WR-04: the growth move runs the same class of ledger as the install and enable
  * arms, so it names the same two degradation signals in `install-flow.ts`'s emit
  * order -- `{orphan rewake}`, then the per-kind `{malformed skill}` /
  * `{malformed command}` tokens, then (on the degraded arm) the dropped kinds.
@@ -1184,8 +1185,8 @@ function applyPluginOutcomeToBlock(
       block.plugins.push(installedRowFromOutcome(outcome));
       return block;
     case "plugin-backfilled":
-      // BFILL-01 / D-68-04: a load-time backfill re-materialized the plugin in
-      // place. The re-resolved `installable` selects the row: a fully promoted
+      // BFILL-01 / D-68-04 / D-08: `apply`'s growth move re-materialized the
+      // plugin in place. The result's `installable` selects the row: a fully promoted
       // plugin (unsupported set now empty) reuses the `installed` row including
       // `dependencies` for the soft-dep markers; a partial re-materialize (still
       // degraded) renders a `partially-installed` row. Both fold into THIS single

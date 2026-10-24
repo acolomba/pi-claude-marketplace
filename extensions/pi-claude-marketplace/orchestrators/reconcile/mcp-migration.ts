@@ -28,10 +28,10 @@
 // plugin's entries are removed with no re-stage and no record change
 // (ENBL-08: a disabled plugin's servers are never restored at load). The
 // record change is saved before the legacy entries go, so the trigger
-// outlives it. This differs from load-time backfill, which refuses to degrade
-// a clean record on a load the user did not start: the move degrades a record
-// or drops a plugin's MCP servers because that is what the installed plugin
-// now provides, and the notice lists every change with its reason.
+// outlives it. This differs from `apply`'s consent decline (WCONV-01), which
+// refuses to degrade a clean record without `--partial`: the move degrades a
+// record or drops a plugin's MCP servers because that is what the installed
+// plugin now provides, and the notice lists every change with its reason.
 //
 // AMIG-04: an entry belongs to an install record of this scope only; a record
 // of the same plugin in the other scope does not own it. An owner with no

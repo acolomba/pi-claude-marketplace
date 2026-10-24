@@ -78,14 +78,14 @@ export const PENDING_CONTEXT = {
 // ---------------------------------------------------------------------------
 
 /**
- * The plugin-row statuses the load-time applied cascade emits. A successful
+ * The plugin-row statuses `apply`'s applied cascade emits. A successful
  * enable re-materializes via install, so it surfaces as `installed`
  * (RECON-04); there is no separate `enabled` row status.
  *
- * BFILL-01 / D-68-04: `partially-installed` widens this reconcile-local closed set
- * so a load-time backfill that only PARTIALLY re-materializes a plugin (its
+ * BFILL-01 / D-68-04 / D-08: `partially-installed` widens this reconcile-local
+ * closed set so a growth move that only PARTIALLY re-materializes a plugin (its
  * re-resolved unsupported set is still non-empty) surfaces as a
- * `(partially-installed)` row. A FULLY promoted backfill reuses the `installed`
+ * `(partially-installed)` row. A FULLY promoted plugin reuses the `installed`
  * row. The `partially-installed` literal already exists in the global
  * `PLUGIN_STATUSES` set; only this narrow applied set widens here.
  *
