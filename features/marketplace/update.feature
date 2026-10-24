@@ -860,9 +860,9 @@ Feature: Marketplace update
       | needs reload | true                           |
       | summary      | A plugin operation has failed. |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status  | reasons           | scope   | from  | to     | leaks | rollback partial |
-      | tools            | <scope>           | updated            | zeta@tools  | zeta  | failed  | permission denied | <scope> |       |        |       |                  |
-      | tools            | <scope>           | updated            | alpha@tools | alpha | updated |                   | <scope> | 1.0.0 | 1.10.0 |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status  | reasons           | scope   | from  | to     | version | leaks | rollback partial |
+      | tools            | <scope>           | updated            | zeta@tools  | zeta  | failed  | permission denied | <scope> | 1.0.0 |        | 1.10.0  |       |                  |
+      | tools            | <scope>           | updated            | alpha@tools | alpha | updated |                   | <scope> | 1.0.0 | 1.10.0 |         |       |                  |
     When the user runs "/claude:plugin list --scope <scope>"
     Then the result has these fields:
       | kind                | cascade     |
