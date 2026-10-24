@@ -32,6 +32,7 @@ key-files:
 key-decisions:
   - "D-03: the warm git row takes `version ?? shaVersion(resolvedSha)`, so a declared entry version still wins and the existing unit contract holds"
   - "D-04: INF-04 is proven on a not-installed plugin; info on an installed plugin keeps showing the installed revision"
+requirements-completed: [INF-01, INF-02, INF-03, INF-04, INF-05]
 ---
 
 # Phase 10 Plan 01: Plugin Info Summary

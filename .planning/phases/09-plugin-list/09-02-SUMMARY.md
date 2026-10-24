@@ -11,6 +11,7 @@ provides:
 key-files:
   created:
     - features/plugin/list.feature
+requirements-completed: [LST-01, LST-02, LST-03, LST-04, LST-05]
 ---
 
 # 09-02 Summary: plugin list scenarios

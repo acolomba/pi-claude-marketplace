@@ -3,6 +3,7 @@ phase: 24-import-reasons
 plan: 01
 status: complete
 requirements: [IMP-08, IMP-09, IMP-10]
+requirements-completed: [IMP-08, IMP-09, IMP-10]
 ---
 
 # Phase 24 Plan 01: Import Reasons Summary

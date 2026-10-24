@@ -41,6 +41,7 @@ key-decisions:
 metrics:
   duration: ~25m
   completed: 2026-10-23
+requirements-completed: [FLR-03, FLR-04]
 ---
 
 # Phase 15 Plan 04: Failed add leftovers and remove clone cleanup Summary

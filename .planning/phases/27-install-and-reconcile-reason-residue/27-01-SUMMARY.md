@@ -5,6 +5,7 @@ subsystem: install, reconcile, import and marketplace remove reasons
 tags: [install, cascade, reconcile, import, marketplace-remove, git]
 requires: [INR-05, INR-06, REC-06, MPR-01]
 decisions: [D-01, D-02, D-03, D-04, D-05, D-06, D-07]
+requirements-completed: [INR-06, REC-06, MPR-01]
 ---
 
 # Plan 27-01 Summary: Install and reconcile reason residue

@@ -17,6 +17,7 @@ key-files:
     - features/plugin/install-dependencies.feature
     - features/step_definitions/plugin/git-source.steps.ts
 decisions: [D-03, D-04, D-05, D-07, D-08, D-09, D-10]
+requirements-completed: [INR-01, INR-02, INR-03, INR-04]
 ---
 
 # Plan 22-01 Summary: Install failure reasons

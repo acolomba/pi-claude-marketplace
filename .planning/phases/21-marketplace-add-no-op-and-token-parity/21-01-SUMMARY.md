@@ -15,6 +15,7 @@ affects:
   - extensions/pi-claude-marketplace/edge/router.ts
 key-decisions:
   - D-01..D-09 in 21-CONTEXT.md
+requirements-completed: [MPA-01, MPA-02, MPA-03]
 ---
 
 # Phase 21 Plan 01: Marketplace Add No-Op and Token Parity Summary
