@@ -35,16 +35,13 @@
 //                         -> child row { status: "will disable" }, folded into
 //                            the pluginsToDisable loop (LOAD-01). The planner's
 //                            claimedPluginKeys keeps the two buckets from
-//                            naming one plugin twice. The bucket is empty for a
-//                            caller that passes no satisfaction verdict, which
-//                            is every caller today (PENDING-VERDICT-01 /
-//                            D-06-25).
+//                            naming one plugin twice. `pending` passes the
+//                            satisfaction verdict, so the bucket fills (D-21,
+//                            superseding PENDING-VERDICT-01 / D-06-25).
 //   pluginsToDependencyInstall
 //                         -> child row { status: "will install" }, folded into
-//                            the pluginsToInstall loop (MISS-01, D-09-12). The
-//                            bucket is empty for a caller that passes no
-//                            satisfaction verdict, which is every caller today
-//                            (PENDING-VERDICT-01).
+//                            the pluginsToInstall loop (MISS-01, D-09-12). It
+//                            fills from the same verdict (D-21).
 //
 // The empty-plan case is handled by the orchestrator (`pending.ts`) which
 // switches on `plans.every(isPlanEmpty)` and emits a free-form advisory line
@@ -432,18 +429,16 @@ export async function resolvePendingForceInstalls(
  *                           -> child row { status: "will disable" }, folded
  *                              into the pluginsToDisable loop (LOAD-01). The
  *                              planner's claimedPluginKeys keeps the two
- *                              buckets from naming one plugin twice. The
- *                              bucket is empty for a caller that passes no
- *                              satisfaction verdict, which is every caller
- *                              today (PENDING-VERDICT-01 / D-06-25).
+ *                              buckets from naming one plugin twice. `pending`
+ *                              passes the satisfaction verdict, so the bucket
+ *                              fills (D-21, superseding PENDING-VERDICT-01 /
+ *                              D-06-25).
  *   - pluginsToDependencyInstall
  *                           -> child row { status: "will install" }, folded
  *                              into the pluginsToInstall loop (MISS-01,
  *                              D-09-12). A bucket entry never matches a force-
- *                              install key, so its row is the bare token. The
- *                              bucket is empty for a caller that passes no
- *                              satisfaction verdict, which is every caller
- *                              today (PENDING-VERDICT-01).
+ *                              install key, so its row is the bare token. It
+ *                              fills from the same verdict (D-21).
  *
  * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
  * case-insensitive, project-before-user secondary). Plugin rows within a
@@ -501,9 +496,8 @@ export function buildReconcilePendingNotification(
     // config-driven disable bucket does, so both feed one loop and one token.
     // The planner drops a key already claimed by `pluginsToDisable`
     // (`plan.ts::claimedPluginKeys`), so the concatenation never names one
-    // plugin twice. The held-down bucket is empty for a caller that supplies
-    // no satisfaction verdict, which is every caller today
-    // (PENDING-VERDICT-01 / D-06-25).
+    // plugin twice. `pending` supplies the satisfaction verdict, so the
+    // held-down bucket fills (D-21).
     for (const o of [...plan.pluginsToDisable, ...plan.pluginsToDependencyDisable]) {
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
       block.plugins.push({
@@ -547,15 +541,13 @@ export function buildReconcilePendingNotification(
  * `marketplacesToRemove` entry counts, a remove with no recorded plugin
  * included. The plugin-level buckets always map to a pending row.
  *
- * WR-02: `pluginsToDependencyDisable` is counted alongside the other
- * plugin-level buckets. It is empty for every caller that supplies no
- * satisfaction verdict, so counting it changes nothing today -- and it stops a
- * scope whose only pending change is a load-time disable from reporting
- * "0 actions" once a caller starts populating it.
+ * WR-02 / D-21: `pluginsToDependencyDisable` is counted alongside the other
+ * plugin-level buckets, so a scope whose only pending change is a dependency
+ * disable does not report "0 actions".
  *
  * MISS-01 / D-09-12: `pluginsToDependencyInstall` is counted the same way, so
  * a scope whose only pending change is a missing declared dependency does not
- * report "0 actions" once a caller starts populating it.
+ * report "0 actions".
  */
 export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boolean {
   return !planListNeedsApply(plans) && plans.every((p) => p.sourceMismatches.length === 0);

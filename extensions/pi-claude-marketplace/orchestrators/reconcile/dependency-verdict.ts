@@ -7,10 +7,11 @@
 // and this walk does filesystem reads. The planner consumes the verdict as an
 // already-computed argument, the same way it consumes the marketplace diff.
 //
-// It takes NO lock. Its only caller runs inside the reconcile read pass's
-// existing `withLockedStateTransaction` closure over the same snapshot, and
+// It takes NO lock. The reconcile read pass calls it inside its existing
+// `withLockedStateTransaction` closure over the same snapshot, and
 // `proper-lockfile` is configured with no retries and is not re-entrant, so a
-// second guard here would self-deadlock into a lock-held row.
+// second guard here would self-deadlock into a lock-held row. `pending` calls
+// it on its own unlocked, read-only snapshot (D-21).
 //
 // D-06-05: the walk runs to a fixpoint. A record this pass decides to hold
 // down is itself an unsatisfied dependency for whoever declares it, so the

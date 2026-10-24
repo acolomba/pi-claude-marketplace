@@ -33,6 +33,13 @@
 // APL-04 / D-14: `pending` lists what the next `/claude:plugin apply` would
 // change, since a load changes no installation state. A list that holds such a
 // change ends with the `/claude:plugin apply to make these changes` trailer.
+//
+// D-21 (superseding PENDING-VERDICT-01 / D-06-25): `apply` makes the LOAD-01
+// dependency disable and the MISS-01 missing-dependency install, so `pending`
+// computes the same satisfaction verdict `apply`'s read pass computes, offline
+// and without the lock, and hands it to the planner. A walk the verdict cannot
+// complete plans no dependency disable, install or lift (D-05-07), as in
+// `apply`.
 
 import path from "node:path";
 
@@ -44,7 +51,7 @@ import {
 } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { buildConfigFromState } from "../../persistence/migrate-config.ts";
-import { loadState } from "../../persistence/state-io.ts";
+import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -53,9 +60,11 @@ import {
   type MarketplaceRows,
   type Plural,
 } from "../../shared/notify-context.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { scanRetainedWorkflowsStaging } from "../plugin/workflows-staging-gc.ts";
 
+import { buildScopeSatisfactionVerdict } from "./dependency-verdict.ts";
 import {
   buildReconcilePendingNotification,
   isReconcilePlanListEmpty,
@@ -71,6 +80,7 @@ import {
   type PendingMsg,
 } from "./reconcile.messaging.ts";
 
+import type { ScopeSatisfactionVerdict, UnsatisfiedDeclaration } from "./dependency-verdict.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -218,6 +228,111 @@ function mergedViewForPlanning(outcome: ScopeLoadOutcome, state: ExtensionState)
   return mergeScopeConfigs(buildConfigFromState(state, local), local);
 }
 
+/** Every recorded `name@marketplace` key disabled by something other than the check. */
+function independentlyDisabledKeys(state: ExtensionState): ReadonlySet<string> {
+  const keys = new Set<string>();
+  for (const marketplace of Object.values(state.marketplaces)) {
+    for (const [name, record] of Object.entries(marketplace.plugins)) {
+      if (isRecordedButDisabled(record) && record.dependencyDisabled !== true) {
+        keys.add(`${name}@${marketplace.name}`);
+      }
+    }
+  }
+
+  return keys;
+}
+
+/**
+ * The dependents whose every unsatisfied declaration the planned installs
+ * satisfy, run to a fixpoint: a `missing` dependency is satisfied once a
+ * planned install names it, and a `disabled` one once the check releases it
+ * and nothing else disabled it.
+ */
+function releasedDependents(
+  unsatisfied: readonly UnsatisfiedDeclaration[],
+  installed: ReadonlySet<string>,
+  state: ExtensionState,
+): ReadonlySet<string> {
+  const disabled = independentlyDisabledKeys(state);
+  const released = new Set<string>();
+  const isSatisfied = (entry: UnsatisfiedDeclaration): boolean =>
+    entry.kind === "missing"
+      ? installed.has(entry.dependency)
+      : entry.kind === "disabled" &&
+        released.has(entry.dependency) &&
+        !disabled.has(entry.dependency);
+  const dependents = [...new Set(unsatisfied.map((entry) => entry.dependent))];
+  let batch: readonly string[];
+  do {
+    batch = dependents.filter(
+      (dependent) =>
+        !released.has(dependent) &&
+        unsatisfied.every((entry) => entry.dependent !== dependent || isSatisfied(entry)),
+    );
+    for (const dependent of batch) {
+      released.add(dependent);
+    }
+  } while (batch.length > 0);
+
+  return released;
+}
+
+/**
+ * D-21 / D-09-07: the toggle buckets `apply` drives after its dependency
+ * installs land. `apply` reads the scope again after such an install and takes
+ * the fresh plan's enable, disable and dependency-disable buckets, so a
+ * dependent whose missing dependency it just installed stays up, or comes back
+ * up. `pending` installs nothing, so it removes from the verdict each dependent
+ * the planned installs satisfy and plans again. The other buckets stay the
+ * first plan's, as in `apply`, which also reads again only when it installs a
+ * dependency.
+ */
+function withPlannedInstallsLanded(
+  plan: ReconcilePlan,
+  verdict: ScopeSatisfactionVerdict,
+  state: ExtensionState,
+  replan: (verdict: ScopeSatisfactionVerdict) => ReconcilePlan,
+): ReconcilePlan {
+  // The planner fills no dependency install from a failed walk, so the second
+  // test only narrows the verdict.
+  if (plan.pluginsToDependencyInstall.length === 0 || !verdict.ok) {
+    return plan;
+  }
+
+  const installed = new Set(
+    [...plan.pluginsToInstall, ...plan.pluginsToDependencyInstall].map(
+      (install) => `${install.plugin}@${install.marketplace}`,
+    ),
+  );
+  const released = releasedDependents(verdict.unsatisfied, installed, state);
+  const fresh = replan({
+    ok: true,
+    unsatisfied: verdict.unsatisfied.filter((entry) => !released.has(entry.dependent)),
+  });
+  return {
+    ...plan,
+    pluginsToEnable: fresh.pluginsToEnable,
+    pluginsToDisable: fresh.pluginsToDisable,
+    pluginsToDependencyDisable: fresh.pluginsToDependencyDisable,
+  };
+}
+
+/**
+ * D-21: drops each planned dependency disable of a record that is already
+ * disabled. The planner keeps such a record so `apply` reaches its
+ * already-disabled no-op, and that no-op changes nothing and reports no row,
+ * so a `(will disable)` row for it would name a change `apply` never makes.
+ */
+function withoutDisabledDependents(plan: ReconcilePlan, state: ExtensionState): ReconcilePlan {
+  return {
+    ...plan,
+    pluginsToDependencyDisable: plan.pluginsToDependencyDisable.filter((op) => {
+      const record = ownValue(ownValue(state.marketplaces, op.marketplace)?.plugins, op.plugin);
+      return record === undefined || !isRecordedButDisabled(record);
+    }),
+  };
+}
+
 /**
  * WR-06: observations of the workflow staging trees the sweeper
  * keeps forever. The optional field is absent when there are none.
@@ -320,10 +435,24 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
     // PRN-02: each `will uninstall` row names the recorded version.
     recordedVersions.push(...recordedVersionEntries(scope, state));
 
+    // D-21 / LOAD-01: the verdict `apply`'s read pass computes, so the
+    // dependency buckets fill and the LOAD-02 lift proposes no enable the check
+    // would undo. The walk reads cached manifests and installed copies only
+    // (NFR-5) and takes no lock, so a concurrent apply is never blocked.
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one declaration walk each
+    const verdict = await buildScopeSatisfactionVerdict({ state, locations: loc });
+
     // MIG-01 pre-migration window (DIFF-01): plan against what the next
     // load's reconcile would actually see (the apply path migrates first),
     // not against an absent-as-empty merged view -- see mergedViewForPlanning.
-    plans.push(planReconcile(mergedViewForPlanning(outcome, state), state, scope));
+    const view = mergedViewForPlanning(outcome, state);
+    const plan = withPlannedInstallsLanded(
+      planReconcile(view, state, scope, verdict),
+      verdict,
+      state,
+      (released) => planReconcile(view, state, scope, released),
+    );
+    plans.push(withoutDisabledDependents(plan, state));
   }
 
   // WR-06: name the workflow staging trees the sweeper keeps forever, because

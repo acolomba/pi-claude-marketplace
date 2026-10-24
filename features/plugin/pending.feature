@@ -178,3 +178,30 @@ Feature: Plugin pending
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status       | reasons | scope   |
       | fixtures         | project           | demo@fixtures | demo | will install |         | project |
+
+  Scenario: Pending lists the disable of a plugin that an update left needing a newer version of its dependency
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 2.0.0   | lib@^2.0.0   |
+      | lib  | 1.0.0   |              |
+    Given the user has run "/claude:plugin update app@tools --scope project"
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | needs apply         | true              |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 1                 |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status       | reasons | scope   |
+      | tools            | project           | app@tools | app  | will disable |         | project |

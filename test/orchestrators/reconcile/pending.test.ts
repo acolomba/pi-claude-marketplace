@@ -749,6 +749,283 @@ for (const { condition, stage, rendered, expectedMessage } of plannedInstallRows
 }
 
 // ---------------------------------------------------------------------------
+// D-21 / LOAD-01 / MISS-01: pending computes the satisfaction verdict apply's
+// read pass computes, so it lists the dependency disables and missing
+// dependency installs apply makes, and nothing apply would not make.
+// ---------------------------------------------------------------------------
+
+interface OfferedPlugin {
+  readonly version: string;
+  readonly dependencies?: readonly string[];
+}
+
+interface RecordedDependencyPlugin {
+  readonly version: string;
+  readonly enabled?: boolean;
+  /** LOAD-01: the check's own marker on a record it disabled. */
+  readonly dependencyDisabled?: boolean;
+}
+
+interface DependencyScopeSeed {
+  readonly offered: Readonly<Record<string, OfferedPlugin>>;
+  readonly recorded: Readonly<Record<string, RecordedDependencyPlugin>>;
+  readonly declared: readonly DeclaredPlugin[];
+}
+
+/**
+ * Stage a project scope whose marketplace `tools` is recorded with its manifest
+ * on disk, so the verdict reads each record's declarations from the manifest
+ * entry. Every record is written in the canonical shape, so the load performs
+ * no migration.
+ */
+async function stageDependencyScope(
+  cwd: string,
+  locations: ScopedLocations,
+  seed: DependencyScopeSeed,
+): Promise<{ readonly manifestPath: string }> {
+  const marketplaceRoot = path.join(locations.extensionRoot, "marketplaces", "tools");
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await writeUnder(
+    manifestPath,
+    JSON.stringify({
+      name: "tools",
+      plugins: Object.entries(seed.offered).map(([name, offered]) => ({
+        name,
+        source: `./${name}`,
+        version: offered.version,
+        ...(offered.dependencies !== undefined && { dependencies: offered.dependencies }),
+      })),
+    }),
+  );
+  await writeUnder(
+    locations.stateJsonPath,
+    JSON.stringify(
+      {
+        schemaVersion: 2,
+        marketplaces: {
+          tools: {
+            name: "tools",
+            scope: "project",
+            source: "acme/tools",
+            addedFromCwd: cwd,
+            manifestPath,
+            marketplaceRoot,
+            plugins: Object.fromEntries(
+              Object.entries(seed.recorded).map(([name, recorded]) => [
+                name,
+                {
+                  version: recorded.version,
+                  resolvedSource: path.join(marketplaceRoot, name),
+                  compatibility: {
+                    installable: true,
+                    notes: [],
+                    supported: ["skills"],
+                    unsupported: [],
+                  },
+                  resources: {
+                    skills: [],
+                    prompts: [],
+                    agents: [],
+                    mcpServers: [],
+                    hooks: [],
+                    workflows: [],
+                  },
+                  enabled: recorded.enabled ?? true,
+                  ...(recorded.dependencyDisabled !== undefined && {
+                    dependencyDisabled: recorded.dependencyDisabled,
+                  }),
+                  provenance: "explicit",
+                  installedAt: "2026-01-01T00:00:00.000Z",
+                  updatedAt: "2026-01-01T00:00:00.000Z",
+                },
+              ]),
+            ),
+          },
+        },
+      },
+      null,
+      2,
+    ),
+  );
+  await writeUnder(locations.baseConfigJsonPath, configBytes("tools", "acme/tools", seed.declared));
+  return { manifestPath };
+}
+
+/** `app` 2.0.0 requires `lib@^2.0.0`; the recorded `lib` is at `libVersion`. */
+function appNeedingNewerLib(
+  libVersion: string,
+  app: Omit<RecordedDependencyPlugin, "version"> = {},
+  appDeclaredEnabled = true,
+): DependencyScopeSeed {
+  return {
+    offered: {
+      app: { version: "2.0.0", dependencies: ["lib@^2.0.0"] },
+      lib: { version: libVersion },
+    },
+    recorded: { app: { version: "2.0.0", ...app }, lib: { version: libVersion } },
+    declared: [
+      { key: "app@tools", enabled: appDeclaredEnabled },
+      { key: "lib@tools", enabled: true },
+    ],
+  };
+}
+
+const PENDING_EMPTY = { message: "Pending: /claude:plugin apply has nothing to change." };
+
+function pendingList(rows: readonly string[]): { readonly message: string } {
+  const count = rows.length === 1 ? "1 success" : `${rows.length} successes`;
+  return {
+    message:
+      `● tools [project]\n${rows.map((row) => `  ${row}\n`).join("")}\n` +
+      `Reconcile pending: ${count}\n\n/claude:plugin apply to make these changes`,
+  };
+}
+
+const dependencyRows = [
+  {
+    condition: "an enabled plugin whose declared dependency is too old",
+    seed: appNeedingNewerLib("1.0.0"),
+    expected: pendingList(["◍ app (will disable)"]),
+  },
+  {
+    condition: "a plugin the user already disabled whose declared dependency is too old",
+    seed: appNeedingNewerLib("1.0.0", { enabled: false }, false),
+    expected: PENDING_EMPTY,
+  },
+  {
+    condition: "a plugin the check holds down whose dependency is still too old",
+    seed: appNeedingNewerLib("1.0.0", { enabled: false, dependencyDisabled: true }),
+    expected: PENDING_EMPTY,
+  },
+  {
+    condition: "a plugin the check holds down whose dependency is now satisfied",
+    seed: appNeedingNewerLib("2.0.0", { enabled: false, dependencyDisabled: true }),
+    expected: pendingList(["● app (will enable)"]),
+  },
+  {
+    condition: "a recorded plugin whose declared dependency is not installed",
+    seed: {
+      offered: { app: { version: "1.0.0", dependencies: ["vault"] }, vault: { version: "1.0.0" } },
+      recorded: { app: { version: "1.0.0" } },
+      declared: [{ key: "app@tools", enabled: true }],
+    },
+    expected: pendingList(["● vault (will install)"]),
+  },
+  {
+    condition: "a chain whose last link misses a dependency the install brings",
+    seed: {
+      offered: {
+        app: { version: "1.0.0", dependencies: ["core"] },
+        core: { version: "1.0.0", dependencies: ["vault"] },
+        vault: { version: "1.0.0" },
+      },
+      recorded: { app: { version: "1.0.0" }, core: { version: "1.0.0" } },
+      declared: [
+        { key: "app@tools", enabled: true },
+        { key: "core@tools", enabled: true },
+      ],
+    },
+    expected: pendingList(["● vault (will install)"]),
+  },
+  {
+    condition: "a plugin whose missing dependency is installed but whose other one stays too old",
+    seed: {
+      offered: {
+        app: { version: "2.0.0", dependencies: ["vault", "lib@^2.0.0"] },
+        lib: { version: "1.0.0" },
+        vault: { version: "1.0.0" },
+      },
+      recorded: { app: { version: "2.0.0" }, lib: { version: "1.0.0" } },
+      declared: [
+        { key: "app@tools", enabled: true },
+        { key: "lib@tools", enabled: true },
+      ],
+    },
+    expected: pendingList(["● vault (will install)", "◍ app (will disable)"]),
+  },
+  {
+    condition: "a dependency the user disabled, the config enables and the check holds down",
+    seed: {
+      offered: {
+        app: { version: "1.0.0", dependencies: ["core"] },
+        core: { version: "1.0.0", dependencies: ["vault"] },
+        vault: { version: "1.0.0" },
+      },
+      recorded: {
+        app: { version: "1.0.0" },
+        core: { version: "1.0.0", enabled: false },
+      },
+      declared: [
+        { key: "app@tools", enabled: true },
+        { key: "core@tools", enabled: true },
+      ],
+    },
+    expected: pendingList([
+      "● vault (will install)",
+      "◍ app (will disable)",
+      "● core (will enable)",
+    ]),
+  },
+] satisfies readonly {
+  readonly condition: string;
+  readonly seed: DependencyScopeSeed;
+  readonly expected: { readonly message: string };
+}[];
+
+for (const { condition, seed, expected } of dependencyRows) {
+  test(`D-21: pending previews what apply makes for ${condition}`, async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "dependency");
+    await stageDependencyScope(cwd, project, seed);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [expected]);
+    verifyBoundary();
+  });
+}
+
+test("D-05-07: a declarer whose manifest cannot be read plans no dependency row", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "dependency-unreadable");
+  const { manifestPath } = await stageDependencyScope(cwd, project, {
+    offered: { app: { version: "1.0.0", dependencies: ["vault"] } },
+    recorded: { app: { version: "1.0.0" } },
+    declared: [{ key: "app@tools", enabled: true }],
+  });
+  await writeFile(manifestPath, "{ not valid json at all", "utf8");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(notifications, [PENDING_EMPTY]);
+  verifyBoundary();
+});
+
+test("D-21 / NFR-5: previewing a dependency disable leaves state.json and the config byte-identical", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "dependency-read-only");
+  await stageDependencyScope(cwd, project, appNeedingNewerLib("1.0.0"));
+  const stateBefore = await readFile(project.stateJsonPath, "utf8");
+  const configBefore = await readFile(project.baseConfigJsonPath, "utf8");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(notifications, [pendingList(["◍ app (will disable)"])]);
+  assert.strictEqual(await readFile(project.stateJsonPath, "utf8"), stateBefore);
+  assert.strictEqual(await readFile(project.baseConfigJsonPath, "utf8"), configBefore);
+  verifyBoundary();
+});
+
+// ---------------------------------------------------------------------------
 // WR-06: the retained workflow staging advisory.
 //
 // The staging sweeper deliberately keeps an aged tree whose `.previous/` still
