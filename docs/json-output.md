@@ -34,8 +34,8 @@ jq -c -e -s --arg invocation "$invocation_id" '
     .kind as $kind
     | ["cascade", "marketplace-info", "plugin-info", "marketplace-info-cascade",
        "plugin-info-cascade", "marketplace-not-added", "reconcile-pending-empty",
-       "prune-empty", "prune-committed-warning", "usage-error", "usage-info",
-       "internal-error"] | index($kind) != null;
+       "reconcile-applied-cascade", "prune-empty", "prune-committed-warning",
+       "usage-error", "usage-info", "internal-error"] | index($kind) != null;
   [.[] | select(.type == "entry_appended")
    | .entry | select(.type == "custom" and .customType == "claude-plugin")
    | .data | select(.origin.kind == "command" and .origin.invocationId == $invocation)]
@@ -81,8 +81,8 @@ command_entries=$(jq -c -s --arg invocation "$invocation_id" '
     .kind as $kind
     | ["cascade", "marketplace-info", "plugin-info", "marketplace-info-cascade",
        "plugin-info-cascade", "marketplace-not-added", "reconcile-pending-empty",
-       "prune-empty", "prune-committed-warning", "usage-error", "usage-info",
-       "internal-error"] | index($kind) != null;
+       "reconcile-applied-cascade", "prune-empty", "prune-committed-warning",
+       "usage-error", "usage-info", "internal-error"] | index($kind) != null;
   [.[] | select(.type == "entry_appended")
    | .entry | select(.type == "custom" and .customType == "claude-plugin")
    | .data | select(.origin.kind == "command" and .origin.invocationId == $invocation)]
@@ -98,7 +98,7 @@ command_entries=$(jq -c -s --arg invocation "$invocation_id" '
 ' "$input_file") || exit $?
 ```
 
-An outcome reports a command result. The twelve kinds in `outcome` above match the extension's command-outcome classifier. An empty `cascade` counts as an outcome. `diagnostic`, `device-flow-prompt`, and lifecycle-only kinds do not. Silence, unrelated events, or only prompts and diagnostics fail with exactly `No command outcome received`.
+An outcome reports a command result. The thirteen kinds in `outcome` above match the extension's command-outcome classifier. An empty `cascade` counts as an outcome. `diagnostic`, `device-flow-prompt`, and lifecycle-only kinds do not. Silence, unrelated events, or only prompts and diagnostics fail with exactly `No command outcome received`.
 
 Unknown kinds remain in the selected data but cannot establish an outcome. Additional fields are preserved. An unfamiliar severity, a nonboolean `needsReload`, or an unsupported schema version fails with `Unsupported command envelope`. These checks cover the fields used here. They do not replace validation of the full payload against the schema.
 
@@ -248,7 +248,7 @@ Command results or inventory, including an empty `marketplaces` array.
 
 #### reconcile-applied-cascade
 
-Applied load-time reconciliation. It carries no `noOp`, advisories, or retained workflows.
+Applied load-time reconciliation. It carries no `noOp`, advisories, or retained workflows. `/claude:plugin apply` (`origin.commandId` `plugin apply`) reports the changes it made with this kind, so the kind is a command outcome.
 
 <!-- fields: kind:reconcile-applied-cascade -->
 

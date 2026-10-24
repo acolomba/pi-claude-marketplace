@@ -273,7 +273,6 @@ for (const label of ["command-severity", "command-exit-status", "needs-reload"])
     ...[
       "diagnostic",
       "device-flow-prompt",
-      "reconcile-applied-cascade",
       "reconcile-aborted",
       "plugin-path-skipped",
       "async-rewake-summary",
@@ -439,6 +438,7 @@ for (const kind of [
   "plugin-info-cascade",
   "marketplace-not-added",
   "reconcile-pending-empty",
+  "reconcile-applied-cascade",
   "prune-empty",
   "prune-committed-warning",
   "usage-error",
