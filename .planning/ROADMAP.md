@@ -581,7 +581,7 @@ Plans:
 
 **Goal:** A delisted plugin stays "installed, not in manifest" (v1.18) everywhere, including the dependency walk.
 **Depends on:** Phase 25, Phase 26
-**Decision:** 2026-10-24 (user): a delisted plugin is not marketplace corruption; it can be used as is or uninstalled. Read its dependencies from its installed copy, after confirming upstream does the same.
+**Decision:** 2026-10-24 (user): a delisted plugin is not marketplace corruption; it can be used as is or uninstalled. Read its dependencies from its installed copy, after confirming upstream does the same. Upstream check (Claude Code 2.1.309): upstream does not load a delisted plugin (`plugin-not-found`), so it reads no dependencies for it. 2026-10-24 (user, DLS-D1): a delisted plugin that Pi keeps running (v1.18 divergence) keeps its dependencies from its installed copy, so it still protects its dependencies and constrains other plugins; upstream skips the plugin entirely because it does not load it. A path-source plugin whose directory is gone still fails closed with `{unreadable}`. The phase 17 per-session `{not in manifest}` warning stays as its own row, our counterpart to `plugin-not-found`, independent of the walk.
 **Requirements:** DLS-01
 **Files:** `orchestrators/plugin/dependency-index.ts` (`readRecordDeclarations`), `orchestrators/plugin/update-constraint-gate.ts`, the reconcile backfill; `features/plugin/update.feature`, `reinstall.feature`, `uninstall.feature`, `enable-disable.feature`, `pending.feature`.
 **Success Criteria** (what must be TRUE):
