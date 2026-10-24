@@ -31,6 +31,10 @@ None -- no security-relevant surface outside the plan's `<threat_model>` was int
 
 Read `.agents/skills/local-verification/SKILL.md` when planning or running checks. A build input is a file that a build or a CI job reads. When a staged file is a build input, the pre-commit hook runs `npm run check:commit`. It runs the static checks, the unit tests that have no source pair, and direct coverage for the staged source-test pairs. It runs all pairs when the commit stages shared test support, the test tooling, or a dependency file. A passing hook is not a full verdict, and it cannot satisfy a GSD gate. GSD gates run `npm run check` on the combined tree: the post-merge gate of each wave, the phase gate, the merge gate, and the final PR or release handoff. `npm run check` runs what pull request CI runs, except the e2e tests and ESLint with an empty cache. A merge does not run the hook. So a quick task that commits a build input runs `npm run check` in the main checkout after its worktree is merged, before the task finishes. A gate can reuse a passing result for the same inputs, as the skill defines. This project policy governs the TypeScript and GSD skill instructions.
 
+### Behavioral tests
+
+A change to `/claude:plugin` behavior that a user can see ships with a cucumber scenario under `features/` that fails without the change. Unit tests and direct coverage do not replace it. The `cucumber` skill says how to write the scenario.
+
 ### Versioning
 
 Before creating a PR, offer to bump the version in `package.json` and `sonar-project.properties` and update `package-lock.json`. Concisely record changes in `CHANGELOG.md`
