@@ -19,13 +19,12 @@ start) only reloads resources and reports what is pending.
 - **`apply`:** makes every change `pending` lists, converges every installed
   plugin on its marketplace's catalog version on disk (this includes the old
   partial-plugin backfill), and ends by suggesting `/reload`.
-- **Session-start marketplace autoupdate:** refreshes marketplaces only. Their
-  plugin moves show as pending.
 - **`pending`:** advises `apply` instead of `/reload`.
 
 Out of scope: UAT-02 (Pi erases rows emitted during `/reload`; it stays in
-BACKLOG.md). The explicit `marketplace update` verb's own plugin cascade is
-unchanged. Only the session-start autoupdate pass changes (D-09).
+BACKLOG.md). Marketplace autoupdate is unchanged: the explicit
+`marketplace update` verb keeps its plugin cascade, and no session-start
+network refresh is added (D-09, D-27).
 
 </domain>
 
@@ -129,12 +128,11 @@ unchanged. Only the session-start autoupdate pass changes (D-09).
   session has not loaded. With nothing to do, it reports so, uses the same
   empty advisory form `pending` uses but in apply's wording, and writes
   nothing. Afterwards `pending` lists nothing except blocked moves (D-12).
-- **D-09 (autoupdate):** the session-start marketplace autoupdate refreshes
-  marketplace clones only. Its plugin cascade (`autoupdate.ts` calling the
-  plugin update seam) no longer runs at session start. The moves it would
-  have made show up as catalog moves in the load's pending block (D-10) and
-  are applied by `apply`. The explicit `marketplace update` command keeps its
-  current behavior.
+- **D-09 (autoupdate):** unchanged. No load path runs a marketplace
+  autoupdate today (`autoupdate.ts` only flips the config flag), and none is
+  added. An explicit `marketplace update` on an autoupdate marketplace keeps
+  updating its plugins. Superseded the earlier "refresh marketplaces only"
+  wording; see D-27.
 
 ### Catalog convergence inside `apply` (APL-02)
 - **D-10:** a recorded plugin is a move when all of these hold:
@@ -226,14 +224,48 @@ unchanged. Only the session-start autoupdate pass changes (D-09).
   - `/reload` after hand-editing the config changes no state and prints the
     pending block with the `apply` trailer;
   - `/reload` with nothing pending prints nothing;
-  - session start with an autoupdate marketplace refreshes it and shows its
-    plugin moves as pending without applying them;
   - pending names `apply`.
 
   Existing scenarios that trigger installation changes through a reload or a
   new session move to `apply`. They keep their assertions; only the trigger
   and the trailer change, and the plan names each moved scenario. All
   scenarios are hermetic.
+
+### Research follow-ups (decided 2026-10-24, from 29-RESEARCH.md open questions)
+- **D-20:** marketplace add and remove that a hand-edited config declares
+  move to `apply`. A git add clones, and a load stays offline. `pending` and
+  the load's block gain marketplace-level rows (`will add` / `will remove`),
+  superseding WILL-01's "add is immediate, not previewed". `marketplace add`
+  and `marketplace remove` as verbs are unchanged.
+- **D-21:** the LOAD-01 dependency-disable is a disable, so it moves to
+  `apply`, and `pending` lists it as `will disable`. Until `apply` runs, the
+  load's block names it.
+- **D-22:** the AMIG-01 MCP format move stays at load (it changes no
+  installed set). `apply` also runs the same sweep after it installs, so a
+  plugin `apply` installs gets its entries moved too.
+- **D-23:** `apply` takes the catalog version only and never searches for a
+  matching release tag (the constraint gate's tag listing is off for
+  `apply`). A range that does not admit the catalog version is a D-12
+  `{dependents constrain}` warning. `update` stays the verb that searches
+  tags. This keeps `pending` and `apply` identical.
+- **D-24:** the `(partially-upgradable)` row's hint in `apply` and `pending`
+  names the per-plugin consent command, `update <plugin>@<marketplace>
+  --partial` (the remedy matches the failure axis). The row stays `warning`
+  in every cardinality. `apply` gets no `--partial` flag.
+- **D-25:** "reinstall" in APL-01 means the partial-plugin backfill (a
+  growth-only move, D-10). `apply` never restores deleted artifacts: a
+  config-to-record reconciliation does not detect them, and `reinstall` is
+  the repair verb.
+- **D-26:** catalog moves go through a new runner entry beside
+  `beginPluginUpdateRun`, NOT through reinstall. Reinstall deletes the plugin
+  data directory and overwrites user-edited agents. The policy is
+  `refreshSource: false, skipSameRevision: true, overwrite: false`, with
+  `partial` admitted only for records already `installable: false`, and an
+  explicit `cwd`.
+- **D-27 (user, 2026-10-24, option C):** leave marketplace autoupdate as it
+  is. Success criterion 4 and the APL-03 autoupdate clause are dropped. No
+  session-start network refresh is added, so NFR-5 is unchanged.
+  `orchestrators/marketplace/autoupdate.ts` is out of scope.
 
 ### Claude's Discretion
 - Module names and the split between `apply.ts`, `backfill.ts` and a new
@@ -271,7 +303,6 @@ unchanged. Only the session-start autoupdate pass changes (D-09).
 - `orchestrators/plugin/materialize-latest.ts::materializeLatestVersion` (`MaterializationPolicy`: `refreshSource`, `skipSameRevision`, `overwrite`), `update-constraint-gate.ts::evaluateUpdateConstraint`.
 - `orchestrators/plugin/list-installed-row.ts::upgradeCandidate` / `resolveListCandidate`: the offline candidate and version rule.
 - `orchestrators/reconcile/backfill.ts`: growth test, WCONV-01 refusal, per-plugin fault isolation.
-- `orchestrators/marketplace/autoupdate.ts`: the session-start pass.
 
 ### Established Patterns
 - One `notify()` per command (IL-2). Guard-free bodies under per-scope locks (not re-entrant).
