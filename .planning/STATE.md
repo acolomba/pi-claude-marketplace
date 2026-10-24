@@ -5,17 +5,17 @@ milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 29
 current_phase_name: Apply Command and Read-Only Reload
 status: executing
-stopped_at: Completed 29-02-PLAN.md
-last_updated: "2026-10-24T15:12:09.841Z"
+stopped_at: Completed 29-03-PLAN.md
+last_updated: "2026-10-24T15:43:55.619Z"
 last_activity: 2026-10-24
-last_activity_desc: Plan 29-02 complete (the read-only load)
-state_head: cd464fe68b9bf473045bff85d1aa656dcf9a6bb8
+last_activity_desc: Plan 29-03 complete (the pending apply trailer)
+state_head: ba304dedc34067776bf8bc2a5b9da7f302597ba1
 progress:
   total_phases: 29
   completed_phases: 28
   total_plans: 74
-  completed_plans: 62
-  percent: 84
+  completed_plans: 63
+  percent: 85
 ---
 
 # Project State
@@ -32,11 +32,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 29 (Apply Command and Read-Only Reload) — EXECUTING
-Plan: 3 of 14
+Plan: 4 of 14
 Status: Ready to execute
-Last activity: 2026-10-24 — Plan 29-02 complete (the read-only load)
+Last activity: 2026-10-24 — Plan 29-03 complete (the pending apply trailer)
 
-Progress: [████████░░] 84%
+Progress: [█████████░] 85%
 
 Phases 2-15 depend only on Phase 1 and may run in parallel once it lands. Each
 owns its own feature files and step modules (the file ownership table in
@@ -187,8 +187,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-24T15:12:03.836Z
-**Stopped at:** Completed 29-02-PLAN.md
+**Last session:** 2026-10-24T15:43:49.578Z
+**Stopped at:** Completed 29-03-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -396,6 +396,7 @@ archived milestone artifacts.
 | Phase 01 P10 | 10 min | 3 tasks | 10 files |
 | Phase 29 P01 | 28 min | 2 tasks | 27 files |
 | Phase 29 P02 | 46 min | 2 tasks | 17 files |
+| Phase 29 P03 | 27 min | 2 tasks | 24 files |
 
 ## Decisions
 
@@ -576,6 +577,8 @@ archived milestone artifacts.
 - [Phase 29]: pending and apply share the withScopeOnlyArgs prelude in edge/handlers/plugin/shared.ts; spelling-only top-level verbs route through TOP_LEVEL_VERB_ROUTES in edge/router.ts
 - [Phase 29]: apply and the load share openScopePass / closeScopePass / notifyScopePasses in orchestrators/reconcile/read-pass.ts; readPassFailureOutcome, migrateScopeIsolated and rebuildScopeRoutingTableIsolated stay module-private
 - [Phase 29]: The load passes no reason to the MCP move, so it skips only the owners the plan installs, uninstalls or disables; MISS-01 dependency installs run nowhere until the reason gate goes
+- [Phase 29]: The pending apply trailer is the fixed literal /claude:plugin apply to make these changes, folded after the reload trailer; isReconcilePlanListEmpty is !planListNeedsApply plus no source mismatch
+- [Phase 29]: A new optional cascade wire field needs its docs/json-output.md row in the same commit as the schema change, because the hook's json-output-docs gate fails otherwise
 
 ### mcp-4 decisions
 
