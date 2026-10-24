@@ -10,7 +10,7 @@
 //     try/catch in every prepare path.
 //   - pathExists: lstat-based existence predicate. Does NOT follow
 //     symlinks (consistent with PS-1 "refuse all symlinks").
-//   - RemovalOps / createRemovalOps: the injected `rm` + `rename` port that
+//   - RemovalOps / createRemovalOps: the injected `rm` port that
 //     cleanupStaging routes its removal through, so a caller can make one
 //     specific removal fail while its siblings succeed (RCOV-02, D-08-13).
 //
@@ -40,10 +40,11 @@ import { assertPathInside, PathContainmentError } from "./path-safety.ts";
 import type { Dirent } from "node:fs";
 
 /**
- * The removal port: two destructive filesystem verbs behind one substitutable
+ * The removal port: the destructive filesystem verb behind one substitutable
  * object.
  *
- * Two members and no more (D-08-13). Widening this into a general filesystem
+ * The port stays narrow (D-08-13): `rm` is its one member since IN-06
+ * dropped the unused `rename`. Widening this into a general filesystem
  * facade would put every verb in this module behind a seam nothing asked for;
  * `pathExists`, `readDirEntriesTolerant`, and `isPlainMarkdownFile` keep
  * calling `fs` directly.
@@ -54,16 +55,11 @@ export interface RemovalOps {
    * caller can fault one staging root while its siblings succeed.
    */
   rm(target: string, options: { recursive?: boolean; force?: boolean }): Promise<void>;
-  /**
-   * RCOV-02: move `from` onto `to`.
-   */
-  rename(from: string, to: string): Promise<void>;
 }
 
 /**
- * The real removal operations: thin bindings to `fs.rm` and `fs.rename` and
- * nothing else. Construction performs no filesystem work; only the operations
- * do.
+ * The real removal operations: a thin binding to `fs.rm` and nothing else.
+ * Construction performs no filesystem work; only the operations do.
  *
  * Called by the composition roots -- the orchestrators that own a staging
  * lifecycle -- never by a bridge, and never defaulted into a parameter
@@ -72,7 +68,6 @@ export interface RemovalOps {
 export function createRemovalOps(): RemovalOps {
   return {
     rm: (target, options) => fs.rm(target, options),
-    rename: (from, to) => fs.rename(from, to),
   };
 }
 

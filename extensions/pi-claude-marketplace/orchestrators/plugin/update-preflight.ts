@@ -12,11 +12,13 @@ import {
   errorMessage,
   PluginShapeError,
   rethrowInvalidGitHubBaseUrl,
+  StateLockHeldError,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import {
+  withExistingScopeLock,
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
@@ -33,6 +35,7 @@ import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
   materializePluginCommitCopy,
+  materializeUnpinnedSource,
   networkCloneUrl,
   resolveGitSubdirRoot,
   resolvePluginPin,
@@ -258,36 +261,22 @@ function makeUpdateCloneProbe(
   }
 
   async function probeUnpinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
-    const cloneUrl = canonicalCloneUrl(gitSource);
-    const authBundle = cloneAuth(cloneUrl, gitSource.kind);
-    const mirror = await seam.materializeOrRefreshPluginMirror({
-      locations,
-      cloneUrl,
-      networkUrl: networkCloneUrl(gitSource),
-      ...(gitSource.ref !== undefined && { ref: gitSource.ref }),
-      auth: authBundle,
-      refresh: refreshSource,
-    });
-    // GIT-01: the updated plugin runs from its own copy at the mirror's commit.
-    const copyRoot = await seam.materializePluginCommitCopy({
-      locations,
-      cloneUrl,
-      networkUrl: networkCloneUrl(gitSource),
-      sha: mirror.resolvedSha,
-      resolveAuth: () => authBundle,
-    });
-    if (gitSource.kind === "git-subdir") {
-      const subdir = await resolveGitSubdirRoot(copyRoot, gitSource.path);
-      if (subdir.kind !== "materialized") {
-        return subdir;
-      }
-
-      captured = mirror.resolvedSha;
-      return { ...subdir, resolvedSha: mirror.resolvedSha };
+    // GIT-01 / GIT-04 / GIT-03: the shared unpinned step, under the scope's
+    // state lock so no `fetch` refreshes the mirror while its commit is read
+    // and copied. The preflight runs before the swap takes the lock.
+    const result = await withExistingScopeLock(locations, () =>
+      materializeUnpinnedSource(seam, {
+        locations,
+        source: gitSource,
+        auth: cloneAuth(canonicalCloneUrl(gitSource), gitSource.kind),
+        refresh: refreshSource,
+      }),
+    );
+    if (result.kind === "materialized") {
+      captured = result.resolvedSha;
     }
 
-    captured = mirror.resolvedSha;
-    return { kind: "materialized", pluginRoot: copyRoot, resolvedSha: mirror.resolvedSha };
+    return result;
   }
 
   async function probePinned(gitSource: GitBackedSource): Promise<GitPluginRootResult> {
@@ -477,6 +466,12 @@ async function resolveUpdateCandidate(
     // GHB-03: an invalid GitHub base override fails the whole command; it never
     // becomes a skipped row.
     rethrowInvalidGitHubBaseUrl(error);
+    // GIT-03: `probeUnpinned` takes the state lock; a held lock is the
+    // command's own `lock held` failure, never a candidate verdict.
+    if (error instanceof StateLockHeldError) {
+      throw error;
+    }
+
     const networkReason = classifyGitTransportFailure(error);
     if (networkReason !== undefined) {
       return {

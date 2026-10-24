@@ -22,6 +22,7 @@ import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
   materializePluginCommitCopy,
+  materializeUnpinnedSource,
   resolveGitPluginRootWithSubdir,
   resolveGitSubdirRoot,
   resolvePluginPin,
@@ -2411,4 +2412,84 @@ void test("GIT-01: a mirror that cannot be copied fails the copy and leaves no s
   );
   assert.strictEqual(state.cloneCalls.length, 0);
   assert.deepStrictEqual(await readdir(path.join(locations.extensionRoot, "sources-staging")), []);
+});
+
+void test("GIT-04: a tag clone checks out a directory that holds only a symlink", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
+    originUrl: GITHUB_REPO_URL,
+    plugins: [],
+  });
+  await mkdir(path.join(marketplaceRoot, "plugins", "foo", "linked"), { recursive: true });
+  await fs.promises.symlink(
+    "../.claude-plugin",
+    path.join(marketplaceRoot, "plugins", "foo", "linked", "manifest"),
+  );
+  await git.add({ fs, dir: marketplaceRoot, filepath: "plugins/foo/linked/manifest" });
+  const tagOid = await git.commit({
+    fs,
+    dir: marketplaceRoot,
+    message: "symlink-only directory",
+    author: { name: "test", email: "test@example.com" },
+  });
+
+  // act
+  const tagClone = await materializeMarketplaceTagClone({
+    locations,
+    marketplaceRoot,
+    marketplaceSource: GITHUB_REPO_URL,
+    marketplaceName: "marketplace",
+    pathSource: pathSource("./plugins/foo"),
+    tagOid,
+  });
+
+  // assert
+  assert.ok(tagClone.kind === "materialized");
+  assert.strictEqual(
+    await fs.promises.readlink(path.join(tagClone.pluginRoot, "linked", "manifest")),
+    "../.claude-plugin",
+  );
+});
+
+void test("GIT-04: an unpinned source copies the mirror's commit and anchors its subdir", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const copyRoot = path.join(locations.extensionRoot, "copy");
+  await mkdir(path.join(copyRoot, "plugins", "one"), { recursive: true });
+  const calls: unknown[] = [];
+  const source: GitSubdirSource = {
+    kind: "git-subdir",
+    raw: "https://example.com/mono.git",
+    url: "https://example.com/mono",
+    path: "plugins/one",
+    ref: "main",
+  };
+  const auth = publicCloneAuth();
+
+  // act
+  const result = await materializeUnpinnedSource(
+    {
+      materializeOrRefreshPluginMirror: (args) => {
+        calls.push({ step: "mirror", ref: args.ref, refresh: args.refresh, auth: args.auth });
+        return Promise.resolve({ pluginRoot: "unused", resolvedSha: PIN_40 });
+      },
+      materializePluginCommitCopy: (args) => {
+        calls.push({ step: "copy", sha: args.sha, auth: args.resolveAuth() });
+        return Promise.resolve(copyRoot);
+      },
+    },
+    { locations, source, auth, refresh: false },
+  );
+
+  // assert
+  assert.deepStrictEqual(result, {
+    kind: "materialized",
+    pluginRoot: path.join(copyRoot, "plugins", "one"),
+    resolvedSha: PIN_40,
+  });
+  assert.deepStrictEqual(calls, [
+    { step: "mirror", ref: "main", refresh: false, auth },
+    { step: "copy", sha: PIN_40, auth },
+  ]);
 });

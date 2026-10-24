@@ -101,10 +101,10 @@ export interface CheckoutOptions {
    * Default false. isomorphic-git's checkout skips writing a file whose
    * index entry already matches the target commit, even when the file is
    * absent from the actual working tree (it diffs index vs. commit, not
-   * disk vs. commit). Set true when `dir`'s work tree may be empty or
-   * incomplete relative to its own index -- for example a `.git`-only copy
-   * checked out into a fresh, empty directory -- so every file the target
-   * tree names gets written regardless of what the index already claims.
+   * disk vs. commit). For a `.git`-only copy checked out into an empty
+   * directory, drop the copied index instead (GIT-04,
+   * `clone-cache.ts::checkoutGitDirCopy`): a forced checkout refuses a
+   * directory that holds only a symlink.
    */
   force?: boolean;
 }
