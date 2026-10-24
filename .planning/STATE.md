@@ -5,10 +5,10 @@ milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 15
 status: completed
 stopped_at: Phase 15 complete — all phases complete
-last_updated: "2026-10-23T11:00:56.141Z"
+last_updated: "2026-10-24T08:53:06.732Z"
 last_activity: 2026-10-23
 last_activity_desc: Phase 15 complete
-state_head: 7a9b610777efb593d152d40010d9178a403810da
+state_head: 7f4c217859ea01021970ca0c7a5a9965b7cea5b6
 progress:
   total_phases: 15
   completed_phases: 15
@@ -182,6 +182,7 @@ hit the same wall; convert it rather than re-disclosing it.
 
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
+| 1 | Run init.sh in new worktrees: SessionStart guard keyed on node_modules/.init-done (7f4c2178) | 2026-10-24 | 7f4c2178 | — | — |
 
 ## Session Continuity
 
