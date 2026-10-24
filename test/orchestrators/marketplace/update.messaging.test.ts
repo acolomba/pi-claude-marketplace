@@ -243,6 +243,75 @@ test("projects a clean updated outcome with dependency order and optional reason
   assert.equal(Object.hasOwn(message, "reasons"), false);
 });
 
+test("UPR-02: an autoupdated plugin at the same version names the moved commits", () => {
+  // arrange
+  const fromCommit = "a".repeat(40);
+  const toCommit = "b".repeat(40);
+  const outcome = {
+    partition: "updated",
+    name: "ghp",
+    fromVersion: "1.0.0",
+    toVersion: "1.0.0",
+    fromCommit,
+    toCommit,
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+  } satisfies PluginUpdateOutcome;
+
+  // act
+  const message = outcomeToCascadePluginMessage(outcome, "user");
+
+  // assert
+  assert.deepStrictEqual(message, {
+    status: "updated",
+    name: "ghp",
+    scope: "user",
+    from: "1.0.0",
+    to: "1.0.0",
+    commits: { from: fromCommit, to: toCommit },
+    dependencies: [],
+    severity: "info",
+    needsReload: true,
+  });
+});
+
+test("NREG-01: an autoupdated plugin whose version moved names no commits", () => {
+  // arrange
+  const outcome = {
+    partition: "updated",
+    name: "ghp",
+    fromVersion: "1.0.0",
+    toVersion: "1.1.0",
+    fromCommit: "a".repeat(40),
+    toCommit: "b".repeat(40),
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+  } satisfies PluginUpdateOutcome;
+
+  // act
+  const message = outcomeToCascadePluginMessage(outcome, "user");
+
+  // assert
+  assert.deepStrictEqual(message, {
+    status: "updated",
+    name: "ghp",
+    scope: "user",
+    from: "1.0.0",
+    to: "1.1.0",
+    dependencies: [],
+    severity: "info",
+    needsReload: true,
+  });
+});
+
 test("projects orphan rewake before canonical malformed reasons on an updated row", () => {
   // arrange
   const outcome = {

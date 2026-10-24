@@ -339,6 +339,37 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
       },
     },
 
+    // UPR-02: a same-version move to a new commit names both short commits.
+    "update-same-version-new-commit": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Plugin update",
+        cardinality: "plural",
+        tally: { verb: "updated", count: 1 },
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "updated",
+                severity: "info",
+                needsReload: true,
+                name: "git-plugin",
+                from: "1.0.0",
+                to: "1.0.0",
+                commits: {
+                  from: "a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0",
+                  to: "2222333344445555666677778888999900001111",
+                },
+                dependencies: [],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // WARN-01 / WR-12 / D-99-03: a component the update's own ledger degraded
     // names its kind on the `(updated)` row and takes the info -> warning raise,
     // matching the install / enable / reinstall arms. Distinct from the

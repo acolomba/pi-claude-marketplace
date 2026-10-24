@@ -40,7 +40,7 @@ On THIS list surface (mp.status === undefined) the marker token `<autoupdate>` a
 - `<icon>` -- one of `●` / `○` / `⊘` / `⊖` / `◉` / `◌` / `◍` per the effective-state rule above. The seven characters are the seven `ICON_*` constants `shared/notification-grammar.ts` exports; the COMPAT-01 gate pins each code point and the export count.
 - `<name>` -- the plugin name from `p.name`. The `@<marketplace>` suffix is NEVER emitted on a plugin row in v2; the marketplace is already in the header above.
 - `[<scope>]` -- emitted ONLY in the orphan-fold case (plugin's `scope` field is explicitly set AND differs from the marketplace's scope). Same-scope rows omit the bracket because the header carries it. The `available`, `partially-available`, and `unavailable` variants have no `scope` field at all (SNM-11 carve-out) and never emit the bracket.
-- `<version-token>` -- `v<version>` on most variants when `version` is set; `v<from> → v<to>` on the `updated` variant (required from-/to-fields per D-15-04). A persisted PI-7 hash-version (`hash-<12hex>`) renders as a git-style short SHA `v#<7hex>` -- the `hash-` prefix is stripped and only the first 7 of the 12 hex chars are shown (matching git `--short=7`); e.g. `hash-2ea95f85703d` renders `v#2ea95f8`. Persistence is unchanged (`state.json` keeps the full `hash-<12hex>`, PI-7 intact, no migration); the short form exists only at render time (SNM-35, D-23-04 / D-23-05).
+- `<version-token>` -- `v<version>` on most variants when `version` is set; `v<from> → v<to>` on the `updated` variant (required from-/to-fields per D-15-04); on a same-version move to a new commit each side is followed by its short commit in parentheses, `v1.0.0 (a1b2c3d) → v1.0.0 (2222333)` (UPR-02). A persisted PI-7 hash-version (`hash-<12hex>`) renders as a git-style short SHA `v#<7hex>` -- the `hash-` prefix is stripped and only the first 7 of the 12 hex chars are shown (matching git `--short=7`); e.g. `hash-2ea95f85703d` renders `v#2ea95f8`. Persistence is unchanged (`state.json` keeps the full `hash-<12hex>`, PI-7 intact, no migration); the short form exists only at render time (SNM-35, D-23-04 / D-23-05).
 - `(<status>)` -- the discriminator literal. `(manual recovery)` includes the space verbatim.
 - `{<reasons>}` -- single brace block, comma-space separated, emitted only on the 9 reason-bearing variants and only when the composed reasons list is non-empty. A variant is reason-bearing when its message interface in `shared/notification-types.ts` declares a `reasons` field; that set is `installed | unavailable | upgradable | failed | skipped | manual recovery | partially-installed | partially-upgradable | partially-available`, listed in `PLUGIN_STATUSES` order. The remaining 10 of the 19 plugin statuses have no `reasons` field and therefore cannot carry a brace. `installed` is the one variant whose `reasons` field is OPTIONAL: the list inventory row stamps it for the durable absence fact (INV-01) and the install cascade stamps it for `orphan rewake` (SURF-05), while every other producer omits it. When the composed list is empty -- no typed reasons and no soft-dependency marker -- `composeReasons` returns the empty string and NO brace is emitted, so the row renders with the status token as its last token.
 
@@ -1943,7 +1943,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin update`
 
-Multi-plugin cascade. Same shape as `reinstall` with version-arrow rows (`v<from> → v<to>`) per D-15-04 / Phase 16 `composeVersionArrow`.
+Multi-plugin cascade. Same shape as `reinstall` with version-arrow rows (`v<from> → v<to>`) per D-15-04 / Phase 16 `composeVersionArrow`. When the version did not move but the commit did, the arrow carries each side's short commit (UPR-02).
 
 An update changes the installation and its record only. It writes no declaration to either layer, so an updated dependency stays undeclared (LAYER-04 / D-MF-03). A named `update <plugin>@<marketplace>` acts on the base layer, or on the local layer with `--local`. It refuses a plugin that only the other layer declares, and a layer config it cannot read, with the rows of the `uninstall-plugin-in-local-layer-only` state under `/claude:plugin uninstall`, before it looks for a new version. The forms that name no plugin cover the plugins of both layers. With `--local`, they cover the plugins the local layer declares and the dependencies those plugins need, but not a dependency that only base-layer plugins need. When they cannot read the dependencies of one of those plugins, they change nothing and fail with one `{unreadable}` row whose cause names that plugin.
 
@@ -2063,6 +2063,21 @@ Plugin update: 1 updated
 ```
 
 D-78-06 / PURL-06: a git-source update swaps the recorded commit, so both `from` and `to` are git-source `sha-<12hex>` versions (`sha-a1b2c3d4e5f6` -> `sha-222233334445`). Each renders through the SAME `composeVersionArrow` -> `renderVersion` -> `formatShaVersionForDisplay` path the hash-version arrow uses, so it shortens to its git-style 7-hex form with a `v#` prefix (`v#a1b2c3d`, `v#2222333`) -- no new render grammar. Persistence keeps the full `sha-<12hex>` on both sides (D-77-01). Severity: info. Reload-hint fires because `git-plugin` was updated.
+
+### Same-version update to a new commit (UPR-02)
+
+<!-- catalog-state: update-same-version-new-commit -->
+
+```text
+● official [user]
+  ● git-plugin v1.0.0 (a1b2c3d) → v1.0.0 (2222333) (updated)
+
+Plugin update: 1 updated
+
+/reload to pick up changes
+```
+
+UPR-02: the repository moved to a new commit while its declared version stayed `1.0.0`, so the plain arrow would read `v1.0.0 → v1.0.0`, as if nothing moved. The row names the record's commit on the left and the candidate's on the right, each shortened to its first 7 hex characters. It names them only when the versions are equal and both sides carry a different commit. A path source, a commit on one side only, or a moved version renders the plain arrow. The JSON row carries the full commits as `fromCommit` and `toCommit`. Severity: info. Reload-hint fires because `git-plugin` was updated.
 
 ### Update with a degraded component (WARN-01 / D-86-03 / WR-12)
 
