@@ -170,6 +170,45 @@ test("D-10-13: the ceiling version discloses its range and holders", () => {
   boundary.verifyBoundary();
 });
 
+test("D-10-13: an update a dependent's range admitted names the range on its cause line", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1);
+  const outcomes: readonly UpdateCascadeOutcome[] = [
+    {
+      target: { marketplace: "tools", scope: "project" },
+      outcome: {
+        declaresWorkflows: false,
+        partition: "updated",
+        name: "lib",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: {
+          disclosure: 'constrained to the combined range (^1.0.0) -- required by "app@tools"',
+          fellBackToCurrentCopy: true,
+        },
+      },
+    },
+  ];
+  const expectedMessage = [
+    "● tools [project]",
+    "  ● lib v1.0.0 → v1.1.0 (updated) {dependency current copy}",
+    '    cause: constrained to the combined range (^1.0.0) -- required by "app@tools"',
+    "",
+    "/reload to pick up changes",
+  ].join("\n");
+
+  // act
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "single");
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
+  boundary.verifyBoundary();
+});
+
 test("an unconstrained unchanged outcome renders no cause line", () => {
   // arrange
   const boundary = createNotificationBoundary(1);

@@ -341,8 +341,8 @@ Feature: Plugin update
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status  | reasons                 | scope   | from  | to    |
-      | tools            | project           | lib@tools | lib  | updated | dependency current copy | project | 1.0.0 | 1.1.0 |
+      | marketplace name | marketplace scope | id        | name | status  | reasons                 | scope   | from  | to    | cause chain                                                            | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | updated | dependency current copy | project | 1.0.0 | 1.1.0 | constrained to the combined range (^1.0.0) -- required by "app@tools" | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | app@tools     | 1.0.0   | true    |

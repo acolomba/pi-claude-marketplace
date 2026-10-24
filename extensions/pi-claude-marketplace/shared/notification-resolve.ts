@@ -260,8 +260,10 @@ export interface ResolvedRollbackPhase {
 }
 
 /**
- * D-11 / PMOD-03: the failure detail of a failed or manual-recovery row, or the
- * remedy cause of a realized `disabled`, `uninstalled`, or update `skipped` row.
+ * D-11 / PMOD-03: the failure detail of a failed or manual-recovery row, the
+ * remedy cause of a realized `disabled`, `uninstalled`, or update `skipped`
+ * row, or the constraint disclosure of an `updated` or `reinstalled` row
+ * (D-10-13 / D-10-17a).
  * `cause` is absent when the row carries no cause. `leaks` names the paths the
  * user must clean up by hand. `rollbackPartial` lists the phases whose undo
  * failed; it is empty on a manual-recovery row.
@@ -502,6 +504,11 @@ function resolveRow(row: PluginNotificationMessage, compose: ReasonComposer): Re
     return { ...rest, reasons: compose(reasons, undefined), ...remedyFailure(cause) };
   }
 
+  if (row.status === "updated" || row.status === "reinstalled") {
+    const { reasons, dependencies, cause, ...rest } = row;
+    return { ...rest, reasons: compose(reasons, dependencies), ...remedyFailure(cause) };
+  }
+
   if ("dependencies" in row) {
     const { reasons, dependencies, ...rest } = row;
     return { ...rest, reasons: compose(reasons, dependencies) };
@@ -516,10 +523,11 @@ function resolveRow(row: PluginNotificationMessage, compose: ReasonComposer): Re
 }
 
 /**
- * LOAD-01 / LOAD-03 / UPDT-02: the `failure` member of a realized `disabled`,
- * `uninstalled`, or update `skipped` row whose producer set a remedy `cause`,
- * or no member. The cause names plugin identifiers, which only the cause line
- * may interpolate. A row without one keeps its byte-frozen form.
+ * LOAD-01 / LOAD-03 / UPDT-02 / D-10-13: the `failure` member of a realized
+ * `disabled`, `uninstalled`, `updated`, or `reinstalled` row, or of an update
+ * `skipped` row, whose producer set a remedy or disclosure `cause`, or no
+ * member. The cause names plugin identifiers, which only the cause line may
+ * interpolate. A row without one keeps its byte-frozen form.
  */
 function remedyFailure(cause: Error | undefined): Pick<ResolvedRowFacts, "failure"> {
   return cause === undefined ? {} : { failure: resolveFailure(cause, []) };

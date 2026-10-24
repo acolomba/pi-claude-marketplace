@@ -317,6 +317,26 @@ void ({
   severity: "info",
   needsReload: true,
 } satisfies PluginUpdatedMessage);
+// D-10-13: an updated and a reinstalled row may carry the constraint disclosure as their cause.
+void ({
+  status: "updated",
+  name: "lib",
+  from: "1.0.0",
+  to: "1.1.0",
+  dependencies: [],
+  cause: new Error('constrained to the combined range (^1.0.0) -- required by "app@tools"'),
+  severity: "info",
+  needsReload: true,
+} satisfies PluginUpdatedMessage);
+void ({
+  status: "reinstalled",
+  name: "lib",
+  version: "1.0.0",
+  dependencies: [],
+  cause: new Error('constrained to the combined range (^1.0.0) -- required by "app@tools"'),
+  severity: "info",
+  needsReload: true,
+} satisfies PluginReinstalledMessage);
 // @ts-expect-error UPR-02: the commits travel together, so one side alone is no VersionCommits
 void ({ from: "a".repeat(40) } satisfies VersionCommits);
 // UPR-03: the three rows that can show a move carry `from` and `commits` beside `version`.

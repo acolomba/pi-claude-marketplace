@@ -408,7 +408,7 @@ test("reports orphan rewake without overriding clean base severity", () => {
   });
 });
 
-test("D-10-15: an in-range current-copy fallback names itself on the success row", () => {
+test("D-10-15 / D-10-13: an in-range current-copy fallback names itself and its range on the success row", () => {
   // arrange
   const outcome = {
     constraint: {
@@ -437,6 +437,7 @@ test("D-10-15: an in-range current-copy fallback names itself on the success row
     name: "shared-lib",
     needsReload: true,
     reasons: ["dependency current copy"],
+    cause: new Error("already the highest version ^1.0.0 admits"),
     scope: "user",
     severity: "warning",
     status: "updated",
@@ -594,6 +595,34 @@ test("D-10-13: constraintCauseFor composes an Error from an unchanged outcome's 
   assert.strictEqual(
     cause.message,
     'already the highest version the combined range admits (<=1.5.0) -- required by "alpha@mp"',
+  );
+});
+
+test("D-10-13 / D-10-17a: constraintCauseFor composes an Error from an updated outcome's disclosure", () => {
+  // arrange
+  const outcome = {
+    partition: "updated" as const,
+    name: "lib",
+    fromVersion: "1.0.0",
+    toVersion: "1.1.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    constraint: {
+      disclosure: 'constrained to the combined range (^1.0.0) -- required by "app@tools"',
+      fellBackToCurrentCopy: false,
+    },
+  };
+
+  // act
+  const cause = constraintCauseFor(outcome);
+
+  // assert
+  assert.deepStrictEqual(
+    cause,
+    new Error('constrained to the combined range (^1.0.0) -- required by "app@tools"'),
   );
 });
 

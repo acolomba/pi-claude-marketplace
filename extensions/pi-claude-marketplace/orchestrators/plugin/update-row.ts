@@ -35,6 +35,7 @@ import type {
   PluginUpdateUnchangedOutcome,
   PluginUpdateUpdatedOutcome,
   RevisionMove,
+  UpdateConstraintDisclosure,
 } from "../types.ts";
 
 /**
@@ -117,6 +118,13 @@ export interface UpdatedRowSeverity {
  * composes them from that membership and the command run's snapshot under the
  * context's marker policy (D-05, D-12).
  *
+ * D-10-13 / D-10-17a: the clean `(updated)` form carries the constraint
+ * gate's disclosure as its cause line when a dependent's range chose what
+ * landed, read through `constraintCauseFor` as the `unchanged` and held
+ * `skipped` rows read it. Upstream discloses the range on its updated message
+ * too. The `{dependency current copy}` token keeps its first place and still
+ * moves no severity. The `partially-installed` form has no cause slot.
+ *
  * D-03/D-06: a realized update transition always reloads Pi resources, and
  * `partially-installed` is a realized transition too.
  */
@@ -162,6 +170,7 @@ export function updatedRowFromOutcome(
   }
 
   const cleanFormReasons: readonly ContentReason[] = [...written, ...stale];
+  const cause = constraintCauseFor(outcome);
   return {
     status: "updated",
     name: outcome.name,
@@ -173,6 +182,7 @@ export function updatedRowFromOutcome(
     // Optional spread, not a required key: an unaffected row renders the legacy
     // brace-less bytes because the key is ABSENT, not `undefined` (NREG-01).
     ...(cleanFormReasons.length > 0 && { reasons: cleanFormReasons }),
+    ...(cause !== undefined && { cause }),
     // Two axes move the severity channel, for two different reasons. The
     // MALFORMED axis names a component the update wrote in degraded form; the
     // STALE-COMMAND axis names a shortfall in what the update achieved -- it was
@@ -277,16 +287,16 @@ function outcomeDependencies(
 /**
  * UPDT-02 / D-10-11 / D-10-13: the constraint gate's cause line, read off
  * whichever partition carries it. The `skipped` arm carries the held-update
- * cause on `notes`; the `unchanged` arm carries the D-10-13 ceiling
- * disclosure on `constraint`. `undefined` for every other outcome, so its
- * row stays byte-frozen (no other producer sets either field under this
- * reason).
+ * cause on `notes`; the `unchanged` and `updated` arms carry the gate's
+ * disclosure on `constraint` (D-10-17a). `undefined` for every other outcome,
+ * so its row stays byte-frozen (no other producer sets either field under
+ * this reason).
  */
 export function constraintCauseFor(
-  outcome: PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome,
+  outcome: PluginUpdateSkippedOutcome | PluginUpdateUnchangedOutcome | PluginUpdateUpdatedOutcome,
 ): Error | undefined {
-  if (outcome.partition === "unchanged") {
-    return outcome.constraint === undefined ? undefined : new Error(outcome.constraint.disclosure);
+  if (outcome.partition !== "skipped") {
+    return disclosureCause(outcome.constraint);
   }
 
   if (!outcome.reasons.includes("dependents constrain") || outcome.notes.length === 0) {
@@ -294,4 +304,13 @@ export function constraintCauseFor(
   }
 
   return new Error(outcome.notes.join(" "));
+}
+
+/**
+ * D-10-13 / D-10-17a: the constraint gate's disclosure as a cause line, or
+ * `undefined` for an unconstrained outcome. Update's rows and reinstall's
+ * `reinstalled` row both read it, so the two verbs cannot word it differently.
+ */
+function disclosureCause(constraint: UpdateConstraintDisclosure | undefined): Error | undefined {
+  return constraint === undefined ? undefined : new Error(constraint.disclosure);
 }

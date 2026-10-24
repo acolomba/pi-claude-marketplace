@@ -471,6 +471,36 @@ test("renders the held-update cause line of a skipped row", () => {
   ]);
 });
 
+test("D-10-13: renders the constraint disclosure line under an updated row", () => {
+  // arrange
+  const row = {
+    status: "updated",
+    name: "lib",
+    from: "1.0.0",
+    to: "1.1.0",
+    reasons: ["dependency current copy"],
+    severity: "info",
+    needsReload: true,
+    failure: {
+      cause: {
+        causeChain: ['constrained to the combined range (^1.0.0) -- required by "app@tools"'],
+        truncated: false,
+      },
+      leaks: [],
+      rollbackPartial: [],
+    },
+  } as const satisfies ResolvedRow;
+
+  // act
+  const lines = composePluginLines(row, "project");
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "  ● lib v1.0.0 → v1.1.0 (updated) {dependency current copy}",
+    '    cause: constrained to the combined range (^1.0.0) -- required by "app@tools"',
+  ]);
+});
+
 for (const { plugin, expectedLines } of [
   {
     plugin: {

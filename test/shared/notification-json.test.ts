@@ -804,6 +804,58 @@ test("UPR-02: an updated row with commits carries them whole as fromCommit and t
   );
 });
 
+test("D-10-13: an updated row's constraint disclosure rides the wire as its cause", () => {
+  // arrange
+  const disclosure = 'constrained to the combined range (^1.0.0) -- required by "app@tools"';
+  const row: ResolvedRow = {
+    status: "updated",
+    name: "lib",
+    severity: "info",
+    needsReload: true,
+    reasons: [],
+    from: "1.0.0",
+    to: "1.1.0",
+    failure: {
+      cause: { causeChain: [disclosure], truncated: false },
+      leaks: [],
+      rollbackPartial: [],
+    },
+  };
+  const presentation = presentationOf([{ name: "tools", scope: "project", plugins: [row] }]);
+
+  // act
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    payload,
+    expectedInfoPayload([
+      {
+        name: "tools",
+        scope: "project",
+        plugins: [
+          {
+            status: "updated",
+            name: "lib",
+            id: "lib@tools",
+            reasons: [],
+            from: "1.0.0",
+            to: "1.1.0",
+            scope: "project",
+            cause: { causeChain: [disclosure], truncated: false },
+            leaks: [],
+            rollbackPartial: [],
+          },
+        ],
+      },
+    ]),
+  );
+});
+
 const MOVE_WIRE_ROWS = [
   {
     row: {

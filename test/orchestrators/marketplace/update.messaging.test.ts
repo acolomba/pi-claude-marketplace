@@ -553,6 +553,41 @@ test("D-10-13: an unchanged outcome with a constraint discloses its range and ho
   });
 });
 
+test("D-10-13: an updated outcome with a constraint discloses its range on the autoupdate row", () => {
+  // arrange
+  const outcome = {
+    declaresWorkflows: false,
+    partition: "updated",
+    name: "lib",
+    fromVersion: "1.0.0",
+    toVersion: "1.1.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: {
+      disclosure: 'constrained to the combined range (^1.0.0) -- required by "app@tools"',
+      fellBackToCurrentCopy: false,
+    },
+  } satisfies PluginUpdateOutcome;
+
+  // act
+  const message = outcomeToCascadePluginMessage(outcome, "user");
+
+  // assert
+  assert.deepStrictEqual(message, {
+    status: "updated",
+    name: "lib",
+    scope: "user",
+    from: "1.0.0",
+    to: "1.1.0",
+    dependencies: [],
+    cause: new Error('constrained to the combined range (^1.0.0) -- required by "app@tools"'),
+    severity: "info",
+    needsReload: true,
+  });
+});
+
 test("prefers a typed benign skip reason over contradictory notes", () => {
   // arrange
   const outcome = {

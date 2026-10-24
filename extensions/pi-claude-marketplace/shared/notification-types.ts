@@ -428,6 +428,14 @@ export interface PluginUpdatedMessage extends TransitionMessageBase {
   readonly dependencies: readonly Dependency[];
   readonly scope?: Scope;
   readonly reasons?: readonly ContentReason[];
+  /**
+   * D-10-13 / D-10-17a: the constraint gate's disclosure, when a dependent's
+   * range chose what landed. It rides the cause chain because the sentence
+   * interpolates plugin identifiers, and the cause chain is the only channel
+   * in this grammar that legally interpolates one, as on the held `skipped`
+   * row. An unconstrained update omits it.
+   */
+  readonly cause?: Error;
 }
 
 /**
@@ -450,6 +458,8 @@ export interface PluginReinstalledMessage extends TransitionMessageBase, Revisio
   readonly version?: string;
   readonly scope?: Scope;
   readonly reasons?: readonly ContentReason[];
+  /** D-10-13 / D-18-07: the constraint gate's disclosure, as on `PluginUpdatedMessage`. */
+  readonly cause?: Error;
 }
 
 /**

@@ -1127,7 +1127,8 @@ function pushCauseLine(
 //
 //   <mp-header-1>
 //     <plugin-row-1>
-//       [cause-chain at 4-space indent if (failed | manual recovery) with cause]
+//       [cause-chain at 4-space indent if (failed | manual recovery) with cause,
+//        or a realized row whose producer set a cause]
 //       [rollback child row at 4-space indent for each rollbackPartial phase]
 //       [phase cause-chain at 6-space indent if phase.cause set]
 //     <plugin-row-2>
