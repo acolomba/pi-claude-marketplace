@@ -401,7 +401,10 @@ function isPartialableUpdateShapeError(error: unknown): error is PartialableUpda
   );
 }
 
-/** What `resolveUpdateCandidate` reaches: a candidate (or a skip or failure verdict), plus a `path`-pin's own resolved sha. */
+/**
+ * What `resolveUpdateCandidate` reaches: a candidate (or a skip or failure
+ * verdict), plus a `path`-pin's own resolved sha.
+ */
 interface UpdateCandidateResolution {
   readonly candidate: MaterializablePlugin | PluginUpdateSkippedOutcome | PreflightFailedOutcome;
   /**

@@ -118,9 +118,10 @@ export type UpdateConstraintVerdict =
        * D-10-13 / D-10-17a: the ceiling disclosure -- the holders' declared
        * ranges joined with `, ` (INR-05) and the holders, composed once here
        * so every `admits` arm has it ready for the two `unchanged`
-       * construction sites and for `PreparedPluginUpdate.constraint`. Composed the same way whether or
-       * not a pin or a fallback produced this verdict; the caller decides
-       * which row (if any) actually shows it.
+       * construction sites and for `PreparedPluginUpdate.constraint`.
+       * Composed the same way whether or not a pin or a fallback produced
+       * this verdict; the caller decides which row (if any) actually shows
+       * it.
        */
       readonly disclosure: string;
     }
