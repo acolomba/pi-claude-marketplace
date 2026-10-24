@@ -1011,15 +1011,17 @@ describe("dependencyDisabledOutcome", () => {
     );
   });
 
-  test("bounds a declared range too long to render", () => {
-    // arrange
+  test("T-06-05: prints the range the verdict already bounded verbatim", () => {
+    // arrange -- the verdict bounds the declared ranges once, so a second
+    // bound here would cut the text and replace its true overflow count.
+    const bounded = `>=${"1".repeat(198)}... (+12 chars)`;
     const held = {
       scope: "user",
       marketplace: "official",
       plugin: "deploy-kit",
       dependency: "secrets-vault@official",
       kind: "out-of-range",
-      range: `>=${"1".repeat(210)}`,
+      range: bounded,
     } as const;
 
     // act
@@ -1028,7 +1030,7 @@ describe("dependencyDisabledOutcome", () => {
     // assert
     assert.strictEqual(
       outcome.cause.message,
-      `Update "secrets-vault@official" to satisfy >=${"1".repeat(198)}... (+12 chars), or uninstall "deploy-kit@official"`,
+      `Update "secrets-vault@official" to satisfy ${bounded}, or uninstall "deploy-kit@official"`,
     );
   });
 

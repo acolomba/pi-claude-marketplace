@@ -165,7 +165,10 @@ export interface PlannedDependencyDisable {
   /** `name@marketplace` of the declared dependency the scope does not satisfy. */
   readonly dependency: string;
   readonly kind: UnsatisfiedKind;
-  /** The declared range, present only on the out-of-range kind. */
+  /**
+   * The declared ranges as the verdict rendered them, joined and bounded once
+   * (INR-05), present only on the out-of-range kind.
+   */
   readonly range?: string;
 }
 

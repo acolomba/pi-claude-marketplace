@@ -228,15 +228,14 @@ test("reports a recorded version outside its declared range as out-of-range", as
     loadManifest,
   });
 
-  // assert -- the carried range is the CANONICAL fold of what was declared, not
-  // the declared text: one evaluator canonicalizes, and a caret that kept its
-  // shorthand here would mean the row and the comparison read different ranges.
+  // assert -- INR-05: the carried range is the declared text, as the user
+  // wrote it, while the fold still decides the comparison.
   assert.deepStrictEqual(unsatisfiedOf(verdict), [
     {
       dependent: "app@mp",
       dependency: "vault@mp",
       kind: "out-of-range",
-      range: ">=2.0.0 <3.0.0-0",
+      range: "^2.0.0",
     },
   ]);
 });
@@ -291,7 +290,7 @@ test("reports nothing for a declaration whose constraints are all unconstrained"
   assert.deepStrictEqual(unsatisfiedOf(verdict), []);
 });
 
-test("folds two declarations of one dependency into a single intersected range", async () => {
+test("INR-05: two declarations of one dependency the recorded version fails report both declared ranges", async () => {
   // arrange
   const mp = marketplaceRecord("mp", { app: {}, vault: { version: "2.0.0" } });
   const loadManifest = manifestLoader({
@@ -320,7 +319,7 @@ test("folds two declarations of one dependency into a single intersected range",
       dependent: "app@mp",
       dependency: "vault@mp",
       kind: "out-of-range",
-      range: ">=1.0.0 <1.5.0",
+      range: ">=1.0.0, <1.5.0",
     },
   ]);
 });
@@ -354,7 +353,7 @@ test("reports out-of-range rather than throwing when the declared ranges interse
       dependent: "app@mp",
       dependency: "vault@mp",
       kind: "out-of-range",
-      range: ">=2.0.0 <1.0.0",
+      range: ">=2.0.0, <1.0.0",
     },
   ]);
 });
@@ -381,13 +380,51 @@ test("reports out-of-range rather than unconstrained when the fold trips an inpu
     loadManifest,
   });
 
-  // assert -- a cap trip must never read as "no constraint" (T-06-10).
-  const entries = unsatisfiedOf(verdict);
-  assert.deepStrictEqual(
-    entries.map(({ dependent, dependency, kind }) => ({ dependent, dependency, kind })),
-    [{ dependent: "app@mp", dependency: "vault@mp", kind: "out-of-range" }],
-  );
-  assert.equal(entries[0]?.range, Array.from({ length: 70 }, () => declared).join(" "));
+  // assert -- a cap trip must never read as "no constraint" (T-06-10), and the
+  // joined declared ranges are bounded once (T-06-05).
+  const joined = Array.from({ length: 70 }, () => declared).join(", ");
+  assert.deepStrictEqual(unsatisfiedOf(verdict), [
+    {
+      dependent: "app@mp",
+      dependency: "vault@mp",
+      kind: "out-of-range",
+      range: `${joined.slice(0, 200)}... (+4068 chars)`,
+    },
+  ]);
+});
+
+test("INR-05 / T-06-05: declared ranges too long to render are bounded once", async () => {
+  // arrange -- four 59-character declarations join to 242 characters and fold
+  // to a range the recorded version fails.
+  const declared = ">=1.0.0 <9.9.9 >=1.0.1 <9.9.8 >=1.0.2 <9.9.7 >=1.0.3 <9.9.6";
+  const mp = marketplaceRecord("mp", { app: {}, vault: { version: "1.0.0" } });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: {
+        dependencies: Array.from({ length: 4 }, () => ({ name: "vault", version: declared })),
+      },
+      vault: {},
+    }),
+  });
+
+  // act
+  const verdict = await buildScopeSatisfactionVerdict({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests(),
+    loadManifest,
+  });
+
+  // assert
+  const joined = Array.from({ length: 4 }, () => declared).join(", ");
+  assert.deepStrictEqual(unsatisfiedOf(verdict), [
+    {
+      dependent: "app@mp",
+      dependency: "vault@mp",
+      kind: "out-of-range",
+      range: `${joined.slice(0, 200)}... (+42 chars)`,
+    },
+  ]);
 });
 
 test("reports nothing for a scope with no recorded marketplace", async () => {

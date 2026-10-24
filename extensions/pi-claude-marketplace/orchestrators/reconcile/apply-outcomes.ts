@@ -27,7 +27,6 @@
 import path from "node:path";
 
 import { isRenderablePluginKey } from "../../domain/dependencies.ts";
-import { renderConstraintRange } from "../../domain/dependency-range.ts";
 import {
   DependencyCascadeError,
   InstallMarketplaceAddError,
@@ -386,8 +385,9 @@ function remedyParty(key: string, keyless: string): string {
  *
  * Each party is quoted only after `remedyParty` clears it. The row's own
  * subject already names the held-down plugin, so the key-less form stays
- * actionable. T-06-05: a declared range is bounded by `renderConstraintRange`,
- * never sliced by hand.
+ * actionable. T-06-05: the verdict already bounded the declared ranges once,
+ * so the range is printed verbatim; a second bound would cut the bounded text
+ * and replace its true overflow count.
  */
 function dependencyRemedy(held: {
   readonly marketplace: string;
@@ -409,7 +409,7 @@ function dependencyRemedy(held: {
       // constraint the operator cannot act on.
       return held.range === undefined
         ? `Update ${dependency} or uninstall ${dependent}`
-        : `Update ${dependency} to satisfy ${renderConstraintRange(held.range)}, or uninstall ${dependent}`;
+        : `Update ${dependency} to satisfy ${held.range}, or uninstall ${dependent}`;
   }
 }
 

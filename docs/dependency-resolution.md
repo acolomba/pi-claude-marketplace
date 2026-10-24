@@ -271,10 +271,10 @@ The dependency's recorded version is outside the declared range. This case carri
 ```text
 ● mp [project]
   ◍ deploy-kit v1.0.0 (disabled) {dependency version unsatisfied}
-    cause: Update "secrets-vault@mp" to satisfy >=2.0.0 <3.0.0-0, or uninstall "deploy-kit@mp"
+    cause: Update "secrets-vault@mp" to satisfy ^2.0.0, or uninstall "deploy-kit@mp"
 ```
 
-The range on that line is the range the check actually tested. It is every constraint the dependent declared for that dependency, intersected and written in full form. So a declared `^2.0.0` reads `>=2.0.0 <3.0.0-0`.
+The line names every constraint the dependent declared for that dependency, as written and separated by commas as Claude Code prints them. So a declared `^2.0.0` reads `^2.0.0`. The check itself still tests the intersection of those constraints.
 
 The version arm can also fire on a dependency that carries no real semantic version. A dependency recorded as `hash-` or `sha-` plus 12 hexadecimal characters goes through the same normalization as any other recorded version (D-03-04), which reads an arbitrary digit run out of the hexadecimal string. That number fails almost any range that is not a wildcard. The dependent is then disabled at load time and the row tells you to update the dependency, but the dependency has no semantic version to move to. Two things clear it: declare no version constraint on that dependency, or use a dependency whose marketplace gives it a real version.
 

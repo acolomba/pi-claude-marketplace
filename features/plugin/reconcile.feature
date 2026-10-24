@@ -165,7 +165,7 @@ Feature: Plugin reconcile
       | tally warnings | 1                                   |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id        | name | status   | reasons                        | scope   | version | cause chain                                                               | cause truncated | leaks | rollback partial |
-      | tools            | project           | app@tools | app  | disabled | dependency version unsatisfied | project | 2.0.0   | Update "lib@tools" to satisfy >=2.0.0 <3.0.0-0, or uninstall "app@tools" | false           |       |                  |
+      | tools            | project           | app@tools | app  | disabled | dependency version unsatisfied | project | 2.0.0   | Update "lib@tools" to satisfy ^2.0.0, or uninstall "app@tools" | false           |       |                  |
     Then the session offers these skills:
       | command          | description           |
       | /skill:lib-skill | A skill of lib 1.0.0. |
