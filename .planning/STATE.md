@@ -5,17 +5,17 @@ milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 29
 current_phase_name: Apply Command and Read-Only Reload
 status: executing
-stopped_at: Completed 29-07-PLAN.md
-last_updated: "2026-10-24T17:53:13.763Z"
+stopped_at: Completed 29-08-PLAN.md
+last_updated: "2026-10-24T18:25:32.318Z"
 last_activity: 2026-10-24
-last_activity_desc: Plan 29-07 complete (pending lists the dependency disables and installs)
-state_head: 838be7b30a497ce6dbf0f4c5ec2dc351860bd3cf
+last_activity_desc: Plan 29-08 complete (a load prints the pending block)
+state_head: ad4a5c4d8a1eae7731b297e94ca6759ef60b6dee
 progress:
   total_phases: 29
   completed_phases: 28
   total_plans: 74
-  completed_plans: 67
-  percent: 91
+  completed_plans: 68
+  percent: 92
 ---
 
 # Project State
@@ -32,11 +32,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 29 (Apply Command and Read-Only Reload) — EXECUTING
-Plan: 8 of 14
+Plan: 9 of 14
 Status: Ready to execute
-Last activity: 2026-10-24 — Plan 29-07 complete (pending lists the dependency disables and installs)
+Last activity: 2026-10-24 — Plan 29-08 complete (a load prints the pending block)
 
-Progress: [█████████░] 91%
+Progress: [█████████░] 92%
 
 Phases 2-15 depend only on Phase 1 and may run in parallel once it lands. Each
 owns its own feature files and step modules (the file ownership table in
@@ -187,8 +187,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-24T17:53:07.728Z
-**Stopped at:** Completed 29-07-PLAN.md
+**Last session:** 2026-10-24T18:25:26.595Z
+**Stopped at:** Completed 29-08-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -401,6 +401,7 @@ archived milestone artifacts.
 | Phase 29 P05 | 40 min | 2 tasks | 24 files |
 | Phase 29 P06 | 24 min | 2 tasks | 24 files |
 | Phase 29 P07 | 19 min | 2 tasks | 7 files |
+| Phase 29 P08 | 27 min | 2 tasks | 15 files |
 
 ## Decisions
 
@@ -589,6 +590,7 @@ archived milestone artifacts.
 - [Phase 29]: The reason option is gone from ApplyReconcileOptions, McpMigrationInput and ScopePassInput; every apply installs missing declared dependencies and the MCP move skips planned dependency installs (D-02, D-22)
 - [Phase 29]: Pending previews marketplace adds and removes as (will add) / (will remove) headers stamped severity info and needsReload false; each counts as one tally success and toward needsApply, and a remove with no plugin still shows its header (D-20)
 - [Phase 29]: pending previews the LOAD-01 dependency disable and the MISS-01 install apply makes: it computes the satisfaction verdict, mirrors apply's D-09-07 re-plan so a dependent a planned dependency install satisfies shows no disable, and drops a disable of an already-disabled record (D-21)
+- [Phase 29]: The load prints pending's block through the shared composePendingReport / notifyPendingReport on a mismatch, with the apply trailer and no reload hint, and nothing on a match; an invalid config, layer gap or source mismatch is reported only in that block, while per-session warnings and read-pass throws keep their reconcile-applied-cascade payload (D-05, D-06, D-18)
 
 ### mcp-4 decisions
 
