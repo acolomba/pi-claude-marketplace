@@ -597,17 +597,16 @@ Plans:
 
 **Goal:** Changing installation state is always an explicit command: `apply` reaches the desired state, and a load only reloads resources and reports what is pending.
 **Depends on:** Phase 28
-**Decision:** 2026-10-24 (user), superseding the same day's "load converges on the catalog": a load (`/reload`, session start) changes no installation state; on a mismatch it prints `pending`'s block and advises `/claude:plugin apply`. `apply` makes every change `pending` lists, converges installed plugins on their marketplace's catalog version (including the partial-plugin backfill), may clone on cache miss, and then suggests `/reload`. Marketplace autoupdate at session start refreshes marketplaces only. Amends NFR-2 ("`/reload` must suffice" becomes "`apply`, then `/reload`"); record both as decision IDs, with the Claude Code comparison.
+**Decision:** 2026-10-24 (user), superseding the same day's "load converges on the catalog": a load (`/reload`, session start) changes no installation state; on a mismatch it prints `pending`'s block and advises `/claude:plugin apply`. `apply` makes every change `pending` lists, converges installed plugins on their marketplace's catalog version (including the partial-plugin backfill), may clone on cache miss, and then suggests `/reload`. `marketplace update` on an autoupdate marketplace keeps updating its plugins as before (explicit command; no session-start refresh exists). Amends NFR-2 ("`/reload` must suffice" becomes "`apply`, then `/reload`"); record both as decision IDs, with the Claude Code comparison.
 **Requirements:** APL-01, APL-02, APL-03, APL-04
-**Files:** `orchestrators/reconcile/*` (`plan.ts`, `apply.ts`, `backfill.ts`, `notify.ts`, `pending.ts`), `index.ts` (`resources_discover`, `session_start`), `orchestrators/marketplace/autoupdate.ts`, a new edge handler and router entry for `apply`, help, completions, `docs/output-catalog.md`, `docs/json-output.md`; `features/plugin/pending.feature`, `features/plugin/reconcile*.feature`, a new `features/plugin/apply.feature`.
+**Files:** `orchestrators/reconcile/*` (`plan.ts`, `apply.ts`, `backfill.ts`, `notify.ts`, `pending.ts`), `index.ts` (`resources_discover`, `session_start`), a new edge handler and router entry for `apply`, help, completions, `docs/output-catalog.md`, `docs/json-output.md`; `features/plugin/pending.feature`, `features/plugin/reconcile*.feature`, a new `features/plugin/apply.feature`.
 **Success Criteria** (what must be TRUE):
 
 1. `apply` makes every change `pending` listed, then `pending` lists nothing; `apply` with nothing pending reports so and writes nothing (APL-01).
 2. After `marketplace update` moves a path-source and a git-source plugin, `apply` installs both at the catalog version; a range-blocked move and a consent-needing partial move stay put with warning rows and remain in `pending` (APL-02).
 3. `/reload` after hand-editing the config changes no state and prints `pending`'s block with the `apply` trailer; `/reload` with nothing pending prints nothing (APL-03).
-4. Session start with an autoupdate marketplace refreshes it and reports its plugin moves as pending, without applying them (APL-03).
-5. `pending`, help, completions and the docs name `apply` (APL-04).
-6. `npm run check` stays green.
+4. `pending`, help, completions and the docs name `apply` (APL-04).
+5. `npm run check` stays green.
 
 ## Progress
 
