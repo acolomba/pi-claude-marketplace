@@ -608,7 +608,7 @@ Plans:
 4. `pending`, help, completions and the docs name `apply` (APL-04).
 5. `npm run check` stays green.
 
-**Plans:** 12/14 plans executed
+**Plans:** 13/14 plans executed
 
 Plans:
 **Wave 1**
@@ -646,7 +646,7 @@ Plans:
 - [x] 29-12-PLAN.md — `apply` converges plugins on the catalog through a new runner entry and keeps blocked moves
 
 **Wave 12** *(blocked on Wave 11 completion)*
-- [ ] 29-13-PLAN.md — `apply` makes partial plugins whole; the backfill and the extension-version stamp retire
+- [x] 29-13-PLAN.md — `apply` makes partial plugins whole; the backfill and the extension-version stamp retire
 
 **Wave 13** *(blocked on Wave 12 completion)*
 - [ ] 29-14-PLAN.md — APL-D1 and APL-D2 decision records, README, CHANGELOG and internal docs
@@ -683,7 +683,7 @@ Plans:
 | 26. Git Mirror Access | 1/1 | Complete    | 2026-10-23 |
 | 27. Install and Reconcile Reason Residue | 1/1 | Complete    | 2026-10-23 |
 | 28. Delisted Plugin Dependency Walk | 1/1 | Complete    | 2026-10-24 |
-| 29. Apply Command and Read-Only Reload | 12/14 | In Progress | - |
+| 29. Apply Command and Read-Only Reload | 13/14 | In Progress | - |
 
 ## Carried Forward
 

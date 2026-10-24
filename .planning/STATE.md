@@ -5,16 +5,16 @@ milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 29
 current_phase_name: Apply Command and Read-Only Reload
 status: executing
-stopped_at: Completed 29-12-PLAN.md
-last_updated: "2026-10-24T22:06:43.277Z"
+stopped_at: Completed 29-13-PLAN.md
+last_updated: "2026-10-24T22:59:18.832Z"
 last_activity: 2026-10-24
-last_activity_desc: Plan 29-12 complete (apply converges installed plugins on the catalog)
-state_head: 4d69faf8850398ce0e9f8940449e63b8cbf446c0
+last_activity_desc: Plan 29-13 complete (apply re-materializes grown plugins; the backfill retires)
+state_head: 136e09568e288c375889de353638aeefdd6f8c84
 progress:
   total_phases: 29
   completed_phases: 28
   total_plans: 74
-  completed_plans: 72
+  completed_plans: 73
   percent: 97
 ---
 
@@ -32,9 +32,9 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 29 (Apply Command and Read-Only Reload) — EXECUTING
-Plan: 13 of 14
+Plan: 14 of 14
 Status: Ready to execute
-Last activity: 2026-10-24 — Plan 29-12 complete (apply converges installed plugins on the catalog)
+Last activity: 2026-10-24 — Plan 29-13 complete (apply re-materializes grown plugins; the backfill retires)
 
 Progress: [█████████░] 97%
 
@@ -187,8 +187,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-24T22:06:07.476Z
-**Stopped at:** Completed 29-12-PLAN.md
+**Last session:** 2026-10-24T22:58:50.256Z
+**Stopped at:** Completed 29-13-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -406,6 +406,7 @@ archived milestone artifacts.
 | Phase 29 P10 | 54 min | 3 tasks | 31 files |
 | Phase 29 P11 | 27 min | 2 tasks | 14 files |
 | Phase 29 P12 | 70 min | 3 tasks | 34 files |
+| Phase 29 P13 | 48 min | 3 tasks | 44 files |
 
 ## Decisions
 
@@ -603,6 +604,7 @@ archived milestone artifacts.
 - [Phase 29]: supportedSetGrew moved to convergence.ts as an export; backfill.ts imports it until the backfill is removed
 - [Phase 29]: apply moves catalog plugins through PluginUpdateOperations.convergePlugin (the update runner, refreshSource off, skipSameRevision on, overwrite off, searchReleaseTags off), never reinstall; a failed move shows the planned move and its closed-set reason
 - [Phase 29]: The cascade failure classifier reads the errno a BridgeStagingError carries on its cause, so an unreadable plugin source is permission denied (also in the autoupdate cascade)
+- [Phase 29]: apply runs growth-only moves through convergePlugin with rematerialize (skipSameRevision off, overwrite off) and reports them with the plugin-backfilled row; the load-time backfill, its stamp gate and EXTENSION_VERSION are deleted, lastReconciledExtensionVersion stays readable and nothing writes it (D-10, D-13, D-25)
 
 ### mcp-4 decisions
 
