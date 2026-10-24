@@ -7,9 +7,8 @@
 // JavaScript to measure.
 //
 // The one contract `EdgeDeps` carries is its required-versus-optional split:
-// the completion cache, the MCP status reader and the git/update operations are
-// required, while
-// `importClaudeSettings` is optional. The hooks runtime stays at its direct
+// the completion cache, the MCP status reader, the git/update operations and the
+// reconcile apply step are required, while `importClaudeSettings` is optional. The hooks runtime stays at its direct
 // root-to-bridge boundary because edge cannot import bridge contracts.
 // D-116-12: this owner does NOT enumerate the member set and does NOT assert the
 // module's export surface. A test observes shape; whether a member is READ
@@ -36,6 +35,7 @@ import type {
   ImportClaudeSettingsOptions,
 } from "../../extensions/pi-claude-marketplace/orchestrators/import/index.ts";
 import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type { ApplyReconcileOptions } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { PluginUpdateFn } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { McpStatusReader } from "../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
 import type { CompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -67,6 +67,8 @@ const beginPluginUpdateRun = (): PluginUpdateFn => pluginUpdate;
 
 const mcpStatus = { lookup: () => "no-snapshot" } satisfies McpStatusReader;
 
+const applyReconcile = (_opts: ApplyReconcileOptions): Promise<void> => Promise.resolve();
+
 const IMPORT_RESULT = {
   addedMarketplaces: [],
   changedResources: false,
@@ -86,8 +88,15 @@ const importClaudeSettings = (
 
 function proveEdgeDepsShape(completionCache: CompletionCache): void {
   // The optional-member proof: the bundle is complete without the import hook.
-  void ({ beginPluginUpdateRun, completionCache, gitOps, mcpStatus } satisfies EdgeDeps);
   void ({
+    applyReconcile,
+    beginPluginUpdateRun,
+    completionCache,
+    gitOps,
+    mcpStatus,
+  } satisfies EdgeDeps);
+  void ({
+    applyReconcile,
     beginPluginUpdateRun,
     completionCache,
     gitOps,
@@ -99,6 +108,7 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
   void ({} satisfies EdgeDeps);
 
   void ({
+    applyReconcile,
     beginPluginUpdateRun,
     completionCache,
     mcpStatus,
@@ -106,6 +116,7 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
   } satisfies EdgeDeps);
 
   void ({
+    applyReconcile,
     completionCache,
     gitOps,
     mcpStatus,
@@ -113,6 +124,7 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
   } satisfies EdgeDeps);
 
   void ({
+    applyReconcile,
     beginPluginUpdateRun,
     gitOps,
     mcpStatus,
@@ -120,16 +132,37 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
   } satisfies EdgeDeps);
 
   void ({
+    applyReconcile,
     beginPluginUpdateRun,
     completionCache,
     gitOps,
     // @ts-expect-error the edge dependency bundle always carries its MCP status reader
   } satisfies EdgeDeps);
 
+  void ({
+    beginPluginUpdateRun,
+    completionCache,
+    gitOps,
+    mcpStatus,
+    // @ts-expect-error the edge dependency bundle always carries its reconcile apply step (APL-01)
+  } satisfies EdgeDeps);
+
+  const applyWithWrongParameter = (_scope: string): Promise<void> => Promise.resolve();
+
+  void ({
+    beginPluginUpdateRun,
+    completionCache,
+    gitOps,
+    mcpStatus,
+    // @ts-expect-error the reconcile apply step takes the reconcile apply options bundle
+    applyReconcile: applyWithWrongParameter,
+  } satisfies EdgeDeps);
+
   const importWithWrongParameter = (_scope: string): Promise<ClaudeImportExecutionResult> =>
     Promise.resolve(IMPORT_RESULT);
 
   void ({
+    applyReconcile,
     beginPluginUpdateRun,
     completionCache,
     gitOps,
@@ -142,6 +175,7 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
     Promise.resolve("imported");
 
   void ({
+    applyReconcile,
     beginPluginUpdateRun,
     completionCache,
     gitOps,
@@ -164,6 +198,8 @@ function proveEdgeDepsReadonly(deps: EdgeDeps, completionCache: CompletionCache)
   deps.importClaudeSettings = importClaudeSettings;
   // @ts-expect-error the injected MCP status reader is readonly
   deps.mcpStatus = mcpStatus;
+  // @ts-expect-error the injected reconcile apply step is readonly
+  deps.applyReconcile = applyReconcile;
 }
 
 void proveEdgeDepsReadonly;

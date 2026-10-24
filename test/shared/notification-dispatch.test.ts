@@ -468,7 +468,7 @@ for (const { message, outcome, reload } of [
   },
   {
     message: { kind: "reconcile-applied-cascade", marketplaces: [] },
-    outcome: false,
+    outcome: true,
     reload: false,
   },
 ] satisfies Array<{ message: NotificationMessage; outcome: boolean; reload: boolean }>) {

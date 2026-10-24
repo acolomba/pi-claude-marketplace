@@ -11,6 +11,7 @@ import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 import { parseArgs } from "../../args.ts";
 import { passThroughFlagNames } from "../../flag-catalog.ts";
+import { rejectUnknownFlag } from "../shared.ts";
 
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { NotificationRun } from "../../../shared/notification-run.ts";
@@ -268,4 +269,32 @@ export function withParsedArgs<P>(
 
     await operation(parsed, ctx, run);
   };
+}
+
+/**
+ * D-07: the prelude of a verb whose only argument is `--scope` (`pending`,
+ * `apply`). After `withParsedArgs`, a token that opens with `--` is an unknown
+ * flag, and any other positional is one too many. Only then does `operation`
+ * run, with the parsed scope (`undefined` when no flag narrows the command).
+ */
+export function withScopeOnlyArgs(
+  usage: string,
+  operation: (
+    scope: Scope | undefined,
+    ctx: ExtensionCommandContext,
+    run: NotificationRun,
+  ) => Promise<void>,
+): SubcommandHandler {
+  return withParsedArgs(parseArgs, usage, async (parsed, ctx, run): Promise<void> => {
+    if (rejectUnknownFlag(parsed.positional, { ctx, run, usage })) {
+      return;
+    }
+
+    if (parsed.positional.length > 0) {
+      notifyUsageError(ctx, run, { message: "Too many arguments.", usage });
+      return;
+    }
+
+    await operation(parsed.scope, ctx, run);
+  });
 }

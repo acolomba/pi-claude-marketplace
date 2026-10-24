@@ -1,8 +1,8 @@
 // Owner for edge/handlers/plugin/pending.ts (MOD-09).
 //
 // This shim accepts NO positional argument and one optional scope flag. It
-// opens with the shared `withParsedArgs` prelude over `parseArgs`, then runs its
-// own guard over the recovered positional tokens. The guard's promise is that it
+// opens with the shared `withScopeOnlyArgs` prelude, which parses through
+// `parseArgs` and then guards the recovered positional tokens. The guard's promise is that it
 // reads the FIRST positional's SHAPE and picks one of two sentences from it, so
 // the discriminating proof is a pair of cases that differ only in that shape.
 //

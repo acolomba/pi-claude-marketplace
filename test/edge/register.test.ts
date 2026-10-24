@@ -145,7 +145,7 @@ type PiRegistrar = Omit<ExtensionAPI, "registerTool"> & {
 };
 
 const EXPECTED_TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|enable|disable|import|browse|marketplace|help> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
@@ -156,6 +156,7 @@ const EXPECTED_TOP_LEVEL_USAGE =
   "  list [<marketplace>] [--scope user|project]   (alias: ls)\n" +
   "  info <plugin>@<marketplace> [--scope user|project]\n" +
   "  pending [--scope user|project]\n" +
+  "  apply [--scope user|project]\n" +
   "  enable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  import [--scope user|project]\n" +
@@ -351,7 +352,7 @@ async function seedPrunableScope(scope: Scope, cwd: string): Promise<ExtensionSt
 
 /**
  * The injected dependency bag. The git operations are a memory-boundary fake and
- * the two orchestrator entrypoints refuse to run: no case here dispatches a
+ * the three orchestrator entrypoints refuse to run: no case here dispatches a
  * subcommand that reaches them, so a call is a defect rather than a fixture gap.
  */
 function createEdgeDeps(
@@ -366,6 +367,9 @@ function createEdgeDeps(
     gitOps: selectedGitOps,
     beginPluginUpdateRun: () => (): Promise<PluginUpdateOutcome> => {
       throw new Error("the registration glue must not run a plugin update");
+    },
+    applyReconcile: (): Promise<void> => {
+      throw new Error("the registration glue must not run a reconcile apply");
     },
     importClaudeSettings:
       importClaudeSettings ??
@@ -3206,6 +3210,11 @@ const COMMAND_ARGUMENT_CASES = [
     verb: "pending",
     operand: "",
     usage: "pending [--scope user|project]",
+  },
+  {
+    verb: "apply",
+    operand: "",
+    usage: "apply [--scope user|project]",
   },
   {
     verb: "enable",

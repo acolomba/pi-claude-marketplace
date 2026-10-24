@@ -203,6 +203,9 @@ function registeredCommand(cwd: string) {
           declaresMcp: false,
           constraint: undefined,
         }),
+      applyReconcile: (): Promise<void> => {
+        throw new Error("standalone prune must not run a reconcile apply");
+      },
     },
     hooksRouting,
     createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,

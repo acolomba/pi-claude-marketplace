@@ -105,6 +105,7 @@ function registeredCommand(cwd: string): (args: string) => Promise<NotifyRecord[
       mcpStatus: noStatusSnapshot(),
       gitOps: createGitOpsFake({ boundary: "memory" }).gitOps,
       beginPluginUpdateRun: pluginUpdates.beginPluginUpdateRun,
+      applyReconcile: createApplyReconcile({ loadState }),
     },
     hooksRouting,
     pluginUpdates.updatePlugins,

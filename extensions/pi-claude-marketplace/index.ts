@@ -79,9 +79,10 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   const pluginUpdateOperations = createPluginUpdateOperations(hooksRouting, completionCache);
   const hooksHydration = createHooksHydration(hooksRuntime, { loadState, readHooksJson });
   // RECON-01..05: one reconcile operation per extension load, bound to the
-  // production state reader. The `resources_discover` handler below drives it;
-  // constructing it here keeps the single binding at extension lifetime rather
-  // than rebuilding it on every event.
+  // production state reader. The `resources_discover` handler below and
+  // `/claude:plugin apply` (APL-01) drive it; constructing it here keeps the
+  // single binding at extension lifetime rather than rebuilding it on every
+  // event.
   const applyReconcile = createApplyReconcile({ loadState });
 
   // DISP-01 / DISP-02 / D-59-02 / D-59-03: register the hooks bridge at
@@ -215,6 +216,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       mcpStatus,
       gitOps: DEFAULT_GIT_OPS,
       beginPluginUpdateRun: pluginUpdateOperations.beginPluginUpdateRun,
+      applyReconcile,
     },
     hooksRouting,
     pluginUpdateOperations.updatePlugins,

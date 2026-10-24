@@ -16,10 +16,10 @@
 //     (`SCOPE_TARGET_FLAG`).
 //
 // Guarded BY TEST (test/architecture/flag-catalog-drift.test.ts): the
-// reinstall/enable/disable/fetch/pending/import/bootstrap handlers hard-reject
-// unknown long flags inline rather than consuming the catalog, so the drift
-// guard pins every verb's parse-set to the exact flags its handler accepts (and
-// reconciles catalog vs emitted completions per verb).
+// reinstall/enable/disable/fetch/pending/apply/import/bootstrap handlers
+// hard-reject unknown long flags inline rather than consuming the catalog, so
+// the drift guard pins every verb's parse-set to the exact flags its handler
+// accepts (and reconciles catalog vs emitted completions per verb).
 //
 // SCOPE: this catalog models ONLY the per-verb EXTRA flags. `--scope` is a
 // global base flag consumed by the parseArgs tokenizer and hard-coded as the
@@ -61,6 +61,7 @@ export type CatalogVerb =
   | "enable"
   | "disable"
   | "pending"
+  | "apply"
   | "import"
   | "bootstrap"
   | "browse"
@@ -201,6 +202,7 @@ const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
   enable: [WRITE_TARGET_FLAG_ENTRY],
   disable: [WRITE_TARGET_FLAG_ENTRY],
   pending: [],
+  apply: [],
   import: [],
   bootstrap: [],
   // The three documentation/navigation verbs take no flags at all, not even

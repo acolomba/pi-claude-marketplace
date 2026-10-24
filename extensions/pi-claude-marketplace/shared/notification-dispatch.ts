@@ -75,9 +75,8 @@ function isStructuredOutcome(presentation: NotificationPresentation): boolean {
     case "reconcile-pending-empty":
     case "prune-empty":
     case "prune-committed-warning":
-      return true;
     case "reconcile-applied-cascade":
-      return false;
+      return true;
   }
 }
 
