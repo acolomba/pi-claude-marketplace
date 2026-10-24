@@ -1968,13 +1968,13 @@ test("PRL-13: a bulk reinstall continues past a plugin it can no longer resolve"
       // assert
       assert.deepEqual(
         outcomes.map((o) => `${o.name}:${o.partition}`),
-        ["bad:skipped", "good:reinstalled"],
+        ["bad:failed", "good:reinstalled"],
       );
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ bad (skipped) {no longer installable}\n  ● good v1.0.0 (reinstalled)\n\nPlugin reinstall: 1 warning, 1 success\n\n/reload to pick up changes",
-          severity: "warning",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ bad v1.0.0 (failed) {source missing}\n  ● good v1.0.0 (reinstalled)\n\nPlugin reinstall: 1 failure, 1 success\n\n/reload to pick up changes",
+          severity: "error",
         },
       ]);
       const body = notifications.at(-1)?.message ?? "";
@@ -2216,8 +2216,8 @@ test("PRL-15: batch soft dependency markers ride only the reinstalled row", asyn
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ bad (skipped) {no longer installable}\n  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}\n\nPlugin reinstall: 1 warning, 1 success\n\n/reload to pick up changes",
-          severity: "warning",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ bad v1.0.0 (failed) {source missing}\n  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}\n\nPlugin reinstall: 1 failure, 1 success\n\n/reload to pick up changes",
+          severity: "error",
         },
       ]);
     } finally {
@@ -5717,6 +5717,67 @@ test("PRL-10: a source that stopped being installable skips the reinstall with t
         },
       ]);
       assert.deepStrictEqual(cloneCalls, []);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+      assert.match(await readSkill(cwd), /old skill/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("SRC-01: a source whose directory is missing fails the reinstall as source missing at the installed version", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-source-missing-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const { manifestPath } = await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      await writeFile(
+        manifestPath,
+        JSON.stringify({
+          name: "mp",
+          plugins: [{ name: "hello", version: "1.0.0", source: "./plugins/ghost" }],
+        }),
+        "utf8",
+      );
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "failed",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        fromVersion: "1.0.0",
+        notes: [
+          `Plugin "hello" is no longer installable: source dir does not exist: ${path.join(marketplaceRoot, "plugins", "ghost")}`,
+        ],
+        reasons: ["source missing"],
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v1.0.0 (failed) {source missing}",
+          severity: "error",
+        },
+      ]);
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
       assert.match(await readSkill(cwd), /old skill/);
     } finally {

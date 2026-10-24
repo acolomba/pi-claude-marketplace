@@ -16,7 +16,7 @@ import {
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { ownValue } from "../../shared/own-key.ts";
-import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import { narrowResolverNotes, narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import {
   withExistingScopeLock,
   withLockedStateTransaction,
@@ -190,24 +190,27 @@ export interface PreparePluginUpdateOptions {
 type PluginStateRecord = PreparedPluginUpdate["record"];
 
 /**
- * NFR-7: a `(failed)` row the preflight itself can reach. The four fields only a
- * staged replacement can know are pinned `never`, so a preflight failure cannot
- * claim a version transition it never attempted, nor a `phaseFailures` aggregate
- * that only phase-3a produces -- the shape `update-flow.ts` narrows on to tell a
- * phase-3a aggregate (already notified, `RECOVERY_PLUGIN_REINSTALL_PREFIX` hint
- * composed from `phaseFailures`) apart from every other failure. Threading any
- * of the four onto a preflight row therefore requires widening this type
- * deliberately, and that widening is what forces the phase-3a narrowing to be
- * revisited alongside it.
+ * NFR-7: a `(failed)` row the preflight itself can reach. It may name the
+ * installed version (UPR-03: a failure before any candidate shows the version
+ * it left in place) and the error behind it (SRC-01: a source the update could
+ * not read or fetch). The four fields only a staged replacement can know stay
+ * pinned `never`, so a preflight failure cannot claim a version transition it
+ * never attempted, nor a `phaseFailures` aggregate that only phase-3a produces
+ * -- the shape `update-flow.ts` narrows on to tell a phase-3a aggregate
+ * (already notified, `RECOVERY_PLUGIN_REINSTALL_PREFIX` hint composed from
+ * `phaseFailures`) apart from every other failure. Threading any of the four
+ * onto a preflight row therefore requires widening this type deliberately, and
+ * that widening is what forces the phase-3a narrowing to be revisited
+ * alongside it.
  */
 export interface PreflightFailedOutcome extends Omit<
   PluginUpdateFailedOutcome,
-  "cause" | "fromVersion" | "phaseFailures" | "reasons" | "toVersion"
+  "fromCommit" | "phaseFailures" | "reasons" | "toCommit" | "toVersion"
 > {
   readonly reasons: readonly ContentReason[];
-  readonly cause?: never;
-  readonly fromVersion?: never;
+  readonly fromCommit?: never;
   readonly phaseFailures?: never;
+  readonly toCommit?: never;
   readonly toVersion?: never;
 }
 
@@ -391,9 +394,9 @@ function isPartialableUpdateShapeError(error: unknown): error is PartialableUpda
   );
 }
 
-/** What `resolveUpdateCandidate` reaches: a candidate (or skip verdict), plus a `path`-pin's own resolved sha. */
+/** What `resolveUpdateCandidate` reaches: a candidate (or a skip or failure verdict), plus a `path`-pin's own resolved sha. */
 interface UpdateCandidateResolution {
-  readonly candidate: MaterializablePlugin | PluginUpdateSkippedOutcome;
+  readonly candidate: MaterializablePlugin | PluginUpdateSkippedOutcome | PreflightFailedOutcome;
   /**
    * The commit a `path`-source pin materialized, when one did. The git arm's
    * own resolved sha is unaffected -- it stays `clone.resolvedSha()`'s own
@@ -472,49 +475,53 @@ async function resolveUpdateCandidate(
       throw error;
     }
 
-    const networkReason = classifyGitTransportFailure(error);
-    if (networkReason !== undefined) {
-      return {
-        candidate: skippedCandidate(options, [errorMessage(error)], [networkReason]),
-        pathResolvedSha: undefined,
-      };
-    }
+    return { candidate: candidateFailure(error, options), pathResolvedSha: undefined };
+  }
+}
 
-    if (isPartialableUpdateShapeError(error)) {
-      return {
-        candidate: {
-          ...skippedCandidate(
-            options,
-            [errorMessage(error)],
-            narrowUnsupportedKinds(error.shape.unsupportedKinds),
-          ),
-          partialUpgradable: true,
-        },
-        pathResolvedSha: undefined,
-      };
-    }
+/**
+ * The verdict for a candidate the resolver could not produce. Only reached
+ * after the GHB-03 and GIT-03 rethrows, which fail the whole command.
+ */
+function candidateFailure(
+  error: unknown,
+  options: { readonly plugin: string; readonly fromVersion: string },
+): PluginUpdateSkippedOutcome | PreflightFailedOutcome {
+  const networkReason = classifyGitTransportFailure(error);
+  if (networkReason !== undefined) {
+    return skippedCandidate(options, [errorMessage(error)], [networkReason]);
+  }
 
-    if (error instanceof PluginShapeError && error.shape.kind === "no-longer-installable") {
-      return {
-        candidate: skippedCandidate(options, [errorMessage(error)], ["no longer installable"]),
-        pathResolvedSha: undefined,
-      };
-    }
-
-    // Anything else is genuinely unexpected -- not an invalid GitHub base
-    // override (rethrown above, GHB-03), not a classified git-transport
-    // failure, and not the resolver's typed `no-longer-installable` shape.
-    // "no longer installable" stays the user-facing verdict (the candidate
-    // could not be resolved either way), but it is not necessarily the real
-    // cause, so log the actual error for diagnosis.
-    hookDebugLog(
-      `resolveUpdateCandidate: unclassified error for "${options.plugin}": ${errorMessage(error)}`,
-    );
+  if (isPartialableUpdateShapeError(error)) {
     return {
-      candidate: skippedCandidate(options, [errorMessage(error)], ["no longer installable"]),
-      pathResolvedSha: undefined,
+      ...skippedCandidate(
+        options,
+        [errorMessage(error)],
+        narrowUnsupportedKinds(error.shape.unsupportedKinds),
+      ),
+      partialUpgradable: true,
     };
   }
+
+  if (error instanceof PluginShapeError && error.shape.kind === "no-longer-installable") {
+    // SRC-01: a plugin directory that is not on disk fails, as install's
+    // does. The reason carries it; the note embeds the absolute path, so no
+    // cause rides along.
+    return narrowResolverNotes(error.shape.reasons).includes("source missing")
+      ? failedCandidate(options, [errorMessage(error)], ["source missing"])
+      : skippedCandidate(options, [errorMessage(error)], ["no longer installable"]);
+  }
+
+  // Anything else is genuinely unexpected -- not an invalid GitHub base
+  // override (rethrown above, GHB-03), not a classified git-transport
+  // failure, and not the resolver's typed `no-longer-installable` shape.
+  // "no longer installable" stays the user-facing verdict (the candidate
+  // could not be resolved either way), but it is not necessarily the real
+  // cause, so log the actual error for diagnosis.
+  hookDebugLog(
+    `resolveUpdateCandidate: unclassified error for "${options.plugin}": ${errorMessage(error)}`,
+  );
+  return skippedCandidate(options, [errorMessage(error)], ["no longer installable"]);
 }
 
 function skippedCandidate(
@@ -524,6 +531,24 @@ function skippedCandidate(
 ): PluginUpdateSkippedOutcome {
   return {
     partition: "skipped",
+    name: options.plugin,
+    fromVersion: options.fromVersion,
+    notes: [...notes],
+    reasons: [...reasons],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  };
+}
+
+/** UPR-03: a candidate failure names the installed version it left in place. */
+function failedCandidate(
+  options: { readonly plugin: string; readonly fromVersion: string },
+  notes: readonly string[],
+  reasons: readonly ContentReason[],
+): PreflightFailedOutcome {
+  return {
+    partition: "failed",
     name: options.plugin,
     fromVersion: options.fromVersion,
     notes: [...notes],
@@ -775,7 +800,7 @@ async function refreshDisabledPluginUpdate(
 
 /** What candidate resolution reaches once a pin (if any) has been threaded through it. */
 interface PinnedUpdateCandidateResolution {
-  readonly candidate: MaterializablePlugin | PluginUpdateSkippedOutcome;
+  readonly candidate: MaterializablePlugin | PluginUpdateSkippedOutcome | PreflightFailedOutcome;
   readonly resolvedSha: string | undefined;
   readonly pin: UpdateTagPin | undefined;
 }

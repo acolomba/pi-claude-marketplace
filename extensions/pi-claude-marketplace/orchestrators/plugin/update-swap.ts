@@ -234,19 +234,21 @@ export type NonFailedUpdateOutcome = Exclude<PluginUpdateOutcome, PluginUpdateFa
 
 /**
  * A failed update outcome the caller can render directly -- one that carries its
- * own reasons and none of the phase-3 rollback payload.
+ * own reasons and none of the phase-3 rollback payload. It may name the
+ * installed version and the error behind it (the preflight's candidate
+ * failures, SRC-01 / UPR-03), never a move.
  *
  * Stated as an intersection rather than as an interface extending an `Omit` of
- * the same five keys. Both admit exactly the same values, because every one of
- * those five slots is optional on the source; the intersection additionally
- * keeps each absence marker beside the slot it closes, so what the marker
- * narrows is readable from the declaration itself.
+ * the same keys. Both admit exactly the same values, because every one of
+ * those slots is optional on the source; the intersection additionally keeps
+ * each absence marker beside the slot it closes, so what the marker narrows is
+ * readable from the declaration itself.
  */
 export type DirectRenderableFailedOutcome = PluginUpdateFailedOutcome & {
   readonly reasons: readonly ContentReason[];
-  readonly cause?: never;
-  readonly fromVersion?: never;
+  readonly fromCommit?: never;
   readonly phaseFailures?: never;
+  readonly toCommit?: never;
   readonly toVersion?: never;
 };
 

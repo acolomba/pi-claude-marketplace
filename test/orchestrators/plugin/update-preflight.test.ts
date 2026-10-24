@@ -582,6 +582,28 @@ test("keeps an unsupported candidate skipped with and without partial permission
   }
 });
 
+test("SRC-01: fails a path source whose directory is missing as source missing at the installed version", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), source: "./plugins/ghost" });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const ghostRoot = path.join(seed.cwd, "marketplace", "plugins", "ghost");
+
+  // act
+  const outcome = await prepare(seed);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: [`Plugin "hello" is no longer installable: source dir does not exist: ${ghostRoot}`],
+    reasons: ["source missing"],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
+});
+
 test("keeps an unexpected resolve failure skipped as no-longer-installable, carrying the raw error", async (t) => {
   // arrange
   const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });

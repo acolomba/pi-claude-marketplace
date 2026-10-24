@@ -4511,7 +4511,14 @@ test("CR-01: a later marketplace removed during an earlier refresh aborts before
             "Plugin update: 1 failure",
           severity: "error",
         },
-        { message: "● aaa [project]\n  ⊘ hello v1.0.0 (skipped) {no longer installable}" },
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● aaa [project]\n" +
+            "  ⊘ hello v1.0.0 (failed) {source missing}\n\n" +
+            "Plugin update: 1 failure",
+          severity: "error",
+        },
       ]);
       assert.equal((await loadState(locations.extensionRoot)).marketplaces["zzz"], undefined);
     } finally {
@@ -4705,6 +4712,7 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
       await mkdir(locations.extensionRoot, { recursive: true });
       const cloneDir = await locations.sourceCloneDir("official");
       await cp(fixtureMarketplaceDir("valid-marketplace"), cloneDir, { recursive: true });
+      await mkdir(path.join(cloneDir, "plugins", "hello"), { recursive: true });
 
       await saveState(locations.extensionRoot, {
         schemaVersion: 1,
@@ -4770,9 +4778,12 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
       // No error: version advanced from 0.0.9 to 0.0.10, manifest has 1.0.0.
       // preflightUpdate uses 0.0.10 as fromVersion; withStateGuard finds 0.0.10
       // -> they match -> update proceeds.
-      assert.ok(notifications.length >= 1, "expected at least one notification");
-      const errs = notifications.filter((n) => n.severity === "error");
-      assert.equal(errs.length, 0, `unexpected error: ${JSON.stringify(errs)}`);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● official [project]\n  ● hello v0.0.10 → v1.0.0 (updated)\n\nPlugin update: 1 updated\n\n/reload to pick up changes",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

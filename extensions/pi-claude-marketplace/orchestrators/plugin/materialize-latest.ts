@@ -19,7 +19,7 @@ import type { ThreePhaseArgs, UpdateRunOutcome } from "./update-swap.ts";
  *
  * NFR-7: `UpdatePreflightOutcome` is a strict subset of `UpdateRunOutcome`, so a
  * preflight verdict returns straight through with no cast. That assignability is
- * the guard: a preflight row that gained a `cause`, `toVersion` or
+ * the guard: a preflight row that gained a `toVersion`, a commit, or
  * `phaseFailures` would fail to compile here, because neither failed arm of
  * `UpdateRunOutcome` admits one, and `isPhase3aAggregateFailure` narrows on
  * exactly that gap.

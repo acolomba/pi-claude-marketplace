@@ -354,6 +354,73 @@ test("UPR-04: renders an absent targeted result as an exact failure without a ve
   boundary.verifyBoundary();
 });
 
+test("SRC-01 / UPR-03: renders a preflight failure at the installed version", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1);
+  const outcomes: readonly UpdateCascadeOutcome[] = [
+    {
+      target: { marketplace: "mp", scope: "project" },
+      outcome: {
+        partition: "failed",
+        name: "demo",
+        fromVersion: "1.0.0",
+        notes: ["source dir does not exist"],
+        reasons: ["source missing"],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+      },
+    },
+  ];
+
+  // act
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "single");
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ demo v1.0.0 (failed) {source missing}",
+      severity: "error",
+    },
+  ]);
+  boundary.verifyBoundary();
+});
+
+test("renders a failed outcome's cause as its cause line", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1);
+  const outcomes: readonly UpdateCascadeOutcome[] = [
+    {
+      target: { marketplace: "mp", scope: "project" },
+      outcome: {
+        partition: "failed",
+        name: "demo",
+        fromVersion: "1.0.0",
+        notes: ["connect ECONNREFUSED 127.0.0.1:443"],
+        reasons: ["network unreachable"],
+        cause: new Error("connect ECONNREFUSED 127.0.0.1:443"),
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+      },
+    },
+  ];
+
+  // act
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "single");
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ demo v1.0.0 (failed) {network unreachable}\n    cause: connect ECONNREFUSED 127.0.0.1:443",
+      severity: "error",
+    },
+  ]);
+  boundary.verifyBoundary();
+});
+
 test("renders a failed bulk result with exact severity and tally", () => {
   // arrange
   const boundary = createNotificationBoundary(1);

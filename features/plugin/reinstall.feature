@@ -231,6 +231,29 @@ Feature: Plugin reinstall
       | demo@fixtures |
     Then the "claude-plugins.local.json" file of the project scope does not exist
 
+  Scenario: Reinstalling a plugin whose marketplace now names a missing source directory fails as source missing and keeps it installed
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [{ "name": "demo", "source": "./plugins/ghost", "version": "1.0.0" }]
+      }
+      """
+    Given the user has run "/claude:plugin marketplace update fixtures --scope project"
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons        | scope   | version | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | source missing | project | 1.0.0   |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+
   Scenario: Reinstalling a plugin the marketplace now offers at a newer version installs and records that version
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
