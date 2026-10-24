@@ -17,11 +17,15 @@ import {
   type MarketplaceStatus,
   type NotificationMessage,
   type PluginAvailableMessage,
+  type PluginFailedMessage,
   type PluginInstalledMessage,
   type PluginNotificationMessage,
+  type PluginPartiallyInstalledMessage,
   type PluginPathSkippedSurface,
+  type PluginReinstalledMessage,
   type PluginSkippedMessage,
   type PluginUninstallSkippedMessage,
+  type PluginUpdatedMessage,
   type PluginUpdateSkippedMessage,
   type PluginStatus,
   type Reason,
@@ -33,6 +37,7 @@ import {
   type StopOverrideCapSurface,
   type UsageErrorSurface,
   type UsageInfoSurface,
+  type VersionCommits,
   type WithPlugins,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
@@ -302,6 +307,64 @@ const severity: Severity = "warning";
 void pluginStatusIsExhaustive;
 void marketplaceStatusIsExhaustive;
 void notificationKindIsExhaustive;
+void ({
+  status: "updated",
+  name: "ghp",
+  from: "1.0.0",
+  to: "1.0.0",
+  commits: { from: "a".repeat(40), to: "b".repeat(40) },
+  dependencies: [],
+  severity: "info",
+  needsReload: true,
+} satisfies PluginUpdatedMessage);
+// D-10-13: an updated and a reinstalled row may carry the constraint disclosure as their cause.
+void ({
+  status: "updated",
+  name: "lib",
+  from: "1.0.0",
+  to: "1.1.0",
+  dependencies: [],
+  cause: new Error('constrained to the combined range (^1.0.0) -- required by "app@tools"'),
+  severity: "info",
+  needsReload: true,
+} satisfies PluginUpdatedMessage);
+void ({
+  status: "reinstalled",
+  name: "lib",
+  version: "1.0.0",
+  dependencies: [],
+  cause: new Error('constrained to the combined range (^1.0.0) -- required by "app@tools"'),
+  severity: "info",
+  needsReload: true,
+} satisfies PluginReinstalledMessage);
+// @ts-expect-error UPR-02: the commits travel together, so one side alone is no VersionCommits
+void ({ from: "a".repeat(40) } satisfies VersionCommits);
+// UPR-03: the three rows that can show a move carry `from` and `commits` beside `version`.
+void ({
+  status: "reinstalled",
+  name: "ghp",
+  version: "1.1.0",
+  from: "1.0.0",
+  dependencies: [],
+  severity: "info",
+  needsReload: true,
+} satisfies PluginReinstalledMessage);
+void ({
+  status: "partially-installed",
+  name: "ghp",
+  version: "1.0.0",
+  from: "1.0.0",
+  commits: { from: "a".repeat(40), to: "b".repeat(40) },
+  reasons: ["unsupported component"],
+} satisfies PluginPartiallyInstalledMessage);
+void ({
+  status: "failed",
+  name: "ghp",
+  version: "1.1.0",
+  from: "1.0.0",
+  reasons: ["lock held"],
+  severity: "error",
+} satisfies PluginFailedMessage);
 void ({ kind: "prune-empty", scope: "user" } satisfies NotificationMessage);
 // @ts-expect-error a prune empty result must name its selected scope
 void ({ kind: "prune-empty" } satisfies NotificationMessage);

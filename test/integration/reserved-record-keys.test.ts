@@ -431,11 +431,11 @@ for (const { command, notification } of [
   },
   {
     command: (name: string) => `reinstall ${name}@mp`,
-    notification: (name: string) => pluginFailed(name, "(skipped) {not installed}"),
+    notification: (name: string) => pluginFailed(name, "(failed) {not installed}"),
   },
   {
     command: (name: string) => `update ${name}@mp`,
-    notification: (name: string) => pluginFailed(name, "(failed) {not in manifest}"),
+    notification: (name: string) => pluginFailed(name, "(failed) {not installed}"),
   },
 ]) {
   test(`D-08-07: ${command("constructor")} prints what ${command("absent")} prints and changes no file`, async () => {

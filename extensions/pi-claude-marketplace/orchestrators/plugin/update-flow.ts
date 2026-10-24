@@ -87,7 +87,7 @@ import { DEFAULT_GIT_OPS, refreshGitHubClone, refreshUrlClone } from "../marketp
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
-import { materializeLatestVersion } from "./materialize-latest.ts";
+import { materializeLatestVersion, recordCandidate } from "./materialize-latest.ts";
 import {
   emitMarketplaceNotAddedSignal,
   keepLocalLayerTargets,
@@ -98,6 +98,7 @@ import {
   surfaceDiscoveryWarnings,
 } from "./shared.ts";
 import { composeUpdateCascade } from "./update-cascade.ts";
+import { revisionVersionSlot } from "./update-row.ts";
 import { UPDATE_CONTEXT } from "./update.messaging.ts";
 
 import type { UpdateCascadeOutcome, UpdateHooksRouting } from "./update-cascade.ts";
@@ -126,6 +127,7 @@ import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult } from "../auth-host.ts";
 import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
+import type { CandidateReport } from "./materialize-latest.ts";
 
 /** Runs one prepared update target for the update flow. */
 type UpdatePluginRunner = (args: ThreePhaseArgs) => Promise<UpdateRunOutcome>;
@@ -218,6 +220,7 @@ function buildDirectThreePhaseArgs(
   bindings: UpdateBindings,
   constraintTagMemo: Map<string, readonly RemoteTag[]>,
   constraintMarketplaceTagMemo: Map<string, readonly ReleaseTagCandidate[]>,
+  report: CandidateReport,
 ): DirectThreePhaseArgs {
   return {
     plugin: target.plugin,
@@ -257,6 +260,7 @@ function buildDirectThreePhaseArgs(
     constraintTagMemo,
     constraintMarketplaceTagMemo,
     cleanupClones: garbageCollectPluginClones,
+    ...recordCandidate(report),
     notifyPhaseFailure: (error, failures) => {
       notifyDirectFailure({
         ctx: opts.ctx,
@@ -268,6 +272,7 @@ function buildDirectThreePhaseArgs(
         err: error,
         reasonOverride: "rollback partial",
         rollbackPartial: failures,
+        report,
       });
     },
   };
@@ -367,6 +372,7 @@ async function updatePluginsWith(
     }
 
     let outcome: UpdateRunOutcome;
+    const report: CandidateReport = {};
     try {
       // eslint-disable-next-line no-await-in-loop -- each update locks the scope (retries: 0)
       outcome = await runPluginUpdate(
@@ -377,6 +383,7 @@ async function updatePluginsWith(
           bindings,
           constraintTagMemo,
           constraintMarketplaceTagMemo,
+          report,
         ),
       );
     } catch (err) {
@@ -397,6 +404,7 @@ async function updatePluginsWith(
         scope: t.scope,
         pluginName: t.plugin,
         err,
+        report,
       });
       abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade);
       return;
@@ -635,6 +643,7 @@ async function updateSinglePluginWith(
   // dependency-injection seam if needed.
   const cwd = process.cwd();
   const locations = locationsFor(scope, cwd);
+  const report: CandidateReport = {};
 
   try {
     return await runPluginUpdate({
@@ -662,6 +671,7 @@ async function updateSinglePluginWith(
       constraintTagMemo: constraintMemos.tagMemo,
       constraintMarketplaceTagMemo: constraintMemos.marketplaceTagMemo,
       cleanupClones: garbageCollectPluginClones,
+      ...recordCandidate(report),
     });
   } catch (err) {
     // GHB-03: an invalid GitHub base override fails the marketplace command
@@ -678,6 +688,9 @@ async function updateSinglePluginWith(
     const base: PluginUpdateOutcome = {
       partition: "failed",
       name: plugin,
+      // UPR-03: the move a throw after the candidate attempted; nothing
+      // before one.
+      ...(report.move ?? {}),
       notes: [composeErrorWithCauseChain(err)],
       ...(cleanupFailures.length > 0 && {
         cause: err as Error,
@@ -771,6 +784,13 @@ interface NotifyDirectFailureArgs {
    * identity for the renderer's cause-chain walker.
    */
   readonly rollbackPartial?: readonly UpdatePhase3Failure[];
+  /**
+   * UPR-03: the target's candidate report. A failure after the candidate
+   * shows the move it attempted, and one after the preflight found the record
+   * shows the installed version; the marketplace-sync, enumeration, and
+   * layer-refusal failures carry none and show no version.
+   */
+  readonly report?: CandidateReport;
 }
 
 function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
@@ -787,6 +807,7 @@ function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
   const failedRow: PluginFailedMessage = {
     status: "failed",
     name: pluginName,
+    ...revisionVersionSlot(args.report?.move ?? {}),
     reasons,
     cause,
     // D-03/D-06: a direct update failure -> error, no reload.
@@ -1041,7 +1062,7 @@ async function enumerateMarketplaceTarget(
   // (`<plugin>@<mp>` and `@<mp>`). For the plugin form, first try the
   // installed-plugin target; a miss falls back to the marketplace-existence
   // resolver so a present-marketplace/absent-plugin row still reaches the
-  // downstream `(skipped) {not installed}` preflight. A
+  // downstream `(failed) {not installed}` preflight (UPR-04). A
   // marketplace-absent / other-scope outcome raises `MarketplaceNotAddedSignal`
   // -- caught at the `updatePlugins` entrypoint and re-attributed to the
   // standalone `{marketplace not added}` variant, so the miss is never
@@ -1101,8 +1122,8 @@ async function enumerateMarketplaceTarget(
  *  - PLUGIN form: prefer the installed-plugin target (CMP-5). When the plugin
  *    row is absent, fall back to the marketplace-existence resolver so a
  *    present-marketplace/absent-plugin target resolves against the container's
- *    scope (the downstream `preflightUpdate` emits `(skipped) {not installed}`
- *    ); a marketplace-absent / other-scope outcome signals
+ *    scope (the downstream `preflightUpdate` emits `(failed) {not installed}`,
+ *    UPR-04); a marketplace-absent / other-scope outcome signals
  *    `{marketplace not added}` carrying the REQUESTED scope (SCOPE-01).
  *  - MARKETPLACE form: consume the discriminated `resolveInstalledMarketplaceTarget`
  *    result directly; `marketplace-absent`/`other-scope` signal `{marketplace not added}`

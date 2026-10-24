@@ -471,6 +471,36 @@ test("renders the held-update cause line of a skipped row", () => {
   ]);
 });
 
+test("D-10-13: renders the constraint disclosure line under an updated row", () => {
+  // arrange
+  const row = {
+    status: "updated",
+    name: "lib",
+    from: "1.0.0",
+    to: "1.1.0",
+    reasons: ["dependency current copy"],
+    severity: "info",
+    needsReload: true,
+    failure: {
+      cause: {
+        causeChain: ['constrained to the combined range (^1.0.0) -- required by "app@tools"'],
+        truncated: false,
+      },
+      leaks: [],
+      rollbackPartial: [],
+    },
+  } as const satisfies ResolvedRow;
+
+  // act
+  const lines = composePluginLines(row, "project");
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "  ● lib v1.0.0 → v1.1.0 (updated) {dependency current copy}",
+    '    cause: constrained to the combined range (^1.0.0) -- required by "app@tools"',
+  ]);
+});
+
 for (const { plugin, expectedLines } of [
   {
     plugin: {
@@ -1350,6 +1380,130 @@ test("composeVersionArrow renders complete version bytes on both sides", () => {
   // assert
   assert.equal(arrow, expectedArrow);
 });
+
+test("UPR-02: an updated row with commits names each side's short commit", () => {
+  // arrange
+  const expectedArrow = "  ● ghp v1.0.0 (aaaaaaa) → v1.0.0 (bbbbbbb) (updated)";
+
+  // act
+  const arrow = composePluginLines(
+    {
+      status: "updated",
+      name: "ghp",
+      from: "1.0.0",
+      to: "1.0.0",
+      commits: { from: "a".repeat(40), to: "b".repeat(40) },
+      reasons: [],
+      severity: "info",
+      needsReload: true,
+    },
+    "user",
+  )[0];
+
+  // assert
+  assert.equal(arrow, expectedArrow);
+});
+
+test("NREG-01: an updated row without commits keeps the plain sha arrow", () => {
+  // arrange
+  const expectedArrow = "  ● ghp v#aaaaaaa → v#bbbbbbb (updated)";
+
+  // act
+  const arrow = composePluginLines(
+    {
+      status: "updated",
+      name: "ghp",
+      from: "sha-aaaaaaaaaaaa",
+      to: "sha-bbbbbbbbbbbb",
+      reasons: [],
+      severity: "info",
+      needsReload: true,
+    },
+    "user",
+  )[0];
+
+  // assert
+  assert.equal(arrow, expectedArrow);
+});
+
+const MOVE_ROWS = [
+  {
+    title: "a reinstalled row",
+    row: {
+      status: "reinstalled",
+      name: "ghp",
+      version: "1.1.0",
+      reasons: [],
+      severity: "info",
+      needsReload: true,
+    },
+    glyph: "●",
+    tail: "(reinstalled)",
+  },
+  {
+    title: "a partially-installed row",
+    row: {
+      status: "partially-installed",
+      name: "ghp",
+      version: "1.1.0",
+      reasons: ["unsupported component"],
+      severity: "info",
+      needsReload: true,
+    },
+    glyph: "◉",
+    tail: "(partially-installed) {unsupported component}",
+  },
+  {
+    title: "a failed row",
+    row: {
+      status: "failed",
+      name: "ghp",
+      version: "1.1.0",
+      reasons: ["lock held"],
+      severity: "error",
+    },
+    glyph: "⊘",
+    tail: "(failed) {lock held}",
+  },
+] as const satisfies readonly {
+  readonly title: string;
+  readonly row: ResolvedRow;
+  readonly glyph: string;
+  readonly tail: string;
+}[];
+
+for (const { title, row, glyph, tail } of MOVE_ROWS) {
+  test(`NREG-01: ${title} without from keeps its single version`, () => {
+    // act
+    const line = composePluginLines(row, "user")[0];
+
+    // assert
+    assert.equal(line, `  ${glyph} ghp v1.1.0 ${tail}`);
+  });
+
+  test(`UPR-03: ${title} with from draws the version arrow`, () => {
+    // act
+    const line = composePluginLines({ ...row, from: "1.0.0" }, "user")[0];
+
+    // assert
+    assert.equal(line, `  ${glyph} ghp v1.0.0 → v1.1.0 ${tail}`);
+  });
+
+  test(`UPR-02: ${title} with from and commits names each side's short commit`, () => {
+    // act
+    const line = composePluginLines(
+      {
+        ...row,
+        from: "1.1.0",
+        commits: { from: "a".repeat(40), to: "b".repeat(40) },
+      },
+      "user",
+    )[0];
+
+    // assert
+    assert.equal(line, `  ${glyph} ghp v1.1.0 (aaaaaaa) → v1.1.0 (bbbbbbb) ${tail}`);
+  });
+}
 
 for (const { name, reasons, expected } of [
   {

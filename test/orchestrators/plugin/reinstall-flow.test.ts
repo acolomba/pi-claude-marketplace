@@ -6,6 +6,9 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import * as git from "isomorphic-git";
+import lockfile from "proper-lockfile";
+
 import {
   createHooksRouting,
   createHooksRuntime,
@@ -42,6 +45,7 @@ import {
   PluginInBaseLayerOnlyError,
   PluginInLocalLayerOnlyError,
   PluginUpdatePhase3Error,
+  StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
@@ -489,7 +493,7 @@ function errorNotifications(notifications: readonly NotifyRecord[]): readonly No
   return notifications.filter((n) => n.severity === "error");
 }
 
-test("PRL-06: absent installed record returns skipped and does not mutate state or disk", async () => {
+test("PRL-06 / UPR-04: absent installed record fails as not installed and does not mutate state or disk", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-skip-"));
     try {
@@ -503,18 +507,25 @@ test("PRL-06: absent installed record returns skipped and does not mutate state 
       const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert
-      assert.equal(outcome.partition, "skipped");
-      assert.deepEqual(outcome.notes, ["not installed"]);
+      assert.deepStrictEqual(outcome, {
+        partition: "failed",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        notes: ["not installed"],
+        reasons: ["not installed"],
+      });
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), before);
-      // CR-02 / D-01: the standalone path emits the absent-target row as an
-      // error (was a silent return). State/disk stay untouched; the notify is
+      // CR-02 / UPR-04: the standalone path emits the absent-target row as a
+      // failure, as uninstall's is. State/disk stay untouched; the notify is
       // the only visible effect.
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "error");
-      assert.equal(
-        notifications[0]?.message,
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not installed}",
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -632,6 +643,7 @@ for (const coexist of [false, true]) {
         marketplace: "mp",
         scope: "project",
         version: "1.0.0",
+        fromVersion: "1.0.0",
         stagedAgentNames: expectedNames,
         stagedMcpServerNames: [],
         declaresAgents: true,
@@ -766,6 +778,8 @@ test("AGENT-01 / NFR-3: a reinstall refuses a file no index row names at its new
       name: "hello",
       marketplace: "mp",
       scope: "project",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
       notes: [`${message}\n\ncause: ${message}`],
     });
     assert.strictEqual(await readFile(newTarget, "utf8"), "Other owner's bytes.\n");
@@ -828,6 +842,8 @@ test("AGENT-01: reinstall preserves legacy bytes and state when another plugin o
       name: "hello",
       marketplace: "mp",
       scope: "project",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
       notes: [`${message}\n\ncause: ${message}`],
     });
     assert.strictEqual(await readFile(newTarget, "utf8"), "Other owner's bytes.\n");
@@ -873,6 +889,8 @@ test("AGENT-01: reinstall preserves legacy bytes and state when the post-migrati
       name: "hello",
       marketplace: "mp",
       scope: "project",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
       notes: ["save failure after migration\n\ncause: save failure after migration"],
     });
     await assert.rejects(readFile(newTarget), { code: "ENOENT" });
@@ -1539,6 +1557,7 @@ test("REI-04: a reinstall after the marketplace offers a newer version records a
         marketplace: "mp",
         scope: "project",
         version: "1.1.0",
+        fromVersion: "1.0.0",
         stagedAgentNames: [],
         stagedMcpServerNames: [],
         declaresAgents: false,
@@ -1554,6 +1573,187 @@ test("REI-04: a reinstall after the marketplace offers a newer version records a
         },
         { version: "1.1.0", installedAt: before.installedAt, provenance: before.provenance },
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("UPR-03: a reinstall refused at its intent mark by a held lock names the version it attempted", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-lock-held-"));
+    try {
+      // arrange
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old" },
+        install: true,
+      });
+      const locations = locationsFor("project", cwd);
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const { ctx, run, notifications } = makeCtx();
+      const lockMessage = `Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`;
+      const release = await lockfile.lock(locations.extensionRoot, {
+        lockfilePath: locations.stateLockFile,
+        realpath: false,
+      });
+      let outcome;
+      try {
+        // act
+        outcome = await reinstallPlugin({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+        });
+      } finally {
+        await release();
+      }
+
+      // assert
+      assert.ok(outcome.partition === "failed");
+      const { cause, ...rest } = outcome;
+      assert.deepStrictEqual(rest, {
+        partition: "failed",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
+        notes: [`${lockMessage}\n\ncause: ${lockMessage} -> Lock file is already being held`],
+        reasons: ["lock held"],
+      });
+      assert.ok(cause instanceof StateLockHeldError);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v1.0.0 (failed) {lock held}\n" +
+            `    cause: ${lockMessage} -> Lock file is already being held`,
+          severity: "error",
+        },
+      ]);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("UPR-03: a reinstall whose finalize fails after moving its version names the move it attempted", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-phase3-move-"));
+    try {
+      // arrange
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedMarketplace({ cwd, marketplaceRoot, resources: { skill: "old" }, install: true });
+      const { pluginRoot } = await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        version: "1.1.0",
+        resources: { skill: "new" },
+      });
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hello", version: "1.1.0" }),
+      );
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await reinstallPlugins({
+        ctx,
+        run,
+        cwd,
+        scope: "project",
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        stateTransaction: { saveState: refuseFinalizeSave() },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v1.0.0 → v1.1.0 (failed) {rollback partial}\n" +
+            '    cause: Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it. -> finalize refused\n' +
+            "    [mcp] (rollback failed)\n      cause: finalize refused",
+          severity: "error",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("UPR-03: a failure in a bulk reinstall names its own target's move, not an earlier target's", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-own-move-"));
+    try {
+      // arrange
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        pluginName: "alpha",
+        resources: { skill: "old alpha" },
+        install: true,
+      });
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        pluginName: "beta",
+        resources: { skill: "old beta" },
+        install: true,
+      });
+      const { pluginRoot } = await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        pluginName: "alpha",
+        version: "2.0.0",
+        resources: { skill: "new alpha" },
+      });
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "alpha", version: "2.0.0" }),
+      );
+      // Once alpha's record holds 2.0.0, beta's first state read fails, before
+      // beta's runner derives any candidate.
+      let alphaReinstalled = false;
+      const stateTransaction: LockedStateTransactionDeps = {
+        loadState: async (extensionRoot) => {
+          if (alphaReinstalled) {
+            throw new Error("state read failed");
+          }
+
+          return loadState(extensionRoot);
+        },
+        saveState: async (extensionRoot, state) => {
+          await saveState(extensionRoot, state);
+          alphaReinstalled ||= state.marketplaces["mp"]?.plugins["alpha"]?.version === "2.0.0";
+        },
+      };
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await reinstallPlugins({
+        ctx,
+        run,
+        cwd,
+        scope: "project",
+        target: { kind: "marketplace", marketplace: "mp" },
+        stateTransaction,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ● alpha v1.0.0 → v2.0.0 (reinstalled)\n  ⊘ beta (failed) {unreadable}\n\nPlugin reinstall: 1 failure, 1 success\n\n/reload to pick up changes",
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -1605,7 +1805,7 @@ test("PRL-05 bulk reinstall explicit scope filters targets", async () => {
   });
 });
 
-test("ATTR-03/SCOPE-01: explicit-scope-plugin reinstall of an other-scope-only target emits (skipped) {not installed, marketplace in user scope}", async () => {
+test("ATTR-03/SCOPE-01/UPR-04: explicit-scope-plugin reinstall of an other-scope-only target emits (failed) {not installed, marketplace in user scope}", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-cross-scope-source-"));
     try {
@@ -1643,7 +1843,7 @@ test("ATTR-03/SCOPE-01: explicit-scope-plugin reinstall of an other-scope-only t
       const body = notifications.at(-1)?.message ?? "";
       assert.equal(
         body,
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ plug (skipped) {not installed, marketplace in user scope}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ plug (failed) {not installed, marketplace in user scope}",
       );
       assert.equal(notifications.at(-1)?.severity, "error");
     } finally {
@@ -1769,13 +1969,13 @@ test("PRL-13: a bulk reinstall continues past a plugin it can no longer resolve"
       // assert
       assert.deepEqual(
         outcomes.map((o) => `${o.name}:${o.partition}`),
-        ["bad:skipped", "good:reinstalled"],
+        ["bad:failed", "good:reinstalled"],
       );
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ bad (skipped) {no longer installable}\n  ● good v1.0.0 (reinstalled)\n\nPlugin reinstall: 1 warning, 1 success\n\n/reload to pick up changes",
-          severity: "warning",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ bad v1.0.0 (failed) {source missing}\n  ● good v1.0.0 (reinstalled)\n\nPlugin reinstall: 1 failure, 1 success\n\n/reload to pick up changes",
+          severity: "error",
         },
       ]);
       const body = notifications.at(-1)?.message ?? "";
@@ -2017,8 +2217,8 @@ test("PRL-15: batch soft dependency markers ride only the reinstalled row", asyn
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ bad (skipped) {no longer installable}\n  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}\n\nPlugin reinstall: 1 warning, 1 success\n\n/reload to pick up changes",
-          severity: "warning",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ bad v1.0.0 (failed) {source missing}\n  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}\n\nPlugin reinstall: 1 failure, 1 success\n\n/reload to pick up changes",
+          severity: "error",
         },
       ]);
     } finally {
@@ -2078,6 +2278,7 @@ test("D-18-17: a recorded plugin the manifest no longer declares fails every oth
         name: "good",
         marketplace: "mp",
         scope: "project",
+        fromVersion: "1.0.0",
         notes: [`${walkCause}\n\ncause: ${walkCause}`],
         reasons: ["unreadable"],
       });
@@ -2086,7 +2287,7 @@ test("D-18-17: a recorded plugin the manifest no longer declares fails every oth
       assert.strictEqual(cause.declarer, "bad@mp");
       assert.deepStrictEqual(notifications, [
         {
-          message: `A plugin operation has failed.\n\n● mp [project]\n  ⊘ bad (skipped) {not in manifest}\n  ⊘ good (failed) {unreadable}\n    cause: ${walkCause}\n\nPlugin reinstall: 1 failure, 1 warning`,
+          message: `A plugin operation has failed.\n\n● mp [project]\n  ⊘ bad (skipped) {not in manifest}\n  ⊘ good v1.0.0 (failed) {unreadable}\n    cause: ${walkCause}\n\nPlugin reinstall: 1 failure, 1 warning`,
           severity: "error",
         },
       ]);
@@ -2318,9 +2519,9 @@ test("GAP-06: an MCP collision at prepare aborts the prepared handles and fails 
   });
 });
 
-test("GAP-07: reinstallPlugin skipped does not trigger runPostSuccessMaintenance", async () => {
+test("GAP-07: a reinstall that fails as not installed does not trigger runPostSuccessMaintenance", async () => {
   // When the plugin is not installed, the reinstall returns
-  // partition='skipped' without calling runPostSuccessMaintenance (so no
+  // partition='failed' without calling runPostSuccessMaintenance (so no
   // cache/data drops run).
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-skip-no-maint-"));
@@ -2347,7 +2548,7 @@ test("GAP-07: reinstallPlugin skipped does not trigger runPostSuccessMaintenance
       );
 
       // assert
-      assert.equal(outcome.partition, "skipped");
+      assert.equal(outcome.partition, "failed");
       assert.equal(maintenanceCalled, false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2355,7 +2556,7 @@ test("GAP-07: reinstallPlugin skipped does not trigger runPostSuccessMaintenance
   });
 });
 
-test("GAP-08: reinstallPlugin render=none with skipped outcome emits no notifications", async () => {
+test("GAP-08: reinstallPlugin render=none with a not-installed failure emits no notifications", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-none-skip-"));
     try {
@@ -2375,7 +2576,7 @@ test("GAP-08: reinstallPlugin render=none with skipped outcome emits no notifica
       });
 
       // assert
-      assert.equal(outcome.partition, "skipped");
+      assert.equal(outcome.partition, "failed");
       assert.equal(notifications.length, 0);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2525,17 +2726,15 @@ test("GAP-13: reinstallPlugin user-scope happy path reinstalls and records corre
   });
 });
 
-test("GAP-14: reinstallPlugins batch with only skipped outcomes emits skipped cascade", async () => {
-  // When every reinstall target reports skipped ('not installed' because
-  // the plugin record was removed from state), reinstallSummary returns
-  // 'Plugin reinstall complete.' and the batch notification includes a
-  // Skipped section.  Explicit scope is required so resolveReinstallScope
+test("GAP-14 / UPR-04: a reinstall whose record was removed from state fails as not installed", async () => {
+  // When the plugin record was removed from state, the target fails as
+  // 'not installed'. Explicit scope is required so resolveReinstallScope
   // takes the explicitScope branch and finds the marketplace in state.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-all-skipped-"));
     try {
       // arrange
-      // Install a plugin then remove it from state so reinstall sees it as skipped.
+      // Install a plugin then remove it from state so reinstall finds no record.
       const locations = locationsFor("project", cwd);
       await seedMarketplace({
         cwd,
@@ -2563,7 +2762,7 @@ test("GAP-14: reinstallPlugins batch with only skipped outcomes emits skipped ca
       // act
       // Explicit scope=project so enumerateMarketplaceReinstallTargets finds
       // the marketplace and returns [{ plugin: "hello", scope: "project" }].
-      // reinstallPlugin then sees plugin not in mp.plugins and returns skipped.
+      // reinstallPlugin then sees plugin not in mp.plugins and fails.
       const outcomes = await reinstallPlugins({
         ctx,
         run,
@@ -2573,10 +2772,17 @@ test("GAP-14: reinstallPlugins batch with only skipped outcomes emits skipped ca
       });
 
       // assert
-      assert.equal(outcomes.length, 1);
-      assert.equal(outcomes[0]?.partition, "skipped");
-      const body = notifications.at(-1)?.message ?? "";
-      assert.match(body, /skipped/);
+      assert.deepStrictEqual(
+        outcomes.map((outcome) => [outcome.name, outcome.partition]),
+        [["hello", "failed"]],
+      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not installed}",
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2728,7 +2934,7 @@ test("SCOPE-01: an explicit-scope plugin reinstall of an other-scope-only contai
           message:
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
-            "  ⊘ hello (skipped) {not installed, marketplace in user scope}",
+            "  ⊘ hello (failed) {not installed, marketplace in user scope}",
           severity: "error",
         },
       ]);
@@ -3400,6 +3606,7 @@ test("LAYER-04: the unnamed flagless reinstall the load-time backfill runs on a 
         marketplace: "mp",
         scope: "project",
         version: "1.0.0",
+        fromVersion: "1.0.0",
         stagedAgentNames: [],
         stagedMcpServerNames: [],
         declaresAgents: false,
@@ -4068,7 +4275,7 @@ async function seedInstalledGitSourcePlugin(opts: {
   });
 }
 
-test("a clone-cache seam non-Error rejection becomes a complete skipped outcome", async () => {
+test("SRC-01: a clone-cache seam non-Error rejection fails with no reason, its cause, and the installed version", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-clone-string-failure-"));
     try {
@@ -4107,14 +4314,75 @@ test("a clone-cache seam non-Error rejection becomes a complete skipped outcome"
 
       // assert
       assert.deepStrictEqual(outcome, {
-        partition: "skipped",
+        partition: "failed",
         name: "gp",
         marketplace: "mp",
         scope: "project",
+        fromVersion: "9.9.9",
         notes: ["clone-cache string failure"],
-        reasons: ["no longer installable"],
+        reasons: [],
+        cause: new Error("clone-cache string failure"),
       });
       assert.deepEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("SRC-01: a cold-cache reinstall whose git host answers 404 fails as source missing with its cause", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-clone-404-"));
+    try {
+      // arrange
+      await seedInstalledGitSourcePlugin({
+        cwd,
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+      });
+      const locations = locationsFor("project", cwd);
+      await rm(
+        await locations.pluginCloneDir(
+          pluginCloneKey("https://github.com/org/repo", GIT_SOURCE_SHA),
+        ),
+        { recursive: true, force: true },
+      );
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const notFound = new git.Errors.HttpError(404, "Not Found", "");
+      const { gitOps } = createGitOps({ cloneThrows: notFound });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        cloneCacheSeam: installSeamWith(gitOps),
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "failed",
+        name: "gp",
+        marketplace: "mp",
+        scope: "project",
+        fromVersion: "9.9.9",
+        notes: ["HTTP Error: 404 Not Found"],
+        reasons: ["source missing"],
+        cause: notFound,
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {source missing}\n    cause: HTTP Error: 404 Not Found",
+          severity: "error",
+        },
+      ]);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -4805,6 +5073,9 @@ test("GIT-01 / D-18-04 / D-18-11: an unpinned reinstall of a record on the mirro
         marketplace: "mp",
         scope: "project",
         version: "9.9.9",
+        fromVersion: "sha-b2c3d4e5f607",
+        fromCommit: "b2c3d4e5f60718293a4b5c6d7e8f90123456789a",
+        toCommit: "b2c3d4e5f60718293a4b5c6d7e8f90123456789a",
         stagedAgentNames: [],
         stagedMcpServerNames: [],
         declaresAgents: false,
@@ -4884,6 +5155,9 @@ test("REI-04 / D-18-04: an unpinned reinstall copies the commit the mirror last 
         marketplace: "mp",
         scope: "project",
         version: "9.9.9",
+        fromVersion: "sha-b2c3d4e5f607",
+        fromCommit: "b2c3d4e5f60718293a4b5c6d7e8f90123456789a",
+        toCommit: "c3d4e5f60718293a4b5c6d7e8f90123456789abc",
         stagedAgentNames: [],
         stagedMcpServerNames: [],
         declaresAgents: false,
@@ -4969,7 +5243,7 @@ test("MIRR-06 / D-18-04: an unpinned reinstall with no mirror clones it once and
   });
 });
 
-test("D-18-04: an unpinned reinstall whose mirror clone fails is skipped and materializes nothing", async () => {
+test("D-18-04 / SRC-01: an unpinned reinstall whose mirror clone fails fails with its cause and materializes nothing", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mirror-cold-"));
     try {
@@ -4985,8 +5259,9 @@ test("D-18-04: an unpinned reinstall whose mirror clone fails is skipped and mat
         resolvedSha: GIT_SOURCE_SHA,
         source: { source: "url", url: cloneUrl },
       });
+      const cloneFailure = new Error("network unreachable: clone");
       const { gitOps, state: gitState } = createGitOps({
-        cloneThrows: new Error("network unreachable: clone"),
+        cloneThrows: cloneFailure,
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
       });
       const { ctx, run } = makeCtx();
@@ -5005,12 +5280,14 @@ test("D-18-04: an unpinned reinstall whose mirror clone fails is skipped and mat
 
       // assert
       assert.deepStrictEqual(outcome, {
-        partition: "skipped",
+        partition: "failed",
         name: "gp",
         marketplace: "mp",
         scope: "project",
+        fromVersion: `sha-${GIT_SOURCE_SHA.slice(0, 12)}`,
         notes: ["network unreachable: clone"],
-        reasons: ["no longer installable"],
+        reasons: [],
+        cause: cloneFailure,
       });
       assert.equal(gitState.cloneCalls.length, 1);
       // Neither a mirror nor a per-commit copy is left behind.
@@ -5506,6 +5783,67 @@ test("PRL-10: a source that stopped being installable skips the reinstall with t
         },
       ]);
       assert.deepStrictEqual(cloneCalls, []);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+      assert.match(await readSkill(cwd), /old skill/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("SRC-01: a source whose directory is missing fails the reinstall as source missing at the installed version", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-source-missing-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      const { manifestPath } = await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        resources: { skill: "old skill" },
+        install: true,
+      });
+      await writeFile(
+        manifestPath,
+        JSON.stringify({
+          name: "mp",
+          plugins: [{ name: "hello", version: "1.0.0", source: "./plugins/ghost" }],
+        }),
+        "utf8",
+      );
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "failed",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        fromVersion: "1.0.0",
+        notes: [
+          `Plugin "hello" is no longer installable: source dir does not exist: ${path.join(marketplaceRoot, "plugins", "ghost")}`,
+        ],
+        reasons: ["source missing"],
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v1.0.0 (failed) {source missing}",
+          severity: "error",
+        },
+      ]);
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
       assert.match(await readSkill(cwd), /old skill/);
     } finally {
@@ -6289,6 +6627,7 @@ test("NREG-01: a hygiene-only reinstall carries neither notes nor discoveryWarni
         marketplace: "mp",
         scope: "project",
         version: "1.0.0",
+        fromVersion: "1.0.0",
         stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
         stagedMcpServerNames: [],
         declaresAgents: true,
@@ -7182,12 +7521,14 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
       // assert
       assert.equal(first.partition, "failed");
       assert.deepStrictEqual(Object.keys(first).sort(), [
+        "fromVersion",
         "marketplace",
         "name",
         "notes",
         "partition",
         "reasons",
         "scope",
+        "toVersion",
       ]);
       assert.deepStrictEqual(first.reasons, ["source missing"]);
       assert.match(
@@ -7209,6 +7550,7 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
         stagedAgentNames: [],
         stagedMcpServerNames: [],
         version: "1.0.0",
+        fromVersion: "1.0.0",
       });
       assert.deepStrictEqual(notifications, []);
       assert.equal(firstStateBytes, stateBytes);
@@ -7350,6 +7692,7 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
         stagedAgentNames: [],
         stagedMcpServerNames: [],
         version: "1.0.0",
+        fromVersion: "1.0.0",
       });
       assert.deepStrictEqual(notifications, []);
       assert.equal(firstStateBytes, stateBytes);
@@ -7757,6 +8100,8 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
         name: "hello",
         marketplace: "mp",
         scope: "project",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
         notes: [aggregate, "mcp: state finalize failed: state persistence refused"],
         reasons: ["rollback partial"],
       });
@@ -7807,6 +8152,7 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
         marketplace: "mp",
         scope: "project",
         version: "1.0.0",
+        fromVersion: "1.0.0",
         stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
         stagedMcpServerNames: ["server1"],
         declaresAgents: true,
@@ -8414,7 +8760,7 @@ test("retry proof: reinstall: a bulk cascade keeps the earlier committed target 
       assert.deepStrictEqual(firstNotifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ● alpha v1.0.0 (reinstalled)\n  ⊘ beta (failed) {unreadable}\n\nPlugin reinstall: 1 failure, 1 success\n\n/reload to pick up changes",
+            "A plugin operation has failed.\n\n● mp [project]\n  ● alpha v1.0.0 (reinstalled)\n  ⊘ beta v1.0.0 (failed) {unreadable}\n\nPlugin reinstall: 1 failure, 1 success\n\n/reload to pick up changes",
           severity: "error",
         },
       ]);
@@ -9225,6 +9571,7 @@ test("PRL-08 / PRL-11 / REI-04: a reinstall records the version its source now d
         marketplace: "mp",
         scope: "project",
         version: "9.9.9",
+        fromVersion: "1.0.0",
         stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
         stagedMcpServerNames: ["server1"],
         declaresAgents: true,
@@ -9262,7 +9609,8 @@ test("PRL-08 / PRL-11 / REI-04: a reinstall records the version its source now d
       });
       assert.deepStrictEqual(notifications, [
         {
-          message: "● mp [project]\n  ● hello v9.9.9 (reinstalled)\n\n/reload to pick up changes",
+          message:
+            "● mp [project]\n  ● hello v1.0.0 → v9.9.9 (reinstalled)\n\n/reload to pick up changes",
         },
       ]);
     } finally {
@@ -9326,7 +9674,7 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through reinstall", 
 
 /** The failed row of a reinstall of `hello@mp` whose finalize save was refused. */
 const FINALIZE_FAILED_ROW =
-  "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {rollback partial}\n" +
+  "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v1.0.0 (failed) {rollback partial}\n" +
   '    cause: Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it. -> finalize refused\n' +
   "    [mcp] (rollback failed)\n      cause: finalize refused";
 
@@ -9407,7 +9755,7 @@ test("AFILE-04: a reinstall refused at its intent mark keeps the comments and sh
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {unreadable}",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v1.0.0 (failed) {unreadable}",
           severity: "error",
         },
       ]);
@@ -9493,6 +9841,7 @@ test("AFILE-04: an orchestrated reinstall returns the notice on its outcome and 
         marketplace: "mp",
         scope: "project",
         version: "1.0.0",
+        fromVersion: "1.0.0",
         stagedAgentNames: [],
         stagedMcpServerNames: ["server1"],
         declaresAgents: false,

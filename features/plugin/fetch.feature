@@ -57,7 +57,7 @@ Feature: Plugin fetch
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
     Then the fetched copy of the plugin "ghp" in the project scope holds revision 2 of its repository
 
-  Scenario: A fetch installs no new version, so the plugin list still shows the installed one
+  Scenario: A fetch installs no new version, so the plugin list shows the installed one as upgradable
     Given the git repository "ghp" holds these plugins:
       | name | version | path |
       | ghp  | 1.0.0   |      |
@@ -81,8 +81,8 @@ Feature: Plugin fetch
       | tally warnings      | 0           |
       | tally success count | 1           |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
-      | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | id       | name | status     | reasons | scope   | version |
+      | gits             | project           | ghp@gits | ghp  | upgradable |         | project | 1.0.0   |
     Then the git host receives no request
 
   Scenario: A fetch leaves the installed plugin running the revision it installed until an update

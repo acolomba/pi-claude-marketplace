@@ -281,7 +281,7 @@ export class MarketplaceNotAddedSignal extends Error {
   /**
    * SCOPE-01: set when the miss is really "nothing is installed at the scope
    * you named" -- see `missIsNotInstalled`. The handler then renders the
-   * PLUGIN row `(skipped|failed) {not installed}` instead of the marketplace
+   * PLUGIN row `(failed) {not installed}` instead of the marketplace
    * row, because the container's registration scope is not what the operator
    * asked about. Carries the plugin so the row has a subject; both fields are
    * set together or not at all.
@@ -1582,32 +1582,29 @@ export function emitMarketplaceNotAdded(args: {
  * Two arms, and which one fires is a property of the SIGNAL, not of the verb:
  *   - `notInstalledAt` + `plugin` set: the container sits one scope over, so
  *     nothing is installed at the scope the operator named. The PLUGIN is the
- *     subject, on the same `(skipped)` row an in-scope marketplace with no
- *     record yields -- but the brace names the container's actual scope beside
- *     `not installed` (SCOPE-01, via `absentTargetReasons`), because the two
- *     misses take different remedies and a shared byte form states neither.
+ *     subject, on the same `(failed)` row an in-scope marketplace with no
+ *     record yields, as uninstall's cross-scope row is (UPR-04) -- but the
+ *     brace names the container's actual scope beside `not installed`
+ *     (SCOPE-01, via `absentTargetReasons`), because the two misses take
+ *     different remedies and a shared byte form states neither.
  *   - otherwise: the marketplace row itself, `{marketplace not added}`
  *     (structural, no new REASONS member per D-47-B). `requestedScope` (when
  *     present) renders the `[scope]` bracket; the bare both-scopes-miss form
  *     carries no bracket and, per `crossScopeFlag`, is owed no sibling probe.
  *
- * The caller supplies its command label and skipped-row policy. Requiring
- * `CommandContext<"skipped">` keeps missing policies a compile error while the
+ * The caller supplies its command label and failed-row policy. Requiring
+ * `CommandContext<"failed">` keeps missing policies a compile error while the
  * row literal remains checked against the shared producer contract.
  *
- * SEV-04 / D-01: the row is stamped `error`. Its reasons always lead with
+ * SEV-04: the row is a failure stamped `error`: its reasons always lead with
  * `not installed` -- an absent target, i.e. the requested operation was NOT
- * carried out -- so both verbs' own skip-severity rules
- * (`update.ts::cascadeSkipSeverity`, `reinstall.ts`'s in-scope skipped arm)
- * collapse to the same constant here. Neither rule can be CALLED from this
- * module: both live in files that import this one, so reaching back for them
- * would close a module cycle.
+ * carried out.
  */
 export async function emitMarketplaceNotAddedSignal(args: {
   readonly ctx: NotificationContext;
   readonly run: NotificationRun;
   readonly cwd: string;
-  readonly context: CommandContext<"skipped">;
+  readonly context: CommandContext<"failed">;
   readonly cardinality: "single" | "plural";
   readonly err: MarketplaceNotAddedSignal;
 }): Promise<void> {
@@ -1624,7 +1621,7 @@ export async function emitMarketplaceNotAddedSignal(args: {
           scope: err.notInstalledAt,
           plugins: [
             {
-              status: "skipped",
+              status: "failed",
               name: err.plugin,
               reasons: absentTargetReasons(err.notInstalledAt),
               severity: "error",

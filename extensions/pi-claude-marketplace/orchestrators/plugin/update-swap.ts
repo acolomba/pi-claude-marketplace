@@ -146,7 +146,7 @@ import type {
   PreparePluginUpdateOptions,
   UpdateCloneCacheSeam,
 } from "./update-preflight.ts";
-import type { PluginUpdateFailedOutcome, PluginUpdateOutcome } from "../types.ts";
+import type { PluginUpdateFailedOutcome, PluginUpdateOutcome, RevisionMove } from "../types.ts";
 
 /** Common collaborators and identity for one prepared plugin replacement. */
 export interface ThreePhaseArgsBase {
@@ -180,6 +180,15 @@ export interface ThreePhaseArgsBase {
     PreparePluginUpdateOptions["constraintMarketplaceTagMemo"]
   >;
   readonly cleanupClones: (locations: ScopedLocations) => Promise<unknown>;
+  /**
+   * UPR-03: receives the revisions of the derived candidate, reported once
+   * before the swap starts and never for a verdict the preflight returns, so
+   * a caller can name the move on a failure the swap throws without wrapping
+   * the error. Production callers that render failures set it.
+   */
+  readonly onCandidate?: (move: RevisionMove) => void;
+  /** UPR-03: the installed version, reported before any candidate; see `onCandidate`. */
+  readonly onRecord?: NonNullable<PreparePluginUpdateOptions["onRecord"]>;
   /**
    * State I/O for the intent-mark and finalize guards (and the disabled-pin
    * refresh in preflight). Production callers omit it and get the real state
@@ -227,19 +236,21 @@ export type NonFailedUpdateOutcome = Exclude<PluginUpdateOutcome, PluginUpdateFa
 
 /**
  * A failed update outcome the caller can render directly -- one that carries its
- * own reasons and none of the phase-3 rollback payload.
+ * own reasons and none of the phase-3 rollback payload. It may name the
+ * installed version and the error behind it (the preflight's candidate
+ * failures, SRC-01 / UPR-03), never a move.
  *
  * Stated as an intersection rather than as an interface extending an `Omit` of
- * the same five keys. Both admit exactly the same values, because every one of
- * those five slots is optional on the source; the intersection additionally
- * keeps each absence marker beside the slot it closes, so what the marker
- * narrows is readable from the declaration itself.
+ * the same keys. Both admit exactly the same values, because every one of
+ * those slots is optional on the source; the intersection additionally keeps
+ * each absence marker beside the slot it closes, so what the marker narrows is
+ * readable from the declaration itself.
  */
 export type DirectRenderableFailedOutcome = PluginUpdateFailedOutcome & {
   readonly reasons: readonly ContentReason[];
-  readonly cause?: never;
-  readonly fromVersion?: never;
+  readonly fromCommit?: never;
   readonly phaseFailures?: never;
+  readonly toCommit?: never;
   readonly toVersion?: never;
 };
 
@@ -1227,7 +1238,7 @@ function hasUpdatePhase3Failures(
 function composePhase3FailureOutcome(
   args: ThreePhaseArgs,
   failures: NonEmptyUpdatePhase3Failures,
-  versions: { readonly fromVersion: string; readonly toVersion: string },
+  move: RevisionMove,
   mcpConfigNotices: readonly McpConfigNotice[],
 ): UpdatePhase3FailedOutcome {
   const { plugin, marketplace } = args;
@@ -1259,8 +1270,8 @@ function composePhase3FailureOutcome(
   return {
     partition: "failed",
     name: plugin,
-    fromVersion: versions.fromVersion,
-    toVersion: versions.toVersion,
+    // UPR-03: the versions, and the commits when a side has one.
+    ...move,
     notes: [aggregateMsg, ...failures.map((f) => `${f.phase}: ${f.msg}`)],
     // Pre-narrowed: phase-3 aggregate failures always render as `(failed)
     // {rollback partial}` per docs/output-catalog.md. The direct entrypoint
@@ -1294,7 +1305,7 @@ export async function swapPluginUpdate(
   policy: MaterializationPolicy,
 ): Promise<UpdateRunOutcome> {
   const { plugin, marketplace, scope } = args;
-  const { installable, fromVersion, toVersion } = preflight;
+  const { installable } = preflight;
 
   // ─── : prepare into tmp ────────────────────────────────────────────
   //
@@ -1401,7 +1412,7 @@ export async function swapPluginUpdate(
     return composePhase3FailureOutcome(
       args,
       phase3aFailures,
-      { fromVersion, toVersion },
+      preflightMove(preflight),
       mcpConfigNotices,
     );
   }
@@ -1458,8 +1469,7 @@ export async function swapPluginUpdate(
   return {
     partition: "updated",
     name: plugin,
-    fromVersion,
-    toVersion,
+    ...preflightMove(preflight),
     stagedAgentNames,
     stagedMcpServerNames,
     declaresAgents: stagedAgentNames.length > 0,
@@ -1507,6 +1517,24 @@ export async function swapPluginUpdate(
     // AFILE-04: same NREG-01 spread rule; the caller that renders the row
     // routes these through `notifyMcpConfigNotices`.
     ...(mcpConfigNotices.length > 0 && { mcpConfigNotices }),
+  };
+}
+
+/**
+ * UPR-02 / UPR-03: the revisions a prepared update moves between -- the
+ * versions, and the record's and the candidate's commits, each commit key
+ * present exactly when its side has a sha (NREG-01). The one place both shas
+ * are read: the success outcome, the phase-3 failure outcome, and the
+ * runner's candidate report all take it from here.
+ */
+export function preflightMove(preflight: PreparedPluginUpdate): RevisionMove {
+  const fromCommit = preflight.record.resolvedSha;
+  const toCommit = preflight.resolvedSha;
+  return {
+    fromVersion: preflight.fromVersion,
+    toVersion: preflight.toVersion,
+    ...(fromCommit !== undefined && { fromCommit }),
+    ...(toCommit !== undefined && { toCommit }),
   };
 }
 

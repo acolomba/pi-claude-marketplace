@@ -1,7 +1,7 @@
 // orchestrators/plugin/reinstall-flow.ts
 //
 // PRL-02..PRL-15 reinstall, single-plugin and bulk. This module owns target
-// selection, the `not installed` / `already disabled` skips, the named-layer
+// selection, the `not installed` failure, the `already disabled` skip, the named-layer
 // refusal, the post-success maintenance, and messaging. The materialization
 // is the shared runner `materialize-latest.ts` that `update` runs too, under
 // reinstall's policy (UPR-01, D-18-02..D-18-10). So a reinstall installs the
@@ -60,7 +60,7 @@ import { ownValue } from "../../shared/own-key.ts";
 import { type LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
-import { materializeLatestVersion } from "./materialize-latest.ts";
+import { materializeLatestVersion, recordCandidate } from "./materialize-latest.ts";
 import {
   recordReinstallOutcome,
   reinstallOutcomeFromRun,
@@ -90,7 +90,8 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts";
+import type { ReinstallFailedOutcome, ReinstallPluginOutcome, RevisionMove } from "../types.ts";
+import type { CandidateReport } from "./materialize-latest.ts";
 import type { ReinstallPhaseFailure } from "./reinstall-record.ts";
 import type { ReinstallPluginsTarget, ReinstallTargetSelection } from "./reinstall-targets.ts";
 import type { MaterializationPolicy, UpdateCloneCacheSeam } from "./update-preflight.ts";
@@ -281,14 +282,16 @@ async function reinstallPluginWith(
   const render = opts.render ?? "default";
   const locations = locationsFor(scope, cwd);
 
+  // UPR-03: one holder per call, so a failure names this target's move only.
+  const candidate: CandidateReport = {};
   let reached: ReinstallReached;
   try {
-    reached = await runReinstall(owners, bindings, opts, locations);
+    reached = await runReinstall(owners, bindings, opts, locations, candidate);
   } catch (err) {
     // GHB-03 / D-18-16: an invalid GitHub base override fails the command,
     // warm cache or not.
     rethrowInvalidGitHubBaseUrl(err);
-    return failReinstall(owners, opts, err, render);
+    return failReinstall(owners, opts, err, render, candidate.move);
   }
 
   const { outcome } = reached;
@@ -365,13 +368,16 @@ async function runReinstall(
   bindings: ReinstallBindings,
   opts: ReinstallPluginOptions,
   locations: ScopedLocations,
+  candidate: CandidateReport,
 ): Promise<ReinstallReached> {
   const target = { name: opts.plugin, marketplace: opts.marketplace, scope: opts.scope };
   const state = await (opts.stateTransaction?.loadState ?? loadState)(locations.extensionRoot);
   const record = ownValue(ownValue(state.marketplaces, opts.marketplace)?.plugins, opts.plugin);
   if (record === undefined) {
-    return skippedBeforeRunner(
-      owners.recordReinstallOutcome({ partition: "skipped", ...target, reason: "not installed" }),
+    // UPR-04: a target the scope does not record fails as not installed, as
+    // uninstall's does; nothing is changed.
+    return reachedBeforeRunner(
+      owners.recordReinstallOutcome({ partition: "failed", ...target, reason: "not installed" }),
     );
   }
 
@@ -385,7 +391,7 @@ async function runReinstall(
   // inventory while disabled, so a populated inventory is not evidence that
   // anything is on disk and must not be read as one.
   if (isRecordedButDisabled(record)) {
-    return skippedBeforeRunner(
+    return reachedBeforeRunner(
       owners.recordReinstallOutcome({
         partition: "skipped",
         ...target,
@@ -416,6 +422,7 @@ async function runReinstall(
       notifyPhaseFailure: (error, failures) => {
         phaseFailure = { error, failures };
       },
+      ...recordCandidate(candidate),
     },
     REINSTALL_MATERIALIZATION,
   );
@@ -427,7 +434,8 @@ async function runReinstall(
   };
 }
 
-function skippedBeforeRunner(outcome: ReinstallPluginOutcome): ReinstallReached {
+/** An outcome reinstall reached before the shared runner, which stages nothing. */
+function reachedBeforeRunner(outcome: ReinstallPluginOutcome): ReinstallReached {
   return { outcome, discoveryWarnings: [], mcpConfigNotices: [] };
 }
 
@@ -482,6 +490,7 @@ function failReinstall(
   opts: ReinstallPluginOptions,
   err: unknown,
   render: "default" | "none",
+  move?: Partial<RevisionMove>,
 ): ReinstallFailedOutcome {
   const outcome = owners.recordReinstallOutcome({
     partition: "failed",
@@ -489,6 +498,7 @@ function failReinstall(
     marketplace: opts.marketplace,
     scope: opts.scope,
     error: err,
+    ...(move !== undefined && { move }),
   });
   if (render !== "none") {
     renderReinstallPartitionAndNotify(opts.ctx, opts.run, [outcome], "single");

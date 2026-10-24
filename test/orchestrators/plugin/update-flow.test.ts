@@ -2431,6 +2431,9 @@ test("FLR-02: updateSinglePlugin under a held state lock fails as lock held with
       assert.deepStrictEqual(failure, {
         partition: "failed",
         name: "hello",
+        // UPR-03: the lock is hit at the intent mark, after the candidate.
+        fromVersion: "1.0.0",
+        toVersion: "1.0.1",
         notes: [`${lockMessage}\n\ncause: ${lockMessage} -> Lock file is already being held`],
         declaresAgents: false,
         declaresMcp: false,
@@ -3514,9 +3517,9 @@ test("SEV-03 / D-69-01: prior-state read -- an ALREADY partially-installed plugi
   });
 });
 
-// ─── PUP-1 pl@mp form: not-installed plugin -> partition='skipped' ─────────────
+// ─── PUP-1 pl@mp form: not-installed plugin -> partition='failed' ──────────────
 
-test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not installed)", async () => {
+test("PUP-1 / UPR-04 pl@mp: targeting a plugin not in state -> partition='failed' (not installed)", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-pup1-pl-noinstall-");
     try {
@@ -3539,11 +3542,11 @@ test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not i
 
       const body = notifications[0]?.message ?? "";
       // V2 byte form. Plugin-row `[<scope>]` bracket suppressed by orphan-fold.
-      // D-01: an absent-target update (not installed) is error, severity-only
-      // flip; the `(skipped) {not installed}` per-row grammar is preserved.
+      // UPR-04: an absent-target update fails as not installed, as uninstall's
+      // does.
       assert.equal(
         body,
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not installed}",
       );
       assert.equal(notifications[0]?.severity, "error");
     } finally {
@@ -3554,13 +3557,11 @@ test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not i
 
 // ─── PUP-1 pl@mp: not in state AND not in manifest -> partition='failed' ───────
 
-// UXG-08 / D-29-08: `update <plugin>@<mp>` where the plugin is absent from both
-// local state AND the marketplace manifest now classifies as `(failed) {not in
-// manifest}` (matching `install`), not the prior `(skipped) {not installed}`.
-// `preflightUpdate` consults the manifest BEFORE concluding "not installed", so
-// a typo / nonexistent plugin name is distinguished from a real-but-uninstalled
-// plugin.
-test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partition='failed' (not in manifest)", async () => {
+// UPR-04: `update <plugin>@<mp>` checks the install record before the
+// marketplace manifest, as Claude Code does, so a plugin absent from both local
+// state AND the manifest fails as `(failed) {not installed}`, the same row a
+// plugin the manifest still lists renders.
+test("PUP-1 / UPR-04 pl@mp: targeting a plugin not in state AND not in manifest -> partition='failed' (not installed)", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-pup1-pl-nomanifest-");
     try {
@@ -3569,8 +3570,7 @@ test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partit
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         // Empty manifest: no entry for "hello", and hello is not installed
-        // (no installedVersions). The manifest check must fire before the
-        // "not installed" guard.
+        // (no installedVersions). The record check fires first.
         manifestPlugins: {},
       });
 
@@ -3586,7 +3586,7 @@ test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partit
       const body = notifications[0]?.message ?? "";
       assert.equal(
         body,
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not in manifest}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not installed}",
       );
       assert.equal(notifications[0]?.severity, "error");
     } finally {
@@ -3733,9 +3733,9 @@ test("SCOPE-01 @<mp>: marketplace present only in other scope -> scope-qualified
 // The plugin form reaches this via `resolveInstalledPluginTarget` returning the
 // explicit scope blindly, then `enumerateMarketplaceTarget` finding
 // `mp === undefined` for that scope and raising the signal -- the companion of
-// the `@<mp>` form test above (WR-01 gap closure). SEV-04 / D-01: an absent
-// target means the operation was NOT carried out, so the row is `error`.
-test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> (skipped) {not installed, marketplace in project scope}", async () => {
+// the `@<mp>` form test above (WR-01 gap closure). SEV-04 / UPR-04: an absent
+// target means the operation was NOT carried out, so the row is a failure.
+test("SCOPE-01 / UPR-04 <plugin>@<mp>: marketplace present only in other scope -> (failed) {not installed, marketplace in project scope}", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-scope01-plugin-other-");
     try {
@@ -3761,7 +3761,7 @@ test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> (skippe
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "A plugin operation has failed.\n\n● mp [user]\n  ⊘ hello (skipped) {not installed, marketplace in project scope}",
+        "A plugin operation has failed.\n\n● mp [user]\n  ⊘ hello (failed) {not installed, marketplace in project scope}",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -3772,7 +3772,7 @@ test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> (skippe
 // Covers the resolveInstalledPluginTarget → undefined → ?? resolveInstalledMarketplaceTarget
 // fallback in enumerateMarketplaceTarget. With no explicit scope, resolveInstalledPluginTarget
 // searches both scopes and finds nothing, so the fallback fires to locate the marketplace scope.
-test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback resolution; partition='skipped'", async () => {
+test("PUP-1 / UPR-04 pl@mp: no explicit scope + plugin absent -> marketplace-fallback resolution; partition='failed'", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await createCaseDir("update-pup1-noscope-fallback-");
@@ -3800,11 +3800,11 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
       // assert
       const body = notifications[0]?.message ?? "";
       // V2 byte form mirrors the pl@mp not-installed shape (PUP-1 above).
-      // Plugin-row `[<scope>]` bracket suppressed by orphan-fold. D-01:
-      // absent-target update (not installed) is error, severity-only flip.
+      // Plugin-row `[<scope>]` bracket suppressed by orphan-fold. UPR-04: an
+      // absent-target update fails as not installed.
       assert.equal(
         body,
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not installed}",
       );
       assert.equal(notifications[0]?.severity, "error");
     } finally {
@@ -4511,7 +4511,14 @@ test("CR-01: a later marketplace removed during an earlier refresh aborts before
             "Plugin update: 1 failure",
           severity: "error",
         },
-        { message: "● aaa [project]\n  ⊘ hello v1.0.0 (skipped) {no longer installable}" },
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● aaa [project]\n" +
+            "  ⊘ hello v1.0.0 (failed) {source missing}\n\n" +
+            "Plugin update: 1 failure",
+          severity: "error",
+        },
       ]);
       assert.equal((await loadState(locations.extensionRoot)).marketplaces["zzz"], undefined);
     } finally {
@@ -4607,8 +4614,8 @@ test("swapState-plugin-gone: plugin removed from state between enumerateTargets 
   // gitOps.fetch removes the plugin record from state.json after
   // enumerateTargets has already collected "hello" as a target. When
   // preflightUpdate runs, loadState finds no "hello" in the marketplace
-  // plugins -> returns partition='skipped' (notes: "not installed"). D-01:
-  // the absent target flips that skip to an error row (severity-only).
+  // plugins -> returns partition='failed' (notes: "not installed"), the
+  // absent-target failure (UPR-04).
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-swap-plugin-gone-");
     try {
@@ -4676,13 +4683,12 @@ test("swapState-plugin-gone: plugin removed from state between enumerateTargets 
       });
 
       // preflightUpdate reads modified state -> "hello" not in plugins ->
-      // returns skipped (not installed). D-01: absent target -> error row
-      // (severity-only flip; the `(skipped) {not installed}` token is kept).
+      // returns failed (not installed), an error row (UPR-04).
       assert.ok(notifications.length >= 1, "expected at least one notification");
       const errs = notifications.filter((n) => n.severity === "error");
-      assert.equal(errs.length, 1, "absent-target update is now an error (D-01)");
+      assert.equal(errs.length, 1, "absent-target update is an error (UPR-04)");
       const body = notifications[0]?.message ?? "";
-      assert.match(body, /\(skipped\) \{not installed\}/);
+      assert.match(body, /\(failed\) \{not installed\}/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -4706,6 +4712,7 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
       await mkdir(locations.extensionRoot, { recursive: true });
       const cloneDir = await locations.sourceCloneDir("official");
       await cp(fixtureMarketplaceDir("valid-marketplace"), cloneDir, { recursive: true });
+      await mkdir(path.join(cloneDir, "plugins", "hello"), { recursive: true });
 
       await saveState(locations.extensionRoot, {
         schemaVersion: 1,
@@ -4771,9 +4778,12 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
       // No error: version advanced from 0.0.9 to 0.0.10, manifest has 1.0.0.
       // preflightUpdate uses 0.0.10 as fromVersion; withStateGuard finds 0.0.10
       // -> they match -> update proceeds.
-      assert.ok(notifications.length >= 1, "expected at least one notification");
-      const errs = notifications.filter((n) => n.severity === "error");
-      assert.equal(errs.length, 0, `unexpected error: ${JSON.stringify(errs)}`);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● official [project]\n  ● hello v0.0.10 → v1.0.0 (updated)\n\nPlugin update: 1 updated\n\n/reload to pick up changes",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5323,7 +5333,7 @@ async function updateFileSnapshot(locations: ReturnType<typeof locationsFor>): P
 
 /** The single failed-row notification a refused named update of `plugin` renders. */
 function refusedUpdateNotification(
-  plugin: string,
+  subject: string,
   reason: string,
   cause: string,
 ): { readonly message: string; readonly severity: "error" } {
@@ -5332,7 +5342,7 @@ function refusedUpdateNotification(
       "A plugin operation has failed.",
       "",
       "● mp [project]",
-      `  ⊘ ${plugin} (failed) {${reason}}`,
+      `  ⊘ ${subject} (failed) {${reason}}`,
       `    cause: ${cause}`,
     ].join("\n"),
     severity: "error",
@@ -5737,9 +5747,11 @@ test("D-18-17: an update whose dependency walk cannot read another recorded plug
       });
 
       // assert
+      // UPR-03: the walk failed after the preflight found the record, so the
+      // row shows the installed version it left in place.
       assert.deepStrictEqual(notifications, [
         refusedUpdateNotification(
-          "hello",
+          "hello v1.0.0",
           "unreadable",
           "cannot read the dependencies of gone@mp: not declared by its marketplace",
         ),
@@ -5772,6 +5784,7 @@ test("D-18-17: an autoupdate cascade fails a plugin whose dependency walk cannot
       assert.deepStrictEqual(failure, {
         partition: "failed",
         name: "hello",
+        fromVersion: "1.0.0",
         notes: [`${walkMessage}\n\ncause: ${walkMessage}`],
         declaresAgents: false,
         declaresMcp: false,
@@ -6048,10 +6061,11 @@ test("FLR-01: a held scope lock fails an update that is due as lock held and kee
         await release();
       }
 
-      // assert
+      // assert: the lock is hit at the intent mark, after the candidate, so
+      // the row names the move it attempted (UPR-03).
       assert.deepStrictEqual(notifications, [
         refusedUpdateNotification(
-          "hello",
+          "hello v1.0.0 → v1.1.0",
           "lock held",
           `Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes. -> Lock file is already being held`,
         ),
@@ -7645,7 +7659,7 @@ test("FORCE-02: --partial on a candidate that became partially available degrade
       assert.equal(
         notifications[0]?.message,
         "● mp [project]\n" +
-          "  ◉ hello v1.1.0 (partially-installed) {unsupported component}\n" +
+          "  ◉ hello v1.0.0 → v1.1.0 (partially-installed) {unsupported component}\n" +
           "\n" +
           "/reload to pick up changes",
       );
@@ -8998,7 +9012,7 @@ test("D-10-13: an up-to-date constrained plugin discloses the range that admits 
           message: [
             "● mp [project]",
             "  ⊘ pathfoo (skipped) {up-to-date}",
-            '    cause: constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "app@mp"',
+            '    cause: constrained to the combined range (^1.0.0) -- required by "app@mp"',
           ].join("\n"),
         },
       ]);
@@ -9287,7 +9301,7 @@ test("PURL-06 / D-78-01 shared clone NOT GC'd: two git plugins share the old url
   });
 });
 
-test("MIRR-01 / NFR-3 vanished repo: unpinned mirror update whose clone throws -> fails clean; plugin stays on recorded sha, existing REASONS token, no new token", async () => {
+test("MIRR-01 / NFR-3 / SRC-01 vanished repo: unpinned mirror update whose clone throws -> fails with its cause; plugin stays on recorded sha, existing REASONS token, no new token", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-git-vanished-");
     try {
@@ -9332,8 +9346,13 @@ test("MIRR-01 / NFR-3 vanished repo: unpinned mirror update whose clone throws -
       assert.equal(await pathExists(seeded.oldCloneRoot ?? ""), true, "recorded clone untouched");
       // A failure surfaced through the EXISTING network-unreachable REASON token
       // (no new token); the plugin declined its swap and stayed put.
-      const body = notifications.map((n) => n.message).join("\n");
-      assert.match(body, /\{network unreachable\}/, "existing network-unreachable REASON token");
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {network unreachable}\n    cause: getaddrinfo ENOTFOUND example.com",
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -9938,17 +9957,14 @@ test("NFR-3 device-flow auth failure: a clone throw shaped UserCanceledError cla
         SHA_OLD,
         "plugin stays on its recorded sha",
       );
-      const body = notifications.map((n) => n.message).join("\n");
-      assert.match(
-        body,
-        /\{authentication required\}/,
-        "an auth failure renders the existing authentication-required REASON token",
-      );
-      assert.doesNotMatch(
-        body,
-        /\{no longer installable\}/,
-        "an auth failure must NOT render the lying no-longer-installable reason",
-      );
+      // The bare auth row carries no cause line, as install's does.
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {authentication required}",
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -10405,7 +10421,7 @@ test("CR-01: a --partial update that drops a kind AND degrades a component names
         "A plugin operation needs attention.\n" +
           "\n" +
           "● mp [project]\n" +
-          "  ◉ hello v1.1.0 (partially-installed) {malformed skill, unsupported component}\n" +
+          "  ◉ hello v1.0.0 → v1.1.0 (partially-installed) {malformed skill, unsupported component}\n" +
           "\n" +
           "/reload to pick up changes",
       );
@@ -10693,7 +10709,7 @@ test("ST-9: a version that advanced under an in-flight update aborts on the inte
       const body = notifications.map((n) => n.message).join("\n");
       assert.match(
         body,
-        /⊘ gp \(failed\) \{concurrently updated\}/,
+        /⊘ gp v9\.9\.9 \(1111111\) → v9\.9\.9 \(2222222\) \(failed\) \{concurrently updated\}/,
         `the version drift must reach the closed-set reason in:\n${body}`,
       );
       assert.match(body, /was concurrently updated; expected version/, `no cause in:\n${body}`);
@@ -10751,7 +10767,7 @@ test("ST-9: a record uninstalled under an in-flight update aborts instead of res
       const body = notifications.map((n) => n.message).join("\n");
       assert.match(
         body,
-        /⊘ gp \(failed\) \{concurrently uninstalled\}/,
+        /⊘ gp v9\.9\.9 \(1111111\) → v9\.9\.9 \(2222222\) \(failed\) \{concurrently uninstalled\}/,
         `the vanished record must reach the closed-set reason in:\n${body}`,
       );
       assert.match(body, /was concurrently uninstalled/, `no cause in:\n${body}`);
@@ -12284,7 +12300,7 @@ test("owns plugin update flow composition", () => {
   assert.strictEqual(typeof operations.beginPluginUpdateRun(), "function");
 });
 
-test("routes cascade-safe preflight outcomes through the flow owner", async () => {
+test("UPR-04: routes a not-installed preflight failure through the flow owner", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await createCaseDir("update-flow-preflight-");
@@ -12306,7 +12322,7 @@ test("routes cascade-safe preflight outcomes through the flow owner", async () =
       const outcome = await operations.beginPluginUpdateRun()("present", "mp", "project");
 
       // assert
-      assert.strictEqual(outcome.partition, "skipped");
+      assert.strictEqual(outcome.partition, "failed");
       assert.strictEqual(outcome.name, "present");
       assert.deepStrictEqual(outcome.reasons, ["not installed"]);
     } finally {
@@ -12759,7 +12775,7 @@ test("AFILE-04: an update that fails after its MCP commit still reports the remo
           message:
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
-            "  ⊘ hello (failed) {rollback partial}\n" +
+            "  ⊘ hello v1.0.0 → v1.0.1 (failed) {rollback partial}\n" +
             `    cause: Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it. -> ${refusal}\n` +
             "    [workflows] (rollback failed)\n" +
             `      cause: ${refusal}`,
@@ -12913,10 +12929,10 @@ test("AFILE-02: updating a plugin with no MCP servers over an unparseable mcp-ad
 
 /**
  * AFILE-04: binds update operations whose next locked state load throws once a
- * save has recorded `hello` at 1.0.1, so the target after `hello` fails before
- * its swap.
+ * save has recorded `hello` at `helloVersion`, so the target after `hello`
+ * fails at its intent mark, after its candidate.
  */
-function failLoadsAfterHelloUpdate(): UpdatePluginsFn {
+function failLoadsAfterHelloUpdate(helloVersion: string): UpdatePluginsFn {
   let helloUpdated = false;
   return createPluginUpdateOperations(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -12931,7 +12947,7 @@ function failLoadsAfterHelloUpdate(): UpdatePluginsFn {
       },
       saveState: async (extensionRoot, state) => {
         await saveState(extensionRoot, state);
-        helloUpdated ||= state.marketplaces["mp"]?.plugins["hello"]?.version === "1.0.1";
+        helloUpdated ||= state.marketplaces["mp"]?.plugins["hello"]?.version === helloVersion;
       },
     },
   ).updatePlugins;
@@ -12954,7 +12970,7 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later plugin's failure st
       });
       const locations = locationsFor("project", cwd);
       await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ADAPTER_TEXT);
-      const updateAll = failLoadsAfterHelloUpdate();
+      const updateAll = failLoadsAfterHelloUpdate("1.0.1");
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -12972,7 +12988,7 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later plugin's failure st
           message:
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
-            "  ⊘ zzz (failed) {unreadable manifest}\n" +
+            "  ⊘ zzz v1.0.0 → v1.0.1 (failed) {unreadable manifest}\n" +
             "    cause: state read failed\n\n" +
             "Plugin update: 1 failure",
           severity: "error",
@@ -12987,6 +13003,55 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later plugin's failure st
           severity: "warning",
         },
         PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("UPR-03: a later target's failure in a bulk update names its own move, not the earlier target's", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-bulk-own-move-");
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "2.0.0" }, zzz: { version: "1.0.1" } },
+        installedVersions: { hello: "1.0.0", zzz: "1.0.0" },
+      });
+      const updateAll = failLoadsAfterHelloUpdate("2.0.0");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updateAll({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ zzz v1.0.0 → v1.0.1 (failed) {unreadable manifest}\n" +
+            "    cause: state read failed\n\n" +
+            "Plugin update: 1 failure",
+          severity: "error",
+        },
+        {
+          message:
+            "● mp [project]\n" +
+            "  ● hello v1.0.0 → v2.0.0 (updated)\n\n" +
+            "Plugin update: 1 updated\n\n" +
+            "/reload to pick up changes",
+        },
       ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });

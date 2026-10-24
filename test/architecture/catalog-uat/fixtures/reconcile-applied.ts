@@ -513,7 +513,7 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
                 version: "1.0.0",
                 reasons: ["dependency version unsatisfied"],
                 cause: new Error(
-                  'Update "secrets-vault@mp" to satisfy >=2.0.0 <3.0.0-0, or uninstall "deploy-kit@mp"',
+                  'Update "secrets-vault@mp" to satisfy ^2.0.0, or uninstall "deploy-kit@mp"',
                 ),
                 severity: "warning",
                 needsReload: true,

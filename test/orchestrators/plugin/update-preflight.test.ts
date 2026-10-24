@@ -19,6 +19,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
+  CleanupLeakError,
   InvalidGitHubBaseUrlError,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -158,6 +159,7 @@ async function prepare(
     readonly credentialOps?: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
+    readonly onRecord?: PreparePluginUpdateOptions["onRecord"];
   } = {},
 ) {
   return preparePluginUpdate({
@@ -181,6 +183,7 @@ async function prepare(
     ...(options.credentialOps !== undefined && { credentialOps: options.credentialOps }),
     ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
     ...(options.authMemo !== undefined && { authMemo: options.authMemo }),
+    ...(options.onRecord !== undefined && { onRecord: options.onRecord }),
   });
 }
 
@@ -212,32 +215,46 @@ test("classifies a missing marketplace without reading a manifest", async (t) =>
   });
 });
 
-test("distinguishes an undeclared target from a declared uninstalled target", async (t) => {
+for (const { declared, listing } of [
+  { declared: false, listing: "does not list" },
+  { declared: true, listing: "still lists" },
+] as const) {
+  test(`UPR-04: a target with no install record fails as not installed when the manifest ${listing} it`, async (t) => {
+    // arrange
+    const seed = await seedUpdate({ declared });
+    t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+
+    const reported: string[] = [];
+
+    // act
+    const outcome = await prepare(seed, { onRecord: (version) => reported.push(version) });
+
+    // assert
+    assert.deepStrictEqual(reported, []);
+    assert.deepStrictEqual(outcome, {
+      partition: "failed",
+      name: "hello",
+      notes: ["not installed"],
+      reasons: ["not installed"],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    });
+  });
+}
+
+test("UPR-04: a target with no install record fails as not installed before the manifest is read", async (t) => {
   // arrange
-  const undeclared = await seedUpdate({ declared: false });
-  const uninstalled = await seedUpdate();
-  t.after(() =>
-    Promise.all(
-      [undeclared.cwd, uninstalled.cwd].map((cwd) => rm(cwd, { force: true, recursive: true })),
-    ),
-  );
+  const seed = await seedUpdate();
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  await writeFile(path.join(seed.cwd, "marketplace", ".claude-plugin", "marketplace.json"), "{");
 
   // act
-  const undeclaredOutcome = await prepare(undeclared);
-  const uninstalledOutcome = await prepare(uninstalled);
+  const outcome = await prepare(seed);
 
   // assert
-  assert.deepStrictEqual(undeclaredOutcome, {
+  assert.deepStrictEqual(outcome, {
     partition: "failed",
-    name: "hello",
-    notes: ["not in manifest"],
-    reasons: ["not in manifest"],
-    declaresAgents: false,
-    declaresMcp: false,
-    declaresWorkflows: false,
-  });
-  assert.deepStrictEqual(uninstalledOutcome, {
-    partition: "skipped",
     name: "hello",
     notes: ["not installed"],
     reasons: ["not installed"],
@@ -592,7 +609,29 @@ test("keeps an unsupported candidate skipped with and without partial permission
   }
 });
 
-test("keeps an unexpected resolve failure skipped as no-longer-installable, carrying the raw error", async (t) => {
+test("SRC-01: fails a path source whose directory is missing as source missing at the installed version", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), source: "./plugins/ghost" });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const ghostRoot = path.join(seed.cwd, "marketplace", "plugins", "ghost");
+
+  // act
+  const outcome = await prepare(seed);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: [`Plugin "hello" is no longer installable: source dir does not exist: ${ghostRoot}`],
+    reasons: ["source missing"],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
+});
+
+test("SRC-01: fails an unclassified resolve failure with no reason and the raw error as its cause", async (t) => {
   // arrange
   const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
   const manifestPath = path.join(seed.pluginRoot, ".claude-plugin", "plugin.json");
@@ -604,8 +643,8 @@ test("keeps an unexpected resolve failure skipped as no-longer-installable, carr
   // `PluginShapeError` -- a raw EACCES reading the marketplace-side
   // plugin.json, which `readManifest` deliberately leaves unwrapped so it
   // keeps its identity. Exercises `resolveUpdateCandidate`'s unclassified
-  // fallback (still "no longer installable" to the caller, but logged for
-  // diagnosis rather than silently folded into the typed shape).
+  // fallback: the source has not stopped being installable, so the row
+  // carries no reason and the error as its cause.
   //
   // UPDT-02: the SAME unreadable file also trips the constraint gate's own
   // fail-closed declaration walk (D-10-05), which now runs first -- an
@@ -620,9 +659,13 @@ test("keeps an unexpected resolve failure skipped as no-longer-installable, carr
 
   // assert
   assert.ok("partition" in outcome);
-  assert.strictEqual(outcome.partition, "skipped");
-  assert.deepStrictEqual(outcome.reasons, ["no longer installable"]);
+  assert.strictEqual(outcome.partition, "failed");
+  assert.deepStrictEqual(
+    { reasons: outcome.reasons, fromVersion: outcome.fromVersion },
+    { reasons: [], fromVersion: "1.0.0" },
+  );
   assert.match(outcome.notes[0] ?? "", /EACCES/);
+  assert.strictEqual((outcome.cause as NodeJS.ErrnoException | undefined)?.code, "EACCES");
 });
 
 test("refreshes a disabled pin without materializing its recorded resources", async (t) => {
@@ -1270,19 +1313,90 @@ test("D-18-11: an enabled record at the same version under another root is prepa
   assert.strictEqual(prepared.installable.pluginRoot, seed.pluginRoot);
 });
 
-test("classifies a clone transport failure without exposing a raw throw", async (t) => {
+const offline = Object.assign(new Error("offline"), { code: "ENETUNREACH" });
+const refusedWith = (status: number, message: string): Error =>
+  new git.Errors.HttpError(status, message, "");
+const challenge = refusedWith(401, "Unauthorized");
+const leakedChallenge = new CleanupLeakError(challenge, "clone tmp left at /tmp/x");
+
+for (const { title, error, reasons, cause } of [
+  {
+    title: "a dropped connection fails as network unreachable",
+    error: offline,
+    reasons: ["network unreachable"],
+    cause: offline,
+  },
+  {
+    title: "a 404 fails as source missing",
+    error: refusedWith(404, "Not Found"),
+    reasons: ["source missing"],
+    cause: "same",
+  },
+  {
+    title: "a 503 fails as network error",
+    error: refusedWith(503, "Service Unavailable"),
+    reasons: ["network error"],
+    cause: "same",
+  },
+  {
+    title: "an authentication challenge fails bare as authentication required",
+    error: challenge,
+    reasons: ["authentication required"],
+    cause: undefined,
+  },
+  {
+    title: "an authentication challenge behind a cleanup leak keeps the leak as its cause",
+    error: leakedChallenge,
+    reasons: ["authentication required"],
+    cause: leakedChallenge,
+  },
+] as const) {
+  test(`SRC-01: a clone the git host refuses -- ${title} at the installed version`, async (t) => {
+    // arrange
+    const seed = await seedUpdate({
+      installed: pluginRecord("sha-000000000000"),
+      source: { source: "url", url: "https://example.com/private" },
+    });
+    t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+    const cloneCacheSeam: UpdateCloneCacheSeam = {
+      resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
+      materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
+      materializeOrRefreshPluginMirror: () => Promise.reject(error),
+      materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
+    };
+    const expectedCause = cause === "same" ? error : cause;
+
+    // act
+    const outcome = await prepare(seed, { cloneCacheSeam });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "failed",
+      name: "hello",
+      fromVersion: "sha-000000000000",
+      notes: [error.message],
+      reasons,
+      ...(expectedCause !== undefined && { cause: expectedCause }),
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    });
+  });
+}
+
+test("SRC-01: a non-Error clone rejection fails with no reason and the rejection as its cause", async (t) => {
   // arrange
+  const sha = "6666666666666666666666666666666666666666";
   const seed = await seedUpdate({
     installed: pluginRecord("sha-000000000000"),
-    source: { source: "url", url: "https://example.com/private" },
+    source: { source: "url", url: "https://example.com/private", sha },
   });
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
-  const transportError = new Error("offline") as NodeJS.ErrnoException;
-  transportError.code = "ENETUNREACH";
+  const rejectNonError = Promise.reject.bind(Promise);
   const cloneCacheSeam: UpdateCloneCacheSeam = {
-    resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
-    materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
-    materializeOrRefreshPluginMirror: () => Promise.reject(transportError),
+    resolvePluginPin: () => Promise.resolve({ cloneUrl: "https://example.com/private", pin: sha }),
+    materializePluginClone: () => rejectNonError("mirror gone"),
+    materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
     materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
   };
 
@@ -1290,13 +1404,13 @@ test("classifies a clone transport failure without exposing a raw throw", async 
   const outcome = await prepare(seed, { cloneCacheSeam });
 
   // assert
-  assert.ok("partition" in outcome);
   assert.deepStrictEqual(outcome, {
-    partition: "skipped",
+    partition: "failed",
     name: "hello",
     fromVersion: "sha-000000000000",
-    notes: ["offline"],
-    reasons: ["network unreachable"],
+    notes: ["mirror gone"],
+    reasons: [],
+    cause: new Error("mirror gone"),
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,
@@ -1842,7 +1956,7 @@ for (const { label, recordedSha, source } of [
   });
 }
 
-test("GIT-03: an unpinned update under a held state lock throws lock held, not a verdict", async (t) => {
+test("GIT-03 / UPR-03: an unpinned update under a held state lock throws lock held after reporting the installed version", async (t) => {
   // arrange
   const seed = await seedUpdate({
     installed: pluginRecord("1.0.0"),
@@ -1859,11 +1973,17 @@ test("GIT-03: an unpinned update under a held state lock throws lock held, not a
     lockfilePath: seed.locations.stateLockFile,
     realpath: false,
   });
+  const reported: string[] = [];
 
   // act & assert
   try {
-    await assert.rejects(prepare(seed, { cloneCacheSeam }), StateLockHeldError);
+    await assert.rejects(
+      prepare(seed, { cloneCacheSeam, onRecord: (version) => reported.push(version) }),
+      StateLockHeldError,
+    );
   } finally {
     await release();
   }
+
+  assert.deepStrictEqual(reported, ["1.0.0"]);
 });

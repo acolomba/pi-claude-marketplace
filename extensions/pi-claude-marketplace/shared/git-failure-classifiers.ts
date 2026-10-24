@@ -59,9 +59,8 @@ function classifyNetworkErrno(code: string | undefined): GitTransportReason | un
  *   - network errno ladder -> `network unreachable`.
  *
  * Returns undefined for any other throw so each caller keeps its own
- * fallthrough (e.g. update's `no longer installable`, info's
- * `narrowProbeError` ladder). The error behind a cleanup leak is the one
- * classified (INR-02).
+ * fallthrough (e.g. info's `narrowProbeError` ladder). The error behind a
+ * cleanup leak is the one classified (INR-02).
  */
 export function classifyGitTransportFailure(
   thrown: unknown,
@@ -171,7 +170,7 @@ export function classifyGitHostFailure(
  * add`, which always clones fresh: a ref or object the remote does not have,
  * like a repository the host does not have, is `source missing` too. The
  * opt-in layer keeps other callers' fallthroughs unchanged: the transport
- * ladder that update and the plugin verbs use leaves a missing ref
+ * and host ladders that update and the plugin verbs use leave a missing ref
  * unclassified.
  */
 export function classifyGitSourceAccessFailure(

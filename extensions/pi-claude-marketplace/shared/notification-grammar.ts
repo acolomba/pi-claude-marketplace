@@ -24,11 +24,15 @@ import type {
   PluginInfoComponentsResolved,
   PluginInfoMessage,
   PluginInfoRow,
+  PluginFailedMessage,
   PluginNotificationMessage,
+  PluginPartiallyInstalledMessage,
+  PluginReinstalledMessage,
   PluginUpdatedMessage,
   PruneEmptyMessage,
   Reason,
   Severity,
+  VersionCommits,
 } from "./notification-types.ts";
 import type { Scope } from "./types.ts";
 
@@ -359,8 +363,25 @@ function renderScopeBracket(pluginScope: Scope | undefined, mpScope: Scope): str
   return `[${pluginScope}]`;
 }
 
-function composeVersionArrow(from: string, to: string): string {
-  return `${renderVersion(from)} → ${renderVersion(to)}`;
+/**
+ * The `from → to` version slot. UPR-02: when the row carries `commits`, each
+ * side's version is followed by its commit's first 7 characters in
+ * parentheses. The producer decides whether a row carries them.
+ */
+function composeVersionArrow(
+  from: string,
+  to: string | undefined,
+  commits?: VersionCommits,
+): string {
+  if (commits === undefined) {
+    return `${renderVersion(from)} → ${renderVersion(to)}`;
+  }
+
+  return `${renderVersion(from)} (${shortCommit(commits.from)}) → ${renderVersion(to)} (${shortCommit(commits.to)})`;
+}
+
+function shortCommit(commit: string): string {
+  return commit.slice(0, 7);
 }
 
 /**
@@ -388,23 +409,27 @@ function composeReasons(reasons: readonly Reason[] | undefined): string {
 interface PluginRowLayout {
   readonly icon: string;
   readonly scope: boolean;
-  readonly version: "single" | "arrow" | "none";
+  /**
+   * `move` draws `from → version` when the row carries `from` (UPR-03), and
+   * the single version otherwise.
+   */
+  readonly version: "single" | "arrow" | "move" | "none";
 }
 
 const PLUGIN_ROW_LAYOUT = {
   installed: { icon: ICON_INSTALLED, scope: true, version: "single" },
   updated: { icon: ICON_INSTALLED, scope: true, version: "arrow" },
-  reinstalled: { icon: ICON_INSTALLED, scope: true, version: "single" },
+  reinstalled: { icon: ICON_INSTALLED, scope: true, version: "move" },
   uninstalled: { icon: ICON_AVAILABLE, scope: true, version: "single" },
   available: { icon: ICON_AVAILABLE, scope: false, version: "single" },
   remote: { icon: ICON_REMOTE, scope: false, version: "single" },
   unavailable: { icon: ICON_UNINSTALLABLE, scope: false, version: "single" },
   "partially-available": { icon: ICON_PARTIALLY_AVAILABLE, scope: false, version: "single" },
   upgradable: { icon: ICON_INSTALLED, scope: true, version: "single" },
-  "partially-installed": { icon: ICON_PARTIALLY_INSTALLED, scope: true, version: "single" },
+  "partially-installed": { icon: ICON_PARTIALLY_INSTALLED, scope: true, version: "move" },
   "partially-upgradable": { icon: ICON_INSTALLED, scope: true, version: "single" },
   skipped: { icon: ICON_UNINSTALLABLE, scope: true, version: "single" },
-  failed: { icon: ICON_UNINSTALLABLE, scope: true, version: "single" },
+  failed: { icon: ICON_UNINSTALLABLE, scope: true, version: "move" },
   "manual recovery": { icon: ICON_UNINSTALLABLE, scope: true, version: "single" },
   "will install": { icon: ICON_INSTALLED, scope: true, version: "none" },
   "will uninstall": { icon: ICON_AVAILABLE, scope: true, version: "single" },
@@ -419,15 +444,7 @@ function formatPluginRow(row: ResolvedRow, mpScope: Scope): string {
   }
 
   const layout: PluginRowLayout = PLUGIN_ROW_LAYOUT[row.status];
-  let version = "";
-  if (layout.version === "single") {
-    version = renderVersion("version" in row ? row.version : undefined);
-  } else if (layout.version === "arrow") {
-    // Only the updated layout selects the from/to version slot.
-    const updated = row as ResolvedRow<PluginUpdatedMessage>;
-    version = composeVersionArrow(updated.from, updated.to);
-  }
-
+  const version = renderVersionSlot(row, layout.version);
   const status =
     row.status === "will install" && row.partial === true ? "will partially install" : row.status;
   return joinTokens([
@@ -438,6 +455,31 @@ function formatPluginRow(row: ResolvedRow, mpScope: Scope): string {
     `(${status})`,
     composeReasons(row.reasons),
   ]);
+}
+
+function renderVersionSlot(row: ResolvedRow, mode: PluginRowLayout["version"]): string {
+  switch (mode) {
+    case "single":
+      return renderVersion("version" in row ? row.version : undefined);
+    case "arrow": {
+      // Only the updated layout selects the from/to version slot.
+      const updated = row as ResolvedRow<PluginUpdatedMessage>;
+      return composeVersionArrow(updated.from, updated.to, updated.commits);
+    }
+
+    case "move": {
+      // Only the reinstalled, partially-installed, and failed layouts select it.
+      const moved = row as ResolvedRow<
+        PluginReinstalledMessage | PluginPartiallyInstalledMessage | PluginFailedMessage
+      >;
+      return moved.from === undefined
+        ? renderVersion(moved.version)
+        : composeVersionArrow(moved.from, moved.version, moved.commits);
+    }
+
+    case "none":
+      return "";
+  }
 }
 
 /**
@@ -1085,7 +1127,8 @@ function pushCauseLine(
 //
 //   <mp-header-1>
 //     <plugin-row-1>
-//       [cause-chain at 4-space indent if (failed | manual recovery) with cause]
+//       [cause-chain at 4-space indent if (failed | manual recovery) with cause,
+//        or a realized row whose producer set a cause]
 //       [rollback child row at 4-space indent for each rollbackPartial phase]
 //       [phase cause-chain at 6-space indent if phase.cause set]
 //     <plugin-row-2>

@@ -94,7 +94,7 @@ import {
   intersectDependencyRanges,
   isUnconstrainedRange,
   recordedVersionSatisfies,
-  renderConstraintRange,
+  renderDeclaredRanges,
 } from "../../domain/dependency-range.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
@@ -534,15 +534,6 @@ interface CascadeRun {
   readonly materialized: Set<string>;
   /** AFILE-04: each materialized member's MCP config file notices. */
   readonly mcpConfigNotices: McpConfigNotice[];
-}
-
-/**
- * INR-05: the member's declared ranges as a cause shows them, joined with
- * `, ` as Claude Code joins them, so a `||` range keeps its meaning, and
- * bounded like any other rendered range.
- */
-function renderDeclaredRanges(ranges: readonly string[]): string {
-  return renderConstraintRange(ranges.join(", "));
 }
 
 /**

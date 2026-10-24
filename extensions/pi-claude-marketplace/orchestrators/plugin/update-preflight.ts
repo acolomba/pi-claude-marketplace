@@ -9,14 +9,15 @@ import { parsePluginSource } from "../../domain/source.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
+  CleanupLeakError,
   errorMessage,
   PluginShapeError,
   rethrowInvalidGitHubBaseUrl,
   StateLockHeldError,
 } from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import { ownValue } from "../../shared/own-key.ts";
-import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import { narrowResolverNotes, narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import {
   withExistingScopeLock,
   withLockedStateTransaction,
@@ -185,29 +186,38 @@ export interface PreparePluginUpdateOptions {
   readonly constraintTagMemo?: Map<string, readonly RemoteTag[]>;
   readonly constraintMarketplaceTagMemo?: Map<string, readonly ReleaseTagCandidate[]>;
   readonly cleanupClones: (locations: ScopedLocations) => Promise<unknown>;
+  /**
+   * UPR-03: receives the installed version once the preflight found the
+   * record, so a failure thrown before any candidate can show the version it
+   * left in place, as a returned preflight failure does.
+   */
+  readonly onRecord?: (fromVersion: string) => void;
 }
 
 type PluginStateRecord = PreparedPluginUpdate["record"];
 
 /**
- * NFR-7: a `(failed)` row the preflight itself can reach. The four fields only a
- * staged replacement can know are pinned `never`, so a preflight failure cannot
- * claim a version transition it never attempted, nor a `phaseFailures` aggregate
- * that only phase-3a produces -- the shape `update-flow.ts` narrows on to tell a
- * phase-3a aggregate (already notified, `RECOVERY_PLUGIN_REINSTALL_PREFIX` hint
- * composed from `phaseFailures`) apart from every other failure. Threading any
- * of the four onto a preflight row therefore requires widening this type
- * deliberately, and that widening is what forces the phase-3a narrowing to be
- * revisited alongside it.
+ * NFR-7: a `(failed)` row the preflight itself can reach. It may name the
+ * installed version (UPR-03: a failure before any candidate shows the version
+ * it left in place) and the error behind it (SRC-01: a source the update could
+ * not read or fetch). The four fields only a staged replacement can know stay
+ * pinned `never`, so a preflight failure cannot claim a version transition it
+ * never attempted, nor a `phaseFailures` aggregate that only phase-3a produces
+ * -- the shape `update-flow.ts` narrows on to tell a phase-3a aggregate
+ * (already notified, `RECOVERY_PLUGIN_REINSTALL_PREFIX` hint composed from
+ * `phaseFailures`) apart from every other failure. Threading any of the four
+ * onto a preflight row therefore requires widening this type deliberately, and
+ * that widening is what forces the phase-3a narrowing to be revisited
+ * alongside it.
  */
 export interface PreflightFailedOutcome extends Omit<
   PluginUpdateFailedOutcome,
-  "cause" | "fromVersion" | "phaseFailures" | "reasons" | "toVersion"
+  "fromCommit" | "phaseFailures" | "reasons" | "toCommit" | "toVersion"
 > {
   readonly reasons: readonly ContentReason[];
-  readonly cause?: never;
-  readonly fromVersion?: never;
+  readonly fromCommit?: never;
   readonly phaseFailures?: never;
+  readonly toCommit?: never;
   readonly toVersion?: never;
 }
 
@@ -391,9 +401,12 @@ function isPartialableUpdateShapeError(error: unknown): error is PartialableUpda
   );
 }
 
-/** What `resolveUpdateCandidate` reaches: a candidate (or skip verdict), plus a `path`-pin's own resolved sha. */
+/**
+ * What `resolveUpdateCandidate` reaches: a candidate (or a skip or failure
+ * verdict), plus a `path`-pin's own resolved sha.
+ */
 interface UpdateCandidateResolution {
-  readonly candidate: MaterializablePlugin | PluginUpdateSkippedOutcome;
+  readonly candidate: MaterializablePlugin | PluginUpdateSkippedOutcome | PreflightFailedOutcome;
   /**
    * The commit a `path`-source pin materialized, when one did. The git arm's
    * own resolved sha is unaffected -- it stays `clone.resolvedSha()`'s own
@@ -472,49 +485,51 @@ async function resolveUpdateCandidate(
       throw error;
     }
 
-    const networkReason = classifyGitTransportFailure(error);
-    if (networkReason !== undefined) {
-      return {
-        candidate: skippedCandidate(options, [errorMessage(error)], [networkReason]),
-        pathResolvedSha: undefined,
-      };
-    }
+    return { candidate: candidateFailure(error, options), pathResolvedSha: undefined };
+  }
+}
 
-    if (isPartialableUpdateShapeError(error)) {
-      return {
-        candidate: {
-          ...skippedCandidate(
-            options,
-            [errorMessage(error)],
-            narrowUnsupportedKinds(error.shape.unsupportedKinds),
-          ),
-          partialUpgradable: true,
-        },
-        pathResolvedSha: undefined,
-      };
-    }
+/**
+ * The verdict for a candidate the resolver could not produce. Only reached
+ * after the GHB-03 and GIT-03 rethrows, which fail the whole command.
+ *
+ * SRC-01: a source the update could not read or fetch fails, as Claude Code's
+ * update does. A clone the git host refused reads install's reason for the
+ * same answer, and a throw no ladder classifies keeps its cause and no reason
+ * -- the source has not stopped being installable. Only the resolver's own
+ * refusal skips.
+ */
+function candidateFailure(
+  error: unknown,
+  options: { readonly plugin: string; readonly fromVersion: string },
+): PluginUpdateSkippedOutcome | PreflightFailedOutcome {
+  const notes = [errorMessage(error)];
+  const cause = error instanceof Error ? error : new Error(errorMessage(error));
+  const hostReason = classifyGitHostFailure(error);
+  if (hostReason !== undefined) {
+    // The bare auth row keeps no cause, unless a cleanup leaked: its cause
+    // carries the manual-cleanup hint (MA-9, INR-02).
+    const keepsCause =
+      hostReason !== "authentication required" || error instanceof CleanupLeakError;
+    return failedCandidate(options, notes, [hostReason], keepsCause ? cause : undefined);
+  }
 
-    if (error instanceof PluginShapeError && error.shape.kind === "no-longer-installable") {
-      return {
-        candidate: skippedCandidate(options, [errorMessage(error)], ["no longer installable"]),
-        pathResolvedSha: undefined,
-      };
-    }
-
-    // Anything else is genuinely unexpected -- not an invalid GitHub base
-    // override (rethrown above, GHB-03), not a classified git-transport
-    // failure, and not the resolver's typed `no-longer-installable` shape.
-    // "no longer installable" stays the user-facing verdict (the candidate
-    // could not be resolved either way), but it is not necessarily the real
-    // cause, so log the actual error for diagnosis.
-    hookDebugLog(
-      `resolveUpdateCandidate: unclassified error for "${options.plugin}": ${errorMessage(error)}`,
-    );
+  if (isPartialableUpdateShapeError(error)) {
     return {
-      candidate: skippedCandidate(options, [errorMessage(error)], ["no longer installable"]),
-      pathResolvedSha: undefined,
+      ...skippedCandidate(options, notes, narrowUnsupportedKinds(error.shape.unsupportedKinds)),
+      partialUpgradable: true,
     };
   }
+
+  if (error instanceof PluginShapeError && error.shape.kind === "no-longer-installable") {
+    // The reason carries a missing directory; the note embeds the absolute
+    // path, so no cause rides along.
+    return narrowResolverNotes(error.shape.reasons).includes("source missing")
+      ? failedCandidate(options, notes, ["source missing"])
+      : skippedCandidate(options, notes, ["no longer installable"]);
+  }
+
+  return failedCandidate(options, notes, [], cause);
 }
 
 function skippedCandidate(
@@ -528,6 +543,26 @@ function skippedCandidate(
     fromVersion: options.fromVersion,
     notes: [...notes],
     reasons: [...reasons],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  };
+}
+
+/** UPR-03: a candidate failure names the installed version it left in place. */
+function failedCandidate(
+  options: { readonly plugin: string; readonly fromVersion: string },
+  notes: readonly string[],
+  reasons: readonly ContentReason[],
+  cause?: Error,
+): PreflightFailedOutcome {
+  return {
+    partition: "failed",
+    name: options.plugin,
+    fromVersion: options.fromVersion,
+    notes: [...notes],
+    reasons: [...reasons],
+    ...(cause !== undefined && { cause }),
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,
@@ -555,9 +590,9 @@ interface StaticPreflightRowBase {
  * candidate.
  *
  * `fromVersion` is reachable on the `skipped` partition only. A `failed` row is
- * one the plugin is absent from the manifest for, so there is no install record
- * to read a version from; pinning the field `never` there keeps a version arrow
- * off a row for a plugin that was never installed.
+ * one for a plugin with no install record (UPR-04), so there is no record to
+ * read a version from; pinning the field `never` there keeps a version arrow
+ * off a row for a plugin that is not installed.
  */
 type StaticPreflightRowOptions =
   | (StaticPreflightRowBase & { readonly partition: "failed"; readonly fromVersion?: never })
@@ -590,29 +625,31 @@ function staticPreflightRow(
   };
 }
 
-function triageUpdateMembership(
+async function triageUpdateMembership(
   plugin: string,
-  record: PluginStateRecord | undefined,
-  lookup: ReturnType<typeof lookupDeclaredPlugin>,
-): UpdatePreflightOutcome | { readonly record: PluginStateRecord; readonly entry: PluginEntry } {
+  marketplace: ExtensionState["marketplaces"][string],
+): Promise<
+  UpdatePreflightOutcome | { readonly record: PluginStateRecord; readonly entry: PluginEntry }
+> {
+  const record = ownValue(marketplace.plugins, plugin);
   if (record === undefined) {
-    return lookup.kind === "absent"
-      ? // Not installed AND absent from the manifest. No `fromVersion` -- there
-        // is no install record to read a version from.
-        staticPreflightRow({
-          partition: "failed",
-          plugin,
-          notes: ["not in manifest"],
-          reason: "not in manifest",
-        })
-      : staticPreflightRow({
-          partition: "skipped",
-          plugin,
-          notes: ["not installed"],
-          reason: "not installed",
-        });
+    // UPR-04: the record is checked before the manifest is read, as Claude
+    // Code does, so a plugin with no install record fails as not installed
+    // whether the manifest lists it, omits it, or cannot be read -- the row
+    // `uninstall` renders. No `fromVersion`: there is no record to read a
+    // version from.
+    return staticPreflightRow({
+      partition: "failed",
+      plugin,
+      notes: ["not installed"],
+      reason: "not installed",
+    });
   }
 
+  const lookup = lookupDeclaredPlugin(
+    await loadMarketplaceManifest(marketplace.manifestPath),
+    plugin,
+  );
   if (lookup.kind === "absent") {
     return staticPreflightRow({
       partition: "skipped",
@@ -780,7 +817,7 @@ async function refreshDisabledPluginUpdate(
 
 /** What candidate resolution reaches once a pin (if any) has been threaded through it. */
 interface PinnedUpdateCandidateResolution {
-  readonly candidate: MaterializablePlugin | PluginUpdateSkippedOutcome;
+  readonly candidate: MaterializablePlugin | PluginUpdateSkippedOutcome | PreflightFailedOutcome;
   readonly resolvedSha: string | undefined;
   readonly pin: UpdateTagPin | undefined;
 }
@@ -917,16 +954,12 @@ export async function preparePluginUpdate(
     });
   }
 
-  const manifest = await loadMarketplaceManifest(marketplace.manifestPath);
-  const triaged = triageUpdateMembership(
-    options.plugin,
-    ownValue(marketplace.plugins, options.plugin),
-    lookupDeclaredPlugin(manifest, options.plugin),
-  );
+  const triaged = await triageUpdateMembership(options.plugin, marketplace);
   if ("partition" in triaged) {
     return triaged;
   }
 
+  options.onRecord?.(triaged.record.version);
   // AUTH-09: ONE credential composition in this function, shared by the
   // constraint gate and the clone probe below.
   const auth = buildUpdateAuth(options);

@@ -147,11 +147,13 @@ To choose a version, this extension first searches the plugin's release tags for
 
 A marketplace entry that names its own commit is no exception. When a tag inside the combined range is found, the update moves the plugin to that tag, and the record stores the tag's version and commit. The dependents' ranges outrank the entry's pin, because a pinned commit outside a dependent's range is the conflict this check exists to settle.
 
-A skipped update's row reads `{dependents constrain}`, and the `cause:` line says which of three situations it is -- the declared ranges admit nothing in common, no release tag satisfies them, or the version that resolved falls outside them -- and names the plugins holding it, marking any that are currently disabled. On the last of these, only the plugins whose own range rejects that version are named; a plugin whose range the version satisfies never appears on the line.
+A skipped update's row reads `{dependents constrain}`, and the `cause:` line says which of three situations it is -- the declared ranges admit nothing in common, no release tag satisfies them, or the version that resolved falls outside them -- and names the plugins holding it, marking any that are currently disabled. In parentheses it prints the ranges those plugins declared, separated by commas as Claude Code prints them, so you can find each one in its plugin's manifest. On the last of these, only the plugins whose own range rejects that version are named, with only their ranges; a plugin whose range the version satisfies never appears on the line.
 
 A plugin whose entry is a relative path and whose marketplace has no satisfying tag falls back to the marketplace's current copy, and that copy is then measured like any other version. When it is in range the update goes through and the row reads `{dependency current copy}` -- the same phrase an install uses for the same fact. When it is out of range the update is skipped. This differs from the install side, on purpose: on an install the alternative is having nothing, while on an update the alternative is keeping a copy that is already in range, so an update never knowingly moves an in-range plugin out of it.
 
-When the plugin is already at the highest version its dependents admit, the row still reads `{up-to-date}`, and the `cause:` line names the range and its holders, so you can tell "nothing newer exists" from "nothing newer is allowed."
+An update or reinstall that a range admitted names that range and its holders on its row: the `(updated)` or `(reinstalled)` row's `cause:` line prints the ranges the holders declared and the holders, as Claude Code's update message does.
+
+When the plugin is already at the highest version its dependents admit, the row still reads `{up-to-date}`, and the `cause:` line names the ranges its holders declared and the holders, so you can tell "nothing newer exists" from "nothing newer is allowed."
 
 When the declarations of some other installed plugin in the scope cannot be read, the update or reinstall fails with `{unreadable}` and changes nothing. The `cause:` line names that plugin and says why. This is the same refusal that [the uninstall guard](#removing-a-plugin-other-plugins-need) makes. Repair or remove that plugin, then run the command again.
 
@@ -271,10 +273,10 @@ The dependency's recorded version is outside the declared range. This case carri
 ```text
 ● mp [project]
   ◍ deploy-kit v1.0.0 (disabled) {dependency version unsatisfied}
-    cause: Update "secrets-vault@mp" to satisfy >=2.0.0 <3.0.0-0, or uninstall "deploy-kit@mp"
+    cause: Update "secrets-vault@mp" to satisfy ^2.0.0, or uninstall "deploy-kit@mp"
 ```
 
-The range on that line is the range the check actually tested. It is every constraint the dependent declared for that dependency, intersected and written in full form. So a declared `^2.0.0` reads `>=2.0.0 <3.0.0-0`.
+The line names every constraint the dependent declared for that dependency, as written and separated by commas as Claude Code prints them. So a declared `^2.0.0` reads `^2.0.0`. The check itself still tests the intersection of those constraints.
 
 The version arm can also fire on a dependency that carries no real semantic version. A dependency recorded as `hash-` or `sha-` plus 12 hexadecimal characters goes through the same normalization as any other recorded version (D-03-04), which reads an arbitrary digit run out of the hexadecimal string. That number fails almost any range that is not a wildcard. The dependent is then disabled at load time and the row tells you to update the dependency, but the dependency has no semantic version to move to. Two things clear it: declare no version constraint on that dependency, or use a dependency whose marketplace gives it a real version.
 

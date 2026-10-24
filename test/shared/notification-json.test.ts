@@ -383,6 +383,8 @@ interface ExpectedRow {
   readonly version?: string;
   readonly from?: string;
   readonly to?: string;
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
   readonly scope?: Scope;
   readonly description?: string;
   readonly partial?: boolean;
@@ -750,6 +752,186 @@ for (const [status, { row, expected }] of Object.entries(STATUS_CASES)) {
     assert.deepStrictEqual(
       payload,
       expectedInfoPayload([{ name: "mp", scope: "user", plugins: [expected] }]),
+    );
+  });
+}
+
+test("UPR-02: an updated row with commits carries them whole as fromCommit and toCommit", () => {
+  // arrange
+  const fromCommit = "a".repeat(40);
+  const toCommit = "b".repeat(40);
+  const row: ResolvedRow = {
+    status: "updated",
+    name: "ghp",
+    severity: "info",
+    needsReload: true,
+    reasons: [],
+    from: "1.0.0",
+    to: "1.0.0",
+    commits: { from: fromCommit, to: toCommit },
+  };
+  const presentation = presentationOf([{ name: "mp", scope: "user", plugins: [row] }]);
+
+  // act
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    payload,
+    expectedInfoPayload([
+      {
+        name: "mp",
+        scope: "user",
+        plugins: [
+          {
+            status: "updated",
+            name: "ghp",
+            id: "ghp@mp",
+            reasons: [],
+            from: "1.0.0",
+            to: "1.0.0",
+            fromCommit,
+            toCommit,
+            scope: "user",
+          },
+        ],
+      },
+    ]),
+  );
+});
+
+test("D-10-13: an updated row's constraint disclosure rides the wire as its cause", () => {
+  // arrange
+  const disclosure = 'constrained to the combined range (^1.0.0) -- required by "app@tools"';
+  const row: ResolvedRow = {
+    status: "updated",
+    name: "lib",
+    severity: "info",
+    needsReload: true,
+    reasons: [],
+    from: "1.0.0",
+    to: "1.1.0",
+    failure: {
+      cause: { causeChain: [disclosure], truncated: false },
+      leaks: [],
+      rollbackPartial: [],
+    },
+  };
+  const presentation = presentationOf([{ name: "tools", scope: "project", plugins: [row] }]);
+
+  // act
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    payload,
+    expectedInfoPayload([
+      {
+        name: "tools",
+        scope: "project",
+        plugins: [
+          {
+            status: "updated",
+            name: "lib",
+            id: "lib@tools",
+            reasons: [],
+            from: "1.0.0",
+            to: "1.1.0",
+            scope: "project",
+            cause: { causeChain: [disclosure], truncated: false },
+            leaks: [],
+            rollbackPartial: [],
+          },
+        ],
+      },
+    ]),
+  );
+});
+
+const MOVE_WIRE_ROWS = [
+  {
+    row: {
+      status: "reinstalled",
+      name: "ghp",
+      severity: "info",
+      needsReload: true,
+      reasons: [],
+      version: "1.0.0",
+    },
+    reasons: [],
+  },
+  {
+    row: {
+      status: "partially-installed",
+      name: "ghp",
+      severity: "info",
+      needsReload: true,
+      reasons: ["unsupported component"],
+      version: "1.0.0",
+    },
+    reasons: ["unsupported component"],
+  },
+  {
+    row: {
+      status: "failed",
+      name: "ghp",
+      severity: "error",
+      reasons: ["lock held"],
+      version: "1.0.0",
+    },
+    reasons: ["lock held"],
+  },
+] as const satisfies readonly { readonly row: ResolvedRow; readonly reasons: readonly Reason[] }[];
+
+for (const { row, reasons } of MOVE_WIRE_ROWS) {
+  test(`UPR-02 / UPR-03: a ${row.status} row that moved carries from and its commits beside version`, () => {
+    // arrange
+    const fromCommit = "a".repeat(40);
+    const toCommit = "b".repeat(40);
+    const moved: ResolvedRow = {
+      ...row,
+      from: "1.0.0",
+      commits: { from: fromCommit, to: toCommit },
+    };
+    const presentation = presentationOf([{ name: "mp", scope: "user", plugins: [moved] }]);
+
+    // act
+    const payload = toWirePayload(presentation, {
+      kind: "command",
+      commandId: "plugin",
+      invocationId: "test-run",
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      payload,
+      expectedInfoPayload([
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [
+            {
+              status: row.status,
+              name: "ghp",
+              id: "ghp@mp",
+              reasons,
+              version: "1.0.0",
+              from: "1.0.0",
+              fromCommit,
+              toCommit,
+              scope: "user",
+            },
+          ],
+        },
+      ]),
     );
   });
 }

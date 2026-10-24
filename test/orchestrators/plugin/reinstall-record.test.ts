@@ -65,14 +65,14 @@ function stateWith(record: PluginInstallRecord): ExtensionState {
   };
 }
 
-test("composes both skipped outcomes without mutating records", () => {
+test("UPR-04: composes the not-installed failure and the already-disabled skip without mutating records", () => {
   // arrange
   const state = stateWith(oldRecord());
   const before = structuredClone(state);
 
   // act
   const missing = recordReinstallOutcome({
-    partition: "skipped",
+    partition: "failed",
     name: "plugin",
     marketplace: "market",
     scope: "project",
@@ -88,13 +88,20 @@ test("composes both skipped outcomes without mutating records", () => {
 
   // assert
   assert.deepStrictEqual(missing, {
-    partition: "skipped",
+    partition: "failed",
     name: "plugin",
     marketplace: "market",
     scope: "project",
     notes: ["not installed"],
+    reasons: ["not installed"],
   });
-  assert.deepStrictEqual(disabled, { ...missing, notes: ["already disabled"] });
+  assert.deepStrictEqual(disabled, {
+    partition: "skipped",
+    name: "plugin",
+    marketplace: "market",
+    scope: "project",
+    notes: ["already disabled"],
+  });
   assert.deepStrictEqual(state, before);
 });
 
@@ -230,6 +237,43 @@ test("FLR-01: a held state lock carries lock held and its cause", () => {
     cause: error,
   });
   assert.strictEqual(outcome.cause, error);
+});
+
+test("UPR-03: a thrown failure carries the move the runner reported before it", () => {
+  // arrange
+  const error = new StateLockHeldError("project", "/tmp/scope/.state-lock");
+  const lockMessage =
+    "Another pi-claude-marketplace operation is in progress for project scope (/tmp/scope/.state-lock). Retry after it completes.";
+
+  // act
+  const outcome = recordReinstallOutcome({
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    error,
+    move: {
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
+      fromCommit: "1111111111111111111111111111111111111111",
+      toCommit: "2222222222222222222222222222222222222222",
+    },
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    marketplace: "mp",
+    scope: "project",
+    fromVersion: "1.0.0",
+    toVersion: "1.0.0",
+    fromCommit: "1111111111111111111111111111111111111111",
+    toCommit: "2222222222222222222222222222222222222222",
+    notes: [`${lockMessage}\n\ncause: ${lockMessage}`],
+    reasons: ["lock held"],
+    cause: error,
+  });
 });
 
 test("a manifest parse failure carries no cause and no layer reason", () => {
@@ -394,6 +438,7 @@ describe("reinstallOutcomeFromRun", () => {
       marketplace: "mp",
       scope: "project",
       version: "1.1.0",
+      fromVersion: "1.0.0",
       stagedAgentNames: ["hello-bot"],
       stagedMcpServerNames: ["hello-server"],
       declaresAgents: true,
@@ -429,6 +474,7 @@ describe("reinstallOutcomeFromRun", () => {
       marketplace: "mp",
       scope: "project",
       version: "1.0.0",
+      fromVersion: "1.0.0",
       stagedAgentNames: [],
       stagedMcpServerNames: [],
       declaresAgents: false,
@@ -468,6 +514,7 @@ describe("reinstallOutcomeFromRun", () => {
       marketplace: "mp",
       scope: "project",
       version: "1.1.0",
+      fromVersion: "1.0.0",
       stagedAgentNames: [],
       stagedMcpServerNames: [],
       declaresAgents: false,
@@ -478,6 +525,44 @@ describe("reinstallOutcomeFromRun", () => {
         disclosure: 'constrained to the combined range (^1.0.0) -- required by "app@mp"',
         fellBackToCurrentCopy: true,
       },
+    });
+  });
+
+  test("UPR-02: a swapped candidate carries the commits the run moved between", () => {
+    // arrange
+    const run: UpdateRunOutcome = {
+      partition: "updated",
+      name: "hello",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
+      fromCommit: "1111111111111111111111111111111111111111",
+      toCommit: "2222222222222222222222222222222222222222",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+      constraint: undefined,
+    };
+
+    // act
+    const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, undefined);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "reinstalled",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      version: "1.0.0",
+      fromVersion: "1.0.0",
+      fromCommit: "1111111111111111111111111111111111111111",
+      toCommit: "2222222222222222222222222222222222222222",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
     });
   });
 
@@ -560,6 +645,37 @@ describe("reinstallOutcomeFromRun", () => {
     });
   });
 
+  test("SRC-01: a preflight failure carries its cause and the installed version", () => {
+    // arrange
+    const cause = new Error("HTTP Error: 404 Not Found");
+    const run: UpdateRunOutcome = {
+      partition: "failed",
+      name: "hello",
+      fromVersion: "1.0.0",
+      notes: ["HTTP Error: 404 Not Found"],
+      reasons: ["source missing"],
+      cause,
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    };
+
+    // act
+    const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, undefined);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      fromVersion: "1.0.0",
+      notes: ["HTTP Error: 404 Not Found"],
+      reasons: ["source missing"],
+      cause,
+    });
+  });
+
   test("D-18-10: a commit failure carries the captured aggregate error and one child per failed bridge", () => {
     // arrange
     const skillsCause = new Error("skills refused");
@@ -596,6 +712,8 @@ describe("reinstallOutcomeFromRun", () => {
       name: "hello",
       marketplace: "mp",
       scope: "project",
+      fromVersion: "1.0.0",
+      toVersion: "1.1.0",
       notes: ["replace failed", "skills: skills refused", "workflows: workflows refused"],
       reasons: ["rollback partial"],
       cause: aggregate,
@@ -606,6 +724,48 @@ describe("reinstallOutcomeFromRun", () => {
     });
     assert.ok(outcome.partition === "failed");
     assert.strictEqual(outcome.cause, aggregate);
+  });
+
+  test("UPR-02: a commit failure carries the commits of the move it attempted", () => {
+    // arrange
+    const skillsCause = new Error("skills refused");
+    const aggregate = new Error("replace failed");
+    const run: UpdateRunOutcome = {
+      partition: "failed",
+      name: "hello",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
+      fromCommit: "1111111111111111111111111111111111111111",
+      toCommit: "2222222222222222222222222222222222222222",
+      notes: ["replace failed", "skills: skills refused"],
+      reasons: ["rollback partial"],
+      phaseFailures: [{ phase: "skills", msg: "skills refused" }],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    };
+
+    // act
+    const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, {
+      error: aggregate,
+      failures: [{ phase: "skills", msg: "skills refused", cause: skillsCause }],
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
+      fromCommit: "1111111111111111111111111111111111111111",
+      toCommit: "2222222222222222222222222222222222222222",
+      notes: ["replace failed", "skills: skills refused"],
+      reasons: ["rollback partial"],
+      cause: aggregate,
+      rollbackPartial: [{ phase: "skills", cause: skillsCause }],
+    });
   });
 
   test("AFILE-04: a failure after the MCP commit carries the notices of the rewritten file", () => {
@@ -638,6 +798,8 @@ describe("reinstallOutcomeFromRun", () => {
       name: "hello",
       marketplace: "mp",
       scope: "project",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
       notes: ["replace failed", "mcp: state finalize failed: refused"],
       reasons: ["rollback partial"],
       cause: aggregate,

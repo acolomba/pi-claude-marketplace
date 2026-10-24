@@ -49,6 +49,7 @@ import {
   intersectDependencyRanges,
   isUnconstrainedRange,
   recordedVersionSatisfies,
+  renderDeclaredRanges,
 } from "../../domain/dependency-range.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { buildScopeDeclarationDetail } from "../plugin/dependency-index.ts";
@@ -84,7 +85,10 @@ export interface UnsatisfiedDeclaration {
   /** `name@marketplace` of the declared dependency. */
   readonly dependency: string;
   readonly kind: UnsatisfiedKind;
-  /** The declared range, present only on the out-of-range kind. */
+  /**
+   * The declared ranges, joined with `, ` and bounded once for the cause line
+   * (INR-05), present only on the out-of-range kind.
+   */
   readonly range?: string;
   /**
    * Raw per-declarer range texts of the missing kind, so the reconcile
@@ -184,15 +188,17 @@ function constraintsByKey(
 }
 
 /**
- * The effective range a recorded version fails, or `undefined` when it holds.
+ * The declared ranges a recorded version fails, rendered for the cause line,
+ * or `undefined` when it holds.
  *
+ * The fold decides: a recorded version that satisfies the intersection holds.
  * A fold that produces no range -- declarations that contradict each other, or
  * a set that trips one of the two project-owned input caps -- is reported as
- * out-of-range against the conjunction of what was declared. It is never read
- * as "no constraint" (T-06-10): the caps exist to refuse work, and failing open
- * on one would silently satisfy every dependency an attacker can make expensive
- * to fold. The declared texts are joined rather than sliced, and the row bounds
- * the result through `renderConstraintRange`.
+ * out-of-range. It is never read as "no constraint" (T-06-10): the caps exist
+ * to refuse work, and failing open on one would silently satisfy every
+ * dependency an attacker can make expensive to fold. Either way the reported
+ * text is the declared ranges, joined with `, ` as Claude Code joins them and
+ * bounded once (INR-05), never the fold.
  *
  * The unconstrained short-circuit tests canonicalization rather than string
  * identity, so two authors independently spelling "any version" differently
@@ -201,14 +207,14 @@ function constraintsByKey(
 function unsatisfiedRange(ranges: readonly string[], version: string): string | undefined {
   const folded = intersectDependencyRanges(ranges);
   if (!folded.ok) {
-    return ranges.join(" ");
+    return renderDeclaredRanges(ranges);
   }
 
   if (isUnconstrainedRange(folded.range)) {
     return undefined;
   }
 
-  return recordedVersionSatisfies(version, folded.range) ? undefined : folded.range;
+  return recordedVersionSatisfies(version, folded.range) ? undefined : renderDeclaredRanges(ranges);
 }
 
 /**

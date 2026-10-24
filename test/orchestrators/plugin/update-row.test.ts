@@ -3,13 +3,19 @@ import test from "node:test";
 
 import {
   constraintCauseFor,
+  revisionVersionSlot,
   updatedRowFromOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts";
 
 import type {
   PluginUpdateSkippedOutcome,
   PluginUpdateUnchangedOutcome,
+  PluginUpdateUpdatedOutcome,
+  RevisionMove,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
+
+const COMMIT_A = "a".repeat(40);
+const COMMIT_B = "b".repeat(40);
 
 test("composes agent and MCP dependencies in declared display order", () => {
   // arrange
@@ -261,6 +267,7 @@ test("preserves orphan, malformed, and dropped reason order on a partial row", (
     scope: "project",
     severity: "warning",
     status: "partially-installed",
+    from: "6.0.0",
     version: "6.1.0",
   });
 });
@@ -328,6 +335,7 @@ test("retains base info severity for an already degraded partial update", () => 
     scope: "project",
     severity: "info",
     status: "partially-installed",
+    from: "8.0.0",
     version: "8.1.0",
   });
 });
@@ -361,6 +369,7 @@ test("retains base warning severity for a newly degraded partial update", () => 
     scope: "user",
     severity: "warning",
     status: "partially-installed",
+    from: "9.0.0",
     version: "9.1.0",
   });
 });
@@ -399,7 +408,7 @@ test("reports orphan rewake without overriding clean base severity", () => {
   });
 });
 
-test("D-10-15: an in-range current-copy fallback names itself on the success row", () => {
+test("D-10-15 / D-10-13: an in-range current-copy fallback names itself and its range on the success row", () => {
   // arrange
   const outcome = {
     constraint: {
@@ -428,6 +437,7 @@ test("D-10-15: an in-range current-copy fallback names itself on the success row
     name: "shared-lib",
     needsReload: true,
     reasons: ["dependency current copy"],
+    cause: new Error("already the highest version ^1.0.0 admits"),
     scope: "user",
     severity: "warning",
     status: "updated",
@@ -461,8 +471,10 @@ test("D-10-15: all four written axes emit in the documented order on one row", (
   // act
   const row = updatedRowFromOutcome(outcome, "project", severity);
 
-  // assert
+  // assert -- D-10-13: the partial form carries the disclosure as its cause
+  // line, as the clean form does.
   assert.deepStrictEqual(row, {
+    cause: new Error('constrained to the combined range (^1.0.0) -- required by "alpha@mp"'),
     dependencies: ["agents", "mcp"],
     name: "shared-lib",
     needsReload: true,
@@ -477,6 +489,7 @@ test("D-10-15: all four written axes emit in the documented order on one row", (
     scope: "project",
     severity: "warning",
     status: "partially-installed",
+    from: "1.0.0",
     version: "1.5.0",
   });
 });
@@ -584,6 +597,34 @@ test("D-10-13: constraintCauseFor composes an Error from an unchanged outcome's 
   assert.strictEqual(
     cause.message,
     'already the highest version the combined range admits (<=1.5.0) -- required by "alpha@mp"',
+  );
+});
+
+test("D-10-13 / D-10-17a: constraintCauseFor composes an Error from an updated outcome's disclosure", () => {
+  // arrange
+  const outcome = {
+    partition: "updated" as const,
+    name: "lib",
+    fromVersion: "1.0.0",
+    toVersion: "1.1.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    constraint: {
+      disclosure: 'constrained to the combined range (^1.0.0) -- required by "app@tools"',
+      fellBackToCurrentCopy: false,
+    },
+  };
+
+  // act
+  const cause = constraintCauseFor(outcome);
+
+  // assert
+  assert.deepStrictEqual(
+    cause,
+    new Error('constrained to the combined range (^1.0.0) -- required by "app@tools"'),
   );
 });
 
@@ -718,6 +759,7 @@ test("WLIF-06: all four axes at once emit in one brace in the established order"
     scope: "user",
     severity: "warning",
     status: "partially-installed",
+    from: "1.0.0",
     version: "1.0.1",
   });
 });
@@ -747,4 +789,212 @@ test("WLIF-06: the dropped-kind row raises on the stale token alone", () => {
   // assert
   assert.equal(row.severity, "warning");
   assert.deepStrictEqual(row.reasons, ["unsupported component", "stale workflow command"]);
+});
+
+// A clean updated outcome over `move`, as the swap stamps it.
+function updatedOutcomeOver(move: RevisionMove): PluginUpdateUpdatedOutcome {
+  return {
+    constraint: undefined,
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    name: "ghp",
+    partition: "updated",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    ...move,
+  };
+}
+
+test("UPR-02: an updated row at the same version names the moved commits", () => {
+  // arrange
+  const outcome = updatedOutcomeOver({
+    fromVersion: "1.0.0",
+    toVersion: "1.0.0",
+    fromCommit: COMMIT_A,
+    toCommit: COMMIT_B,
+  });
+  const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
+
+  // act
+  const row = updatedRowFromOutcome(outcome, "project", severity);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    commits: { from: COMMIT_A, to: COMMIT_B },
+    dependencies: [],
+    from: "1.0.0",
+    name: "ghp",
+    needsReload: true,
+    scope: "project",
+    severity: "info",
+    status: "updated",
+    to: "1.0.0",
+  });
+});
+
+const PLAIN_ARROW_MOVES: readonly { readonly title: string; readonly move: RevisionMove }[] = [
+  {
+    title: "equal commits at the same version",
+    move: { fromVersion: "1.0.0", toVersion: "1.0.0", fromCommit: COMMIT_A, toCommit: COMMIT_A },
+  },
+  {
+    title: "different commits at different versions",
+    move: { fromVersion: "1.0.0", toVersion: "1.1.0", fromCommit: COMMIT_A, toCommit: COMMIT_B },
+  },
+  {
+    title: "a commit on the record side only",
+    move: { fromVersion: "1.0.0", toVersion: "1.0.0", fromCommit: COMMIT_A },
+  },
+  {
+    title: "a commit on the candidate side only",
+    move: { fromVersion: "1.0.0", toVersion: "1.0.0", toCommit: COMMIT_B },
+  },
+  {
+    title: "a path source with no commits",
+    move: { fromVersion: "1.0.0", toVersion: "1.0.0" },
+  },
+  {
+    title: "equal sha- versions from one commit",
+    move: {
+      fromVersion: "sha-aaaaaaaaaaaa",
+      toVersion: "sha-aaaaaaaaaaaa",
+      fromCommit: COMMIT_A,
+      toCommit: COMMIT_A,
+    },
+  },
+  {
+    title: "different sha- versions",
+    move: {
+      fromVersion: "sha-aaaaaaaaaaaa",
+      toVersion: "sha-bbbbbbbbbbbb",
+      fromCommit: COMMIT_A,
+      toCommit: COMMIT_B,
+    },
+  },
+  {
+    title: "hash- versions, which carry no commit",
+    move: { fromVersion: "hash-aaaaaaaaaaaa", toVersion: "hash-bbbbbbbbbbbb" },
+  },
+];
+
+for (const { title, move } of PLAIN_ARROW_MOVES) {
+  test(`UPR-02 / NREG-01: an updated row over ${title} names no commits`, () => {
+    // arrange
+    const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
+
+    // act
+    const row = updatedRowFromOutcome(updatedOutcomeOver(move), "project", severity);
+
+    // assert
+    assert.deepStrictEqual(row, {
+      dependencies: [],
+      from: move.fromVersion,
+      name: "ghp",
+      needsReload: true,
+      scope: "project",
+      severity: "info",
+      status: "updated",
+      to: move.toVersion,
+    });
+  });
+}
+
+const VERSION_SLOTS: readonly {
+  readonly title: string;
+  readonly known: Partial<RevisionMove>;
+  readonly expected: ReturnType<typeof revisionVersionSlot>;
+}[] = [
+  { title: "no version known gives no version fields", known: {}, expected: {} },
+  {
+    title: "only the installed version gives that version alone",
+    known: { fromVersion: "1.0.0" },
+    expected: { version: "1.0.0" },
+  },
+  {
+    title: "only the attempted version gives that version alone",
+    known: { toVersion: "1.1.0" },
+    expected: { version: "1.1.0" },
+  },
+  {
+    title: "a moved version gives the arrow",
+    known: { fromVersion: "1.0.0", toVersion: "1.1.0" },
+    expected: { version: "1.1.0", from: "1.0.0" },
+  },
+  {
+    title: "the same version and no commits gives the version alone",
+    known: { fromVersion: "1.0.0", toVersion: "1.0.0" },
+    expected: { version: "1.0.0" },
+  },
+  {
+    title: "the same version and the same commit gives the version alone",
+    known: { fromVersion: "1.0.0", toVersion: "1.0.0", fromCommit: COMMIT_A, toCommit: COMMIT_A },
+    expected: { version: "1.0.0" },
+  },
+  {
+    title: "the same version and two commits gives the arrow with both commits",
+    known: { fromVersion: "1.0.0", toVersion: "1.0.0", fromCommit: COMMIT_A, toCommit: COMMIT_B },
+    expected: { version: "1.0.0", from: "1.0.0", commits: { from: COMMIT_A, to: COMMIT_B } },
+  },
+  {
+    title: "the same version and a commit on the to side only gives the version alone",
+    known: { fromVersion: "1.0.0", toVersion: "1.0.0", toCommit: COMMIT_B },
+    expected: { version: "1.0.0" },
+  },
+  {
+    title: "the same version and a commit on the from side only gives the version alone",
+    known: { fromVersion: "1.0.0", toVersion: "1.0.0", fromCommit: COMMIT_A },
+    expected: { version: "1.0.0" },
+  },
+  {
+    title: "a moved version with commits gives the arrow without commits",
+    known: { fromVersion: "1.0.0", toVersion: "1.1.0", fromCommit: COMMIT_A, toCommit: COMMIT_B },
+    expected: { version: "1.1.0", from: "1.0.0" },
+  },
+  {
+    title: "an empty installed version gives no arrow",
+    known: { fromVersion: "", toVersion: "1.1.0" },
+    expected: { version: "1.1.0" },
+  },
+];
+
+for (const { title, known, expected } of VERSION_SLOTS) {
+  test(`UPR-03: ${title}`, () => {
+    // act
+    const slot = revisionVersionSlot(known);
+
+    // assert
+    assert.deepStrictEqual(slot, expected);
+  });
+}
+
+test("UPR-02 / UPR-03: a partial update at the same version names the moved commits", () => {
+  // arrange
+  const outcome = {
+    ...updatedOutcomeOver({
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
+      fromCommit: COMMIT_A,
+      toCommit: COMMIT_B,
+    }),
+    partialDegrade: { kinds: ["lsp"], newlyDegraded: false },
+  };
+  const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
+
+  // act
+  const row = updatedRowFromOutcome(outcome, "project", severity);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    commits: { from: COMMIT_A, to: COMMIT_B },
+    dependencies: [],
+    from: "1.0.0",
+    name: "ghp",
+    needsReload: true,
+    reasons: ["unsupported component"],
+    scope: "project",
+    severity: "info",
+    status: "partially-installed",
+    version: "1.0.0",
+  });
 });

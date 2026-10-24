@@ -6,6 +6,7 @@ import {
   isUnconstrainedRange,
   recordedVersionSatisfies,
   renderConstraintRange,
+  renderDeclaredRanges,
   type DependencyRangeIntersection,
 } from "../../extensions/pi-claude-marketplace/domain/dependency-range.ts";
 
@@ -305,4 +306,50 @@ describe("isUnconstrainedRange", () => {
       assert.equal(unconstrained, expected);
     });
   }
+});
+
+describe("renderDeclaredRanges", () => {
+  test("INR-05 one declared range renders as written", () => {
+    // arrange
+    const ranges = ["^1.0.0"];
+
+    // act
+    const rendered = renderDeclaredRanges(ranges);
+
+    // assert
+    assert.equal(rendered, "^1.0.0");
+  });
+
+  test("INR-05 declared ranges are joined with a comma in their declared order", () => {
+    // arrange
+    const ranges = ["^1.0.0", ">=1.2.0"];
+
+    // act
+    const rendered = renderDeclaredRanges(ranges);
+
+    // assert
+    assert.equal(rendered, "^1.0.0, >=1.2.0");
+  });
+
+  test("INR-05 a union range keeps its operator", () => {
+    // arrange
+    const ranges = ["1.x || 2.x", "<2.5.0"];
+
+    // act
+    const rendered = renderDeclaredRanges(ranges);
+
+    // assert
+    assert.equal(rendered, "1.x || 2.x, <2.5.0");
+  });
+
+  test("T-03-08 a join past the rendering bound is truncated once and names what it dropped", () => {
+    // arrange: four 62-character ranges join to 254 characters.
+    const ranges = Array.from({ length: 4 }, (_, index) => `${String(index)}${"x".repeat(61)}`);
+
+    // act
+    const rendered = renderDeclaredRanges(ranges);
+
+    // assert
+    assert.equal(rendered, `${ranges.join(", ").slice(0, 200)}... (+54 chars)`);
+  });
 });

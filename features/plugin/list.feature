@@ -29,6 +29,9 @@ Feature: Plugin list
     Given the user has run "/claude:plugin install eps@tools --scope project"
     Given the user has run "/claude:plugin disable eps@tools --scope project"
     Given the user has run "/claude:plugin install kilo@extras --scope user"
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | alpha | 2.0.0   |
     Given the marketplace "tools" publishes this manifest:
       """
       {
@@ -93,6 +96,9 @@ Feature: Plugin list
     Given the user has run "/claude:plugin install eps@tools --scope project"
     Given the user has run "/claude:plugin disable eps@tools --scope project"
     Given the user has run "/claude:plugin install kilo@extras --scope user"
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | alpha | 2.0.0   |
     Given the marketplace "tools" publishes this manifest:
       """
       {
@@ -152,6 +158,9 @@ Feature: Plugin list
     Given the user has run "/claude:plugin install eps@tools --scope project"
     Given the user has run "/claude:plugin disable eps@tools --scope project"
     Given the user has run "/claude:plugin install kilo@extras --scope user"
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | alpha | 2.0.0   |
     Given the marketplace "tools" publishes this manifest:
       """
       {
@@ -209,6 +218,9 @@ Feature: Plugin list
     Given the user has run "/claude:plugin install eps@tools --scope project"
     Given the user has run "/claude:plugin disable eps@tools --scope project"
     Given the user has run "/claude:plugin install kilo@extras --scope user"
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | alpha | 2.0.0   |
     Given the marketplace "tools" publishes this manifest:
       """
       {
@@ -266,6 +278,9 @@ Feature: Plugin list
     Given the user has run "/claude:plugin install eps@tools --scope project"
     Given the user has run "/claude:plugin disable eps@tools --scope project"
     Given the user has run "/claude:plugin install kilo@extras --scope user"
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | alpha | 2.0.0   |
     Given the marketplace "tools" publishes this manifest:
       """
       {
@@ -323,6 +338,9 @@ Feature: Plugin list
     Given the user has run "/claude:plugin install eps@tools --scope project"
     Given the user has run "/claude:plugin disable eps@tools --scope project"
     Given the user has run "/claude:plugin install kilo@extras --scope user"
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | alpha | 2.0.0   |
     Given the marketplace "tools" publishes this manifest:
       """
       {
@@ -381,6 +399,9 @@ Feature: Plugin list
     Given the user has run "/claude:plugin install eps@tools --scope project"
     Given the user has run "/claude:plugin disable eps@tools --scope project"
     Given the user has run "/claude:plugin install kilo@extras --scope user"
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | alpha | 2.0.0   |
     Given the marketplace "tools" publishes this manifest:
       """
       {
@@ -439,6 +460,9 @@ Feature: Plugin list
     Given the user has run "/claude:plugin install eps@tools --scope project"
     Given the user has run "/claude:plugin disable eps@tools --scope project"
     Given the user has run "/claude:plugin install kilo@extras --scope user"
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | alpha | 2.0.0   |
     Given the marketplace "tools" publishes this manifest:
       """
       {
@@ -501,6 +525,9 @@ Feature: Plugin list
     Given the user has run "/claude:plugin install eps@tools --scope project"
     Given the user has run "/claude:plugin disable eps@tools --scope project"
     Given the user has run "/claude:plugin install kilo@extras --scope user"
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | alpha | 2.0.0   |
     Given the marketplace "tools" publishes this manifest:
       """
       {
@@ -557,6 +584,9 @@ Feature: Plugin list
     Given the user has run "/claude:plugin install eps@tools --scope project"
     Given the user has run "/claude:plugin disable eps@tools --scope project"
     Given the user has run "/claude:plugin install kilo@extras --scope user"
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | alpha | 2.0.0   |
     Given the marketplace "tools" publishes this manifest:
       """
       {
@@ -700,6 +730,26 @@ Feature: Plugin list
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id          | name  | status    | reasons | version |
       | tools            | project           | alpha@tools | alpha | available |         | 2.0.0   |
+
+  Scenario: The list shows an installed path-source plugin whose plugin.json version matches the record as installed, not upgradable
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name  | version |
+      | alpha | 2.0.0   |
+    Given the marketplace "tools" publishes this manifest:
+      """
+      {
+        "name": "tools",
+        "owner": { "name": "features" },
+        "plugins": [{ "name": "alpha", "source": "./plugins/alpha", "version": "1.0.0" }]
+      }
+      """
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install alpha@tools --scope project"
+    When the user runs "/claude:plugin list --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name  | status    | reasons | scope   | version |
+      | tools            | project           | alpha@tools | alpha | installed |         | project | 2.0.0   |
 
   Scenario: The list names a path-source plugin whose directory is missing unavailable as source missing
     Given the marketplace "tools" is published as a dir source

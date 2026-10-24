@@ -20,6 +20,7 @@ import type {
   ReinstallFailedOutcome,
   ReinstallPluginOutcome,
   ReinstallSkippedOutcome,
+  RevisionMove,
 } from "../types.ts";
 
 /** Identity shared by every composed reinstall outcome. */
@@ -31,25 +32,39 @@ export interface ReinstallOutcomeTarget {
 
 export interface RecordSkippedOutcomeInput extends ReinstallOutcomeTarget {
   readonly partition: "skipped";
-  readonly reason: "not installed" | "already disabled";
+  readonly reason: "already disabled";
+}
+
+/** UPR-04: a target the scope does not record fails, as uninstall's does. */
+export interface RecordNotInstalledOutcomeInput extends ReinstallOutcomeTarget {
+  readonly partition: "failed";
+  readonly reason: "not installed";
 }
 
 export interface RecordFailedOutcomeInput extends ReinstallOutcomeTarget {
   readonly partition: "failed";
   readonly error: unknown;
+  /**
+   * UPR-03: what the shared runner reported before the failure was thrown:
+   * the installed version, or the whole move once it derived a candidate.
+   */
+  readonly move?: Partial<RevisionMove>;
 }
 
-export type RecordReinstallOutcomeInput = RecordSkippedOutcomeInput | RecordFailedOutcomeInput;
+export type RecordReinstallOutcomeInput =
+  RecordSkippedOutcomeInput | RecordNotInstalledOutcomeInput | RecordFailedOutcomeInput;
 
 /** Compose an exact skipped or failed reinstall outcome. */
 export function recordReinstallOutcome(input: RecordSkippedOutcomeInput): ReinstallSkippedOutcome;
-export function recordReinstallOutcome(input: RecordFailedOutcomeInput): ReinstallFailedOutcome;
+export function recordReinstallOutcome(
+  input: RecordNotInstalledOutcomeInput | RecordFailedOutcomeInput,
+): ReinstallFailedOutcome;
 export function recordReinstallOutcome(input: RecordReinstallOutcomeInput): ReinstallPluginOutcome {
   switch (input.partition) {
     case "skipped":
       return skippedOutcome(input);
     case "failed":
-      return failedOutcome(input);
+      return "error" in input ? failedOutcome(input) : notInstalledOutcome(input);
   }
 }
 
@@ -61,8 +76,9 @@ export interface ReinstallPhaseFailure {
 
 /**
  * Projects the shared runner's outcome onto reinstall's. A swapped candidate
- * is `reinstalled` at the version the runner derived (D-18-08); every verdict
- * the runner reached without swapping keeps its notes and typed reasons.
+ * is `reinstalled` at the version the runner derived (D-18-08), and carries
+ * the version and commit it moved from (UPR-02, UPR-03); every verdict the
+ * runner reached without swapping keeps its notes and typed reasons.
  */
 export function reinstallOutcomeFromRun(
   target: ReinstallOutcomeTarget,
@@ -76,6 +92,8 @@ export function reinstallOutcomeFromRun(
         partition: "reinstalled",
         ...identity,
         version: run.toVersion,
+        fromVersion: run.fromVersion,
+        ...knownCommits(run),
         stagedAgentNames: run.stagedAgentNames,
         stagedMcpServerNames: run.stagedMcpServerNames,
         declaresAgents: run.declaresAgents,
@@ -98,8 +116,13 @@ export function reinstallOutcomeFromRun(
       return {
         partition: "failed",
         ...identity,
+        // UPR-03: a commit or finalize failure names the move it attempted.
+        ...knownMove(run),
         notes: run.notes,
         reasons: run.reasons,
+        // SRC-01: a preflight failure carries the error behind it; a phase-3
+        // failure's own error wins.
+        ...(run.cause !== undefined && { cause: run.cause }),
         ...(phaseFailure !== undefined && {
           cause: phaseFailure.error,
           rollbackPartial: phaseFailure.failures.map((f) => ({ phase: f.phase, cause: f.cause })),
@@ -109,6 +132,24 @@ export function reinstallOutcomeFromRun(
         ...(run.mcpConfigNotices !== undefined && { mcpConfigNotices: run.mcpConfigNotices }),
       };
   }
+}
+
+/** The sides of a move that are known; an unknown side's key stays absent (NREG-01). */
+function knownMove(move: Partial<RevisionMove>): Partial<RevisionMove> {
+  return {
+    ...(move.fromVersion !== undefined && { fromVersion: move.fromVersion }),
+    ...(move.toVersion !== undefined && { toVersion: move.toVersion }),
+    ...knownCommits(move),
+  };
+}
+
+function knownCommits(
+  move: Partial<RevisionMove>,
+): Pick<Partial<RevisionMove>, "fromCommit" | "toCommit"> {
+  return {
+    ...(move.fromCommit !== undefined && { fromCommit: move.fromCommit }),
+    ...(move.toCommit !== undefined && { toCommit: move.toCommit }),
+  };
 }
 
 /**
@@ -226,6 +267,17 @@ function skippedOutcome(input: RecordSkippedOutcomeInput): ReinstallSkippedOutco
   };
 }
 
+function notInstalledOutcome(input: RecordNotInstalledOutcomeInput): ReinstallFailedOutcome {
+  return {
+    partition: "failed",
+    name: input.name,
+    marketplace: input.marketplace,
+    scope: input.scope,
+    notes: [input.reason],
+    reasons: [input.reason],
+  };
+}
+
 function failedOutcome(input: RecordFailedOutcomeInput): ReinstallFailedOutcome {
   const message = composeErrorWithCauseChain(input.error);
   const typedReasons = reinstallReasonsFromError(input.error);
@@ -236,6 +288,7 @@ function failedOutcome(input: RecordFailedOutcomeInput): ReinstallFailedOutcome 
     name: input.name,
     marketplace: input.marketplace,
     scope: input.scope,
+    ...knownMove(input.move ?? {}),
     notes: [message],
     ...(isManualRecovery && { failureClass: "manual-recovery" as const }),
     ...(typedReasons !== undefined && { reasons: typedReasons }),

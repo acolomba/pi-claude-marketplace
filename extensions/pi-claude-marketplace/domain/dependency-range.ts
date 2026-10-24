@@ -281,3 +281,12 @@ export function renderConstraintRange(range: string): string {
   const dropped = range.length - MAX_RENDERED_RANGE_CHARS;
   return `${range.slice(0, MAX_RENDERED_RANGE_CHARS)}... (+${dropped} chars)`;
 }
+
+/**
+ * INR-05: a dependency's declared ranges as a cause line shows them, joined
+ * with `, ` as Claude Code joins them, so a `||` range keeps its meaning, and
+ * bounded once like any other rendered range.
+ */
+export function renderDeclaredRanges(ranges: readonly string[]): string {
+  return renderConstraintRange(ranges.join(", "));
+}

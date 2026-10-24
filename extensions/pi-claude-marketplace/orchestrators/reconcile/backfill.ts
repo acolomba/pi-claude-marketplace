@@ -435,10 +435,9 @@ async function maybeBackfillPlugin(
     // did not happen and the plugin still lacks the kind this extension now
     // supports. Keep the gate open with no row, so a later load retries once
     // the dependents admit the offered version. Every other skip is benign:
-    // the record was removed under us (concurrent uninstall), or it was
-    // disabled under us between this scan's state SNAPSHOT and reinstall's own
-    // fresh read (ENBL-05 -- reinstall refuses a disabled record), or the
-    // shared runner found nothing to install. The ENBL-08 filter above reads
+    // the record was disabled under us between this scan's state SNAPSHOT and
+    // reinstall's own fresh read (ENBL-05 -- reinstall refuses a disabled
+    // record), or the shared runner found nothing to install. The ENBL-08 filter above reads
     // the snapshot, so it cannot see a cross-process disable that lands after
     // it. A dependency walk that cannot read a record is a failure, not a skip
     // (D-18-17): it reaches the failed arm below and keeps the gate open.
@@ -446,6 +445,14 @@ async function maybeBackfillPlugin(
   }
 
   if (outcome.partition === "failed") {
+    // UPR-04 / WR-06: a record removed between this scan's snapshot and
+    // reinstall's own read fails as `not installed`. That is the converge of a
+    // concurrent uninstall, which the uninstall path already treats as silent:
+    // no row, and the gate may close.
+    if (outcome.reasons?.includes("not installed") === true) {
+      return false;
+    }
+
     // SF-01: render: "none" makes reinstallPlugin CATCH its own throw and RETURN
     // the `failed` outcome it composes, so a genuine
     // re-materialize failure (EACCES / EIO / bridge failure) never throws and the

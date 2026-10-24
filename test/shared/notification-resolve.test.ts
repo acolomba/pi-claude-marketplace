@@ -757,6 +757,120 @@ describe("resolveRows", () => {
     });
   }
 
+  test("D-10-13: resolves the disclosure cause of an updated, a reinstalled, and a partially installed row and still composes their markers", () => {
+    // arrange
+    const disclosure = 'constrained to the combined range (^1.0.0) -- required by "app@tools"';
+    const rows: readonly PluginNotificationMessage[] = [
+      {
+        status: "updated",
+        severity: "info",
+        needsReload: true,
+        name: "lib",
+        from: "1.0.0",
+        to: "1.1.0",
+        dependencies: ["agents"],
+        reasons: ["dependency current copy"],
+        cause: new Error(disclosure),
+      },
+      {
+        status: "reinstalled",
+        severity: "info",
+        needsReload: true,
+        name: "lib",
+        version: "1.0.0",
+        dependencies: ["agents"],
+        reasons: ["dependency current copy"],
+        cause: new Error(disclosure),
+      },
+      {
+        status: "partially-installed",
+        severity: "info",
+        needsReload: true,
+        name: "lib",
+        from: "1.0.0",
+        version: "1.1.0",
+        dependencies: [],
+        reasons: ["lsp"],
+        cause: new Error(disclosure),
+      },
+      {
+        status: "updated",
+        severity: "info",
+        needsReload: true,
+        name: "other",
+        from: "1.0.0",
+        to: "1.1.0",
+        dependencies: [],
+      },
+      {
+        status: "reinstalled",
+        severity: "info",
+        needsReload: true,
+        name: "other",
+        version: "1.0.0",
+        dependencies: [],
+      },
+    ];
+    const failure = {
+      cause: { causeChain: [disclosure], truncated: false },
+      leaks: [],
+      rollbackPartial: [],
+    };
+
+    // act
+    const resolved = resolveRows(marketplaceWith(rows), noneLoaded(), CENTRAL_ROW_POLICY);
+
+    // assert
+    assert.deepStrictEqual(resolved[0]!.plugins, [
+      {
+        status: "updated",
+        severity: "info",
+        needsReload: true,
+        name: "lib",
+        from: "1.0.0",
+        to: "1.1.0",
+        reasons: ["dependency current copy", "requires pi-subagents"],
+        failure,
+      },
+      {
+        status: "reinstalled",
+        severity: "info",
+        needsReload: true,
+        name: "lib",
+        version: "1.0.0",
+        reasons: ["dependency current copy", "requires pi-subagents"],
+        failure,
+      },
+      {
+        status: "partially-installed",
+        severity: "info",
+        needsReload: true,
+        name: "lib",
+        from: "1.0.0",
+        version: "1.1.0",
+        reasons: ["lsp"],
+        failure,
+      },
+      {
+        status: "updated",
+        severity: "info",
+        needsReload: true,
+        name: "other",
+        from: "1.0.0",
+        to: "1.1.0",
+        reasons: [],
+      },
+      {
+        status: "reinstalled",
+        severity: "info",
+        needsReload: true,
+        name: "other",
+        version: "1.0.0",
+        reasons: [],
+      },
+    ]);
+  });
+
   test("reads the leaked paths of a ManualRecoveryError cause", () => {
     // arrange
     const marketplaces = marketplaceWith([

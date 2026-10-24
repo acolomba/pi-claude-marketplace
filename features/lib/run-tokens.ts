@@ -11,8 +11,9 @@
  * `{scenario time}` stands for any timestamp inside the scenario's window,
  * from the world's construction to the check (D-05). A revision token such as
  * `{ghp revision 1}` stands for the `sha-<12 hex>` version of a revision a
- * scenario published to a git plugin repository; commit dates change every
- * run, so the sha does too.
+ * scenario published to a git plugin repository, and a commit token such as
+ * `{ghp commit 1}` for that revision's full 40-hex commit; commit dates change
+ * every run, so the sha does too.
  */
 
 /** The values the tokens stand for in one scenario. */
@@ -29,6 +30,8 @@ export interface RunTokens {
   readonly scenarioStartedAt: number;
   /** The version each revision token, such as `{ghp revision 1}`, stands for. */
   readonly revisions: ReadonlyMap<string, string>;
+  /** The full commit each commit token, such as `{ghp commit 1}`, stands for. */
+  readonly commits: ReadonlyMap<string, string>;
 }
 
 const HOME_TOKEN = "{home}";
@@ -49,7 +52,8 @@ function isScenarioTime(value: string, startedAt: number): boolean {
 /**
  * Replaces every `{home}`, `{project dir}`, and `{agent dir}` in `text` with
  * the sandbox directory it stands for, every `{git host}` with the git host's
- * address, and every revision token with its version.
+ * address, every revision token with its version, and every commit token
+ * with its commit.
  */
 export function expandTokens(text: string, tokens: RunTokens): string {
   let expanded = text
@@ -57,8 +61,8 @@ export function expandTokens(text: string, tokens: RunTokens): string {
     .replaceAll(PROJECT_DIR_TOKEN, tokens.projectDir)
     .replaceAll(AGENT_DIR_TOKEN, tokens.agentDir)
     .replaceAll(GIT_HOST_TOKEN, tokens.gitHost);
-  for (const [token, version] of tokens.revisions) {
-    expanded = expanded.replaceAll(token, version);
+  for (const [token, standsFor] of [...tokens.revisions, ...tokens.commits]) {
+    expanded = expanded.replaceAll(token, standsFor);
   }
 
   return expanded;
@@ -68,8 +72,9 @@ export function expandTokens(text: string, tokens: RunTokens): string {
  * Projects the result value `value` of the field `key` back to tokens. A
  * `lastUpdatedAt` inside the scenario's window becomes `{scenario time}`;
  * otherwise every occurrence of a sandbox directory becomes its token, every
- * occurrence of the git host's address becomes `{git host}`, and every
- * occurrence of a revision's version becomes its revision token.
+ * occurrence of the git host's address becomes `{git host}`, every
+ * occurrence of a revision's version becomes its revision token, and every
+ * occurrence of a revision's commit becomes its commit token.
  */
 export function projectTokens(key: string, value: string, tokens: RunTokens): string {
   if (key === "lastUpdatedAt" && isScenarioTime(value, tokens.scenarioStartedAt)) {
@@ -81,8 +86,8 @@ export function projectTokens(key: string, value: string, tokens: RunTokens): st
     .replaceAll(tokens.projectDir, PROJECT_DIR_TOKEN)
     .replaceAll(tokens.agentDir, AGENT_DIR_TOKEN)
     .replaceAll(tokens.gitHost, GIT_HOST_TOKEN);
-  for (const [token, version] of tokens.revisions) {
-    projected = projected.replaceAll(version, token);
+  for (const [token, standsFor] of [...tokens.revisions, ...tokens.commits]) {
+    projected = projected.replaceAll(standsFor, token);
   }
 
   return projected;

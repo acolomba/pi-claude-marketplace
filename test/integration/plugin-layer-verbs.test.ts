@@ -338,6 +338,7 @@ test("LAYER-08: the load-time backfill's reinstall of a dependency writes no lay
     marketplace: "mp",
     scope: "project",
     version: "1.0.0",
+    fromVersion: "1.0.0",
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,

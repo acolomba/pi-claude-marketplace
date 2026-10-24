@@ -406,25 +406,60 @@ export interface PluginInstalledMessage extends TransitionMessageBase {
   readonly description?: string;
 }
 
+/**
+ * UPR-02: the commit on each side of a move whose version did not change. Both
+ * are full commit shas; the text form shortens each to 7 hex characters and
+ * the wire carries them whole. Both sides travel together or the whole
+ * sub-object is absent, so no row can draw a half-annotated arrow.
+ */
+export interface VersionCommits {
+  readonly from: string;
+  readonly to: string;
+}
+
 /** Updated plugin row. */
 export interface PluginUpdatedMessage extends TransitionMessageBase {
   readonly status: "updated";
   readonly name: string;
   readonly from: string;
   readonly to: string;
+  /** UPR-02: present only when the producer decided the arrow names commits. */
+  readonly commits?: VersionCommits;
   readonly dependencies: readonly Dependency[];
   readonly scope?: Scope;
   readonly reasons?: readonly ContentReason[];
+  /**
+   * D-10-13 / D-10-17a: the constraint gate's disclosure, when a dependent's
+   * range chose what landed. It rides the cause chain because the sentence
+   * interpolates plugin identifiers, and the cause chain is the only channel
+   * in this grammar that legally interpolates one, as on the held `skipped`
+   * row. An unconstrained update omits it.
+   */
+  readonly cause?: Error;
+}
+
+/**
+ * UPR-03: the move a `reinstalled`, `partially-installed`, or `failed` row
+ * can show. `version` keeps its meaning on those rows (the version installed
+ * or attempted); `from` is the version the move started at, present only when
+ * the producer knows both sides and the revision moved, and `commits` follows
+ * the `updated` row's rule (UPR-02).
+ */
+export interface RevisionMoveFields {
+  readonly from?: string;
+  readonly commits?: VersionCommits;
 }
 
 /** Reinstalled plugin row. */
-export interface PluginReinstalledMessage extends TransitionMessageBase {
+export interface PluginReinstalledMessage extends TransitionMessageBase, RevisionMoveFields {
   readonly status: "reinstalled";
   readonly name: string;
   readonly dependencies: readonly Dependency[];
   readonly version?: string;
   readonly scope?: Scope;
   readonly reasons?: readonly ContentReason[];
+  /** D-10-13 / D-18-07: the constraint gate's disclosure, as on `PluginUpdatedMessage`. */
+  readonly cause?: Error;
 }
 
 /**
@@ -543,7 +578,7 @@ export interface PluginUpgradableMessage extends MessageBase {
 }
 
 /** Partially installed plugin row. */
-export interface PluginPartiallyInstalledMessage extends MessageBase {
+export interface PluginPartiallyInstalledMessage extends MessageBase, RevisionMoveFields {
   readonly status: "partially-installed";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
@@ -551,6 +586,8 @@ export interface PluginPartiallyInstalledMessage extends MessageBase {
   readonly version?: string;
   readonly scope?: Scope;
   readonly description?: string;
+  /** D-10-13: the constraint gate's disclosure on a partial update, as on `PluginUpdatedMessage`. */
+  readonly cause?: Error;
 }
 
 /** Partially upgradable plugin row. */
@@ -565,7 +602,7 @@ export interface PluginPartiallyUpgradableMessage extends MessageBase {
 }
 
 /** Failed plugin row. */
-export interface PluginFailedMessage extends MessageBase {
+export interface PluginFailedMessage extends MessageBase, RevisionMoveFields {
   readonly status: "failed";
   readonly severity: "error" | "warning";
   readonly name: string;

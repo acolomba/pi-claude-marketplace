@@ -25,6 +25,7 @@ import {
   isUnconstrainedRange,
   recordedVersionSatisfies,
   renderConstraintRange,
+  renderDeclaredRanges,
 } from "../../domain/dependency-range.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
@@ -114,12 +115,13 @@ export type UpdateConstraintVerdict =
       readonly pin?: UpdateTagPin;
       readonly fellBackToCurrentCopy: boolean;
       /**
-       * D-10-13 / D-10-17a: the ceiling disclosure -- the effective range and
-       * its holders, composed once here so every `admits` arm has it ready
-       * for the two `unchanged` construction sites and for
-       * `PreparedPluginUpdate.constraint`. Composed the same way whether or
-       * not a pin or a fallback produced this verdict; the caller decides
-       * which row (if any) actually shows it.
+       * D-10-13 / D-10-17a: the ceiling disclosure -- the holders' declared
+       * ranges joined with `, ` (INR-05) and the holders, composed once here
+       * so every `admits` arm has it ready for the two `unchanged`
+       * construction sites and for `PreparedPluginUpdate.constraint`.
+       * Composed the same way whether or not a pin or a fallback produced
+       * this verdict; the caller decides which row (if any) actually shows
+       * it.
        */
       readonly disclosure: string;
     }
@@ -165,7 +167,7 @@ const ARM_CLAUSE: Record<ConstraintArm, string> = {
   transport: "the release tags could not be listed",
   // UPDT-02: the version that actually landed (a no-tag repository, or a
   // drifted path-source current copy) falls outside what the dependents
-  // named below admit.
+  // named below admit; the line prints only their declared ranges.
   "out-of-range": "falls outside what the combined range admits",
   // D-10-13: the plugin is already at the highest version the combined
   // range admits -- disclosed on an `{up-to-date}` row's cause line, never a
@@ -179,37 +181,48 @@ const ARM_CLAUSE: Record<ConstraintArm, string> = {
   "range-only": "constrained to the combined range",
 };
 
+/**
+ * What one cause line says behind its arm clause. The `transport` arm names
+ * its classification; every other arm names the holders' declared ranges, so
+ * no caller can hand a range arm a fold or a fold diagnostic. `version` is
+ * stage two's fetched version, printed ahead of the clause.
+ */
+type ConstraintLine =
+  | { readonly arm: "transport"; readonly classification: string }
+  | { readonly arm: Exclude<ConstraintArm, "transport">; readonly version?: string };
+
 function nameHolder(holder: ConstraintHolder): string {
   return holder.disabled ? `"${holder.key}" (currently disabled)` : `"${holder.key}"`;
 }
 
 /**
  * Composes the ONE cause line every constraint arm shares (D-10-11): a fixed
- * arm clause, the bounded diagnostic detail behind it, and the declaring
- * plugins in walk order, each marked when currently disabled. Every new arm
- * extends `ARM_CLAUSE` rather than writing a second composer -- the
- * holder-naming half is identical across all of them, so a second composer
- * would be a second place to drift the disabled marking. `detail` carries
- * whatever bounded diagnostic text the calling arm has -- `intersectDependencyRanges`'
- * own measurement/position-only text for the three range-fold arms, the
- * transport classification for the `transport` arm, or the effective range
- * for the `out-of-range` / `already-resolved` arms -- passed through
- * `renderConstraintRange` so a synthesized detail cannot flood the line and
- * never a declared range's raw content. `version` is stage two's own arm
- * only: the fetched version that landed, interpolated with NO transformation
- * (never bounded -- a resolved version is never attacker-controlled length
- * the way a declared range is) ahead of the arm clause.
+ * arm clause, the detail behind it, and the declaring plugins in walk order,
+ * each marked when currently disabled. Every new arm extends `ARM_CLAUSE`
+ * rather than writing a second composer -- the holder-naming half is
+ * identical across all of them, so a second composer would be a second place
+ * to drift the disabled marking.
+ *
+ * INR-05: a range-naming arm's detail is the declared ranges of the holders
+ * the line names, in holder order, joined with `, ` as Claude Code joins
+ * them; a holder that declared no range is named but adds nothing. Each
+ * declared range passed `domain/dependencies.ts`' allowlist and 64-character
+ * bound at parse time, and the join is bounded again here. The `transport`
+ * arm's classification is bounded the same way. A stage-two `version` is
+ * interpolated with NO transformation (a resolved version is never
+ * attacker-controlled length the way a declared range is).
  */
-function describeConstraint(
-  detail: string,
-  holders: readonly ConstraintHolder[],
-  arm: ConstraintArm,
-  version?: string,
-): string {
-  const bounded = renderConstraintRange(detail);
+function describeConstraint(holders: readonly ConstraintHolder[], line: ConstraintLine): string {
+  const detail =
+    line.arm === "transport"
+      ? renderConstraintRange(line.classification)
+      : renderDeclaredRanges(
+          holders.flatMap((holder) => (holder.range === undefined ? [] : [holder.range])),
+        );
   const required = holders.map(nameHolder).join(", ");
-  const fetched = version === undefined ? "" : `version ${version} `;
-  return `${fetched}${ARM_CLAUSE[arm]} (${bounded}) -- required by ${required}`;
+  const fetched =
+    line.arm === "transport" || line.version === undefined ? "" : `version ${line.version} `;
+  return `${fetched}${ARM_CLAUSE[line.arm]} (${detail}) -- required by ${required}`;
 }
 
 /** The `name@marketplace` key naming one record, on the D-05-06 convention. */
@@ -289,9 +302,10 @@ function constraintTagSource(entry: PluginEntry): ConstraintTagSource {
 /**
  * The `admits` arm, with or without a pin (the shape every stage-one branch
  * below returns). `disclosure` is composed here ONCE per verdict, from the
- * SAME range and holders every branch already has, so it is ready for the
- * `unchanged` ceiling row (D-10-13) and `PreparedPluginUpdate.constraint`
- * (D-10-17a) without a second composition site.
+ * SAME holders every branch already has, naming their declared ranges
+ * (INR-05) while `range` keeps the fold, so it is ready for the `unchanged`
+ * ceiling row (D-10-13) and `PreparedPluginUpdate.constraint` (D-10-17a)
+ * without a second composition site.
  *
  * The clause follows the PIN. A pin means the tag search ran and chose the
  * highest satisfying release, so the ceiling is established and the line
@@ -310,11 +324,9 @@ function admitsRange(
     holders,
     ...(options?.pin !== undefined && { pin: options.pin }),
     fellBackToCurrentCopy: options?.fellBackToCurrentCopy === true,
-    disclosure: describeConstraint(
-      range,
-      holders,
-      options?.pin === undefined ? "range-only" : "already-resolved",
-    ),
+    disclosure: describeConstraint(holders, {
+      arm: options?.pin === undefined ? "range-only" : "already-resolved",
+    }),
   };
 }
 
@@ -351,11 +363,10 @@ function decodeTagProbe(
 
   return {
     kind: "held",
-    cause: describeConstraint(
-      probed.classification ?? "an unclassified transport failure",
-      holders,
-      "transport",
-    ),
+    cause: describeConstraint(holders, {
+      arm: "transport",
+      classification: probed.classification ?? "an unclassified transport failure",
+    }),
   };
 }
 
@@ -472,7 +483,7 @@ export async function evaluateUpdateConstraint(
   const ranges = holders.flatMap((holder) => (holder.range === undefined ? [] : [holder.range]));
   const fold = intersectDependencyRanges(ranges);
   if (!fold.ok) {
-    return { kind: "held", cause: describeConstraint(fold.detail, holders, fold.reason) };
+    return { kind: "held", cause: describeConstraint(holders, { arm: fold.reason }) };
   }
 
   if (isUnconstrainedRange(fold.range)) {
@@ -527,6 +538,6 @@ export function admitResolvedVersion(
   );
   return {
     kind: "held",
-    cause: describeConstraint(admits.range, rejecting, "out-of-range", toVersion),
+    cause: describeConstraint(rejecting, { arm: "out-of-range", version: toVersion }),
   };
 }

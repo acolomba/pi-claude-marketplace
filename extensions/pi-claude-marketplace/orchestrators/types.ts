@@ -26,6 +26,19 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly partition: "reinstalled";
   readonly version: string;
   /**
+   * UPR-03: the version the record held before the reinstall. The row shows
+   * the move from it to `version` only when the revision moved (D-18-08 as
+   * amended), so a repair at the recorded revision keeps its single version.
+   */
+  readonly fromVersion: string;
+  /**
+   * UPR-02: the full sha of the record the reinstall read and of the
+   * candidate, each omitted when that side has none (a path source), so a
+   * path reinstall's outcome shape is unchanged (NREG-01).
+   */
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
+  /**
    * WLIF-06: the reinstall's new source did not re-place at least one workflow
    * envelope the record named, so the command that envelope registered is still
    * live for the session. The row composer turns this into the
@@ -147,8 +160,8 @@ export interface ReinstallSkippedOutcome extends ReinstallOutcomeBase {
   /**
    * D-18-07: the shared runner's typed skip reasons, such as `dependents
    * constrain`, whose holders ride on `notes`. Absent for reinstall's own
-   * `not installed` / `already disabled` skips, whose `notes` the messaging
-   * narrows.
+   * `already disabled` skip, whose `notes` the messaging narrows. A target
+   * the scope does not record is a failure, not a skip (UPR-04).
    */
   readonly reasons?: readonly ContentReason[];
 }
@@ -156,6 +169,16 @@ export interface ReinstallSkippedOutcome extends ReinstallOutcomeBase {
 export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
   readonly partition: "failed";
   readonly notes: readonly string[];
+  /**
+   * UPR-03: whatever the shared runner knew of the move the reinstall
+   * attempted -- the record's and the candidate's versions and shas. Each is
+   * absent when that side is unknown, as on a failure before any candidate
+   * exists (NREG-01).
+   */
+  readonly fromVersion?: string;
+  readonly toVersion?: string;
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
   /**
    * CMC-16 / CMC-11: structural failure-class tag
    * consumed by `outcomeToCascadePluginMessage`'s closed-set Reason mapping. When the
@@ -251,6 +274,18 @@ export interface UpdatePhaseFailure {
   readonly cleanupFailures?: readonly CleanupFailure[];
 }
 
+/**
+ * UPR-02 / UPR-03: the revisions a materialization moves between, read by the
+ * row composers. Each commit is optional on its own: a path source records
+ * none, and a switch between source kinds has one on one side only.
+ */
+export interface RevisionMove {
+  readonly fromVersion: string;
+  readonly toVersion: string;
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
+}
+
 export interface PluginUpdateBase {
   readonly name: string;
   /**
@@ -290,6 +325,15 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
   readonly partition: "updated";
   readonly fromVersion: string;
   readonly toVersion: string;
+  /**
+   * UPR-02: the full sha of the record the preflight read and of the
+   * candidate, each omitted when that side has none (a path source, or a
+   * record written before commits were recorded), so a path update's outcome
+   * shape is unchanged (NREG-01). The row composer decides whether a row
+   * shows them.
+   */
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
   /**
    * D-99-02c: generated NAMES, spelled apart from the same-subject presence
    * flags on `LedgerDegradationSignals` (`plugin/shared.ts`). While both
@@ -482,6 +526,12 @@ export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
   readonly partition: "failed";
   readonly fromVersion?: string;
   readonly toVersion?: string;
+  /**
+   * UPR-03: the full shas of the move a failure after the candidate
+   * attempted, each omitted when that side has none (NREG-01).
+   */
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
   readonly notes: readonly string[];
   readonly reasons?: readonly ContentReason[];
   readonly phaseFailures?: readonly UpdatePhaseFailure[];

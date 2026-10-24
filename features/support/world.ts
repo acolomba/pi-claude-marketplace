@@ -118,15 +118,22 @@ export class ScenarioWorld extends World {
       agentDir: run.sandbox.agentDir,
       gitHost: run.gitHost.address,
       scenarioStartedAt: this.startedAt,
-      revisions: new Map(
-        [...this.gitRepositories.values()].flatMap((repository) =>
-          repository.revisions.map((sha, index): [string, string] => [
-            `{${repository.name} revision ${index + 1}}`,
-            `sha-${sha.slice(0, 12)}`,
-          ]),
-        ),
-      ),
+      revisions: this.revisionTokens("revision", (sha) => `sha-${sha.slice(0, 12)}`),
+      commits: this.revisionTokens("commit", (sha) => sha),
     };
+  }
+
+  // One `{<repository> <noun> <n>}` token per published revision, standing
+  // for `value` of that revision's commit.
+  private revisionTokens(noun: string, value: (sha: string) => string): Map<string, string> {
+    return new Map(
+      [...this.gitRepositories.values()].flatMap((repository) =>
+        repository.revisions.map((sha, index): [string, string] => [
+          `{${repository.name} ${noun} ${index + 1}}`,
+          value(sha),
+        ]),
+      ),
+    );
   }
 
   /**

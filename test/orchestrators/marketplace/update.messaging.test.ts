@@ -243,6 +243,75 @@ test("projects a clean updated outcome with dependency order and optional reason
   assert.equal(Object.hasOwn(message, "reasons"), false);
 });
 
+test("UPR-02: an autoupdated plugin at the same version names the moved commits", () => {
+  // arrange
+  const fromCommit = "a".repeat(40);
+  const toCommit = "b".repeat(40);
+  const outcome = {
+    partition: "updated",
+    name: "ghp",
+    fromVersion: "1.0.0",
+    toVersion: "1.0.0",
+    fromCommit,
+    toCommit,
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+  } satisfies PluginUpdateOutcome;
+
+  // act
+  const message = outcomeToCascadePluginMessage(outcome, "user");
+
+  // assert
+  assert.deepStrictEqual(message, {
+    status: "updated",
+    name: "ghp",
+    scope: "user",
+    from: "1.0.0",
+    to: "1.0.0",
+    commits: { from: fromCommit, to: toCommit },
+    dependencies: [],
+    severity: "info",
+    needsReload: true,
+  });
+});
+
+test("NREG-01: an autoupdated plugin whose version moved names no commits", () => {
+  // arrange
+  const outcome = {
+    partition: "updated",
+    name: "ghp",
+    fromVersion: "1.0.0",
+    toVersion: "1.1.0",
+    fromCommit: "a".repeat(40),
+    toCommit: "b".repeat(40),
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+  } satisfies PluginUpdateOutcome;
+
+  // act
+  const message = outcomeToCascadePluginMessage(outcome, "user");
+
+  // assert
+  assert.deepStrictEqual(message, {
+    status: "updated",
+    name: "ghp",
+    scope: "user",
+    from: "1.0.0",
+    to: "1.1.0",
+    dependencies: [],
+    severity: "info",
+    needsReload: true,
+  });
+});
+
 test("projects orphan rewake before canonical malformed reasons on an updated row", () => {
   // arrange
   const outcome = {
@@ -334,6 +403,7 @@ test("projects a newly degraded partial update with warning severity", () => {
     status: "partially-installed",
     name: "iota",
     scope: "user",
+    from: "4.0.0",
     version: "4.1.0",
     dependencies: ["mcp"],
     reasons: ["lsp"],
@@ -366,6 +436,7 @@ test("projects an already degraded partial update with info severity", () => {
     status: "partially-installed",
     name: "kappa",
     scope: "project",
+    from: "5.0.0",
     version: "5.1.0",
     dependencies: ["agents"],
     reasons: ["unsupported hooks"],
@@ -403,6 +474,7 @@ test("preserves orphan, malformed, and dropped reason order on a partial update"
     status: "partially-installed",
     name: "lambda",
     scope: "project",
+    from: "6.0.0",
     version: "6.1.0",
     dependencies: ["agents", "mcp"],
     reasons: [
@@ -478,6 +550,41 @@ test("D-10-13: an unchanged outcome with a constraint discloses its range and ho
     cause: new Error(
       'already the highest version the combined range admits (<=1.5.0) -- required by "alpha@mp"',
     ),
+  });
+});
+
+test("D-10-13: an updated outcome with a constraint discloses its range on the autoupdate row", () => {
+  // arrange
+  const outcome = {
+    declaresWorkflows: false,
+    partition: "updated",
+    name: "lib",
+    fromVersion: "1.0.0",
+    toVersion: "1.1.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: {
+      disclosure: 'constrained to the combined range (^1.0.0) -- required by "app@tools"',
+      fellBackToCurrentCopy: false,
+    },
+  } satisfies PluginUpdateOutcome;
+
+  // act
+  const message = outcomeToCascadePluginMessage(outcome, "user");
+
+  // assert
+  assert.deepStrictEqual(message, {
+    status: "updated",
+    name: "lib",
+    scope: "user",
+    from: "1.0.0",
+    to: "1.1.0",
+    dependencies: [],
+    cause: new Error('constrained to the combined range (^1.0.0) -- required by "app@tools"'),
+    severity: "info",
+    needsReload: true,
   });
 });
 
@@ -794,14 +901,76 @@ test("prefers a typed failure reason and preserves its Error cause", () => {
     status: "failed",
     name: "phi",
     scope: "user",
+    version: "9.1.0",
+    from: "9.0.0",
     reasons: ["permission denied"],
     cause,
     severity: "error",
     needsReload: false,
   });
-  assert.equal(Object.hasOwn(message, "version"), false);
-  assert.equal(Object.hasOwn(message, "from"), false);
-  assert.equal(Object.hasOwn(message, "to"), false);
+});
+
+test("UPR-03: a failed autoupdate that knows only the installed version shows it alone", () => {
+  // arrange
+  const outcome = {
+    partition: "failed",
+    name: "phi",
+    fromVersion: "9.0.0",
+    notes: [],
+    reasons: ["lock held"],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  } as const satisfies PluginUpdateOutcome;
+
+  // act
+  const message = outcomeToCascadePluginMessage(outcome, "user");
+
+  // assert
+  assert.deepStrictEqual(message, {
+    status: "failed",
+    name: "phi",
+    scope: "user",
+    version: "9.0.0",
+    reasons: ["lock held"],
+    severity: "error",
+    needsReload: false,
+  });
+});
+
+test("UPR-02 / UPR-03: a failed same-version autoupdate names the commits it attempted", () => {
+  // arrange
+  const fromCommit = "a".repeat(40);
+  const toCommit = "b".repeat(40);
+  const outcome = {
+    partition: "failed",
+    name: "phi",
+    fromVersion: "9.0.0",
+    toVersion: "9.0.0",
+    fromCommit,
+    toCommit,
+    notes: [],
+    reasons: ["lock held"],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  } as const satisfies PluginUpdateOutcome;
+
+  // act
+  const message = outcomeToCascadePluginMessage(outcome, "user");
+
+  // assert
+  assert.deepStrictEqual(message, {
+    status: "failed",
+    name: "phi",
+    scope: "user",
+    version: "9.0.0",
+    from: "9.0.0",
+    commits: { from: fromCommit, to: toCommit },
+    reasons: ["lock held"],
+    severity: "error",
+    needsReload: false,
+  });
 });
 
 test("prefers a typed rollback reason while truly omitting an absent cause", () => {
@@ -831,13 +1000,43 @@ test("prefers a typed rollback reason while truly omitting an absent cause", () 
   assert.equal(Object.hasOwn(message, "cause"), false);
 });
 
+test("SRC-01: renders an empty typed reason set with its cause and no reason token", () => {
+  // arrange
+  const cause = new Error("mirror gone");
+  const outcome = {
+    partition: "failed",
+    name: "upsilon",
+    fromVersion: "1.0.0",
+    notes: ["mirror gone"],
+    reasons: [],
+    cause,
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  } satisfies PluginUpdateOutcome;
+
+  // act
+  const message = outcomeToCascadePluginMessage(outcome, "user");
+
+  // assert
+  assert.deepStrictEqual(message, {
+    status: "failed",
+    name: "upsilon",
+    scope: "user",
+    version: "1.0.0",
+    reasons: [],
+    cause,
+    severity: "error",
+    needsReload: false,
+  });
+});
+
 test("classifies an empty notes-only failure as an unreadable manifest", () => {
   // arrange
   const outcome = {
     partition: "failed",
     name: "psi",
     notes: [],
-    reasons: [],
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,

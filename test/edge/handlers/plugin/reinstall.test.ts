@@ -631,7 +631,7 @@ test("honours a scope flag and the scope-target flag driven together (WB-02)", a
 // resolver answers first and the row renders offline.
 // ---------------------------------------------------------------------------
 
-test("D-18-04 / NFR-5: a cold git source is a cache miss, so reinstall tries to clone it and skips the plugin when the clone fails", async (t) => {
+test("D-18-04 / NFR-5 / SRC-01: a cold git source is a cache miss, so reinstall tries to clone it and fails the plugin with the clone's cause when the clone fails", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "cold-git-source");
   const marketplaceRoot = path.join(workspace.cwd, "mp-src");
@@ -670,8 +670,8 @@ test("D-18-04 / NFR-5: a cold git source is a cache miss, so reinstall tries to 
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "A plugin operation needs attention.\n\n● mp [project]\n  ⊘ far (skipped) {no longer installable}",
-      severity: "warning",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ far v1.0.0 (failed)\n    cause: reinstall must not open a network connection",
+      severity: "error",
     },
   ]);
   assert.deepStrictEqual(await readFootprint(workspace), NOTHING_REINSTALLED);
