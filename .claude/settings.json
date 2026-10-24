@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "in=$(cat); line=\"$(date -Is) pwd=$PWD proj=${CLAUDE_PROJECT_DIR-unset} $in\"; for f in \"$HOME/.cache/ss-probe.log\" /tmp/ss-probe.log \"${CLAUDE_PROJECT_DIR:-$PWD}/node_modules/.ss-probe.log\"; do mkdir -p \"$(dirname \"$f\")\"; echo \"$line\" >> \"$f\"; done; true"
+            "command": "{ date -Is; cat; echo; } >> /tmp/claude-1000/-home-acolomba-src-pi-claude-marketplace-22442f56d78caa3a-plugin-lifecycle-coverage-b1d431/669da5d2-2b98-4168-aab4-2fde4993d911/scratchpad/sessionstart.log"
           }
         ]
       }
