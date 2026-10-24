@@ -167,6 +167,7 @@ settle which one wins (see PROJECT.md).
 - [x] **INR-06**: A failed pinned-commit install's cause carries no git-library advice the user cannot act on, and a pin reachable only from a tag installs on the ref-hint clone path
 - [x] **REC-06**: Reconcile's own failed install reports the narrowed resolver reasons `install` and `import` report, and `import` reports a rollback-partial install as `{rollback partial}` as `install` does
 - [x] **MPR-01**: `marketplace remove`'s dependents refusal ignores disabled holders, as a named `uninstall` does
+- [ ] **DLS-01**: A plugin its marketplace no longer lists (installed, `{not in manifest}`) does not make the scope's dependency walk unreadable: its dependencies are read from its installed copy, so `update`, `reinstall`, `uninstall`, `enable`, and the load-time backfill of other plugins proceed; only a record whose installed copy is also unreadable fails closed
 
 ## Future Requirements
 
@@ -280,10 +281,11 @@ settle which one wins (see PROJECT.md).
 | INR-06 | Phase 27 | Complete |
 | REC-06 | Phase 27 | Complete |
 | MPR-01 | Phase 27 | Complete |
+| DLS-01 | Phase 28 | Pending |
 
 **Coverage:**
-- v1 requirements: 95 total
-- Mapped to phases: 95
+- v1 requirements: 96 total
+- Mapped to phases: 96
 - Unmapped: 0
 
 ---
