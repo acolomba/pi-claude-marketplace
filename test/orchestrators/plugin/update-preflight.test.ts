@@ -243,6 +243,27 @@ for (const { declared, listing } of [
   });
 }
 
+test("UPR-04: a target with no install record fails as not installed before the manifest is read", async (t) => {
+  // arrange
+  const seed = await seedUpdate();
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  await writeFile(path.join(seed.cwd, "marketplace", ".claude-plugin", "marketplace.json"), "{");
+
+  // act
+  const outcome = await prepare(seed);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    notes: ["not installed"],
+    reasons: ["not installed"],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
+});
+
 test("retains the recorded version when the refreshed manifest drops the plugin", async (t) => {
   // arrange
   const seed = await seedUpdate({ declared: false, installed: pluginRecord("1.0.0") });

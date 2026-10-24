@@ -622,16 +622,19 @@ function staticPreflightRow(
   };
 }
 
-function triageUpdateMembership(
+async function triageUpdateMembership(
   plugin: string,
-  record: PluginStateRecord | undefined,
-  lookup: ReturnType<typeof lookupDeclaredPlugin>,
-): UpdatePreflightOutcome | { readonly record: PluginStateRecord; readonly entry: PluginEntry } {
+  marketplace: ExtensionState["marketplaces"][string],
+): Promise<
+  UpdatePreflightOutcome | { readonly record: PluginStateRecord; readonly entry: PluginEntry }
+> {
+  const record = ownValue(marketplace.plugins, plugin);
   if (record === undefined) {
-    // UPR-04: the record is checked before the manifest, as Claude Code does,
-    // so a plugin with no install record fails as not installed whether or not
-    // the manifest still lists it -- the row `uninstall` renders. No
-    // `fromVersion`: there is no record to read a version from.
+    // UPR-04: the record is checked before the manifest is read, as Claude
+    // Code does, so a plugin with no install record fails as not installed
+    // whether the manifest lists it, omits it, or cannot be read -- the row
+    // `uninstall` renders. No `fromVersion`: there is no record to read a
+    // version from.
     return staticPreflightRow({
       partition: "failed",
       plugin,
@@ -640,6 +643,10 @@ function triageUpdateMembership(
     });
   }
 
+  const lookup = lookupDeclaredPlugin(
+    await loadMarketplaceManifest(marketplace.manifestPath),
+    plugin,
+  );
   if (lookup.kind === "absent") {
     return staticPreflightRow({
       partition: "skipped",
@@ -944,12 +951,7 @@ export async function preparePluginUpdate(
     });
   }
 
-  const manifest = await loadMarketplaceManifest(marketplace.manifestPath);
-  const triaged = triageUpdateMembership(
-    options.plugin,
-    ownValue(marketplace.plugins, options.plugin),
-    lookupDeclaredPlugin(manifest, options.plugin),
-  );
+  const triaged = await triageUpdateMembership(options.plugin, marketplace);
   if ("partition" in triaged) {
     return triaged;
   }
