@@ -608,6 +608,49 @@ Plans:
 4. `pending`, help, completions and the docs name `apply` (APL-04).
 5. `npm run check` stays green.
 
+**Plans:** 14 plans
+
+Plans:
+**Wave 1**
+- [ ] 29-01-PLAN.md — Tracer: the `/claude:plugin apply` verb (handler, router, register, flag catalog, help, completions, JSON outcome)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 29-02-PLAN.md — A load changes no installation state: `load.ts` and the shared `read-pass.ts`; the reload scenarios move to `apply`
+- [ ] 29-03-PLAN.md — `pending` ends with the `/claude:plugin apply` trailer and carries `needsApply`
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [ ] 29-04-PLAN.md — An empty `apply` reports `Apply: nothing to change.`; the empty pending advisory names `apply`; the catalog's `apply` section
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [ ] 29-05-PLAN.md — `apply` ends with the reload trailer and installs missing dependencies on every run
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [ ] 29-06-PLAN.md — `pending` lists marketplace adds and removes as `(will add)` / `(will remove)` (D-20)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [ ] 29-07-PLAN.md — `pending` lists the LOAD-01 dependency disables and missing-dependency installs (D-21)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [ ] 29-08-PLAN.md — A load prints `pending`'s block on a mismatch and nothing on a match
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [ ] 29-09-PLAN.md — `(will update)` and the offline convergence planner for path-source catalog moves
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [ ] 29-10-PLAN.md — Range holds and consent declines in `pending` and the load; the network-free constraint fold
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [ ] 29-11-PLAN.md — Git-source and supported-set growth moves in the preview
+
+**Wave 11** *(blocked on Wave 10 completion)*
+- [ ] 29-12-PLAN.md — `apply` converges plugins on the catalog through a new runner entry and keeps blocked moves
+
+**Wave 12** *(blocked on Wave 11 completion)*
+- [ ] 29-13-PLAN.md — `apply` makes partial plugins whole; the backfill and the extension-version stamp retire
+
+**Wave 13** *(blocked on Wave 12 completion)*
+- [ ] 29-14-PLAN.md — APL-D1 and APL-D2 decision records, README, CHANGELOG and internal docs
+
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
@@ -640,7 +683,7 @@ Plans:
 | 26. Git Mirror Access | 1/1 | Complete    | 2026-10-23 |
 | 27. Install and Reconcile Reason Residue | 1/1 | Complete    | 2026-10-23 |
 | 28. Delisted Plugin Dependency Walk | 1/1 | Complete    | 2026-10-24 |
-| 29. Apply Command and Read-Only Reload | 0/TBD | Not started | - |
+| 29. Apply Command and Read-Only Reload | 0/14 | Not started | - |
 
 ## Carried Forward
 

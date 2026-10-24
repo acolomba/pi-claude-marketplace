@@ -2,19 +2,20 @@
 gsd_state_version: "1.0"
 milestone: lifecycle-coverage
 milestone_name: Plugin Lifecycle Behavioral Tests
-current_phase: 15
+current_phase: 29
+current_phase_name: Apply Command and Read-Only Reload
 status: completed
 stopped_at: Phase 29 context gathered
-last_updated: "2026-10-24T09:46:39.691Z"
+last_updated: "2026-10-24T13:41:11.673Z"
 last_activity: 2026-10-23
 last_activity_desc: Phase 15 complete
-state_head: a7ebc2dadda4469a9fc4b1ea78709307129b2c12
+state_head: e3a9749ee5a8385e44417cba084cd3a1e3ea5e39
 progress:
   total_phases: 29
   completed_phases: 28
-  total_plans: 60
+  total_plans: 74
   completed_plans: 60
-  percent: 97
+  percent: 81
 ---
 
 # Project State
@@ -30,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 15
+Phase: 29 (Apply Command and Read-Only Reload) — READY TO EXECUTE
 Plan: Not started
 Status: All phases complete
 Last activity: 2026-10-23 — Phase 15 complete
 
-Progress: [█████████░] 97%
+Progress: [████████░░] 81%
 
 Phases 2-15 depend only on Phase 1 and may run in parallel once it lands. Each
 owns its own feature files and step modules (the file ownership table in
