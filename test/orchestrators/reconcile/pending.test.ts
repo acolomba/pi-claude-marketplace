@@ -1000,7 +1000,10 @@ for (const { condition, seed, expected } of dependencyRows) {
 // `(will update)` row with the move's version arrow.
 // ---------------------------------------------------------------------------
 
-/** Stage each offered plugin's directory, its own manifest declaring the offered version. */
+/**
+ * Stage each offered plugin's directory, its own manifest declaring the
+ * offered version and dependencies.
+ */
 async function stageOfferedPlugins(
   locations: ScopedLocations,
   offered: Readonly<Record<string, OfferedPlugin>>,
@@ -1010,7 +1013,10 @@ async function stageOfferedPlugins(
     Object.entries(offered).map(([name, plugin]) =>
       writeUnder(
         path.join(marketplaceRoot, name, ".claude-plugin", "plugin.json"),
-        JSON.stringify({ version: plugin.version }),
+        JSON.stringify({
+          version: plugin.version,
+          ...(plugin.dependencies !== undefined && { dependencies: plugin.dependencies }),
+        }),
       ),
     ),
   );
@@ -1101,6 +1107,84 @@ test("APL-02 / D-14: composePendingReport counts a catalog move alone as a chang
     ],
     retained: {},
     needsApply: true,
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-12 / D-23: a move a dependent's range does not admit is listed with the
+// row `apply` reports for it, and asks for no apply.
+// ---------------------------------------------------------------------------
+
+/** `app` declares `lib@^1.0.0`; the catalog now offers `lib` 2.0.0. */
+const LIB_PAST_APP_RANGE: DependencyScopeSeed = {
+  offered: {
+    app: { version: "1.0.0", dependencies: ["lib@^1.0.0"] },
+    lib: { version: "2.0.0" },
+  },
+  recorded: { app: { version: "1.0.0" }, lib: { version: "1.0.0" } },
+  declared: [
+    { key: "app@tools", enabled: true },
+    { key: "lib@tools", enabled: true },
+  ],
+};
+
+test("D-12: pending lists a range-held move as update's warning hold row, with no apply trailer", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "range-hold");
+  await stageDependencyScope(cwd, project, LIB_PAST_APP_RANGE);
+  await stageOfferedPlugins(project, LIB_PAST_APP_RANGE.offered);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation needs attention.\n\n" +
+        "● tools [project]\n" +
+        "  ⊘ lib v1.0.0 (skipped) {dependents constrain}\n" +
+        '    cause: version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools"\n' +
+        "\nReconcile pending: 1 warning",
+      severity: "warning",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("D-12: composePendingReport does not count a range hold as a change apply makes", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "compose-hold");
+  await stageDependencyScope(cwd, project, LIB_PAST_APP_RANGE);
+  await stageOfferedPlugins(project, LIB_PAST_APP_RANGE.offered);
+
+  // act
+  const report = await composePendingReport({ cwd, scopes: ["project"] });
+
+  // assert
+  assert.deepStrictEqual(report, {
+    marketplaces: [
+      {
+        name: "tools",
+        scope: "project",
+        plugins: [
+          {
+            status: "skipped",
+            name: "lib",
+            version: "1.0.0",
+            reasons: ["dependents constrain"],
+            cause: new Error(
+              'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools"',
+            ),
+            severity: "warning",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+    retained: {},
+    needsApply: false,
   });
 });
 

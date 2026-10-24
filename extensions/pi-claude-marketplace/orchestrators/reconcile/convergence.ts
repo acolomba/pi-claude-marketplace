@@ -4,6 +4,10 @@
 // plugin whose catalog candidate on disk differs from its record, so `pending`,
 // the load and `apply` plan the same moves from one place.
 //
+// D-12 / D-23: a move a dependent's declared range does not admit is held, not
+// moved. The range is judged against the catalog version alone, through the
+// network-free `constraint-fold.ts`; no release tag is listed here.
+//
 // MUST NOT touch the network (NFR-5). The module is outside `NETWORK_SEAMS`, so
 // BLOCK F in `eslint.config.js` rejects a git surface here; the candidate
 // resolves through `resolveListCandidate`, whose git path uses the fs-only
@@ -16,6 +20,8 @@ import { parsePluginSource } from "../../domain/source.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { admitResolvedVersion, foldDeclaredConstraint } from "../plugin/constraint-fold.ts";
+import { readInstalledCopyDeclaration } from "../plugin/dependency-declaration-read.ts";
 import { buildScopeDeclarationDetail } from "../plugin/dependency-index.ts";
 import { resolveListCandidate } from "../plugin/list-candidate-version.ts";
 import { isRecordedCandidate, resolvePluginVersion } from "../plugin/shared.ts";
@@ -24,6 +30,7 @@ import type { ReconcilePlan } from "./types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { AddressedDependency } from "../plugin/dependency-index.ts";
 import type { RevisionMove } from "../types.ts";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -51,10 +58,35 @@ export interface PlannedMove extends RevisionMove {
   readonly partial: boolean;
 }
 
-/** The scope's moves, sorted by marketplace then plugin. */
+/**
+ * D-12: a move a dependent's declared range does not admit. The plugin stays
+ * at its recorded `version`; `cause` is the constraint gate's line (UPDT-02).
+ */
+export interface PlannedHold {
+  readonly scope: Scope;
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly version: string;
+  readonly cause: string;
+}
+
+/** The scope's moves and holds, each sorted by marketplace then plugin. */
 export interface ConvergencePlan {
   readonly moves: readonly PlannedMove[];
+  readonly holds: readonly PlannedHold[];
 }
+
+/** One move found on disk, before the range check judges it. */
+interface CandidateMove {
+  readonly key: string;
+  readonly move: PlannedMove;
+  /** DLS-D1: what the installed copy declares; absent when it cannot be read. */
+  readonly installed?: readonly AddressedDependency[];
+}
+
+type Declarations = ReadonlyMap<string, readonly AddressedDependency[]>;
+
+const NO_CONVERGENCE: ConvergencePlan = Object.freeze({ moves: [], holds: [] });
 
 function compareNames(a: string, b: string): number {
   return a.localeCompare(b);
@@ -156,15 +188,42 @@ async function recordMove(
   };
 }
 
+/**
+ * DLS-D1: what the record's installed copy declares, the declarations a move
+ * that stays put keeps. A copy that cannot be read answers `undefined`, and
+ * the catalog declarations stand.
+ */
+async function installedCopyDeclarations(
+  input: ConvergenceInput,
+  mp: MarketplaceRecord,
+  record: PluginRecord,
+): Promise<readonly AddressedDependency[] | undefined> {
+  const read = await readInstalledCopyDeclaration({
+    pluginRoot: record.resolvedSource,
+    ownerRoots: [mp.marketplaceRoot, input.locations.pluginClonesDir],
+  });
+  if (read.kind !== "found") {
+    return undefined;
+  }
+
+  return read.dependencies.map((dep) => ({ ...dep, marketplace: dep.marketplace ?? mp.name }));
+}
+
 /** T-29-22: a candidate that cannot be read is skipped, never thrown. */
 async function recordMoveIsolated(
   input: ConvergenceInput,
   mp: MarketplaceRecord,
   plugin: string,
   record: PluginRecord,
-): Promise<PlannedMove | undefined> {
+): Promise<CandidateMove | undefined> {
   try {
-    return await recordMove(input, mp, plugin, record);
+    const move = await recordMove(input, mp, plugin, record);
+    if (move === undefined) {
+      return undefined;
+    }
+
+    const installed = await installedCopyDeclarations(input, mp, record);
+    return { key: `${plugin}@${mp.name}`, move, ...(installed !== undefined && { installed }) };
   } catch (err) {
     hookDebugLog(
       `planConvergence: skipped ${plugin}@${mp.name}: ${errorMessage(err)}`,
@@ -172,6 +231,85 @@ async function recordMoveIsolated(
     );
     return undefined;
   }
+}
+
+/**
+ * D-12 / D-23: the cause line of a move a dependent's declared range does not
+ * admit, or `undefined`. The catalog version is judged as it stands: the fold
+ * lists no tag, so a range that does not admit it holds the move.
+ */
+function rangeHoldCause(
+  declarations: Declarations,
+  view: ExtensionState,
+  move: PlannedMove,
+): string | undefined {
+  const verdict = foldDeclaredConstraint(declarations, view, move.plugin, move.marketplace);
+  if (verdict.kind !== "admits") {
+    return verdict.kind === "held" ? verdict.cause : undefined;
+  }
+
+  const admitted = admitResolvedVersion(verdict, move.toVersion);
+  return admitted.kind === "held" ? admitted.cause : undefined;
+}
+
+/**
+ * One round of the fixed point: holds every candidate the current
+ * declarations block and gives it its installed-copy declarations, because a
+ * held plugin keeps running the copy it has. Returns whether a hold was added.
+ */
+function holdBlockedRound(
+  candidates: readonly CandidateMove[],
+  declarations: Map<string, readonly AddressedDependency[]>,
+  view: ExtensionState,
+  holds: Map<string, PlannedHold>,
+): boolean {
+  let added = false;
+  for (const { key, move, installed } of candidates) {
+    const cause = holds.has(key) ? undefined : rangeHoldCause(declarations, view, move);
+    if (cause === undefined) {
+      continue;
+    }
+
+    holds.set(key, {
+      scope: move.scope,
+      marketplace: move.marketplace,
+      plugin: move.plugin,
+      version: move.fromVersion,
+      cause,
+    });
+    if (installed !== undefined) {
+      declarations.set(key, installed);
+    }
+
+    added = true;
+  }
+
+  return added;
+}
+
+/**
+ * D-12: judges every candidate against the scope as the plan leaves it, to a
+ * fixed point. A dependent that moves is judged by its catalog declarations
+ * and one that is held by its installed copy (DLS-D1). Holds only grow and
+ * the candidates arrive sorted, so the answer does not depend on input order.
+ */
+function settleCandidates(
+  candidates: readonly CandidateMove[],
+  walked: Declarations,
+  view: ExtensionState,
+): ConvergencePlan {
+  const declarations = new Map(walked);
+  const holds = new Map<string, PlannedHold>();
+  // A new hold may change what a dependent declares, so judge again.
+  let added = true;
+  while (added) {
+    added = holdBlockedRound(candidates, declarations, view, holds);
+  }
+
+  return {
+    moves: candidates.filter(({ key }) => !holds.has(key)).map(({ move }) => move),
+    holds: candidates.flatMap(({ key }) => holds.get(key) ?? []),
+  };
 }
 
 /**
@@ -185,10 +323,10 @@ export async function planConvergence(input: ConvergenceInput): Promise<Converge
     input.plan === undefined ? input.state : stateAsPlanLeavesIt(input.state, input.plan);
   const walk = await buildScopeDeclarationDetail({ state: view, locations: input.locations });
   if (!walk.ok) {
-    return { moves: [] };
+    return NO_CONVERGENCE;
   }
 
-  const moves: PlannedMove[] = [];
+  const candidates: CandidateMove[] = [];
   const marketplaces = Object.values(view.marketplaces).sort((a, b) =>
     compareNames(a.name, b.name),
   );
@@ -200,12 +338,12 @@ export async function planConvergence(input: ConvergenceInput): Promise<Converge
       }
 
       // eslint-disable-next-line no-await-in-loop -- one offline resolve per record, in the order the moves are reported
-      const move = await recordMoveIsolated(input, mp, plugin, record);
-      if (move !== undefined) {
-        moves.push(move);
+      const candidate = await recordMoveIsolated(input, mp, plugin, record);
+      if (candidate !== undefined) {
+        candidates.push(candidate);
       }
     }
   }
 
-  return { moves };
+  return settleCandidates(candidates, walk.declarations, view);
 }

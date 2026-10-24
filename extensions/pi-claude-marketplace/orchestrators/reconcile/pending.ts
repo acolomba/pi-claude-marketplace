@@ -89,7 +89,7 @@ import {
   type PendingMsg,
 } from "./reconcile.messaging.ts";
 
-import type { PlannedMove } from "./convergence.ts";
+import type { PlannedHold, PlannedMove } from "./convergence.ts";
 import type { ScopeSatisfactionVerdict, UnsatisfiedDeclaration } from "./dependency-verdict.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
@@ -423,6 +423,7 @@ export async function composePendingReport(opts: {
   >();
   const recordedVersions: (readonly [string, string])[] = [];
   const moves: PlannedMove[] = [];
+  const holds: PlannedHold[] = [];
 
   for (const scope of opts.scopes) {
     const loc = locationsFor(scope, opts.cwd);
@@ -510,6 +511,7 @@ export async function composePendingReport(opts: {
     // eslint-disable-next-line no-await-in-loop -- at most two scopes, one convergence plan each
     const convergence = await planConvergence({ scope, state, locations: loc, plan: scopePlan });
     moves.push(...convergence.moves);
+    holds.push(...convergence.holds);
   }
 
   // WR-06: name the workflow staging trees the sweeper keeps forever, because
@@ -525,7 +527,12 @@ export async function composePendingReport(opts: {
   // DIFF-01 SC #2 empty-steady-state: no invalid-config rows AND every plan
   // is empty -> no block. Every non-empty bucket yields a block, so an empty
   // list is exactly the empty case.
-  if (invalidBlocks.length === 0 && isReconcilePlanListEmpty(plans) && moves.length === 0) {
+  const convergence = { moves, holds };
+  if (
+    invalidBlocks.length === 0 &&
+    isReconcilePlanListEmpty(plans) &&
+    moves.length + holds.length === 0
+  ) {
     return { marketplaces: [], retained, needsApply: false };
   }
 
@@ -567,7 +574,7 @@ export async function composePendingReport(opts: {
     plans,
     forceInstallKeys,
     new Map(recordedVersions),
-    moves,
+    convergence,
   );
   // D-12 / OUT-07: the pending diff is bulk (it spans both scopes and many
   // marketplaces) -> Plural row cardinality. D-02: thread PENDING_CONTEXT so the
@@ -582,8 +589,8 @@ export async function composePendingReport(opts: {
   ].sort((a, b) => compareByNameThenScope(a, b));
 
   // APL-04 / D-14: a list with a change `apply` would make, a catalog move
-  // included, ends with the apply trailer; a list of failures alone does not,
-  // since `apply` cannot fix them.
+  // included, ends with the apply trailer; a list of failures or of held moves
+  // alone does not, since `apply` changes nothing for them (D-12).
   return {
     marketplaces,
     retained,

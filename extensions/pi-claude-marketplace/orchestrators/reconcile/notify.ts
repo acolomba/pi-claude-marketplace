@@ -45,6 +45,9 @@
 //   catalog moves         -> child row { status: "will update" } with the
 //                            move's `from → to` (D-14). They come from the
 //                            convergence planner, not from a plan bucket.
+//   range holds           -> child row { status: "skipped" } with
+//                            {dependents constrain} and the gate's cause line
+//                            (D-12), update's range-hold row.
 //
 // The empty-plan case is handled by the orchestrator (`pending.ts`) which
 // switches on `plans.every(isPlanEmpty)` and emits a free-form advisory line
@@ -83,7 +86,7 @@ import type {
   PluginEnabledOutcome,
   PluginInstalledOutcome,
 } from "./apply-outcomes.ts";
-import type { PlannedMove } from "./convergence.ts";
+import type { ConvergencePlan } from "./convergence.ts";
 import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
@@ -286,12 +289,16 @@ function pushMarketplaceActions(
 /**
  * D-14: one `will update` row per catalog move, under its marketplace block.
  * The arrow names commits only under the `updated` row's rule (UPR-02).
+ *
+ * D-12: then one row per blocked move, the row `update` gives the same block:
+ * a range hold is `(skipped) {dependents constrain}` with the gate's cause
+ * line, at warning. A blocked move changes nothing, so it asks for no reload.
  */
-function pushPlannedMoves(
+function pushConvergence(
   byMp: Map<string, MarketplaceBlock<PendingMsg>>,
-  moves: readonly PlannedMove[],
+  convergence: ConvergencePlan,
 ): void {
-  for (const move of moves) {
+  for (const move of convergence.moves) {
     const commits = revisionCommits(move);
     ensureMarketplaceBlock(byMp, move.scope, move.marketplace).plugins.push({
       status: "will update",
@@ -301,7 +308,21 @@ function pushPlannedMoves(
       ...(commits !== undefined && { commits }),
     });
   }
+
+  for (const hold of convergence.holds) {
+    ensureMarketplaceBlock(byMp, hold.scope, hold.marketplace).plugins.push({
+      status: "skipped",
+      name: hold.plugin,
+      version: hold.version,
+      reasons: ["dependents constrain"],
+      cause: new Error(hold.cause),
+      severity: "warning",
+      needsReload: false,
+    });
+  }
 }
+
+const NO_CONVERGENCE: ConvergencePlan = Object.freeze({ moves: [], holds: [] });
 
 /** PRN-02: a `will uninstall` row naming the plugin's recorded version. */
 function willUninstallRow(
@@ -464,9 +485,10 @@ export async function resolvePendingForceInstalls(
  *                              D-09-12). A bucket entry never matches a force-
  *                              install key, so its row is the bare token. It
  *                              fills from the same verdict (D-21).
- *   - `moves`               -> child row { status: "will update" } per catalog
+ *   - `convergence`         -> child row { status: "will update" } per catalog
  *                              move (D-14, superseding D-66-05's "no update
- *                              bucket"), after the plan buckets.
+ *                              bucket"), then one `skipped` row per range
+ *                              hold (D-12), after the plan buckets.
  *
  * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
  * case-insensitive, project-before-user secondary). Plugin rows within a
@@ -477,7 +499,7 @@ export function buildReconcilePendingNotification(
   plans: readonly ReconcilePlan[],
   forceInstallKeys: ReadonlySet<string> = new Set<string>(),
   recordedVersions: ReadonlyMap<string, string> = new Map<string, string>(),
-  moves: readonly PlannedMove[] = [],
+  convergence: ConvergencePlan = NO_CONVERGENCE,
 ): {
   readonly marketplaces: readonly MarketplaceRows<PendingMsg>[];
 } {
@@ -546,7 +568,7 @@ export function buildReconcilePendingNotification(
     }
   }
 
-  pushPlannedMoves(byMp, moves);
+  pushConvergence(byMp, convergence);
 
   return {
     marketplaces: Object.freeze(

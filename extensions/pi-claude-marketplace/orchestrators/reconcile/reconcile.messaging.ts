@@ -5,7 +5,9 @@ import {
   type PluginFailedMessage,
   type PluginInstalledMessage,
   type PluginPartiallyInstalledMessage,
+  type PluginPartiallyUpgradableMessage,
   type PluginUninstalledMessage,
+  type PluginUpdateSkippedMessage,
   type PluginWillDisableMessage,
   type PluginWillEnableMessage,
   type PluginWillInstallMessage,
@@ -27,10 +29,19 @@ import type { Scope } from "../../shared/types.ts";
  * recorded version (PRN-02); `will update` carries the catalog move's
  * `from → to` (D-14). The `failed`
  * row (source-mismatch dangling reference) carries its `reasons` via the shared
- * row grammar.
+ * row grammar. The two blocked moves (D-12) carry update's rows: `skipped` is
+ * a move a dependent's range holds, with its cause line, and
+ * `partially-upgradable` is a move that would drop components without consent.
  */
 type PendingStatus =
-  "will install" | "will uninstall" | "will enable" | "will disable" | "will update" | "failed";
+  | "will install"
+  | "will uninstall"
+  | "will enable"
+  | "will disable"
+  | "will update"
+  | "skipped"
+  | "partially-upgradable"
+  | "failed";
 
 export type PendingMsg =
   | PluginWillInstallMessage
@@ -38,6 +49,8 @@ export type PendingMsg =
   | PluginWillEnableMessage
   | PluginWillDisableMessage
   | PluginWillUpdateMessage
+  | PluginUpdateSkippedMessage
+  | PluginPartiallyUpgradableMessage
   | PluginFailedMessage;
 
 /**
@@ -53,6 +66,8 @@ export const PENDING_CONTEXT = {
     "will enable": { markers: false, contentReasons: false },
     "will disable": { markers: false, contentReasons: false },
     "will update": { markers: false, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    "partially-upgradable": { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
   },
 } as const satisfies CommandContext<PendingStatus>;

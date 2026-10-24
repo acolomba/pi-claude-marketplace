@@ -2413,7 +2413,10 @@ describe("buildReconcilePendingNotification", () => {
     ] as const;
 
     // act
-    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), moves);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), {
+      moves,
+      holds: [],
+    });
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -2422,6 +2425,62 @@ describe("buildReconcilePendingNotification", () => {
           name: "mp",
           scope: "project",
           plugins: [{ status: "will update", name: "demo", from: "1.0.0", to: "1.1.0" }],
+        },
+      ],
+    });
+  });
+
+  test("D-12: previews a range hold as update's warning hold row after the moves", () => {
+    // arrange
+    const plans = [reconcilePlan("project")];
+    const convergence = {
+      moves: [
+        {
+          scope: "project",
+          marketplace: "mp",
+          plugin: "demo",
+          fromVersion: "1.0.0",
+          toVersion: "1.1.0",
+          revisionChanged: true,
+          grew: false,
+          partial: false,
+        },
+      ],
+      holds: [
+        {
+          scope: "project",
+          marketplace: "mp",
+          plugin: "lib",
+          version: "1.0.0",
+          cause:
+            'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"',
+        },
+      ],
+    } as const;
+
+    // act
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), convergence);
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            { status: "will update", name: "demo", from: "1.0.0", to: "1.1.0" },
+            {
+              status: "skipped",
+              name: "lib",
+              version: "1.0.0",
+              reasons: ["dependents constrain"],
+              cause: new Error(
+                'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"',
+              ),
+              severity: "warning",
+              needsReload: false,
+            },
+          ],
         },
       ],
     });
@@ -2454,7 +2513,10 @@ describe("buildReconcilePendingNotification", () => {
     ] as const;
 
     // act
-    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), moves);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), {
+      moves,
+      holds: [],
+    });
 
     // assert
     assert.deepStrictEqual(pending, {

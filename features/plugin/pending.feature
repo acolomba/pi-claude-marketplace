@@ -102,6 +102,31 @@ Feature: Plugin pending
       | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | from  | to    |
       | fixtures         | project           | demo@fixtures | demo | will update |         | project | 1.0.0 | 1.1.0 |
 
+  Scenario: Pending lists a move a dependent's range blocks as held
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^1.0.0   |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^1.0.0   |
+      | lib  | 2.0.0   |              |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade                             |
+      | severity            | warning                             |
+      | needs reload        | false                               |
+      | summary             | A plugin operation needs attention. |
+      | tally label         | Reconcile pending                   |
+      | tally failures      | 0                                   |
+      | tally warnings      | 1                                   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status  | reasons              | scope   | version | cause chain                                                                                    | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | skipped | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
+
   Scenario: Pending lists the install, uninstall, disable, and enable that one hand edit of the base config would cause
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"

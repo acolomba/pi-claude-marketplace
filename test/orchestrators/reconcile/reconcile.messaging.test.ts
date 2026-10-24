@@ -71,6 +71,17 @@ void ({ name: "plugin", status: "will disable" } satisfies PendingMsg);
 void ({ name: "plugin", status: "will update", from: "1.0.0", to: "1.1.0" } satisfies PendingMsg);
 void ({
   name: "plugin",
+  reasons: ["dependents constrain"],
+  cause: new Error("held"),
+  status: "skipped",
+} satisfies PendingMsg);
+void ({
+  name: "plugin",
+  reasons: ["unsupported component"],
+  status: "partially-upgradable",
+} satisfies PendingMsg);
+void ({
+  name: "plugin",
   reasons: ["not found"],
   severity: "error",
   status: "failed",
@@ -122,6 +133,8 @@ test("reconcile contexts expose their exact labels and row policy statuses", () 
     "will enable",
     "will disable",
     "will update",
+    "skipped",
+    "partially-upgradable",
     "failed",
   ];
   const expectedAppliedStatuses = [
@@ -399,6 +412,8 @@ test("PENDING_CONTEXT declares complete row policies", () => {
     "will enable": { markers: false, contentReasons: false },
     "will disable": { markers: false, contentReasons: false },
     "will update": { markers: false, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    "partially-upgradable": { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
   });
 });

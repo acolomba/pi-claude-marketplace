@@ -41,8 +41,9 @@ import {
   resolveGitSubdirRoot,
   resolvePluginPin,
 } from "./clone-cache.ts";
+import { admitResolvedVersion } from "./constraint-fold.ts";
 import { isRecordedCandidate, isSameRevision, resolvePluginVersion } from "./shared.ts";
-import { admitResolvedVersion, evaluateUpdateConstraint } from "./update-constraint-gate.ts";
+import { evaluateUpdateConstraint } from "./update-constraint-gate.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
@@ -63,11 +64,8 @@ import type {
   PluginUpdateUnchangedOutcome,
   UpdateConstraintDisclosure,
 } from "../types.ts";
-import type {
-  UpdateConstraintOptions,
-  UpdateConstraintVerdict,
-  UpdateTagPin,
-} from "./update-constraint-gate.ts";
+import type { UpdateConstraintVerdict, UpdateTagPin } from "./constraint-fold.ts";
+import type { UpdateConstraintOptions } from "./update-constraint-gate.ts";
 
 /** Target selected by the three public plugin-update invocation forms. */
 export type UpdatePluginsTarget =
