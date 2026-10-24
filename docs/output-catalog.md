@@ -40,7 +40,7 @@ On THIS list surface (mp.status === undefined) the marker token `<autoupdate>` a
 - `<icon>` -- one of `●` / `○` / `⊘` / `⊖` / `◉` / `◌` / `◍` per the effective-state rule above. The seven characters are the seven `ICON_*` constants `shared/notification-grammar.ts` exports; the COMPAT-01 gate pins each code point and the export count.
 - `<name>` -- the plugin name from `p.name`. The `@<marketplace>` suffix is NEVER emitted on a plugin row in v2; the marketplace is already in the header above.
 - `[<scope>]` -- emitted ONLY in the orphan-fold case (plugin's `scope` field is explicitly set AND differs from the marketplace's scope). Same-scope rows omit the bracket because the header carries it. The `available`, `partially-available`, and `unavailable` variants have no `scope` field at all (SNM-11 carve-out) and never emit the bracket.
-- `<version-token>` -- `v<version>` on most variants when `version` is set; `v<from> → v<to>` on the `updated` variant (required from-/to-fields per D-15-04); on a same-version move to a new commit each side is followed by its short commit in parentheses, `v1.0.0 (a1b2c3d) → v1.0.0 (2222333)` (UPR-02). A persisted PI-7 hash-version (`hash-<12hex>`) renders as a git-style short SHA `v#<7hex>` -- the `hash-` prefix is stripped and only the first 7 of the 12 hex chars are shown (matching git `--short=7`); e.g. `hash-2ea95f85703d` renders `v#2ea95f8`. Persistence is unchanged (`state.json` keeps the full `hash-<12hex>`, PI-7 intact, no migration); the short form exists only at render time (SNM-35, D-23-04 / D-23-05).
+- `<version-token>` -- `v<version>` on most variants when `version` is set; `v<from> → v<to>` on the `updated` variant (required from-/to-fields per D-15-04), and on a `reinstalled`, `partially-installed`, or `failed` row whose producer knows a move (UPR-03); on a same-version move to a new commit each side is followed by its short commit in parentheses, `v1.0.0 (a1b2c3d) → v1.0.0 (2222333)` (UPR-02). A persisted PI-7 hash-version (`hash-<12hex>`) renders as a git-style short SHA `v#<7hex>` -- the `hash-` prefix is stripped and only the first 7 of the 12 hex chars are shown (matching git `--short=7`); e.g. `hash-2ea95f85703d` renders `v#2ea95f8`. Persistence is unchanged (`state.json` keeps the full `hash-<12hex>`, PI-7 intact, no migration); the short form exists only at render time (SNM-35, D-23-04 / D-23-05).
 - `(<status>)` -- the discriminator literal. `(manual recovery)` includes the space verbatim.
 - `{<reasons>}` -- single brace block, comma-space separated, emitted only on the 9 reason-bearing variants and only when the composed reasons list is non-empty. A variant is reason-bearing when its message interface in `shared/notification-types.ts` declares a `reasons` field; that set is `installed | unavailable | upgradable | failed | skipped | manual recovery | partially-installed | partially-upgradable | partially-available`, listed in `PLUGIN_STATUSES` order. The remaining 10 of the 19 plugin statuses have no `reasons` field and therefore cannot carry a brace. `installed` is the one variant whose `reasons` field is OPTIONAL: the list inventory row stamps it for the durable absence fact (INV-01) and the install cascade stamps it for `orphan rewake` (SURF-05), while every other producer omits it. When the composed list is empty -- no typed reasons and no soft-dependency marker -- `composeReasons` returns the empty string and NO brace is emitted, so the row renders with the status token as its last token.
 
@@ -1943,7 +1943,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin update`
 
-Multi-plugin cascade. Same shape as `reinstall` with version-arrow rows (`v<from> → v<to>`) per D-15-04 / Phase 16 `composeVersionArrow`. When the version did not move but the commit did, the arrow carries each side's short commit (UPR-02).
+Multi-plugin cascade. Same shape as `reinstall` with version-arrow rows (`v<from> → v<to>`) per D-15-04 / Phase 16 `composeVersionArrow`. When the version did not move but the commit did, the arrow carries each side's short commit (UPR-02). A `partially-installed` row, and a `failed` row that failed after its candidate was derived, show the arrow from the installed version too (UPR-03).
 
 An update changes the installation and its record only. It writes no declaration to either layer, so an updated dependency stays undeclared (LAYER-04 / D-MF-03). A named `update <plugin>@<marketplace>` acts on the base layer, or on the local layer with `--local`. It refuses a plugin that only the other layer declares, and a layer config it cannot read, with the rows of the `uninstall-plugin-in-local-layer-only` state under `/claude:plugin uninstall`, before it looks for a new version. The forms that name no plugin cover the plugins of both layers. With `--local`, they cover the plugins the local layer declares and the dependencies those plugins need, but not a dependency that only base-layer plugins need. When they cannot read the dependencies of one of those plugins, they change nothing and fail with one `{unreadable}` row whose cause names that plugin.
 
@@ -1963,7 +1963,7 @@ Plugin update: 1 failure, 1 updated
 /reload to pick up changes
 ```
 
-UGRM-01: a bulk `update` suppresses the per-plugin `(skipped) {up-to-date}` row for every unchanged plugin, so the `beta` up-to-date row is absent here. UGRM-02/D-04: the headline counts realized transitions only -- the one `failed` row composes ahead of the one `updated` row as `1 failure, 1 updated` (the failure category is the unchanged `countRowsBySeverity` math; the updates-only `tally` override owns the success category, rendered with the verb `updated`, which has no plural-s). The `updated` variant emits `v<from> → v<to>` (both sides carry the `v` prefix per `composeVersionArrow`). When a side is a PI-7 hash-version it is shortened to git-style `v#<7hex>`, e.g. `v#2ea95f8 → v#1c3d9a0` (SNM-35, D-23-05). The `failed` plugin row carries `version?` only (the v2 `PluginFailedMessage` has no `from`/`to` fields per D-15-04 -- `composeVersionArrow` is the `updated` variant's helper alone); `delta` here omits `version` because the orchestrator has no post-failure target version to surface. Severity: `error`. Reload-hint fires because `alpha` was updated.
+UGRM-01: a bulk `update` suppresses the per-plugin `(skipped) {up-to-date}` row for every unchanged plugin, so the `beta` up-to-date row is absent here. UGRM-02/D-04: the headline counts realized transitions only -- the one `failed` row composes ahead of the one `updated` row as `1 failure, 1 updated` (the failure category is the unchanged `countRowsBySeverity` math; the updates-only `tally` override owns the success category, rendered with the verb `updated`, which has no plural-s). The `updated` variant emits `v<from> → v<to>` (both sides carry the `v` prefix per `composeVersionArrow`). When a side is a PI-7 hash-version it is shortened to git-style `v#<7hex>`, e.g. `v#2ea95f8 → v#1c3d9a0` (SNM-35, D-23-05). A `failed` row shows the arrow from the installed to the attempted version when it failed after its candidate was derived, and the installed version alone, or none, when it failed before (UPR-03). `delta` here failed to reach its source, before any candidate, so its row has no version. Severity: `error`. Reload-hint fires because `alpha` was updated.
 
 ### Failed with rollback-partial cause chain
 
@@ -1973,7 +1973,7 @@ UGRM-01: a bulk `update` suppresses the per-plugin `(skipped) {up-to-date}` row 
 A plugin operation has failed.
 
 ● official [user]
-  ⊘ delta v1.0.0 (failed) {rollback partial}
+  ⊘ delta v0.9.0 → v1.0.0 (failed) {rollback partial}
     cause: orchestrator failed mid-staging
     [phase3a] (rollback failed)
       cause: failed to remove staged agent: EACCES
@@ -1983,7 +1983,7 @@ A plugin operation has failed.
 Plugin update: 1 failure
 ```
 
-OUT-03/D-04: the single `failed` row is the one failure in the plural tally (success/warning zero, omitted); the tally sits after the cause-chain block (there is no reload-hint on a failed-only cascade). `failed` variant carrying both `cause?` and `rollbackPartial`. Per-plugin cause-chain at 4-space indent first; rollback-partial child rows + 6-space-indent per-phase cause chains next (D-16-08). Severity: `error`. No reload-hint. UGRM-01/UGRM-02: this state is deliberately unaffected -- there are no `unchanged` rows to suppress and zero `updated` rows, so the updates-only `tally` override contributes nothing (its 0-count success category is dropped) and the failure math is unchanged at `1 failure`.
+OUT-03/D-04: the single `failed` row is the one failure in the plural tally (success/warning zero, omitted). It failed after its candidate was derived, so it shows the arrow from the installed `0.9.0` to the attempted `1.0.0` (UPR-03); the tally sits after the cause-chain block (there is no reload-hint on a failed-only cascade). `failed` variant carrying both `cause?` and `rollbackPartial`. Per-plugin cause-chain at 4-space indent first; rollback-partial child rows + 6-space-indent per-phase cause chains next (D-16-08). Severity: `error`. No reload-hint. UGRM-01/UGRM-02: this state is deliberately unaffected -- there are no `unchanged` rows to suppress and zero `updated` rows, so the updates-only `tally` override contributes nothing (its 0-count success category is dropped) and the failure math is unchanged at `1 failure`.
 
 ### All up-to-date (no-op cascade)
 
@@ -2014,7 +2014,7 @@ Plugin update: 1 failure, 2 updated
 /reload to pick up changes
 ```
 
-Two marketplace blocks. Severity: `error`. UGRM-01: the `beta` `(skipped) {up-to-date}` row is suppressed. UGRM-02/D-04: the headline counts realized transitions only -- the one `failed` row composes ahead of the two `updated` rows (`helper` + `alpha`) as `1 failure, 2 updated`. Reload-hint fires (two `updated` plugin rows). The `failed` `delta` row omits the version-arrow slot per the v2 type model (`PluginFailedMessage` does not carry `from`/`to` -- only the `updated` variant does).
+Two marketplace blocks. Severity: `error`. UGRM-01: the `beta` `(skipped) {up-to-date}` row is suppressed. UGRM-02/D-04: the headline counts realized transitions only -- the one `failed` row composes ahead of the two `updated` rows (`helper` + `alpha`) as `1 failure, 2 updated`. Reload-hint fires (two `updated` plugin rows). The `failed` `delta` row has no version: it failed to reach its source, before any candidate existed (UPR-03).
 
 ### Same marketplace name in both scopes
 
@@ -2136,12 +2136,12 @@ Severity `warning`, the second axis that moves the severity channel and for a di
 A plugin operation needs attention.
 
 ● official [user]
-  ◉ alpha v1.0.1 (partially-installed) {malformed skill, unsupported component}
+  ◉ alpha v1.0.0 → v1.0.1 (partially-installed) {malformed skill, unsupported component}
 
 /reload to pick up changes
 ```
 
-The two axes above firing on one ledger run. The DROPPED kind picks the row form -- `(partially-installed)` with the `◉` glyph, carrying the post-update version rather than the arrow, exactly as the dropped-kind state does on its own -- and the MALFORMED component adds its own token to the same brace. Both tokens ride ONE brace in the install row's established emit order (malformed kinds first, then the dropped kinds; see `enable-orphan-rewake`), because a reader scanning a column of rows should meet the same token in the same position on every surface.
+The two axes above firing on one ledger run. The DROPPED kind picks the row form -- `(partially-installed)` with the `◉` glyph and the arrow from the installed to the post-update version (UPR-03), exactly as the dropped-kind state does on its own -- and the MALFORMED component adds its own token to the same brace. Both tokens ride ONE brace in the install row's established emit order (malformed kinds first, then the dropped kinds; see `enable-orphan-rewake`), because a reader scanning a column of rows should meet the same token in the same position on every surface.
 
 Both cascade surfaces compose this row through the one `updatedRowFromOutcome` seam, so neither can name one axis and swallow the other. The malformed raise applies here as it does on the `(updated)` row: severity `warning` with the summary line, whatever the surface's own base policy for the dropped kind was (the manual `--partial` opt-in stays `info` for the drop alone; the autoupdate cascade raises a NEWLY-degrading drop on its own). The reload-hint fires -- `partially-installed` is a realized transition. Dropping a kind with no malformed component renders `autoupdate-partially-installed-already-degraded` unchanged.
 
@@ -4137,7 +4137,7 @@ A plugin operation has failed.
 /reload to pick up changes
 ```
 
-Marketplace header carries `(updated)`; plugin rows mix outcomes. Reload-hint fires (multiple state-changing rows). Severity: `error`. The `failed` `delta` row carries no version-arrow because `PluginFailedMessage` has no `from`/`to` fields (only the `updated` variant does per D-15-04).
+Marketplace header carries `(updated)`; plugin rows mix outcomes. Reload-hint fires (multiple state-changing rows). Severity: `error`. The `failed` `delta` row has no version: it failed to reach its source, before any candidate existed. A failed autoupdate that got as far as its candidate shows the arrow from the installed to the attempted version (UPR-03).
 
 ### Autoupdate cascade takes the partial path -- already-degraded plugin (info)
 
@@ -4145,7 +4145,7 @@ Marketplace header carries `(updated)`; plugin rows mix outcomes. Reload-hint fi
 
 ```text
 ● official [user] (updated)
-  ◉ degraded-plugin v1.0.0 (partially-installed) {lsp}
+  ◉ degraded-plugin v0.9.0 → v1.0.0 (partially-installed) {lsp}
 
 /reload to pick up changes
 ```
@@ -4160,12 +4160,12 @@ SEV-03 / D-69-01: the autoupdate cascade TAKES the partial path automatically (`
 A plugin operation needs attention.
 
 ● official [user] (updated)
-  ◉ degraded-plugin v1.0.0 (partially-installed) {lsp}
+  ◉ degraded-plugin v0.9.0 → v1.0.0 (partially-installed) {lsp}
 
 /reload to pick up changes
 ```
 
-SEV-03 / D-69-01: the SAME `(partially-installed)` autoupdate row as the already-degraded state above, but here the auto-update NEWLY degrades a previously-clean plugin -- the plugin's PERSISTED `compatibility.unsupported` was EMPTY before the auto-update applied (read from the prior install record, no new tracking, no schema change). An automatic upgrade that silently drops components the user never opted into is actionable, so the row stamps `warning` and the cascade prepends the `A plugin operation needs attention.` summary line. The per-row `◉ degraded-plugin v1.0.0 (partially-installed) {lsp}` bytes are identical to the already-degraded form -- only the stamped severity (and therefore the summary line) moves. The reload-hint still fires (partially-installed is a realized transition). The manual `update --partial` degrade is unaffected -- the explicit opt-in stays `info` (SEV-01); the warning fires ONLY on this autoupdate surface.
+SEV-03 / D-69-01: the SAME `(partially-installed)` autoupdate row as the already-degraded state above, but here the auto-update NEWLY degrades a previously-clean plugin -- the plugin's PERSISTED `compatibility.unsupported` was EMPTY before the auto-update applied (read from the prior install record, no new tracking, no schema change). An automatic upgrade that silently drops components the user never opted into is actionable, so the row stamps `warning` and the cascade prepends the `A plugin operation needs attention.` summary line. The per-row `◉ degraded-plugin v0.9.0 → v1.0.0 (partially-installed) {lsp}` bytes are identical to the already-degraded form -- only the stamped severity (and therefore the summary line) moves. The reload-hint still fires (partially-installed is a realized transition). The manual `update --partial` degrade is unaffected -- the explicit opt-in stays `info` (SEV-01); the warning fires ONLY on this autoupdate surface.
 
 ### Marketplace update failed (manifest unreachable)
 
