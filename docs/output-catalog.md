@@ -3506,7 +3506,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin pending`
 
-DIFF-01 SC #2 / D-53-01 read-only diff/pending surface. Renders the bidirectional difference between the merged config (`claude-plugins.json` + `claude-plugins.local.json`) and the recorded state (`state.json`) for the next reload's reconcile. Runs against both scopes when `--scope` is omitted. NEVER writes any file, NEVER touches the network (NFR-5). Running it twice produces byte-identical output (DIFF-01 SC #2). DIFF-02: rows render subject-first `<glyph> <name> [<scope>] (will ...)` with the closed-set pending-tense token set (`will install` / `will uninstall` / `will enable` / `will disable`). WILL-01 / D-65.1-02 / D-65.1-03: marketplace add/remove carry no pending token -- add is immediate, and a remove surfaces its reload-deferred plugin-uninstall cascade as per-plugin `will uninstall` rows under a bare header. The `/reload to pick up changes` trailer is STRUCTURALLY EXCLUDED -- pending rows are pre-transition and the trailer would mislead the user.
+DIFF-01 SC #2 / D-53-01 read-only diff/pending surface. It lists what the next `/claude:plugin apply` would change: the difference between the merged config (`claude-plugins.json` + `claude-plugins.local.json`) and the recorded state (`state.json`). A load changes no installation state, so `apply` is the command that makes these changes. Runs against both scopes when `--scope` is omitted. NEVER writes any file, NEVER touches the network (NFR-5). Running it twice produces byte-identical output (DIFF-01 SC #2). DIFF-02: rows render subject-first `<glyph> <name> [<scope>] (will ...)` with the closed-set pending-tense token set (`will install` / `will uninstall` / `will enable` / `will disable`). WILL-01 / D-65.1-02 / D-65.1-03: marketplace add/remove carry no pending token -- add is immediate, and a remove surfaces its reload-deferred plugin-uninstall cascade as per-plugin `will uninstall` rows under a bare header. APL-04 / D-14: a list that holds at least one change ends with the block `/claude:plugin apply to make these changes`, after any tally line and one blank line below it. A list of failures alone (source mismatch, invalid config, layer gap) has no such trailer, because `apply` cannot fix them. The `/reload to pick up changes` trailer stays STRUCTURALLY EXCLUDED: pending rows are pre-transition, so that trailer would mislead the user.
 
 ### Empty steady-state (no actions pending)
 
@@ -3532,40 +3532,46 @@ Pending: next reload will apply 0 actions.
 
 ### Marketplace add with child plugin install
 
-A new marketplace declared in `claude-plugins.json` carries one child plugin row declared with the same key (`will install`). WILL-01 / D-65.1-02: the marketplace add is immediate, so its header carries no `will add` token and renders status-less (list-arm bare header); only the reload-deferred child install carries a pending token. Subject-first row grammar per DIFF-02: `● new-mp [user]` / `● new-plugin (will install)`. Orphan-fold (D-13-18 / MSG-PL-6): the plugin row omits its `[scope]` bracket because its scope matches the parent marketplace's scope. Severity `info`; no reload-hint.
+A new marketplace declared in `claude-plugins.json` carries one child plugin row declared with the same key (`will install`). WILL-01 / D-65.1-02: the marketplace add is immediate, so its header carries no `will add` token and renders status-less (list-arm bare header); only the reload-deferred child install carries a pending token. Subject-first row grammar per DIFF-02: `● new-mp [user]` / `● new-plugin (will install)`. Orphan-fold (D-13-18 / MSG-PL-6): the plugin row omits its `[scope]` bracket because its scope matches the parent marketplace's scope. Severity `info`; no reload-hint; the apply trailer.
 
 <!-- catalog-state: mp-add-plugin-install -->
 
 ```text
 ● new-mp [user]
   ● new-plugin (will install)
+
+/claude:plugin apply to make these changes
 ```
 
 ### Marketplace add with child plugin partial install (FSTAT-06 / D-66-04)
 
-A new marketplace whose child plugin would resolve `partially-available` when installed: the no-network candidate resolve degrades, so the pending row carries the `partial` modifier and renders `(will partially install)` in place of `(will install)`. The token is a render MODIFIER on the existing `will install` discriminator, NOT a new closed-set token; there is deliberately no `will partially update` analog (the reconcile plan has no update bucket -- D-66-05). Severity `info`; no reload-hint.
+A new marketplace whose child plugin would resolve `partially-available` when installed: the no-network candidate resolve degrades, so the pending row carries the `partial` modifier and renders `(will partially install)` in place of `(will install)`. The token is a render MODIFIER on the existing `will install` discriminator, NOT a new closed-set token; there is deliberately no `will partially update` analog (the reconcile plan has no update bucket -- D-66-05). Severity `info`; no reload-hint; the apply trailer.
 
 <!-- catalog-state: mp-add-plugin-partial-install -->
 
 ```text
 ● new-mp [user]
   ● degraded-plugin (will partially install)
+
+/claude:plugin apply to make these changes
 ```
 
 ### Plugin pending uninstall under existing marketplace
 
-A plugin recorded in `state.json` but no longer declared in `claude-plugins.json`. The marketplace itself is still declared (source matches the recording) so its header renders status-less (list-arm: SUB-BRANCH A bare header) and only the plugin row carries the `(will uninstall)` token (`○` glyph -- the pre-transition analog of the realized `(uninstalled)` open-circle row). Severity `info`; no reload-hint.
+A plugin recorded in `state.json` but no longer declared in `claude-plugins.json`. The marketplace itself is still declared (source matches the recording) so its header renders status-less (list-arm: SUB-BRANCH A bare header) and only the plugin row carries the `(will uninstall)` token (`○` glyph -- the pre-transition analog of the realized `(uninstalled)` open-circle row). Severity `info`; no reload-hint; the apply trailer.
 
 <!-- catalog-state: plugin-pending-uninstall -->
 
 ```text
 ● mp [user]
   ○ old-plugin v1.0.0 (will uninstall)
+
+/claude:plugin apply to make these changes
 ```
 
 ### Plugin pending uninstall carrying a retained workflow staging tree (WR-06)
 
-The same retained-tree advisory on the command's OTHER arm. The cascade message and the empty-steady-state message declare the SAME optional advisory member and one render site composes both, so the appended line is byte-identical to the [empty steady-state](#empty-steady-state-carrying-a-retained-workflow-staging-tree-wr-06) form above whichever arm the user's configuration lands on. The advisory sits after the cascade body and before the trailing tally slot; it is a body line, not a row, because its subject is a directory and the row grammar's name slot expects a plugin or a marketplace. Severity `info`; no reload-hint.
+The same retained-tree advisory on the command's OTHER arm. The cascade message and the empty-steady-state message declare the SAME optional advisory member and one render site composes both, so the appended line is byte-identical to the [empty steady-state](#empty-steady-state-carrying-a-retained-workflow-staging-tree-wr-06) form above whichever arm the user's configuration lands on. The advisory sits after the cascade body and before the trailing tally slot; it is a body line, not a row, because its subject is a directory and the row grammar's name slot expects a plugin or a marketplace. Severity `info`; no reload-hint; the apply trailer.
 
 <!-- catalog-state: plugin-pending-uninstall-retained-workflow-staging -->
 
@@ -3574,11 +3580,13 @@ The same retained-tree advisory on the command's OTHER arm. The cascade message 
   ○ old-plugin v1.0.0 (will uninstall)
 
     retained workflow staging: 9f1c4d2a-3b7e (2 envelopes) under the workflows staging directory
+
+/claude:plugin apply to make these changes
 ```
 
 ### Marketplace remove with installed plugins
 
-A marketplace recorded in `state.json` but no longer declared in `claude-plugins.json`, still carrying installed plugins. WILL-03 / D-65.1-03: de-registering the marketplace record is immediate (no `will remove` marketplace token), so its header renders status-less (list-arm bare header); the reload-deferred work is the plugin-uninstall cascade, surfaced as one `(will uninstall)` row per recorded plugin (`○` glyph). Severity `info`; no reload-hint.
+A marketplace recorded in `state.json` but no longer declared in `claude-plugins.json`, still carrying installed plugins. WILL-03 / D-65.1-03: de-registering the marketplace record is immediate (no `will remove` marketplace token), so its header renders status-less (list-arm bare header); the reload-deferred work is the plugin-uninstall cascade, surfaced as one `(will uninstall)` row per recorded plugin (`○` glyph). Severity `info`; no reload-hint; the apply trailer.
 
 <!-- catalog-state: marketplace-remove-with-installed-plugins -->
 
@@ -3586,11 +3594,13 @@ A marketplace recorded in `state.json` but no longer declared in `claude-plugins
 ● old-mp [user]
   ○ p1 v1.0.0 (will uninstall)
   ○ p2 v2.3.0 (will uninstall)
+
+/claude:plugin apply to make these changes
 ```
 
 ### Enable / disable transitions
 
-A marketplace with two plugin children: one newly enabled in config (`will enable`, `●` glyph) and one newly disabled (`will disable`, `◍` glyph). Severity `info`; no reload-hint.
+A marketplace with two plugin children: one newly enabled in config (`will enable`, `●` glyph) and one newly disabled (`will disable`, `◍` glyph). Severity `info`; no reload-hint; the apply trailer.
 
 <!-- catalog-state: enable-disable-transitions -->
 
@@ -3598,6 +3608,8 @@ A marketplace with two plugin children: one newly enabled in config (`will enabl
 ● mp [user]
   ● to-enable (will enable)
   ◍ to-disable (will disable)
+
+/claude:plugin apply to make these changes
 ```
 
 ### Source mismatch (declared source diverges from recorded source)

@@ -2,7 +2,10 @@ import { piWithAllLoaded, piWithBothLoaded } from "../mock-pi.ts";
 
 import type { FixtureMap } from "../fixture-types.ts";
 
-/** Catalog fixtures for the plugin pending command surface. */
+/**
+ * Catalog fixtures for the plugin pending command surface. APL-04 / D-14: each
+ * state with a `will ...` row sets `needsApply`, as the pending composer does.
+ */
 export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
   "/claude:plugin pending": {
     "empty-steady-state": {
@@ -28,6 +31,7 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
     "mp-add-plugin-install": {
       pi: piWithBothLoaded(),
       message: {
+        needsApply: true,
         marketplaces: [
           {
             name: "new-mp",
@@ -44,6 +48,7 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
     "mp-add-plugin-partial-install": {
       pi: piWithBothLoaded(),
       message: {
+        needsApply: true,
         marketplaces: [
           {
             name: "new-mp",
@@ -56,6 +61,7 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
     "plugin-pending-uninstall": {
       pi: piWithBothLoaded(),
       message: {
+        needsApply: true,
         marketplaces: [
           {
             name: "mp",
@@ -69,6 +75,7 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
     "plugin-pending-uninstall-retained-workflow-staging": {
       pi: piWithAllLoaded(),
       message: {
+        needsApply: true,
         marketplaces: [
           {
             name: "mp",
@@ -88,6 +95,7 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
     "marketplace-remove-with-installed-plugins": {
       pi: piWithBothLoaded(),
       message: {
+        needsApply: true,
         marketplaces: [
           {
             name: "old-mp",
@@ -107,6 +115,7 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
       // land against an exercised path.
       pi: piWithBothLoaded(),
       message: {
+        needsApply: true,
         marketplaces: [
           {
             name: "mp",
