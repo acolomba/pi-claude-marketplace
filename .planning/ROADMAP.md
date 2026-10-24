@@ -608,11 +608,11 @@ Plans:
 4. `pending`, help, completions and the docs name `apply` (APL-04).
 5. `npm run check` stays green.
 
-**Plans:** 14 plans
+**Plans:** 1/14 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 29-01-PLAN.md — Tracer: the `/claude:plugin apply` verb (handler, router, register, flag catalog, help, completions, JSON outcome)
+- [x] 29-01-PLAN.md — Tracer: the `/claude:plugin apply` verb (handler, router, register, flag catalog, help, completions, JSON outcome)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 29-02-PLAN.md — A load changes no installation state: `load.ts` and the shared `read-pass.ts`; the reload scenarios move to `apply`
@@ -683,7 +683,7 @@ Plans:
 | 26. Git Mirror Access | 1/1 | Complete    | 2026-10-23 |
 | 27. Install and Reconcile Reason Residue | 1/1 | Complete    | 2026-10-23 |
 | 28. Delisted Plugin Dependency Walk | 1/1 | Complete    | 2026-10-24 |
-| 29. Apply Command and Read-Only Reload | 0/14 | Not started | - |
+| 29. Apply Command and Read-Only Reload | 1/14 | In Progress | - |
 
 ## Carried Forward
 

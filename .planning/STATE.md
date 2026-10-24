@@ -5,17 +5,17 @@ milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 29
 current_phase_name: Apply Command and Read-Only Reload
 status: executing
-stopped_at: Phase 29 context gathered
-last_updated: "2026-10-24T13:43:19.582Z"
+stopped_at: Completed 29-01-PLAN.md
+last_updated: "2026-10-24T14:15:39.647Z"
 last_activity: 2026-10-24
-last_activity_desc: Phase 29 execution started
-state_head: 5cb5bc700846077db755eb9bff66a35cfafd9d78
+last_activity_desc: Plan 29-01 complete (the apply command)
+state_head: 4237dbe483bb2995c63c1a54193be9043e86802c
 progress:
   total_phases: 29
   completed_phases: 28
   total_plans: 74
-  completed_plans: 60
-  percent: 81
+  completed_plans: 61
+  percent: 82
 ---
 
 # Project State
@@ -32,11 +32,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 29 (Apply Command and Read-Only Reload) — EXECUTING
-Plan: 1 of 14
-Status: Executing Phase 29
-Last activity: 2026-10-24 — Phase 29 execution started
+Plan: 2 of 14
+Status: Ready to execute
+Last activity: 2026-10-24 — Plan 29-01 complete (the apply command)
 
-Progress: [████████░░] 81%
+Progress: [████████░░] 82%
 
 Phases 2-15 depend only on Phase 1 and may run in parallel once it lands. Each
 owns its own feature files and step modules (the file ownership table in
@@ -187,9 +187,9 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-24T09:46:35.344Z
-**Stopped at:** Phase 29 context gathered
-**Resume file:** .planning/phases/29-load-converges-on-the-catalog/29-CONTEXT.md
+**Last session:** 2026-10-24T14:15:33.822Z
+**Stopped at:** Completed 29-01-PLAN.md
+**Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
 `claude/plugin-lifecycle-coverage-b1d431`. Next: `/gsd-plan-phase 1` (Suite
@@ -394,6 +394,7 @@ archived milestone artifacts.
 | Phase 01 P08 | 10 min | 2 tasks | 8 files |
 | Phase 01 P09 | 12 min | 2 tasks | 6 files |
 | Phase 01 P10 | 10 min | 3 tasks | 10 files |
+| Phase 29 P01 | 28 min | 2 tasks | 27 files |
 
 ## Decisions
 
@@ -570,6 +571,8 @@ archived milestone artifacts.
 - [Phase 01]: 01-09: pending never reads the source of a marketplace it would add, so the writer's token expansion is carried to a Phase 11 reconcile seed (WINDOWS #110)
 - [Phase 01]: 01-10: The plugin form of {git repository} resolves through gitRepositoryServing, which fails when no recorded repository or more than one holds the plugin
 - [Phase 01]: 01-10: Git clones are stated by origin URL and revision token, never by their directory key; the clone reader fails on a stray plugin-clones entry or a checkout with no origin
+- [Phase 29]: The apply handler member is SubcommandHandlers.pluginApply, not apply: strong-mock reserves apply/call/bind on every mock
+- [Phase 29]: pending and apply share the withScopeOnlyArgs prelude in edge/handlers/plugin/shared.ts; spelling-only top-level verbs route through TOP_LEVEL_VERB_ROUTES in edge/router.ts
 
 ### mcp-4 decisions
 
