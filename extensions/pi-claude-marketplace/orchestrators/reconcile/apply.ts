@@ -115,7 +115,7 @@ import {
 } from "./read-pass.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
-import type { ConvergencePlan } from "./convergence.ts";
+import type { ConvergencePlan, PlannedMove } from "./convergence.ts";
 import type { ReconcileStateReader, ScopePassAccumulators } from "./read-pass.ts";
 import type {
   ApplyReconcileOptions,
@@ -127,6 +127,7 @@ import type {
 import type { Scope } from "../../shared/types.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
+import type { PluginUpdateOutcome } from "../types.ts";
 
 /**
  * Apply one plan's marketplacesToRemove bucket. NO outer lock around the
@@ -1087,10 +1088,9 @@ async function convergeScope(
 
   const convergePlugin = createConvergeOperation(opts.hooksRouting, opts.completionCache);
   for (const move of convergence.moves) {
-    if (!move.revisionChanged) {
-      continue;
-    }
-
+    // D-10 / D-25: a move whose revision did not change exists because its
+    // supported set grew, so the runner re-materializes the recorded revision.
+    const rematerialize = !move.revisionChanged;
     // eslint-disable-next-line no-await-in-loop -- each move locks the scope (retries: 0)
     const result = await convergePlugin({
       plugin: move.plugin,
@@ -1098,11 +1098,42 @@ async function convergeScope(
       scope,
       cwd: opts.cwd,
       partial: move.partial,
+      rematerialize,
     });
-    outcomes.push(...convergedMoveOutcomes(move, result));
+    outcomes.push(
+      ...(rematerialize ? grownMoveOutcomes(move, result) : convergedMoveOutcomes(move, result)),
+    );
   }
 
   outcomes.push(...blockedMoveOutcomes(convergence));
+}
+
+/**
+ * D-08 / WCONV-03: a growth-only move that re-materialized reports the
+ * backfill row: `(installed)` or `(partially-installed)` at the recorded
+ * version, led by `{components now supported}`, so it never reads as a fresh
+ * install. Any other result reports what a catalog move reports.
+ */
+function grownMoveOutcomes(move: PlannedMove, result: PluginUpdateOutcome): PerEntryOutcome[] {
+  if (result.partition !== "updated") {
+    return convergedMoveOutcomes(move, result);
+  }
+
+  const unsupported = result.partialDegrade?.kinds ?? [];
+  return [
+    {
+      kind: "plugin-backfilled",
+      scope: move.scope,
+      marketplace: move.marketplace,
+      plugin: move.plugin,
+      version: result.toVersion,
+      dependencies: declaredDependencies(result),
+      installable: unsupported.length === 0,
+      unsupported,
+      ...installedRowDegradation(result),
+      ...carriedMcpConfigNotices(result),
+    },
+  ];
 }
 
 /**

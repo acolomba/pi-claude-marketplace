@@ -588,6 +588,12 @@ export interface PluginConvergeTarget {
   readonly scope: Scope;
   readonly cwd: string;
   readonly partial: boolean;
+  /**
+   * D-10 / D-25: a growth-only move re-materializes the recorded revision, so
+   * the runner does not skip a candidate at the recorded revision. A plugin
+   * whose supported component set grew gets the components it lacked.
+   */
+  readonly rematerialize: boolean;
 }
 
 /**

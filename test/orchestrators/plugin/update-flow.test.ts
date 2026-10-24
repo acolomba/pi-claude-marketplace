@@ -13149,6 +13149,7 @@ test("D-26: convergePlugin moves a path-source plugin to the catalog version in 
         scope: "project",
         cwd,
         partial: false,
+        rematerialize: false,
       });
 
       // assert
@@ -13195,6 +13196,7 @@ test("D-26: convergePlugin answers a move at the recorded revision as unchanged 
         scope: "project",
         cwd,
         partial: false,
+        rematerialize: false,
       });
 
       // assert
@@ -13209,6 +13211,56 @@ test("D-26: convergePlugin answers a move at the recorded revision as unchanged 
         declaresWorkflows: false,
       });
       assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), before);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-10 / D-25: convergePlugin with rematerialize re-materializes the recorded revision", async () => {
+  await withHermeticHome(async () => {
+    // arrange -- the catalog offers the recorded version, and a skill the
+    // record names is missing on disk.
+    const cwd = await createCaseDir("update-converge-rematerialize-");
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const skillFile = path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md");
+      await rm(path.join(locations.skillsTargetDir, "hello-tool"), {
+        recursive: true,
+        force: true,
+      });
+
+      // act
+      const outcome = await convergeOperations().convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "updated",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+      });
+      assert.ok(await pathExists(skillFile));
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -13244,6 +13296,7 @@ for (const { partial, expected } of [
           scope: "project",
           cwd,
           partial,
+          rematerialize: false,
         });
 
         // assert
@@ -13273,73 +13326,79 @@ for (const { partial, expected } of [
   });
 }
 
-test("D-26 / T-29-29: convergePlugin keeps an agent file a user edited and fails the move", async () => {
-  await withHermeticHome(async () => {
-    // arrange
-    const cwd = await createCaseDir("update-converge-edited-agent-");
-    try {
-      const locations = locationsFor("project", cwd);
-      const marketplaceRoot = path.join(cwd, "mp-src");
-      await seedPathMarketplace({
-        cwd,
-        marketplaceRoot,
-        marketplaceName: "mp",
-        manifestPlugins: { hello: { version: "2.0.0", hasSkill: false, hasAgent: true } },
-        installedVersions: { hello: "1.0.0" },
-      });
-      const target = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
-      const editedBytes = "---\nname: bot\n---\nEdited by hand.\n";
-      await mkdir(locations.agentsDir, { recursive: true });
-      await writeFile(target, editedBytes);
-      await writeFile(
-        locations.agentsIndexPath,
-        JSON.stringify({
-          schemaVersion: 1,
-          agents: [
-            {
-              plugin: "hello",
-              marketplace: "mp",
-              sourceAgent: "bot",
-              generatedName: "pi-claude-marketplace-hello-bot",
-              sourcePath: path.join(marketplaceRoot, "plugins", "hello", "agents", "bot.md"),
-              targetPath: target,
-              sourceHash: "a".repeat(64),
-              droppedFields: [],
-              droppedTools: [],
-              warnings: [],
-            },
-          ],
-        }),
-      );
-      const state = await loadState(locations.extensionRoot);
-      const record = state.marketplaces.mp?.plugins.hello;
-      assert.ok(record !== undefined);
-      record.resources = {
-        ...record.resources,
-        skills: [],
-        agents: ["pi-claude-marketplace-hello-bot"],
-      };
-      await saveState(locations.extensionRoot, state);
-      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+for (const { rematerialize, offered } of [
+  { rematerialize: false, offered: "2.0.0" },
+  { rematerialize: true, offered: "1.0.0" },
+] as const) {
+  test(`D-26 / T-29-29 / T-29-35: convergePlugin keeps an agent file a user edited and fails the move when rematerialize is ${String(rematerialize)}`, async () => {
+    await withHermeticHome(async () => {
+      // arrange
+      const cwd = await createCaseDir("update-converge-edited-agent-");
+      try {
+        const locations = locationsFor("project", cwd);
+        const marketplaceRoot = path.join(cwd, "mp-src");
+        await seedPathMarketplace({
+          cwd,
+          marketplaceRoot,
+          marketplaceName: "mp",
+          manifestPlugins: { hello: { version: offered, hasSkill: false, hasAgent: true } },
+          installedVersions: { hello: "1.0.0" },
+        });
+        const target = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
+        const editedBytes = "---\nname: bot\n---\nEdited by hand.\n";
+        await mkdir(locations.agentsDir, { recursive: true });
+        await writeFile(target, editedBytes);
+        await writeFile(
+          locations.agentsIndexPath,
+          JSON.stringify({
+            schemaVersion: 1,
+            agents: [
+              {
+                plugin: "hello",
+                marketplace: "mp",
+                sourceAgent: "bot",
+                generatedName: "pi-claude-marketplace-hello-bot",
+                sourcePath: path.join(marketplaceRoot, "plugins", "hello", "agents", "bot.md"),
+                targetPath: target,
+                sourceHash: "a".repeat(64),
+                droppedFields: [],
+                droppedTools: [],
+                warnings: [],
+              },
+            ],
+          }),
+        );
+        const state = await loadState(locations.extensionRoot);
+        const record = state.marketplaces.mp?.plugins.hello;
+        assert.ok(record !== undefined);
+        record.resources = {
+          ...record.resources,
+          skills: [],
+          agents: ["pi-claude-marketplace-hello-bot"],
+        };
+        await saveState(locations.extensionRoot, state);
+        const stateBefore = await readFile(locations.stateJsonPath, "utf8");
 
-      // act
-      const outcome = await convergeOperations().convergePlugin({
-        plugin: "hello",
-        marketplace: "mp",
-        scope: "project",
-        cwd,
-        partial: false,
-      });
+        // act
+        const outcome = await convergeOperations().convergePlugin({
+          plugin: "hello",
+          marketplace: "mp",
+          scope: "project",
+          cwd,
+          partial: false,
+          rematerialize,
+        });
 
-      // assert
-      assert.strictEqual(outcome.partition, "failed");
-      assert.strictEqual(await readFile(target, "utf8"), editedBytes);
-      assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
-    } finally {
-      await rm(cwd, { recursive: true, force: true });
-    }
+        // assert
+        assert.strictEqual(outcome.partition, "failed");
+        assert.strictEqual(await readFile(target, "utf8"), editedBytes);
+        assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
   });
-});
+}
 
 test("D-26 / PUP-9: a throw inside convergePlugin becomes a failed outcome naming the attempted move", async () => {
   await withHermeticHome(async () => {
@@ -13367,6 +13426,7 @@ test("D-26 / PUP-9: a throw inside convergePlugin becomes a failed outcome namin
         scope: "project",
         cwd,
         partial: false,
+        rematerialize: false,
       });
 
       // assert
@@ -13417,6 +13477,7 @@ test("D-13: a source file convergePlugin cannot read fails the move as permissio
         scope: "project",
         cwd,
         partial: false,
+        rematerialize: false,
       });
 
       // assert
@@ -13452,6 +13513,7 @@ test("GHB-03: convergePlugin rethrows an invalid base", async (t) => {
           scope: "project",
           cwd,
           partial: false,
+          rematerialize: false,
         }),
       (error: unknown) => {
         assert.deepStrictEqual(

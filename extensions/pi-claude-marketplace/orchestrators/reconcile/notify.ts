@@ -430,10 +430,13 @@ export function convergedMoveOutcomes(
         {
           ...convergedOutcome(
             move,
-            updatedRowFromOutcome({ ...outcome, constraint: undefined }, move.scope, {
-              updated: "info",
-              partiallyInstalled: "info",
-            }),
+            withGrowthMarker(
+              move,
+              updatedRowFromOutcome({ ...outcome, constraint: undefined }, move.scope, {
+                updated: "info",
+                partiallyInstalled: "info",
+              }),
+            ),
           ),
           ...carriedMcpConfigNotices(outcome),
         },
@@ -465,6 +468,20 @@ export function convergedMoveOutcomes(
         },
       ];
   }
+}
+
+/**
+ * WCONV-03: a revision move whose supported set also grew leads its row with
+ * `{components now supported}`, as the `will update` row `pending` lists for
+ * it does.
+ */
+function withGrowthMarker<R extends { readonly reasons?: readonly ContentReason[] }>(
+  move: PlannedMove,
+  row: R,
+): R {
+  return move.grew
+    ? { ...row, reasons: ["components now supported", ...(row.reasons ?? [])] }
+    : row;
 }
 
 function convergedOutcome(

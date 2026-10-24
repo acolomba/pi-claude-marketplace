@@ -244,13 +244,15 @@ const PLUGIN_UPDATE_FN = ((plugin, marketplace, scope) => {
 
 void PLUGIN_UPDATE_FN;
 
-// D-26: a catalog move names its scope's cwd and whether a partial candidate is admitted.
+// D-26: a catalog move names its scope's cwd, whether a partial candidate is admitted,
+// and whether it re-materializes the recorded revision (D-10 / D-25).
 const PLUGIN_CONVERGE_TARGET = {
   plugin: "alpha",
   marketplace: "official",
   scope: "project",
   cwd: "/project",
   partial: false,
+  rematerialize: false,
 } satisfies PluginConvergeTarget;
 
 const PLUGIN_CONVERGE_FN = ((target) => {
@@ -266,6 +268,7 @@ void ({
   marketplace: "official",
   scope: "project",
   partial: false,
+  rematerialize: false,
   // @ts-expect-error a catalog move names its cwd explicitly
 } satisfies PluginConvergeTarget);
 
@@ -274,7 +277,17 @@ void ({
   marketplace: "official",
   scope: "project",
   cwd: "/project",
+  rematerialize: false,
   // @ts-expect-error a catalog move states whether a partial candidate is admitted
+} satisfies PluginConvergeTarget);
+
+void ({
+  plugin: "alpha",
+  marketplace: "official",
+  scope: "project",
+  cwd: "/project",
+  partial: false,
+  // @ts-expect-error D-10 / D-25: a catalog move states whether it re-materializes the recorded revision
 } satisfies PluginConvergeTarget);
 
 const LEDGER_DEGRADATION_SIGNALS = {

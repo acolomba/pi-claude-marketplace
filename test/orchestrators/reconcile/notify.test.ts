@@ -2060,6 +2060,68 @@ describe("convergedMoveOutcomes", () => {
     ]);
   });
 
+  test("WCONV-03: a revision move whose supported set grew leads its updated row with the growth marker", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(
+      { ...DEMO_MOVE, grew: true },
+      {
+        ...UPDATE_BASE,
+        partition: "updated",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresWorkflows: false,
+        constraint: undefined,
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        row: {
+          status: "updated",
+          name: "demo",
+          scope: "project",
+          from: "1.0.0",
+          to: "1.1.0",
+          dependencies: [],
+          reasons: ["components now supported"],
+          severity: "info",
+          needsReload: true,
+        },
+      },
+    ]);
+  });
+
+  test("WCONV-03: a grown partial record's move puts the growth marker before the dropped kinds", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(
+      { ...DEMO_MOVE, partial: true, grew: true },
+      {
+        ...UPDATE_BASE,
+        partition: "updated",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresWorkflows: false,
+        constraint: undefined,
+        partialDegrade: { kinds: ["outputStyles"], newlyDegraded: false },
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      outcomes.map((outcome) => outcome.row.reasons),
+      [["components now supported", "unsupported component"]],
+    );
+  });
+
   test("a move the runner found at the recorded revision reports nothing", () => {
     // act
     const outcomes = convergedMoveOutcomes(DEMO_MOVE, {

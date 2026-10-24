@@ -463,6 +463,25 @@ export async function publishOutputStyle(
 }
 
 /**
+ * Deletes the `output-styles` directory of the published plugin `plugin`,
+ * which must exist, and returns its path. Re-offering a plugin keeps the files
+ * its directory already holds, so this is how a new version stops shipping
+ * the output style an earlier one had. A git publication commits and pushes
+ * the deletion.
+ */
+export async function removePublishedOutputStyle(
+  published: PublishedMarketplace,
+  plugin: string,
+): Promise<string> {
+  const target = ownedTarget(
+    published,
+    path.join(published.root, "plugins", plugin, "output-styles"),
+  );
+  await changePublication(published, () => rm(target, { recursive: true }));
+  return target;
+}
+
+/**
  * Lets the plugins of the marketplace `published` records depend on plugins of
  * the marketplace `target`.
  */

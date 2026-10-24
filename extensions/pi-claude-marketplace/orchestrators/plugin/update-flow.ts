@@ -1285,9 +1285,24 @@ async function runPluginUpdate(args: ThreePhaseArgs): Promise<UpdateRunOutcome> 
   return materializeLatestVersion(args, UPDATE_MATERIALIZATION);
 }
 
+/**
+ * D-10 / D-25: a growth-only move re-materializes the recorded revision. Only
+ * `skipSameRevision` differs from the catalog move; `overwrite` stays off, so a
+ * user-edited agent file is still kept (D-26).
+ */
+const REMATERIALIZE_MATERIALIZATION: MaterializationPolicy = {
+  ...CONVERGE_MATERIALIZATION,
+  skipSameRevision: false,
+};
+
 /** D-26: one catalog move through the shared materialization leaf. */
 function runPluginConverge(args: ThreePhaseArgs): Promise<UpdateRunOutcome> {
   return materializeLatestVersion(args, CONVERGE_MATERIALIZATION);
+}
+
+/** D-10 / D-25: one growth-only move through the shared materialization leaf. */
+function runPluginRematerialize(args: ThreePhaseArgs): Promise<UpdateRunOutcome> {
+  return materializeLatestVersion(args, REMATERIALIZE_MATERIALIZATION);
 }
 
 /**
@@ -1338,6 +1353,7 @@ export function createPluginUpdateOperations(
     stateTransaction === undefined ? runner : (args) => runner({ ...args, stateTransaction });
   const run = withStateTransaction(runPluginUpdate);
   const converge = withStateTransaction(runPluginConverge);
+  const rematerialize = withStateTransaction(runPluginRematerialize);
   const updatePlugins: UpdatePluginsFn = (options) =>
     updatePluginsWith(options, bindings, run, composeUpdateCascade);
   // D-10-18: ONE memo pair per autoupdate run. `beginPluginUpdateRun`
@@ -1356,7 +1372,7 @@ export function createPluginUpdateOperations(
   };
 
   const convergePlugin: PluginConvergeFn = (target) =>
-    convergePluginWith(bindings, converge, target);
+    convergePluginWith(bindings, target.rematerialize ? rematerialize : converge, target);
 
   return { updatePlugins, beginPluginUpdateRun, convergePlugin };
 }

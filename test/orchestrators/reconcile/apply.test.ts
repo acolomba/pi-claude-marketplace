@@ -456,6 +456,19 @@ interface RecordSeed {
   readonly hooks?: readonly string[];
 }
 
+/**
+ * D-10: the supported kinds a record's resources imply, so a seeded record
+ * whose plugin tree has not grown is not a growth move `apply` re-materializes.
+ */
+function impliedSupported(seed: RecordSeed): string[] {
+  return [
+    ...((seed.skills ?? []).length > 0 ? ["skills"] : []),
+    ...((seed.prompts ?? []).length > 0 ? ["commands"] : []),
+    ...((seed.agents ?? []).length > 0 ? ["agents"] : []),
+    ...((seed.hooks ?? []).length > 0 ? ["hooks"] : []),
+  ];
+}
+
 function pluginRecord(seed: RecordSeed): PluginRecord {
   return {
     version: "1.0.0",
@@ -463,7 +476,7 @@ function pluginRecord(seed: RecordSeed): PluginRecord {
     compatibility: {
       installable: seed.installable ?? true,
       notes: [],
-      supported: [...(seed.supported ?? [])],
+      supported: [...(seed.supported ?? impliedSupported(seed))],
       unsupported: [...(seed.unsupported ?? [])],
     },
     resources: {
@@ -1288,7 +1301,10 @@ describe("applyReconcile", () => {
           manifestPath,
           marketplaceRoot,
           plugins: {
-            keeper: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "keeper") }),
+            keeper: pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "keeper"),
+            }),
             orphan: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "orphan") }),
           },
         }),
@@ -1417,7 +1433,10 @@ describe("applyReconcile", () => {
       }),
     );
     const orphan = pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "orphan") });
-    const keeper = pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "keeper") });
+    const keeper = pluginRecord({
+      supported: ["skills"],
+      pluginRoot: path.join(marketplaceRoot, "plugins", "keeper"),
+    });
     await seedState(project, {
       schemaVersion: 3,
       lastReconciledExtensionVersion: EXTENSION_VERSION,
@@ -4368,9 +4387,11 @@ describe("applyReconcile", () => {
           marketplaceRoot,
           plugins: {
             "deploy-kit": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
             }),
             "secrets-vault": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "secrets-vault"),
             }),
           },
@@ -4478,6 +4499,7 @@ describe("applyReconcile", () => {
               pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
             }),
             "secrets-vault": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "secrets-vault"),
             }),
           },
@@ -4989,6 +5011,7 @@ describe("applyReconcile", () => {
           marketplaceRoot,
           plugins: {
             "deploy-kit": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
             }),
           },
@@ -5126,6 +5149,7 @@ describe("applyReconcile", () => {
           marketplaceRoot,
           plugins: {
             "deploy-kit": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
             }),
           },
@@ -5214,6 +5238,7 @@ describe("applyReconcile", () => {
           marketplaceRoot,
           plugins: {
             "deploy-kit": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
             }),
           },
@@ -5808,6 +5833,7 @@ describe("applyReconcile", () => {
           marketplaceRoot,
           plugins: {
             "deploy-kit": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
             }),
           },
@@ -6031,7 +6057,10 @@ describe("applyReconcile", () => {
             manifestPath: alpha.manifestPath,
             marketplaceRoot: alpha.marketplaceRoot,
             plugins: {
-              a: pluginRecord({ pluginRoot: path.join(alpha.marketplaceRoot, "plugins", "a") }),
+              a: pluginRecord({
+                supported: ["skills"],
+                pluginRoot: path.join(alpha.marketplaceRoot, "plugins", "a"),
+              }),
             },
           }),
           beta: marketplaceRecord({
@@ -6043,7 +6072,10 @@ describe("applyReconcile", () => {
             marketplaceRoot: beta.marketplaceRoot,
             ...(scenario.secondMarketplace === "beta" && {
               plugins: {
-                c: pluginRecord({ pluginRoot: path.join(beta.marketplaceRoot, "plugins", "c") }),
+                c: pluginRecord({
+                  supported: ["skills"],
+                  pluginRoot: path.join(beta.marketplaceRoot, "plugins", "c"),
+                }),
               },
             }),
           }),
@@ -6056,7 +6088,10 @@ describe("applyReconcile", () => {
               manifestPath: gamma.manifestPath,
               marketplaceRoot: gamma.marketplaceRoot,
               plugins: {
-                c: pluginRecord({ pluginRoot: path.join(gamma.marketplaceRoot, "plugins", "c") }),
+                c: pluginRecord({
+                  supported: ["skills"],
+                  pluginRoot: path.join(gamma.marketplaceRoot, "plugins", "c"),
+                }),
               },
             }),
           }),
@@ -6148,7 +6183,10 @@ describe("applyReconcile", () => {
           manifestPath: alpha.manifestPath,
           marketplaceRoot: alpha.marketplaceRoot,
           plugins: {
-            a: pluginRecord({ pluginRoot: path.join(alpha.marketplaceRoot, "plugins", "a") }),
+            a: pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(alpha.marketplaceRoot, "plugins", "a"),
+            }),
           },
         }),
       },
@@ -6253,6 +6291,7 @@ describe("applyReconcile", () => {
           marketplaceRoot: mp.marketplaceRoot,
           plugins: {
             "deploy-kit": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(mp.marketplaceRoot, "plugins", "deploy-kit"),
             }),
           },
@@ -6327,9 +6366,11 @@ describe("applyReconcile", () => {
           marketplaceRoot,
           plugins: {
             "deploy-kit": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
             }),
             common: pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "common"),
             }),
           },
@@ -6394,9 +6435,11 @@ describe("applyReconcile", () => {
           marketplaceRoot,
           plugins: {
             "deploy-kit": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
             }),
             "secrets-vault": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "secrets-vault"),
             }),
           },
@@ -6830,7 +6873,7 @@ describe("applyReconcile", () => {
         "secrets-vault": { mcpServer: true },
       },
       declared: { "deploy-kit@mp": {} },
-      recorded: { "deploy-kit": {} },
+      recorded: { "deploy-kit": { supported: ["skills"] } },
       owners: [],
     });
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
@@ -7217,6 +7260,8 @@ async function seedConvergenceScope(
     readonly dependencies?: Readonly<
       Record<string, readonly { readonly name: string; readonly version: string }[]>
     >;
+    /** Per-plugin record fields beyond the supported set; a disabled record is disabled in config too. */
+    readonly records?: Readonly<Record<string, Omit<RecordSeed, "pluginRoot" | "supported">>>;
   },
 ): Promise<{
   readonly cwd: string;
@@ -7267,7 +7312,12 @@ async function seedConvergenceScope(
     project.baseConfigJsonPath,
     configBytes({
       marketplaces: { mp: { source: marketplaceRoot } },
-      plugins: Object.fromEntries(plugins.map((plugin) => [`${plugin}@mp`, {}])),
+      plugins: Object.fromEntries(
+        plugins.map((plugin) => [
+          `${plugin}@mp`,
+          seed.records?.[plugin]?.enabled === false ? { enabled: false } : {},
+        ]),
+      ),
     }),
   );
   await seedState(project, {
@@ -7285,6 +7335,7 @@ async function seedConvergenceScope(
           plugins.map((plugin) => [
             plugin,
             pluginRecord({
+              ...seed.records?.[plugin],
               pluginRoot: path.join(marketplaceRoot, "plugins", plugin),
               supported: seed.supported[plugin] ?? [],
             }),
@@ -7431,6 +7482,223 @@ describe("applyReconcile catalog convergence", () => {
     ]);
     assert.equal((await recordFor(project, "mp", "alpha"))?.version, "1.0.0");
     assert.equal((await recordFor(project, "mp", "beta"))?.version, "1.1.0");
+    verifyBoundary();
+  });
+
+  test("D-10 / D-25 / WCONV-03: a plugin whose supported set grew is re-materialized at its recorded version with the backfill row", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "converge-grown", {
+      trees: { demo: { skill: "clean", command: true } },
+      supported: { demo: ["skills"] },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● demo v1.0.0 (installed) {components now supported}\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    const record = await recordFor(project, "mp", "demo");
+    assert.equal(record?.version, "1.0.0");
+    assert.deepStrictEqual(record.resources.prompts, ["demo:deploy"]);
+    assert.ok(record.compatibility.supported.includes("commands"));
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("WCONV-03: a revision move whose supported set also grew leads its updated row with the growth marker", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "converge-grown-move", {
+      trees: { demo: { skill: "clean", command: true } },
+      supported: { demo: ["skills"] },
+      offered: { demo: "1.1.0" },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● demo v1.0.0 → v1.1.0 (updated) {components now supported}\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "demo"))?.version, "1.1.0");
+    verifyBoundary();
+  });
+
+  test("D-12 / D-25: a partial record whose supported set grew stays partial and names the kinds it still lacks", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "converge-grown-partial", {
+      trees: { demo: { skill: "clean", command: true, lsp: true } },
+      supported: { demo: ["skills"] },
+      records: { demo: { installable: false, unsupported: ["lspServers"] } },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ◉ demo v1.0.0 (partially-installed) {components now supported, lsp}\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    const record = await recordFor(project, "mp", "demo");
+    assert.equal(record?.compatibility.installable, false);
+    assert.deepStrictEqual(record.resources.prompts, ["demo:deploy"]);
+    verifyBoundary();
+  });
+
+  test("WCONV-01 / T-29-33: a clean record whose grown candidate is partially available is declined, not degraded", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "converge-grown-consent", {
+      trees: { demo: { skill: "clean", command: true, lsp: true } },
+      supported: { demo: ["skills"] },
+    });
+    const before = await readFile(project.stateJsonPath, "utf8");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● demo v1.0.0 (partially-upgradable) {lsp}\n" +
+          "    Run update --partial on this plugin to update it with the supported components.\n" +
+          "\n" +
+          "Reconcile: 1 warning",
+        severity: "warning",
+      },
+    ]);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), before);
+    verifyBoundary();
+  });
+
+  test("ENBL-08: a disabled record whose supported set grew is never re-materialized", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "converge-grown-disabled", {
+      trees: { demo: { skill: "clean", command: true } },
+      supported: { demo: ["skills"] },
+      records: { demo: { enabled: false } },
+    });
+    const before = await readFile(project.stateJsonPath, "utf8");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), before);
+    verifyBoundary();
+  });
+
+  test("APL-02 / D-19: a partial record whose new version needs nothing unsupported is moved and recorded whole", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "converge-made-whole", {
+      trees: { demo: { skill: "clean" } },
+      supported: { demo: ["skills"] },
+      offered: { demo: "1.1.0" },
+      records: { demo: { installable: false, unsupported: ["outputStyles"] } },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● demo v1.0.0 → v1.1.0 (updated)\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    const record = await recordFor(project, "mp", "demo");
+    assert.equal(record?.version, "1.1.0");
+    assert.equal(record.compatibility.installable, true);
+    assert.deepStrictEqual(record.compatibility.unsupported, []);
+    verifyBoundary();
+  });
+
+  test("D-13: a growth move that fails to materialize reports its reason and the record keeps its supported set", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "converge-grown-failed",
+      {
+        trees: { demo: { skill: "clean", command: true } },
+        supported: { demo: ["skills"] },
+      },
+    );
+    if (typeof process.getuid === "function" && process.getuid() === 0) {
+      throw new Error("an unreadable file cannot deny root; run this suite as a non-root user");
+    }
+
+    // An unreadable file still unlinks, so the tree removal needs no restore.
+    await chmod(path.join(marketplaceRoot, "plugins", "demo", "commands", "deploy.md"), 0o000);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ demo v1.0.0 (failed) {permission denied}\n" +
+          "\n" +
+          "Reconcile: 1 failure",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual((await recordFor(project, "mp", "demo"))?.compatibility.supported, [
+      "skills",
+    ]);
     verifyBoundary();
   });
 });
