@@ -704,7 +704,7 @@ async function updateSinglePluginWith(
       name: plugin,
       // UPR-03: the move a throw after the candidate attempted; nothing
       // before one.
-      ...report.move,
+      ...(report.move ?? {}),
       notes: [composeErrorWithCauseChain(err)],
       ...(cleanupFailures.length > 0 && {
         cause: err as Error,
