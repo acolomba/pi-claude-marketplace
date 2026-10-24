@@ -9,6 +9,10 @@
 // network-free `constraint-fold.ts`; no release tag is listed here. A clean
 // record whose candidate would drop components is declined (WCONV-01).
 //
+// D-11: a git source is previewed from what is on disk. A cached tree is
+// compared by version and commit; a target with no cached tree is a move only
+// when the catalog itself names a different commit pin or version.
+//
 // MUST NOT touch the network (NFR-5). The module is outside `NETWORK_SEAMS`, so
 // BLOCK F in `eslint.config.js` rejects a git surface here; the candidate
 // resolves through `resolveListCandidate`, whose git path uses the fs-only
@@ -18,6 +22,7 @@ import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
+import { shaVersion } from "../../domain/version.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -25,13 +30,17 @@ import { admitResolvedVersion, foldDeclaredConstraint } from "../plugin/constrai
 import { readInstalledCopyDeclaration } from "../plugin/dependency-declaration-read.ts";
 import { buildScopeDeclarationDetail } from "../plugin/dependency-index.ts";
 import { resolveListCandidate } from "../plugin/list-candidate-version.ts";
-import { isRecordedCandidate, resolvePluginVersion } from "../plugin/shared.ts";
+import { isRecordedCandidate, isSameRevision, resolvePluginVersion } from "../plugin/shared.ts";
 
 import type { ReconcilePlan } from "./types.ts";
+import type { PluginEntry } from "../../domain/components/plugin.ts";
+import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AddressedDependency } from "../plugin/dependency-index.ts";
+import type { ListCandidate } from "../plugin/list-candidate-version.ts";
 import type { RevisionMove } from "../types.ts";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -149,18 +158,128 @@ function stateAsPlanLeavesIt(state: ExtensionState, plan: ReconcilePlan): Extens
   return { ...state, marketplaces };
 }
 
-/** Whether `source` installs from git (url / git-subdir / github). */
-function isGitSource(source: unknown): boolean {
-  const kind = parsePluginSource(source).kind;
-  return kind === "url" || kind === "git-subdir" || kind === "github";
+/**
+ * D-68-03: true iff `resolved` is a STRICT superset of `recorded` (the supported
+ * set grew for this plugin). A strictly larger set that still contains every
+ * recorded kind means the supported-kind boundary moved in this plugin's favour;
+ * an equal-or-smaller set is skipped so backfill never re-materializes (and
+ * churns state.json) for a plugin whose boundary did not move.
+ */
+export function supportedSetGrew(
+  recorded: readonly string[],
+  resolved: readonly string[],
+): boolean {
+  if (resolved.length <= recorded.length) {
+    return false;
+  }
+
+  const resolvedSet = new Set(resolved);
+  return recorded.every((kind) => resolvedSet.has(kind));
+}
+
+/** The git source `source` names (url / git-subdir / github), or `undefined`. */
+function gitSourceOf(source: unknown): GitBackedSource | undefined {
+  const parsed = parsePluginSource(source);
+  return parsed.kind === "url" || parsed.kind === "git-subdir" || parsed.kind === "github"
+    ? parsed
+    : undefined;
+}
+
+/** What a candidate offers against its record, before growth is weighed. */
+interface Offer {
+  readonly toVersion: string;
+  readonly toCommit?: string;
+  /** The version, sha or plugin root differs (D-18-11). */
+  readonly revisionChanged: boolean;
+  /** The candidate's tree; absent for a git target with no cached tree. */
+  readonly resolved?: MaterializablePlugin;
+}
+
+/** A path source moves when its version or plugin root differs (D-18-11). */
+async function pathOffer(
+  entry: PluginEntry,
+  candidate: ListCandidate,
+  record: PluginRecord,
+): Promise<Offer | undefined> {
+  if (candidate.kind === "cold" || candidate.resolved.state === "unavailable") {
+    return undefined;
+  }
+
+  const resolved = candidate.resolved;
+  const toVersion = await resolvePluginVersion(entry, resolved);
+  const pluginRoot = resolved.pluginRoot;
+  return {
+    toVersion,
+    revisionChanged: !isRecordedCandidate(record, {
+      toVersion,
+      resolvedSha: undefined,
+      pluginRoot,
+    }),
+    resolved,
+  };
+}
+
+/**
+ * D-11: a git target with no cached tree. Offline, only the catalog can show a
+ * different target: a commit pin other than the recorded one, else a declared
+ * version other than the recorded one. Its tree is unknown, so it cannot grow.
+ */
+function coldGitOffer(
+  source: GitBackedSource,
+  entry: PluginEntry,
+  record: PluginRecord,
+): Offer | undefined {
+  if (source.sha !== undefined && source.sha !== record.resolvedSha) {
+    return {
+      toVersion: entry.version ?? shaVersion(source.sha),
+      toCommit: source.sha,
+      revisionChanged: true,
+    };
+  }
+
+  if (entry.version !== undefined && entry.version !== record.version) {
+    return { toVersion: entry.version, revisionChanged: true };
+  }
+
+  return undefined;
+}
+
+/**
+ * D-10 / GIT-01: a cached git tree moves when its version or commit differs.
+ * The plugin root is not compared: an unpinned source answers with the
+ * mirror, while the record names its per-commit copy.
+ */
+async function gitOffer(
+  source: GitBackedSource,
+  entry: PluginEntry,
+  candidate: ListCandidate,
+  record: PluginRecord,
+): Promise<Offer | undefined> {
+  if (candidate.kind === "cold" || candidate.resolvedSha === undefined) {
+    return coldGitOffer(source, entry, record);
+  }
+
+  if (candidate.resolved.state === "unavailable") {
+    return undefined;
+  }
+
+  const { resolved, resolvedSha } = candidate;
+  const toVersion = await resolvePluginVersion(entry, resolved, resolvedSha);
+  return {
+    toVersion,
+    toCommit: resolvedSha,
+    revisionChanged: !isSameRevision(record, toVersion, resolvedSha),
+    resolved,
+  };
 }
 
 /**
  * D-10: the move one enabled record would make, or `undefined`. A delisted
- * record (DLS-D1), an invalid entry, a git source and an `unavailable`
- * candidate are not moves. A clean record's `partially-available` candidate
- * carries the kinds it would drop; a record already installed partial moves
- * without consent (D-12).
+ * record (DLS-D1), an invalid entry and an `unavailable` candidate are not
+ * moves. A move is a changed revision or a strictly grown supported set
+ * (BFILL-01), weighed on every pass; a growth-only move keeps its version. A
+ * clean record's `partially-available` candidate carries the kinds it would
+ * drop; a record already installed partial moves without consent (D-12).
  */
 async function recordMove(
   input: ConvergenceInput,
@@ -175,28 +294,23 @@ async function recordMove(
   }
 
   const entry = declared.entry;
-  if (isGitSource(entry.source)) {
-    return undefined;
-  }
-
   const candidate = await resolveListCandidate(
     entry,
     { marketplaceRoot: mp.marketplaceRoot, marketplaceName: mp.name },
     input.locations,
   );
-  if (candidate.kind === "cold" || candidate.resolved.state === "unavailable") {
+  const source = gitSourceOf(entry.source);
+  const offer = await (source === undefined
+    ? pathOffer(entry, candidate, record)
+    : gitOffer(source, entry, candidate, record));
+  if (offer === undefined) {
     return undefined;
   }
 
-  const resolved = candidate.resolved;
-  const toVersion = await resolvePluginVersion(entry, resolved);
-  if (
-    isRecordedCandidate(record, {
-      toVersion,
-      resolvedSha: undefined,
-      pluginRoot: resolved.pluginRoot,
-    })
-  ) {
+  const resolved = offer.resolved;
+  const grew =
+    resolved !== undefined && supportedSetGrew(record.compatibility.supported, resolved.supported);
+  if (!offer.revisionChanged && !grew) {
     return undefined;
   }
 
@@ -205,14 +319,18 @@ async function recordMove(
     marketplace: mp.name,
     plugin,
     fromVersion: record.version,
-    toVersion,
+    toVersion: offer.toVersion,
     ...(record.resolvedSha !== undefined && { fromCommit: record.resolvedSha }),
-    revisionChanged: true,
-    grew: false,
+    ...(offer.toCommit !== undefined && { toCommit: offer.toCommit }),
+    revisionChanged: offer.revisionChanged,
+    grew,
     partial: !record.compatibility.installable,
   };
-  const needsConsent = record.compatibility.installable && resolved.state === "partially-available";
-  return { move, ...(needsConsent && { consent: resolved.unsupported }) };
+  const consent =
+    record.compatibility.installable && resolved?.state === "partially-available"
+      ? resolved.unsupported
+      : undefined;
+  return { move, ...(consent !== undefined && { consent }) };
 }
 
 /**

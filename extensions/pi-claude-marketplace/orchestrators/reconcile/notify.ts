@@ -291,7 +291,9 @@ function pushMarketplaceActions(
 
 /**
  * D-14: one `will update` row per catalog move, under its marketplace block.
- * The arrow names commits only under the `updated` row's rule (UPR-02).
+ * The arrow names commits only under the `updated` row's rule (UPR-02). A move
+ * whose supported set grew carries `{components now supported}`, the marker a
+ * backfilled row carries (WCONV-03).
  *
  * D-12: then one row per blocked move, the row `update` gives the same block:
  * a range hold is `(skipped) {dependents constrain}` with the gate's cause
@@ -311,6 +313,7 @@ function pushConvergence(
       from: move.fromVersion,
       to: move.toVersion,
       ...(commits !== undefined && { commits }),
+      ...(move.grew && { reasons: ["components now supported"] }),
     });
   }
 

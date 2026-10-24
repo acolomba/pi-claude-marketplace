@@ -1,19 +1,22 @@
 // Owner suite for orchestrators/reconcile/convergence.ts.
 //
-// Every case stages a real path-source marketplace on a case-owned temporary
-// tree and hands the planner a seeded state, so the declaration walk, the
-// manifest read and the candidate resolve all run against disk.
+// Every case stages a real marketplace on a case-owned temporary tree and
+// hands the planner a seeded state, so the declaration walk, the manifest read
+// and the candidate resolve all run against disk. A git case seeds the clone
+// cache the fs-only presence probe reads; nothing reaches a network.
 
 import assert from "node:assert/strict";
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
+import { pluginCloneKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { planConvergence } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/convergence.ts";
 import { emptyReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { seedWarmMirror } from "../plugin/warm-mirror-seed.ts";
 
 import type {
   PlannedHold,
@@ -344,19 +347,55 @@ test("D-10: an unavailable candidate is not a move", async (t) => {
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
 });
 
-test("D-10: a git-source record is skipped by the path-source planner", async (t) => {
-  // arrange
-  const fixture = await createFixture(t, "git");
-  const mp = await stageMarketplace(fixture, "tools", [
-    { name: "demo", source: { source: "github", repo: "acme/demo" } },
-  ]);
-  const state = stateOf({
+const DEMO_URL = "https://example.com/demo";
+const RECORDED_COMMIT = "a".repeat(40);
+const PINNED_COMMIT = "b".repeat(40);
+
+/** The per-commit copy of `demo` at `commit`, the root a git install records (GIT-01). */
+function demoCopy(fixture: Fixture, commit: string): Promise<string> {
+  return fixture.locations.pluginCloneDir(pluginCloneKey(DEMO_URL, commit));
+}
+
+/**
+ * `tools` offers `demo` from a git `source`; the record holds `demo` 1.0.0 at
+ * its per-commit copy of `recordedCommit`.
+ */
+async function stageGitDemo(
+  fixture: Fixture,
+  entry: Record<string, unknown>,
+  recordedCommit = RECORDED_COMMIT,
+): Promise<ExtensionState> {
+  const mp = await stageMarketplace(fixture, "tools", [{ name: "demo", ...entry }]);
+  const copy = await demoCopy(fixture, recordedCommit);
+  return stateOf({
     ...mp,
-    plugins: {
-      demo: pluginRecord(path.join(fixture.locations.extensionRoot, "plugin-clones", "demo"), {
-        resolvedSha: "a".repeat(40),
-      }),
-    },
+    plugins: { demo: pluginRecord(copy, { resolvedSha: recordedCommit }) },
+  });
+}
+
+test("D-10 / GIT-01: a fetched mirror at a new commit and version is a move naming both commits", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "git-warm-move");
+  const { head } = await seedWarmMirror(fixture.locations, DEMO_URL, { version: "2.0.0" });
+  const state = await stageGitDemo(fixture, { source: { source: "url", url: DEMO_URL } });
+
+  // act
+  const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [demoMove({ toVersion: "2.0.0", fromCommit: RECORDED_COMMIT, toCommit: head })],
+    holds: [],
+    declines: [],
+  });
+});
+
+test("D-10: a cached copy at the recorded commit and version is not a move", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "git-warm-same");
+  await stagePlugin(await demoCopy(fixture, RECORDED_COMMIT), "1.0.0");
+  const state = await stageGitDemo(fixture, {
+    source: { source: "url", url: DEMO_URL, sha: RECORDED_COMMIT },
   });
 
   // act
@@ -364,6 +403,120 @@ test("D-10: a git-source record is skipped by the path-source planner", async (t
 
   // assert
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
+});
+
+test("GIT-01: an unpinned mirror at the recorded commit is not a move although its root differs", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "git-warm-mirror-root");
+  const { head } = await seedWarmMirror(fixture.locations, DEMO_URL, { version: "1.0.0" });
+  const state = await stageGitDemo(fixture, { source: { source: "url", url: DEMO_URL } }, head);
+
+  // act
+  const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+  // assert
+  assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
+});
+
+test("D-10: a cached git tree that resolves unavailable is not a move", async (t) => {
+  // arrange: a component path that is not a string makes the candidate unavailable
+  const fixture = await createFixture(t, "git-warm-unavailable");
+  await seedWarmMirror(fixture.locations, DEMO_URL, { version: "2.0.0" });
+  const state = await stageGitDemo(fixture, {
+    source: { source: "url", url: DEMO_URL },
+    skills: 5,
+  });
+
+  // act
+  const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+  // assert
+  assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
+});
+
+const COLD_MOVES: readonly {
+  readonly title: string;
+  readonly entry: Record<string, unknown>;
+  readonly move: Partial<PlannedMove>;
+}[] = [
+  {
+    title: "a changed commit pin moves to the version the entry declares",
+    entry: { source: { source: "url", url: DEMO_URL, sha: PINNED_COMMIT }, version: "2.0.0" },
+    move: { toVersion: "2.0.0", toCommit: PINNED_COMMIT },
+  },
+  {
+    title: "a changed commit pin with no declared version moves to the pin's sha version",
+    entry: { source: { source: "url", url: DEMO_URL, sha: PINNED_COMMIT } },
+    move: { toVersion: "sha-bbbbbbbbbbbb", toCommit: PINNED_COMMIT },
+  },
+  {
+    title: "an unpinned entry that declares another version moves to it",
+    entry: { source: { source: "github", repo: "acme/demo" }, version: "2.0.0" },
+    move: { toVersion: "2.0.0" },
+  },
+];
+
+for (const { title, entry, move } of COLD_MOVES) {
+  test(`D-11: with no cached tree, ${title}`, async (t) => {
+    // arrange
+    const fixture = await createFixture(t, "git-cold-move");
+    const state = await stageGitDemo(fixture, entry);
+
+    // act
+    const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      moves: [demoMove({ fromCommit: RECORDED_COMMIT, ...move })],
+      holds: [],
+      declines: [],
+    });
+  });
+}
+
+const COLD_STAYS: readonly { readonly title: string; readonly entry: Record<string, unknown> }[] = [
+  {
+    title: "the recorded commit pin and version",
+    entry: { source: { source: "url", url: DEMO_URL, sha: RECORDED_COMMIT }, version: "1.0.0" },
+  },
+  {
+    title: "no pin and no declared version",
+    entry: { source: { source: "github", repo: "acme/demo" } },
+  },
+];
+
+for (const { title, entry } of COLD_STAYS) {
+  test(`D-11: with no cached tree, an entry naming ${title} is not a move`, async (t) => {
+    // arrange
+    const fixture = await createFixture(t, "git-cold-stay");
+    const state = await stageGitDemo(fixture, entry);
+
+    // act
+    const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+    // assert
+    assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
+  });
+}
+
+test("D-11: a cached clone that lacks the plugin's subdirectory is judged by the entry alone", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "git-missing-subdir");
+  await seedWarmMirror(fixture.locations, DEMO_URL, undefined);
+  const state = await stageGitDemo(fixture, {
+    source: { source: "git-subdir", url: DEMO_URL, path: "plugins/demo" },
+    version: "2.0.0",
+  });
+
+  // act
+  const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [demoMove({ toVersion: "2.0.0", fromCommit: RECORDED_COMMIT })],
+    holds: [],
+    declines: [],
+  });
 });
 
 test("D-05-07: a scope whose marketplace manifest cannot be read previews no move", async (t) => {
@@ -780,4 +933,132 @@ test("D-12: a partial candidate a dependent's range does not admit is held, not 
     holds: [toolsHold("lib", LIB_OUT_OF_RANGE)],
     declines: [],
   });
+});
+
+const COMPONENT_FILES = {
+  skills: path.join("skills", "tool", "SKILL.md"),
+  agents: path.join("agents", "helper.md"),
+} as const;
+
+/** Gives the plugin under `root` one component of each named supported kind. */
+async function stageComponents(
+  root: string,
+  kinds: readonly (keyof typeof COMPONENT_FILES)[],
+): Promise<void> {
+  await Promise.all(
+    kinds.map((kind) =>
+      writeUnder(
+        path.join(root, COMPONENT_FILES[kind]),
+        "---\nname: tool\ndescription: d\n---\n\nbody\n",
+      ),
+    ),
+  );
+}
+
+function recordSupporting(supported: readonly string[]): Partial<PluginRecord> {
+  return {
+    compatibility: { installable: true, notes: [], supported: [...supported], unsupported: [] },
+  };
+}
+
+test("D-10 / BFILL-01: a strictly grown supported set is a growth-only move at the same version", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "growth");
+  const state = await stageDemo(fixture, "1.0.0");
+  await stageComponents(path.join(marketplaceRootOf(fixture, "tools"), "demo"), ["skills"]);
+
+  // act
+  const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [demoMove({ toVersion: "1.0.0", revisionChanged: false, grew: true })],
+    holds: [],
+    declines: [],
+  });
+});
+
+test("D-10: a grown supported set rides on a version move", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "growth-with-version");
+  const state = await stageDemo(fixture, "1.1.0");
+  await stageComponents(path.join(marketplaceRootOf(fixture, "tools"), "demo"), ["skills"]);
+
+  // act
+  const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [demoMove({ grew: true })],
+    holds: [],
+    declines: [],
+  });
+});
+
+const NOT_GROWN: readonly {
+  readonly title: string;
+  readonly recorded: readonly string[];
+  readonly offered: readonly (keyof typeof COMPONENT_FILES)[];
+}[] = [
+  { title: "an equal supported set", recorded: ["skills"], offered: ["skills"] },
+  {
+    title: "a larger supported set that drops a recorded kind",
+    recorded: ["commands"],
+    offered: ["skills", "agents"],
+  },
+];
+
+for (const { title, recorded, offered } of NOT_GROWN) {
+  test(`BFILL-01: ${title} at the recorded revision is not a move`, async (t) => {
+    // arrange
+    const fixture = await createFixture(t, "not-grown");
+    const state = await stageDemo(fixture, "1.0.0", recordSupporting(recorded));
+    await stageComponents(path.join(marketplaceRootOf(fixture, "tools"), "demo"), offered);
+
+    // act
+    const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+    // assert
+    assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
+  });
+}
+
+test("D-10 / WCONV-01: a grown set whose candidate would drop components is declined for a clean record", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "growth-declined");
+  const state = await stageDemo(fixture, "1.0.0");
+  const root = path.join(marketplaceRootOf(fixture, "tools"), "demo");
+  await stageComponents(root, ["skills"]);
+  await stageOutputStyle(root);
+
+  // act
+  const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [],
+    holds: [],
+    declines: [
+      {
+        scope: "project",
+        marketplace: "tools",
+        plugin: "demo",
+        version: "1.0.0",
+        unsupported: ["outputStyles"],
+      },
+    ],
+  });
+});
+
+test("ENBL-08: a disabled record whose supported set grew is not a move", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "growth-disabled");
+  const state = await stageDemo(fixture, "1.0.0", { enabled: false });
+  await stageComponents(path.join(marketplaceRootOf(fixture, "tools"), "demo"), ["skills"]);
+
+  // act
+  const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+  // assert
+  assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
 });

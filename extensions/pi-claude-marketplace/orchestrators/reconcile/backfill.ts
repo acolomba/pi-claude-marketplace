@@ -21,6 +21,7 @@ import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { createReinstallOperation } from "../plugin/operations.ts";
 
 import { carriedMcpConfigNotices, classifyOrchestratorThrow } from "./apply-outcomes.ts";
+import { supportedSetGrew } from "./convergence.ts";
 import { runScopeIsolated } from "./read-pass.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
@@ -531,20 +532,4 @@ async function resolveRecordedPluginOffline(
 
     throw err;
   }
-}
-
-/**
- * D-68-03: true iff `resolved` is a STRICT superset of `recorded` (the supported
- * set grew for this plugin). A strictly larger set that still contains every
- * recorded kind means the supported-kind boundary moved in this plugin's favour;
- * an equal-or-smaller set is skipped so backfill never re-materializes (and
- * churns state.json) for a plugin whose boundary did not move.
- */
-function supportedSetGrew(recorded: readonly string[], resolved: readonly string[]): boolean {
-  if (resolved.length <= recorded.length) {
-    return false;
-  }
-
-  const resolvedSet = new Set(resolved);
-  return recorded.every((kind) => resolvedSet.has(kind));
 }

@@ -2431,6 +2431,49 @@ describe("buildReconcilePendingNotification", () => {
     });
   });
 
+  test("D-10 / WCONV-03: a growth-only move carries the components-now-supported marker", () => {
+    // arrange
+    const plans = [reconcilePlan("project")];
+    const moves = [
+      {
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
+        revisionChanged: false,
+        grew: true,
+        partial: false,
+      },
+    ] as const;
+
+    // act
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), {
+      moves,
+      holds: [],
+      declines: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "will update",
+              name: "hello",
+              from: "1.0.0",
+              to: "1.0.0",
+              reasons: ["components now supported"],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   test("D-12 / D-24: previews a range hold and a consent decline as update's warning rows after the moves", () => {
     // arrange
     const plans = [reconcilePlan("project")];
