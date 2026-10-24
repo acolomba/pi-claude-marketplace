@@ -274,6 +274,7 @@ export const PLUGIN_REINSTALL_FIXTURES: FixtureMap = {
               {
                 status: "failed",
                 name: "delta",
+                version: "1.0.0",
                 reasons: ["source missing"],
                 severity: "error",
                 needsReload: false,
@@ -298,6 +299,7 @@ export const PLUGIN_REINSTALL_FIXTURES: FixtureMap = {
               {
                 status: "failed",
                 name: "alpha",
+                version: "1.0.0",
                 reasons: ["source missing"],
                 severity: "error",
                 needsReload: false,
@@ -391,6 +393,7 @@ export const PLUGIN_REINSTALL_FIXTURES: FixtureMap = {
               {
                 status: "failed",
                 name: "delta",
+                version: "1.0.0",
                 reasons: ["source missing"],
                 severity: "error",
                 needsReload: false,

@@ -1775,14 +1775,14 @@ A plugin operation has failed.
 ● official [user]
   ● alpha v1.0.0 (reinstalled)
   ⊘ beta (skipped) {up-to-date}
-  ⊘ delta (failed) {source missing}
+  ⊘ delta v1.0.0 (failed) {source missing}
 
 Plugin reinstall: 1 failure, 2 successes
 
 /reload to pick up changes
 ```
 
-Mixed-outcome cascade. OUT-03/D-04: the plural tally counts the `failed` row as the one failure and the `reinstalled` + `(skipped) {up-to-date}` (idempotent -> info per D-01) rows as the two successes; zero-count categories (warnings) are omitted. Reload-hint fires because at least one plugin status is in the state-changing set (`reinstalled`). Severity: `error` (first-match wins; failed beats skipped/manual-recovery per D-16-11). `(skipped)` uses the `⊘` glyph per the renderer's switch (the renderer emits `⊘` for skipped/failed/unavailable/manual-recovery uniformly).
+Mixed-outcome cascade. The `failed` row's source directory is missing, so it fails before any candidate and shows the installed version (UPR-03, SRC-01). OUT-03/D-04: the plural tally counts the `failed` row as the one failure and the `reinstalled` + `(skipped) {up-to-date}` (idempotent -> info per D-01) rows as the two successes; zero-count categories (warnings) are omitted. Reload-hint fires because at least one plugin status is in the state-changing set (`reinstalled`). Severity: `error` (first-match wins; failed beats skipped/manual-recovery per D-16-11). `(skipped)` uses the `⊘` glyph per the renderer's switch (the renderer emits `⊘` for skipped/failed/unavailable/manual-recovery uniformly).
 
 ### Single marketplace, all failed (no reload-hint)
 
@@ -1792,13 +1792,13 @@ Mixed-outcome cascade. OUT-03/D-04: the plural tally counts the `failed` row as 
 Some plugin operations have failed.
 
 ● official [user]
-  ⊘ alpha (failed) {source missing}
+  ⊘ alpha v1.0.0 (failed) {source missing}
   ⊘ beta (failed) {invalid manifest}
 
 Plugin reinstall: 2 failures
 ```
 
-Failed-only cascade. OUT-03/D-04: both `failed` rows are the two failures in the plural tally; the success/warning categories are zero and omitted. No reload-hint per D-16-12 (no plugin in the state-changing set; no state-changing marketplace status). Severity: `error`.
+Failed-only cascade. `alpha`'s source directory is missing, so it shows the installed version it left in place (UPR-03, SRC-01); `beta`'s `{invalid manifest}` row shows no version. OUT-03/D-04: both `failed` rows are the two failures in the plural tally; the success/warning categories are zero and omitted. No reload-hint per D-16-12 (no plugin in the state-changing set; no state-changing marketplace status). Severity: `error`.
 
 ### Plugin became unavailable after install (manifest now declares unsupported features)
 
@@ -1830,7 +1830,7 @@ A plugin operation has failed.
 ● official [user]
   ● alpha v1.0.0 (reinstalled)
   ⊘ beta (skipped) {up-to-date}
-  ⊘ delta (failed) {source missing}
+  ⊘ delta v1.0.0 (failed) {source missing}
 
 Plugin reinstall: 1 failure, 4 successes
 
@@ -1885,7 +1885,7 @@ Some plugin operations need attention.
 Plugin reinstall: 2 warnings
 ```
 
-The reinstall resolves the entry the marketplace offers now, through the same candidate resolution `update` uses. `{no longer installable}` means the entry's source cannot be installed: the resolver refuses it, a git source has no plugin at its declared path, or the source cannot be fetched on a cache miss. `{not in manifest}` means the cached marketplace manifest no longer declares the plugin. Either way nothing is staged and the record is unchanged. Severity `warning` per row; no reload-hint.
+The reinstall resolves the entry the marketplace offers now, through the same candidate resolution `update` uses. `{no longer installable}` means only that the resolver refuses the entry: an unsupported source, a git path the clone does not hold, or a partial candidate without `--partial`. A missing source directory, or a fetch the git host refuses on a cache miss, fails the reinstall instead, with the rows of the `update-source-missing` and `update-host-failure` states under `/claude:plugin update`. `{not in manifest}` means the cached marketplace manifest no longer declares the plugin. Either way nothing is staged and the record is unchanged. Severity `warning` per row; no reload-hint.
 
 ### Reinstall whose dependency walk cannot read a record (D-18-17)
 
@@ -1984,14 +1984,15 @@ A plugin operation has failed.
 
 ● official [user]
   ● alpha v0.5.0 → v1.0.0 (updated)
-  ⊘ delta (failed) {network unreachable}
+  ⊘ delta v1.0.0 (failed) {network unreachable}
+    cause: connect ECONNREFUSED 127.0.0.1:443
 
 Plugin update: 1 failure, 1 updated
 
 /reload to pick up changes
 ```
 
-UGRM-01: a bulk `update` suppresses the per-plugin `(skipped) {up-to-date}` row for every unchanged plugin, so the `beta` up-to-date row is absent here. UGRM-02/D-04: the headline counts realized transitions only -- the one `failed` row composes ahead of the one `updated` row as `1 failure, 1 updated` (the failure category is the unchanged `countRowsBySeverity` math; the updates-only `tally` override owns the success category, rendered with the verb `updated`, which has no plural-s). The `updated` variant emits `v<from> → v<to>` (both sides carry the `v` prefix per `composeVersionArrow`). When a side is a PI-7 hash-version it is shortened to git-style `v#<7hex>`, e.g. `v#2ea95f8 → v#1c3d9a0` (SNM-35, D-23-05). A `failed` row shows the arrow from the installed to the attempted version when it failed after its candidate was derived, and the installed version alone, or none, when it failed before (UPR-03). `delta` here failed to reach its source, before any candidate, so its row has no version. Severity: `error`. Reload-hint fires because `alpha` was updated.
+UGRM-01: a bulk `update` suppresses the per-plugin `(skipped) {up-to-date}` row for every unchanged plugin, so the `beta` up-to-date row is absent here. UGRM-02/D-04: the headline counts realized transitions only -- the one `failed` row composes ahead of the one `updated` row as `1 failure, 1 updated` (the failure category is the unchanged `countRowsBySeverity` math; the updates-only `tally` override owns the success category, rendered with the verb `updated`, which has no plural-s). The `updated` variant emits `v<from> → v<to>` (both sides carry the `v` prefix per `composeVersionArrow`). When a side is a PI-7 hash-version it is shortened to git-style `v#<7hex>`, e.g. `v#2ea95f8 → v#1c3d9a0` (SNM-35, D-23-05). A `failed` row shows the arrow from the installed to the attempted version when it failed after its candidate was derived, the installed version alone when it failed before, and no version when there is no install record (UPR-03). `delta` here failed to reach its source, before any candidate, so its row shows the installed version, and the error the host connection raised rides its cause line, as on install's row for the same failure (SRC-01). Severity: `error`. Reload-hint fires because `alpha` was updated.
 
 ### Failed with rollback-partial cause chain
 
@@ -2035,14 +2036,15 @@ A plugin operation has failed.
 
 ● official [user]
   ● alpha v0.5.0 → v1.0.0 (updated)
-  ⊘ delta (failed) {network unreachable}
+  ⊘ delta v1.0.0 (failed) {network unreachable}
+    cause: connect ECONNREFUSED 127.0.0.1:443
 
 Plugin update: 1 failure, 2 updated
 
 /reload to pick up changes
 ```
 
-Two marketplace blocks. Severity: `error`. UGRM-01: the `beta` `(skipped) {up-to-date}` row is suppressed. UGRM-02/D-04: the headline counts realized transitions only -- the one `failed` row composes ahead of the two `updated` rows (`helper` + `alpha`) as `1 failure, 2 updated`. Reload-hint fires (two `updated` plugin rows). The `failed` `delta` row has no version: it failed to reach its source, before any candidate existed (UPR-03).
+Two marketplace blocks. Severity: `error`. UGRM-01: the `beta` `(skipped) {up-to-date}` row is suppressed. UGRM-02/D-04: the headline counts realized transitions only -- the one `failed` row composes ahead of the two `updated` rows (`helper` + `alpha`) as `1 failure, 2 updated`. Reload-hint fires (two `updated` plugin rows). The `failed` `delta` row shows the installed version and its cause line: it failed to reach its source, before any candidate existed (UPR-03, SRC-01).
 
 ### Same marketplace name in both scopes
 
@@ -2266,6 +2268,50 @@ Stage one's tag probe found no satisfying tag, so the candidate resolves exactly
 ```
 
 `shared-lib` is already at the highest version its installed dependents jointly admit. The row keeps its existing `{up-to-date}` brace unchanged -- no second reason token and no catalog churn -- and discloses its holders and the ranges they declared, separated by commas (INR-05), on the cause line, composed by the SAME `describeConstraint` composer stage two's held arm uses. The `already-resolved` clause shown here is earned by a pin: the tag search ran and selected the highest satisfying release. An admitting arm that established no ceiling -- no tag matched, the listing could not be read, or the entry source has no tag listing either probe reads -- discloses the declared ranges alone instead (`constrained to the combined range (<=1.5.0) -- required by "alpha@mp"`), because claiming a ceiling no search found would be untrue. This is what lets the user tell "nothing newer exists" from "nothing newer is allowed": an unconstrained up-to-date plugin renders the brace-less bytes above with no cause line, byte-identical to before. Severity stays `info` -- an up-to-date result is benign whether or not something constrains it. No reload-hint (nothing changed on disk).
+
+### Failure -- the source directory is missing (SRC-01)
+
+<!-- catalog-state: update-source-missing -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ hello v1.0.0 (failed) {source missing}
+```
+
+The marketplace entry of an installed path plugin names a directory that does not exist, so the update fails before any candidate exists and keeps the record. The row reads `{source missing}`, the token `install`, `list`, and `info` show for the same fault, and `reinstall` renders the same row through the same candidate resolution. It shows the installed version, the one left in place (UPR-03). It carries no cause line: the resolver's note names the absolute plugin path, and the reason already says what is wrong. Severity `error`; no reload-hint.
+
+### Failure -- the git host refused the clone (SRC-01)
+
+<!-- catalog-state: update-host-failure -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ alpha v1.0.0 (failed) {network unreachable}
+    cause: connect ECONNREFUSED 127.0.0.1:443
+  ⊘ beta v1.0.0 (failed) {authentication required}
+
+Plugin update: 2 failures
+```
+
+A git-source update whose clone or fetch the host refuses fails with the reason `install` reports for the same answer, from install's host ladder: `{network unreachable}` for a connection that could not be made or was dropped, `{source missing}` for a 404 or 410 or a pinned commit the clone does not hold, `{network error}` for another HTTP status, and `{authentication required}` for a credential challenge. Each row shows the installed version and keeps the thrown error as its cause line, except the authentication row, which stays bare as install's does, unless a cleanup leaked, because then its cause carries the manual-cleanup hint. Claude Code also fails an update whose source it cannot fetch. `reinstall` renders the same rows when its cache misses, and the autoupdate cascade renders them under its marketplace header. Severity `error`; no reload-hint.
+
+### Failure -- a failure no ladder classifies (SRC-01)
+
+<!-- catalog-state: update-unclassified-failure -->
+
+```text
+A plugin operation has failed.
+
+● official [user]
+  ⊘ hello v1.0.0 (failed)
+    cause: EACCES: permission denied, scandir 'plugins/hello'
+```
+
+A failure that neither the host ladder nor the resolver classifies keeps its cause and names no reason, as install's runtime row does, so the row carries no brace. It never reads `{no longer installable}`: the source has not stopped being installable, the update could not read it. `reinstall` renders the same row; it does not substitute `{unreadable}` when the failure carries a cause. Severity `error`; no reload-hint.
 
 ### Failure -- marketplace not added, explicit scope (ATTR-02 / SCOPE-01)
 
@@ -4160,12 +4206,13 @@ A plugin operation has failed.
 ● official [user] (updated)
   ● alpha v0.5.0 → v1.0.0 (updated)
   ⊘ beta (skipped) {up-to-date}
-  ⊘ delta (failed) {network unreachable}
+  ⊘ delta v1.0.0 (failed) {network unreachable}
+    cause: connect ECONNREFUSED 127.0.0.1:443
 
 /reload to pick up changes
 ```
 
-Marketplace header carries `(updated)`; plugin rows mix outcomes. Reload-hint fires (multiple state-changing rows). Severity: `error`. The `failed` `delta` row has no version: it failed to reach its source, before any candidate existed. A failed autoupdate that got as far as its candidate shows the arrow from the installed to the attempted version (UPR-03).
+Marketplace header carries `(updated)`; plugin rows mix outcomes. Reload-hint fires (multiple state-changing rows). Severity: `error`. The `failed` `delta` row shows the installed version and its cause line: it failed to reach its source, before any candidate existed (SRC-01). A failed autoupdate that got as far as its candidate shows the arrow from the installed to the attempted version (UPR-03).
 
 ### Autoupdate cascade takes the partial path -- already-degraded plugin (info)
 

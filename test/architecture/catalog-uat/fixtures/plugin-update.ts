@@ -58,6 +58,35 @@ function updateNoOpSeam<
   };
 }
 
+/**
+ * The `official` block both bulk update states render: one update, and one
+ * plugin whose source the host connection could not reach (SRC-01).
+ */
+const OFFICIAL_MIXED_BLOCK: MarketplaceRows<PluginNotificationMessage> = {
+  name: "official",
+  scope: "user",
+  plugins: [
+    {
+      status: "updated",
+      severity: "info",
+      needsReload: true,
+      name: "alpha",
+      from: "0.5.0",
+      to: "1.0.0",
+      dependencies: [],
+    },
+    {
+      status: "failed",
+      severity: "error",
+      needsReload: false,
+      name: "delta",
+      version: "1.0.0",
+      reasons: ["network unreachable"],
+      cause: new Error("connect ECONNREFUSED 127.0.0.1:443"),
+    },
+  ],
+};
+
 /** Catalog fixtures for the plugin update command surface. */
 export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
   "/claude:plugin update": {
@@ -99,30 +128,7 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
         label: "Plugin update",
         cardinality: "plural",
         tally: { verb: "updated", count: 1 },
-        marketplaces: [
-          {
-            name: "official",
-            scope: "user",
-            plugins: [
-              {
-                status: "updated",
-                severity: "info",
-                needsReload: true,
-                name: "alpha",
-                from: "0.5.0",
-                to: "1.0.0",
-                dependencies: [],
-              },
-              {
-                status: "failed",
-                severity: "error",
-                needsReload: false,
-                name: "delta",
-                reasons: ["network unreachable"],
-              },
-            ],
-          },
-        ],
+        marketplaces: [OFFICIAL_MIXED_BLOCK],
       },
     },
 
@@ -208,28 +214,7 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
               },
             ],
           },
-          {
-            name: "official",
-            scope: "user",
-            plugins: [
-              {
-                status: "updated",
-                severity: "info",
-                needsReload: true,
-                name: "alpha",
-                from: "0.5.0",
-                to: "1.0.0",
-                dependencies: [],
-              },
-              {
-                status: "failed",
-                severity: "error",
-                needsReload: false,
-                name: "delta",
-                reasons: ["network unreachable"],
-              },
-            ],
-          },
+          OFFICIAL_MIXED_BLOCK,
         ],
       },
     },
@@ -705,6 +690,97 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
                 cause: new Error(
                   'already the highest version the combined range admits (<=1.5.0) -- required by "alpha@mp"',
                 ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // SRC-01: a missing path source fails before any candidate, at the
+    // installed version, with no cause line.
+    "update-source-missing": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "hello",
+                version: "1.0.0",
+                reasons: ["source missing"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // SRC-01: install's host ladder names the refusal; the bare auth row keeps
+    // no cause line.
+    "update-host-failure": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Plugin update",
+        cardinality: "plural",
+        tally: { verb: "updated", count: 0 },
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "alpha",
+                version: "1.0.0",
+                reasons: ["network unreachable"],
+                cause: new Error("connect ECONNREFUSED 127.0.0.1:443"),
+              },
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "beta",
+                version: "1.0.0",
+                reasons: ["authentication required"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // SRC-01: a failure no ladder classifies keeps its cause and no reason.
+    "update-unclassified-failure": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "hello",
+                version: "1.0.0",
+                reasons: [],
+                cause: new Error("EACCES: permission denied, scandir 'plugins/hello'"),
               },
             ],
           },
