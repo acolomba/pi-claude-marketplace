@@ -170,7 +170,7 @@ export function classifyGitHostFailure(
  * add`, which always clones fresh: a ref or object the remote does not have,
  * like a repository the host does not have, is `source missing` too. The
  * opt-in layer keeps other callers' fallthroughs unchanged: the transport
- * ladder that update and the plugin verbs use leaves a missing ref
+ * and host ladders that update and the plugin verbs use leave a missing ref
  * unclassified.
  */
 export function classifyGitSourceAccessFailure(
