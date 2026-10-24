@@ -159,16 +159,14 @@ function stateAsPlanLeavesIt(state: ExtensionState, plan: ReconcilePlan): Extens
 }
 
 /**
- * D-68-03: true iff `resolved` is a STRICT superset of `recorded` (the supported
- * set grew for this plugin). A strictly larger set that still contains every
- * recorded kind means the supported-kind boundary moved in this plugin's favour;
- * an equal-or-smaller set is skipped so backfill never re-materializes (and
- * churns state.json) for a plugin whose boundary did not move.
+ * D-68-03 / D-10: true iff `resolved` is a STRICT superset of `recorded` (the
+ * supported set grew for this plugin). A strictly larger set that still
+ * contains every recorded kind means the supported-kind boundary moved in this
+ * plugin's favour; an equal-or-smaller set is no growth move, so `apply` never
+ * re-materializes (and churns state.json) for a plugin whose boundary did not
+ * move.
  */
-export function supportedSetGrew(
-  recorded: readonly string[],
-  resolved: readonly string[],
-): boolean {
+function supportedSetGrew(recorded: readonly string[], resolved: readonly string[]): boolean {
   if (resolved.length <= recorded.length) {
     return false;
   }

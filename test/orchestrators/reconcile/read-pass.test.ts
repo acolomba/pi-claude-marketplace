@@ -156,7 +156,6 @@ describe("readPassForScope", () => {
     assert.deepStrictEqual(readResult, {
       plan: undefined,
       invalidOutcomes: [],
-      stateExisted: false,
     });
     assert.deepStrictEqual(await retryTree(project.scopeRoot), []);
   });
@@ -184,7 +183,6 @@ describe("readPassForScope", () => {
       }),
       invalidOutcomes: [],
       state: recordedState(scope),
-      stateExisted: true,
       verdict: { ok: true, unsatisfied: [] },
     });
     assert.equal(await readFile(scope.project.stateJsonPath, "utf8"), stateBytes);
@@ -259,7 +257,6 @@ describe("readPassForScope", () => {
           cause: new Error("schema validation failed: /plugins: must be object"),
         },
       ],
-      stateExisted: true,
     });
   });
 
@@ -300,7 +297,6 @@ describe("readPassForScope", () => {
           ),
         },
       ],
-      stateExisted: true,
     });
   });
 });
@@ -620,7 +616,7 @@ describe("closeScopePass", () => {
     // act
     await closeScopePass(
       "project",
-      { plan: undefined, invalidOutcomes: [], stateExisted: false },
+      { plan: undefined, invalidOutcomes: [] },
       cwd,
       hooksRouting,
       outcomes,
@@ -684,7 +680,6 @@ describe("closeScopePass", () => {
         plan: planOf({}),
         invalidOutcomes: [],
         state: delisted,
-        stateExisted: true,
         verdict: {
           ok: false,
           declarer: "app@kit",
@@ -731,7 +726,7 @@ describe("closeScopePass", () => {
     // act
     await closeScopePass(
       "project",
-      { plan: planOf({}), invalidOutcomes: [], stateExisted: true },
+      { plan: planOf({}), invalidOutcomes: [] },
       scope.cwd,
       hooksRouting,
       outcomes,

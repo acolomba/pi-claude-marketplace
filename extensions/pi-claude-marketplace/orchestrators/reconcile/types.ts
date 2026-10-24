@@ -423,22 +423,11 @@ export interface ScopeReadResult {
   /** CFG-03 + state-load failure rows surfaced from the read pass. */
   readonly invalidOutcomes: readonly PerEntryOutcome[];
   /**
-   * BFILL-02: the read-pass state snapshot, carried out so the load-time
-   * backfill gate can read its persisted `lastReconciledExtensionVersion`
-   * stamp + scan every plugin the scope records (WCONV-01). Undefined for a
-   * pristine scope (no state.json) -- backfill MUST NOT create state.json there
-   * (WR-05).
+   * DLS-01: the read-pass state snapshot, carried out so the closing step can
+   * report a recorded plugin its marketplace no longer lists. Undefined for a
+   * pristine scope (no state.json) and for a CFG-03 abort.
    */
   readonly state?: ExtensionState;
-  /**
-   * WR-01: whether state.json existed ON DISK at read time. A config-present /
-   * state.json-absent scope loads DEFAULT_STATE inside the read pass (so
-   * `state` is defined) even though no state.json exists; the backfill stamp
-   * must NOT bring an unsolicited state.json into existence purely to record
-   * the version when there is nothing to promote (WR-05). False for the
-   * pristine arm (no `state` carried anyway).
-   */
-  readonly stateExisted: boolean;
   /**
    * LOAD-01: the satisfaction verdict computed inside the locked read pass,
    * over the same snapshot the planner saw. Carried out so the apply pass can

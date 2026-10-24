@@ -5,12 +5,9 @@
 // this owner binds those contracts to the concrete Node implementations, so a
 // command boundary asks for an operation rather than assembling one.
 //
-// Reinstall is bound in two places. `reinstall-flow.ts`'s bulk
-// `createNodeReinstallPlugins`, which `edge/register.ts` calls for
-// `/claude:plugin reinstall`, and `createReinstallOperation` below, which
-// `reconcile/backfill.ts` takes for the single-plugin form, both call the same
-// two-argument `createReinstallPlugin(hooksRouting, completionCache)`, so
-// neither binding carries anything the other lacks.
+// Reinstall is bound once, by `createReinstallOperation` below.
+// `edge/register.ts` hands that single-plugin operation to `reinstall-flow.ts`'s
+// bulk `createNodeReinstallPlugins` for `/claude:plugin reinstall`.
 //
 // `apply`'s catalog move is bound by `createConvergeOperation` below, from the
 // same update operations factory the extension entry point binds for `update`

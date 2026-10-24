@@ -31,14 +31,11 @@
 // fact: it is what would keep `surfaceReinstallDiscoveryWarnings` from
 // double-rendering, not the reason that arm is silent.
 //
-// `reconcile/backfill.ts` is the other production caller -- `render: "none"`
-// too, reached from `resources_discover` -> `applyReconcile`. It consumes the
-// outcome without rendering EITHER half: `PluginBackfilledOutcome` carries no
-// warnings field, and `reconcile/apply.ts::surfacePostCommitWarnings` renders
-// only the `plugin-installed`/`plugin-disabled` arms. So a reconcile-driven
-// re-materialize of a colliding plugin reports nothing while a
-// reconcile-driven INSTALL of the same plugin reports it. Tracked as part of
-// BACKLOG UPCASC-01 (decide the cascade rendering once).
+// The user-invoked reinstall is the only production path. Its single-plugin
+// operation is the one `operations.ts::createReinstallOperation` binds, and
+// `edge/register.ts` hands it to `createNodeReinstallPlugins`. No reconcile
+// step reinstalls anything: `apply` moves a plugin through the update runner
+// instead (D-26).
 
 import { rm } from "node:fs/promises";
 
@@ -128,8 +125,8 @@ export interface ReinstallPluginOptions {
   /**
    * LAYER-04 / D-MF-03: the command named this plugin
    * (`<plugin>@<marketplace>`), so it acts on its target layer and is refused
-   * when only the other layer declares the plugin. A nameless form, the
-   * reconcile backfill, and any other caller that omits it are never refused.
+   * when only the other layer declares the plugin. A nameless form, and any
+   * other caller that omits it, is never refused.
    */
   readonly named?: boolean;
   readonly credentialOps?: CredentialOps;
@@ -247,12 +244,8 @@ export function createReinstallPlugin(
   return (options) => reinstallPluginWith(REINSTALL_FLOW_OWNERS, bindings, options);
 }
 
-/** Binds direct and bulk production reinstall to one lifecycle routing owner. */
-export function createNodeReinstallPlugins(
-  hooksRouting: ReinstallHooksRouting,
-  completionCache: CompletionCache,
-): ReinstallPluginsFn {
-  const reinstallPlugin = createReinstallPlugin(hooksRouting, completionCache);
+/** Binds the bulk reinstall around the single-plugin operation it drives per target. */
+export function createNodeReinstallPlugins(reinstallPlugin: ReinstallPluginFn): ReinstallPluginsFn {
   return (options) => reinstallPluginsWith(REINSTALL_FLOW_OWNERS, options, reinstallPlugin);
 }
 

@@ -104,8 +104,10 @@ function reinstallPlugin(opts: ReinstallPluginOptions) {
 
 function reinstallPlugins(opts: ReinstallPluginsOptions) {
   return createNodeReinstallPlugins(
-    createHooksRouting(createHooksRuntime(), { readHooksJson }),
-    createCompletionCache(),
+    createReinstallPlugin(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      createCompletionCache(),
+    ),
   )(opts);
 }
 
@@ -129,7 +131,7 @@ test("owns the injected single-plugin and the bulk production reinstall factorie
 
   // act
   const injected = createReinstallPlugin(hooksRouting, completionCache);
-  const bulk = createNodeReinstallPlugins(hooksRouting, completionCache);
+  const bulk = createNodeReinstallPlugins(injected);
 
   // assert
   assert.strictEqual(typeof injected, "function");

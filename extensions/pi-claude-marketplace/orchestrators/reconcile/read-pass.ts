@@ -124,7 +124,7 @@ export async function readPassForScope(
   if (!stateExists && !configExists) {
     // Pristine scope: nothing recorded, nothing declared -- no-op without
     // touching the disk.
-    return { plan: undefined, invalidOutcomes: [], stateExisted: false };
+    return { plan: undefined, invalidOutcomes: [] };
   }
 
   return withLockedStateTransaction(
@@ -189,7 +189,7 @@ export async function readPassForScope(
       // never also reports a missing marketplace.
       invalidOutcomes.push(...layerMarketplaceGapOutcomes(outcome, loc, scope));
       if (invalidOutcomes.length > 0) {
-        return { plan: undefined, invalidOutcomes, stateExisted: stateExists };
+        return { plan: undefined, invalidOutcomes };
       }
 
       // (4) LOAD-01 / D-06-04: decide which recorded plugin has a declaration
@@ -215,10 +215,10 @@ export async function readPassForScope(
       // (5) Plan against the merged config + current state + the verdict.
       // Pure -- no I/O.
       const plan = planReconcile(outcome.merged, state, scope, verdict);
-      // BFILL-02: carry the loaded state snapshot out so applyBackfillForScope can
-      // read its stamp + scan every plugin it records (WCONV-01). planReconcile is
-      // pure, so the snapshot is the unmutated read-pass state.
-      return { plan, invalidOutcomes: [], state, stateExisted: stateExists, verdict };
+      // DLS-01: carry the loaded state snapshot out so the closing step can
+      // report a recorded plugin its marketplace no longer lists. planReconcile
+      // is pure, so the snapshot is the unmutated read-pass state.
+      return { plan, invalidOutcomes: [], state, verdict };
     },
     { loadState: reader.loadState },
   );

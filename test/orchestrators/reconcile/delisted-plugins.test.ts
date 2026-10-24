@@ -217,7 +217,6 @@ function unreadableDeclarerRead(declarer: string): ScopeReadResult {
   return {
     plan: undefined,
     invalidOutcomes: [],
-    stateExisted: true,
     verdict: {
       ok: false,
       declarer,
@@ -238,7 +237,6 @@ describe("reportUnreadableDeclarer", () => {
       {
         plan: undefined,
         invalidOutcomes: [],
-        stateExisted: true,
         verdict: { ok: true, unsatisfied: [] },
       },
       outcomes,
@@ -253,11 +251,7 @@ describe("reportUnreadableDeclarer", () => {
     const outcomes: PerEntryOutcome[] = [];
 
     // act
-    reportUnreadableDeclarer(
-      "project",
-      { plan: undefined, invalidOutcomes: [], stateExisted: false },
-      outcomes,
-    );
+    reportUnreadableDeclarer("project", { plan: undefined, invalidOutcomes: [] }, outcomes);
 
     // assert
     assert.deepStrictEqual(outcomes, []);

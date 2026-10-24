@@ -37,6 +37,7 @@
 import { randomUUID } from "node:crypto";
 
 import { makeLocationsResolver } from "../orchestrators/edge-deps.ts";
+import { createReinstallOperation } from "../orchestrators/plugin/operations.ts";
 import { createNodeReinstallPlugins } from "../orchestrators/plugin/reinstall-flow.ts";
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
@@ -104,7 +105,9 @@ export function registerClaudePluginCommand(
 ): void {
   const createInvocationId = options.createInvocationId ?? randomUUID;
   const createRecoveryId = options.createRecoveryId ?? randomUUID;
-  const reinstallPlugins = createNodeReinstallPlugins(hooksRouting, deps.completionCache);
+  const reinstallPlugins = createNodeReinstallPlugins(
+    createReinstallOperation(hooksRouting, deps.completionCache),
+  );
   const install = makeInstallHandler(hooksRouting, deps.completionCache);
   const uninstall = makeUninstallHandler(hooksRouting, deps.completionCache);
   const prune = makePruneHandler(hooksRouting, deps.completionCache);

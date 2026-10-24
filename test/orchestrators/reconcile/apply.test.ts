@@ -81,7 +81,6 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { StateLockHeldError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
@@ -571,7 +570,6 @@ async function seedLayerScope(
   await writeUnder(project.localConfigJsonPath, layers.local(marketplaceRoot));
   await seedState(project, {
     schemaVersion: 3,
-    lastReconciledExtensionVersion: EXTENSION_VERSION,
     marketplaces: {
       mp: marketplaceRecord({
         cwd,
@@ -740,7 +738,6 @@ async function seedCommentedAdapterScope(
   );
   await seedState(project, {
     schemaVersion: 3,
-    lastReconciledExtensionVersion: EXTENSION_VERSION,
     marketplaces: {
       mp: marketplaceRecord({
         cwd,
@@ -824,7 +821,6 @@ describe("applyReconcile", () => {
     const { cwd, project } = await createHermeticScopes(t, "invalid-base");
     const seeded: ExtensionState = {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         "should-stay": marketplaceRecord({
           cwd,
@@ -921,7 +917,6 @@ describe("applyReconcile", () => {
     await writeUnder(user.baseConfigJsonPath, configBytes({ marketplaces: {} }));
     await seedState(user, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         "user-mp": marketplaceRecord({
           cwd,
@@ -986,7 +981,6 @@ describe("applyReconcile", () => {
       );
       await seedState(project, {
         schemaVersion: 3,
-        lastReconciledExtensionVersion: EXTENSION_VERSION,
         marketplaces: {},
       });
       const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -1040,7 +1034,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     const unreachable = new Error("connect ENETUNREACH");
@@ -1084,7 +1077,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {} }));
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1146,7 +1138,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {} }));
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1226,7 +1217,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {} }));
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1291,7 +1281,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1370,7 +1359,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1439,7 +1427,6 @@ describe("applyReconcile", () => {
     });
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1458,7 +1445,6 @@ describe("applyReconcile", () => {
     });
     const competingState: ExtensionState = {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1533,7 +1519,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1594,7 +1579,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1657,7 +1641,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, declaration);
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1821,7 +1804,6 @@ describe("applyReconcile", () => {
     });
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1941,7 +1923,6 @@ describe("applyReconcile", () => {
       );
       await seedState(project, {
         schemaVersion: 3,
-        lastReconciledExtensionVersion: EXTENSION_VERSION,
         marketplaces: {
           mp: marketplaceRecord({
             cwd,
@@ -2017,7 +1998,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, declaration);
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2083,7 +2063,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, declaration);
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2136,7 +2115,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2211,7 +2189,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, declaration);
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2272,7 +2249,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, declaration);
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         "canonical-name": marketplaceRecord({
           cwd,
@@ -2325,7 +2301,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, declaration);
     const initialState = {
       schemaVersion: 3 as const,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         zeta: marketplaceRecord({
           cwd,
@@ -2385,7 +2360,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2450,7 +2424,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2511,7 +2484,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2564,7 +2536,6 @@ describe("applyReconcile", () => {
       );
       await seedState(project, {
         schemaVersion: 3,
-        lastReconciledExtensionVersion: EXTENSION_VERSION,
         marketplaces: {
           mp: marketplaceRecord({
             cwd,
@@ -2681,7 +2652,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2775,7 +2745,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2832,7 +2801,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2902,7 +2870,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2980,7 +2947,6 @@ describe("applyReconcile", () => {
       );
       await seedState(project, {
         schemaVersion: 3,
-        lastReconciledExtensionVersion: EXTENSION_VERSION,
         marketplaces: {
           mp: marketplaceRecord({
             cwd,
@@ -3037,7 +3003,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, declaration);
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -3135,7 +3100,6 @@ describe("applyReconcile", () => {
       );
       await seedState(project, {
         schemaVersion: 3,
-        lastReconciledExtensionVersion: EXTENSION_VERSION,
         marketplaces: {
           mp: marketplaceRecord({
             cwd,
@@ -3187,7 +3151,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -3239,7 +3202,6 @@ describe("applyReconcile", () => {
     );
     const seeded: ExtensionState = {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -3298,7 +3260,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -3377,7 +3338,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -3449,13 +3409,11 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, projectConfig);
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     await writeUnder(user.baseConfigJsonPath, userConfig);
     await seedState(user, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     await writeUnder(path.join(project.scopeRoot, "unrelated.txt"), "project bytes\n");
@@ -3488,7 +3446,6 @@ describe("applyReconcile", () => {
     assert.equal(userUpdatedAt >= startedAt && userUpdatedAt <= completedAt, true);
     assert.deepStrictEqual(projectState, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         "p-mp": {
           ...marketplaceRecord({
@@ -3506,7 +3463,6 @@ describe("applyReconcile", () => {
     });
     assert.deepStrictEqual(userState, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         "u-mp": {
           ...marketplaceRecord({
@@ -3558,7 +3514,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     await writeUnder(
@@ -3567,7 +3522,6 @@ describe("applyReconcile", () => {
     );
     await seedState(user, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     const { gitOps, clonedUrls } = createRemoteGitOps({
@@ -3618,7 +3572,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -3657,7 +3610,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     await writeUnder(
@@ -3666,7 +3618,6 @@ describe("applyReconcile", () => {
     );
     const userState: ExtensionState = {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     };
     await seedState(user, userState);
@@ -3701,7 +3652,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, declaration);
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     const stateBytes = await readFile(project.stateJsonPath, "utf8");
@@ -3729,7 +3679,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("BFILL-01: one cascade carries a backfill promotion row beside a fresh install row and ends with the reload trailer", async (t) => {
+  test("BFILL-01 / D-13: one cascade carries a growth row beside a fresh install row, ends with the reload trailer and leaves the old stamp as written", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "promotion");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -3745,7 +3695,7 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      // Older than the running version, so the backfill gate opens.
+      // D-13: an old stamp gates nothing and stays as written.
       lastReconciledExtensionVersion: "0.0.0",
       marketplaces: {
         mp: marketplaceRecord({
@@ -3788,10 +3738,7 @@ describe("applyReconcile", () => {
           "/reload to pick up changes",
       },
     ]);
-    assert.equal(
-      (await loadState(project.extensionRoot)).lastReconciledExtensionVersion,
-      EXTENSION_VERSION,
-    );
+    assert.equal((await loadState(project.extensionRoot)).lastReconciledExtensionVersion, "0.0.0");
     assert.deepStrictEqual((await recordFor(project, "mp", "promoted"))?.resources.prompts, [
       "promoted:deploy",
     ]);
@@ -3851,7 +3798,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -3901,7 +3847,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {} }));
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -3952,7 +3897,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4028,7 +3972,6 @@ describe("applyReconcile", () => {
     await writeUnder(user.baseConfigJsonPath, configBytes({ marketplaces: {} }));
     const projectRecorded: ExtensionState = {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4042,7 +3985,6 @@ describe("applyReconcile", () => {
     };
     const userRecorded: ExtensionState = {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4167,7 +4109,6 @@ describe("applyReconcile", () => {
     );
     const competingState: ExtensionState = {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4224,7 +4165,6 @@ describe("applyReconcile", () => {
     const declaration = await readFile(project.baseConfigJsonPath, "utf8");
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4293,7 +4233,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4376,7 +4315,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4429,7 +4367,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4483,7 +4420,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4551,7 +4487,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4637,7 +4572,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4723,7 +4657,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4811,7 +4744,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4868,7 +4800,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4927,7 +4858,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5000,7 +4930,6 @@ describe("applyReconcile", () => {
     const declaration = await readFile(project.baseConfigJsonPath, "utf8");
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5073,7 +5002,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5138,7 +5066,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5227,7 +5154,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5289,7 +5215,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5363,7 +5288,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5450,7 +5374,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5546,7 +5469,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5604,7 +5526,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5671,7 +5592,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5745,7 +5665,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5822,7 +5741,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5890,7 +5808,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5965,7 +5882,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -6047,7 +5963,6 @@ describe("applyReconcile", () => {
       );
       await seedState(project, {
         schemaVersion: 3,
-        lastReconciledExtensionVersion: EXTENSION_VERSION,
         marketplaces: {
           alpha: marketplaceRecord({
             cwd,
@@ -6173,7 +6088,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         alpha: marketplaceRecord({
           cwd,
@@ -6280,7 +6194,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -6355,7 +6268,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -6424,7 +6336,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -6952,7 +6863,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -7036,7 +6946,6 @@ describe("applyReconcile", () => {
     const { cwd, project } = await createHermeticScopes(t, "mcp-move-invalid-config");
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     await writeUnder(project.baseConfigJsonPath, "{");
@@ -7131,7 +7040,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -7196,7 +7104,6 @@ describe("applyReconcile", () => {
     const { cwd, project } = await createHermeticScopes(t, "mcp-move-alone");
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {} }));
@@ -7322,7 +7229,6 @@ async function seedConvergenceScope(
   );
   await seedState(project, {
     schemaVersion: 3,
-    lastReconciledExtensionVersion: EXTENSION_VERSION,
     marketplaces: {
       mp: marketplaceRecord({
         cwd,
@@ -7699,6 +7605,123 @@ describe("applyReconcile catalog convergence", () => {
     assert.deepStrictEqual((await recordFor(project, "mp", "demo"))?.compatibility.supported, [
       "skills",
     ]);
+    verifyBoundary();
+  });
+
+  test("SURF-05 / WARN-01: a growth move names the orphan rewake and the malformed skill its re-materialize produced", async (t) => {
+    // arrange
+    const { cwd } = await seedConvergenceScope(t, "converge-grown-signals", {
+      trees: { demo: { skill: "malformed", orphanRewakeHooks: true } },
+      supported: { demo: ["skills"] },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● demo v1.0.0 (installed) {components now supported, orphan rewake, malformed skill}\n" +
+          "\n" +
+          "Reconcile: 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "warning",
+      },
+    ]);
+    verifyBoundary();
+  });
+
+  test("RECON-04 / ENBL-08: a plugin the same apply disables is not re-materialized for its grown set", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "converge-grown-toggled",
+      {
+        trees: { demo: { skill: "clean", command: true } },
+        supported: { demo: ["skills"] },
+      },
+    );
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "demo@mp": { enabled: false } },
+      }),
+    );
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ◍ demo v1.0.0 (disabled)\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual((await recordFor(project, "mp", "demo"))?.compatibility.supported, [
+      "skills",
+    ]);
+    verifyBoundary();
+  });
+
+  test("AFILE-04: a growth move that rewrites a commented mcp-adapter.json shows the notice after the cascade", async (t) => {
+    // arrange
+    const { cwd } = await seedCommentedAdapterScope(t, "afile-growth", {
+      trees: { alfa: { skill: "clean", mcpServer: true } },
+      declared: { "alfa@mp": {} },
+      recorded: { alfa: { mcpServers: ["alfa-echo"] } },
+      owners: ["alfa"],
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● alfa v1.0.0 (installed) {components now supported, requires pi-mcp-adapter}\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+      COMMENTS_REMOVED_NOTICE,
+    ]);
+    verifyBoundary();
+  });
+
+  test("WR-05: an apply over a declared scope that records nothing brings no state.json into existence", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "converge-no-state");
+    await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {} }));
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
+    assert.equal(await pathExists(project.stateJsonPath), false);
     verifyBoundary();
   });
 });

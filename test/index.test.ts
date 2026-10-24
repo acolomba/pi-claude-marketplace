@@ -50,7 +50,6 @@ import { It, mock, verify, when } from "strong-mock";
 import claudeMarketplaceExtension from "../extensions/pi-claude-marketplace/index.ts";
 import * as entryModule from "../extensions/pi-claude-marketplace/index.ts";
 import { loadState } from "../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { EXTENSION_VERSION } from "../extensions/pi-claude-marketplace/shared/extension-version.ts";
 
 import {
   buildInstalledPluginRecord,
@@ -772,22 +771,8 @@ async function seedPrompt(root: string, fileName: string): Promise<string> {
   return promptPath;
 }
 
-/**
- * Record one enabled project-scope plugin whose binaries live under `root`.
- *
- * The version stamp is part of the seed, not decoration: an absent
- * `lastReconciledExtensionVersion` opens the load-time backfill gate, and the
- * scan that follows re-resolves this record against a `marketplaceRoot` no case
- * here creates. Most cases here are about PATH plumbing over a steady-state
- * scope, so the default seed describes one: a scope already reconciled at the
- * running version. `stamped: false` leaves the gate OPEN, which is what the
- * WCONV-01 convergence case below needs.
- */
-async function seedEnabledPlugin(
-  cwd: string,
-  resolvedSource: string,
-  opts: { readonly stamped?: boolean } = {},
-): Promise<void> {
+/** Record one enabled project-scope plugin whose binaries live under `root`. */
+async function seedEnabledPlugin(cwd: string, resolvedSource: string): Promise<void> {
   const extensionRoot = path.join(cwd, ".pi", "pi-claude-marketplace");
   const marketplaceRoot = path.join(cwd, "mp-src");
   await mkdir(extensionRoot, { recursive: true });
@@ -807,7 +792,6 @@ async function seedEnabledPlugin(
     path.join(extensionRoot, "state.json"),
     JSON.stringify({
       schemaVersion: 3,
-      ...(opts.stamped === false ? {} : { lastReconciledExtensionVersion: EXTENSION_VERSION }),
       marketplaces: {
         mp: {
           name: "mp",
@@ -969,7 +953,7 @@ test("EXPORT-02: the entry module publishes exactly its default and nothing else
 test("unsupported loading preserves disk and environment while discovering existing resources", async (t) => {
   // arrange
   const scope = await createHermeticScope(t, "unsupported-load");
-  await seedEnabledPlugin(scope.cwd, path.join(scope.cwd, "plugin"), { stamped: false });
+  await seedEnabledPlugin(scope.cwd, path.join(scope.cwd, "plugin"));
   const promptPath = await seedPrompt(scope.cwd, "existing.md");
   const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
   const stateBytes = await readFile(statePath, "utf8");
@@ -1607,7 +1591,6 @@ test(
           },
         },
       },
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
     };
     const expectedConfig = {
       schemaVersion: 1,
@@ -1686,13 +1669,12 @@ test("reports the scope whose install state it cannot read once as a reconcile f
 // two lines the reconcile stage emits.
 
 test("APL-03: a load reports nothing and writes nothing over a recorded plugin whose source tree is absent (WCONV-01)", async (t) => {
-  // arrange -- the seed the PATH cases use with the version stamp left OUT, so
-  // a backfill gate would be open, and with the plugin's source tree never
-  // created. A load runs no backfill (D-04), so no stamp lands and no row
-  // reaches the user on a reload they did not initiate.
-  const scope = await createHermeticScope(t, "backfill-absent-source");
+  // arrange -- the seed the PATH cases use, with the plugin's source tree never
+  // created. A load moves nothing (D-04), so no row reaches the user on a
+  // reload they did not initiate.
+  const scope = await createHermeticScope(t, "absent-source");
   const resolvedSource = path.join(scope.cwd, "vendored-plugin");
-  await seedEnabledPlugin(scope.cwd, resolvedSource, { stamped: false });
+  await seedEnabledPlugin(scope.cwd, resolvedSource);
   const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
   const stateBytes = await readFile(statePath, "utf8");
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
@@ -1914,7 +1896,6 @@ test("attempts every skipped-scope PATH warning when every host notification thr
   const invalidStateBytes = JSON.stringify({ schemaVersion: 99, marketplaces: {} });
   const validStateBytes = JSON.stringify({
     schemaVersion: 2,
-    lastReconciledExtensionVersion: EXTENSION_VERSION,
     marketplaces: {},
   });
   const staleUserBin = path.join(scope.home, "stale-user", "bin");

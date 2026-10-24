@@ -103,7 +103,6 @@ import {
   dependencyDisabledOutcome,
   sourceMismatchOutcomes,
 } from "./apply-outcomes.ts";
-import { applyBackfillForScopeIsolated } from "./backfill.ts";
 import { planConvergence } from "./convergence.ts";
 import { blockedMoveOutcomes, convergedMoveOutcomes } from "./notify.ts";
 import {
@@ -698,7 +697,7 @@ async function refreshTogglePlan(
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<ReconcilePlan> {
-  let fresh: ScopeReadResult = { plan: undefined, invalidOutcomes: [], stateExisted: true };
+  let fresh: ScopeReadResult = { plan: undefined, invalidOutcomes: [] };
   await runScopeIsolated(plan.scope, outcomes, async () => {
     fresh = await readPassForScope(reader, plan.scope, opts.cwd);
   });
@@ -1063,12 +1062,11 @@ async function applyPlan(
  * state file that turned unreadable after the read pass is the apply steps'
  * to report, and the next `apply`'s read pass stops on it (NFR-3).
  *
- * Each revision move runs through the update runner's converge entry, in the
- * planner's order (D-26). The runner answers every failure as a `failed`
- * outcome, so one failed move never stops the next (D-13); an
- * `InvalidGitHubBaseUrlError` still ends the pass (GHB-03). A growth-only move
- * is left to the backfill, whose RECON-04 dedupe skips every plugin this step
- * reported.
+ * Each move runs through the update runner's converge entry, in the planner's
+ * order (D-26). A growth-only move re-materializes the recorded revision
+ * (D-10, D-25). The runner answers every failure as a `failed` outcome, so one
+ * failed move never stops the next (D-13); an `InvalidGitHubBaseUrlError`
+ * still ends the pass (GHB-03).
  */
 async function convergeScope(
   reader: ReconcileStateReader,
@@ -1181,22 +1179,12 @@ async function applyReconcileWithReader(
     if (readResult.plan !== undefined) {
       // eslint-disable-next-line no-await-in-loop -- each scope's apply edits shared hooks routing
       await applyPlan(reader, opts, readResult.plan, outcomes);
-      // APL-02 / D-08: converge the scope on its catalog after its plan, and
-      // before the backfill, whose dedupe then skips every plugin moved here.
+      // APL-02 / D-08: converge the scope on its catalog after its plan.
       // eslint-disable-next-line no-await-in-loop -- each scope's moves edit shared hooks routing
       await convergeScope(reader, opts, scope, outcomes);
     }
 
-    // BFILL-01 / BFILL-02 / D-68-03: load-time backfill sibling step. Runs in
-    // the no-outer-lock apply region (CR-01) after applyPlan so re-materialized
-    // promotions ride the same single cascade (RECON-04). Gated on the version
-    // stamp; stamps the running version whenever the gate opened. WR-01: a
-    // transient lock-held / EACCES throw is coerced to a structured row so it
-    // never aborts the cascade.
-    // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing
-    await applyBackfillForScopeIsolated(opts, scope, readResult, outcomes);
-
-    // REC-05 / DLS-01 / DISP-02: after the backfill, so a backfill failure for
+    // REC-05 / DLS-01 / DISP-02: after the convergence, so a failed move for
     // the same plugin suppresses the unreadable-declarer row as an apply-pass
     // failure does; the routing rebuild reflects the post-reconcile state.
     // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing

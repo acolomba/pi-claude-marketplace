@@ -1050,6 +1050,31 @@ test("D-10 / WCONV-01: a grown set whose candidate would drop components is decl
   });
 });
 
+test("DLS-01: a delisted record whose installed copy reads does not stop another plugin's growth move", async (t) => {
+  // arrange: `gone` is delisted, and its installed copy declares a range demo's recorded version meets
+  const fixture = await createFixture(t, "growth-beside-delisted");
+  const mp = await stageMarketplace(fixture, "tools", [{ name: "demo", source: "./demo" }]);
+  const demoRoot = path.join(mp.marketplaceRoot, "demo");
+  const goneRoot = path.join(mp.marketplaceRoot, "gone");
+  await stagePlugin(demoRoot, "1.0.0");
+  await stageComponents(demoRoot, ["skills"]);
+  await stagePlugin(goneRoot, "1.0.0", [{ name: "demo", version: "^1.0.0" }]);
+  const state = stateOf({
+    ...mp,
+    plugins: { demo: pluginRecord(demoRoot), gone: pluginRecord(goneRoot) },
+  });
+
+  // act
+  const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [demoMove({ toVersion: "1.0.0", revisionChanged: false, grew: true })],
+    holds: [],
+    declines: [],
+  });
+});
+
 test("ENBL-08: a disabled record whose supported set grew is not a move", async (t) => {
   // arrange
   const fixture = await createFixture(t, "growth-disabled");
