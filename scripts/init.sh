@@ -50,3 +50,6 @@ npx fallow agent install --harness claude --harness codex --without hooks --with
 
 # normalize AGENTS.md
 pre-commit run --files AGENTS.md || true
+
+# init-session.sh keys on this marker
+touch node_modules/.init-done
