@@ -178,6 +178,60 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
         ],
       },
     },
+    // D-12 / D-23: a catalog move a dependent's range does not admit stays put
+    // with update's range-hold row. No tag is listed, so the catalog version
+    // alone is judged. A held move changes nothing, so it asks for no apply.
+    "plugin-pending-update-held": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                severity: "warning",
+                needsReload: false,
+                name: "lib",
+                version: "1.0.0",
+                reasons: ["dependents constrain"],
+                cause: new Error(
+                  'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"',
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+    // D-12 / D-24: a clean record whose catalog candidate would drop components
+    // stays put with update's decline row; the hint names the per-plugin
+    // consent command, because `apply` and `pending` take no `--partial`.
+    "plugin-pending-update-partial-consent": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "partially-upgradable",
+                severity: "warning",
+                needsReload: false,
+                name: "demo",
+                version: "1.0.0",
+                reasons: ["unsupported component"],
+                catalogHint: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
     "source-mismatch": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
