@@ -32,7 +32,13 @@ export interface ReinstallOutcomeTarget {
 
 export interface RecordSkippedOutcomeInput extends ReinstallOutcomeTarget {
   readonly partition: "skipped";
-  readonly reason: "not installed" | "already disabled";
+  readonly reason: "already disabled";
+}
+
+/** UPR-04: a target the scope does not record fails, as uninstall's does. */
+export interface RecordNotInstalledOutcomeInput extends ReinstallOutcomeTarget {
+  readonly partition: "failed";
+  readonly reason: "not installed";
 }
 
 export interface RecordFailedOutcomeInput extends ReinstallOutcomeTarget {
@@ -42,17 +48,20 @@ export interface RecordFailedOutcomeInput extends ReinstallOutcomeTarget {
   readonly move?: RevisionMove;
 }
 
-export type RecordReinstallOutcomeInput = RecordSkippedOutcomeInput | RecordFailedOutcomeInput;
+export type RecordReinstallOutcomeInput =
+  RecordSkippedOutcomeInput | RecordNotInstalledOutcomeInput | RecordFailedOutcomeInput;
 
 /** Compose an exact skipped or failed reinstall outcome. */
 export function recordReinstallOutcome(input: RecordSkippedOutcomeInput): ReinstallSkippedOutcome;
-export function recordReinstallOutcome(input: RecordFailedOutcomeInput): ReinstallFailedOutcome;
+export function recordReinstallOutcome(
+  input: RecordNotInstalledOutcomeInput | RecordFailedOutcomeInput,
+): ReinstallFailedOutcome;
 export function recordReinstallOutcome(input: RecordReinstallOutcomeInput): ReinstallPluginOutcome {
   switch (input.partition) {
     case "skipped":
       return skippedOutcome(input);
     case "failed":
-      return failedOutcome(input);
+      return "error" in input ? failedOutcome(input) : notInstalledOutcome(input);
   }
 }
 
@@ -249,6 +258,17 @@ function skippedOutcome(input: RecordSkippedOutcomeInput): ReinstallSkippedOutco
     marketplace: input.marketplace,
     scope: input.scope,
     notes: [input.reason],
+  };
+}
+
+function notInstalledOutcome(input: RecordNotInstalledOutcomeInput): ReinstallFailedOutcome {
+  return {
+    partition: "failed",
+    name: input.name,
+    marketplace: input.marketplace,
+    scope: input.scope,
+    notes: [input.reason],
+    reasons: [input.reason],
   };
 }
 

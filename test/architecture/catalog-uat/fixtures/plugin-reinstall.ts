@@ -564,10 +564,9 @@ export const PLUGIN_REINSTALL_FIXTURES: FixtureMap = {
       },
     },
 
-    // CR-02 / D-01: standalone reinstall of a present marketplace whose plugin
-    // record is absent -> the `(skipped) {not installed}` row stamps `error`
-    // (absent-target across the board), single cardinality so no tally. Mirrors
-    // the byte form the `reinstallPlugin` standalone path now emits.
+    // CR-02 / UPR-04: standalone reinstall of a present marketplace whose plugin
+    // record is absent -> the `(failed) {not installed}` row at `error`, as
+    // uninstall's is; single cardinality so no tally.
     "standalone-not-installed-error": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
@@ -580,7 +579,7 @@ export const PLUGIN_REINSTALL_FIXTURES: FixtureMap = {
             scope: "project",
             plugins: [
               {
-                status: "skipped",
+                status: "failed",
                 name: "hello",
                 reasons: ["not installed"],
                 severity: "error",

@@ -1,7 +1,7 @@
 // orchestrators/plugin/reinstall-flow.ts
 //
 // PRL-02..PRL-15 reinstall, single-plugin and bulk. This module owns target
-// selection, the `not installed` / `already disabled` skips, the named-layer
+// selection, the `not installed` failure, the `already disabled` skip, the named-layer
 // refusal, the post-success maintenance, and messaging. The materialization
 // is the shared runner `materialize-latest.ts` that `update` runs too, under
 // reinstall's policy (UPR-01, D-18-02..D-18-10). So a reinstall installs the
@@ -381,8 +381,10 @@ async function runReinstall(
   const state = await (opts.stateTransaction?.loadState ?? loadState)(locations.extensionRoot);
   const record = ownValue(ownValue(state.marketplaces, opts.marketplace)?.plugins, opts.plugin);
   if (record === undefined) {
-    return skippedBeforeRunner(
-      owners.recordReinstallOutcome({ partition: "skipped", ...target, reason: "not installed" }),
+    // UPR-04: a target the scope does not record fails as not installed, as
+    // uninstall's does; nothing is changed.
+    return reachedBeforeRunner(
+      owners.recordReinstallOutcome({ partition: "failed", ...target, reason: "not installed" }),
     );
   }
 
@@ -396,7 +398,7 @@ async function runReinstall(
   // inventory while disabled, so a populated inventory is not evidence that
   // anything is on disk and must not be read as one.
   if (isRecordedButDisabled(record)) {
-    return skippedBeforeRunner(
+    return reachedBeforeRunner(
       owners.recordReinstallOutcome({
         partition: "skipped",
         ...target,
@@ -441,7 +443,8 @@ async function runReinstall(
   };
 }
 
-function skippedBeforeRunner(outcome: ReinstallPluginOutcome): ReinstallReached {
+/** An outcome reinstall reached before the shared runner, which stages nothing. */
+function reachedBeforeRunner(outcome: ReinstallPluginOutcome): ReinstallReached {
   return { outcome, discoveryWarnings: [], mcpConfigNotices: [] };
 }
 

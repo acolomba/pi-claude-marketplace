@@ -160,8 +160,8 @@ export interface ReinstallSkippedOutcome extends ReinstallOutcomeBase {
   /**
    * D-18-07: the shared runner's typed skip reasons, such as `dependents
    * constrain`, whose holders ride on `notes`. Absent for reinstall's own
-   * `not installed` / `already disabled` skips, whose `notes` the messaging
-   * narrows.
+   * `already disabled` skip, whose `notes` the messaging narrows. A target
+   * the scope does not record is a failure, not a skip (UPR-04).
    */
   readonly reasons?: readonly ContentReason[];
 }

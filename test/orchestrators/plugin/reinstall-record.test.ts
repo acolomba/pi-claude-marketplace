@@ -65,14 +65,14 @@ function stateWith(record: PluginInstallRecord): ExtensionState {
   };
 }
 
-test("composes both skipped outcomes without mutating records", () => {
+test("UPR-04: composes the not-installed failure and the already-disabled skip without mutating records", () => {
   // arrange
   const state = stateWith(oldRecord());
   const before = structuredClone(state);
 
   // act
   const missing = recordReinstallOutcome({
-    partition: "skipped",
+    partition: "failed",
     name: "plugin",
     marketplace: "market",
     scope: "project",
@@ -88,13 +88,20 @@ test("composes both skipped outcomes without mutating records", () => {
 
   // assert
   assert.deepStrictEqual(missing, {
-    partition: "skipped",
+    partition: "failed",
     name: "plugin",
     marketplace: "market",
     scope: "project",
     notes: ["not installed"],
+    reasons: ["not installed"],
   });
-  assert.deepStrictEqual(disabled, { ...missing, notes: ["already disabled"] });
+  assert.deepStrictEqual(disabled, {
+    partition: "skipped",
+    name: "plugin",
+    marketplace: "market",
+    scope: "project",
+    notes: ["already disabled"],
+  });
   assert.deepStrictEqual(state, before);
 });
 

@@ -431,7 +431,7 @@ for (const { command, notification } of [
   },
   {
     command: (name: string) => `reinstall ${name}@mp`,
-    notification: (name: string) => pluginFailed(name, "(skipped) {not installed}"),
+    notification: (name: string) => pluginFailed(name, "(failed) {not installed}"),
   },
   {
     command: (name: string) => `update ${name}@mp`,

@@ -1917,9 +1917,9 @@ A plugin operation has failed.
 
 A reinstall replaces the plugin through the same three-phase swap `update` runs. A failure while it commits the bridges, or while it writes the final record, leaves the plugin partly replaced: the swap reports one child per bridge that failed, and the record keeps the in-progress marker its intent mark wrote. The cause line is the swap's own message, which `update` shares, and its recovery hint is to run `reinstall` again, which repairs it. A failure after the candidate names the version it attempted: here the single `v1.0.0`, because the reinstall was repairing the recorded revision, and the arrow when the revision moved (UPR-03). Severity `error`; no reload-hint. A failure before the intent mark, such as an agent target that holds a file no index row names, changes nothing and renders an ordinary `(failed)` row instead.
 
-### Failure -- plugin not installed, standalone form (CR-02 / D-01)
+### Failure -- plugin not installed, standalone form (CR-02 / UPR-04)
 
-Triggered when `reinstall <plugin>@<marketplace>` names a marketplace that IS added in the requested scope but whose plugin record is absent from state (never installed, or concurrently uninstalled). The standalone single-plugin path emits the absent-target row instead of returning silently: `not installed` is an absent-target precondition, so D-01 routes it to `error` ("absent-target -> error across the board") rather than the benign-skip `warning`. The row keeps its `(skipped) {not installed}` per-row grammar (severity is a stamp-only flip). Single cardinality, so no trailing tally. Two-block form: the `A plugin operation has failed.` summary on the host `Error:` label line, then the marketplace header + skipped row block (GRAM-01 / GRAM-02). No reload-hint (nothing changed on disk).
+Triggered when `reinstall <plugin>@<marketplace>` names a marketplace that IS added in the requested scope but whose plugin record is absent from state (never installed, or concurrently uninstalled). The reinstall was not carried out, so the row is `(failed) {not installed}` at `error`, the same row `uninstall` and `update` render for a plugin that is not installed (UPR-04). Single cardinality, so no trailing tally. Two-block form: the `A plugin operation has failed.` summary on the host `Error:` label line, then the marketplace header + failed row block (GRAM-01 / GRAM-02). No reload-hint (nothing changed on disk).
 
 <!-- catalog-state: standalone-not-installed-error -->
 
@@ -1927,7 +1927,7 @@ Triggered when `reinstall <plugin>@<marketplace>` names a marketplace that IS ad
 A plugin operation has failed.
 
 ● mp [project]
-  ⊘ hello (skipped) {not installed}
+  ⊘ hello (failed) {not installed}
 ```
 
 ### Failure -- not installed, marketplace one scope over (SCOPE-01)

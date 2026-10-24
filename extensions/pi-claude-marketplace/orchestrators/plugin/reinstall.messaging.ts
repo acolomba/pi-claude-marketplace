@@ -329,11 +329,8 @@ function skippedRowFromOutcome(outcome: ReinstallSkippedOutcome): PluginUpdateSk
     name: outcome.name,
     reasons,
     ...(holdsCause && { cause: new Error(outcome.notes.join(" ")) }),
-    // D-01: an absent-target reinstall (the named plugin is not installed)
-    // cannot be carried out -> error (severity-only flip; the `(skipped)
-    // {not installed}` per-row grammar is preserved). Otherwise benign
-    // idempotent skip -> info, actionable skip -> warning; never reloads.
-    severity: reasons.includes("not installed") ? "error" : skipSeverity(reasons),
+    // Benign idempotent skip -> info, actionable skip -> warning; never reloads.
+    severity: skipSeverity(reasons),
     needsReload: false,
   };
 }

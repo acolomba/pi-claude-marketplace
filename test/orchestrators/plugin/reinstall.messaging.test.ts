@@ -983,24 +983,25 @@ test("renderReinstallPartitionAndNotify sorts case-insensitive names and scopes 
   verify(harness.ui);
 });
 
-test("renderReinstallPartitionAndNotify omits tally and reload for a single missing target", () => {
+test("UPR-04: renderReinstallPartitionAndNotify renders a single missing target as failed with no tally or reload", () => {
   // arrange
   const harness = createNotifyHarness({
     message: [
       "A plugin operation has failed.",
       "",
       "● official [project]",
-      "  ⊘ alpha (skipped) {not installed}",
+      "  ⊘ alpha (failed) {not installed}",
     ].join("\n"),
     severity: "error",
   });
   const outcomes: readonly ReinstallPluginOutcome[] = [
     {
-      partition: "skipped",
+      partition: "failed",
       name: "alpha",
       marketplace: "official",
       scope: "project",
       notes: ["not installed"],
+      reasons: ["not installed"],
     },
   ];
 

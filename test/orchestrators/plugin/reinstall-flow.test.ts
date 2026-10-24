@@ -492,7 +492,7 @@ function errorNotifications(notifications: readonly NotifyRecord[]): readonly No
   return notifications.filter((n) => n.severity === "error");
 }
 
-test("PRL-06: absent installed record returns skipped and does not mutate state or disk", async () => {
+test("PRL-06 / UPR-04: absent installed record fails as not installed and does not mutate state or disk", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-skip-"));
     try {
@@ -506,18 +506,25 @@ test("PRL-06: absent installed record returns skipped and does not mutate state 
       const outcome = await reinstallDefault(cwd, ctx, run);
 
       // assert
-      assert.equal(outcome.partition, "skipped");
-      assert.deepEqual(outcome.notes, ["not installed"]);
+      assert.deepStrictEqual(outcome, {
+        partition: "failed",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        notes: ["not installed"],
+        reasons: ["not installed"],
+      });
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), before);
-      // CR-02 / D-01: the standalone path emits the absent-target row as an
-      // error (was a silent return). State/disk stay untouched; the notify is
+      // CR-02 / UPR-04: the standalone path emits the absent-target row as a
+      // failure, as uninstall's is. State/disk stay untouched; the notify is
       // the only visible effect.
-      assert.equal(notifications.length, 1);
-      assert.equal(notifications[0]?.severity, "error");
-      assert.equal(
-        notifications[0]?.message,
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
-      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not installed}",
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2510,9 +2517,9 @@ test("GAP-06: an MCP collision at prepare aborts the prepared handles and fails 
   });
 });
 
-test("GAP-07: reinstallPlugin skipped does not trigger runPostSuccessMaintenance", async () => {
+test("GAP-07: a reinstall that fails as not installed does not trigger runPostSuccessMaintenance", async () => {
   // When the plugin is not installed, the reinstall returns
-  // partition='skipped' without calling runPostSuccessMaintenance (so no
+  // partition='failed' without calling runPostSuccessMaintenance (so no
   // cache/data drops run).
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-skip-no-maint-"));
@@ -2539,7 +2546,7 @@ test("GAP-07: reinstallPlugin skipped does not trigger runPostSuccessMaintenance
       );
 
       // assert
-      assert.equal(outcome.partition, "skipped");
+      assert.equal(outcome.partition, "failed");
       assert.equal(maintenanceCalled, false);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2547,7 +2554,7 @@ test("GAP-07: reinstallPlugin skipped does not trigger runPostSuccessMaintenance
   });
 });
 
-test("GAP-08: reinstallPlugin render=none with skipped outcome emits no notifications", async () => {
+test("GAP-08: reinstallPlugin render=none with a not-installed failure emits no notifications", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-none-skip-"));
     try {
@@ -2567,7 +2574,7 @@ test("GAP-08: reinstallPlugin render=none with skipped outcome emits no notifica
       });
 
       // assert
-      assert.equal(outcome.partition, "skipped");
+      assert.equal(outcome.partition, "failed");
       assert.equal(notifications.length, 0);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -2717,17 +2724,15 @@ test("GAP-13: reinstallPlugin user-scope happy path reinstalls and records corre
   });
 });
 
-test("GAP-14: reinstallPlugins batch with only skipped outcomes emits skipped cascade", async () => {
-  // When every reinstall target reports skipped ('not installed' because
-  // the plugin record was removed from state), reinstallSummary returns
-  // 'Plugin reinstall complete.' and the batch notification includes a
-  // Skipped section.  Explicit scope is required so resolveReinstallScope
+test("GAP-14 / UPR-04: a reinstall whose record was removed from state fails as not installed", async () => {
+  // When the plugin record was removed from state, the target fails as
+  // 'not installed'. Explicit scope is required so resolveReinstallScope
   // takes the explicitScope branch and finds the marketplace in state.
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-all-skipped-"));
     try {
       // arrange
-      // Install a plugin then remove it from state so reinstall sees it as skipped.
+      // Install a plugin then remove it from state so reinstall finds no record.
       const locations = locationsFor("project", cwd);
       await seedMarketplace({
         cwd,
@@ -2755,7 +2760,7 @@ test("GAP-14: reinstallPlugins batch with only skipped outcomes emits skipped ca
       // act
       // Explicit scope=project so enumerateMarketplaceReinstallTargets finds
       // the marketplace and returns [{ plugin: "hello", scope: "project" }].
-      // reinstallPlugin then sees plugin not in mp.plugins and returns skipped.
+      // reinstallPlugin then sees plugin not in mp.plugins and fails.
       const outcomes = await reinstallPlugins({
         ctx,
         run,
@@ -2765,10 +2770,17 @@ test("GAP-14: reinstallPlugins batch with only skipped outcomes emits skipped ca
       });
 
       // assert
-      assert.equal(outcomes.length, 1);
-      assert.equal(outcomes[0]?.partition, "skipped");
-      const body = notifications.at(-1)?.message ?? "";
-      assert.match(body, /skipped/);
+      assert.deepStrictEqual(
+        outcomes.map((outcome) => [outcome.name, outcome.partition]),
+        [["hello", "failed"]],
+      );
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not installed}",
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -218,8 +218,8 @@ Feature: Plugin reinstall
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id          | name | status  | reasons       | scope   |
-      | fixtures         | project           | pp@fixtures | pp   | skipped | not installed | project |
+      | marketplace name | marketplace scope | id          | name | status | reasons       | scope   | leaks | rollback partial |
+      | fixtures         | project           | pp@fixtures | pp   | failed | not installed | project |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
