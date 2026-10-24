@@ -2258,6 +2258,20 @@ Stage one's tag probe found no satisfying tag, so the candidate resolves exactly
 
 `formatter` is a constrained PATH-source dependency whose marketplace clone carries no release tag satisfying its dependents' combined range (UPDT-01). Rather than holding the update, `preparePluginUpdate` falls back to the marketplace's CURRENT copy and lets stage two decide (D-10-14) -- the arm that makes stage two earn its place: the install-side arm that always accepts is deliberately NOT ported here, because knowingly moving an in-range plugin to an out-of-range version is exactly what UPDT-01 forbids. Here the fallback landed IN range, so the update proceeds and the success row reuses the existing `{dependency current copy}` token (D-10-15) -- no catalog amendment, same fact, same phrase. The token is FIRST in the brace, ahead of orphan-rewake and malformed-kind tokens, and it moves no severity channel: the update was carried out in full. The range that admitted the copy and the dependents that declared it ride the cause line, composed by the same `describeConstraint` composer as on the ceiling and held rows (D-10-13); Claude Code's update message discloses the range too. An unconstrained `(updated)` row has no cause line. Single cardinality, so no trailing tally. Reload-hint fires because a resource transition landed.
 
+### A partial update a dependent's range admitted (D-10-13)
+
+<!-- catalog-state: update-partial-current-copy -->
+
+```text
+● mp [user]
+  ◉ formatter v1.0.0 → v1.5.0 (partially-installed) {dependency current copy, lsp}
+    cause: constrained to the combined range (^1.0.0) -- required by "alpha@mp"
+
+/reload to pick up changes
+```
+
+The same constrained update as `update-current-copy`, run with `--partial` on a candidate that resolves `partially-available`, so the row takes the `(partially-installed)` form and names the dropped kind after the current-copy token. The row still discloses the range that admitted the copy and the dependents that declared it on its cause line, through the same carrier as the `(updated)` row, so a partial update words the range as a partial reinstall does. The cause line moves no severity: the manual `--partial` opt-in stays `info`. Single cardinality, so no trailing tally. Reload-hint fires because a resource transition landed.
+
 ### The ceiling version, still constrained (D-10-13)
 
 <!-- catalog-state: update-up-to-date-constrained -->

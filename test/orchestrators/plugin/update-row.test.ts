@@ -471,8 +471,10 @@ test("D-10-15: all four written axes emit in the documented order on one row", (
   // act
   const row = updatedRowFromOutcome(outcome, "project", severity);
 
-  // assert
+  // assert -- D-10-13: the partial form carries the disclosure as its cause
+  // line, as the clean form does.
   assert.deepStrictEqual(row, {
+    cause: new Error('constrained to the combined range (^1.0.0) -- required by "alpha@mp"'),
     dependencies: ["agents", "mcp"],
     name: "shared-lib",
     needsReload: true,

@@ -670,6 +670,37 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
       },
     },
 
+    // D-10-13: a `--partial` update a dependent's range admitted discloses the
+    // range on its cause line, as the clean form above does.
+    "update-partial-current-copy": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Plugin update",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "partially-installed",
+                severity: "info",
+                needsReload: true,
+                name: "formatter",
+                from: "1.0.0",
+                version: "1.5.0",
+                dependencies: [],
+                reasons: ["dependency current copy", "lsp"],
+                cause: new Error(
+                  'constrained to the combined range (^1.0.0) -- required by "alpha@mp"',
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // D-10-13: the plugin is already at the highest version its dependents
     // jointly admit. The row keeps its existing `{up-to-date}` brace and
     // discloses the range and its holders on the cause line -- no second

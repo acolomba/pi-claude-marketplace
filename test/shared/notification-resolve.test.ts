@@ -757,7 +757,7 @@ describe("resolveRows", () => {
     });
   }
 
-  test("D-10-13: resolves the disclosure cause of an updated and a reinstalled row and still composes their markers", () => {
+  test("D-10-13: resolves the disclosure cause of an updated, a reinstalled, and a partially installed row and still composes their markers", () => {
     // arrange
     const disclosure = 'constrained to the combined range (^1.0.0) -- required by "app@tools"';
     const rows: readonly PluginNotificationMessage[] = [
@@ -780,6 +780,17 @@ describe("resolveRows", () => {
         version: "1.0.0",
         dependencies: ["agents"],
         reasons: ["dependency current copy"],
+        cause: new Error(disclosure),
+      },
+      {
+        status: "partially-installed",
+        severity: "info",
+        needsReload: true,
+        name: "lib",
+        from: "1.0.0",
+        version: "1.1.0",
+        dependencies: [],
+        reasons: ["lsp"],
         cause: new Error(disclosure),
       },
       {
@@ -828,6 +839,16 @@ describe("resolveRows", () => {
         name: "lib",
         version: "1.0.0",
         reasons: ["dependency current copy", "requires pi-subagents"],
+        failure,
+      },
+      {
+        status: "partially-installed",
+        severity: "info",
+        needsReload: true,
+        name: "lib",
+        from: "1.0.0",
+        version: "1.1.0",
+        reasons: ["lsp"],
         failure,
       },
       {

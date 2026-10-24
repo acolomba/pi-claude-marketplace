@@ -586,6 +586,8 @@ export interface PluginPartiallyInstalledMessage extends MessageBase, RevisionMo
   readonly version?: string;
   readonly scope?: Scope;
   readonly description?: string;
+  /** D-10-13: the constraint gate's disclosure on a partial update, as on `PluginUpdatedMessage`. */
+  readonly cause?: Error;
 }
 
 /** Partially upgradable plugin row. */

@@ -67,7 +67,7 @@ The discriminated union and the per-variant field carve-outs are the binding com
 
 Two fields are narrower than a column and stay as bullets:
 
-- `cause?: Error` on `failed | manual recovery` (SNM-10), and as a remedy or disclosure line on the realized `disabled`, `uninstalled`, `updated`, and `reinstalled` rows and on update's `skipped` row: an `updated` or `reinstalled` row carries it when a dependent's range chose what landed (D-10-13).
+- `cause?: Error` on `failed | manual recovery` (SNM-10), and as a remedy or disclosure line on the realized `disabled`, `uninstalled`, `updated`, `reinstalled`, and `partially-installed` rows and on update's `skipped` row: an `updated`, `reinstalled`, or `partially-installed` row carries it when a dependent's range chose what landed (D-10-13).
 - `rollbackPartial?: readonly { phase: string; cause?: Error }[]` on `failed` only (SNM-09).
 
 Why the cells fall where they do:

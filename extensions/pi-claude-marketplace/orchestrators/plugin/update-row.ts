@@ -118,12 +118,13 @@ export interface UpdatedRowSeverity {
  * composes them from that membership and the command run's snapshot under the
  * context's marker policy (D-05, D-12).
  *
- * D-10-13 / D-10-17a: the clean `(updated)` form carries the constraint
- * gate's disclosure as its cause line when a dependent's range chose what
- * landed, read through `constraintCauseFor` as the `unchanged` and held
- * `skipped` rows read it. Upstream discloses the range on its updated message
- * too. The `{dependency current copy}` token keeps its first place and still
- * moves no severity. The `partially-installed` form has no cause slot.
+ * D-10-13 / D-10-17a: both forms carry the constraint gate's disclosure as
+ * their cause line when a dependent's range chose what landed, read through
+ * `constraintCauseFor` as the `unchanged` and held `skipped` rows read it, so a
+ * partial update discloses the range a partial reinstall does. Upstream
+ * discloses the range on its updated message too. The
+ * `{dependency current copy}` token keeps its first place and still moves no
+ * severity.
  *
  * D-03/D-06: a realized update transition always reloads Pi resources, and
  * `partially-installed` is a realized transition too.
@@ -155,6 +156,7 @@ export function updatedRowFromOutcome(
     outcome.declaresMcp,
     outcome.declaresWorkflows,
   );
+  const cause = constraintCauseFor(outcome);
   const dropped = outcome.partialDegrade;
   if (dropped !== undefined && dropped.kinds.length > 0) {
     return {
@@ -164,13 +166,13 @@ export function updatedRowFromOutcome(
       ...revisionVersionSlot(outcome),
       dependencies,
       reasons: [...written, ...narrowUnsupportedKinds(dropped.kinds), ...stale],
+      ...(cause !== undefined && { cause }),
       severity: raised ? "warning" : baseSeverity.partiallyInstalled,
       needsReload: true,
     };
   }
 
   const cleanFormReasons: readonly ContentReason[] = [...written, ...stale];
-  const cause = constraintCauseFor(outcome);
   return {
     status: "updated",
     name: outcome.name,

@@ -504,7 +504,11 @@ function resolveRow(row: PluginNotificationMessage, compose: ReasonComposer): Re
     return { ...rest, reasons: compose(reasons, undefined), ...remedyFailure(cause) };
   }
 
-  if (row.status === "updated" || row.status === "reinstalled") {
+  if (
+    row.status === "updated" ||
+    row.status === "reinstalled" ||
+    row.status === "partially-installed"
+  ) {
     const { reasons, dependencies, cause, ...rest } = row;
     return { ...rest, reasons: compose(reasons, dependencies), ...remedyFailure(cause) };
   }
@@ -524,10 +528,10 @@ function resolveRow(row: PluginNotificationMessage, compose: ReasonComposer): Re
 
 /**
  * LOAD-01 / LOAD-03 / UPDT-02 / D-10-13: the `failure` member of a realized
- * `disabled`, `uninstalled`, `updated`, or `reinstalled` row, or of an update
- * `skipped` row, whose producer set a remedy or disclosure `cause`, or no
- * member. The cause names plugin identifiers, which only the cause line may
- * interpolate. A row without one keeps its byte-frozen form.
+ * `disabled`, `uninstalled`, `updated`, `reinstalled`, or `partially-installed`
+ * row, or of an update `skipped` row, whose producer set a remedy or disclosure
+ * `cause`, or no member. The cause names plugin identifiers, which only the
+ * cause line may interpolate. A row without one keeps its byte-frozen form.
  */
 function remedyFailure(cause: Error | undefined): Pick<ResolvedRowFacts, "failure"> {
   return cause === undefined ? {} : { failure: resolveFailure(cause, []) };
