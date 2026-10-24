@@ -127,18 +127,18 @@ Step module paths are relative to `features/step_definitions/`.
 - [x] **Phase 13: Plugin Import** — Importing enabled plugins and marketplaces from a Claude Code settings file (completed 2026-10-23)
 - [x] **Phase 14: Bootstrap, Browse, Help, and Usage Errors** — `bootstrap`, the non-TUI `browse` refusal, plugin `help`, and every plugin usage rejection (completed 2026-10-23)
 - [x] **Phase 15: State Lock and Marketplace Failure Cleanup** — A held state lock refuses plugin and marketplace commands, a failed `marketplace add` leaves nothing, and `marketplace remove` cleans plugin clones (completed 2026-10-23)
-- [ ] **Phase 16: Git Plugin Copies and Version Rule** — Unpinned git installs get their own per-commit copy, the mirror becomes a cache, and one version rule serves install, info, and list
-- [ ] **Phase 17: Reconcile Stale-Declarer Warning** — A plugin whose catalog dropped it or whose manifest broke is reported as a warning with its real reason and cause
-- [ ] **Phase 18: Update and Reinstall Unification** — `reinstall` takes the latest known version and reports it, through one code path shared with `update`
-- [ ] **Phase 19: Import on the Reconcile Path** — `import` uses reconcile's desired-state path, reports what it skipped, and refuses under a held state lock
-- [ ] **Phase 20: Path-Source Version and Missing Source** — Path-source rows follow the one version rule, and a missing path directory reads `{source missing}`
-- [ ] **Phase 21: Marketplace Add No-Op and Token Parity** — Re-adding a marketplace is a skipped no-op, and write-path manifest faults use list/info's tokens
-- [ ] **Phase 22: Install Failure Reasons** — Every install failure in a cascade, a leaked cleanup, or a missing pinned commit carries its reason
-- [ ] **Phase 23: Uninstall and Prune Parity** — `will uninstall` rows show versions, prune's lock cause matches other commands, and uninstall of a disabled-only dependency matches Claude Code
-- [ ] **Phase 24: Import Reasons** — `import` reports the same reasons and statuses as `install` and reconcile
-- [ ] **Phase 25: Update and Reinstall Rows** — Same-version updates show commits, and update and reinstall rows carry their versions and consistent reasons
-- [ ] **Phase 26: Git Mirror Access** — Mirror refreshes take the state lock, one copy helper serves all clones, and a cold `info --fetch` contacts the host once
-- [ ] **Phase 27: Install and Reconcile Reason Residue** — Dependency ranges read as upstream, pinned-commit failures read cleanly, reconcile and import narrow reasons like install, and marketplace remove ignores disabled holders
+- [x] **Phase 16: Git Plugin Copies and Version Rule** — Unpinned git installs get their own per-commit copy, the mirror becomes a cache, and one version rule serves install, info, and list
+- [x] **Phase 17: Reconcile Stale-Declarer Warning** — A plugin whose catalog dropped it or whose manifest broke is reported as a warning with its real reason and cause
+- [x] **Phase 18: Update and Reinstall Unification** — `reinstall` takes the latest known version and reports it, through one code path shared with `update`
+- [x] **Phase 19: Import on the Reconcile Path** — `import` uses reconcile's desired-state path, reports what it skipped, and refuses under a held state lock
+- [x] **Phase 20: Path-Source Version and Missing Source** — Path-source rows follow the one version rule, and a missing path directory reads `{source missing}`
+- [x] **Phase 21: Marketplace Add No-Op and Token Parity** — Re-adding a marketplace is a skipped no-op, and write-path manifest faults use list/info's tokens
+- [x] **Phase 22: Install Failure Reasons** — Every install failure in a cascade, a leaked cleanup, or a missing pinned commit carries its reason
+- [x] **Phase 23: Uninstall and Prune Parity** — `will uninstall` rows show versions, prune's lock cause matches other commands, and uninstall of a disabled-only dependency matches Claude Code
+- [x] **Phase 24: Import Reasons** — `import` reports the same reasons and statuses as `install` and reconcile
+- [x] **Phase 25: Update and Reinstall Rows** — Same-version updates show commits, and update and reinstall rows carry their versions and consistent reasons
+- [x] **Phase 26: Git Mirror Access** — Mirror refreshes take the state lock, one copy helper serves all clones, and a cold `info --fetch` contacts the host once
+- [x] **Phase 27: Install and Reconcile Reason Residue** — Dependency ranges read as upstream, pinned-commit failures read cleanly, reconcile and import narrow reasons like install, and marketplace remove ignores disabled holders
 
 ## Phase Details
 
@@ -595,18 +595,18 @@ Plans:
 | 13. Plugin Import | 1/1 | Complete    | 2026-10-23 |
 | 14. Bootstrap, Browse, Help, and Usage Errors | 3/3 | Complete    | 2026-10-23 |
 | 15. State Lock and Marketplace Failure Cleanup | 4/4 | Complete    | 2026-10-23 |
-| 16. Git Plugin Copies and Version Rule | 0/TBD | Not started | - |
-| 17. Reconcile Stale-Declarer Warning | 0/TBD | Not started | - |
-| 18. Update and Reinstall Unification | 0/TBD | Not started | - |
-| 19. Import on the Reconcile Path | 0/TBD | Not started | - |
-| 20. Path-Source Version and Missing Source | 0/TBD | Not started | - |
-| 21. Marketplace Add No-Op and Token Parity | 0/TBD | Not started | - |
-| 22. Install Failure Reasons | 0/TBD | Not started | - |
-| 23. Uninstall and Prune Parity | 0/TBD | Not started | - |
-| 24. Import Reasons | 0/TBD | Not started | - |
-| 25. Update and Reinstall Rows | 0/TBD | Not started | - |
-| 26. Git Mirror Access | 0/TBD | Not started | - |
-| 27. Install and Reconcile Reason Residue | 0/TBD | Not started | - |
+| 16. Git Plugin Copies and Version Rule | 2/2 | Complete    | 2026-10-23 |
+| 17. Reconcile Stale-Declarer Warning | 1/1 | Complete    | 2026-10-23 |
+| 18. Update and Reinstall Unification | 7/7 | Complete    | 2026-10-23 |
+| 19. Import on the Reconcile Path | 1/1 | Complete    | 2026-10-23 |
+| 20. Path-Source Version and Missing Source | 1/1 | Complete    | 2026-10-23 |
+| 21. Marketplace Add No-Op and Token Parity | 1/1 | Complete    | 2026-10-23 |
+| 22. Install Failure Reasons | 1/1 | Complete    | 2026-10-23 |
+| 23. Uninstall and Prune Parity | 1/1 | Complete    | 2026-10-23 |
+| 24. Import Reasons | 1/1 | Complete    | 2026-10-23 |
+| 25. Update and Reinstall Rows | 8/8 | Complete    | 2026-10-24 |
+| 26. Git Mirror Access | 1/1 | Complete    | 2026-10-23 |
+| 27. Install and Reconcile Reason Residue | 1/1 | Complete    | 2026-10-23 |
 
 ## Carried Forward
 

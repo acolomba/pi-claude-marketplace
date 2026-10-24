@@ -130,43 +130,43 @@ settle which one wins (see PROJECT.md).
 
 ### Decisions applied (2026-10-23)
 
-- [ ] **GIT-01**: An unpinned git-source install gets its own copy at the commit it installs; `fetch` refreshes only the download cache, and installed code changes only through `update` or `reinstall`
-- [ ] **GIT-02**: Clone cleanup keeps every per-commit copy an installation uses and deletes unused clones, including caches `fetch` warmed for plugins that are not installed
-- [ ] **VER-01**: `install`, `info`, and `list` derive a plugin's version with one rule: the declared version (plugin.json, then the marketplace entry) first, and `sha-<12hex>` only for a git plugin that declares none; the full commit sha stays stored
-- [ ] **REC-05**: A plugin that stays installed after its marketplace's catalog drops it, or whose marketplace manifest is invalid, is reported at each new session as a `warning` with the real reason (`{not in manifest}` for a catalog drop; for a broken manifest the same token `list`/`info` use: `{unparseable}`, `{source missing}`, `{permission denied}`, or `{invalid manifest}`, decision D-11) and a cause chain
-- [ ] **REI-04**: `reinstall` installs whatever version the marketplace currently offers, the same or newer, and records and reports that version
-- [ ] **UPR-01**: `update` and `reinstall` materialize the latest known version through one shared code path, with no per-plugin version pinning
-- [ ] **IMP-05**: `import` applies the Claude Code settings through the same desired-state path as reconcile, and never reinstalls a plugin that is already installed
-- [ ] **IMP-06**: `import` reports a plugin it already has as `skipped {already installed}`, and a marketplace already added with the same source as a skipped no-op at `info` severity, not `(updated)`
-- [ ] **IMP-07**: `import` run while another process holds the state lock fails with the lock-held reason and changes nothing, instead of `unexpected-failure`
+- [x] **GIT-01**: An unpinned git-source install gets its own copy at the commit it installs; `fetch` refreshes only the download cache, and installed code changes only through `update` or `reinstall`
+- [x] **GIT-02**: Clone cleanup keeps every per-commit copy an installation uses and deletes unused clones, including caches `fetch` warmed for plugins that are not installed
+- [x] **VER-01**: `install`, `info`, and `list` derive a plugin's version with one rule: the declared version (plugin.json, then the marketplace entry) first, and `sha-<12hex>` only for a git plugin that declares none; the full commit sha stays stored
+- [x] **REC-05**: A plugin that stays installed after its marketplace's catalog drops it, or whose marketplace manifest is invalid, is reported at each new session as a `warning` with the real reason (`{not in manifest}` for a catalog drop; for a broken manifest the same token `list`/`info` use: `{unparseable}`, `{source missing}`, `{permission denied}`, or `{invalid manifest}`, decision D-11) and a cause chain
+- [x] **REI-04**: `reinstall` installs whatever version the marketplace currently offers, the same or newer, and records and reports that version
+- [x] **UPR-01**: `update` and `reinstall` materialize the latest known version through one shared code path, with no per-plugin version pinning
+- [x] **IMP-05**: `import` applies the Claude Code settings through the same desired-state path as reconcile, and never reinstalls a plugin that is already installed
+- [x] **IMP-06**: `import` reports a plugin it already has as `skipped {already installed}`, and a marketplace already added with the same source as a skipped no-op at `info` severity, not `(updated)`
+- [x] **IMP-07**: `import` run while another process holds the state lock fails with the lock-held reason and changes nothing, instead of `unexpected-failure`
 
 ### Decisions applied, second round (2026-10-23)
 
-- [ ] **VER-02**: Path-source plugins follow the VER-01 version rule too: `list` and `info` candidate rows show plugin.json's declared version before the marketplace entry's
-- [ ] **SRC-01**: A path-source plugin whose directory is missing reads `{source missing}` in `info`, `install`, and `list`, not `{unsupported source}`
-- [ ] **MPA-01**: `marketplace add` and `bootstrap` of a marketplace already added with the same source succeed as a no-op, reported `(skipped) {already added}` at `info` (Claude Code: "already added; nothing changed")
-- [ ] **MPA-02**: `marketplace add` and `marketplace update` report a marketplace manifest fault with the same token `list`/`info` use (`{unparseable}`, `{source missing}`, `{permission denied}`, `{invalid manifest}`, D-11)
-- [ ] **MPA-03**: `marketplace help` with an unknown flag reports `Unknown flag: "<flag>".` as `help marketplace` does
-- [ ] **INR-01**: A dependency whose clone the git host refuses during an install cascade reports its reason (as a direct install does), in the command and on `/reload`
-- [ ] **INR-02**: A staging cleanup leak keeps the original failure's reason
-- [ ] **INR-03**: An install pinned to a commit the remote lacks fails with a reason
-- [ ] **INR-04**: Both `{version conflict}` causes print a version range in the same form
-- [ ] **PRN-02**: `prune --dry-run` (and every `will uninstall` row) shows the plugin's version, as Claude Code's preview prints `name (version)`
-- [ ] **PRN-03**: `prune` under a held lock prints the lock path in its cause the same way every other command does
-- [ ] **UNI-01**: `uninstall` of a dependency whose only dependents are disabled behaves as Claude Code does
-- [ ] **IMP-08**: A first-time `import` of a plugin that cannot be installed reports the same narrowed reason `install` reports
-- [ ] **IMP-09**: An unclassified `import` failure is not reported as `{not in manifest}`
-- [ ] **IMP-10**: `import` re-enabling a partially installed plugin reports `(partially-installed)`, as reconcile does
-- [ ] **UPR-02**: An `update` row whose declared version did not change shows the commits: `1.0.0 (abc1234) → 1.0.0 (def5678)`
-- [ ] **UPR-03**: `partially-installed` and `failed` update rows carry the version (and from/to where known) as `updated` and failed install rows do
-- [ ] **UPR-04**: `reinstall` of a plugin that is not installed reports `failed {not installed}`, as `uninstall` does
-- [ ] **GIT-03**: `fetch` and `info --fetch` refresh the mirror under the state lock, so an install never copies from a mirror mid-refresh
-- [ ] **GIT-04**: One copy-and-checkout helper serves per-commit copies and tag clones, and it handles a directory that holds only a symlink
-- [ ] **GIT-05**: `info --fetch` on a cold unpinned source contacts the git host once
-- [ ] **INR-05**: Every dependency-range cause (`{version conflict}`, `{no matching version}`) prints the declared ranges as Claude Code does: joined with `, `, unquoted
-- [ ] **INR-06**: A failed pinned-commit install's cause carries no git-library advice the user cannot act on, and a pin reachable only from a tag installs on the ref-hint clone path
-- [ ] **REC-06**: Reconcile's own failed install reports the narrowed resolver reasons `install` and `import` report, and `import` reports a rollback-partial install as `{rollback partial}` as `install` does
-- [ ] **MPR-01**: `marketplace remove`'s dependents refusal ignores disabled holders, as a named `uninstall` does
+- [x] **VER-02**: Path-source plugins follow the VER-01 version rule too: `list` and `info` candidate rows show plugin.json's declared version before the marketplace entry's
+- [x] **SRC-01**: A path-source plugin whose directory is missing reads `{source missing}` in `info`, `install`, and `list`, not `{unsupported source}`
+- [x] **MPA-01**: `marketplace add` and `bootstrap` of a marketplace already added with the same source succeed as a no-op, reported `(skipped) {already added}` at `info` (Claude Code: "already added; nothing changed")
+- [x] **MPA-02**: `marketplace add` and `marketplace update` report a marketplace manifest fault with the same token `list`/`info` use (`{unparseable}`, `{source missing}`, `{permission denied}`, `{invalid manifest}`, D-11)
+- [x] **MPA-03**: `marketplace help` with an unknown flag reports `Unknown flag: "<flag>".` as `help marketplace` does
+- [x] **INR-01**: A dependency whose clone the git host refuses during an install cascade reports its reason (as a direct install does), in the command and on `/reload`
+- [x] **INR-02**: A staging cleanup leak keeps the original failure's reason
+- [x] **INR-03**: An install pinned to a commit the remote lacks fails with a reason
+- [x] **INR-04**: Both `{version conflict}` causes print a version range in the same form
+- [x] **PRN-02**: `prune --dry-run` (and every `will uninstall` row) shows the plugin's version, as Claude Code's preview prints `name (version)`
+- [x] **PRN-03**: `prune` under a held lock prints the lock path in its cause the same way every other command does
+- [x] **UNI-01**: `uninstall` of a dependency whose only dependents are disabled behaves as Claude Code does
+- [x] **IMP-08**: A first-time `import` of a plugin that cannot be installed reports the same narrowed reason `install` reports
+- [x] **IMP-09**: An unclassified `import` failure is not reported as `{not in manifest}`
+- [x] **IMP-10**: `import` re-enabling a partially installed plugin reports `(partially-installed)`, as reconcile does
+- [x] **UPR-02**: An `update` row whose declared version did not change shows the commits: `1.0.0 (abc1234) → 1.0.0 (def5678)`
+- [x] **UPR-03**: `partially-installed` and `failed` update rows carry the version (and from/to where known) as `updated` and failed install rows do
+- [x] **UPR-04**: `reinstall` of a plugin that is not installed reports `failed {not installed}`, as `uninstall` does
+- [x] **GIT-03**: `fetch` and `info --fetch` refresh the mirror under the state lock, so an install never copies from a mirror mid-refresh
+- [x] **GIT-04**: One copy-and-checkout helper serves per-commit copies and tag clones, and it handles a directory that holds only a symlink
+- [x] **GIT-05**: `info --fetch` on a cold unpinned source contacts the git host once
+- [x] **INR-05**: Every dependency-range cause (`{version conflict}`, `{no matching version}`) prints the declared ranges as Claude Code does: joined with `, `, unquoted
+- [x] **INR-06**: A failed pinned-commit install's cause carries no git-library advice the user cannot act on, and a pin reachable only from a tag installs on the ref-hint clone path
+- [x] **REC-06**: Reconcile's own failed install reports the narrowed resolver reasons `install` and `import` report, and `import` reports a rollback-partial install as `{rollback partial}` as `install` does
+- [x] **MPR-01**: `marketplace remove`'s dependents refusal ignores disabled holders, as a named `uninstall` does
 
 ## Future Requirements
 
@@ -246,40 +246,40 @@ settle which one wins (see PROJECT.md).
 | FLR-02 | Phase 15 | Complete |
 | FLR-03 | Phase 15 | Complete |
 | FLR-04 | Phase 15 | Complete |
-| GIT-01 | Phase 16 | Pending |
-| GIT-02 | Phase 16 | Pending |
-| VER-01 | Phase 16 | Pending |
-| REC-05 | Phase 17 | Pending |
-| REI-04 | Phase 18 | Pending |
-| UPR-01 | Phase 18 | Pending |
-| IMP-05 | Phase 19 | Pending |
-| IMP-06 | Phase 19 | Pending |
-| IMP-07 | Phase 19 | Pending |
-| VER-02 | Phase 20 | Pending |
-| SRC-01 | Phase 20 | Pending |
-| MPA-01 | Phase 21 | Pending |
-| MPA-02 | Phase 21 | Pending |
-| MPA-03 | Phase 21 | Pending |
-| INR-01 | Phase 22 | Pending |
-| INR-02 | Phase 22 | Pending |
-| INR-03 | Phase 22 | Pending |
-| INR-04 | Phase 22 | Pending |
-| PRN-02 | Phase 23 | Pending |
-| PRN-03 | Phase 23 | Pending |
-| UNI-01 | Phase 23 | Pending |
-| IMP-08 | Phase 24 | Pending |
-| IMP-09 | Phase 24 | Pending |
-| IMP-10 | Phase 24 | Pending |
-| UPR-02 | Phase 25 | Pending |
-| UPR-03 | Phase 25 | Pending |
-| UPR-04 | Phase 25 | Pending |
-| GIT-03 | Phase 26 | Pending |
-| GIT-04 | Phase 26 | Pending |
-| GIT-05 | Phase 26 | Pending |
-| INR-05 | Phase 27 | Pending |
-| INR-06 | Phase 27 | Pending |
-| REC-06 | Phase 27 | Pending |
-| MPR-01 | Phase 27 | Pending |
+| GIT-01 | Phase 16 | Complete |
+| GIT-02 | Phase 16 | Complete |
+| VER-01 | Phase 16 | Complete |
+| REC-05 | Phase 17 | Complete |
+| REI-04 | Phase 18 | Complete |
+| UPR-01 | Phase 18 | Complete |
+| IMP-05 | Phase 19 | Complete |
+| IMP-06 | Phase 19 | Complete |
+| IMP-07 | Phase 19 | Complete |
+| VER-02 | Phase 20 | Complete |
+| SRC-01 | Phase 20 | Complete |
+| MPA-01 | Phase 21 | Complete |
+| MPA-02 | Phase 21 | Complete |
+| MPA-03 | Phase 21 | Complete |
+| INR-01 | Phase 22 | Complete |
+| INR-02 | Phase 22 | Complete |
+| INR-03 | Phase 22 | Complete |
+| INR-04 | Phase 22 | Complete |
+| PRN-02 | Phase 23 | Complete |
+| PRN-03 | Phase 23 | Complete |
+| UNI-01 | Phase 23 | Complete |
+| IMP-08 | Phase 24 | Complete |
+| IMP-09 | Phase 24 | Complete |
+| IMP-10 | Phase 24 | Complete |
+| UPR-02 | Phase 25 | Complete |
+| UPR-03 | Phase 25 | Complete |
+| UPR-04 | Phase 25 | Complete |
+| GIT-03 | Phase 26 | Complete |
+| GIT-04 | Phase 26 | Complete |
+| GIT-05 | Phase 26 | Complete |
+| INR-05 | Phase 27 | Complete |
+| INR-06 | Phase 27 | Complete |
+| REC-06 | Phase 27 | Complete |
+| MPR-01 | Phase 27 | Complete |
 
 **Coverage:**
 - v1 requirements: 95 total
