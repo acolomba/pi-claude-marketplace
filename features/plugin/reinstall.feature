@@ -363,3 +363,28 @@ Feature: Plugin reinstall
     Then the installation record of the user scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.1.0   | true    |
+
+  Scenario: Reinstalling a dependency within the version range of a plugin its marketplace no longer lists names that range on its row
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^1.0.0   |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 1.0.0   |              |
+    When the user runs "/claude:plugin reinstall lib@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons                 | scope   | version | cause chain                                                            | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | reinstalled | dependency current copy | project | 1.0.0   | constrained to the combined range (^1.0.0) -- required by "app@tools" | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | app@tools     | 1.0.0   | true    |
+      | demo@fixtures | 1.0.0   | true    |
+      | lib@tools     | 1.0.0   | true    |

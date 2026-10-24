@@ -404,6 +404,19 @@ export async function publishUnreadableSkillFile(
 }
 
 /**
+ * Deletes the directory of the published plugin `plugin`, which must exist,
+ * as a marketplace does when it stops shipping a plugin. A git publication
+ * commits and pushes the deletion.
+ */
+export async function removePublishedPlugin(
+  published: PublishedMarketplace,
+  plugin: string,
+): Promise<void> {
+  const target = ownedTarget(published, path.join(published.root, "plugins", plugin));
+  await changePublication(published, () => rm(target, { recursive: true }));
+}
+
+/**
  * Writes `text` to `file` inside the published plugin `plugin`, which must
  * not hold that file yet, and creates the directories above it. It refuses a
  * path outside the publication, and a git publication commits and pushes the

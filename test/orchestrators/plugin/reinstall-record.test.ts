@@ -307,7 +307,7 @@ test("LAYER-04: an unreadable dependency declaration narrows to unreadable", () 
   // arrange
   const error = new DependencyDeclarationsUnreadableError(
     "app@tools",
-    "cannot read the dependencies of app@tools: not declared by its marketplace",
+    "cannot read the dependencies of app@tools: not declared by its marketplace, and its installed copy cannot be read",
   );
 
   // act
@@ -376,7 +376,8 @@ for (const { kind, reason } of [
 
 test("D-18-17: an unreadable dependency walk carries unreadable and names the record on its cause", () => {
   // arrange
-  const walkMessage = "cannot read the dependencies of gone@mp: not declared by its marketplace";
+  const walkMessage =
+    "cannot read the dependencies of gone@mp: not declared by its marketplace, and its installed copy cannot be read";
   const error = new DependencyDeclarationsUnreadableError("gone@mp", walkMessage);
 
   // act

@@ -128,7 +128,7 @@ void ({
   reason: "unreadable",
   cause: new UninstallRefusedError(
     "unreadable",
-    "cannot read the dependencies of linter@official: not declared by its marketplace",
+    "cannot read the dependencies of linter@official: not declared by its marketplace, and its installed copy cannot be read",
   ),
 } satisfies PluginUninstallFailedOutcome);
 void ({
@@ -191,7 +191,7 @@ void ({
   plugin: "formatter",
   reason: "not in manifest",
   cause: new Error(
-    "cannot read the dependencies of formatter@official: not declared by its marketplace",
+    "cannot read the dependencies of formatter@official: not declared by its marketplace, and its installed copy cannot be read",
   ),
 } satisfies PluginDeclarerUnreadableOutcome);
 void ({

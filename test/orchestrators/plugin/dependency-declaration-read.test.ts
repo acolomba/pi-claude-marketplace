@@ -5,7 +5,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
-import { readDependencyDeclaration } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-declaration-read.ts";
+import {
+  readDependencyDeclaration,
+  readInstalledCopyDeclaration,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-declaration-read.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 import type { ClosureLookupResult } from "../../../extensions/pi-claude-marketplace/domain/dependency-closure.ts";
@@ -455,4 +458,108 @@ test("D-01-32: the production reader reads a bare manifest off real disk", async
 
   // assert
   assert.deepStrictEqual(declaration, dependsOn("from-manifest"));
+});
+
+/** `readInstalledCopyDeclaration` of `PLUGIN_ROOT`, owned by the marketplace root. */
+function readInstalledCopy(
+  reader: RecordingReader,
+  pluginRoot: string = PLUGIN_ROOT,
+): ReturnType<typeof readInstalledCopyDeclaration> {
+  return readInstalledCopyDeclaration({
+    pluginRoot,
+    ownerRoots: [path.join(tmpdir(), "dependency-declaration-read-clones"), MARKETPLACE_ROOT],
+    reader,
+  });
+}
+
+test("DLS-01: a delisted plugin's installed copy answers with its own manifest", async () => {
+  // arrange
+  const reader = buildReader({
+    files: { [WRAPPED]: JSON.stringify({ dependencies: ["beta@mp"] }) },
+  });
+
+  // act
+  const read = await readInstalledCopy(reader);
+
+  // assert
+  assert.deepStrictEqual(read, dependsOn("beta"));
+});
+
+test("DLS-01: an installed copy whose manifest has no dependencies key declares nothing", async () => {
+  // arrange
+  const reader = buildReader({ files: { [BARE]: JSON.stringify({ name: "alpha" }) } });
+
+  // act
+  const read = await readInstalledCopy(reader);
+
+  // assert
+  assert.deepStrictEqual(read, { kind: "found", dependencies: [] });
+  assert.deepStrictEqual(reader.opened, [WRAPPED, BARE]);
+});
+
+test("DLS-01: an installed copy with no manifest answers absent", async () => {
+  // arrange
+  const reader = buildReader({});
+
+  // act
+  const read = await readInstalledCopy(reader);
+
+  // assert
+  assert.deepStrictEqual(read, { kind: "absent" });
+});
+
+test("D-05-07: an installed copy whose manifest is present but unusable is the fixed-detail refusal", async () => {
+  // arrange
+  const reader = buildReader({ files: { [WRAPPED]: "{ not json" } });
+
+  // act
+  const read = await readInstalledCopy(reader);
+
+  // assert
+  assert.deepStrictEqual(read, {
+    kind: "unusable",
+    detail: "its own manifest is present but cannot be read",
+    ownManifest: true,
+  });
+});
+
+test("RESV-02: an installed copy's rejected declaration is the unusable arm", async () => {
+  // arrange
+  const reader = buildReader({ files: { [WRAPPED]: JSON.stringify({ dependencies: "beta" }) } });
+
+  // act
+  const read = await readInstalledCopy(reader);
+
+  // assert
+  assert.equal(read.kind, "unusable");
+  assert.ok(!("ownManifest" in read));
+});
+
+test("NFR-10: an installed copy outside every owning root is never opened", async () => {
+  // arrange
+  const reader = buildReader({});
+
+  // act
+  const read = await readInstalledCopy(reader, path.join(tmpdir(), "elsewhere", "alpha"));
+
+  // assert
+  assert.deepStrictEqual(read, { kind: "absent" });
+  assert.deepStrictEqual(reader.opened, []);
+});
+
+test("DLS-01: the production reader reads an installed copy off real disk", async (testContext) => {
+  // arrange
+  const root = await freshRoot(testContext, "installed-copy-read-");
+  const pluginRoot = path.join(root, "plugins", "alpha");
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ dependencies: ["beta@mp"] }),
+  );
+
+  // act
+  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoots: [root] });
+
+  // assert
+  assert.deepStrictEqual(read, dependsOn("beta"));
 });

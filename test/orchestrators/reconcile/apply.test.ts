@@ -1815,11 +1815,11 @@ describe("applyReconcile", () => {
           "\n" +
           "● mp [project]\n" +
           "  ⊘ victim (failed) {unreadable}\n" +
-          "    cause: cannot read the dependencies of stray@mp: not declared by its marketplace\n" +
+          "    cause: cannot read the dependencies of stray@mp: not declared by its marketplace, and its installed copy cannot be read\n" +
           // REC-05: `stray` itself is declared but its marketplace does not
           // list it, so its own row is the stale-declarer warning.
           "  ⊘ stray (failed) {not in manifest}\n" +
-          "    cause: cannot read the dependencies of stray@mp: not declared by its marketplace\n" +
+          "    cause: cannot read the dependencies of stray@mp: not declared by its marketplace, and its installed copy cannot be read\n" +
           "\n" +
           "Reconcile: 1 failure, 1 warning",
         severity: "error",
@@ -5036,7 +5036,7 @@ describe("applyReconcile", () => {
           "\u25cf mp [project]\n" +
           "  \u25cd gone v1.0.0 (disabled)\n" +
           "  \u2298 gone (failed) {not in manifest}\n" +
-          "    cause: cannot read the dependencies of gone@mp: not declared by its marketplace\n" +
+          "    cause: cannot read the dependencies of gone@mp: not declared by its marketplace, and its installed copy cannot be read\n" +
           "\n" +
           "Reconcile: 1 warning, 1 success",
         severity: "warning",

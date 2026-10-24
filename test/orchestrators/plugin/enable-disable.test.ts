@@ -3112,6 +3112,100 @@ test("WR-06 / NREG-01: a re-enable that staged neither agents nor MCP servers re
   });
 });
 
+test("DLS-01 / ATTR-08: enable on a delisted root whose installed copy declares a missing dependency refuses as not found", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+      unsupportedKind: "lspServers",
+      omitFromManifest: true,
+    });
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: { mp: { plugins: Record<string, { resolvedSource: string }> } };
+    };
+    const copy = state.marketplaces.mp.plugins["foo-plugin"]!.resolvedSource;
+    await mkdir(path.join(copy, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(copy, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "foo-plugin", dependencies: ["missing@mp"] }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo-plugin",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      notifications.map((notification) => notification.message),
+      [
+        [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user]",
+          "  ⊘ foo-plugin v1.2.3 (failed)",
+          '    cause: Plugin "foo-plugin" not found in marketplace "mp".',
+        ].join("\n"),
+      ],
+    );
+  });
+});
+
+test("WR-03 / ATTR-08: enable on a delisted root whose installed copy is gone still refuses as not found, not as unreadable", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+      unsupportedKind: "lspServers",
+      omitFromManifest: true,
+    });
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: { mp: { plugins: Record<string, { resolvedSource: string }> } };
+    };
+    await rm(state.marketplaces.mp.plugins["foo-plugin"]!.resolvedSource, {
+      recursive: true,
+      force: true,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo-plugin",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      notifications.map((notification) => notification.message),
+      [
+        [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user]",
+          "  ⊘ foo-plugin v1.2.3 (failed)",
+          '    cause: Plugin "foo-plugin" not found in marketplace "mp".',
+        ].join("\n"),
+      ],
+    );
+  });
+});
+
 test("ENBL-07 / D-97-01: enable on a manifest-absent disabled PARTIAL fails clean -- nothing materialized, record stays disabled", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
@@ -6745,17 +6839,27 @@ test("EDEP-01: an unreadable declarer refuses the enable with no absolute path l
       { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
       { name: "b", version: "1.0.0", enabled: false },
     ]);
-    // Break "b"'s own manifest read AND remove it from the marketplace
-    // entry so D-01-07's fallback also misses, forcing the declarer read to
-    // fail closed (D-05-07).
+    // Delist "b" AND delete its installed copy, so neither the
+    // marketplace nor the copy (DLS-01) can state its declarations and the
+    // declarer read fails closed (D-05-07).
     const state = JSON.parse(await readFile(statePath, "utf8")) as {
-      marketplaces: { official: { manifestPath: string; marketplaceRoot: string } };
+      marketplaces: {
+        official: {
+          manifestPath: string;
+          marketplaceRoot: string;
+          plugins: Record<string, { resolvedSource: string }>;
+        };
+      };
     };
     const manifest = JSON.parse(
       await readFile(state.marketplaces.official.manifestPath, "utf8"),
     ) as { plugins: { name: string }[] };
     manifest.plugins = manifest.plugins.filter((entry) => entry.name !== "b");
     await writeFile(state.marketplaces.official.manifestPath, JSON.stringify(manifest), "utf8");
+    await rm(state.marketplaces.official.plugins["b"]!.resolvedSource, {
+      recursive: true,
+      force: true,
+    });
     const mtimeBefore = (await stat(statePath)).mtimeMs;
     const { ctx, notifications } = makeCtx(cwd);
 
@@ -6779,7 +6883,7 @@ test("EDEP-01: an unreadable declarer refuses the enable with no absolute path l
         "",
         "● official [user]",
         "  ⊘ a (failed) {unreadable}",
-        "    cause: cannot read the dependencies of b@official: not declared by its marketplace",
+        "    cause: cannot read the dependencies of b@official: not declared by its marketplace, and its installed copy cannot be read",
       ].join("\n"),
     );
     assert.equal((await stat(statePath)).mtimeMs, mtimeBefore);
@@ -8020,17 +8124,27 @@ test("EDEP-02: an unreadable declarer refuses the disable with no absolute path 
       { name: "shared-lib", version: "1.0.0", enabled: true },
       { name: "other", version: "1.0.0", enabled: true },
     ]);
-    // Break "other"'s own manifest read AND remove it from the marketplace
-    // entry so D-01-07's fallback also misses, forcing the declarer read to
-    // fail closed (D-05-07).
+    // Delist "other" AND delete its installed copy, so neither the
+    // marketplace nor the copy (DLS-01) can state its declarations and the
+    // declarer read fails closed (D-05-07).
     const state = JSON.parse(await readFile(statePath, "utf8")) as {
-      marketplaces: { official: { manifestPath: string; marketplaceRoot: string } };
+      marketplaces: {
+        official: {
+          manifestPath: string;
+          marketplaceRoot: string;
+          plugins: Record<string, { resolvedSource: string }>;
+        };
+      };
     };
     const manifest = JSON.parse(
       await readFile(state.marketplaces.official.manifestPath, "utf8"),
     ) as { plugins: { name: string }[] };
     manifest.plugins = manifest.plugins.filter((entry) => entry.name !== "other");
     await writeFile(state.marketplaces.official.manifestPath, JSON.stringify(manifest), "utf8");
+    await rm(state.marketplaces.official.plugins["other"]!.resolvedSource, {
+      recursive: true,
+      force: true,
+    });
     let saveCalls = 0;
     const transaction: EnableDisableTransaction = {
       ...REAL_ENABLE_DISABLE_TRANSACTION,
@@ -8073,7 +8187,7 @@ test("EDEP-02: an unreadable declarer refuses the disable with no absolute path 
         "",
         "● official [user]",
         "  ⊘ shared-lib (failed) {unreadable}",
-        "    cause: cannot read the dependencies of other@official: not declared by its marketplace",
+        "    cause: cannot read the dependencies of other@official: not declared by its marketplace, and its installed copy cannot be read",
       ].join("\n"),
     );
     assert.equal(saveCalls, 0);

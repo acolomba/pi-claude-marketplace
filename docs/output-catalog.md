@@ -1292,7 +1292,7 @@ A plugin operation has failed.
 
 ● official [user]
   ⊘ helper v1.0.0 (failed) {unreadable}
-    cause: cannot read the dependencies of other@official: not declared by its marketplace
+    cause: cannot read the dependencies of other@official: not declared by its marketplace, and its installed copy cannot be read
 ```
 
 ### Failure -- the plugin is declared in the local layer only (LAYER-04 / D-MF-03)
@@ -1548,7 +1548,7 @@ A plugin operation has failed.
 
 ● official [user]
   ⊘ other (failed) {unreadable}
-    cause: cannot read the dependencies of other@official: not declared by its marketplace
+    cause: cannot read the dependencies of other@official: not declared by its marketplace, and its installed copy cannot be read
 ```
 
 The failure names the declarer and, for a reason this extension writes, why. The command removes nothing and emits no reload hint.
@@ -1896,7 +1896,7 @@ A plugin operation has failed.
 
 ● mp [project]
   ⊘ good v1.0.0 (failed) {unreadable}
-    cause: cannot read the dependencies of bad@mp: not declared by its marketplace
+    cause: cannot read the dependencies of bad@mp: not declared by its marketplace, and its installed copy cannot be read
 ```
 
 The constraint gate reads the dependency declarations of every plugin the scope records. When it cannot read one, it fails closed: the reinstall changes nothing and fails with `{unreadable}`, never `{dependents constrain}`, because nothing was shown to hold the version. The cause line names the record the walk could not read. The walk fails before any candidate, so the row shows the installed version it left in place (UPR-03). This is the named-target form of the bulk `{unreadable}` row the section introduction describes, and `update` renders the same row for the same walk.
@@ -3877,7 +3877,7 @@ Reconcile: 1 warning
 
 ### Load-time check, a declarer's dependencies cannot be read (REC-05)
 
-The load-time dependency check could not read what one installed plugin declares, so it held no plugin in the scope down on this pass (D-05-07). The usual cause is a marketplace that no longer lists the plugin, or a marketplace manifest that became invalid. The plugin stays installed and keeps loading; only the check is lost, so the row keeps the `(failed)` token at `warning` severity rather than `error`. The brace names the fault: `{not in manifest}` when the catalog dropped the plugin. A marketplace manifest that fails to load takes the token `list` and `info` give the same fault: `{unparseable}` for malformed JSON, `{invalid manifest}` for a schema-invalid manifest, `{source missing}` when it is missing, `{permission denied}` when the process may not read it, and `{unreadable}` otherwise. A plugin `dependencies` value that does not parse is `{invalid manifest}`, and a plugin's own manifest that is present but cannot be used is `{unreadable manifest}`. The `cause:` trailer names the plugin and says why in fixed words this extension writes; it never carries manifest text. The check is re-run on every load and nothing is stored, so the row returns at each new session until the marketplace is repaired, the plugin is uninstalled, or the marketplace is removed. Only the first such plugin in a scope is reported per pass. A plugin this pass already reported as failed, or uninstalled, gets no second row; a success row for it (for example a config-driven disable) does not replace the warning. The trailing tally counts the row as one warning; no reload-hint.
+The load-time dependency check could not read what one installed plugin declares, so it held no plugin in the scope down on this pass (D-05-07). The usual cause is a marketplace manifest that became invalid. A plugin the marketplace no longer lists is read from its installed copy (DLS-01), so it lands here only when that copy is gone or has no manifest -- for example a path-source plugin whose directory the marketplace deleted. The plugin stays installed and keeps loading; only the check is lost, so the row keeps the `(failed)` token at `warning` severity rather than `error`. The brace names the fault: `{not in manifest}` when the catalog dropped the plugin and its installed copy cannot be read. A marketplace manifest that fails to load takes the token `list` and `info` give the same fault: `{unparseable}` for malformed JSON, `{invalid manifest}` for a schema-invalid manifest, `{source missing}` when it is missing, `{permission denied}` when the process may not read it, and `{unreadable}` otherwise. A plugin `dependencies` value that does not parse is `{invalid manifest}`, and a plugin's own manifest that is present but cannot be used is `{unreadable manifest}`. The `cause:` trailer names the plugin and says why in fixed words this extension writes; it never carries manifest text. The check is re-run on every load and nothing is stored, so the row returns at each new session until the marketplace is repaired, the plugin is uninstalled, or the marketplace is removed. Only the first such plugin in a scope is reported per pass. A plugin this pass already reported as failed, or uninstalled, gets no second row; a success row for it (for example a config-driven disable) does not replace the warning. The trailing tally counts the row as one warning; no reload-hint.
 
 <!-- catalog-state: reconcile-dependency-declarer-unreadable -->
 
@@ -3886,7 +3886,23 @@ A plugin operation needs attention.
 
 ● mp [project]
   ⊘ deploy-kit (failed) {not in manifest}
-    cause: cannot read the dependencies of deploy-kit@mp: not declared by its marketplace
+    cause: cannot read the dependencies of deploy-kit@mp: not declared by its marketplace, and its installed copy cannot be read
+
+Reconcile: 1 warning
+```
+
+### Load-time warning, a plugin its marketplace no longer lists (REC-05 / DLS-01)
+
+An enabled plugin stays installed after its marketplace's catalog dropped it. Claude Code reports this on every load as a `plugin-not-found` error and stops loading the plugin; Pi keeps it running and reads its dependencies from its installed copy (DLS-D1), so it still protects its dependencies and constrains other plugins. This row is Pi's counterpart to the upstream error: `(failed)` at `warning` severity with `{not in manifest}`, and a `cause:` line in upstream's words. It does not depend on the dependency check failing. A disabled plugin gets no row, because upstream raises the error only for plugins it loads. When the dependency check stops at a plugin whose installed copy cannot be read, that plugin gets the dependency-check row above instead; the check stops at the first such plugin, so any later one still gets this row. A plugin this pass already reported as failed, uninstalled, or disabled gets none. The row returns at each new session until the plugin is uninstalled or the marketplace lists it again. The trailing tally counts the row as one warning; no reload-hint.
+
+<!-- catalog-state: reconcile-plugin-not-in-manifest -->
+
+```text
+A plugin operation needs attention.
+
+● mp [project]
+  ⊘ deploy-kit (failed) {not in manifest}
+    cause: Plugin "deploy-kit" not found in marketplace "mp"
 
 Reconcile: 1 warning
 ```

@@ -240,12 +240,12 @@ A dependency can go missing after the install that brought it in. You can uninst
 
 A declaration is unsatisfied in three cases: the dependency is not installed, the dependency is installed but disabled, or the dependency's recorded version falls outside the declared range.
 
-The check needs to read what every plugin in the scope declares. When it cannot read that for one plugin, it disables nothing in the scope on that reload, because it cannot tell which plugins are safe. It reports that plugin as a warning instead. The plugin stays installed and keeps loading. The brace names the fault: `{not in manifest}` when the marketplace no longer lists the plugin. A marketplace manifest fault gets the same token `list` and `info` show for it, such as `{unparseable}` for malformed JSON, `{invalid manifest}` for a schema-invalid manifest, or `{source missing}` for a missing one. The warning returns at every reload until you update or repair the marketplace, or uninstall the plugin:
+The check needs to read what every plugin in the scope declares. When it cannot read that for one plugin, it disables nothing in the scope on that reload, because it cannot tell which plugins are safe. It reports that plugin as a warning instead. The plugin stays installed and keeps loading. A plugin the marketplace no longer lists is read from its installed copy, so it blocks the check only when that copy is gone or has no manifest. The brace names the fault: `{not in manifest}` when the marketplace no longer lists the plugin and its installed copy cannot be read. A marketplace manifest fault gets the same token `list` and `info` show for it, such as `{unparseable}` for malformed JSON, `{invalid manifest}` for a schema-invalid manifest, or `{source missing}` for a missing one. The warning returns at every reload until you update or repair the marketplace, or uninstall the plugin:
 
 ```text
 ● mp [project]
   ⊘ deploy-kit (failed) {not in manifest}
-    cause: cannot read the dependencies of deploy-kit@mp: not declared by its marketplace
+    cause: cannot read the dependencies of deploy-kit@mp: not declared by its marketplace, and its installed copy cannot be read
 ```
 
 A plugin whose declaration is unsatisfied is disabled. Its skills, prompts, agents, MCP entries and hooks come off disk, so it stops loading instead of running against a dependency that is not there. Its install record stays, so nothing else is lost.

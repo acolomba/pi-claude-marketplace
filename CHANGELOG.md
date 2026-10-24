@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+- A plugin that its marketplace no longer lists no longer blocks `update`, `reinstall`, `uninstall`, `disable`, or `enable` of other plugins in its scope. Pi keeps such a plugin running, so it now reads the plugin's dependencies from its installed copy: the plugin still protects what it needs and still limits which versions of it other commands install. Claude Code stops loading such a plugin instead. The warning at each new session stays, and now says `Plugin "<plugin>" not found in marketplace "<marketplace>"`. A plugin whose installed files are also gone still fails these commands with `{unreadable}`.
+
 - `enable` now fails with `{dependency unsatisfied}` and changes nothing when a dependency of the plugin is not installed, as Claude Code does. The cause says which dependencies to install first. It used to enable the plugin and leave the dependency to the next reload.
 
 - Plugins from git sources now reach the git host less often, and an install the host refuses says why.

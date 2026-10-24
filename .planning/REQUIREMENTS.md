@@ -167,7 +167,7 @@ settle which one wins (see PROJECT.md).
 - [x] **INR-06**: A failed pinned-commit install's cause carries no git-library advice the user cannot act on, and a pin reachable only from a tag installs on the ref-hint clone path
 - [x] **REC-06**: Reconcile's own failed install reports the narrowed resolver reasons `install` and `import` report, and `import` reports a rollback-partial install as `{rollback partial}` as `install` does
 - [x] **MPR-01**: `marketplace remove`'s dependents refusal ignores disabled holders, as a named `uninstall` does
-- [ ] **DLS-01**: A plugin its marketplace no longer lists (installed, `{not in manifest}`) does not make the scope's dependency walk unreadable: its dependencies are read from its installed copy, so `update`, `reinstall`, `uninstall`, `enable`, and the load-time backfill of other plugins proceed; only a record whose installed copy is also unreadable fails closed
+- [x] **DLS-01**: A plugin its marketplace no longer lists (installed, `{not in manifest}`) does not make the scope's dependency walk unreadable: its dependencies are read from its installed copy, so `update`, `reinstall`, `uninstall`, `enable`, and the load-time backfill of other plugins proceed; only a record whose installed copy is also unreadable fails closed (divergence DLS-D1: upstream does not load a delisted plugin; Pi keeps it running, so it keeps its dependencies. The per-session `{not in manifest}` warning stays, independent of the walk)
 - [ ] **CAT-01**: On load (`/reload`, session start), every installed plugin whose recorded version differs from its marketplace's catalog on disk moves to the catalog version, so the scope converges on one internally consistent catalog version; a load with no catalog change writes nothing (RECON-05)
 - [ ] **CAT-02**: A git-source plugin whose catalog target is not cached stays at its version and reports `upgradable`; a load never reaches the network for it (NFR-5, option b)
 - [ ] **CAT-03**: A plugin a dependent's range blocks, or whose new version would drop components without consent, stays at its version with a warning row naming why (`{dependents constrain}`, `partially-upgradable`), and `pending` lists it; no load retries it silently
@@ -285,7 +285,7 @@ settle which one wins (see PROJECT.md).
 | INR-06 | Phase 27 | Complete |
 | REC-06 | Phase 27 | Complete |
 | MPR-01 | Phase 27 | Complete |
-| DLS-01 | Phase 28 | Pending |
+| DLS-01 | Phase 28 | Complete |
 | CAT-01 | Phase 29 | Pending |
 | CAT-02 | Phase 29 | Pending |
 | CAT-03 | Phase 29 | Pending |

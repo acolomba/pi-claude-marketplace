@@ -494,7 +494,7 @@ test("WIRE-02: the retained inventory and separate command error cover all 21 ki
     "usage-error",
     "usage-info",
   ]);
-  assert.strictEqual(PRESENTED.length, 317);
+  assert.strictEqual(PRESENTED.length, 318);
 
   for (const payload of payloads) {
     assert.ok(PAYLOAD_VALIDATOR.Check(payload));
@@ -704,7 +704,7 @@ for (const mode of ["json", "rpc"] as const) {
 
     const emittedKeys = emitted.flatMap(({ key, payloads }) => payloads.map(() => key));
     assert.deepStrictEqual(emittedKeys, tupleKeys(EXAMPLES));
-    assert.strictEqual(new Set(emittedKeys).size, 307);
+    assert.strictEqual(new Set(emittedKeys).size, 308);
     assert.deepStrictEqual(
       capture.entries.map(({ customType }) => customType),
       EXAMPLES.map(() => "claude-plugin"),

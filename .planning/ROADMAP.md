@@ -139,7 +139,7 @@ Step module paths are relative to `features/step_definitions/`.
 - [x] **Phase 25: Update and Reinstall Rows** — Same-version updates show commits, and update and reinstall rows carry their versions and consistent reasons
 - [x] **Phase 26: Git Mirror Access** — Mirror refreshes take the state lock, one copy helper serves all clones, and a cold `info --fetch` contacts the host once
 - [x] **Phase 27: Install and Reconcile Reason Residue** — Dependency ranges read as upstream, pinned-commit failures read cleanly, reconcile and import narrow reasons like install, and marketplace remove ignores disabled holders
-- [ ] **Phase 28: Delisted Plugin Dependency Walk** — A plugin its marketplace no longer lists keeps its dependencies from its installed copy, so it no longer blocks the scope's dependency walk
+- [x] **Phase 28: Delisted Plugin Dependency Walk** — A plugin its marketplace no longer lists keeps its dependencies from its installed copy, so it no longer blocks the scope's dependency walk
 - [ ] **Phase 29: Load Converges on the Catalog** — A load moves every plugin to its marketplace catalog's version, offline, and reports what it could not move
 
 ## Phase Details
@@ -582,7 +582,7 @@ Plans:
 
 **Goal:** A delisted plugin stays "installed, not in manifest" (v1.18) everywhere, including the dependency walk.
 **Depends on:** Phase 25, Phase 26
-**Decision:** 2026-10-24 (user): a delisted plugin is not marketplace corruption; it can be used as is or uninstalled. Read its dependencies from its installed copy, after confirming upstream does the same.
+**Decision:** 2026-10-24 (user): a delisted plugin is not marketplace corruption; it can be used as is or uninstalled. Read its dependencies from its installed copy, after confirming upstream does the same. Upstream check (Claude Code 2.1.309): upstream does not load a delisted plugin (`plugin-not-found`), so it reads no dependencies for it. 2026-10-24 (user, DLS-D1): a delisted plugin that Pi keeps running (v1.18 divergence) keeps its dependencies from its installed copy, so it still protects its dependencies and constrains other plugins; upstream skips the plugin entirely because it does not load it. A path-source plugin whose directory is gone still fails closed with `{unreadable}`. The phase 17 per-session `{not in manifest}` warning stays as its own row, our counterpart to `plugin-not-found`, independent of the walk.
 **Requirements:** DLS-01
 **Files:** `orchestrators/plugin/dependency-index.ts` (`readRecordDeclarations`), `orchestrators/plugin/update-constraint-gate.ts`, the reconcile backfill; `features/plugin/update.feature`, `reinstall.feature`, `uninstall.feature`, `enable-disable.feature`, `pending.feature`.
 **Success Criteria** (what must be TRUE):
@@ -639,7 +639,7 @@ Plans:
 | 25. Update and Reinstall Rows | 8/8 | Complete    | 2026-10-24 |
 | 26. Git Mirror Access | 1/1 | Complete    | 2026-10-23 |
 | 27. Install and Reconcile Reason Residue | 1/1 | Complete    | 2026-10-23 |
-| 28. Delisted Plugin Dependency Walk | 0/TBD | Not started | - |
+| 28. Delisted Plugin Dependency Walk | 1/1 | Complete    | 2026-10-24 |
 | 29. Load Converges on the Catalog | 0/TBD | Not started | - |
 
 ## Carried Forward
