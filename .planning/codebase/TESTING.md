@@ -143,7 +143,7 @@ export interface CredentialOpsFake {
 - Failure injection is opt-in per operation via `*Error?: Error` option fields (`fillError`, `approveError`, `rejectError`, `cloneError`, `fetchError`, `checkoutError`, `resolveRemoteRefError`), so a test can exercise its own try/catch around one specific seam
 
 **What to Mock:**
-- External subprocess/network/credential-store boundaries: `git` operations (`GitOps`), OS credential helper subprocess calls (`CredentialOps`), device-flow HTTP calls (`DeviceFlowHttp`), and destructive filesystem removal/rename (`RemovalOps`, injected as a port)
+- External subprocess/network/credential-store boundaries: `git` operations (`GitOps`), OS credential helper subprocess calls (`CredentialOps`), device-flow HTTP calls (`DeviceFlowHttp`), and destructive filesystem removal (`RemovalOps`, injected as a port)
 
 **What NOT to Mock:**
 - The filesystem for state/config I/O — tests use real `mkdtemp` temp directories throughout, never an in-memory fs layer. `withHermeticHome` wrappers do exist and are **not** a counter-example: they delegate to `test/platform/hermetic-environment.ts`, which `mkdtemp`s a real root and repoints `HOME` and `PI_CODING_AGENT_DIR` at real directories inside it, then restores both and removes the tree. It relocates the filesystem rather than interposing a fake one. The name is per-suite rather than shared — 15 local definitions, of which only `test/orchestrators/plugin/update-flow.test.ts` exports one and only `test/orchestrators/plugin/update-swap.test.ts` imports it; `createHermeticEnvironment(t, prefix)` is the variant that registers cleanup via `t.after`

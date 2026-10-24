@@ -43,7 +43,8 @@ import type { Dirent } from "node:fs";
  * The removal port: the destructive filesystem verb behind one substitutable
  * object.
  *
- * One member and no more (D-08-13). Widening this into a general filesystem
+ * The port stays narrow (D-08-13): `rm` is its one member since IN-06
+ * dropped the unused `rename`. Widening this into a general filesystem
  * facade would put every verb in this module behind a seam nothing asked for;
  * `pathExists`, `readDirEntriesTolerant`, and `isPlainMarkdownFile` keep
  * calling `fs` directly.
@@ -57,8 +58,8 @@ export interface RemovalOps {
 }
 
 /**
- * The real removal operations: a thin binding to `fs.rm` and nothing else. Construction performs no filesystem work; only the operations
- * do.
+ * The real removal operations: a thin binding to `fs.rm` and nothing else.
+ * Construction performs no filesystem work; only the operations do.
  *
  * Called by the composition roots -- the orchestrators that own a staging
  * lifecycle -- never by a bridge, and never defaulted into a parameter

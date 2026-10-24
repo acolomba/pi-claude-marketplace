@@ -373,12 +373,13 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
       }
     }
 
-    // (3) Materialize through the clone-cache seam (the consented fetch),
-    // under the scope's state lock so no install copies from a mirror
-    // mid-refresh (GIT-03); a held lock fails the row `lock held`.
-    await withExistingScopeLock(locations, () =>
-      materializeThroughSeam(gitSource, deps, locations),
-    );
+    // (3) Materialize through the clone-cache seam (the consented fetch). A
+    // mirror refresh runs under the scope's state lock so no install copies
+    // from a mirror mid-refresh (GIT-03); a held lock fails the row `lock
+    // held`. A pinned clone is immutable and never touches the mirror.
+    await (gitSource.sha === undefined
+      ? withExistingScopeLock(locations, () => materializeThroughSeam(gitSource, deps, locations))
+      : materializeThroughSeam(gitSource, deps, locations));
 
     // Derive the post-fetch row FRESH against the now-warm tree.
     const marketplaceContext = {

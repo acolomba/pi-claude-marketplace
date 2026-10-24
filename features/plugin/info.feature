@@ -368,7 +368,7 @@ Feature: Plugin info
       | marketplace name               | gits                           |
       | marketplace scope              | project                        |
       | needs reload                   | false                          |
-      | plugin components resolved     | false                          |
+      | plugin components resolved     | true                           |
       | plugin id                      | ghp@gits                       |
       | plugin name                    | ghp                            |
       | plugin reasons                 | lock held                      |

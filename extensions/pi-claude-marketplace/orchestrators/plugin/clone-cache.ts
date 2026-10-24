@@ -648,19 +648,21 @@ async function seedOnePluginMirror(
 
   const staging = await locations.sourcesStagingDir(randomUUID());
   await mkdir(path.dirname(staging), { recursive: true });
-  // Copy the working tree AND `.git`, so the seeded mirror's origin remote is
-  // the real remote URL (SEED-05), never the local checkout path. `cp` is
-  // cross-FS safe; the visible mirror still appears only via the atomic rename.
-  await cp(marketplaceRoot, staging, { recursive: true });
-
-  // SEED-04: a pinned source is seeded ONLY after its sha checks out against the
-  // copied history -- a successful checkout IS the reachability proof. An
-  // unreachable pin (CommitNotFetchedError, or any throw) is skipped so the
-  // normal network path materializes it later; never fabricate an immutable
-  // per-sha entry from non-matching content.
-  if (source.sha !== undefined) {
+  if (source.sha === undefined) {
+    // The mirror is a download cache: copy the working tree AND `.git`, so its
+    // origin remote is the real remote URL (SEED-05), never the local checkout
+    // path, with symlinks kept as they are. `cp` is cross-FS safe; the visible
+    // mirror still appears only via the atomic rename.
+    await cp(marketplaceRoot, staging, { recursive: true, verbatimSymlinks: true });
+  } else {
+    // SEED-04 / GIT-04: a pinned source is a per-commit copy an install runs
+    // from, so it gets exactly the commit's tree through the shared step, and
+    // only when the sha checks out against the copied history -- a successful
+    // checkout IS the reachability proof. An unreachable pin (or any throw) is
+    // skipped so the normal network path materializes it later; never
+    // fabricate an immutable per-sha entry from non-matching content.
     try {
-      await gitOps.checkout({ dir: staging, ref: source.sha });
+      await checkoutGitDirCopy(gitOps, path.join(marketplaceRoot, ".git"), staging, source.sha);
     } catch {
       await cleanupStaging(ops, staging, "plugin mirror seed staging");
       return;

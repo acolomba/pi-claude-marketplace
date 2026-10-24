@@ -12,6 +12,7 @@ import {
   errorMessage,
   PluginShapeError,
   rethrowInvalidGitHubBaseUrl,
+  StateLockHeldError,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { ownValue } from "../../shared/own-key.ts";
@@ -465,6 +466,12 @@ async function resolveUpdateCandidate(
     // GHB-03: an invalid GitHub base override fails the whole command; it never
     // becomes a skipped row.
     rethrowInvalidGitHubBaseUrl(error);
+    // GIT-03: `probeUnpinned` takes the state lock; a held lock is the
+    // command's own `lock held` failure, never a candidate verdict.
+    if (error instanceof StateLockHeldError) {
+      throw error;
+    }
+
     const networkReason = classifyGitTransportFailure(error);
     if (networkReason !== undefined) {
       return {

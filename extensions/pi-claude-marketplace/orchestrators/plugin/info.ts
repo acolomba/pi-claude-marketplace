@@ -2113,12 +2113,13 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
     return resolveGitPluginRootWithSubdir(gitSource, cloneRoot, pin);
   };
 
-  // GIT-03: the refresh runs under the scope's state lock, so no install
-  // copies from a mirror mid-refresh; a held lock folds to `lock held`.
+  // GIT-03: the mirror refresh runs under the scope's state lock, so no
+  // install copies from a mirror mid-refresh; a held lock fails the read. A
+  // pinned clone is immutable and never touches the mirror, as in `fetch`.
   return (gitSource) =>
-    withExistingScopeLock(locations, () =>
-      gitSource.sha === undefined ? probeUnpinned(gitSource) : probePinned(gitSource),
-    );
+    gitSource.sha === undefined
+      ? withExistingScopeLock(locations, () => probeUnpinned(gitSource))
+      : probePinned(gitSource);
 }
 
 /**
@@ -2132,7 +2133,8 @@ function lockHeldRow(pluginName: string, version: string | undefined): PluginInf
     name: pluginName,
     ...(version !== undefined && { version }),
     reasons: ["lock held"],
-    componentsResolved: false,
+    componentsResolved: true,
+    components: {},
   };
 }
 

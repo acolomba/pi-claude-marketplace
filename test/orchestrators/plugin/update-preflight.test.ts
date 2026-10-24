@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 
 import * as git from "isomorphic-git";
+import lockfile from "proper-lockfile";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
@@ -17,7 +18,10 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  InvalidGitHubBaseUrlError,
+  StateLockHeldError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -1837,3 +1841,29 @@ for (const { label, recordedSha, source } of [
     assert.strictEqual(outcome.toVersion, "2.0.0");
   });
 }
+
+test("GIT-03: an unpinned update under a held state lock throws lock held, not a verdict", async (t) => {
+  // arrange
+  const seed = await seedUpdate({
+    installed: pluginRecord("1.0.0"),
+    source: { source: "url", url: "https://example.com/unpinned" },
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const cloneCacheSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: () => Promise.reject(new Error("unexpected pin resolution")),
+    materializePluginClone: () => Promise.reject(new Error("unexpected immutable clone")),
+    materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
+  };
+  const release = await lockfile.lock(seed.locations.extensionRoot, {
+    lockfilePath: seed.locations.stateLockFile,
+    realpath: false,
+  });
+
+  // act & assert
+  try {
+    await assert.rejects(prepare(seed, { cloneCacheSeam }), StateLockHeldError);
+  } finally {
+    await release();
+  }
+});
