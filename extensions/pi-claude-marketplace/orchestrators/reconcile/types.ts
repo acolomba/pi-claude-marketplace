@@ -313,9 +313,7 @@ export function emptyReconcilePlan(scope: Scope): ReconcilePlan {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Both moved from apply.ts when the backfill pass became its own module: two
-// files in this folder now name them, so leaving them in one of those files
-// would have made the other import back into it (FLOW-09).
+// The `/claude:plugin apply` options and the step seams its tests inject.
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
@@ -335,8 +333,8 @@ export type DependencyDisableStamp = (
 export interface ApplyReconcileOptions {
   readonly ctx: NotificationContext;
   /**
-   * D-05 / D-07: the load pass's run, opened once per `resources_discover`.
-   * The reconcile-applied cascade renders from its soft-dependency snapshot.
+   * D-05 / D-07: the run the `apply` command opens before the pass. The
+   * reconcile-applied cascade renders from its soft-dependency snapshot.
    */
   readonly run: NotificationRun;
   /** Project-scope cwd (ignored for the user scope). */

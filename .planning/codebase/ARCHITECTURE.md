@@ -67,7 +67,7 @@ last_mapped_at: 2026-10-05
 | Orchestrators (plugin) | Transactional install/uninstall/update/reinstall/enable-disable flows | `extensions/pi-claude-marketplace/orchestrators/plugin/*.ts` |
 | Orchestrators (marketplace) | add/remove/list/info/update/autoupdate for marketplaces | `extensions/pi-claude-marketplace/orchestrators/marketplace/*.ts` |
 | Orchestrators (import) | Bulk cascade-install of an entire Claude Code `claude-plugins.json` config | `extensions/pi-claude-marketplace/orchestrators/import/*.ts` |
-| Orchestrators (reconcile) | Load-time diffing of desired vs. on-disk state; drives `resources_discover` self-healing | `extensions/pi-claude-marketplace/orchestrators/reconcile/*.ts` |
+| Orchestrators (reconcile) | Diffs desired (config) against recorded (`state.json`) state and the installed plugins against their catalog; previews the changes at load and in `pending`, and makes them through `apply` | `extensions/pi-claude-marketplace/orchestrators/reconcile/*.ts` |
 | Bridges | Translate one Claude-plugin component kind (skills/commands/agents/mcp/hooks/workflows) into its Pi-native artifact via a stage/commit/unstage triplet | `extensions/pi-claude-marketplace/bridges/{skills,commands,agents,mcp,hooks,workflows}/*.ts` |
 | Domain | Pure resolution/validation logic: plugin manifest parsing, source-URL parsing, discriminated `installable` resolver, version derivation | `extensions/pi-claude-marketplace/domain/*.ts` |
 | Transaction | Generic phase-ledger primitive + cross-process state-lock guard + rollback composition | `extensions/pi-claude-marketplace/transaction/*.ts` |
@@ -96,7 +96,7 @@ last_mapped_at: 2026-10-05
 - Used by: `index.ts` factory (`registerClaudePluginCommand`)
 
 **orchestrators/:**
-- Purpose: own the business logic for install/uninstall/update/reinstall/enable-disable, marketplace lifecycle, bulk import, and load-time reconcile
+- Purpose: own the business logic for install/uninstall/update/reinstall/enable-disable, marketplace lifecycle, bulk import, and reconcile (the load-time preview, `pending`, and `apply`)
 - Location: `extensions/pi-claude-marketplace/orchestrators/`
 - Contains: per-verb owners — the split verbs pair a `<verb>-flow.ts` composition root with extracted leaf modules (`install-flow.ts` + `install-outcome.ts`/`install-cascade.ts`/`install-clone-probe.ts`/`install-declared-enabled.ts`/`install-disable-cascade.ts`; `update-flow.ts` + `update-swap.ts`/`update-preflight.ts`/`update-cascade.ts`/`update-row.ts`; `reinstall-flow.ts` + `reinstall-clone-probe.ts`/`reinstall-record.ts`/`reinstall-replace.ts`/`reinstall-targets.ts`; `list-flow.ts` + `list-candidate-row.ts`/`list-installed-row.ts`/`list-orphan-fold.ts`), while `uninstall.ts`, `info.ts`, `fetch.ts`, and `enable-disable.ts` remain single-file owners; most verbs are paired with a `*.messaging.ts` file holding the notification-message builder; `shared.ts` per subdirectory for cross-verb helpers
 - Depends on: bridges/, domain/, transaction/, persistence/, platform/, shared/
@@ -141,7 +141,7 @@ last_mapped_at: 2026-10-05
 **shared/:**
 - Purpose: cross-cutting leaf utilities with no upward dependencies
 - Location: `extensions/pi-claude-marketplace/shared/`
-- Contains: the notification family — `notification-types.ts` (the closed message/reason/severity vocabulary), `notification-grammar.ts` (the largest module in `shared/`; deterministic row and block rendering), `notification-summary.ts` (severity, tally, reload, and cascade-summary folding), `notification-dispatch.ts` (the single sanctioned UI-output surface and sole `ctx.ui.notify` call site) — plus `notify-context.ts`/`notify-reasons.ts`, `compare-name-scope.ts` (canonical name-then-scope row ordering), `redact-absolute-paths.ts`, `errors.ts`/`errors-bridges.ts` (typed error classes: `PluginShapeError`, `ConcurrentInstallError`, `StateLockHeldError`, `PathContainmentError`), `path-safety.ts` (`assertPathInside` chokepoint, NFR-10), `atomic-json.ts` (JSON write-file-atomic wrapper), `fs-utils.ts`, `concerns/soft-dep.ts` (`Dependency` type + companion-extension probing), `concerns/hooks.ts`, `debug-log.ts`, `types.ts` (`Scope` union), `vars.ts` (`${CLAUDE_PLUGIN_DATA}`/`${CLAUDE_PROJECT_DIR}` substitution), `git-failure-classifiers.ts`, `probe-classifiers.ts`, `extension-version.ts`, `markers.ts`, `session-env.ts`, `completion-cache.ts`
+- Contains: the notification family — `notification-types.ts` (the closed message/reason/severity vocabulary), `notification-grammar.ts` (the largest module in `shared/`; deterministic row and block rendering), `notification-summary.ts` (severity, tally, reload, and cascade-summary folding), `notification-dispatch.ts` (the single sanctioned UI-output surface and sole `ctx.ui.notify` call site) — plus `notify-context.ts`/`notify-reasons.ts`, `compare-name-scope.ts` (canonical name-then-scope row ordering), `redact-absolute-paths.ts`, `errors.ts`/`errors-bridges.ts` (typed error classes: `PluginShapeError`, `ConcurrentInstallError`, `StateLockHeldError`, `PathContainmentError`), `path-safety.ts` (`assertPathInside` chokepoint, NFR-10), `atomic-json.ts` (JSON write-file-atomic wrapper), `fs-utils.ts`, `concerns/soft-dep.ts` (`Dependency` type + companion-extension probing), `concerns/hooks.ts`, `debug-log.ts`, `types.ts` (`Scope` union), `vars.ts` (`${CLAUDE_PLUGIN_DATA}`/`${CLAUDE_PROJECT_DIR}` substitution), `git-failure-classifiers.ts`, `probe-classifiers.ts`, `markers.ts`, `session-env.ts`, `completion-cache.ts`
 - Depends on: nothing internal (leaf layer)
 - Used by: every other layer
 
@@ -159,10 +159,19 @@ last_mapped_at: 2026-10-05
 
 ### Load-Time Reconcile Flow (`resources_discover`)
 
+A load changes no installation state (APL-D1). It reads, reports, and reloads resources.
+
 1. Pi fires `resources_discover` on every session start/reload; `index.ts` handler first calls `hydrateProjectScopeForCwd` (`bridges/hooks/index.ts`) to populate the per-project hook-routing cache
-2. `applyReconcile` (`orchestrators/reconcile/apply.ts`) reconciles **desired** state against **recorded** state: `orchestrators/reconcile/plan.ts` diffs the declared config (merged `claude-plugins.json`) against the installation records in `state.json`, partitioning both sides into action buckets, and the apply path installs, uninstalls, enables, and disables to close the gap — materializing and unstaging artifacts as those transitions require. This is what lets `/reload` alone converge on a hand-edited config (NFR-2). It is a config-to-record reconciliation, NOT a deep diff of records against on-disk artifacts: an artifact deleted underneath an intact record is not detected
+2. `loadReconcile` (`orchestrators/reconcile/load.ts`) runs per scope, project first: the shared locked, write-free read pass (`orchestrators/reconcile/read-pass.ts`: the MIG-01 first-run config migration, the legacy state migration, the LOAD-01 dependency verdict, and `orchestrators/reconcile/plan.ts`'s diff of the merged config against the records in `state.json`), then the AMIG-01 MCP move, then the per-session warnings (unreadable declarer, `{not in manifest}`) and the hook routing rebuild. On a mismatch it prints the block `pending` prints, built by `pending.ts::composePendingReport` and ending with the `/claude:plugin apply` trailer; on a match it prints nothing (RECON-05). It installs, uninstalls, enables, disables, and updates nothing
 3. `recomputePluginPath` (`orchestrators/plugin-path.ts`) rebuilds the `PATH`-equivalent routing table for both scopes
 4. `aggregateDiscoveredResources` (`orchestrators/discover.ts`) walks both scope `locationsFor(...)` bundles and returns `{ skillPaths, promptPaths }` to Pi
+
+### Apply Request Path (`/claude:plugin apply`)
+
+1. The router dispatches `apply` to `edge/handlers/plugin/apply.ts` (handler member `pluginApply`), which parses `--scope` and calls `applyReconcile` (`orchestrators/reconcile/apply.ts`)
+2. Per scope, project first: the same read pass as the load, then the AMIG-01 MCP move, then the apply steps in fixed order (uninstall, marketplace remove, marketplace add, install, missing-dependency install, enable, disable, dependency-disable), each through its own orchestrator and its own state lock, so a hand-edited config converges (APL-01)
+3. `convergeScope` re-reads the scope and runs `orchestrators/reconcile/convergence.ts::planConvergence`, the offline catalog-move planner that `pending` and the load share. Each move runs through the update runner's converge entry (`convergePlugin`); a move a dependent's range blocks or that needs `--partial` consent is reported and not run (APL-02). A git target may clone on a cache miss
+4. One `reconcile-applied-cascade` notification reports every change and ends with the `/reload` hint; with nothing to do, apply reports `Apply: nothing to change.` and writes nothing. NFR-2, amended by APL-D2: `/claude:plugin apply`, then `/reload`, must suffice. It is a config-to-record and record-to-catalog reconciliation, NOT a deep diff of records against on-disk artifacts: an artifact deleted underneath an intact record is not detected
 
 **State Management:**
 - Single source of truth is `<scopeRoot>/pi-claude-marketplace/state.json`, one file per scope (`user`/`project`), read/written exclusively through `persistence/state-io.ts` under the `proper-lockfile` guard
@@ -201,7 +210,7 @@ last_mapped_at: 2026-10-05
 **`/claude:plugin` command:**
 - Location: `extensions/pi-claude-marketplace/edge/router.ts` (`routeClaudePlugin`), wired by `edge/register.ts`
 - Triggers: user-typed slash command in Pi
-- Responsibilities: subcommand dispatch (install/uninstall/update/fetch/reinstall/list/info/pending/prune/browse/help/enable/disable/import/marketplace)
+- Responsibilities: subcommand dispatch (install/uninstall/update/fetch/reinstall/list/info/pending/apply/prune/browse/help/enable/disable/import/marketplace)
 
 **MCP tools:**
 - Location: `extensions/pi-claude-marketplace/edge/handlers/tools.ts`, registered via `registerClaudeMarketplaceTools` (`edge/register.ts`)
