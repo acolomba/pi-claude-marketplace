@@ -10,7 +10,32 @@ import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-prefligh
 import { preflightMove, swapPluginUpdate } from "./update-swap.ts";
 
 import type { MaterializationPolicy } from "./update-preflight.ts";
-import type { ThreePhaseArgs, UpdateRunOutcome } from "./update-swap.ts";
+import type { ThreePhaseArgs, ThreePhaseArgsBase, UpdateRunOutcome } from "./update-swap.ts";
+import type { RevisionMove } from "../types.ts";
+
+/**
+ * UPR-03: what one target's runner reported, so a thrown failure can name the
+ * installed version once the preflight found the record, and the move it
+ * attempted once it derived a candidate. A caller creates a fresh one per
+ * target, so a later target never renders an earlier target's versions.
+ */
+export interface CandidateReport {
+  move?: Partial<RevisionMove>;
+}
+
+/** UPR-03: the runner callbacks that fill `report`, for both verbs. */
+export function recordCandidate(
+  report: CandidateReport,
+): Pick<ThreePhaseArgsBase, "onCandidate" | "onRecord"> {
+  return {
+    onRecord: (fromVersion) => {
+      report.move = { fromVersion };
+    },
+    onCandidate: (move) => {
+      report.move = move;
+    },
+  };
+}
 
 /**
  * Materializes the latest version the scope knows about for one installed

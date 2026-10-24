@@ -87,7 +87,7 @@ import { DEFAULT_GIT_OPS, refreshGitHubClone, refreshUrlClone } from "../marketp
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
-import { materializeLatestVersion } from "./materialize-latest.ts";
+import { materializeLatestVersion, recordCandidate } from "./materialize-latest.ts";
 import {
   emitMarketplaceNotAddedSignal,
   keepLocalLayerTargets,
@@ -126,7 +126,8 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult } from "../auth-host.ts";
-import type { PluginUpdateFn, PluginUpdateOutcome, RevisionMove } from "../types.ts";
+import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
+import type { CandidateReport } from "./materialize-latest.ts";
 
 /** Runs one prepared update target for the update flow. */
 type UpdatePluginRunner = (args: ThreePhaseArgs) => Promise<UpdateRunOutcome>;
@@ -205,29 +206,6 @@ function makeSyncCloneOnce(
 
 /** The collaborators `createPluginUpdateOperations` binds into every target's arguments. */
 type UpdateBindings = Pick<ThreePhaseArgsBase, "hooksRouting" | "completionCache" | "env">;
-
-/**
- * UPR-03: what one target's runner reported, so a thrown failure can name the
- * installed version once the preflight found the record, and the move it
- * attempted once it derived a candidate. A caller creates a fresh one per
- * target, so a later target never renders an earlier target's versions.
- */
-interface CandidateReport {
-  move?: Partial<RevisionMove>;
-}
-
-function recordCandidate(
-  report: CandidateReport,
-): Pick<ThreePhaseArgsBase, "onCandidate" | "onRecord"> {
-  return {
-    onRecord: (fromVersion) => {
-      report.move = { fromVersion };
-    },
-    onCandidate: (move) => {
-      report.move = move;
-    },
-  };
-}
 
 /**
  * Build the per-target `runThreePhaseUpdate` argument bag for the DIRECT

@@ -60,7 +60,7 @@ import { ownValue } from "../../shared/own-key.ts";
 import { type LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
-import { materializeLatestVersion } from "./materialize-latest.ts";
+import { materializeLatestVersion, recordCandidate } from "./materialize-latest.ts";
 import {
   recordReinstallOutcome,
   reinstallOutcomeFromRun,
@@ -91,6 +91,7 @@ import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { ReinstallFailedOutcome, ReinstallPluginOutcome, RevisionMove } from "../types.ts";
+import type { CandidateReport } from "./materialize-latest.ts";
 import type { ReinstallPhaseFailure } from "./reinstall-record.ts";
 import type { ReinstallPluginsTarget, ReinstallTargetSelection } from "./reinstall-targets.ts";
 import type { MaterializationPolicy, UpdateCloneCacheSeam } from "./update-preflight.ts";
@@ -271,15 +272,6 @@ interface ReinstallReached {
 // The `reinstallPlugins` enumeration catch detects it via `instanceof` and
 // emits ONE standalone `MarketplaceNotAddedMessage` before any cascade row.
 
-/**
- * UPR-03: what the shared runner reported, so a thrown failure can name the
- * installed version once the preflight found the record, and the move it
- * attempted once it derived a candidate.
- */
-interface ReportedCandidate {
-  move?: Partial<RevisionMove>;
-}
-
 /** Runs one reinstall, its maintenance, and its notification. */
 async function reinstallPluginWith(
   owners: ReinstallFlowOwners,
@@ -291,7 +283,7 @@ async function reinstallPluginWith(
   const locations = locationsFor(scope, cwd);
 
   // UPR-03: one holder per call, so a failure names this target's move only.
-  const candidate: ReportedCandidate = {};
+  const candidate: CandidateReport = {};
   let reached: ReinstallReached;
   try {
     reached = await runReinstall(owners, bindings, opts, locations, candidate);
@@ -376,7 +368,7 @@ async function runReinstall(
   bindings: ReinstallBindings,
   opts: ReinstallPluginOptions,
   locations: ScopedLocations,
-  candidate: ReportedCandidate,
+  candidate: CandidateReport,
 ): Promise<ReinstallReached> {
   const target = { name: opts.plugin, marketplace: opts.marketplace, scope: opts.scope };
   const state = await (opts.stateTransaction?.loadState ?? loadState)(locations.extensionRoot);
@@ -430,12 +422,7 @@ async function runReinstall(
       notifyPhaseFailure: (error, failures) => {
         phaseFailure = { error, failures };
       },
-      onRecord: (fromVersion) => {
-        candidate.move = { fromVersion };
-      },
-      onCandidate: (move) => {
-        candidate.move = move;
-      },
+      ...recordCandidate(candidate),
     },
     REINSTALL_MATERIALIZATION,
   );

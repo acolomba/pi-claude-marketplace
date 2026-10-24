@@ -9,7 +9,10 @@ import {
   readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { materializeLatestVersion } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts";
+import {
+  materializeLatestVersion,
+  recordCandidate,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -19,6 +22,7 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
+import type { CandidateReport } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts";
 import type { MaterializationPolicy } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type { ThreePhaseArgsBase } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import type { RevisionMove } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
@@ -254,4 +258,35 @@ test("UPR-03: reports no candidate for a verdict the preflight returns", async (
   // assert
   assert.strictEqual(outcome.partition, "unchanged");
   assert.deepStrictEqual(reported, []);
+});
+
+test("UPR-03: a candidate report holds the whole move once the runner derived a candidate", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  const report: CandidateReport = {};
+
+  // act
+  await materializeLatestVersion(
+    { ...base, cascade: true, ...recordCandidate(report) },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(report, { move: { fromVersion: "1.0.0", toVersion: "1.1.0" } });
+});
+
+test("UPR-03: a candidate report holds the installed version when no candidate was derived", async (t) => {
+  // arrange
+  const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.0.0" });
+  const report: CandidateReport = {};
+
+  // act
+  await materializeLatestVersion(
+    { ...base, cascade: true, ...recordCandidate(report) },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(report, { move: { fromVersion: "1.0.0" } });
 });
