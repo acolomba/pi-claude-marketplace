@@ -5,17 +5,17 @@ milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 29
 current_phase_name: Apply Command and Read-Only Reload
 status: executing
-stopped_at: Completed 29-01-PLAN.md
-last_updated: "2026-10-24T14:15:39.647Z"
+stopped_at: Completed 29-02-PLAN.md
+last_updated: "2026-10-24T15:12:09.841Z"
 last_activity: 2026-10-24
-last_activity_desc: Plan 29-01 complete (the apply command)
-state_head: 4237dbe483bb2995c63c1a54193be9043e86802c
+last_activity_desc: Plan 29-02 complete (the read-only load)
+state_head: cd464fe68b9bf473045bff85d1aa656dcf9a6bb8
 progress:
   total_phases: 29
   completed_phases: 28
   total_plans: 74
-  completed_plans: 61
-  percent: 82
+  completed_plans: 62
+  percent: 84
 ---
 
 # Project State
@@ -32,11 +32,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 29 (Apply Command and Read-Only Reload) — EXECUTING
-Plan: 2 of 14
+Plan: 3 of 14
 Status: Ready to execute
-Last activity: 2026-10-24 — Plan 29-01 complete (the apply command)
+Last activity: 2026-10-24 — Plan 29-02 complete (the read-only load)
 
-Progress: [████████░░] 82%
+Progress: [████████░░] 84%
 
 Phases 2-15 depend only on Phase 1 and may run in parallel once it lands. Each
 owns its own feature files and step modules (the file ownership table in
@@ -187,8 +187,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-24T14:15:33.822Z
-**Stopped at:** Completed 29-01-PLAN.md
+**Last session:** 2026-10-24T15:12:03.836Z
+**Stopped at:** Completed 29-02-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -395,6 +395,7 @@ archived milestone artifacts.
 | Phase 01 P09 | 12 min | 2 tasks | 6 files |
 | Phase 01 P10 | 10 min | 3 tasks | 10 files |
 | Phase 29 P01 | 28 min | 2 tasks | 27 files |
+| Phase 29 P02 | 46 min | 2 tasks | 17 files |
 
 ## Decisions
 
@@ -573,6 +574,8 @@ archived milestone artifacts.
 - [Phase 01]: 01-10: Git clones are stated by origin URL and revision token, never by their directory key; the clone reader fails on a stray plugin-clones entry or a checkout with no origin
 - [Phase 29]: The apply handler member is SubcommandHandlers.pluginApply, not apply: strong-mock reserves apply/call/bind on every mock
 - [Phase 29]: pending and apply share the withScopeOnlyArgs prelude in edge/handlers/plugin/shared.ts; spelling-only top-level verbs route through TOP_LEVEL_VERB_ROUTES in edge/router.ts
+- [Phase 29]: apply and the load share openScopePass / closeScopePass / notifyScopePasses in orchestrators/reconcile/read-pass.ts; readPassFailureOutcome, migrateScopeIsolated and rebuildScopeRoutingTableIsolated stay module-private
+- [Phase 29]: The load passes no reason to the MCP move, so it skips only the owners the plan installs, uninstalls or disables; MISS-01 dependency installs run nowhere until the reason gate goes
 
 ### mcp-4 decisions
 
