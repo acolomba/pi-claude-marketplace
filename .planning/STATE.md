@@ -5,10 +5,10 @@ milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 15
 status: completed
 stopped_at: Phase 15 complete — all phases complete
-last_updated: "2026-10-24T08:53:06.732Z"
+last_updated: "2026-10-24T21:55:41.290Z"
 last_activity: 2026-10-23
 last_activity_desc: Phase 15 complete
-state_head: 7f4c217859ea01021970ca0c7a5a9965b7cea5b6
+state_head: 9a64ba09989f5d1f8a049af469432d6b1e702fd9
 progress:
   total_phases: 15
   completed_phases: 15
@@ -183,6 +183,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
 | 1 | Run init.sh in new worktrees: SessionStart guard keyed on node_modules/.init-done (7f4c2178) | 2026-10-24 | 7f4c2178 | — | — |
+| 2 | Require a cucumber scenario for user-visible behavior (AGENTS.md, cucumber skill trigger) | 2026-10-24 | 9a64ba09 | — | — |
 
 ## Session Continuity
 
