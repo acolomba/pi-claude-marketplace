@@ -867,7 +867,9 @@ describe("applyReconcile", () => {
           "⊘ nowhere [project] (failed) {dangling reference}\n" +
           "  ⊘ ghost (failed) {dangling reference}\n" +
           "\n" +
-          "Reconcile: 2 failures, 1 success",
+          "Reconcile: 2 failures, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "error",
       },
     ]);
@@ -1088,7 +1090,9 @@ describe("applyReconcile", () => {
           "● mp [project] (removed)\n" +
           "  ○ hello (uninstalled)\n" +
           "\n" +
-          "Reconcile: 2 successes",
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual((await loadState(project.extensionRoot)).marketplaces, {});
@@ -1160,7 +1164,9 @@ describe("applyReconcile", () => {
           "  ○ good (uninstalled)\n" +
           "  ⊘ stuck (failed) {permission denied}\n" +
           "\n" +
-          "Reconcile: 2 failures, 1 success",
+          "Reconcile: 2 failures, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "error",
       },
     ]);
@@ -1286,7 +1292,10 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "● mp [project]\n" + "  ○ orphan v1.0.0 (uninstalled)\n" + "\n" + "Reconcile: 1 success",
+          "● mp [project]\n" +
+          "  ○ orphan v1.0.0 (uninstalled)\n" +
+          "\n" +
+          "Reconcile: 1 success\n\n/reload to pick up changes",
       },
       {
         message:
@@ -1296,7 +1305,9 @@ describe("applyReconcile", () => {
           "  ◍ keeper v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "orphan@mp" or uninstall "keeper@mp"\n' +
           "\n" +
-          "Reconcile: 1 warning",
+          "Reconcile: 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "warning",
       },
       APPLY_EMPTY_NOTICE,
@@ -1361,7 +1372,9 @@ describe("applyReconcile", () => {
           "  ○ orphan v1.0.0 (uninstalled)\n" +
           "  ○ keeper v1.0.0 (uninstalled)\n" +
           "\n" +
-          "Reconcile: 2 successes",
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       APPLY_EMPTY_NOTICE,
     ]);
@@ -1444,7 +1457,10 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "● mp [project]\n" + "  ○ orphan v1.0.0 (uninstalled)\n" + "\n" + "Reconcile: 1 success",
+          "● mp [project]\n" +
+          "  ○ orphan v1.0.0 (uninstalled)\n" +
+          "\n" +
+          "Reconcile: 1 success\n\n/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(
@@ -1508,7 +1524,9 @@ describe("applyReconcile", () => {
           "  ○ stray v1.0.0 (uninstalled)\n" +
           "  ○ victim v1.0.0 (uninstalled)\n" +
           "\n" +
-          "Reconcile: 2 successes",
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(
@@ -1711,7 +1729,8 @@ describe("applyReconcile", () => {
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: "● mp [project]\n  ○ hello v1.0.0 (uninstalled)\n\nReconcile: 1 success",
+        message:
+          "● mp [project]\n  ○ hello v1.0.0 (uninstalled)\n\nReconcile: 1 success\n\n/reload to pick up changes",
       },
       APPLY_EMPTY_NOTICE,
     ]);
@@ -1821,7 +1840,8 @@ describe("applyReconcile", () => {
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: "● mp [project]\n  ○ hello v1.0.0 (uninstalled)\n\nReconcile: 1 success",
+        message:
+          "● mp [project]\n  ○ hello v1.0.0 (uninstalled)\n\nReconcile: 1 success\n\n/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(
@@ -1930,7 +1950,9 @@ describe("applyReconcile", () => {
             "● mp [project]\n" +
             `${rows}\n` +
             "\n" +
-            "Reconcile: 1 failure, 2 successes",
+            "Reconcile: 1 failure, 2 successes\n" +
+            "\n" +
+            "/reload to pick up changes",
           severity: "error",
         },
       ]);
@@ -1976,7 +1998,10 @@ describe("applyReconcile", () => {
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● mp [project]\n  ● hello v1.0.0 (installed)\n\nReconcile: 1 success" },
+      {
+        message:
+          "● mp [project]\n  ● hello v1.0.0 (installed)\n\nReconcile: 1 success\n\n/reload to pick up changes",
+      },
     ]);
     const record = await recordFor(project, "mp", "hello");
     assert.deepStrictEqual(record?.resources, {
@@ -2235,7 +2260,9 @@ describe("applyReconcile", () => {
           "● canonical-name [project]\n" +
           "  ● formatter v1.0.0 (installed)\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       APPLY_EMPTY_NOTICE,
     ]);
@@ -2346,7 +2373,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● soft v1.0.0 (installed) {malformed skill}\n" +
           "\n" +
-          "Reconcile: 1 warning",
+          "Reconcile: 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "warning",
       },
       {
@@ -2415,7 +2444,7 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "● mp [project]\n  ● orphan v1.0.0 (installed) {orphan rewake}\n\nReconcile: 1 success",
+          "● mp [project]\n  ● orphan v1.0.0 (installed) {orphan rewake}\n\nReconcile: 1 success\n\n/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual((await recordFor(project, "mp", "orphan"))?.resources.hooks, ["orphan"]);
@@ -2468,7 +2497,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● rich v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual((await recordFor(project, "mp", "rich"))?.resources.mcpServers, [
@@ -2553,7 +2584,7 @@ describe("applyReconcile", () => {
             origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
             kind: "reconcile-applied-cascade",
             severity: "info",
-            needsReload: false,
+            needsReload: true,
             tally: { label: "Reconcile", failures: 0, warnings: 0, success: { count: 1 } },
             marketplaces: [
               {
@@ -2660,7 +2691,7 @@ describe("applyReconcile", () => {
           origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
           kind: "reconcile-applied-cascade",
           severity: "info",
-          needsReload: false,
+          needsReload: true,
           tally: { label: "Reconcile", failures: 0, warnings: 0, success: { count: 1 } },
           marketplaces: [
             {
@@ -2730,7 +2761,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● duo v1.0.0 (installed) {requires pi-subagents}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       {
         message:
@@ -2786,7 +2819,9 @@ describe("applyReconcile", () => {
           "  ◍ quiet v1.0.0 (disabled) {installs disabled}\n" +
           "    Run enable on this plugin to use its components.\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.equal((await recordFor(project, "mp", "quiet"))?.enabled, false);
@@ -2854,7 +2889,9 @@ describe("applyReconcile", () => {
           "  ◍ quiet v1.0.0 (disabled) {installs disabled}\n" +
           "    Run enable on this plugin to use its components.\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.equal(await readFile(project.baseConfigJsonPath, "utf8"), baseDeclaration);
@@ -2931,7 +2968,9 @@ describe("applyReconcile", () => {
             "● mp [project]\n" +
             `${rows}\n` +
             "\n" +
-            "Reconcile: 1 failure, 2 successes",
+            "Reconcile: 1 failure, 2 successes\n" +
+            "\n" +
+            "/reload to pick up changes",
           severity: "error",
         },
       ]);
@@ -2985,7 +3024,10 @@ describe("applyReconcile", () => {
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● mp [project]\n  ● hello v1.0.0 (installed)\n\nReconcile: 1 success" },
+      {
+        message:
+          "● mp [project]\n  ● hello v1.0.0 (installed)\n\nReconcile: 1 success\n\n/reload to pick up changes",
+      },
     ]);
     const record = await recordFor(project, "mp", "hello");
     assert.equal(record?.enabled, true);
@@ -3081,7 +3123,7 @@ describe("applyReconcile", () => {
       // assert
       assert.deepStrictEqual(notifications, [
         {
-          message: `${summary}● mp [project]\n${row}\n\n${tally}`,
+          message: `${summary}● mp [project]\n${row}\n\n${tally}\n\n/reload to pick up changes`,
           ...(severity !== undefined && { severity }),
         },
       ]);
@@ -3137,7 +3179,7 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "● mp [project]\n  ◉ hello v1.0.0 (partially-installed) {lsp}\n\nReconcile: 1 success",
+          "● mp [project]\n  ◉ hello v1.0.0 (partially-installed) {lsp}\n\nReconcile: 1 success\n\n/reload to pick up changes",
       },
     ]);
     assert.equal((await recordFor(project, "mp", "hello"))?.enabled, true);
@@ -3264,7 +3306,9 @@ describe("applyReconcile", () => {
           "  ◍ alfa v1.0.0 (disabled)\n" +
           "  ⊘ zulu (failed) {permission denied}\n" +
           "\n" +
-          "Reconcile: 1 failure, 1 success",
+          "Reconcile: 1 failure, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "error",
       },
     ]);
@@ -3551,7 +3595,9 @@ describe("applyReconcile", () => {
           "● mp [project] (added)\n" +
           "  ● hello v1.0.0 (installed)\n" +
           "\n" +
-          "Reconcile: 2 successes",
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual((await recordFor(project, "mp", "hello"))?.resources.skills, [
@@ -3644,7 +3690,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("BFILL-01: one cascade carries a backfill promotion row beside a fresh install row and no reload trailer", async (t) => {
+  test("BFILL-01: one cascade carries a backfill promotion row beside a fresh install row and ends with the reload trailer", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "promotion");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -3698,7 +3744,9 @@ describe("applyReconcile", () => {
           // beside it has no such brace, which is the whole point of the marker.
           "  ● promoted v1.0.0 (installed) {components now supported}\n" +
           "\n" +
-          "Reconcile: 2 successes",
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.equal(
@@ -3790,7 +3838,9 @@ describe("applyReconcile", () => {
           "  ◍ quiet v1.0.0 (disabled) {installs disabled}\n" +
           "    Run enable on this plugin to use its components.\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       {
         message:
@@ -4167,7 +4217,9 @@ describe("applyReconcile", () => {
           "  \u25cd deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 warning",
+          "Reconcile: 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "warning",
       },
     ]);
@@ -4248,7 +4300,9 @@ describe("applyReconcile", () => {
           "  ⊘ state.json (failed) {lock held}\n" +
           "    cause: Another pi-claude-marketplace operation is in progress for project scope (.state-lock). Retry after it completes.\n" +
           "\n" +
-          "Reconcile: 2 failures, 1 warning",
+          "Reconcile: 2 failures, 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "error",
       },
     ]);
@@ -4421,7 +4475,9 @@ describe("applyReconcile", () => {
           "\u25cf mp [project]\n" +
           "  \u25cf deploy-kit v1.0.0 (installed)\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(record?.resources.skills, ["deploy-kit-tool"]);
@@ -4568,7 +4624,9 @@ describe("applyReconcile", () => {
           "  ◍ alfa v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Enable "bravo@mp" or uninstall "alfa@mp"\n' +
           "\n" +
-          "Reconcile: 2 warnings",
+          "Reconcile: 2 warnings\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "warning",
       },
     ]);
@@ -4792,7 +4850,9 @@ describe("applyReconcile", () => {
           "  \u2298 gone (failed) {not in manifest}\n" +
           "    cause: cannot read the dependencies of gone@mp: not declared by its marketplace, and its installed copy cannot be read\n" +
           "\n" +
-          "Reconcile: 1 warning, 1 success",
+          "Reconcile: 1 warning, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "warning",
       },
     ]);
@@ -4926,7 +4986,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● secrets-vault v1.0.0 (installed) {dependency installed}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     const secretsVault = await recordFor(project, "mp", "secrets-vault");
@@ -5063,7 +5125,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● secrets-vault v1.0.0 (installed) {dependency installed, orphan rewake}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(clonedUrls(), []);
@@ -5150,7 +5214,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● secrets-vault v1.0.0 (installed) {dependency installed, dependency current copy}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(clonedUrls(), []);
@@ -5214,7 +5280,9 @@ describe("applyReconcile", () => {
           "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 warning",
+          "Reconcile: 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "warning",
       },
     ]);
@@ -5272,7 +5340,9 @@ describe("applyReconcile", () => {
           "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 warning",
+          "Reconcile: 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "warning",
       },
     ]);
@@ -5338,7 +5408,9 @@ describe("applyReconcile", () => {
           "  ● secrets-vault v1.0.0 (installed) {dependency installed}\n" +
           "  ● deploy-kit v1.0.0 (installed)\n" +
           "\n" +
-          "Reconcile: 2 successes",
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     const deployKit = await recordFor(project, "mp", "deploy-kit");
@@ -5422,7 +5494,9 @@ describe("applyReconcile", () => {
           "  ● app v1.0.0 (installed)\n" +
           "  ● lib v1.0.0 (installed)\n" +
           "\n" +
-          "Reconcile: 3 successes",
+          "Reconcile: 3 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     const app = await recordFor(project, "mp", "app");
@@ -5498,7 +5572,9 @@ describe("applyReconcile", () => {
           "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 failure, 1 warning",
+          "Reconcile: 1 failure, 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "error",
       },
     ]);
@@ -5506,7 +5582,8 @@ describe("applyReconcile", () => {
     const deployKit = await recordFor(project, "mp", "deploy-kit");
     assert.equal(deployKit?.dependencyDisabled, true);
     const [notification] = notifications;
-    assert.ok(!(notification?.message ?? "").includes("/"));
+    const body = (notification?.message ?? "").replace(/\n\n\/reload to pick up changes$/u, "");
+    assert.ok(!body.includes("/"));
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
@@ -5651,7 +5728,9 @@ describe("applyReconcile", () => {
           "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 failure, 1 warning",
+          "Reconcile: 1 failure, 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "error",
       },
     ]);
@@ -5797,7 +5876,9 @@ describe("applyReconcile", () => {
           "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Enable "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 warning",
+          "Reconcile: 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "warning",
       },
     ]);
@@ -5862,7 +5943,10 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "● mp [project]\n" + "  ● app v1.0.0 (installed)\n" + "\n" + "Reconcile: 1 success",
+          "● mp [project]\n" +
+          "  ● app v1.0.0 (installed)\n" +
+          "\n" +
+          "Reconcile: 1 success\n\n/reload to pick up changes",
       },
     ]);
     const helper = await recordFor(project, "mp", "helper");
@@ -6132,7 +6216,9 @@ describe("applyReconcile", () => {
               "● beta [project]\n" +
               "  ● b v1.0.0 (installed) {dependency installed}\n" +
               "\n" +
-              "Reconcile: 1 success",
+              "Reconcile: 1 success\n" +
+              "\n" +
+              "/reload to pick up changes",
           },
         ]);
       }
@@ -6216,7 +6302,9 @@ describe("applyReconcile", () => {
           "● beta [project]\n" +
           "  ● b v1.0.0 (installed) {dependency installed}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(clonedUrls(), []);
@@ -6313,7 +6401,9 @@ describe("applyReconcile", () => {
           "● tools [project]\n" +
           "  ● shared-lib v1.0.0 (installed) {dependency installed}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(clonedUrls(), []);
@@ -6382,7 +6472,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● secrets-vault v1.0.0 (installed) {dependency installed}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     const after = await recordFor(project, "mp", "common");
@@ -6508,7 +6600,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       COMMENTS_REMOVED_NOTICE,
     ]);
@@ -6575,7 +6669,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       COMMENTS_REMOVED_NOTICE,
       {
@@ -6649,7 +6745,8 @@ describe("applyReconcile", () => {
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: "● mp [project]\n  ○ hello v1.0.0 (uninstalled)\n\nReconcile: 1 success",
+        message:
+          "● mp [project]\n  ○ hello v1.0.0 (uninstalled)\n\nReconcile: 1 success\n\n/reload to pick up changes",
       },
       COMMENTS_REMOVED_NOTICE,
     ]);
@@ -6685,7 +6782,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       COMMENTS_REMOVED_NOTICE,
     ]);
@@ -6715,7 +6814,10 @@ describe("applyReconcile", () => {
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● mp [project]\n  ◍ hello v1.0.0 (disabled)\n\nReconcile: 1 success" },
+      {
+        message:
+          "● mp [project]\n  ◍ hello v1.0.0 (disabled)\n\nReconcile: 1 success\n\n/reload to pick up changes",
+      },
       COMMENTS_REMOVED_NOTICE,
     ]);
     assert.equal(await readFile(project.mcpAdapterJsonPath, "utf8"), '{\n  "mcpServers": {}\n}\n');
@@ -6746,7 +6848,9 @@ describe("applyReconcile", () => {
           "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 warning",
+          "Reconcile: 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "warning",
       },
       COMMENTS_REMOVED_NOTICE,
@@ -6783,7 +6887,9 @@ describe("applyReconcile", () => {
           "● mp [project] (removed)\n" +
           "  ○ hello (uninstalled)\n" +
           "\n" +
-          "Reconcile: 2 successes",
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       COMMENTS_REMOVED_NOTICE,
     ]);
@@ -6871,7 +6977,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● secrets-vault v1.0.0 (installed) {dependency installed, requires pi-mcp-adapter}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       COMMENTS_REMOVED_NOTICE,
     ]);
@@ -6907,7 +7015,9 @@ describe("applyReconcile", () => {
           "  ○ alfa v1.0.0 (uninstalled)\n" +
           "  ● bravo v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
           "\n" +
-          "Reconcile: 2 successes",
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       COMMENTS_REMOVED_NOTICE,
     ]);
@@ -6975,7 +7085,10 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "● mp [project]\n" + "  ○ gone v1.0.0 (uninstalled)\n" + "\n" + "Reconcile: 1 success",
+          "● mp [project]\n" +
+          "  ○ gone v1.0.0 (uninstalled)\n" +
+          "\n" +
+          "Reconcile: 1 success\n\n/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(calls, [
@@ -7148,7 +7261,10 @@ describe("applyReconcile", () => {
       },
       {
         message:
-          "● mp [project]\n" + "  ○ gone v1.0.0 (uninstalled)\n" + "\n" + "Reconcile: 1 success",
+          "● mp [project]\n" +
+          "  ○ gone v1.0.0 (uninstalled)\n" +
+          "\n" +
+          "Reconcile: 1 success\n\n/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(

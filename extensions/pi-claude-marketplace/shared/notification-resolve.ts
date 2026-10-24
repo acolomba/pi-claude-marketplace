@@ -139,9 +139,10 @@ interface TallySource {
  * Resolves the envelope of `message`. SEV-02 severity comes from the stamped
  * rows (or the standalone kind map); an info result carries no summary line,
  * and a warning or error result carries the D-10 summary sentence.
- * `needsReload` is the RLD-02 OR-reduce of the row stamps, which is false for
- * every standalone kind. Only a cascade and a `reconcile-applied-cascade` carry
- * a tally. APL-04 / D-14: `needsApply` is true only for a cascade whose
+ * `needsReload` is the RLD-02 OR-reduce of the row stamps; a standalone kind
+ * answers false, except the committed prune warning and the
+ * `reconcile-applied-cascade` that reads its rows (D-08). Only a cascade and a
+ * `reconcile-applied-cascade` carry a tally. APL-04 / D-14: `needsApply` is true only for a cascade whose
  * message sets it.
  */
 export function resolveEnvelope(message: NotificationMessage): ResolvedEnvelope {

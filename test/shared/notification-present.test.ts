@@ -322,7 +322,7 @@ describe("presentReconcileApplied", () => {
       envelope: {
         severity: "error",
         summary: "A plugin operation has failed.",
-        needsReload: false,
+        needsReload: true,
         needsApply: false,
         noOp: false,
       },
@@ -364,7 +364,7 @@ describe("presentReconcileApplied", () => {
       kind: "reconcile-applied-cascade",
       envelope: {
         severity: "info",
-        needsReload: false,
+        needsReload: true,
         needsApply: false,
         noOp: false,
         tally: { label: "Reconcile", failures: 0, warnings: 0, success: { count: 1 } },
@@ -476,7 +476,7 @@ describe("presentNotification", () => {
     } satisfies CascadePresentation);
   });
 
-  test("presents an applied reconcile without a reload", () => {
+  test("presents an applied reconcile with the reload its row stamps", () => {
     // arrange
     const message = {
       kind: "reconcile-applied-cascade",
@@ -504,7 +504,7 @@ describe("presentNotification", () => {
     // assert
     assert.deepStrictEqual(presentation, {
       kind: "reconcile-applied-cascade",
-      envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
+      envelope: { severity: "info", needsReload: true, needsApply: false, noOp: false },
       marketplaces: [
         {
           name: "mp",

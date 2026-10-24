@@ -22,7 +22,7 @@ Feature: Plugin apply
     Then the result has these fields:
       | kind                | reconcile-applied-cascade |
       | severity            | info                      |
-      | needs reload        | false                     |
+      | needs reload        | true                      |
       | tally label         | Reconcile                 |
       | tally failures      | 0                         |
       | tally warnings      | 0                         |
@@ -49,7 +49,7 @@ Feature: Plugin apply
     Then the result has these fields:
       | kind                | reconcile-applied-cascade |
       | severity            | info                      |
-      | needs reload        | false                     |
+      | needs reload        | true                      |
       | tally label         | Reconcile                 |
       | tally failures      | 0                         |
       | tally warnings      | 0                         |
@@ -73,7 +73,7 @@ Feature: Plugin apply
     Then the result has these fields:
       | kind                | reconcile-applied-cascade |
       | severity            | info                      |
-      | needs reload        | false                     |
+      | needs reload        | true                      |
       | tally label         | Reconcile                 |
       | tally failures      | 0                         |
       | tally warnings      | 0                         |
@@ -96,7 +96,7 @@ Feature: Plugin apply
     Then the result has these fields:
       | kind                | reconcile-applied-cascade |
       | severity            | info                      |
-      | needs reload        | false                     |
+      | needs reload        | true                      |
       | tally label         | Reconcile                 |
       | tally failures      | 0                         |
       | tally warnings      | 0                         |
@@ -118,7 +118,7 @@ Feature: Plugin apply
     Then the result has these fields:
       | kind                | reconcile-applied-cascade |
       | severity            | info                      |
-      | needs reload        | false                     |
+      | needs reload        | true                      |
       | tally label         | Reconcile                 |
       | tally failures      | 0                         |
       | tally warnings      | 0                         |
@@ -141,7 +141,7 @@ Feature: Plugin apply
     Then the result has these fields:
       | kind                | reconcile-applied-cascade      |
       | severity            | error                          |
-      | needs reload        | false                          |
+      | needs reload        | true                           |
       | summary             | A plugin operation has failed. |
       | tally label         | Reconcile                      |
       | tally failures      | 1                              |
@@ -173,7 +173,7 @@ Feature: Plugin apply
     Then the result has these fields:
       | kind           | reconcile-applied-cascade           |
       | severity       | warning                             |
-      | needs reload   | false                               |
+      | needs reload   | true                                |
       | summary        | A plugin operation needs attention. |
       | tally label    | Reconcile                           |
       | tally failures | 0                                   |
@@ -221,7 +221,7 @@ Feature: Plugin apply
     Then the result has these fields:
       | kind                | reconcile-applied-cascade |
       | severity            | info                      |
-      | needs reload        | false                     |
+      | needs reload        | true                      |
       | tally label         | Reconcile                 |
       | tally failures      | 0                         |
       | tally warnings      | 0                         |

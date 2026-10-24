@@ -502,7 +502,7 @@ describe("resolveEnvelope", () => {
       expectedEnvelope: { severity: "info", needsReload: false, needsApply: true, noOp: false },
     },
     {
-      name: "an applied reconcile resolves its tally without needsReload",
+      name: "an applied reconcile resolves its tally and the reload its row stamps",
       message: {
         kind: "reconcile-applied-cascade",
         cardinality: "plural",
@@ -525,7 +525,7 @@ describe("resolveEnvelope", () => {
       },
       expectedEnvelope: {
         severity: "info",
-        needsReload: false,
+        needsReload: true,
         needsApply: false,
         noOp: false,
         tally: { label: "Reconcile", failures: 0, warnings: 0, success: { count: 1 } },

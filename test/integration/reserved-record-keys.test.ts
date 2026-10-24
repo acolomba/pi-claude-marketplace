@@ -247,7 +247,7 @@ for (const { marketplace, plugins, plugin } of [
       // assert
       assert.deepStrictEqual(notifications, [
         {
-          message: `● ${marketplace} [project] (added)\n  ● ${plugin} v1.0.0 (installed)\n\nReconcile: 2 successes`,
+          message: `● ${marketplace} [project] (added)\n  ● ${plugin} v1.0.0 (installed)\n\nReconcile: 2 successes\n\n/reload to pick up changes`,
         },
       ]);
       assert.deepStrictEqual(await recordedPlugins(cwd, marketplace), [[plugin, "1.0.0", true]]);

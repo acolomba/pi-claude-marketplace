@@ -249,7 +249,7 @@ Command results or inventory, including an empty `marketplaces` array.
 
 #### reconcile-applied-cascade
 
-Applied load-time reconciliation. It carries no `noOp`, advisories, or retained workflows. `/claude:plugin apply` (`origin.commandId` `plugin apply`) reports the changes it made with this kind, so the kind is a command outcome.
+The changes `/claude:plugin apply` made, or a load's per-session warnings. `needsReload` is true when a change needs a reload. It carries no `noOp`, advisories, or retained workflows. `/claude:plugin apply` (`origin.commandId` `plugin apply`) reports the changes it made with this kind, so the kind is a command outcome.
 
 <!-- fields: kind:reconcile-applied-cascade -->
 

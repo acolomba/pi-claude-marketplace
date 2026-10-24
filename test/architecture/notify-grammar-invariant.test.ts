@@ -519,12 +519,13 @@ for (const fixture of DISABLED_VARIANT_FIXTURES) {
 
 // ---------------------------------------------------------------------------
 // RECON-04: subject-first row grammar for the
-// `reconcile-applied-cascade` standalone variant. Carries realized
-// transition tokens (`added` / `installed` / `uninstalled` / `disabled` /
-// `failed`) which would otherwise trigger the `/reload to pick up changes`
-// trailer on the cascade arm; the StandaloneKind dispatch path returns
-// `shouldEmitReloadHint = false` so the trailer NEVER appears.
+// `reconcile-applied-cascade` standalone variant, `/claude:plugin apply`'s
+// report. It carries realized transition tokens (`added` / `installed` /
+// `uninstalled` / `disabled` / `failed`), and D-08: like the cascade arm, a
+// row stamped `needsReload` ends the report with `/reload to pick up changes`.
 // ---------------------------------------------------------------------------
+
+const RELOAD_TRAILER_BLOCK = "\n\n/reload to pick up changes";
 
 const RECONCILE_APPLIED_FIXTURES: readonly GrammarFixture[] = [
   {
@@ -611,15 +612,13 @@ const RECONCILE_APPLIED_FIXTURES: readonly GrammarFixture[] = [
 ];
 
 for (const fixture of RECONCILE_APPLIED_FIXTURES) {
-  test(`RECON-04: reconcile-applied-cascade NEVER emits \`/reload to pick up changes\` even on cascades with realized transition tokens: ${fixture.label}`, (t) => {
+  test(`D-08: reconcile-applied-cascade ends with \`/reload to pick up changes\` when a row realized a transition: ${fixture.label}`, (t) => {
     const args = emitOnce(t, fixture);
     const emitted = args[0];
 
-    // RECON-04: the trailer is structurally excluded -- the
-    // reconcile already ran ON /reload, so the trailer would be a lie.
     assert.ok(
-      !emitted.includes("/reload to pick up changes"),
-      `${fixture.label}: reconcile-applied-cascade MUST NOT emit the reload-hint trailer`,
+      emitted.endsWith(RELOAD_TRAILER_BLOCK),
+      `${fixture.label}: reconcile-applied-cascade MUST end with the reload-hint trailer`,
     );
   });
 }
@@ -636,7 +635,7 @@ const ROW_ICONS_AT_START = ["●", "○", "⊘", "◍"];
 for (const fixture of RECONCILE_APPLIED_FIXTURES) {
   test(`RECON-04: a reconcile-applied-cascade row renders subject-first \`<glyph> <name> [<scope>] (<token>)\` with the status token AFTER the subject: ${fixture.label}`, (t) => {
     const args = emitOnce(t, fixture);
-    const emitted = args[0];
+    const emitted = args[0].slice(0, -RELOAD_TRAILER_BLOCK.length);
 
     // Drop the summary line (if present) -- the cascade body starts AFTER the
     // first `\n\n` separator at error/warning severity.

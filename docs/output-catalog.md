@@ -77,7 +77,7 @@ The soft-dep markers `requires pi-subagents`, `requires pi-mcp-adapter` and `req
 
 The principle: marketplace records are bookkeeping, not Pi-visible resources; only plugin rows (skill / agent / command / MCP entry) are. A marketplace status alone (`added`, `removed`, `updated`, `autoupdate enabled`, `autoupdate disabled`) never warrants a `/reload` -- the trailer fires only when a plugin row carries a state-change token. A `failed` marketplace does NOT trigger the trailer (rolled-back state has nothing to reload). A failed-only cascade (no successful or state-changing rows) also suppresses the trailer.
 
-The `installed` token straddles two surfaces: a list-only steady-state inventory row (emitted by `/claude:plugin list` for already-installed plugins) and a cascade-context install transition. On the list / info inventory surfaces it is deliberately ABSENT from the plugin-status trigger set, resolving its inventory-vs-transition straddle structurally at the KIND level: hint-free on kind-less / `cascade` payloads (the list / info inventory surfaces), trigger on the install cascade. This keeps `shouldEmitReloadHint`'s contents-derived decision unambiguous per SNM-15: within a given cascade kind, every status discriminator either always triggers or never triggers. The `disabled` token resolves its inventory-vs-transition straddle the same way (UAT-03): hint-free on kind-less / `cascade` payloads (the list / info inventory surfaces), trigger on `disable-cascade` payloads (the disable command's fresh cascade) -- mirroring the `reconcile-applied-cascade` kind's structural trailer exclusion. See UAT gap G-21-01 in `.planning/phases/21-final-teardown-green-gate/21-HUMAN-UAT.md` for the failure mode the original split closes.
+The `installed` token straddles two surfaces: a list-only steady-state inventory row (emitted by `/claude:plugin list` for already-installed plugins) and a cascade-context install transition. On the list / info inventory surfaces it is deliberately ABSENT from the plugin-status trigger set, resolving its inventory-vs-transition straddle structurally at the KIND level: hint-free on kind-less / `cascade` payloads (the list / info inventory surfaces), trigger on the install cascade. This keeps `shouldEmitReloadHint`'s contents-derived decision unambiguous per SNM-15: within a given cascade kind, every status discriminator either always triggers or never triggers. The `disabled` token resolves its inventory-vs-transition straddle the same way (UAT-03): hint-free on kind-less / `cascade` payloads (the list / info inventory surfaces), trigger on `disable-cascade` payloads (the disable command's fresh cascade). See UAT gap G-21-01 in `.planning/phases/21-final-teardown-green-gate/21-HUMAN-UAT.md` for the failure mode the original split closes.
 
 ### Severity routing
 
@@ -3672,11 +3672,11 @@ ______________________________________________________________________
 
 ## reconcile-applied-cascade
 
-RECON-04 (Phase 55 Plan 02) load-time reconcile apply cascade emitted by `applyReconcile` after every `resources_discover` invocation that performed at least one apply action OR carried at least one invalid-config / source-mismatch row. Wraps the same per-status `MarketplaceNotificationMessage[]` shape the cascade arm carries -- realized transition tokens (`added` / `removed` / `installed` / `uninstalled` / `disabled` / `failed`) reused per RESEARCH Pattern 5 Option A -- so the rendered bytes match each token's standalone-command counterpart. The `Run /reload to pick up changes` trailer is STRUCTURALLY EXCLUDED (RECON-04 -- the reconcile already ran ON /reload). OUT-03/OUT-06/D-03/D-04: a reconcile apply is a plural mixed-subject operation, so a trailing per-operation tally (`Reconcile: <n> failure(s), <n> warning(s), <n> success(es)`) is appended as the cascade's FINAL block, counting all marketplace + plugin rows uniformly under the `Reconcile` operation name (the reload-hint slot the apply structurally suppresses). An empty-and-clean load is silent (no notify, D-05); an empty-and-clean `apply` emits the advisory in the `/claude:plugin apply` section instead (D-08).
+RECON-04 / D-08: `/claude:plugin apply`'s report of what it changed, emitted by `applyReconcile` after a pass that performed at least one apply action OR carried at least one invalid-config / source-mismatch row. A load emits this kind only for what its read pass reports (an invalid config, a source mismatch, a per-session warning), and those rows never reload. Wraps the same per-status `MarketplaceNotificationMessage[]` shape the cascade arm carries -- realized transition tokens (`added` / `removed` / `installed` / `uninstalled` / `disabled` / `failed`) reused per RESEARCH Pattern 5 Option A -- so the rendered bytes match each token's standalone-command counterpart. OUT-03/OUT-06/D-03/D-04: a reconcile apply is a plural mixed-subject operation, so a trailing per-operation tally (`Reconcile: <n> failure(s), <n> warning(s), <n> success(es)`) follows the rows, counting all marketplace + plugin rows uniformly under the `Reconcile` operation name. RLD-02 / D-08: the `/reload to pick up changes` trailer follows the tally whenever a row stamps a reload (a realized install, uninstall, enable, or disable), because the running session has not loaded what `apply` changed. A report whose rows only failed or warned carries no trailer. An empty-and-clean load is silent (no notify, D-05); an empty-and-clean `apply` emits the advisory in the `/claude:plugin apply` section instead (D-08).
 
 ### Success cascade -- mixed marketplace add + plugin install across both scopes
 
-A reconcile that materialized one new marketplace + one plugin install per scope. Subject-first row grammar; the `(added)` mp row carries the `●` glyph and the `(installed)` plugin row reuses the standalone-install byte form. Severity `info`; no reload-hint; no summary line. OUT-03/OUT-06/D-03/D-04: a reconcile apply is a plural mixed-subject operation, so the trailing tally (`Reconcile: 4 successes`) counts the two `added` marketplace rows + the two `installed` plugin rows uniformly under the operation name; it takes the reload-hint's structural slot (the reconcile already ran ON /reload, so no `/reload` trailer follows).
+A reconcile that materialized one new marketplace + one plugin install per scope. Subject-first row grammar; the `(added)` mp row carries the `●` glyph and the `(installed)` plugin row reuses the standalone-install byte form. Severity `info`; no summary line. OUT-03/OUT-06/D-03/D-04: a reconcile apply is a plural mixed-subject operation, so the trailing tally (`Reconcile: 4 successes`) counts the two `added` marketplace rows + the two `installed` plugin rows uniformly under the operation name. The reload trailer follows it, because the session has not loaded the two installs yet (D-08).
 
 <!-- catalog-state: success-cascade-mixed -->
 
@@ -3688,11 +3688,13 @@ A reconcile that materialized one new marketplace + one plugin install per scope
   ● other-plugin v1.0.0 (installed)
 
 Reconcile: 4 successes
+
+/reload to pick up changes
 ```
 
 ### Soft-fail per-entry -- one (failed) {network unreachable} row, other entries continue
 
-A reconcile where one declared github-source marketplace failed during `addMarketplace` clone (NFR-5 per-entry soft-fail) but a sibling declared marketplace + plugin install succeeded. Severity `error` (the cascade has a failed mp row); summary line prepended.
+A reconcile where one declared github-source marketplace failed during `addMarketplace` clone (NFR-5 per-entry soft-fail) but a sibling declared marketplace + plugin install succeeded. Severity `error` (the cascade has a failed mp row); summary line prepended. The `installed` row brings the reload trailer (D-08).
 
 <!-- catalog-state: soft-fail-mixed -->
 
@@ -3705,6 +3707,8 @@ A marketplace operation has failed.
   ● ok-plugin (installed)
 
 Reconcile: 1 failure, 2 successes
+
+/reload to pick up changes
 ```
 
 OUT-03/D-04: the mixed-subject tally counts the failed marketplace row as one failure and the `added` marketplace + `installed` plugin rows as two successes, all under the `Reconcile` operation name.
@@ -3772,13 +3776,15 @@ Some operations have failed.
   ⊘ plugin-fail-b (failed) {source missing}
 
 Reconcile: 3 failures, 1 success
+
+/reload to pick up changes
 ```
 
 OUT-03/D-04: the plural tally counts the failed mp header + the two failed plugin rows as three failures and the `uninstalled` plugin row as one success (`uninstalled` stamps info), all under the `Reconcile` operation name.
 
-### Load-time backfill -- partially-installed promotion carries the dropped-kinds brace (SEV-05)
+### Apply backfill -- partially-installed promotion carries the dropped-kinds brace (SEV-05)
 
-BFILL-01 / WCONV-03 / SEV-05 / D-69-04: a load-time backfill re-materialized a recorded partially-installed plugin in place (its supported set grew, but it still re-resolves `partially-available`). The promotion row reuses the `◉` `(partially-installed)` byte form. Its brace leads with `components now supported`, the WCONV-03 convergence marker every backfilled row carries, so a reload the user did not initiate never renders byte-identically to a fresh install; the re-resolved dropped-component kinds follow, composed through the SAME shared `narrowUnsupportedKinds` seam the install / list / info surfaces use -- no per-state reasons mechanism (`installed` / `partially-installed` / `partially-upgradable` rows all route through `composeReasons`). The marketplace was already added, so its header is the bare always-marketplace-header form (no status token). SEV-03 / A3 / D-68-04: a backfill is a benign promotion (re-materializing now-supported components), NOT a new degradation, so the row stays `info` -- the SEV-03 newly-degrades warning fires only on the autoupdate cascade. The `Run /reload` trailer is structurally excluded (RECON-04); the trailing tally counts the row as one success.
+BFILL-01 / WCONV-03 / SEV-05 / D-69-04: a load-time backfill re-materialized a recorded partially-installed plugin in place (its supported set grew, but it still re-resolves `partially-available`). The promotion row reuses the `◉` `(partially-installed)` byte form. Its brace leads with `components now supported`, the WCONV-03 convergence marker every backfilled row carries, so a reload the user did not initiate never renders byte-identically to a fresh install; the re-resolved dropped-component kinds follow, composed through the SAME shared `narrowUnsupportedKinds` seam the install / list / info surfaces use -- no per-state reasons mechanism (`installed` / `partially-installed` / `partially-upgradable` rows all route through `composeReasons`). The marketplace was already added, so its header is the bare always-marketplace-header form (no status token). SEV-03 / A3 / D-68-04: a backfill is a benign promotion (re-materializing now-supported components), NOT a new degradation, so the row stays `info` -- the SEV-03 newly-degrades warning fires only on the autoupdate cascade. The trailing tally counts the row as one success, and the reload trailer follows it (D-08).
 
 <!-- catalog-state: backfill-partially-installed -->
 
@@ -3787,9 +3793,11 @@ BFILL-01 / WCONV-03 / SEV-05 / D-69-04: a load-time backfill re-materialized a r
   ◉ hello v1.0.0 (partially-installed) {components now supported, lsp}
 
 Reconcile: 1 success
+
+/reload to pick up changes
 ```
 
-### Load-time backfill -- no dropped kinds leaves the convergence marker alone in the brace (WCONV-03)
+### Apply backfill -- no dropped kinds leaves the convergence marker alone in the brace (WCONV-03)
 
 The degenerate case: a backfill `(partially-installed)` row whose re-resolved dropped-kind set is empty. `narrowUnsupportedKinds([])` returns `[]`, so nothing follows the `components now supported` marker and the brace holds that one token. A backfilled row has no brace-less shape at all -- the projection places the marker ahead of any dropped kind (WCONV-03 / D-69-04), and that is what separates this row from a fresh install of the same plugin.
 
@@ -3800,11 +3808,13 @@ The degenerate case: a backfill `(partially-installed)` row whose re-resolved dr
   ◉ hello v1.0.0 (partially-installed) {components now supported}
 
 Reconcile: 1 success
+
+/reload to pick up changes
 ```
 
-### Load-time backfill -- the fully promoted arm carries the convergence marker alone (WCONV-03)
+### Apply backfill -- the fully promoted arm carries the convergence marker alone (WCONV-03)
 
-The arm the convergence marker exists for: the extension's supported component set grew, so a recorded plugin re-resolved clean and was re-materialized in place at load time, without the user running any command. The row reuses the `●` `(installed)` byte form a fresh install renders, and the marker in the brace is the ONLY thing that separates the two -- which is why `backfilledRowFromOutcome` places it unconditionally on this arm (WCONV-03 / D-69-04). Without it, the commands that appeared after a reload nobody initiated could not be attributed to anything the user could name. The probe reports every companion loaded, so no soft-dep marker fires and this state isolates the marker. The marketplace was already added, so its header is the bare always-marketplace-header form (no status token). SEV-03 / A3 / D-68-04: a benign promotion is not a new degradation, so the row stays `info`; the `Run /reload` trailer is structurally excluded (RECON-04) and the trailing tally counts the row as one success.
+The arm the convergence marker exists for: the extension's supported component set grew, so a recorded plugin re-resolved clean and was re-materialized in place at load time, without the user running any command. The row reuses the `●` `(installed)` byte form a fresh install renders, and the marker in the brace is the ONLY thing that separates the two -- which is why `backfilledRowFromOutcome` places it unconditionally on this arm (WCONV-03 / D-69-04). Without it, the commands that appeared after a reload nobody initiated could not be attributed to anything the user could name. The probe reports every companion loaded, so no soft-dep marker fires and this state isolates the marker. The marketplace was already added, so its header is the bare always-marketplace-header form (no status token). SEV-03 / A3 / D-68-04: a benign promotion is not a new degradation, so the row stays `info`; the trailing tally counts the row as one success, and the reload trailer follows it (D-08).
 
 <!-- catalog-state: backfill-installed -->
 
@@ -3813,9 +3823,11 @@ The arm the convergence marker exists for: the extension's supported component s
   ● hello v1.0.0 (installed) {components now supported}
 
 Reconcile: 1 success
+
+/reload to pick up changes
 ```
 
-### Load-time backfill -- fully promoted in a session with no host workflow engine (WCONV-03 / WDEP-04)
+### Apply backfill -- fully promoted in a session with no host workflow engine (WCONV-03 / WDEP-04)
 
 The same promotion in the session the real population most likely renders it in first: the plugin declares `workflows`, the host workflow engine is not loaded, and both tokens land in ONE brace. The order is contractual, and these bytes are where it is pinned for a backfilled row: the convergence marker comes FIRST because the projection writes it into `reasons[]` as the caller, and `requires pi-dynamic-workflows` comes LAST because the resolve step appends the soft-dep markers after every caller-placed reason (MSG-GR-4 / D-16-15). `composeReasons` formats that resolved list. Severity stays `info` rather than the `warning` the standalone install row stamps for the same marker: this projection raises only on a malformed-frontmatter degrade its own re-materialization produced, so the SEV-01 companion raise does not fire here -- the same stance the sibling load-time enable row takes.
 
@@ -3826,9 +3838,11 @@ The same promotion in the session the real population most likely renders it in 
   ● hello v1.0.0 (installed) {components now supported, requires pi-dynamic-workflows}
 
 Reconcile: 1 success
+
+/reload to pick up changes
 ```
 
-### Load-time enable whose companion extension is unloaded (WR-06)
+### Apply enable whose companion extension is unloaded (WR-06)
 
 The load-time reconcile re-enabled a config-declared-enabled disabled record, and the ledger staged at least one agent. The projected row derives its `dependencies` from the ledger's staged counts through the SAME seam the standalone `enable` row uses, so the `{requires pi-subagents}` marker fires here too -- it no longer depends on which surface drove the enable. Severity stays `info`: this projection applies the companion raise on NEITHER of its two arms (the sibling `plugin-installed` arm carries the marker at `info` as well), so the two arms of one file agree. The standalone `enable` verb, whose severity rule is the SEV-01 composition, DOES raise -- the marker is the shared fact, the severity stance is per surface.
 
@@ -3839,11 +3853,13 @@ The load-time reconcile re-enabled a config-declared-enabled disabled record, an
   ● hello v1.0.0 (installed) {requires pi-subagents}
 
 Reconcile: 1 success
+
+/reload to pick up changes
 ```
 
-### Load-time install that lands disabled (DFEN-04 / OUT-01 / OUT-04)
+### Apply install that lands disabled (DFEN-04 / OUT-01 / OUT-04)
 
-The load-time counterpart of the standalone install-disabled row: the user hand-added a bare `"hello@mp": {}` entry, reloaded, and the plugin's own `defaultEnabled: false` declaration made the install land disabled. This is the COMMON way a plugin arrives inert, and nobody is watching a command run when it happens, so the row carries the same closed-set cause token and the same frozen enable-hint trailer the standalone row carries -- without them it would be indistinguishable from a disable the user asked for. The reload stamp is the one deliberate difference: this row shares the realized-transition arm every other reconcile disable uses, whereas the standalone row stamps `false` because nothing net entered or left Pi's resource view inside that command. The trailing tally counts the row as one success.
+The load-time counterpart of the standalone install-disabled row: the user hand-added a bare `"hello@mp": {}` entry, reloaded, and the plugin's own `defaultEnabled: false` declaration made the install land disabled. This is the COMMON way a plugin arrives inert, and nobody is watching a command run when it happens, so the row carries the same closed-set cause token and the same frozen enable-hint trailer the standalone row carries -- without them it would be indistinguishable from a disable the user asked for. The reload stamp is the one deliberate difference: this row shares the realized-transition arm every other reconcile disable uses, whereas the standalone row stamps `false` because nothing net entered or left Pi's resource view inside that command, so this report ends with the reload trailer (D-08). The trailing tally counts the row as one success.
 
 <!-- catalog-state: reconcile-install-disabled -->
 
@@ -3853,11 +3869,13 @@ The load-time counterpart of the standalone install-disabled row: the user hand-
     Run enable on this plugin to use its components.
 
 Reconcile: 1 success
+
+/reload to pick up changes
 ```
 
-### Load-time disable, declared dependency unsatisfied (LOAD-01)
+### Apply disable, declared dependency unsatisfied (LOAD-01)
 
-The load-time dependency check disabled a plugin whose declared dependency has no record in the scope. The row reuses the realized `(disabled)` transition token -- the disable DID happen -- and carries `{dependency unsatisfied}`, the closed-set marker mirroring upstream's `dependency-unsatisfied` error code. The remedy names both parties and therefore cannot ride the token (a reason is 1-3 lowercase words, and the set is a literal tuple), so it rides the `cause:` trailer, the one channel in this grammar that interpolates an identifier. Each party is checked against the dependency token rule before it is quoted. A plugin or marketplace name its own marketplace chose reaches the state record with nothing but `assertSafeName` behind it, which admits quotes, commas and bidi controls, so a key that fails the rule is dropped and the sentence says `the declared dependency` or `this plugin` in its place. The row's own subject still names the held-down plugin, so the remedy stays actionable. This is the only `(disabled)` row that carries a cause line; the toggle disable and the `{installs disabled}` row above both omit it and stay byte-frozen. Severity is `warning`, not `info`: the disable was carried out in full, but the desired state -- the plugin loading -- was not reached. The disable is a CONSEQUENCE the config does not express, so it is never written back to `claude-plugins.json`; the record carries a `dependencyDisabled` marker instead, re-derived on every pass. A later pass that finds the dependency installed and enabled lifts the disable and the plugin returns to an ordinary `(installed)` row. The trailing tally counts the row as one warning; no reload-hint.
+The load-time dependency check disabled a plugin whose declared dependency has no record in the scope. The row reuses the realized `(disabled)` transition token -- the disable DID happen -- and carries `{dependency unsatisfied}`, the closed-set marker mirroring upstream's `dependency-unsatisfied` error code. The remedy names both parties and therefore cannot ride the token (a reason is 1-3 lowercase words, and the set is a literal tuple), so it rides the `cause:` trailer, the one channel in this grammar that interpolates an identifier. Each party is checked against the dependency token rule before it is quoted. A plugin or marketplace name its own marketplace chose reaches the state record with nothing but `assertSafeName` behind it, which admits quotes, commas and bidi controls, so a key that fails the rule is dropped and the sentence says `the declared dependency` or `this plugin` in its place. The row's own subject still names the held-down plugin, so the remedy stays actionable. This is the only `(disabled)` row that carries a cause line; the toggle disable and the `{installs disabled}` row above both omit it and stay byte-frozen. Severity is `warning`, not `info`: the disable was carried out in full, but the desired state -- the plugin loading -- was not reached. The disable is a CONSEQUENCE the config does not express, so it is never written back to `claude-plugins.json`; the record carries a `dependencyDisabled` marker instead, re-derived on every pass. A later pass that finds the dependency installed and enabled lifts the disable and the plugin returns to an ordinary `(installed)` row. The trailing tally counts the row as one warning, and the reload trailer follows it, because the disable unstaged what the session still has loaded (D-08).
 
 <!-- catalog-state: reconcile-dependency-unsatisfied -->
 
@@ -3869,9 +3887,11 @@ A plugin operation needs attention.
     cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"
 
 Reconcile: 1 warning
+
+/reload to pick up changes
 ```
 
-### Load-time disable, declared dependency recorded but disabled (LOAD-01)
+### Apply disable, declared dependency recorded but disabled (LOAD-01)
 
 The second of the three shapes the load-time check reports. The dependency IS recorded in the scope, but its own record is disabled, so it materialized nothing for the dependent to load against. The token is the same `{dependency unsatisfied}` the missing-dependency row carries -- the dependency is not usable at all in both cases -- and only the remedy differs: it says enable rather than install, because an install remedy for a plugin that is already recorded would be false. Everything else about the row matches the state above: the realized `(disabled)` token, the `cause:` trailer as the only channel that may name both parties, `warning` severity, no write-back to `claude-plugins.json`, and a lift on the first pass that finds the dependency enabled again. The trailing tally counts the row as one warning.
 
@@ -3885,9 +3905,11 @@ A plugin operation needs attention.
     cause: Enable "secrets-vault@mp" or uninstall "deploy-kit@mp"
 
 Reconcile: 1 warning
+
+/reload to pick up changes
 ```
 
-### Load-time disable, declared dependency version unsatisfied (LOAD-01)
+### Apply disable, declared dependency version unsatisfied (LOAD-01)
 
 The third shape. The dependency is recorded AND enabled, and its recorded version falls outside the range the dependent declared. This row carries the second closed-set token, `{dependency version unsatisfied}`, mirroring upstream's second error code `dependency-version-unsatisfied`. The split is deliberate: the two remedies differ in kind -- one says install or enable a thing that is not usable, the other says move an existing thing's version -- so one token for both would make a grep for either fact return the other. The range on the cause line is every constraint the dependent declared for that dependency, as written and separated by commas as Claude Code prints them (INR-05): a `^2.0.0` renders as `^2.0.0`, and several declarations of one dependency render as their declared texts in declaration order. The satisfaction check still tests their intersection; only the reported text is the declared one. The verdict bounds the joined text once through the project renderer, so a pathological declared list ends with its `... (+N chars)` overflow marker instead of flooding the row. Severity, tally, write-back and lift behave exactly as on the two rows above.
 
@@ -3901,9 +3923,11 @@ A plugin operation needs attention.
     cause: Update "secrets-vault@mp" to satisfy ^2.0.0, or uninstall "deploy-kit@mp"
 
 Reconcile: 1 warning
+
+/reload to pick up changes
 ```
 
-### Load-time check, a declarer's dependencies cannot be read (REC-05)
+### Load or apply check, a declarer's dependencies cannot be read (REC-05)
 
 The load-time dependency check could not read what one installed plugin declares, so it held no plugin in the scope down on this pass (D-05-07). The usual cause is a marketplace manifest that became invalid. A plugin the marketplace no longer lists is read from its installed copy (DLS-01), so it lands here only when that copy is gone or has no manifest -- for example a path-source plugin whose directory the marketplace deleted. The plugin stays installed and keeps loading; only the check is lost, so the row keeps the `(failed)` token at `warning` severity rather than `error`. The brace names the fault: `{not in manifest}` when the catalog dropped the plugin and its installed copy cannot be read. A marketplace manifest that fails to load takes the token `list` and `info` give the same fault: `{unparseable}` for malformed JSON, `{invalid manifest}` for a schema-invalid manifest, `{source missing}` when it is missing, `{permission denied}` when the process may not read it, and `{unreadable}` otherwise. A plugin `dependencies` value that does not parse is `{invalid manifest}`, and a plugin's own manifest that is present but cannot be used is `{unreadable manifest}`. The `cause:` trailer names the plugin and says why in fixed words this extension writes; it never carries manifest text. The check is re-run on every load and nothing is stored, so the row returns at each new session until the marketplace is repaired, the plugin is uninstalled, or the marketplace is removed. Only the first such plugin in a scope is reported per pass. A plugin this pass already reported as failed, or uninstalled, gets no second row; a success row for it (for example a config-driven disable) does not replace the warning. The trailing tally counts the row as one warning; no reload-hint.
 
@@ -3919,7 +3943,7 @@ A plugin operation needs attention.
 Reconcile: 1 warning
 ```
 
-### Load-time warning, a plugin its marketplace no longer lists (REC-05 / DLS-01)
+### Load or apply warning, a plugin its marketplace no longer lists (REC-05 / DLS-01)
 
 An enabled plugin stays installed after its marketplace's catalog dropped it. Claude Code reports this on every load as a `plugin-not-found` error and stops loading the plugin; Pi keeps it running and reads its dependencies from its installed copy (DLS-D1), so it still protects its dependencies and constrains other plugins. This row is Pi's counterpart to the upstream error: `(failed)` at `warning` severity with `{not in manifest}`, and a `cause:` line in upstream's words. It does not depend on the dependency check failing. A disabled plugin gets no row, because upstream raises the error only for plugins it loads. When the dependency check stops at a plugin whose installed copy cannot be read, that plugin gets the dependency-check row above instead; the check stops at the first such plugin, so any later one still gets this row. A plugin this pass already reported as failed, uninstalled, or disabled gets none. The row returns at each new session until the plugin is uninstalled or the marketplace lists it again. The trailing tally counts the row as one warning; no reload-hint.
 
@@ -3935,7 +3959,7 @@ A plugin operation needs attention.
 Reconcile: 1 warning
 ```
 
-### Load-time install failed by a dependency (RESV-06)
+### Apply install failed by a dependency (RESV-06)
 
 The load-time counterpart of the standalone dependency-cascade `{dependency failed}` row. The user declared `hello@mp` in `claude-plugins.json` and reloaded; `hello` declares a dependency the marketplace does not declare, so the cascade fails before `hello`'s own ledger runs. Reconcile drives exactly one orchestrated outcome for `hello@mp` (it does not install the dependency separately), so the two-row standalone form -- a dependency row plus a `{dependency failed}` root row -- collapses onto the ONE row reconcile can render: the requesting plugin's own row carries `{dependency failed}` and the failing dependency's own cause line, sourced from the SAME `DependencyCascadeError` the standalone cascade's dependency row carries (`orchestrators/plugin/install-cascade.messaging.ts::cascadeFailureCause`). Every reason the closed-set dependency-cascade vocabulary can classify a cascade failure with (`{dependency cycle}`, `{dependency marketplace not added}`, `{no matching version}`, `{version conflict}`, ...) reaches this surface the same way; only `{dependency failed}` is shown here. A plugin's own (non-dependency) failure is unaffected and keeps its ordinary reason (e.g. `{not in manifest}`, `{source missing}`) with no cause line. The trailing tally counts the row as one failure. Severity: `error`; no reload-hint.
 
@@ -3951,7 +3975,7 @@ A plugin operation has failed.
 Reconcile: 1 failure
 ```
 
-### Reload installed a missing declared dependency (MISS-01)
+### Apply installed a missing declared dependency (MISS-01)
 
 An explicit `/reload` (never session start, D-09-13) installs a declared dependency the scope lacks through the install cascade, with provenance `dependency`. One `(installed) {dependency installed}` row renders per materialized member, under the member's own marketplace block, with its bare name -- the block header carries the marketplace half of the key, so a cross-marketplace member files under its own marketplace (D-09-09). No cause line rides the row, and `info` answers who declares it: the reload, on the dependent's behalf. The root member's row also carries the ledger's `{orphan rewake}` signal (still `info`) and its `{malformed skill}` / `{malformed command}` signals (raising it to `warning`), and any member that fell back to its current copy carries `{dependency current copy}` after `{dependency installed}`. The dependent the install satisfied comes back up in the same reload as an ordinary `(installed)` row (D-09-07). Nothing is written to `claude-plugins.json` (D-04-02). A member the cascade found already installed renders no row (D-09-11).
 
@@ -3963,11 +3987,13 @@ An explicit `/reload` (never session start, D-09-13) installs a declared depende
   ● deploy-kit v1.0.0 (installed)
 
 Reconcile: 2 successes
+
+/reload to pick up changes
 ```
 
-### Reload could not install a missing declared dependency (MISS-02)
+### Apply could not install a missing declared dependency (MISS-02)
 
-The install cascade for a missing declared dependency fails, so the failing dependency reports on its OWN row through the same `plugin-install-failed` outcome and `classifyOrchestratorThrow` path the config-install row uses (D-09-10): a closure or constraint failure the cascade wraps as `DependencyCascadeError` renders `{dependency failed}` with the redacted specific reason on the cause line (`is not declared by its marketplace`, `requires marketplace "mp", which is not added`, `has no release tag satisfying`, ...), and only a failure of the dependency's own ledger keeps its specific token (`{not in manifest}`, `{network unreachable}`, ...). No marketplace is added or cloned to satisfy a declaration (D-03-08). The dependent gets the LOAD-01 `(disabled) {dependency unsatisfied}` row with the install remedy from the re-derived check, or no row at all when it was already down. Nothing is half-materialized (D-03-07, NFR-3); the reload completes; and the install is retried on the next `/reload` while the declaration stays unsatisfied, each attempt reporting the failure row alone once the dependent is down (D-09-14). Severity: `error`; the trailing tally counts one failure and one warning; no reload-hint.
+The install cascade for a missing declared dependency fails, so the failing dependency reports on its OWN row through the same `plugin-install-failed` outcome and `classifyOrchestratorThrow` path the config-install row uses (D-09-10): a closure or constraint failure the cascade wraps as `DependencyCascadeError` renders `{dependency failed}` with the redacted specific reason on the cause line (`is not declared by its marketplace`, `requires marketplace "mp", which is not added`, `has no release tag satisfying`, ...), and only a failure of the dependency's own ledger keeps its specific token (`{not in manifest}`, `{network unreachable}`, ...). No marketplace is added or cloned to satisfy a declaration (D-03-08). The dependent gets the LOAD-01 `(disabled) {dependency unsatisfied}` row with the install remedy from the re-derived check, or no row at all when it was already down. Nothing is half-materialized (D-03-07, NFR-3); the reload completes; and the install is retried on the next `/reload` while the declaration stays unsatisfied, each attempt reporting the failure row alone once the dependent is down (D-09-14). Severity: `error`; the trailing tally counts one failure and one warning, and the dependent's disable row brings the reload trailer (D-08).
 
 <!-- catalog-state: reconcile-dependency-install-failed -->
 
@@ -3981,11 +4007,13 @@ A plugin operation has failed.
     cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"
 
 Reconcile: 1 failure, 1 warning
+
+/reload to pick up changes
 ```
 
-### Reload refused a foreign missing dependency
+### Apply refused a foreign missing dependency
 
-The original declaration from `a@alpha` needs `b@beta`. The `alpha` marketplace does not list `beta` in `allowCrossMarketplaceDependenciesOn`, so the dependency install fails before B's cascade starts. The failed row names the first eligible original declarer and the policy root. The dependent keeps its existing `{dependency unsatisfied}` disable row. Install B by name or change the list in `alpha`'s `marketplace.json`, then run `/reload` again. No marketplace is added and no dependency is partly installed. Severity: `error`; no reload hint.
+The original declaration from `a@alpha` needs `b@beta`. The `alpha` marketplace does not list `beta` in `allowCrossMarketplaceDependenciesOn`, so the dependency install fails before B's cascade starts. The failed row names the first eligible original declarer and the policy root. The dependent gets the `{dependency unsatisfied}` disable row. Install B by name or change the list in `alpha`'s `marketplace.json`, then run `/reload` again. No marketplace is added and no dependency is partly installed. Severity: `error`; the disable row brings the reload trailer (D-08).
 
 <!-- catalog-state: reconcile-dependency-cross-marketplace -->
 
@@ -4001,6 +4029,8 @@ A plugin operation has failed.
     cause: Dependency "b@beta", declared by "a@alpha", is from marketplace "beta", which root marketplace "alpha" does not allow. Install "b@beta" manually first, or add "beta" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "alpha".
 
 Reconcile: 1 failure, 1 warning
+
+/reload to pick up changes
 ```
 
 ______________________________________________________________________
