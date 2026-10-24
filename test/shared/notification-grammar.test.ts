@@ -1396,6 +1396,85 @@ test("NREG-01: an updated row without commits keeps the plain sha arrow", () => 
   assert.equal(arrow, expectedArrow);
 });
 
+const MOVE_ROWS = [
+  {
+    title: "a reinstalled row",
+    row: {
+      status: "reinstalled",
+      name: "ghp",
+      version: "1.1.0",
+      reasons: [],
+      severity: "info",
+      needsReload: true,
+    },
+    glyph: "●",
+    tail: "(reinstalled)",
+  },
+  {
+    title: "a partially-installed row",
+    row: {
+      status: "partially-installed",
+      name: "ghp",
+      version: "1.1.0",
+      reasons: ["unsupported component"],
+      severity: "info",
+      needsReload: true,
+    },
+    glyph: "◉",
+    tail: "(partially-installed) {unsupported component}",
+  },
+  {
+    title: "a failed row",
+    row: {
+      status: "failed",
+      name: "ghp",
+      version: "1.1.0",
+      reasons: ["lock held"],
+      severity: "error",
+    },
+    glyph: "⊘",
+    tail: "(failed) {lock held}",
+  },
+] as const satisfies readonly {
+  readonly title: string;
+  readonly row: ResolvedRow;
+  readonly glyph: string;
+  readonly tail: string;
+}[];
+
+for (const { title, row, glyph, tail } of MOVE_ROWS) {
+  test(`NREG-01: ${title} without from keeps its single version`, () => {
+    // act
+    const line = composePluginLines(row, "user")[0];
+
+    // assert
+    assert.equal(line, `  ${glyph} ghp v1.1.0 ${tail}`);
+  });
+
+  test(`UPR-03: ${title} with from draws the version arrow`, () => {
+    // act
+    const line = composePluginLines({ ...row, from: "1.0.0" }, "user")[0];
+
+    // assert
+    assert.equal(line, `  ${glyph} ghp v1.0.0 → v1.1.0 ${tail}`);
+  });
+
+  test(`UPR-02: ${title} with from and commits names each side's short commit`, () => {
+    // act
+    const line = composePluginLines(
+      {
+        ...row,
+        from: "1.1.0",
+        commits: { from: "a".repeat(40), to: "b".repeat(40) },
+      },
+      "user",
+    )[0];
+
+    // assert
+    assert.equal(line, `  ${glyph} ghp v1.1.0 (aaaaaaa) → v1.1.0 (bbbbbbb) ${tail}`);
+  });
+}
+
 for (const { name, reasons, expected } of [
   {
     name: "omits an undefined reasons block",

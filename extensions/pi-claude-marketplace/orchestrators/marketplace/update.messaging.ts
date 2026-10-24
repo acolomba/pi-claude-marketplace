@@ -6,7 +6,11 @@ import {
   type PluginUpdatedMessage,
 } from "../../shared/notification-types.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
-import { constraintCauseFor, updatedRowFromOutcome } from "../plugin/update-row.ts";
+import {
+  constraintCauseFor,
+  revisionVersionSlot,
+  updatedRowFromOutcome,
+} from "../plugin/update-row.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -162,6 +166,9 @@ export function outcomeToCascadePluginMessage(
         status: "failed",
         name: outcome.name,
         scope,
+        // UPR-03: the move a failure after the candidate attempted, or the
+        // installed version alone, or nothing when the outcome knows none.
+        ...revisionVersionSlot(outcome),
         reasons: [narrowFailReason(outcome)],
         // The per-plugin cause-chain trailer. `outcome.cause` is populated by
         // the cascadeAutoupdates catch where the raw thrown Error is in scope;

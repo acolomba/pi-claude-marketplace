@@ -503,6 +503,12 @@ export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
   readonly partition: "failed";
   readonly fromVersion?: string;
   readonly toVersion?: string;
+  /**
+   * UPR-03: the full shas of the move a failure after the candidate
+   * attempted, each omitted when that side has none (NREG-01).
+   */
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
   readonly notes: readonly string[];
   readonly reasons?: readonly ContentReason[];
   readonly phaseFailures?: readonly UpdatePhaseFailure[];

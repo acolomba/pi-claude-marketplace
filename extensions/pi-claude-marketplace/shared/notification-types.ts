@@ -430,8 +430,20 @@ export interface PluginUpdatedMessage extends TransitionMessageBase {
   readonly reasons?: readonly ContentReason[];
 }
 
+/**
+ * UPR-03: the move a `reinstalled`, `partially-installed`, or `failed` row
+ * can show. `version` keeps its meaning on those rows (the version installed
+ * or attempted); `from` is the version the move started at, present only when
+ * the producer knows both sides and the revision moved, and `commits` follows
+ * the `updated` row's rule (UPR-02).
+ */
+export interface RevisionMoveFields {
+  readonly from?: string;
+  readonly commits?: VersionCommits;
+}
+
 /** Reinstalled plugin row. */
-export interface PluginReinstalledMessage extends TransitionMessageBase {
+export interface PluginReinstalledMessage extends TransitionMessageBase, RevisionMoveFields {
   readonly status: "reinstalled";
   readonly name: string;
   readonly dependencies: readonly Dependency[];
@@ -556,7 +568,7 @@ export interface PluginUpgradableMessage extends MessageBase {
 }
 
 /** Partially installed plugin row. */
-export interface PluginPartiallyInstalledMessage extends MessageBase {
+export interface PluginPartiallyInstalledMessage extends MessageBase, RevisionMoveFields {
   readonly status: "partially-installed";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
@@ -578,7 +590,7 @@ export interface PluginPartiallyUpgradableMessage extends MessageBase {
 }
 
 /** Failed plugin row. */
-export interface PluginFailedMessage extends MessageBase {
+export interface PluginFailedMessage extends MessageBase, RevisionMoveFields {
   readonly status: "failed";
   readonly severity: "error" | "warning";
   readonly name: string;

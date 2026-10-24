@@ -24,6 +24,7 @@ import type {
   PluginStatus,
   RenderedMcpConfigNotice,
   RetainedWorkflowStaging,
+  RevisionMoveFields,
   VersionCommits,
 } from "./notification-types.ts";
 import type { CASCADE_PAYLOAD_SCHEMA, NOTIFICATION_PAYLOAD_SCHEMA } from "./notification-wire.ts";
@@ -606,7 +607,8 @@ function ownScopeOr(scope: Scope | undefined, blockScope: Scope): Scope {
 /**
  * D-04: the raw version, or `from` and `to` on an updated row. The groups
  * follow `pluginVersion`: a manual-recovery row and every pending row but
- * `will uninstall` carry none.
+ * `will uninstall` carry none. UPR-03: a reinstalled, partially installed, or
+ * failed row whose revision moved adds `from` beside its `version`.
  */
 function wireVersion(row: ResolvedRow): {
   readonly version?: string;
@@ -617,7 +619,6 @@ function wireVersion(row: ResolvedRow): {
 } {
   switch (row.status) {
     case "installed":
-    case "reinstalled":
     case "uninstalled":
     case "disabled":
     case "available":
@@ -625,12 +626,14 @@ function wireVersion(row: ResolvedRow): {
     case "unavailable":
     case "partially-available":
     case "upgradable":
-    case "partially-installed":
     case "partially-upgradable":
-    case "failed":
     case "skipped":
     case "will uninstall":
       return versionField(row.version);
+    case "reinstalled":
+    case "partially-installed":
+    case "failed":
+      return { ...versionField(row.version), ...moveFields(row) };
     case "updated":
       return { from: row.from, to: row.to, ...commitFields(row.commits) };
     case "manual recovery":
@@ -643,6 +646,15 @@ function wireVersion(row: ResolvedRow): {
 
 function versionField(version: string | undefined): { readonly version?: string } {
   return version === undefined ? {} : { version };
+}
+
+/** UPR-03: `from` and the commits of a row whose revision moved, absent otherwise. */
+function moveFields(row: RevisionMoveFields): {
+  readonly from?: string;
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
+} {
+  return { ...(row.from === undefined ? {} : { from: row.from }), ...commitFields(row.commits) };
 }
 
 /** UPR-02: the full commits of a same-version move, absent when the row has none. */

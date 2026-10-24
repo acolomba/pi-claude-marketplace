@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   constraintCauseFor,
+  revisionVersionSlot,
   updatedRowFromOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts";
 
@@ -266,6 +267,7 @@ test("preserves orphan, malformed, and dropped reason order on a partial row", (
     scope: "project",
     severity: "warning",
     status: "partially-installed",
+    from: "6.0.0",
     version: "6.1.0",
   });
 });
@@ -333,6 +335,7 @@ test("retains base info severity for an already degraded partial update", () => 
     scope: "project",
     severity: "info",
     status: "partially-installed",
+    from: "8.0.0",
     version: "8.1.0",
   });
 });
@@ -366,6 +369,7 @@ test("retains base warning severity for a newly degraded partial update", () => 
     scope: "user",
     severity: "warning",
     status: "partially-installed",
+    from: "9.0.0",
     version: "9.1.0",
   });
 });
@@ -482,6 +486,7 @@ test("D-10-15: all four written axes emit in the documented order on one row", (
     scope: "project",
     severity: "warning",
     status: "partially-installed",
+    from: "1.0.0",
     version: "1.5.0",
   });
 });
@@ -723,6 +728,7 @@ test("WLIF-06: all four axes at once emit in one brace in the established order"
     scope: "user",
     severity: "warning",
     status: "partially-installed",
+    from: "1.0.0",
     version: "1.0.1",
   });
 });
@@ -862,3 +868,97 @@ for (const { title, move } of PLAIN_ARROW_MOVES) {
     });
   });
 }
+
+const VERSION_SLOTS: readonly {
+  readonly title: string;
+  readonly known: Partial<RevisionMove>;
+  readonly expected: ReturnType<typeof revisionVersionSlot>;
+}[] = [
+  { title: "no version known gives no version fields", known: {}, expected: {} },
+  {
+    title: "only the installed version gives that version alone",
+    known: { fromVersion: "1.0.0" },
+    expected: { version: "1.0.0" },
+  },
+  {
+    title: "only the attempted version gives that version alone",
+    known: { toVersion: "1.1.0" },
+    expected: { version: "1.1.0" },
+  },
+  {
+    title: "a moved version gives the arrow",
+    known: { fromVersion: "1.0.0", toVersion: "1.1.0" },
+    expected: { version: "1.1.0", from: "1.0.0" },
+  },
+  {
+    title: "the same version and no commits gives the version alone",
+    known: { fromVersion: "1.0.0", toVersion: "1.0.0" },
+    expected: { version: "1.0.0" },
+  },
+  {
+    title: "the same version and the same commit gives the version alone",
+    known: { fromVersion: "1.0.0", toVersion: "1.0.0", fromCommit: COMMIT_A, toCommit: COMMIT_A },
+    expected: { version: "1.0.0" },
+  },
+  {
+    title: "the same version and two commits gives the arrow with both commits",
+    known: { fromVersion: "1.0.0", toVersion: "1.0.0", fromCommit: COMMIT_A, toCommit: COMMIT_B },
+    expected: { version: "1.0.0", from: "1.0.0", commits: { from: COMMIT_A, to: COMMIT_B } },
+  },
+  {
+    title: "the same version and a commit on the to side only gives the arrow without commits",
+    known: { fromVersion: "1.0.0", toVersion: "1.0.0", toCommit: COMMIT_B },
+    expected: { version: "1.0.0", from: "1.0.0" },
+  },
+  {
+    title: "a moved version with commits gives the arrow without commits",
+    known: { fromVersion: "1.0.0", toVersion: "1.1.0", fromCommit: COMMIT_A, toCommit: COMMIT_B },
+    expected: { version: "1.1.0", from: "1.0.0" },
+  },
+  {
+    title: "an empty installed version gives no arrow",
+    known: { fromVersion: "", toVersion: "1.1.0" },
+    expected: { version: "1.1.0" },
+  },
+];
+
+for (const { title, known, expected } of VERSION_SLOTS) {
+  test(`UPR-03: ${title}`, () => {
+    // act
+    const slot = revisionVersionSlot(known);
+
+    // assert
+    assert.deepStrictEqual(slot, expected);
+  });
+}
+
+test("UPR-02 / UPR-03: a partial update at the same version names the moved commits", () => {
+  // arrange
+  const outcome = {
+    ...updatedOutcomeOver({
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
+      fromCommit: COMMIT_A,
+      toCommit: COMMIT_B,
+    }),
+    partialDegrade: { kinds: ["lsp"], newlyDegraded: false },
+  };
+  const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
+
+  // act
+  const row = updatedRowFromOutcome(outcome, "project", severity);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    commits: { from: COMMIT_A, to: COMMIT_B },
+    dependencies: [],
+    from: "1.0.0",
+    name: "ghp",
+    needsReload: true,
+    reasons: ["unsupported component"],
+    scope: "project",
+    severity: "info",
+    status: "partially-installed",
+    version: "1.0.0",
+  });
+});

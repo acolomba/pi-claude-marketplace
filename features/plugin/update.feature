@@ -371,8 +371,8 @@ Feature: Plugin update
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status              | reasons               | scope   | version |
-      | fixtures         | project           | demo@fixtures | demo | partially-installed | unsupported component | project | 1.1.0   |
+      | marketplace name | marketplace scope | id            | name | status              | reasons               | scope   | from  | version |
+      | fixtures         | project           | demo@fixtures | demo | partially-installed | unsupported component | project | 1.0.0 | 1.1.0   |
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.1.0   | true    |

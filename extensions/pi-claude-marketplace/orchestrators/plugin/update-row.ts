@@ -22,6 +22,7 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type PluginPartiallyInstalledMessage,
   type PluginUpdatedMessage,
+  type RevisionMoveFields,
   type VersionCommits,
 } from "../../shared/notification-types.ts";
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
@@ -152,7 +153,7 @@ export function updatedRowFromOutcome(
       status: "partially-installed",
       name: outcome.name,
       scope: rowScope,
-      version: outcome.toVersion,
+      ...revisionVersionSlot(outcome),
       dependencies,
       reasons: [...written, ...narrowUnsupportedKinds(dropped.kinds), ...stale],
       severity: raised ? "warning" : baseSeverity.partiallyInstalled,
@@ -207,6 +208,45 @@ function revisionCommits(move: RevisionMove): VersionCommits | undefined {
   }
 
   return { from: fromCommit, to: toCommit };
+}
+
+/**
+ * UPR-03: the version fields of a row that can show a move, from whatever
+ * revisions its producer knows. One rule for every such row:
+ *
+ *  - no version known: no version fields;
+ *  - one side known, or both sides the same revision (the same version, and
+ *    the same commit or none on both): that version alone;
+ *  - the revision moved: `version` (the to side) and `from`, plus `commits`
+ *    under the `revisionCommits` rule (UPR-02). A commit on one side only
+ *    counts as a move but names no commits.
+ *
+ * An empty version counts as unknown, so it never produces a version or an
+ * arrow. Every key is absent rather than `undefined` (NREG-01).
+ */
+export function revisionVersionSlot(
+  known: Partial<RevisionMove>,
+): { readonly version?: string } & RevisionMoveFields {
+  const from = knownVersion(known.fromVersion);
+  const to = knownVersion(known.toVersion);
+  if (from === undefined || to === undefined) {
+    const single = to ?? from;
+    return single === undefined ? {} : { version: single };
+  }
+
+  if (from === to && known.fromCommit === known.toCommit) {
+    return { version: to };
+  }
+
+  return {
+    version: to,
+    from,
+    ...withCommits(revisionCommits({ ...known, fromVersion: from, toVersion: to })),
+  };
+}
+
+function knownVersion(version: string | undefined): string | undefined {
+  return version === "" ? undefined : version;
 }
 
 // NREG-01: an arrow without commits keeps the key absent, not `undefined`.

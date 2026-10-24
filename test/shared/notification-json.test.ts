@@ -804,6 +804,86 @@ test("UPR-02: an updated row with commits carries them whole as fromCommit and t
   );
 });
 
+const MOVE_WIRE_ROWS = [
+  {
+    row: {
+      status: "reinstalled",
+      name: "ghp",
+      severity: "info",
+      needsReload: true,
+      reasons: [],
+      version: "1.0.0",
+    },
+    reasons: [],
+  },
+  {
+    row: {
+      status: "partially-installed",
+      name: "ghp",
+      severity: "info",
+      needsReload: true,
+      reasons: ["unsupported component"],
+      version: "1.0.0",
+    },
+    reasons: ["unsupported component"],
+  },
+  {
+    row: {
+      status: "failed",
+      name: "ghp",
+      severity: "error",
+      reasons: ["lock held"],
+      version: "1.0.0",
+    },
+    reasons: ["lock held"],
+  },
+] as const satisfies readonly { readonly row: ResolvedRow; readonly reasons: readonly Reason[] }[];
+
+for (const { row, reasons } of MOVE_WIRE_ROWS) {
+  test(`UPR-02 / UPR-03: a ${row.status} row that moved carries from and its commits beside version`, () => {
+    // arrange
+    const fromCommit = "a".repeat(40);
+    const toCommit = "b".repeat(40);
+    const moved: ResolvedRow = {
+      ...row,
+      from: "1.0.0",
+      commits: { from: fromCommit, to: toCommit },
+    };
+    const presentation = presentationOf([{ name: "mp", scope: "user", plugins: [moved] }]);
+
+    // act
+    const payload = toWirePayload(presentation, {
+      kind: "command",
+      commandId: "plugin",
+      invocationId: "test-run",
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      payload,
+      expectedInfoPayload([
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [
+            {
+              status: row.status,
+              name: "ghp",
+              id: "ghp@mp",
+              reasons,
+              version: "1.0.0",
+              from: "1.0.0",
+              fromCommit,
+              toCommit,
+              scope: "user",
+            },
+          ],
+        },
+      ]),
+    );
+  });
+}
+
 for (const { title, envelope, expectedEnvelope } of [
   {
     title: "emits an info envelope without a summary",
