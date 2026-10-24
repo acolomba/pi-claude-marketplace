@@ -186,6 +186,12 @@ export interface PreparePluginUpdateOptions {
   readonly constraintTagMemo?: Map<string, readonly RemoteTag[]>;
   readonly constraintMarketplaceTagMemo?: Map<string, readonly ReleaseTagCandidate[]>;
   readonly cleanupClones: (locations: ScopedLocations) => Promise<unknown>;
+  /**
+   * UPR-03: receives the installed version once the preflight found the
+   * record, so a failure thrown before any candidate can show the version it
+   * left in place, as a returned preflight failure does.
+   */
+  readonly onRecord?: (fromVersion: string) => void;
 }
 
 type PluginStateRecord = PreparedPluginUpdate["record"];
@@ -948,6 +954,7 @@ export async function preparePluginUpdate(
     return triaged;
   }
 
+  options.onRecord?.(triaged.record.version);
   // AUTH-09: ONE credential composition in this function, shared by the
   // constraint gate and the clone probe below.
   const auth = buildUpdateAuth(options);

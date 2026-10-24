@@ -272,11 +272,12 @@ interface ReinstallReached {
 // emits ONE standalone `MarketplaceNotAddedMessage` before any cascade row.
 
 /**
- * UPR-03: the move the shared runner reported once it derived a candidate, so
- * a failure the swap throws can name the move it attempted.
+ * UPR-03: what the shared runner reported, so a thrown failure can name the
+ * installed version once the preflight found the record, and the move it
+ * attempted once it derived a candidate.
  */
 interface ReportedCandidate {
-  move?: RevisionMove;
+  move?: Partial<RevisionMove>;
 }
 
 /** Runs one reinstall, its maintenance, and its notification. */
@@ -429,6 +430,9 @@ async function runReinstall(
       notifyPhaseFailure: (error, failures) => {
         phaseFailure = { error, failures };
       },
+      onRecord: (fromVersion) => {
+        candidate.move = { fromVersion };
+      },
       onCandidate: (move) => {
         candidate.move = move;
       },
@@ -499,7 +503,7 @@ function failReinstall(
   opts: ReinstallPluginOptions,
   err: unknown,
   render: "default" | "none",
-  move?: RevisionMove,
+  move?: Partial<RevisionMove>,
 ): ReinstallFailedOutcome {
   const outcome = owners.recordReinstallOutcome({
     partition: "failed",

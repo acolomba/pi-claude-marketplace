@@ -44,8 +44,11 @@ export interface RecordNotInstalledOutcomeInput extends ReinstallOutcomeTarget {
 export interface RecordFailedOutcomeInput extends ReinstallOutcomeTarget {
   readonly partition: "failed";
   readonly error: unknown;
-  /** UPR-03: the move the shared runner reported before the failure was thrown. */
-  readonly move?: RevisionMove;
+  /**
+   * UPR-03: what the shared runner reported before the failure was thrown:
+   * the installed version, or the whole move once it derived a candidate.
+   */
+  readonly move?: Partial<RevisionMove>;
 }
 
 export type RecordReinstallOutcomeInput =

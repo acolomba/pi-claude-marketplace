@@ -5747,9 +5747,11 @@ test("D-18-17: an update whose dependency walk cannot read another recorded plug
       });
 
       // assert
+      // UPR-03: the walk failed after the preflight found the record, so the
+      // row shows the installed version it left in place.
       assert.deepStrictEqual(notifications, [
         refusedUpdateNotification(
-          "hello",
+          "hello v1.0.0",
           "unreadable",
           "cannot read the dependencies of gone@mp: not declared by its marketplace",
         ),
@@ -5782,6 +5784,7 @@ test("D-18-17: an autoupdate cascade fails a plugin whose dependency walk cannot
       assert.deepStrictEqual(failure, {
         partition: "failed",
         name: "hello",
+        fromVersion: "1.0.0",
         notes: [`${walkMessage}\n\ncause: ${walkMessage}`],
         declaresAgents: false,
         declaresMcp: false,

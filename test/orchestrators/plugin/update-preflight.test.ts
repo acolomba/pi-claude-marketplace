@@ -159,6 +159,7 @@ async function prepare(
     readonly credentialOps?: CredentialOps;
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
+    readonly onRecord?: PreparePluginUpdateOptions["onRecord"];
   } = {},
 ) {
   return preparePluginUpdate({
@@ -182,6 +183,7 @@ async function prepare(
     ...(options.credentialOps !== undefined && { credentialOps: options.credentialOps }),
     ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
     ...(options.authMemo !== undefined && { authMemo: options.authMemo }),
+    ...(options.onRecord !== undefined && { onRecord: options.onRecord }),
   });
 }
 
@@ -222,10 +224,13 @@ for (const { declared, listing } of [
     const seed = await seedUpdate({ declared });
     t.after(() => rm(seed.cwd, { force: true, recursive: true }));
 
+    const reported: string[] = [];
+
     // act
-    const outcome = await prepare(seed);
+    const outcome = await prepare(seed, { onRecord: (version) => reported.push(version) });
 
     // assert
+    assert.deepStrictEqual(reported, []);
     assert.deepStrictEqual(outcome, {
       partition: "failed",
       name: "hello",
@@ -1930,7 +1935,7 @@ for (const { label, recordedSha, source } of [
   });
 }
 
-test("GIT-03: an unpinned update under a held state lock throws lock held, not a verdict", async (t) => {
+test("GIT-03 / UPR-03: an unpinned update under a held state lock throws lock held after reporting the installed version", async (t) => {
   // arrange
   const seed = await seedUpdate({
     installed: pluginRecord("1.0.0"),
@@ -1947,11 +1952,17 @@ test("GIT-03: an unpinned update under a held state lock throws lock held, not a
     lockfilePath: seed.locations.stateLockFile,
     realpath: false,
   });
+  const reported: string[] = [];
 
   // act & assert
   try {
-    await assert.rejects(prepare(seed, { cloneCacheSeam }), StateLockHeldError);
+    await assert.rejects(
+      prepare(seed, { cloneCacheSeam, onRecord: (version) => reported.push(version) }),
+      StateLockHeldError,
+    );
   } finally {
     await release();
   }
+
+  assert.deepStrictEqual(reported, ["1.0.0"]);
 });

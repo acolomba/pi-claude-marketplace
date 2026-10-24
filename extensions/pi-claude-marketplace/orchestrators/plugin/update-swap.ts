@@ -187,6 +187,8 @@ export interface ThreePhaseArgsBase {
    * the error. Production callers that render failures set it.
    */
   readonly onCandidate?: (move: RevisionMove) => void;
+  /** UPR-03: the installed version, reported before any candidate; see `onCandidate`. */
+  readonly onRecord?: NonNullable<PreparePluginUpdateOptions["onRecord"]>;
   /**
    * State I/O for the intent-mark and finalize guards (and the disabled-pin
    * refresh in preflight). Production callers omit it and get the real state

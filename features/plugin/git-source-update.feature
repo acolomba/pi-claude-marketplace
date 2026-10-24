@@ -171,8 +171,8 @@ Feature: Plugin git source update
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status | reasons   | scope   | cause chain                                                                                                                                                                                | cause truncated | leaks | rollback partial |
-      | gits             | project           | ghp@gits | ghp  | failed | lock held | project | Another pi-claude-marketplace operation is in progress for project scope ({project dir}/.pi/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
+      | marketplace name | marketplace scope | id       | name | status | version | reasons   | scope   | cause chain                                                                                                                                                                                | cause truncated | leaks | rollback partial |
+      | gits             | project           | ghp@gits | ghp  | failed | 1.0.0   | lock held | project | Another pi-claude-marketplace operation is in progress for project scope ({project dir}/.pi/pi-claude-marketplace/.state-lock). Retry after it completes., Lock file is already being held | false           |       |                  |
     Then the git host receives no request
     Then the git-source plugin "ghp" installed in the project scope runs revision 1 of its repository
 

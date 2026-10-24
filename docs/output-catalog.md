@@ -1895,11 +1895,11 @@ The reinstall resolves the entry the marketplace offers now, through the same ca
 A plugin operation has failed.
 
 ● mp [project]
-  ⊘ good (failed) {unreadable}
+  ⊘ good v1.0.0 (failed) {unreadable}
     cause: cannot read the dependencies of bad@mp: not declared by its marketplace
 ```
 
-The constraint gate reads the dependency declarations of every plugin the scope records. When it cannot read one, it fails closed: the reinstall changes nothing and fails with `{unreadable}`, never `{dependents constrain}`, because nothing was shown to hold the version. The cause line names the record the walk could not read. This is the named-target form of the bulk `{unreadable}` row the section introduction describes, and `update` renders the same row for the same walk.
+The constraint gate reads the dependency declarations of every plugin the scope records. When it cannot read one, it fails closed: the reinstall changes nothing and fails with `{unreadable}`, never `{dependents constrain}`, because nothing was shown to hold the version. The cause line names the record the walk could not read. The walk fails before any candidate, so the row shows the installed version it left in place (UPR-03). This is the named-target form of the bulk `{unreadable}` row the section introduction describes, and `update` renders the same row for the same walk.
 
 ### Reinstall that failed partway through its commit (D-18-10)
 

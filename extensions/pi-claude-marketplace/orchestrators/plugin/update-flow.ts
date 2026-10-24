@@ -207,17 +207,25 @@ function makeSyncCloneOnce(
 type UpdateBindings = Pick<ThreePhaseArgsBase, "hooksRouting" | "completionCache" | "env">;
 
 /**
- * UPR-03: the candidate one target's runner reported, so a failure the swap
- * throws can name the move it attempted. A caller creates a fresh one per
+ * UPR-03: what one target's runner reported, so a thrown failure can name the
+ * installed version once the preflight found the record, and the move it
+ * attempted once it derived a candidate. A caller creates a fresh one per
  * target, so a later target never renders an earlier target's versions.
  */
 interface CandidateReport {
-  move?: RevisionMove;
+  move?: Partial<RevisionMove>;
 }
 
-function recordCandidate(report: CandidateReport): (move: RevisionMove) => void {
-  return (move) => {
-    report.move = move;
+function recordCandidate(
+  report: CandidateReport,
+): Pick<ThreePhaseArgsBase, "onCandidate" | "onRecord"> {
+  return {
+    onRecord: (fromVersion) => {
+      report.move = { fromVersion };
+    },
+    onCandidate: (move) => {
+      report.move = move;
+    },
   };
 }
 
@@ -274,7 +282,7 @@ function buildDirectThreePhaseArgs(
     constraintTagMemo,
     constraintMarketplaceTagMemo,
     cleanupClones: garbageCollectPluginClones,
-    onCandidate: recordCandidate(report),
+    ...recordCandidate(report),
     notifyPhaseFailure: (error, failures) => {
       notifyDirectFailure({
         ctx: opts.ctx,
@@ -685,7 +693,7 @@ async function updateSinglePluginWith(
       constraintTagMemo: constraintMemos.tagMemo,
       constraintMarketplaceTagMemo: constraintMemos.marketplaceTagMemo,
       cleanupClones: garbageCollectPluginClones,
-      onCandidate: recordCandidate(report),
+      ...recordCandidate(report),
     });
   } catch (err) {
     // GHB-03: an invalid GitHub base override fails the marketplace command
@@ -800,8 +808,9 @@ interface NotifyDirectFailureArgs {
   readonly rollbackPartial?: readonly UpdatePhase3Failure[];
   /**
    * UPR-03: the target's candidate report. A failure after the candidate
-   * shows the move it attempted; the marketplace-sync, enumeration, and
-   * pre-candidate failures carry none and show no version.
+   * shows the move it attempted, and one after the preflight found the record
+   * shows the installed version; the marketplace-sync, enumeration, and
+   * layer-refusal failures carry none and show no version.
    */
   readonly report?: CandidateReport;
 }

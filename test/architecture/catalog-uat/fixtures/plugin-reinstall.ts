@@ -520,6 +520,7 @@ export const PLUGIN_REINSTALL_FIXTURES: FixtureMap = {
               {
                 status: "failed",
                 name: "good",
+                version: "1.0.0",
                 reasons: ["unreadable"],
                 cause: new Error(
                   "cannot read the dependencies of bad@mp: not declared by its marketplace",

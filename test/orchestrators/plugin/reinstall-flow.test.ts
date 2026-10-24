@@ -2278,6 +2278,7 @@ test("D-18-17: a recorded plugin the manifest no longer declares fails every oth
         name: "good",
         marketplace: "mp",
         scope: "project",
+        fromVersion: "1.0.0",
         notes: [`${walkCause}\n\ncause: ${walkCause}`],
         reasons: ["unreadable"],
       });
@@ -2286,7 +2287,7 @@ test("D-18-17: a recorded plugin the manifest no longer declares fails every oth
       assert.strictEqual(cause.declarer, "bad@mp");
       assert.deepStrictEqual(notifications, [
         {
-          message: `A plugin operation has failed.\n\n● mp [project]\n  ⊘ bad (skipped) {not in manifest}\n  ⊘ good (failed) {unreadable}\n    cause: ${walkCause}\n\nPlugin reinstall: 1 failure, 1 warning`,
+          message: `A plugin operation has failed.\n\n● mp [project]\n  ⊘ bad (skipped) {not in manifest}\n  ⊘ good v1.0.0 (failed) {unreadable}\n    cause: ${walkCause}\n\nPlugin reinstall: 1 failure, 1 warning`,
           severity: "error",
         },
       ]);
