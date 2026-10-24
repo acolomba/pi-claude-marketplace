@@ -47,11 +47,11 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
  * imports no schema library, so an internal refactor here never changes a wire
  * contract.
  *
- * D-10: severity, the composed summary line, `needsReload`, the numeric tally,
- * and the update no-op flag are resolved here, once. The text strategy
- * (`formatEnvelopeArguments` in notification-grammar.ts) reads the summary line
- * verbatim and composes the tally sentence, the no-op headline, and the reload
- * trailer from these facts.
+ * D-10: severity, the composed summary line, `needsReload`, `needsApply`, the
+ * numeric tally, and the update no-op flag are resolved here, once. The text
+ * strategy (`formatEnvelopeArguments` in notification-grammar.ts) reads the
+ * summary line verbatim and composes the tally sentence, the no-op headline,
+ * and the reload and apply trailers from these facts.
  *
  * D-11: `resolveRows` serializes each failed row's cause chain, manual-recovery
  * leaks, and rollback phases here, once, and the remedy cause a realized
@@ -92,6 +92,7 @@ export interface ResolvedTally {
 export interface InfoEnvelope {
   readonly severity: "info";
   readonly needsReload: boolean;
+  readonly needsApply: boolean;
   readonly noOp: boolean;
   readonly tally?: ResolvedTally;
 }
@@ -104,6 +105,7 @@ export interface AttentionEnvelope {
   readonly severity: "warning" | "error";
   readonly summary: string;
   readonly needsReload: boolean;
+  readonly needsApply: boolean;
   readonly noOp: boolean;
   readonly tally?: ResolvedTally;
 }
@@ -114,6 +116,7 @@ export type ResolvedEnvelope = InfoEnvelope | AttentionEnvelope;
 /** The severity-independent envelope facts. */
 interface EnvelopeFacts {
   readonly needsReload: boolean;
+  readonly needsApply: boolean;
   readonly noOp: boolean;
   readonly tally?: ResolvedTally;
 }
@@ -138,11 +141,14 @@ interface TallySource {
  * and a warning or error result carries the D-10 summary sentence.
  * `needsReload` is the RLD-02 OR-reduce of the row stamps, which is false for
  * every standalone kind. Only a cascade and a `reconcile-applied-cascade` carry
- * a tally.
+ * a tally. APL-04 / D-14: `needsApply` is true only for a cascade whose
+ * message sets it.
  */
 export function resolveEnvelope(message: NotificationMessage): ResolvedEnvelope {
   const attention = resolveAttention(message);
   const needsReload = shouldEmitReloadHint(message);
+  const needsApply =
+    (message.kind === undefined || message.kind === "cascade") && message.needsApply === true;
   const tally =
     message.kind === undefined ||
     message.kind === "cascade" ||
@@ -152,7 +158,9 @@ export function resolveEnvelope(message: NotificationMessage): ResolvedEnvelope 
 
   return assembleEnvelope(
     attention,
-    tally === undefined ? { needsReload, noOp: false } : { needsReload, noOp: false, tally },
+    tally === undefined
+      ? { needsReload, needsApply, noOp: false }
+      : { needsReload, needsApply, noOp: false, tally },
   );
 }
 
@@ -162,7 +170,11 @@ export function resolveEnvelope(message: NotificationMessage): ResolvedEnvelope 
  * takes the tally's place, so there is no tally and no reload trailer.
  */
 export function resolveUpdateNoOpEnvelope(message: CascadeNotificationMessage): ResolvedEnvelope {
-  return assembleEnvelope(resolveAttention(message), { needsReload: false, noOp: true });
+  return assembleEnvelope(resolveAttention(message), {
+    needsReload: false,
+    needsApply: false,
+    noOp: true,
+  });
 }
 
 /** The severity and summary line of `message`, or `undefined` at info. */

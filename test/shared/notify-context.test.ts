@@ -187,6 +187,27 @@ test("WR-06: folds caller-supplied advisory lines before the tally", () => {
   verify(harness.ui);
 });
 
+test("APL-04 / D-14: a caller-supplied needsApply ends the cascade with the apply trailer", () => {
+  // arrange
+  const harness = createHarness({
+    message:
+      "● official [user]\n  ○ alpha (available)\n\nPlugin inspect: 1 success\n\n/claude:plugin apply to make these changes",
+  });
+  const controlled = createControlledContext("Plugin inspect");
+  const rows: readonly MarketplaceRows<ControlledMessage>[] = [
+    { name: "official", scope: "user", plugins: [availableRow("alpha")] },
+  ];
+
+  // act
+  notifyWithContext(harness.ctx, harness.run, controlled, rows, undefined, "plural", {
+    needsApply: true,
+  });
+
+  // assert
+  verify(harness.ctx);
+  verify(harness.ui);
+});
+
 test("a one-row plural cascade retains its one-success tally", () => {
   // arrange
   const harness = createHarness({

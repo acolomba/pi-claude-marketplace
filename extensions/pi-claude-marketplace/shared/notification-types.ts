@@ -933,6 +933,11 @@ export interface CascadeNotificationMessage {
    */
   readonly advisories?: readonly string[];
   readonly retainedWorkflows?: readonly RetainedWorkflowStaging[];
+  /**
+   * APL-04 / D-14: set only by the `pending` composer, when its list holds a
+   * change `/claude:plugin apply` would make. It selects the apply trailer.
+   */
+  readonly needsApply?: true;
 }
 
 /** Marketplace information message. */

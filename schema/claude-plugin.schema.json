@@ -58,6 +58,7 @@
           "additionalProperties": false
         },
         "noOp": { "type": "boolean", "const": true },
+        "needsApply": { "type": "boolean", "const": true },
         "marketplaces": {
           "type": "array",
           "items": {

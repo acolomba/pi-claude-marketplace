@@ -403,7 +403,12 @@ interface ExpectedBlock {
   readonly reasons?: readonly Reason[];
 }
 
-const INFO_ENVELOPE: ResolvedEnvelope = { severity: "info", needsReload: false, noOp: false };
+const INFO_ENVELOPE: ResolvedEnvelope = {
+  severity: "info",
+  needsReload: false,
+  needsApply: false,
+  noOp: false,
+};
 
 function presentationOf(
   marketplaces: readonly ResolvedMarketplace[],
@@ -939,17 +944,29 @@ for (const { row, reasons } of MOVE_WIRE_ROWS) {
 for (const { title, envelope, expectedEnvelope } of [
   {
     title: "emits an info envelope without a summary",
-    envelope: { severity: "info", needsReload: true, noOp: false },
+    envelope: { severity: "info", needsReload: true, needsApply: false, noOp: false },
     expectedEnvelope: { severity: "info", needsReload: true },
   },
   {
     title: "emits a warning envelope with its summary",
-    envelope: { severity: "warning", summary: "Heads up.", needsReload: false, noOp: false },
+    envelope: {
+      severity: "warning",
+      summary: "Heads up.",
+      needsReload: false,
+      needsApply: false,
+      noOp: false,
+    },
     expectedEnvelope: { severity: "warning", summary: "Heads up.", needsReload: false },
   },
   {
     title: "emits an error envelope with an empty summary",
-    envelope: { severity: "error", summary: "", needsReload: false, noOp: false },
+    envelope: {
+      severity: "error",
+      summary: "",
+      needsReload: false,
+      needsApply: false,
+      noOp: false,
+    },
     expectedEnvelope: { severity: "error", summary: "", needsReload: false },
   },
   {
@@ -957,6 +974,7 @@ for (const { title, envelope, expectedEnvelope } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin install", failures: 0, warnings: 1 },
     },
@@ -971,6 +989,7 @@ for (const { title, envelope, expectedEnvelope } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin install", failures: 0, warnings: 0, success: { count: 2 } },
     },
@@ -985,6 +1004,7 @@ for (const { title, envelope, expectedEnvelope } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: {
         label: "Plugin update",
@@ -1006,8 +1026,13 @@ for (const { title, envelope, expectedEnvelope } of [
   },
   {
     title: "emits noOp true for a no-op envelope",
-    envelope: { severity: "info", needsReload: false, noOp: true },
+    envelope: { severity: "info", needsReload: false, needsApply: false, noOp: true },
     expectedEnvelope: { severity: "info", needsReload: false, noOp: true },
+  },
+  {
+    title: "APL-04 / D-14: emits needsApply true when the envelope needs apply",
+    envelope: { severity: "info", needsReload: false, needsApply: true, noOp: false },
+    expectedEnvelope: { severity: "info", needsReload: false, needsApply: true },
   },
 ] satisfies readonly {
   title: string;
@@ -1459,6 +1484,7 @@ test("produces a payload that survives a JSON round trip with no undefined or nu
       severity: "error",
       summary: "A plugin operation has failed.",
       needsReload: false,
+      needsApply: false,
       noOp: false,
     },
     marketplaces: [
@@ -1523,6 +1549,7 @@ test("emits a reconcile-applied payload with its tally and no noOp", () => {
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Reconcile", failures: 0, warnings: 0, success: { count: 1 } },
     },
@@ -1552,7 +1579,13 @@ test("emits a reconcile-applied payload without a tally and with its summary", (
   // arrange
   const presentation: ReconcileAppliedPresentation = {
     kind: "reconcile-applied-cascade",
-    envelope: { severity: "warning", summary: "Heads up.", needsReload: false, noOp: false },
+    envelope: {
+      severity: "warning",
+      summary: "Heads up.",
+      needsReload: false,
+      needsApply: false,
+      noOp: false,
+    },
     marketplaces: [reconcileBlock()],
   };
 
@@ -1625,7 +1658,13 @@ test("emits noOp true with no tally and no reload for an update no-op presentati
 function warningPresentation(): CascadePresentation {
   return {
     kind: "cascade",
-    envelope: { severity: "warning", summary: "Verbatim summary.", needsReload: true, noOp: false },
+    envelope: {
+      severity: "warning",
+      summary: "Verbatim summary.",
+      needsReload: true,
+      needsApply: false,
+      noOp: false,
+    },
     marketplaces: [reconcileBlock()],
     advisories: ["advice"],
   };
@@ -1658,7 +1697,7 @@ function expectedReconcilePayload(): Record<string, unknown> {
 function reconcilePresentation(): ReconcileAppliedPresentation {
   return {
     kind: "reconcile-applied-cascade",
-    envelope: { severity: "info", needsReload: false, noOp: false },
+    envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
     marketplaces: [reconcileBlock()],
   };
 }
@@ -1735,7 +1774,7 @@ test("interleaved conversions of two presentations match each converted alone", 
 });
 
 function infoEnvelope(): ResolvedEnvelope {
-  return { severity: "info", needsReload: false, noOp: false };
+  return { severity: "info", needsReload: false, needsApply: false, noOp: false };
 }
 
 function githubMarketplaceInfo(): MarketplaceInfoMessage {
@@ -2052,6 +2091,7 @@ test("gives an installed plugin-info row with no scope of its own the marketplac
       severity: "error",
       summary: "A plugin operation has failed.",
       needsReload: false,
+      needsApply: false,
       noOp: false,
     },
     message: {
@@ -2163,6 +2203,7 @@ for (const { title, scope, expectedScope } of [
         severity: "error",
         summary: "A marketplace operation has failed.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
       },
       message: { kind: "marketplace-not-added", name: "mp", ...scope },
@@ -2293,6 +2334,7 @@ for (const { title, cause, expectedCause } of [
         severity: "warning",
         summary: "Prune committed; finalization needs attention.",
         needsReload: true,
+        needsApply: false,
         noOp: false,
       },
       scope: "user",
@@ -2677,7 +2719,7 @@ test("copies the diagnostic lines so the payload shares no array with the surfac
 function adjacentCascade(): CascadePresentation {
   return {
     kind: "cascade",
-    envelope: { severity: "info", needsReload: true, noOp: false },
+    envelope: { severity: "info", needsReload: true, needsApply: false, noOp: false },
     marketplaces: [],
   };
 }

@@ -378,6 +378,7 @@ export const CASCADE_PAYLOAD_SCHEMA = Type.Object(
     kind: Type.Literal("cascade"),
     tally: Type.Optional(TALLY),
     noOp: Type.Optional(Type.Literal(true)),
+    needsApply: Type.Optional(Type.Literal(true)),
     marketplaces: Type.Array(MARKETPLACE_BLOCK),
     advisories: Type.Optional(Type.Array(Type.String())),
     retainedWorkflows: Type.Optional(Type.Array(RETAINED_WORKFLOW)),

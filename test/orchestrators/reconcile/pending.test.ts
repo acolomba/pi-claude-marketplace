@@ -174,7 +174,7 @@ test("MSG-GR-3: an omitted scope walks both scopes and orders a shared marketpla
       message:
         "● mp [project]\n  ● p-proj (will install)\n\n" +
         "● mp [user]\n  ● p-user (will install)\n\n" +
-        "Reconcile pending: 2 successes",
+        "Reconcile pending: 2 successes\n\n/claude:plugin apply to make these changes",
     },
   ]);
   verifyBoundary();
@@ -198,7 +198,10 @@ test("an explicit user scope reports the user scope's pending work and never rea
 
   // assert
   assert.deepStrictEqual(notifications, [
-    { message: "● mp [user]\n  ● p-user (will install)\n\nReconcile pending: 1 success" },
+    {
+      message:
+        "● mp [user]\n  ● p-user (will install)\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
+    },
   ]);
   verifyBoundary();
 });
@@ -221,7 +224,10 @@ test("an explicit project scope reports the project scope's pending work and nev
 
   // assert
   assert.deepStrictEqual(notifications, [
-    { message: "● mp [project]\n  ● p-proj (will install)\n\nReconcile pending: 1 success" },
+    {
+      message:
+        "● mp [project]\n  ● p-proj (will install)\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
+    },
   ]);
   verifyBoundary();
 });
@@ -236,7 +242,8 @@ test("DIFF-01 / NFR-5: a repeated invocation emits the same notification and lea
   await writeUnder(project.baseConfigJsonPath, declaredConfig);
   await writeUnder(project.stateJsonPath, recordedState);
   const expectedNotification = {
-    message: "● mp [project]\n  ○ p1 v1.0.0 (will uninstall)\n\nReconcile pending: 1 success",
+    message:
+      "● mp [project]\n  ○ p1 v1.0.0 (will uninstall)\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
   };
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
 
@@ -439,7 +446,36 @@ test("MSG-GR-3: a failed configuration block sorts among the plan blocks by name
         "A marketplace operation has failed.\n\n" +
         "⊘ claude-plugins.json [project] (failed) {invalid manifest}\n\n" +
         "● zzz-mp [user]\n  ● pp (will install)\n\n" +
-        "Reconcile pending: 1 failure, 1 success",
+        "Reconcile pending: 1 failure, 1 success\n\n/claude:plugin apply to make these changes",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("APL-04 / D-14: a list whose only row is a source mismatch carries no apply trailer", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "mismatch-only");
+  await writeUnder(
+    project.baseConfigJsonPath,
+    configBytes("mp", "acme/other", [{ key: "p1@mp", enabled: true }]),
+  );
+  await writeUnder(
+    project.stateJsonPath,
+    stateBytes("mp", "acme/tools", path.join(cwd, "mp-root"), [{ name: "p1", skills: [] }]),
+  );
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A marketplace operation has failed.\n\n" +
+        "⊘ mp [project] (failed) {source mismatch}\n\n" +
+        "Reconcile pending: 1 failure",
       severity: "error",
     },
   ]);
@@ -564,7 +600,10 @@ test("FIX-02: the pending view leaves out what the local config declares, as the
 
   // assert
   assert.deepStrictEqual(notifications, [
-    { message: "● mp [project]\n  ○ p1 v1.0.0 (will uninstall)\n\nReconcile pending: 1 success" },
+    {
+      message:
+        "● mp [project]\n  ○ p1 v1.0.0 (will uninstall)\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
+    },
   ]);
   verifyBoundary();
 });
@@ -632,7 +671,8 @@ const plannedInstallRows = [
     },
     rendered: "● cr (will partially install)",
     expectedMessage:
-      "● mp-github [project]\n  ● cr (will partially install)\n\n" + "Reconcile pending: 1 success",
+      "● mp-github [project]\n  ● cr (will partially install)\n\n" +
+      "Reconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
   },
   {
     condition: "a candidate that resolves cleanly",
@@ -640,7 +680,8 @@ const plannedInstallRows = [
       await stagePlannedInstall(cwd, locations, { degrade: false });
     },
     rendered: "● cr (will install)",
-    expectedMessage: "● mp-github [project]\n  ● cr (will install)\n\nReconcile pending: 1 success",
+    expectedMessage:
+      "● mp-github [project]\n  ● cr (will install)\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
   },
   {
     condition: "a marketplace that is declared but not recorded",
@@ -651,7 +692,8 @@ const plannedInstallRows = [
       );
     },
     rendered: "● pp (will install)",
-    expectedMessage: "● newmp [project]\n  ● pp (will install)\n\nReconcile pending: 1 success",
+    expectedMessage:
+      "● newmp [project]\n  ● pp (will install)\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
   },
   {
     condition: "a recorded manifest that does not parse",
@@ -660,7 +702,8 @@ const plannedInstallRows = [
       await writeFile(manifestPath, "{ not valid json at all", "utf8");
     },
     rendered: "● cr (will install)",
-    expectedMessage: "● mp-github [project]\n  ● cr (will install)\n\nReconcile pending: 1 success",
+    expectedMessage:
+      "● mp-github [project]\n  ● cr (will install)\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
   },
   {
     condition: "a recorded manifest that omits the planned plugin",
@@ -676,7 +719,8 @@ const plannedInstallRows = [
       );
     },
     rendered: "● cr (will install)",
-    expectedMessage: "● mp-github [project]\n  ● cr (will install)\n\nReconcile pending: 1 success",
+    expectedMessage:
+      "● mp-github [project]\n  ● cr (will install)\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
   },
 ] satisfies readonly {
   readonly condition: string;
@@ -778,7 +822,7 @@ test("WR-06: the cascade arm carries the identical retained-tree line", async (t
   // site composes both arms, so the two cannot drift.
   assert.deepStrictEqual(notifications, [
     {
-      message: `● mp [project]\n  ○ p1 v1.0.0 (will uninstall)\n\n${RETAINED_LINE}\n\nReconcile pending: 1 success`,
+      message: `● mp [project]\n  ○ p1 v1.0.0 (will uninstall)\n\n${RETAINED_LINE}\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes`,
     },
   ]);
   verifyBoundary();
@@ -812,7 +856,7 @@ test("WR-06: renders the advisory once for an invocation that walks both scopes"
   // assert
   assert.deepStrictEqual(notifications, [
     {
-      message: `● mp [project]\n  ● p-proj (will install)\n\n● mp [user]\n  ● p-user (will install)\n\n${RETAINED_LINE}\n\nReconcile pending: 2 successes`,
+      message: `● mp [project]\n  ● p-proj (will install)\n\n● mp [user]\n  ● p-user (will install)\n\n${RETAINED_LINE}\n\nReconcile pending: 2 successes\n\n/claude:plugin apply to make these changes`,
     },
   ]);
   assert.deepStrictEqual(

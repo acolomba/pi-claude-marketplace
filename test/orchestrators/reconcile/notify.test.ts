@@ -9,6 +9,7 @@ import {
   buildReconcileAppliedCascade,
   buildReconcilePendingNotification,
   isReconcilePlanListEmpty,
+  planListNeedsApply,
   recordedVersionEntries,
   resolvePendingForceInstalls,
   type PendingInstallCandidate,
@@ -2424,6 +2425,78 @@ describe("buildReconcilePendingNotification", () => {
   });
 });
 
+/**
+ * APL-04 / D-14: one plan action per bucket `/claude:plugin apply` would act
+ * on. A source mismatch is not among them: `apply` cannot fix it.
+ */
+const CHANGE_BUCKETS = [
+  {
+    bucket: "a marketplace removal carrying recorded plugins",
+    actions: {
+      marketplacesToRemove: [{ scope: "project", marketplace: "old-mp", plugins: ["p1"] }],
+    },
+  },
+  {
+    bucket: "a planned install",
+    actions: {
+      pluginsToInstall: [
+        { scope: "project", plugin: "cr", marketplace: "mp", configSource: "base" },
+      ],
+    },
+  },
+  {
+    bucket: "a planned uninstall",
+    actions: { pluginsToUninstall: [{ scope: "project", plugin: "cr", marketplace: "mp" }] },
+  },
+  {
+    bucket: "a planned enable",
+    actions: { pluginsToEnable: [{ scope: "project", plugin: "cr", marketplace: "mp" }] },
+  },
+  {
+    bucket: "a planned disable",
+    actions: { pluginsToDisable: [{ scope: "project", plugin: "cr", marketplace: "mp" }] },
+  },
+  {
+    // WR-02: the load-time held-down bucket is an action the next reload
+    // performs, so a scope carrying only this bucket must not report as a
+    // steady state.
+    bucket: "a planned dependency disable",
+    actions: {
+      pluginsToDependencyDisable: [
+        {
+          scope: "project",
+          plugin: "cr",
+          marketplace: "mp",
+          dependency: "dep@mp",
+          kind: "missing",
+        },
+      ],
+    },
+  },
+  {
+    // MISS-01 / D-09-12: the dependency-install bucket is an action the
+    // next reload performs, so a scope carrying only this bucket must not
+    // report as a steady state.
+    bucket: "a planned dependency install",
+    actions: {
+      pluginsToDependencyInstall: [
+        {
+          scope: "project",
+          plugin: "cr",
+          marketplace: "mp",
+          ranges: [],
+          requiredBy: "dependent@mp",
+          declarers: ["dependent@mp"],
+        },
+      ],
+    },
+  },
+] satisfies readonly { bucket: string; actions: PlannedActions }[];
+
+const SOURCE_MISMATCH_ACTIONS = {
+  sourceMismatches: [{ scope: "project", cause: "malformed-plugin-key", rawKey: "my-plugin" }],
+} satisfies PlannedActions;
+
 describe("isReconcilePlanListEmpty", () => {
   test("reports an empty plan list as empty", () => {
     // arrange
@@ -2463,75 +2536,8 @@ describe("isReconcilePlanListEmpty", () => {
   });
 
   for (const { bucket, actions } of [
-    {
-      bucket: "a marketplace removal carrying recorded plugins",
-      actions: {
-        marketplacesToRemove: [{ scope: "project", marketplace: "old-mp", plugins: ["p1"] }],
-      },
-    },
-    {
-      bucket: "a planned install",
-      actions: {
-        pluginsToInstall: [
-          { scope: "project", plugin: "cr", marketplace: "mp", configSource: "base" },
-        ],
-      },
-    },
-    {
-      bucket: "a planned uninstall",
-      actions: { pluginsToUninstall: [{ scope: "project", plugin: "cr", marketplace: "mp" }] },
-    },
-    {
-      bucket: "a planned enable",
-      actions: { pluginsToEnable: [{ scope: "project", plugin: "cr", marketplace: "mp" }] },
-    },
-    {
-      bucket: "a planned disable",
-      actions: { pluginsToDisable: [{ scope: "project", plugin: "cr", marketplace: "mp" }] },
-    },
-    {
-      // WR-02: the load-time held-down bucket is an action the next reload
-      // performs, so a scope carrying only this bucket must not report as a
-      // steady state.
-      bucket: "a planned dependency disable",
-      actions: {
-        pluginsToDependencyDisable: [
-          {
-            scope: "project",
-            plugin: "cr",
-            marketplace: "mp",
-            dependency: "dep@mp",
-            kind: "missing",
-          },
-        ],
-      },
-    },
-    {
-      // MISS-01 / D-09-12: the dependency-install bucket is an action the
-      // next reload performs, so a scope carrying only this bucket must not
-      // report as a steady state.
-      bucket: "a planned dependency install",
-      actions: {
-        pluginsToDependencyInstall: [
-          {
-            scope: "project",
-            plugin: "cr",
-            marketplace: "mp",
-            ranges: [],
-            requiredBy: "dependent@mp",
-            declarers: ["dependent@mp"],
-          },
-        ],
-      },
-    },
-    {
-      bucket: "a source mismatch",
-      actions: {
-        sourceMismatches: [
-          { scope: "project", cause: "malformed-plugin-key", rawKey: "my-plugin" },
-        ],
-      },
-    },
+    ...CHANGE_BUCKETS,
+    { bucket: "a source mismatch", actions: SOURCE_MISMATCH_ACTIONS },
   ] satisfies readonly { bucket: string; actions: PlannedActions }[]) {
     test(`reports a plan carrying ${bucket} as not empty`, () => {
       // arrange
@@ -2561,6 +2567,53 @@ describe("isReconcilePlanListEmpty", () => {
     // assert
     assert.strictEqual(planListEmpty, true);
   });
+});
+
+describe("planListNeedsApply", () => {
+  test("reports an empty plan list as needing no apply", () => {
+    // arrange
+    const plans: readonly ReconcilePlan[] = [];
+
+    // act
+    const needsApply = planListNeedsApply(plans);
+
+    // assert
+    assert.strictEqual(needsApply, false);
+  });
+
+  for (const { bucket, actions } of CHANGE_BUCKETS) {
+    test(`reports a plan carrying ${bucket} as needing apply`, () => {
+      // arrange
+      const plans = [reconcilePlan("project"), reconcilePlan("user", actions)];
+
+      // act
+      const needsApply = planListNeedsApply(plans);
+
+      // assert
+      assert.strictEqual(needsApply, true);
+    });
+  }
+
+  for (const { condition, actions } of [
+    { condition: "only a source mismatch", actions: SOURCE_MISMATCH_ACTIONS },
+    {
+      condition: "only a marketplace removal with no recorded plugins",
+      actions: {
+        marketplacesToRemove: [{ scope: "project", marketplace: "old-mp", plugins: [] }],
+      },
+    },
+  ] satisfies readonly { condition: string; actions: PlannedActions }[]) {
+    test(`reports a plan carrying ${condition} as needing no apply`, () => {
+      // arrange
+      const plans = [reconcilePlan("project", actions)];
+
+      // act
+      const needsApply = planListNeedsApply(plans);
+
+      // assert
+      assert.strictEqual(needsApply, false);
+    });
+  }
 });
 
 describe("resolvePendingForceInstalls", () => {

@@ -92,6 +92,7 @@ function cascadePayloadWith(row: Record<string, unknown>): Record<string, unknow
     needsReload: true,
     tally: { label: "Plugin install", failures: 1, warnings: 0, success: { count: 2, verb: "ok" } },
     noOp: true,
+    needsApply: true,
     marketplaces: [
       {
         name: "mp",
@@ -261,6 +262,35 @@ test("rejects noOp on a reconcile-applied payload", () => {
   // assert
   assert.deepStrictEqual(errors, [
     { keyword: "boolean", instancePath: "/noOp" },
+    { keyword: "additionalProperties", instancePath: "" },
+  ]);
+  assert.strictEqual(valid, false);
+});
+
+test("APL-04 / D-14: rejects needsApply false on a cascade payload", () => {
+  // arrange
+  const payload = { ...cascadePayloadWith(failedRow()), needsApply: false };
+
+  // act
+  const errors = leafErrors(CASCADE_MEMBER, payload);
+  const valid = Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload);
+
+  // assert
+  assert.deepStrictEqual(errors, [{ keyword: "const", instancePath: "/needsApply" }]);
+  assert.strictEqual(valid, false);
+});
+
+test("APL-04 / D-14: rejects needsApply on a reconcile-applied payload", () => {
+  // arrange
+  const payload = { ...reconcileAppliedPayload(), needsApply: true };
+
+  // act
+  const errors = leafErrors(RECONCILE_APPLIED_MEMBER, payload);
+  const valid = Compile(NOTIFICATION_PAYLOAD_SCHEMA).Check(payload);
+
+  // assert
+  assert.deepStrictEqual(errors, [
+    { keyword: "boolean", instancePath: "/needsApply" },
     { keyword: "additionalProperties", instancePath: "" },
   ]);
   assert.strictEqual(valid, false);

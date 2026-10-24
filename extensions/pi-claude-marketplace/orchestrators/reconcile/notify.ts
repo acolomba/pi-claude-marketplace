@@ -541,16 +541,26 @@ export function buildReconcilePendingNotification(
  * report "0 actions" once a caller starts populating it.
  */
 export function isReconcilePlanListEmpty(plans: readonly ReconcilePlan[]): boolean {
-  return plans.every(
+  return !planListNeedsApply(plans) && plans.every((p) => p.sourceMismatches.length === 0);
+}
+
+/**
+ * APL-04 / D-14: `true` iff some plan holds a change `/claude:plugin apply`
+ * would make, which selects the pending block's apply trailer. The counted
+ * buckets are the ones `isReconcilePlanListEmpty` counts, less the source
+ * mismatches: `apply` cannot fix a mismatch, so a list of mismatches alone
+ * advises nothing.
+ */
+export function planListNeedsApply(plans: readonly ReconcilePlan[]): boolean {
+  return plans.some(
     (p) =>
-      p.marketplacesToRemove.every((m) => m.plugins.length === 0) &&
-      p.pluginsToInstall.length === 0 &&
-      p.pluginsToUninstall.length === 0 &&
-      p.pluginsToEnable.length === 0 &&
-      p.pluginsToDisable.length === 0 &&
-      p.pluginsToDependencyDisable.length === 0 &&
-      p.pluginsToDependencyInstall.length === 0 &&
-      p.sourceMismatches.length === 0,
+      p.marketplacesToRemove.some((m) => m.plugins.length > 0) ||
+      p.pluginsToInstall.length > 0 ||
+      p.pluginsToUninstall.length > 0 ||
+      p.pluginsToEnable.length > 0 ||
+      p.pluginsToDisable.length > 0 ||
+      p.pluginsToDependencyDisable.length > 0 ||
+      p.pluginsToDependencyInstall.length > 0,
   );
 }
 

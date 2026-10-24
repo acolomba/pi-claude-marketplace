@@ -236,13 +236,14 @@ Command results or inventory, including an empty `marketplaces` array.
 
 <!-- use: structured-summary -->
 
-| Field path          | Type                                      | Presence | Meaning                                     |
-| ------------------- | ----------------------------------------- | -------- | ------------------------------------------- |
-| `marketplaces`      | [Marketplace block](#marketplace-block)[] | required | Marketplace and plugin rows in model order. |
-| `tally`             | [Tally](#tally)                           | optional | Counts for a plural result.                 |
-| `noOp`              | boolean `true`                            | optional | The command reports no work.                |
-| `advisories`        | string[]                                  | optional | Advisory lines in caller order.             |
-| `retainedWorkflows` | [Retained workflow](#retained-workflow)[] | optional | Workflow staging retained for recovery.     |
+| Field path          | Type                                      | Presence | Meaning                                                         |
+| ------------------- | ----------------------------------------- | -------- | --------------------------------------------------------------- |
+| `marketplaces`      | [Marketplace block](#marketplace-block)[] | required | Marketplace and plugin rows in model order.                     |
+| `tally`             | [Tally](#tally)                           | optional | Counts for a plural result.                                     |
+| `noOp`              | boolean `true`                            | optional | The command reports no work.                                    |
+| `needsApply`        | boolean `true`                            | optional | `pending` lists changes that `/claude:plugin apply` would make. |
+| `advisories`        | string[]                                  | optional | Advisory lines in caller order.                                 |
+| `retainedWorkflows` | [Retained workflow](#retained-workflow)[] | optional | Workflow staging retained for recovery.                         |
 
 <!-- /fields -->
 

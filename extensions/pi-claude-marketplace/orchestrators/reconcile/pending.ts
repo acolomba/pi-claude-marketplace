@@ -29,6 +29,10 @@
 // through `notify()` preserves IL-2 and lets the catalog-uat byte-equality
 // runner exercise the empty path through the same public surface as every
 // other variant.
+//
+// APL-04 / D-14: `pending` lists what the next `/claude:plugin apply` would
+// change, since a load changes no installation state. A list that holds such a
+// change ends with the `/claude:plugin apply to make these changes` trailer.
 
 import path from "node:path";
 
@@ -55,6 +59,7 @@ import { scanRetainedWorkflowsStaging } from "../plugin/workflows-staging-gc.ts"
 import {
   buildReconcilePendingNotification,
   isReconcilePlanListEmpty,
+  planListNeedsApply,
   recordedVersionEntries,
   resolvePendingForceInstalls,
   type PendingInstallCandidate,
@@ -394,13 +399,10 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   ].sort((a, b) => compareByNameThenScope(a, b));
 
   // WR-06: both message arms carry the same observations from the single scan.
-  notifyWithContext(
-    opts.ctx,
-    opts.run,
-    PENDING_CONTEXT,
-    marketplaces,
-    undefined,
-    "plural",
-    retained,
-  );
+  // APL-04 / D-14: a list with a change `apply` would make ends with the apply
+  // trailer; a list of failures alone does not, since `apply` cannot fix them.
+  notifyWithContext(opts.ctx, opts.run, PENDING_CONTEXT, marketplaces, undefined, "plural", {
+    ...retained,
+    ...(planListNeedsApply(plans) && { needsApply: true }),
+  });
 }

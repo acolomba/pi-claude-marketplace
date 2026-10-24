@@ -25,6 +25,7 @@ Feature: Plugin pending
       | kind                | cascade           |
       | severity            | info              |
       | needs reload        | false             |
+      | needs apply         | true              |
       | tally label         | Reconcile pending |
       | tally failures      | 0                 |
       | tally warnings      | 0                 |
@@ -45,6 +46,7 @@ Feature: Plugin pending
       | kind                | cascade           |
       | severity            | info              |
       | needs reload        | false             |
+      | needs apply         | true              |
       | tally label         | Reconcile pending |
       | tally failures      | 0                 |
       | tally warnings      | 0                 |
@@ -78,6 +80,7 @@ Feature: Plugin pending
       | kind                | cascade           |
       | severity            | info              |
       | needs reload        | false             |
+      | needs apply         | true              |
       | tally label         | Reconcile pending |
       | tally failures      | 0                 |
       | tally warnings      | 0                 |
@@ -102,6 +105,7 @@ Feature: Plugin pending
       | kind                | cascade           |
       | severity            | info              |
       | needs reload        | false             |
+      | needs apply         | true              |
       | tally label         | Reconcile pending |
       | tally failures      | 0                 |
       | tally warnings      | 0                 |
@@ -125,6 +129,7 @@ Feature: Plugin pending
       | kind                | cascade           |
       | severity            | info              |
       | needs reload        | false             |
+      | needs apply         | true              |
       | tally label         | Reconcile pending |
       | tally failures      | 0                 |
       | tally warnings      | 0                 |
@@ -147,6 +152,7 @@ Feature: Plugin pending
       | kind                | cascade           |
       | severity            | info              |
       | needs reload        | false             |
+      | needs apply         | true              |
       | tally label         | Reconcile pending |
       | tally failures      | 0                 |
       | tally warnings      | 0                 |

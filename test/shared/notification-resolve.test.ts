@@ -106,7 +106,7 @@ describe("resolveEnvelope", () => {
           },
         ],
       },
-      expectedEnvelope: { severity: "info", needsReload: false, noOp: false },
+      expectedEnvelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
     },
     {
       name: "a single warning row resolves to a warning envelope with its summary",
@@ -132,6 +132,7 @@ describe("resolveEnvelope", () => {
         severity: "warning",
         summary: "A plugin operation needs attention.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
       },
     },
@@ -166,6 +167,7 @@ describe("resolveEnvelope", () => {
         severity: "error",
         summary: "Some plugin operations have failed.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
       },
     },
@@ -182,6 +184,7 @@ describe("resolveEnvelope", () => {
         severity: "error",
         summary: "A plugin operation has failed.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
       },
     },
@@ -192,6 +195,7 @@ describe("resolveEnvelope", () => {
         severity: "error",
         summary: "A marketplace operation has failed.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
       },
     },
@@ -204,7 +208,7 @@ describe("resolveEnvelope", () => {
         details: { autoupdate: true },
         source: { sourceKind: "path", absPath: "/marketplaces/official" },
       },
-      expectedEnvelope: { severity: "info", needsReload: false, noOp: false },
+      expectedEnvelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
     },
     {
       name: "a single-target cascade resolves no tally",
@@ -220,7 +224,7 @@ describe("resolveEnvelope", () => {
           },
         ],
       },
-      expectedEnvelope: { severity: "info", needsReload: false, noOp: false },
+      expectedEnvelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
     },
     {
       name: "a plural cascade without an operation label resolves no tally",
@@ -234,12 +238,12 @@ describe("resolveEnvelope", () => {
           },
         ],
       },
-      expectedEnvelope: { severity: "info", needsReload: false, noOp: false },
+      expectedEnvelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
     },
     {
       name: "an empty plural cascade resolves no tally",
       message: { kind: "cascade", cardinality: "plural", label: "Plugin list", marketplaces: [] },
-      expectedEnvelope: { severity: "info", needsReload: false, noOp: false },
+      expectedEnvelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
     },
     {
       name: "a populated plural cascade with no operation rows resolves zero successes",
@@ -252,6 +256,7 @@ describe("resolveEnvelope", () => {
       expectedEnvelope: {
         severity: "info",
         needsReload: false,
+        needsApply: false,
         noOp: false,
         tally: { label: "Plugin list", failures: 0, warnings: 0, success: { count: 0 } },
       },
@@ -272,6 +277,7 @@ describe("resolveEnvelope", () => {
       expectedEnvelope: {
         severity: "info",
         needsReload: false,
+        needsApply: false,
         noOp: false,
         tally: { label: "Plugin list", failures: 0, warnings: 0, success: { count: 1 } },
       },
@@ -304,6 +310,7 @@ describe("resolveEnvelope", () => {
       expectedEnvelope: {
         severity: "info",
         needsReload: false,
+        needsApply: false,
         noOp: false,
         tally: { label: "Plugin list", failures: 0, warnings: 0, success: { count: 3 } },
       },
@@ -336,6 +343,7 @@ describe("resolveEnvelope", () => {
         severity: "error",
         summary: "A marketplace operation has failed.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
         tally: { label: "Plugin update", failures: 1, warnings: 1, success: { count: 1 } },
       },
@@ -366,6 +374,7 @@ describe("resolveEnvelope", () => {
         severity: "error",
         summary: "A plugin operation has failed.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
         tally: { label: "Plugin install", failures: 1, warnings: 0 },
       },
@@ -382,6 +391,7 @@ describe("resolveEnvelope", () => {
       expectedEnvelope: {
         severity: "info",
         needsReload: false,
+        needsApply: false,
         noOp: false,
         tally: {
           label: "Plugin update",
@@ -418,6 +428,7 @@ describe("resolveEnvelope", () => {
         severity: "error",
         summary: "A plugin operation has failed.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
         tally: { label: "Plugin update", failures: 1, warnings: 0 },
       },
@@ -436,7 +447,7 @@ describe("resolveEnvelope", () => {
           },
         ],
       },
-      expectedEnvelope: { severity: "info", needsReload: true, noOp: false },
+      expectedEnvelope: { severity: "info", needsReload: true, needsApply: false, noOp: false },
     },
     {
       name: "a plugin reload stamp resolves needsReload",
@@ -459,7 +470,36 @@ describe("resolveEnvelope", () => {
           },
         ],
       },
-      expectedEnvelope: { severity: "info", needsReload: true, noOp: false },
+      expectedEnvelope: { severity: "info", needsReload: true, needsApply: false, noOp: false },
+    },
+    {
+      name: "APL-04 / D-14: a cascade that sets needsApply resolves needsApply",
+      message: {
+        kind: "cascade",
+        needsApply: true,
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [{ name: "alpha", status: "will install", severity: "info" }],
+          },
+        ],
+      },
+      expectedEnvelope: { severity: "info", needsReload: false, needsApply: true, noOp: false },
+    },
+    {
+      name: "APL-04 / D-14: a kindless cascade that sets needsApply resolves needsApply",
+      message: {
+        needsApply: true,
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [{ name: "alpha", status: "will uninstall", severity: "info" }],
+          },
+        ],
+      },
+      expectedEnvelope: { severity: "info", needsReload: false, needsApply: true, noOp: false },
     },
     {
       name: "an applied reconcile resolves its tally without needsReload",
@@ -486,6 +526,7 @@ describe("resolveEnvelope", () => {
       expectedEnvelope: {
         severity: "info",
         needsReload: false,
+        needsApply: false,
         noOp: false,
         tally: { label: "Reconcile", failures: 0, warnings: 0, success: { count: 1 } },
       },
@@ -532,7 +573,12 @@ describe("resolveUpdateNoOpEnvelope", () => {
     const envelope = resolveUpdateNoOpEnvelope(message);
 
     // assert
-    assert.deepStrictEqual(envelope, { severity: "info", needsReload: false, noOp: true });
+    assert.deepStrictEqual(envelope, {
+      severity: "info",
+      needsReload: false,
+      needsApply: false,
+      noOp: true,
+    });
   });
 
   test("resolves the severity and summary of a no-op with a warning row", () => {
@@ -563,6 +609,7 @@ describe("resolveUpdateNoOpEnvelope", () => {
       severity: "warning",
       summary: "A plugin operation needs attention.",
       needsReload: false,
+      needsApply: false,
       noOp: true,
     });
   });

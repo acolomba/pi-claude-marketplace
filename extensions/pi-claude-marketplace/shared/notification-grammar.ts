@@ -1143,6 +1143,8 @@ function pushCauseLine(
 //
 //   [/reload to pick up changes]  <-- iff the envelope needsReload
 //
+//   [/claude:plugin apply to make these changes]  <-- iff the envelope needsApply
+//
 // Joins / separators:
 //   - Plugin row prefix:                "  " (2 spaces)
 //   - Cause-chain trailer prefix:       "    " (4 spaces)
@@ -1159,6 +1161,12 @@ function pushCauseLine(
 
 /** Reload-hint trailer literal. */
 const RELOAD_HINT_TRAILER = "/reload to pick up changes";
+
+/**
+ * APL-04 / D-05: the trailer of a `pending` block that holds a change. It is a
+ * fixed literal that names no plugin, marketplace, or path (T-73-01).
+ */
+const APPLY_HINT_TRAILER = "/claude:plugin apply to make these changes";
 
 /**
  * UGRM-01 / UGRM-02 never-silent no-op headline for a bulk `update` that
@@ -1212,12 +1220,12 @@ export type NotifyArguments = readonly [text: string] | readonly [text: string, 
 
 /**
  * Formats one resolved envelope around a rendered body. It folds `body`, then
- * the no-op headline or the tally sentence, then the reload trailer, dropping
- * each absent segment and joining the rest with one blank line. A warning or
- * error envelope then prepends its summary line as its own block (GRAM-01):
- * one blank line, never a single `\n`, which would glue the host `Error:` /
- * `Warning:` label onto the first detail row. An info envelope carries no
- * summary line.
+ * the no-op headline or the tally sentence, then the reload trailer, then the
+ * apply trailer, dropping each absent segment and joining the rest with one
+ * blank line. A warning or error envelope then prepends its summary line as its
+ * own block (GRAM-01): one blank line, never a single `\n`, which would glue the
+ * host `Error:` / `Warning:` label onto the first detail row. An info envelope
+ * carries no summary line.
  *
  * D-15: an info envelope yields one argument, the text alone. A warning or
  * error envelope yields two, the text and its severity.
@@ -1227,6 +1235,7 @@ export function formatEnvelopeArguments(envelope: ResolvedEnvelope, body: string
     body,
     envelope.noOp ? UPDATE_NO_OP_HEADLINE : tallySentence(envelope.tally),
     envelope.needsReload ? RELOAD_HINT_TRAILER : "",
+    envelope.needsApply ? APPLY_HINT_TRAILER : "",
   ]
     .filter((segment) => segment !== "")
     .join("\n\n");

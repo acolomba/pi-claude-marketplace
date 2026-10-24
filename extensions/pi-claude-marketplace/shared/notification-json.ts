@@ -304,6 +304,7 @@ function wireCascade(
     ...wireEnvelope(presentation.envelope, origin),
     ...wireTallyField(presentation.envelope),
     ...noOpField(presentation.envelope.noOp),
+    ...needsApplyField(presentation.envelope.needsApply),
     marketplaces: toWireMarketplaces(presentation.marketplaces),
     ...wireAdvisories(presentation),
   };
@@ -363,6 +364,11 @@ function wireAdvisories(carrier: {
 /** D-04: `noOp` is present only on a no-op cascade envelope. */
 function noOpField(noOp: boolean): { readonly noOp?: true } {
   return noOp ? { noOp: true } : {};
+}
+
+/** APL-04 / D-14: `needsApply` is present only when a pending list holds a change. */
+function needsApplyField(needsApply: boolean): { readonly needsApply?: true } {
+  return needsApply ? { needsApply: true } : {};
 }
 
 function wireTally(tally: ResolvedTally) {

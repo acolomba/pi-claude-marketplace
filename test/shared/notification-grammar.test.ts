@@ -1707,7 +1707,7 @@ test("formatEnvelopeArguments returns an info body byte for byte as its only arg
 
   // act
   const notifyArguments = formatEnvelopeArguments(
-    { severity: "info", needsReload: false, noOp: false },
+    { severity: "info", needsReload: false, needsApply: false, noOp: false },
     body,
   );
 
@@ -1722,6 +1722,7 @@ for (const severity of ["warning", "error"] as const) {
       severity,
       summary: "A plugin operation has failed.",
       needsReload: false,
+      needsApply: false,
       noOp: false,
     };
 
@@ -1745,6 +1746,7 @@ for (const { name, envelope, expectedText } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin update", failures: 1, warnings: 1, success: { count: 1 } },
     },
@@ -1755,6 +1757,7 @@ for (const { name, envelope, expectedText } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin import", failures: 2, warnings: 3, success: { count: 4 } },
     },
@@ -1765,6 +1768,7 @@ for (const { name, envelope, expectedText } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin list", failures: 0, warnings: 0, success: { count: 0 } },
     },
@@ -1775,6 +1779,7 @@ for (const { name, envelope, expectedText } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: {
         label: "Plugin update",
@@ -1790,6 +1795,7 @@ for (const { name, envelope, expectedText } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin install", failures: 1, warnings: 0 },
     },
@@ -1815,6 +1821,7 @@ for (const { name, envelope, body, expectedArguments } of [
     envelope: {
       severity: "info",
       needsReload: true,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin install", failures: 0, warnings: 0, success: { count: 1 } },
     },
@@ -1823,21 +1830,43 @@ for (const { name, envelope, body, expectedArguments } of [
   },
   {
     name: "leaves one blank line between the body and the trailer without a tally",
-    envelope: { severity: "info", needsReload: true, noOp: false },
+    envelope: { severity: "info", needsReload: true, needsApply: false, noOp: false },
     body: "body",
     expectedArguments: ["body\n\n/reload to pick up changes"],
   },
   {
     name: "puts the no-op headline in the tally slot",
-    envelope: { severity: "info", needsReload: false, noOp: true },
+    envelope: { severity: "info", needsReload: false, needsApply: false, noOp: true },
     body: "body",
     expectedArguments: ["body\n\nPlugin update: nothing to update"],
   },
   {
     name: "renders the no-op headline alone over an empty body",
-    envelope: { severity: "info", needsReload: false, noOp: true },
+    envelope: { severity: "info", needsReload: false, needsApply: false, noOp: true },
     body: "",
     expectedArguments: ["Plugin update: nothing to update"],
+  },
+  {
+    name: "APL-04 / D-14: puts the apply trailer last, one blank line below the tally",
+    envelope: {
+      severity: "info",
+      needsReload: false,
+      needsApply: true,
+      noOp: false,
+      tally: { label: "Reconcile pending", failures: 0, warnings: 0, success: { count: 1 } },
+    },
+    body: "body",
+    expectedArguments: [
+      "body\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
+    ],
+  },
+  {
+    name: "APL-04 / D-14: puts the reload trailer before the apply trailer",
+    envelope: { severity: "info", needsReload: true, needsApply: true, noOp: false },
+    body: "body",
+    expectedArguments: [
+      "body\n\n/reload to pick up changes\n\n/claude:plugin apply to make these changes",
+    ],
   },
   {
     name: "prepends the summary over the folded body",
@@ -1845,6 +1874,7 @@ for (const { name, envelope, body, expectedArguments } of [
       severity: "error",
       summary: "A plugin operation has failed.",
       needsReload: true,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin install", failures: 1, warnings: 0 },
     },
