@@ -5,17 +5,17 @@ milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 29
 current_phase_name: Apply Command and Read-Only Reload
 status: executing
-stopped_at: Completed 29-09-PLAN.md
-last_updated: "2026-10-24T19:24:01.086Z"
+stopped_at: Completed 29-10-PLAN.md
+last_updated: "2026-10-24T20:21:11.336Z"
 last_activity: 2026-10-24
-last_activity_desc: Plan 29-09 complete (pending and the load preview catalog moves)
-state_head: d5b543559f40eeef62f074b7c9074511987f665d
+last_activity_desc: Plan 29-10 complete (pending and the load list held and declined catalog moves)
+state_head: 4f191335c4c16851945dae3e2831604a80bbd488
 progress:
   total_phases: 29
   completed_phases: 28
   total_plans: 74
-  completed_plans: 69
-  percent: 93
+  completed_plans: 70
+  percent: 95
 ---
 
 # Project State
@@ -32,11 +32,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 29 (Apply Command and Read-Only Reload) — EXECUTING
-Plan: 10 of 14
+Plan: 11 of 14
 Status: Ready to execute
-Last activity: 2026-10-24 — Plan 29-09 complete (pending and the load preview catalog moves)
+Last activity: 2026-10-24 — Plan 29-10 complete (pending and the load list held and declined catalog moves)
 
-Progress: [█████████░] 93%
+Progress: [█████████░] 95%
 
 Phases 2-15 depend only on Phase 1 and may run in parallel once it lands. Each
 owns its own feature files and step modules (the file ownership table in
@@ -187,8 +187,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-24T19:23:54.794Z
-**Stopped at:** Completed 29-09-PLAN.md
+**Last session:** 2026-10-24T20:21:04.913Z
+**Stopped at:** Completed 29-10-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -403,6 +403,7 @@ archived milestone artifacts.
 | Phase 29 P07 | 19 min | 2 tasks | 7 files |
 | Phase 29 P08 | 27 min | 2 tasks | 15 files |
 | Phase 29 P09 | 52 min | 3 tasks | 41 files |
+| Phase 29 P10 | 54 min | 3 tasks | 31 files |
 
 ## Decisions
 
@@ -594,6 +595,8 @@ archived milestone artifacts.
 - [Phase 29]: The load prints pending's block through the shared composePendingReport / notifyPendingReport on a mismatch, with the apply trailer and no reload hint, and nothing on a match; an invalid config, layer gap or source mismatch is reported only in that block, while per-session warnings and read-pass throws keep their reconcile-applied-cascade payload (D-05, D-06, D-18)
 - [Phase 29]: planConvergence (reconcile/convergence.ts) previews each enabled, listed, path-source record whose catalog candidate on disk is a new revision as a (will update) row in pending and the load's block; it plans against the scope as apply's plan leaves it, fails closed on an unreadable declaration walk, and moves stay beside ReconcilePlan, counted for emptiness and needsApply (APL-02, D-10, D-14)
 - [Phase 29]: With 20 plugin statuses a full switch exceeds fallow's cyclomatic 20, so status switches split at the new isPendingPluginRow partition into two exhaustive halves or become total Record maps (D-15)
+- [Phase 29]: Blocked catalog moves (D-12): planConvergence holds a move a dependent's range does not admit, judged by the network-free constraint-fold.ts on the catalog version alone (D-23), and declines a clean record's partial move; both run to a fixed point that gives a blocked plugin its installed-copy declarations, and pending and the load list update's (skipped) {dependents constrain} and (partially-upgradable) rows at warning, never counted for needsApply
+- [Phase 29]: The catalog decline's hint is the new RowHint catalog-partial-update, set by PluginPartiallyUpgradableMessage.catalogHint, with the frozen trailer 'Run update --partial on this plugin to update it with the supported components.' because apply and pending take no --partial (D-24)
 
 ### mcp-4 decisions
 

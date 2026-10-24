@@ -608,7 +608,7 @@ Plans:
 4. `pending`, help, completions and the docs name `apply` (APL-04).
 5. `npm run check` stays green.
 
-**Plans:** 9/14 plans executed
+**Plans:** 10/14 plans executed
 
 Plans:
 **Wave 1**
@@ -637,7 +637,7 @@ Plans:
 - [x] 29-09-PLAN.md — `(will update)` and the offline convergence planner for path-source catalog moves
 
 **Wave 9** *(blocked on Wave 8 completion)*
-- [ ] 29-10-PLAN.md — Range holds and consent declines in `pending` and the load; the network-free constraint fold
+- [x] 29-10-PLAN.md — Range holds and consent declines in `pending` and the load; the network-free constraint fold
 
 **Wave 10** *(blocked on Wave 9 completion)*
 - [ ] 29-11-PLAN.md — Git-source and supported-set growth moves in the preview
@@ -683,7 +683,7 @@ Plans:
 | 26. Git Mirror Access | 1/1 | Complete    | 2026-10-23 |
 | 27. Install and Reconcile Reason Residue | 1/1 | Complete    | 2026-10-23 |
 | 28. Delisted Plugin Dependency Walk | 1/1 | Complete    | 2026-10-24 |
-| 29. Apply Command and Read-Only Reload | 9/14 | In Progress | - |
+| 29. Apply Command and Read-Only Reload | 10/14 | In Progress | - |
 
 ## Carried Forward
 
