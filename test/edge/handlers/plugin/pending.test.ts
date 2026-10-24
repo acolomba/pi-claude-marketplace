@@ -197,19 +197,19 @@ const USER_BLOCK = "● mp [user]\n  ● p-user (will install)";
 for (const { args, expectedMessage, label, summary } of [
   {
     args: "",
-    expectedMessage: `${PROJECT_BLOCK}\n\n${USER_BLOCK}\n\nReconcile pending: 2 successes`,
+    expectedMessage: `${PROJECT_BLOCK}\n\n${USER_BLOCK}\n\nReconcile pending: 2 successes\n\n/claude:plugin apply to make these changes`,
     label: "scope-omitted",
     summary: "for both scopes, project first, when no scope flag is supplied",
   },
   {
     args: "--scope user",
-    expectedMessage: `${USER_BLOCK}\n\nReconcile pending: 1 success`,
+    expectedMessage: `${USER_BLOCK}\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes`,
     label: "scope-user",
     summary: "for the user scope alone when a user scope flag is supplied",
   },
   {
     args: "--scope project",
-    expectedMessage: `${PROJECT_BLOCK}\n\nReconcile pending: 1 success`,
+    expectedMessage: `${PROJECT_BLOCK}\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes`,
     label: "scope-project",
     summary: "for the project scope alone when a project scope flag is supplied",
   },
@@ -303,7 +303,7 @@ test("previews a planned install of a cold git source without opening a connecti
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [project]\n  ● far (will install)\n  ● near (will install)\n\nReconcile pending: 2 successes",
+        "● mp [project]\n  ● far (will install)\n  ● near (will install)\n\nReconcile pending: 2 successes\n\n/claude:plugin apply to make these changes",
     },
   ]);
   assert.deepStrictEqual(await bothTreeListings(workspace), expectedListings);
