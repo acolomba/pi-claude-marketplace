@@ -168,10 +168,10 @@ settle which one wins (see PROJECT.md).
 - [x] **REC-06**: Reconcile's own failed install reports the narrowed resolver reasons `install` and `import` report, and `import` reports a rollback-partial install as `{rollback partial}` as `install` does
 - [x] **MPR-01**: `marketplace remove`'s dependents refusal ignores disabled holders, as a named `uninstall` does
 - [x] **DLS-01**: A plugin its marketplace no longer lists (installed, `{not in manifest}`) does not make the scope's dependency walk unreadable: its dependencies are read from its installed copy, so `update`, `reinstall`, `uninstall`, `enable`, and the load-time backfill of other plugins proceed; only a record whose installed copy is also unreadable fails closed (divergence DLS-D1: upstream does not load a delisted plugin; Pi keeps it running, so it keeps its dependencies. The per-session `{not in manifest}` warning stays, independent of the walk)
-- [ ] **CAT-01**: On load (`/reload`, session start), every installed plugin whose recorded version differs from its marketplace's catalog on disk moves to the catalog version, so the scope converges on one internally consistent catalog version; a load with no catalog change writes nothing (RECON-05)
-- [ ] **CAT-02**: A git-source plugin whose catalog target is not cached stays at its version and reports `upgradable`; a load never reaches the network for it (NFR-5, option b)
-- [ ] **CAT-03**: A plugin a dependent's range blocks, or whose new version would drop components without consent, stays at its version with a warning row naming why (`{dependents constrain}`, `partially-upgradable`), and `pending` lists it; no load retries it silently
-- [ ] **CAT-04**: The load-time backfill of partially installed plugins is this same convergence, not a separate path, and `pending` previews every move the next load would make
+- [ ] **APL-01**: A new `/claude:plugin apply` makes every change `pending` lists (install, uninstall, enable, disable, update, reinstall) for the selected scope under the state lock, reports one row per change, and ends by suggesting `/reload`
+- [ ] **APL-02**: `apply` moves every installed plugin whose recorded version differs from its marketplace's catalog on disk to the catalog version, including making a partially installed plugin whole; it may clone a git target on cache miss (NFR-5, as install and update do); a move a dependent's range blocks, or one that would drop components without consent, stays put with a warning row (`{dependents constrain}`, `partially-upgradable`), and `pending` keeps listing it
+- [ ] **APL-03**: A load (`/reload`, session start) changes no installation state: no install, uninstall, enable, disable, update, reinstall or backfill. When the current state differs from the desired state it prints the same block `pending` prints, with a trailer to run `/claude:plugin apply`; a matching state prints nothing. Marketplace autoupdate at session start refreshes the marketplaces only; their plugin changes show as pending
+- [ ] **APL-04**: `pending` advises `/claude:plugin apply` instead of `/reload`, and `apply` appears in help, completions, the router, the JSON output and the docs
 
 ## Future Requirements
 
@@ -286,10 +286,10 @@ settle which one wins (see PROJECT.md).
 | REC-06 | Phase 27 | Complete |
 | MPR-01 | Phase 27 | Complete |
 | DLS-01 | Phase 28 | Complete |
-| CAT-01 | Phase 29 | Pending |
-| CAT-02 | Phase 29 | Pending |
-| CAT-03 | Phase 29 | Pending |
-| CAT-04 | Phase 29 | Pending |
+| APL-01 | Phase 29 | Pending |
+| APL-02 | Phase 29 | Pending |
+| APL-03 | Phase 29 | Pending |
+| APL-04 | Phase 29 | Pending |
 
 **Coverage:**
 - v1 requirements: 100 total
