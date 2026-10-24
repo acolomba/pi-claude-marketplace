@@ -2802,3 +2802,93 @@ describe("applyBackfillForScopeIsolated: the partially-installed scan", () => {
     verifyBoundary();
   });
 });
+
+/**
+ * DLS-01: a partially installed `hello` whose supported set grew, beside
+ * `gone`, a plugin the marketplace no longer lists whose installed copy
+ * declares a range on `hello`. `deleteCopy` removes that copy.
+ */
+async function backfillBesideDelisted(
+  t: TestContext,
+  label: string,
+  deleteCopy: boolean,
+): Promise<PerEntryOutcome[]> {
+  const { cwd, locations } = await createHermeticProjectScope(t, label);
+  const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+    hello: { skill: "clean", command: true },
+    gone: {},
+  });
+  const goneRoot = path.join(marketplaceRoot, "plugins", "gone");
+  await writeFile(
+    path.join(goneRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "gone", dependencies: [{ name: "hello", version: "^1.0.0" }] }),
+  );
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: "mp",
+      plugins: [{ name: "hello", version: "1.0.0", source: "./plugins/hello" }],
+    }),
+  );
+  if (deleteCopy) {
+    await rm(goneRoot, { recursive: true, force: true });
+  }
+
+  const seeded: ExtensionState = {
+    schemaVersion: 3,
+    lastReconciledExtensionVersion: STALE_STAMP,
+    marketplaces: {
+      mp: marketplaceRecord(cwd, "mp", "mp-src", manifestPath, marketplaceRoot, {
+        gone: pluginRecord({
+          pluginRoot: goneRoot,
+          installable: true,
+          supported: [],
+          unsupported: [],
+        }),
+        hello: pluginRecord({
+          pluginRoot: path.join(marketplaceRoot, "plugins", "hello"),
+          installable: false,
+          supported: ["skills"],
+          unsupported: ["commands"],
+        }),
+      }),
+    },
+  };
+  await seedState(locations, seeded);
+  const { ctx } = createSilentBoundary();
+  const { gitOps } = createOfflineGitOps();
+  const outcomes: PerEntryOutcome[] = [];
+  await applyBackfillForScopeIsolated(
+    backfillOptions(ctx, cwd, gitOps),
+    "project",
+    readResultFor(seeded, true),
+    outcomes,
+  );
+  return outcomes;
+}
+
+test("DLS-01: a plugin the marketplace no longer lists does not fail another plugin's backfill", async (t) => {
+  // act
+  const outcomes = await backfillBesideDelisted(t, "delisted-readable", false);
+
+  // assert
+  assert.deepStrictEqual(
+    outcomes.map((outcome) => [outcome.kind, "plugin" in outcome ? outcome.plugin : ""]),
+    [["plugin-backfilled", "hello"]],
+  );
+});
+
+test("D-05-07: a delisted plugin whose installed copy is gone fails another plugin's backfill closed", async (t) => {
+  // act
+  const outcomes = await backfillBesideDelisted(t, "delisted-gone", true);
+
+  // assert
+  assert.deepStrictEqual(
+    outcomes.map((outcome) => [
+      outcome.kind,
+      "plugin" in outcome ? outcome.plugin : "",
+      "reason" in outcome ? outcome.reason : "",
+    ]),
+    [["plugin-install-failed", "hello", "unreadable"]],
+  );
+});

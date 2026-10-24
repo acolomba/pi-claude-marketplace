@@ -139,7 +139,7 @@ Step module paths are relative to `features/step_definitions/`.
 - [x] **Phase 25: Update and Reinstall Rows** — Same-version updates show commits, and update and reinstall rows carry their versions and consistent reasons
 - [x] **Phase 26: Git Mirror Access** — Mirror refreshes take the state lock, one copy helper serves all clones, and a cold `info --fetch` contacts the host once
 - [x] **Phase 27: Install and Reconcile Reason Residue** — Dependency ranges read as upstream, pinned-commit failures read cleanly, reconcile and import narrow reasons like install, and marketplace remove ignores disabled holders
-- [ ] **Phase 28: Delisted Plugin Dependency Walk** — A plugin its marketplace no longer lists keeps its dependencies from its installed copy, so it no longer blocks the scope's dependency walk
+- [x] **Phase 28: Delisted Plugin Dependency Walk** — A plugin its marketplace no longer lists keeps its dependencies from its installed copy, so it no longer blocks the scope's dependency walk
 
 ## Phase Details
 
@@ -623,7 +623,7 @@ Plans:
 | 25. Update and Reinstall Rows | 8/8 | Complete    | 2026-10-24 |
 | 26. Git Mirror Access | 1/1 | Complete    | 2026-10-23 |
 | 27. Install and Reconcile Reason Residue | 1/1 | Complete    | 2026-10-23 |
-| 28. Delisted Plugin Dependency Walk | 0/TBD | Not started | - |
+| 28. Delisted Plugin Dependency Walk | 1/1 | Complete    | 2026-10-24 |
 
 ## Carried Forward
 
