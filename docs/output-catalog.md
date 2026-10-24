@@ -3515,7 +3515,7 @@ The merged config matches the recorded state byte-for-byte in every scope -- the
 <!-- catalog-state: empty-steady-state -->
 
 ```text
-Pending: next reload will apply 0 actions.
+Pending: /claude:plugin apply has nothing to change.
 ```
 
 ### Empty steady-state carrying a retained workflow staging tree (WR-06)
@@ -3525,7 +3525,7 @@ The next reload would apply zero actions, AND a workflow staging tree survives t
 <!-- catalog-state: empty-steady-state-retained-workflow-staging -->
 
 ```text
-Pending: next reload will apply 0 actions.
+Pending: /claude:plugin apply has nothing to change.
 
     retained workflow staging: 9f1c4d2a-3b7e (2 envelopes) under the workflows staging directory
 ```

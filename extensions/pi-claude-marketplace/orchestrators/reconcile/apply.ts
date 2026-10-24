@@ -53,9 +53,10 @@
 //     (`notifyMcpMigration`) precedes the cascade and is sent even when
 //     reconcile has no outcome (AMIG-03).
 //   - SINGLE notify() emission per applyReconcile invocation (IL-2 /
-//     RECON-04). Empty-and-clean reconciles are SILENT (NFR-2 / A4) -- the
-//     orchestrator skips the notify() call when no outcomes accumulated AND
-//     no invalid-config rows surfaced.
+//     RECON-04). A pass that accumulated no outcome and no invalid-config row
+//     reports `Apply: nothing to change.` through the `reconcile-pending-empty`
+//     advisory and writes nothing (APL-01 / D-08). The load-time silence
+//     contract for an unchanged tree belongs to `load.ts` (D-05).
 //
 // D-05 / D-07: the soft-dependency snapshot is the run the `apply` command
 // opens before the pass, so it observes a stable pi-subagents /
@@ -65,7 +66,11 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { declaredDependencies } from "../../shared/concerns/soft-dep.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { DependencyCascadeError, errorMessage } from "../../shared/errors.ts";
-import { notifyDiagnostic, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
+import {
+  notify,
+  notifyDiagnostic,
+  notifyMcpConfigNotices,
+} from "../../shared/notification-dispatch.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
@@ -1046,11 +1051,11 @@ async function applyPlan(
  * scopes project-first (or just the explicit scope when `opts.scope` is
  * set), per-scope read pass under withLockedStateTransaction (migrate ->
  * load -> plan), per-scope apply pass with NO outer lock, single notify()
- * emission per invocation (IL-2) -- empty-and-clean reconciles are SILENT
- * (NFR-2 / A4).
+ * emission per invocation (IL-2). An empty-and-clean pass reports
+ * `Apply: nothing to change.` and writes nothing (APL-01 / D-08).
  *
  * Returns `void`; the side effects are the orchestrator-driven state
- * mutations + the single notify() call (when non-empty).
+ * mutations + the single notify() call.
  */
 async function applyReconcileWithReader(
   reader: ReconcileStateReader,
@@ -1106,9 +1111,10 @@ async function applyReconcileWithReader(
   }
 
   // AMIG-03 / IL-2 / RECON-04: the one migration notice, then the single
-  // cascade through RECONCILE_APPLIED_CONTEXT. An empty-and-clean reconcile
-  // sends no cascade (NFR-2 / A4 / RECON-05).
+  // cascade through RECONCILE_APPLIED_CONTEXT. An empty-and-clean pass sends
+  // the apply-empty advisory instead (APL-01 / D-08).
   if (!notifyScopePasses(opts.ctx, opts.run, accumulators)) {
+    notify(opts.ctx, opts.run, { kind: "reconcile-pending-empty", command: "apply" });
     return;
   }
 
@@ -1128,8 +1134,8 @@ async function applyReconcileWithReader(
   surfacePostCommitWarnings(opts, outcomes);
 
   // AFILE-04: the MCP config notices every orchestrated operation returned,
-  // shown after the cascade rows they explain. The empty-reconcile return
-  // above keeps a reconcile with no outcomes silent (RECON-05).
+  // shown after the cascade rows they explain. The empty-pass return above
+  // sends none, since a pass with no outcome carries no notice.
   surfaceMcpConfigNotices(opts, outcomes);
 }
 

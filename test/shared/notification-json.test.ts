@@ -2239,6 +2239,7 @@ test("converts a pending-empty presentation with its advisories and retained wor
     envelope: infoEnvelope(),
     message: {
       kind: "reconcile-pending-empty",
+      command: "pending",
       advisories: ["note"],
       retainedWorkflows: [{ name: "flow", envelopeCount: 2 }],
     },
@@ -2263,25 +2264,25 @@ test("converts a pending-empty presentation with its advisories and retained wor
   });
 });
 
-test("converts a pending-empty presentation with no advisories to the bare envelope", () => {
+test("D-08: converts an apply-empty presentation to the bare envelope without its command", () => {
   // arrange
   const presentation = {
     kind: "reconcile-pending-empty",
     envelope: infoEnvelope(),
-    message: { kind: "reconcile-pending-empty" },
+    message: { kind: "reconcile-pending-empty", command: "apply" },
   } satisfies NotificationPresentation;
 
   // act
   const payload = toWirePayload(presentation, {
     kind: "command",
-    commandId: "plugin",
+    commandId: "plugin apply",
     invocationId: "test-run",
   });
 
   // assert
   assert.deepStrictEqual(payload, {
     schemaVersion: 1,
-    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+    origin: { kind: "command", commandId: "plugin apply", invocationId: "test-run" },
     kind: "reconcile-pending-empty",
     severity: "info",
     needsReload: false,

@@ -31,6 +31,7 @@ import type {
   PluginUpdatedMessage,
   PruneEmptyMessage,
   Reason,
+  ReconcilePendingEmptyMessage,
   Severity,
   VersionCommits,
 } from "./notification-types.ts";
@@ -872,12 +873,20 @@ export function renderMarketplaceNotAdded(
 }
 
 /**
- * DIFF-01: the `reconcile-pending-empty` body line. The bytes are locked to the
- * `empty-steady-state` state in `docs/output-catalog.md`. The caller folds the
- * message's advisories after it.
+ * DIFF-01 / D-08 / D-14: the `reconcile-pending-empty` body line. The bytes are
+ * locked to the `empty-steady-state` state of the pending section and the
+ * `nothing-to-change` state of the apply section in `docs/output-catalog.md`.
+ * The caller folds the message's advisories after it.
  */
-export function renderReconcilePendingEmpty(): string {
-  return "Pending: next reload will apply 0 actions.";
+export function renderReconcilePendingEmpty(
+  command: ReconcilePendingEmptyMessage["command"],
+): string {
+  switch (command) {
+    case "pending":
+      return "Pending: /claude:plugin apply has nothing to change.";
+    case "apply":
+      return "Apply: nothing to change.";
+  }
 }
 
 /** The `prune-empty` body: the scope held no orphaned dependency installs. */

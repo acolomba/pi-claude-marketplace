@@ -654,6 +654,9 @@ function applyAfterSelectedStateRace(
     });
 }
 
+/** APL-01 / D-08: the advisory an apply pass that accumulates no outcome sends. */
+const APPLY_EMPTY_NOTICE = { message: "Apply: nothing to change." } satisfies Notification;
+
 /**
  * AFILE-04: the warning `notifyMcpConfigNotices` sends after a rewrite drops the
  * comments of the project-scope `mcp-adapter.json`.
@@ -771,17 +774,17 @@ test("apply.ts exposes the reconcile factory and no composed value", async () =>
 });
 
 describe("applyReconcile", () => {
-  test("WR-05: leaves a scope with neither a state file nor a config untouched and silent", async (t) => {
+  test("WR-05 / D-08: leaves a scope with neither a state file nor a config untouched and reports nothing to change", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "pristine");
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
     await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
     assert.deepStrictEqual(await retryTree(project.scopeRoot), []);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
@@ -1269,7 +1272,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1296,6 +1299,7 @@ describe("applyReconcile", () => {
           "Reconcile: 1 warning",
         severity: "warning",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
     // LOAD-03: the removal happened on the FIRST pass -- the reconcile-driven
     // uninstall does not refuse -- and the row that reports the consequence
@@ -1341,7 +1345,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1359,6 +1363,7 @@ describe("applyReconcile", () => {
           "\n" +
           "Reconcile: 2 successes",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
     assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["mp"]?.plugins ?? {}), []);
     assert.deepStrictEqual(clonedUrls(), []);
@@ -1580,7 +1585,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("WR-06: a plugin whose declaration is deleted is uninstalled while its marketplace stays recorded, and the next pass is silent", async (t) => {
+  test("WR-06: a plugin whose declaration is deleted is uninstalled while its marketplace stays recorded, and the next pass has nothing to change", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "uninstall-direct");
     const pluginDataDir = await project.pluginDataDir("mp", "hello");
@@ -1617,7 +1622,7 @@ describe("applyReconcile", () => {
       path.join(project.skillsTargetDir, "hello-tool", "SKILL.md"),
       "---\nname: hello-tool\n---\n\nbody\n",
     );
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const ownerRuntime = createHooksRuntime();
     const peerRuntime = createHooksRuntime();
@@ -1708,6 +1713,7 @@ describe("applyReconcile", () => {
       {
         message: "● mp [project]\n  ○ hello v1.0.0 (uninstalled)\n\nReconcile: 1 success",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
     assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["mp"]?.plugins ?? {}), []);
     assert.strictEqual(dataExistsAfterFirst, false);
@@ -2214,7 +2220,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2231,6 +2237,7 @@ describe("applyReconcile", () => {
           "\n" +
           "Reconcile: 1 success",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
     assert.deepStrictEqual(Object.keys(afterFirst.marketplaces), ["canonical-name"]);
     assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["canonical-name"]!.plugins), [
@@ -3602,7 +3609,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("RECON-05: two consecutive reconciles over a converged scope stay silent and leave both files byte-identical and untouched", async (t) => {
+  test("RECON-05 / D-08: two consecutive reconciles over a converged scope report nothing to change and leave both files byte-identical and untouched", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "converged");
     const declaration = configBytes({ marketplaces: {}, plugins: {} });
@@ -3615,7 +3622,7 @@ describe("applyReconcile", () => {
     const stateBytes = await readFile(project.stateJsonPath, "utf8");
     const configModifiedAt = (await stat(project.baseConfigJsonPath)).mtimeMs;
     const stateModifiedAt = (await stat(project.stateJsonPath)).mtimeMs;
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -3623,7 +3630,7 @@ describe("applyReconcile", () => {
     await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE, APPLY_EMPTY_NOTICE]);
     assert.equal(await readFile(project.baseConfigJsonPath, "utf8"), declaration);
     assert.equal(await readFile(project.stateJsonPath, "utf8"), stateBytes);
     assert.equal((await stat(project.baseConfigJsonPath)).mtimeMs, configModifiedAt);
@@ -3723,18 +3730,18 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("WR-05: a scope that declares a configuration but has never recorded state stays silent and gains no state file", async (t) => {
+  test("WR-05 / D-08: a scope that declares a configuration but has never recorded state reports nothing to change and gains no state file", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "config-only");
     await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {}, plugins: {} }));
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
     await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
     assert.deepStrictEqual(await retryTree(project.scopeRoot), [
       "claude-plugins.json",
       "pi-claude-marketplace/",
@@ -3975,7 +3982,7 @@ describe("applyReconcile", () => {
       },
     };
     const applyWithReader = createApplyReconcile(reader);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
     const completionCache = createCompletionCache();
@@ -4011,6 +4018,7 @@ describe("applyReconcile", () => {
           "Reconcile: 1 failure, 1 success",
         severity: "error",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
     const expectedProjectState: ExtensionState = {
       ...projectRecorded,
@@ -4093,14 +4101,14 @@ describe("applyReconcile", () => {
       },
     });
     const applyWithRace = applyAfterSelectedStateRace(project, competingState);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
     await applyWithRace({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
     assert.strictEqual(await recordFor(project, "mp", "hello"), undefined);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
@@ -4251,7 +4259,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("LOAD-01: a scope whose declarations are all satisfied stays silent and leaves state.json untouched", async (t) => {
+  test("LOAD-01 / D-08: a scope whose declarations are all satisfied reports nothing to change and leaves state.json untouched", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-satisfied");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -4289,21 +4297,21 @@ describe("applyReconcile", () => {
     });
     const stateBytes = await readFile(project.stateJsonPath, "utf8");
     const stateModifiedAt = (await stat(project.stateJsonPath)).mtimeMs;
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
     await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
     assert.equal(await readFile(project.stateJsonPath, "utf8"), stateBytes);
     assert.equal((await stat(project.stateJsonPath)).mtimeMs, stateModifiedAt);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
 
-  test("D-06-02: a record disabled before the pass is held down without being stamped or reported", async (t) => {
+  test("D-06-02: a record disabled before the pass is held down without being stamped or given a row", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-already-disabled");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -4338,14 +4346,14 @@ describe("applyReconcile", () => {
     });
     const stateBytes = await readFile(project.stateJsonPath, "utf8");
     const stateModifiedAt = (await stat(project.stateJsonPath)).mtimeMs;
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
     await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
     const record = await recordFor(project, "mp", "deploy-kit");
     assert.equal(record?.enabled, false);
     assert.equal(Object.hasOwn(record ?? {}, "dependencyDisabled"), false);
@@ -4422,7 +4430,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("LOAD-02: a second reload over an unchanged unsatisfied tree plans the retry bucket and stays silent", async (t) => {
+  test("LOAD-02: a second reload over an unchanged unsatisfied tree plans the retry bucket and reports nothing to change", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-converges");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -4455,7 +4463,7 @@ describe("applyReconcile", () => {
       },
     });
     const first = createNotificationBoundary(1);
-    const second = createNotificationBoundary(0);
+    const second = createNotificationBoundary(1);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -4483,8 +4491,7 @@ describe("applyReconcile", () => {
     // secrets-vault), so the retry bucket re-plans the same entry every
     // pass -- a deliberate non-fixpoint. This reconcile never opted into
     // `reason: "reload"`, so the apply step drives nothing off it and the
-    // second pass is still silent (the LOAD-02 silence contract holds at
-    // startup, D-09-13).
+    // second pass reports nothing to change (D-08, D-09-13).
     assert.equal(first.notifications.length, 1);
     assert.deepStrictEqual(replanned, {
       ...emptyReconcilePlan("project"),
@@ -4499,7 +4506,7 @@ describe("applyReconcile", () => {
         },
       ],
     });
-    assert.deepStrictEqual(second.notifications, []);
+    assert.deepStrictEqual(second.notifications, [APPLY_EMPTY_NOTICE]);
     assert.equal(await readFile(project.stateJsonPath, "utf8"), settledBytes);
     assert.equal((await stat(project.stateJsonPath)).mtimeMs, settledModifiedAt);
     assert.deepStrictEqual(clonedUrls(), []);
@@ -4635,7 +4642,7 @@ describe("applyReconcile", () => {
       },
     });
     const first = createNotificationBoundary(1);
-    const second = createNotificationBoundary(0);
+    const second = createNotificationBoundary(1);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -4668,7 +4675,7 @@ describe("applyReconcile", () => {
       { alfaEnabled: true, alfaMarked: false, bravoEnabled: true, bravoMarked: false },
     );
     assert.equal(first.notifications.length, 1);
-    assert.deepStrictEqual(second.notifications, []);
+    assert.deepStrictEqual(second.notifications, [APPLY_EMPTY_NOTICE]);
     assert.equal(await readFile(project.stateJsonPath, "utf8"), settledBytes);
     assert.deepStrictEqual(clonedUrls(), []);
     first.verifyBoundary();
@@ -6435,7 +6442,7 @@ describe("applyReconcile", () => {
         },
       });
 
-    const startup = createNotificationBoundary(0);
+    const startup = createNotificationBoundary(1);
     await withCounter(() => {
       startupCalls += 1;
     })({
@@ -6449,7 +6456,7 @@ describe("applyReconcile", () => {
     });
 
     let reloadCalls = 0;
-    const reload = createNotificationBoundary(0);
+    const reload = createNotificationBoundary(1);
     await withCounter(() => {
       reloadCalls += 1;
     })({
@@ -6464,8 +6471,8 @@ describe("applyReconcile", () => {
     });
 
     // assert
-    assert.deepStrictEqual(startup.notifications, []);
-    assert.deepStrictEqual(reload.notifications, []);
+    assert.deepStrictEqual(startup.notifications, [APPLY_EMPTY_NOTICE]);
+    assert.deepStrictEqual(reload.notifications, [APPLY_EMPTY_NOTICE]);
     assert.equal(reloadCalls, startupCalls);
     assert.equal(await readFile(project.stateJsonPath, "utf8"), settledBytes);
     assert.equal((await stat(project.stateJsonPath)).mtimeMs, settledModifiedAt);
@@ -6591,7 +6598,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("AFILE-04: a reload with nothing to apply stays silent and leaves the commented mcp-adapter.json unchanged", async (t) => {
+  test("AFILE-04 / D-08: a reload with nothing to apply reports so and leaves the commented mcp-adapter.json unchanged", async (t) => {
     // arrange
     const { cwd, project, adapter } = await seedCommentedAdapterScope(t, "afile-silent", {
       trees: { hello: { mcpServer: true } },
@@ -6599,7 +6606,7 @@ describe("applyReconcile", () => {
       recorded: { hello: { mcpServers: ["hello-echo"] } },
       owners: ["hello"],
     });
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const { gitOps } = createOfflineGitOps();
 
     // act
@@ -6613,7 +6620,7 @@ describe("applyReconcile", () => {
     });
 
     // assert
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
     assert.equal(await readFile(project.mcpAdapterJsonPath, "utf8"), adapter);
     verifyBoundary();
   });
@@ -7151,7 +7158,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("AMIG-03: the migration notice is sent alone when reconcile has no outcome", async (t) => {
+  test("AMIG-03 / D-08: the migration notice precedes the apply-empty advisory when reconcile has no outcome", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "mcp-move-alone");
     await seedState(project, {
@@ -7172,7 +7179,7 @@ describe("applyReconcile", () => {
       await Promise.resolve();
     };
 
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
     const { gitOps } = createOfflineGitOps();
 
     // act
@@ -7197,6 +7204,7 @@ describe("applyReconcile", () => {
           "/reload to pick up changes",
         severity: "info",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
     verifyBoundary();
   });

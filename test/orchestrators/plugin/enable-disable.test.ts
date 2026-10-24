@@ -5847,7 +5847,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
       plugins: { "foo@mp": { enabled: true } },
       schemaVersion: 1,
     });
-    assert.deepStrictEqual(firstReload.notifications, []);
+    assert.deepStrictEqual(firstReload.notifications, [{ message: "Apply: nothing to change." }]);
     assert.deepStrictEqual(afterFirstReload, afterEnable);
     assert.deepStrictEqual(afterUpdate, {
       enabled: true,
@@ -5856,7 +5856,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
       version: "2.0.0",
     });
     assert.deepStrictEqual(afterReinstall, afterUpdate);
-    assert.deepStrictEqual(secondReload.notifications, []);
+    assert.deepStrictEqual(secondReload.notifications, [{ message: "Apply: nothing to change." }]);
     assert.deepStrictEqual(afterSecondReload, afterUpdate);
     assert.equal(enableContext.notifications.length, 1);
     assert.equal(updateContext.notifications.length, 1);
@@ -5987,7 +5987,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable with --local of a plugin
       schemaVersion: 1,
     });
     assert.equal(baseExistsAfterEnable, false);
-    assert.deepStrictEqual(firstReload.notifications, []);
+    assert.deepStrictEqual(firstReload.notifications, [{ message: "Apply: nothing to change." }]);
     assert.deepStrictEqual(afterFirstReload, afterEnable);
     // FIX-02: the local config declares every record, so the reload writes no
     // base config.
@@ -6003,7 +6003,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable with --local of a plugin
     assert.equal(baseExistsAfterUpdate, false);
     assert.deepStrictEqual(afterReinstall, afterUpdate);
     assert.equal(baseExistsAfterReinstall, false);
-    assert.deepStrictEqual(secondReload.notifications, []);
+    assert.deepStrictEqual(secondReload.notifications, [{ message: "Apply: nothing to change." }]);
     assert.deepStrictEqual(afterSecondReload, afterUpdate);
     assert.equal(enableContext.notifications.length, 1);
     assert.equal(updateContext.notifications.length, 1);

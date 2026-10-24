@@ -51,12 +51,16 @@ void ({
 } satisfies CascadeNotificationMessage);
 void ({
   kind: "reconcile-pending-empty",
+  command: "pending",
   retainedWorkflows: [{ name: "staging", envelopeCount: 1 }],
 } satisfies ReconcilePendingEmptyMessage);
+// @ts-expect-error D-08 / D-14: a pending empty message names the command that found nothing.
+void ({ kind: "reconcile-pending-empty" } satisfies ReconcilePendingEmptyMessage);
 // @ts-expect-error retained workflow observations carry facts, not formatted lines.
 void ({ marketplaces: [], retainedWorkflows: ["staging"] } satisfies CascadeNotificationMessage);
 void ({
   kind: "reconcile-pending-empty",
+  command: "pending",
   // @ts-expect-error pending empty observations carry facts, not formatted lines.
   retainedWorkflows: ["staging"],
 } satisfies ReconcilePendingEmptyMessage);
@@ -66,6 +70,7 @@ void ({ name: "staging", envelopeCount: null } satisfies RetainedWorkflowStaging
 void ({ marketplaces: [], retainedWorkflows: null } satisfies CascadeNotificationMessage);
 void ({
   kind: "reconcile-pending-empty",
+  command: "pending",
   // @ts-expect-error pending empty observations cannot be null.
   retainedWorkflows: null,
 } satisfies ReconcilePendingEmptyMessage);

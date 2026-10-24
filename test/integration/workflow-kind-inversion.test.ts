@@ -43,6 +43,9 @@ interface NotifyRecord {
   severity?: string;
 }
 
+/** APL-01 / D-08: the advisory an apply pass that accumulates no outcome sends. */
+const APPLY_EMPTY_NOTICE: NotifyRecord = { message: "Apply: nothing to change." };
+
 function makeCtx(): {
   ctx: ExtensionContext;
   pi: ExtensionAPI;
@@ -335,10 +338,11 @@ test("RECON-05: two consecutive reconciles leave a workflow envelope untouched",
       assert.strictEqual(envelopeAfterFirst, BACKDATED.getTime());
       assert.strictEqual(await mtimeMsOf(envelopePath), BACKDATED.getTime());
       assert.strictEqual(await mtimeMsOf(locations.stateJsonPath), stateAfterFirst);
-      // A clean, empty reconcile is documented as silent, so a notification is
-      // itself a regression -- it would mean an outcome row accumulated.
-      assert.deepStrictEqual(first.notifications, []);
-      assert.deepStrictEqual(second.notifications, []);
+      // D-08: a clean, empty apply reports only that it has nothing to change,
+      // so any other notification is a regression -- it would mean an outcome
+      // row accumulated.
+      assert.deepStrictEqual(first.notifications, [APPLY_EMPTY_NOTICE]);
+      assert.deepStrictEqual(second.notifications, [APPLY_EMPTY_NOTICE]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -537,7 +541,7 @@ test("WCONV-01 / WCONV-02: one load converges a record whose kind was invisible,
       // is still a write, so bytes alone would not carry this claim.
       assert.deepStrictEqual(await fileSnapshot(locations.stateJsonPath), stateAfterFirst);
       assert.deepStrictEqual(await fileSnapshot(envelopePath), envelopeAfterFirst);
-      assert.deepStrictEqual(second.notifications, []);
+      assert.deepStrictEqual(second.notifications, [APPLY_EMPTY_NOTICE]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -278,7 +278,7 @@ for (const message of [
     ],
   },
   { kind: "marketplace-not-added", name: "missing" },
-  { kind: "reconcile-pending-empty" },
+  { kind: "reconcile-pending-empty", command: "apply" },
   { kind: "prune-empty", scope: "user" },
   { kind: "reconcile-applied-cascade", marketplaces: [] },
 ] satisfies readonly NotificationMessage[]) {

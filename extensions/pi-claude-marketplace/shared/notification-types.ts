@@ -1116,6 +1116,12 @@ export interface PluginInfoCascadeMessage {
 export interface ReconcilePendingEmptyMessage {
   readonly kind: "reconcile-pending-empty";
   /**
+   * D-08 / D-14: the command that found nothing to change. The text strategy
+   * reads it to pick the wording; the JSON payload does not carry it, because
+   * `origin.commandId` already names the command.
+   */
+  readonly command: "pending" | "apply";
+  /**
    * WR-06: the same free-text advisory body lines the cascade arm declares, on
    * the same terms -- caller-ordered, rendered verbatim, no token, no row. The
    * steady-state user is the one most likely to be carrying a retained staging

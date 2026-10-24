@@ -531,7 +531,7 @@ function formatPresentationBody(presentation: NotificationPresentation): string 
       return renderMarketplaceNotAdded(presentation.message, presentation.reason);
     case "reconcile-pending-empty":
       return foldAdvisories(
-        renderReconcilePendingEmpty(),
+        renderReconcilePendingEmpty(presentation.message.command),
         presentation.message.advisories,
         presentation.message.retainedWorkflows,
       );

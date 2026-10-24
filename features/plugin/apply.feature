@@ -237,3 +237,15 @@ Feature: Plugin apply
       | kind         | reconcile-pending-empty |
       | severity     | info                    |
       | needs reload | false                   |
+
+  Scenario: Apply with nothing to change reports so and changes nothing
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |

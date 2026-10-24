@@ -2522,7 +2522,11 @@ test("DFEN-06 / CFG-02: the reload after an install with --local of a plugin the
       });
 
       // assert
-      assert.deepEqual(reload.notifications, [], "a converged pass says nothing");
+      assert.deepEqual(
+        reload.notifications,
+        [{ message: "Apply: nothing to change." }],
+        "a converged pass has nothing to change",
+      );
 
       const after = await loadState(locations.extensionRoot);
       assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.enabled, false);
@@ -6537,7 +6541,11 @@ test("D-04-05 / CMP-3: a dependency adopted from a user-scope marketplace surviv
         },
         { marketplacesToRemove: [], pluginsToUninstall: [] },
       );
-      assert.deepEqual(reload.notifications, [], "a converged pass says nothing");
+      assert.deepEqual(
+        reload.notifications,
+        [{ message: "Apply: nothing to change." }],
+        "a converged pass has nothing to change",
+      );
       assert.deepStrictEqual(
         (await loadState(projectLocations.extensionRoot)).marketplaces,
         installed.marketplaces,

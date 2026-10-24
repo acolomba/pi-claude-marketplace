@@ -85,7 +85,7 @@ The planner and the apply path coordinate via one structural sentinel, plus two 
 
    Each driven orchestrator is invoked with `notifications: { mode: "orchestrated" }` and wrapped in a try/catch ladder that translates typed marketplace/plugin throws (`StateLockHeldError`, `PluginShapeError`, the file-shape probe classifiers) into closed-set `Reason` tokens BEFORE they reach the projection (T-55-02-02: raw `error.message` never reaches the rendered output).
 
-3. **Single notify emission per invocation** (IL-2 / RECON-04). Empty-and- clean reconciles are SILENT (NFR-2). Post-commit hygiene warnings (data-dir mkdir deferred, completion-cache refresh deferred, etc.) surface through a sanctioned second `notifyDiagnostic` call (the only exception to RECON-04's single-emit rule), mirroring the import cascade's `pushDiagnostic` channel.
+3. **Single notify emission per invocation** (IL-2 / RECON-04). An empty-and-clean `apply` reports `Apply: nothing to change.` through the `reconcile-pending-empty` advisory and writes nothing (APL-01 / D-08); an empty-and-clean load stays SILENT (D-05). Post-commit hygiene warnings (data-dir mkdir deferred, completion-cache refresh deferred, etc.) surface through a sanctioned second `notifyDiagnostic` call (the only exception to RECON-04's single-emit rule), mirroring the import cascade's `pushDiagnostic` channel.
 
 ## Pending path
 

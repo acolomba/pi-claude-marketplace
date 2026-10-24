@@ -459,7 +459,11 @@ for (const { message, outcome, reload } of [
     reload: false,
   },
   { message: { kind: "marketplace-not-added", name: "demo" }, outcome: true, reload: false },
-  { message: { kind: "reconcile-pending-empty" }, outcome: true, reload: false },
+  {
+    message: { kind: "reconcile-pending-empty", command: "pending" },
+    outcome: true,
+    reload: false,
+  },
   { message: { kind: "prune-empty", scope: "project" }, outcome: true, reload: false },
   {
     message: { kind: "prune-committed-warning", scope: "project", cause: new Error("Saved.") },
@@ -6198,23 +6202,46 @@ for (const { name, plugin, expected } of [
   });
 }
 
-test("reconcile-pending-empty emits the exact zero-action advisory", (t) => {
-  // arrange
-  const ctx = createContext(t);
-  const run = runWithAllLoaded();
-  const message = {
-    kind: "reconcile-pending-empty",
-    retainedWorkflows: [],
-  } satisfies NotificationMessage;
+for (const { command, expected } of [
+  { command: "pending", expected: "Pending: /claude:plugin apply has nothing to change." },
+  { command: "apply", expected: "Apply: nothing to change." },
+] as const) {
+  test(`D-08 / D-14: reconcile-pending-empty emits the exact ${command} advisory`, (t) => {
+    // arrange
+    const ctx = createContext(t);
+    const run = runWithAllLoaded();
+    const message = {
+      kind: "reconcile-pending-empty",
+      command,
+      retainedWorkflows: [],
+    } satisfies NotificationMessage;
 
-  // act
-  notify(ctx, run, message);
+    // act
+    notify(ctx, run, message);
 
-  // assert
-  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "Pending: next reload will apply 0 actions.",
-  ]);
-});
+    // assert
+    assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [expected]);
+  });
+
+  test(`WR-06: the retained-workflow advisory folds under the ${command} advisory`, (t) => {
+    // arrange
+    const ctx = createContext(t);
+    const run = runWithAllLoaded();
+    const message = {
+      kind: "reconcile-pending-empty",
+      command,
+      advisories: ["Retained staging tree."],
+    } satisfies NotificationMessage;
+
+    // act
+    notify(ctx, run, message);
+
+    // assert
+    assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+      `${expected}\n\nRetained staging tree.`,
+    ]);
+  });
+}
 
 for (const scope of ["user", "project"] as const) {
   test(`prune-empty emits the scoped informational sentence for ${scope}`, (t) => {

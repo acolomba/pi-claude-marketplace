@@ -25,7 +25,7 @@
 // surfaced an invalid-config failure, the orchestrator dispatches the
 // dedicated `ReconcilePendingEmptyMessage` standalone-arm variant whose
 // renderer arm hard-codes the catalog-locked advisory body line
-// `Pending: next reload will apply 0 actions.`. Routing the empty case
+// `Pending: /claude:plugin apply has nothing to change.` (D-14). Routing the empty case
 // through `notify()` preserves IL-2 and lets the catalog-uat byte-equality
 // runner exercise the empty path through the same public surface as every
 // other variant.
@@ -343,7 +343,11 @@ export async function pendingReconcile(opts: PendingReconcileOptions): Promise<v
   // routing through notify() exactly once. WR-06: the retained-tree lines ride
   // the same variant, so the steady-state reader meets the identical trailer.
   if (invalidBlocks.length === 0 && isReconcilePlanListEmpty(plans)) {
-    notify(opts.ctx, opts.run, { kind: "reconcile-pending-empty", ...retained });
+    notify(opts.ctx, opts.run, {
+      kind: "reconcile-pending-empty",
+      command: "pending",
+      ...retained,
+    });
     return;
   }
 

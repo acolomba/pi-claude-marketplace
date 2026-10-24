@@ -728,6 +728,7 @@ describe("presentNotification", () => {
     // arrange
     const message = {
       kind: "reconcile-pending-empty",
+      command: "pending",
       advisories: ["retained https://user:tok@host/o/r staging"],
       retainedWorkflows: [{ name: "wf" }],
     } satisfies ReconcilePendingEmptyMessage;
@@ -741,6 +742,7 @@ describe("presentNotification", () => {
       envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
       message: {
         kind: "reconcile-pending-empty",
+        command: "pending",
         advisories: ["retained https://***@host/o/r staging"],
         retainedWorkflows: [{ name: "wf" }],
       },
@@ -781,7 +783,10 @@ describe("presentNotification", () => {
 
   test("carries a pending-empty message without advisories by identity", () => {
     // arrange
-    const message = { kind: "reconcile-pending-empty" } satisfies ReconcilePendingEmptyMessage;
+    const message = {
+      kind: "reconcile-pending-empty",
+      command: "apply",
+    } satisfies ReconcilePendingEmptyMessage;
 
     // act
     const presentation = presentNotification(runWithAllLoaded(), message);
@@ -795,6 +800,7 @@ describe("presentNotification", () => {
     // arrange
     const pending = {
       kind: "reconcile-pending-empty",
+      command: "pending",
       advisories: ["note"],
     } satisfies ReconcilePendingEmptyMessage;
     const prune = { kind: "prune-empty", scope: "project" } satisfies PruneEmptyMessage;

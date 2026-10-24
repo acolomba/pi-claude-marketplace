@@ -147,7 +147,7 @@ test("DIFF-01: reports the zero-action advisory when neither scope has pending w
 
   // assert
   assert.deepStrictEqual(notifications, [
-    { message: "Pending: next reload will apply 0 actions." },
+    { message: "Pending: /claude:plugin apply has nothing to change." },
   ]);
   verifyBoundary();
 });
@@ -498,7 +498,7 @@ test("MIG-01: an absent base config plans against the state projection instead o
 
   // assert
   assert.deepStrictEqual(notifications, [
-    { message: "Pending: next reload will apply 0 actions." },
+    { message: "Pending: /claude:plugin apply has nothing to change." },
   ]);
   verifyBoundary();
 });
@@ -510,7 +510,7 @@ test("MIG-01 / NFR-5: the pre-migration projection is read-only and never writes
     { name: "p1", skills: ["mp-p1-tool"] },
   ]);
   await writeUnder(project.stateJsonPath, recordedState);
-  const expectedNotification = { message: "Pending: next reload will apply 0 actions." };
+  const expectedNotification = { message: "Pending: /claude:plugin apply has nothing to change." };
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
 
   // act
@@ -544,7 +544,7 @@ test("MIG-01: a local-only marketplace merges over the state projection and adds
 
   // assert
   assert.deepStrictEqual(notifications, [
-    { message: "Pending: next reload will apply 0 actions." },
+    { message: "Pending: /claude:plugin apply has nothing to change." },
   ]);
   verifyBoundary();
 });
@@ -796,7 +796,7 @@ test("WR-06: the steady state names a retained workflow staging tree", async (t)
 
   // assert
   assert.deepStrictEqual(notifications, [
-    { message: `Pending: next reload will apply 0 actions.\n\n${RETAINED_LINE}` },
+    { message: `Pending: /claude:plugin apply has nothing to change.\n\n${RETAINED_LINE}` },
   ]);
   verifyBoundary();
 });
@@ -884,7 +884,7 @@ test("WR-06: two retained trees render two lines, sorted by directory name", asy
   assert.deepStrictEqual(notifications, [
     {
       message: [
-        "Pending: next reload will apply 0 actions.",
+        "Pending: /claude:plugin apply has nothing to change.",
         "",
         RETAINED_LINE,
         "    retained workflow staging: staging-zzz (1 envelope) under the workflows staging directory",
@@ -899,7 +899,7 @@ test("WR-06 / DIFF-01: a retained tree still leaves two consecutive invocations 
   const { cwd, user } = await createHermeticScopes(t, "retained-idempotent");
   await seedRetainedStagingTree(user, "staging-aaa", 2);
   const expected = {
-    message: `Pending: next reload will apply 0 actions.\n\n${RETAINED_LINE}`,
+    message: `Pending: /claude:plugin apply has nothing to change.\n\n${RETAINED_LINE}`,
   };
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
 
@@ -930,7 +930,7 @@ test("NFR-5: naming retained trees never creates the workflows staging directory
 
   // assert
   assert.deepStrictEqual(notifications, [
-    { message: "Pending: next reload will apply 0 actions." },
+    { message: "Pending: /claude:plugin apply has nothing to change." },
   ]);
   await assert.rejects(readdir(user.workflowsHomeDir), { code: "ENOENT" });
   verifyBoundary();
@@ -951,7 +951,7 @@ test("WR-06: a staging directory that cannot be read leaves the command's own ou
 
   // assert
   assert.deepStrictEqual(notifications, [
-    { message: "Pending: next reload will apply 0 actions." },
+    { message: "Pending: /claude:plugin apply has nothing to change." },
   ]);
   verifyBoundary();
 });

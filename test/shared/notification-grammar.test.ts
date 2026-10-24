@@ -1090,13 +1090,18 @@ for (const { message, reason, expected } of [
   });
 }
 
-test("renders the reconcile-pending-empty body line", () => {
-  // act
-  const rendered = renderReconcilePendingEmpty();
+for (const { command, expected } of [
+  { command: "pending", expected: "Pending: /claude:plugin apply has nothing to change." },
+  { command: "apply", expected: "Apply: nothing to change." },
+] as const) {
+  test(`D-08 / D-14: renders the reconcile-pending-empty body line for ${command}`, () => {
+    // act
+    const rendered = renderReconcilePendingEmpty(command);
 
-  // assert
-  assert.equal(rendered, "Pending: next reload will apply 0 actions.");
-});
+    // assert
+    assert.equal(rendered, expected);
+  });
+}
 
 for (const { scope, expected } of [
   {

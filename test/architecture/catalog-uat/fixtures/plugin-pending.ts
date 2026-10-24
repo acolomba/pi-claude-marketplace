@@ -12,7 +12,7 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
       pi: piWithBothLoaded(),
       // Dedicated standalone variant; the renderer hard-codes the advisory
       // body line so the byte form cannot drift from the catalog state.
-      message: { kind: "reconcile-pending-empty" },
+      message: { kind: "reconcile-pending-empty", command: "pending" },
     },
     // WR-06: the retained workflow staging advisory on the standalone arm. The
     // line carries the tree's directory NAME and its envelope count and
@@ -22,6 +22,7 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
       pi: piWithAllLoaded(),
       message: {
         kind: "reconcile-pending-empty",
+        command: "pending",
         retainedWorkflows: [{ name: "9f1c4d2a-3b7e", envelopeCount: 2 }],
       },
     },
