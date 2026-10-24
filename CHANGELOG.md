@@ -9,6 +9,8 @@
   - A command that clones a plugin's unpinned git source for the first time clones it once. It used to fetch the repository again right after the clone.
   - An install fails as `{source missing}` when the git host answers 404, `{network error}` for another refusal, and `{network unreachable}` when the connection drops. It used to show no reason.
 
+- Internal: a new worktree session now runs `scripts/init.sh` once when it starts, also in the Claude desktop app. (#273)
+
 - Internal: the test suite moves from `tests/` to `test/`, and the duplication check now fails on every repeated block of code. (#272)
 
 - When a reload installs a plugin that you added to a config by hand, its `(installed)` row now shows the version, as `install` does.

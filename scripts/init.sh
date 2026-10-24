@@ -51,7 +51,5 @@ npx fallow agent install --harness claude --harness codex --without hooks --with
 # normalize AGENTS.md
 pre-commit run --files AGENTS.md || true
 
-# the SessionStart hook keys on this marker: the desktop app copies main's
-# gitignored .claude files into a new worktree, so no .claude file can tell
-# whether this script ran
+# init-session.sh keys on this marker
 touch node_modules/.init-done

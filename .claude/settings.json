@@ -20,7 +20,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "cd \"$CLAUDE_PROJECT_DIR\" && [ \"$(git rev-parse --path-format=absolute --git-dir)\" != \"$(git rev-parse --path-format=absolute --git-common-dir)\" ] && [ ! -e node_modules/.init-done ] && { mkdir -p node_modules && scripts/init.sh >node_modules/.init.log 2>&1 || echo \"scripts/init.sh failed; see node_modules/.init.log\" >&2; } || true",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/init-session.sh",
             "timeout": 900
           }
         ]
