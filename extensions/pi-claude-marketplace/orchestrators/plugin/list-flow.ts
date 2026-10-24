@@ -37,8 +37,11 @@
 //     one flag is set, show UNION of selected buckets.
 //   - PL-3 marketplace narrowing: optional opts.marketplace filters which
 //     marketplace records are walked.
-//   - PL-5 upgradable: STRING comparison (manifest.version !== installed
-//     record version). NOT semver.
+//   - PL-5 upgradable: STRING comparison of the record's version against
+//     the candidate version the one version rule derives offline
+//     (plugin.json, then the entry, then the tree's `sha-` version for an
+//     undeclared git plugin), falling back to the entry version when no
+//     candidate resolves (VER-01, VER-02). NOT semver.
 //   - PL-6 manifest soft-fail: per-marketplace manifest load failure
 //     surfaces as a `(failed)` MarketplaceNotificationMessage with
 //     `status: "failed"` and `plugins: []`. No marketplace-level cause

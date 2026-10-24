@@ -8,7 +8,10 @@ import {
   type ComposeInstalledListRowOptions,
   type InstalledListRow,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-installed-row.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+
+import { advanceWarmMirror, seedWarmMirror } from "./warm-mirror-seed.ts";
 
 import type { ManifestPluginEntry } from "../../../extensions/pi-claude-marketplace/domain/manifest-lookup.ts";
 import type { PluginInstallRecord } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -471,5 +474,126 @@ test("flags binaries on an upgrade candidate of an official marketplace", async 
     reasons: ["unsupported component"],
     version: "1.0.0",
     description: "Alpha plugin.",
+  });
+});
+
+const WARM_URL = "https://example.com/warm-plugin";
+
+test("VER-01: a git plugin at its warm tree's plugin.json version lists as installed although the entry differs", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  await seedWarmMirror(locationsFor("project", environment.cwd), WARM_URL, {
+    name: "warm-plugin",
+    version: "1.0.0",
+  });
+  const entry: ManifestPluginEntry = { name: "warm-plugin", source: WARM_URL, version: "0.9.0" };
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    pluginName: "warm-plugin",
+    pluginScope: "project",
+    marketplaceScope: "project",
+    record: pluginRecord({ version: "1.0.0" }),
+    lookup: { kind: "declared", entry },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "installed",
+    name: "warm-plugin",
+    dependencies: [],
+    version: "1.0.0",
+    severity: "info",
+    needsReload: false,
+  });
+});
+
+test("VER-01: an undeclared git plugin whose warm mirror moved to a new commit lists as upgradable", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const { mirrorDirectory, head } = await seedWarmMirror(
+    locationsFor("project", environment.cwd),
+    WARM_URL,
+    { name: "warm-plugin" },
+  );
+  await advanceWarmMirror(mirrorDirectory);
+  const entry: ManifestPluginEntry = { name: "warm-plugin", source: WARM_URL };
+  const recordedVersion = `sha-${head.slice(0, 12)}`;
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    pluginName: "warm-plugin",
+    pluginScope: "project",
+    marketplaceScope: "project",
+    record: pluginRecord({ version: recordedVersion }),
+    lookup: { kind: "declared", entry },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "upgradable",
+    name: "warm-plugin",
+    reasons: [],
+    version: recordedVersion,
+  });
+});
+
+test("VER-01: an undeclared git plugin whose warm mirror is at the recorded commit lists as installed", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const { head } = await seedWarmMirror(locationsFor("project", environment.cwd), WARM_URL, {
+    name: "warm-plugin",
+  });
+  const entry: ManifestPluginEntry = { name: "warm-plugin", source: WARM_URL };
+  const recordedVersion = `sha-${head.slice(0, 12)}`;
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    pluginName: "warm-plugin",
+    pluginScope: "project",
+    marketplaceScope: "project",
+    record: pluginRecord({ version: recordedVersion }),
+    lookup: { kind: "declared", entry },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "installed",
+    name: "warm-plugin",
+    dependencies: [],
+    version: recordedVersion,
+    severity: "info",
+    needsReload: false,
+  });
+});
+
+test("a git plugin with no mirror falls back to the entry version and lists as upgradable", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const entry: ManifestPluginEntry = { name: "cold-plugin", source: WARM_URL, version: "2.0.0" };
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    pluginName: "cold-plugin",
+    pluginScope: "project",
+    marketplaceScope: "project",
+    record: pluginRecord({ version: "1.0.0" }),
+    lookup: { kind: "declared", entry },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "upgradable",
+    name: "cold-plugin",
+    reasons: [],
+    version: "1.0.0",
   });
 });

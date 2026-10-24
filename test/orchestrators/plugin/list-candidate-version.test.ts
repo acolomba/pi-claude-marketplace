@@ -1,15 +1,13 @@
 import assert from "node:assert/strict";
-import * as fs from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
-import * as git from "isomorphic-git";
-
-import { pluginMirrorKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { resolveListCandidate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-candidate-version.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+
+import { seedWarmMirror } from "./warm-mirror-seed.ts";
 
 import type { ManifestPluginEntry } from "../../../extensions/pi-claude-marketplace/domain/manifest-lookup.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -29,33 +27,6 @@ async function candidateEnvironment(testContext: TestContext): Promise<{
 async function writePluginManifest(pluginRoot: string, manifest: object): Promise<void> {
   await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
   await writeFile(path.join(pluginRoot, ".claude-plugin", "plugin.json"), JSON.stringify(manifest));
-}
-
-/** Seeds a warm mirror for `canonicalUrl` with one commit; returns its dir and HEAD. */
-async function seedWarmMirror(
-  locations: ScopedLocations,
-  canonicalUrl: string,
-  manifest: object | undefined,
-): Promise<{ readonly mirrorDirectory: string; readonly head: string }> {
-  const mirrorDirectory = await locations.pluginCloneDir(pluginMirrorKey(canonicalUrl));
-  await mkdir(mirrorDirectory, { recursive: true });
-  const filepath = manifest === undefined ? "README.md" : ".claude-plugin/plugin.json";
-  if (manifest === undefined) {
-    await writeFile(path.join(mirrorDirectory, filepath), "no plugins here");
-  } else {
-    await writePluginManifest(mirrorDirectory, manifest);
-  }
-
-  await git.init({ fs, dir: mirrorDirectory, defaultBranch: "main" });
-  await git.add({ fs, dir: mirrorDirectory, filepath });
-  await git.commit({
-    fs,
-    dir: mirrorDirectory,
-    message: "initial",
-    author: { name: "test", email: "test@example.com" },
-  });
-  const head = await git.resolveRef({ fs, dir: mirrorDirectory, ref: "HEAD" });
-  return { mirrorDirectory, head };
 }
 
 function installableVerdict(name: string, pluginRoot: string): object {
