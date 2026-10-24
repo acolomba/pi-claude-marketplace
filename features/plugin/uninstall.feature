@@ -345,3 +345,28 @@ Feature: Plugin uninstall
       | command            | description             |
       | /skill:lib-skill   | A skill of lib 1.0.0.   |
       | /skill:other-skill | A skill of other 1.0.0. |
+
+  Scenario: Uninstalling a dependency that a plugin its marketplace no longer lists needs fails as dependents remain
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 1.0.0   |              |
+    When the user runs "/claude:plugin uninstall lib@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status | reasons           | scope   | version | cause chain                                | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | failed | dependents remain | project | 1.0.0   | Uninstall app@tools first, then lib@tools. | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | app@tools | 1.0.0   | true    |
+      | lib@tools | 1.0.0   | true    |

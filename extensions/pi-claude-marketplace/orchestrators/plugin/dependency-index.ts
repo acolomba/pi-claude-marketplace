@@ -20,9 +20,15 @@
 // cache). Nothing here names a git surface, and the network-free gate pins
 // this file so nothing can.
 //
+// DLS-01 / DLS-D1: a record its loaded manifest no longer lists is read from
+// its installed copy (`readInstalledCopyDeclaration`), because Pi keeps such a
+// plugin running and it keeps the dependencies it runs with. Upstream reads
+// none: it does not load a delisted plugin at all.
+//
 // D-05-07: the walk FAILS CLOSED. The first record whose declarations cannot
-// be established -- its marketplace manifest fails to load, that manifest does
-// not list it, or its declaration parses as unusable -- ends the walk with a
+// be established -- its marketplace manifest fails to load, neither that
+// manifest nor its installed copy states them, or its declaration parses as
+// unusable -- ends the walk with a
 // failure arm naming that record, because deleting on incomplete information
 // is the one outcome the callers must never produce. A record with no usable
 // answer is never read as "declares nothing".
@@ -70,7 +76,10 @@ import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { InvalidMarketplaceManifestError, isErrnoException } from "../../shared/errors.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
-import { readDependencyDeclaration } from "./dependency-declaration-read.ts";
+import {
+  readDependencyDeclaration,
+  readInstalledCopyDeclaration,
+} from "./dependency-declaration-read.ts";
 
 import type { DependencyDeclarationReader } from "./dependency-declaration-read.ts";
 import type { DeclaredDependency } from "../../domain/dependencies.ts";
@@ -244,17 +253,24 @@ export async function readRecordDeclarations(
   }
 
   const declared = lookupDeclaredPlugin(manifest, name);
-  if (declared.kind === "absent") {
-    return unreadableDeclarer(key, "not in manifest", "not declared by its marketplace");
+  const read =
+    declared.kind === "absent"
+      ? await readInstalledCopy(options, marketplace, name)
+      : await readDependencyDeclaration({
+          marketplaceRoot: marketplace.marketplaceRoot,
+          entry: declared.entry,
+          locations: options.locations,
+          ...(options.reader !== undefined && { reader: options.reader }),
+          refuseUnusableOwnManifest: true,
+        });
+  if (read.kind === "absent") {
+    return unreadableDeclarer(
+      key,
+      "not in manifest",
+      "not declared by its marketplace, and its installed copy cannot be read",
+    );
   }
 
-  const read = await readDependencyDeclaration({
-    marketplaceRoot: marketplace.marketplaceRoot,
-    entry: declared.entry,
-    locations: options.locations,
-    ...(options.reader !== undefined && { reader: options.reader }),
-    refuseUnusableOwnManifest: true,
-  });
   if (read.kind === "unusable") {
     return unreadableDeclarer(
       key,
@@ -270,6 +286,23 @@ export async function readRecordDeclarations(
       marketplace: dep.marketplace ?? marketplace.name,
     })),
   };
+}
+
+/**
+ * DLS-01: a delisted record's declarations come from its installed copy, the
+ * root its install recorded (`resolvedSource`), admitted only inside the
+ * marketplace clone or the scope's `plugin-clones/` (NFR-10).
+ */
+function readInstalledCopy(
+  options: ScopeDeclarationDetailOptions,
+  marketplace: MarketplaceStateRecord,
+  name: string,
+): ReturnType<typeof readInstalledCopyDeclaration> {
+  return readInstalledCopyDeclaration({
+    pluginRoot: marketplace.plugins[name]?.resolvedSource ?? "",
+    ownerRoots: [marketplace.marketplaceRoot, options.locations.pluginClonesDir],
+    ...(options.reader !== undefined && { reader: options.reader }),
+  });
 }
 
 /** The `name@marketplace` key one addressed declaration names. */

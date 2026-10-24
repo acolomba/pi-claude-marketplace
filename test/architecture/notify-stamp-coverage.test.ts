@@ -95,7 +95,7 @@ function appliedOutcomes(): readonly PerEntryOutcome[] {
     },
     {
       cause: new Error(
-        "cannot read the dependencies of stale-plugin@fresh-mp: not declared by its marketplace",
+        "cannot read the dependencies of stale-plugin@fresh-mp: not declared by its marketplace, and its installed copy cannot be read",
       ),
       kind: "plugin-declarer-unreadable",
       marketplace: "fresh-mp",

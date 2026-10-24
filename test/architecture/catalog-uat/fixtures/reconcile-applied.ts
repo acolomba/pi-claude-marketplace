@@ -481,8 +481,37 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
                 name: "deploy-kit",
                 reasons: ["not in manifest"],
                 cause: new Error(
-                  "cannot read the dependencies of deploy-kit@mp: not declared by its marketplace",
+                  "cannot read the dependencies of deploy-kit@mp: not declared by its marketplace, and its installed copy cannot be read",
                 ),
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // REC-05 / DLS-01: an enabled plugin its catalog no longer lists, Pi's
+    // counterpart to upstream's `plugin-not-found` load error. The plugin keeps
+    // loading, so the row is a warning in upstream's words.
+    "reconcile-plugin-not-in-manifest": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "deploy-kit",
+                reasons: ["not in manifest"],
+                cause: new Error('Plugin "deploy-kit" not found in marketplace "mp"'),
                 severity: "warning",
                 needsReload: false,
               },

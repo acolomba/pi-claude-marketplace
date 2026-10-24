@@ -2622,7 +2622,7 @@ test("LAYER-03: a full remove keeps a dependency another marketplace's plugin ne
 });
 
 const UNREADABLE_CAUSE =
-  "cannot read the dependencies of alpha@tools: not declared by its marketplace";
+  "cannot read the dependencies of alpha@tools: not declared by its marketplace, and its installed copy cannot be read";
 
 const unreadableIndex: typeof buildScopeDeclarationIndex = () =>
   Promise.resolve({

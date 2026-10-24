@@ -266,7 +266,7 @@ export const PLUGIN_UNINSTALL_FIXTURES: FixtureMap = {
                 version: "1.0.0",
                 reasons: ["unreadable"],
                 cause: new Error(
-                  "cannot read the dependencies of other@official: not declared by its marketplace",
+                  "cannot read the dependencies of other@official: not declared by its marketplace, and its installed copy cannot be read",
                 ),
               },
             ],

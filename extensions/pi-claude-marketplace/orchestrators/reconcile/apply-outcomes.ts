@@ -473,6 +473,10 @@ export interface PluginDisableFailedOutcome extends PluginOutcomeBase {
  * load-time dependency check did not run for the scope (D-05-07). The plugin
  * stays installed and loading; `reason` names the fault and `cause` is the
  * walk's fixed-phrase line (T-05-04).
+ *
+ * DLS-01: the same row reports an enabled plugin its marketplace no longer
+ * lists, with `not in manifest` and upstream's `plugin-not-found` words as the
+ * cause (`delisted-plugins.ts`), whether or not the walk could read it.
  */
 export interface PluginDeclarerUnreadableOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-declarer-unreadable";

@@ -5861,7 +5861,8 @@ const REFUSAL_CASES: readonly RefusalCase[] = [
     title: "D-05-07: a record its marketplace manifest does not list refuses the uninstall",
     plugins: { helper: {}, other: { listed: false } },
     expectedRow: "⊘ helper v0.0.1 (failed) {unreadable}",
-    expectedCause: "cannot read the dependencies of other@mp: not declared by its marketplace",
+    expectedCause:
+      "cannot read the dependencies of other@mp: not declared by its marketplace, and its installed copy cannot be read",
   },
   {
     title: "D-05-07: a record whose own manifest is present but unreadable refuses the uninstall",
@@ -6046,7 +6047,8 @@ test("D-05-07: the orchestrated unreadable-declarer refusal still returns the ty
         cwd,
       );
       const { ctx, run, notifications } = makeCtx();
-      const cause = "cannot read the dependencies of other@mp: not declared by its marketplace";
+      const cause =
+        "cannot read the dependencies of other@mp: not declared by its marketplace, and its installed copy cannot be read";
 
       // act
       const outcome = await uninstallWithFreshOwner({

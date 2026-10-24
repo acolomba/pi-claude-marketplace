@@ -2227,7 +2227,48 @@ test("PRL-15: batch soft dependency markers ride only the reinstalled row", asyn
   });
 });
 
-test("D-18-17: a recorded plugin the manifest no longer declares fails every other reinstall in its scope as unreadable", async () => {
+test("DLS-01: a recorded plugin the manifest no longer declares keeps its installed copy's declarations and blocks no other reinstall", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-delisted-"));
+    try {
+      // arrange
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "bad",
+        resources: { agent: "bad agent" },
+        install: true,
+      });
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        pluginName: "good",
+        resources: { agent: "good agent", mcp: true },
+        install: true,
+      });
+      await writeManifest(path.join(cwd, "mp-src"), "mp", { good: "1.0.0" });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcomes = await reinstallPlugins({ ctx, run, cwd, target: { kind: "all" } });
+
+      // assert
+      assert.deepStrictEqual(
+        outcomes.map((outcome) => [outcome.name, outcome.partition]),
+        [
+          ["bad", "skipped"],
+          ["good", "reinstalled"],
+        ],
+      );
+      assert.equal(notifications.length, 1);
+      assert.ok(!notifications[0]!.message.includes("unreadable"));
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-18-17: a recorded plugin the manifest no longer declares and whose installed copy is gone fails every other reinstall in its scope as unreadable", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-unreadable-"));
     try {
@@ -2248,6 +2289,7 @@ test("D-18-17: a recorded plugin the manifest no longer declares fails every oth
         install: true,
       });
       await writeManifest(path.join(cwd, "mp-src"), "mp", { good: "1.0.0" });
+      await deleteInstalledCopy(locations, "bad");
       const goodAgentPath = path.join(locations.agentsDir, "pi-claude-marketplace-good-bot.md");
       const goodAgentBefore = await readFile(goodAgentPath, "utf8");
       const adapterBefore = await readFile(locations.mcpAdapterJsonPath, "utf8");
@@ -2261,7 +2303,8 @@ test("D-18-17: a recorded plugin the manifest no longer declares fails every oth
       // D-18-17: the walk fails closed on a record it cannot read, and the row
       // names the true cause; `dependents constrain` is kept for a real range
       // hold (D-18-07). `bad`'s own triage answers before its walk runs.
-      const walkCause = "cannot read the dependencies of bad@mp: not declared by its marketplace";
+      const walkCause =
+        "cannot read the dependencies of bad@mp: not declared by its marketplace, and its installed copy cannot be read";
       const [badOutcome, goodOutcome] = outcomes;
       assert.deepStrictEqual(badOutcome, {
         partition: "skipped",
@@ -3254,8 +3297,25 @@ for (const { form, target, blockName } of [
 }
 
 /**
+ * DLS-01: deletes the installed copy of `plugin@mp`, so a delisted record has
+ * no copy left to read its dependencies from.
+ */
+async function deleteInstalledCopy(
+  locations: ReturnType<typeof locationsFor>,
+  plugin: string,
+): Promise<void> {
+  const state = JSON.parse(await readFile(locations.stateJsonPath, "utf8")) as {
+    readonly marketplaces: {
+      readonly mp: { readonly plugins: Record<string, { readonly resolvedSource: string }> };
+    };
+  };
+  await rm(state.marketplaces.mp.plugins[plugin]!.resolvedSource, { recursive: true, force: true });
+}
+
+/**
  * Install `hello` and `other`, declare both in the local layer, then drop
- * `other` from the marketplace, so its dependencies cannot be read.
+ * `other` from the marketplace and delete its installed copy, so its
+ * dependencies cannot be read.
  */
 async function seedUnreadableLocalDeclaration(
   cwd: string,
@@ -3279,6 +3339,7 @@ async function seedUnreadableLocalDeclaration(
       plugins: manifest.plugins.filter((entry) => entry.name !== "other"),
     }),
   );
+  await deleteInstalledCopy(locations, "other");
   return locations;
 }
 
@@ -3315,7 +3376,7 @@ for (const { form, target, blockName } of [
               "",
               `● ${blockName} [project]`,
               "  ⊘ (reinstall) (failed) {unreadable}",
-              "    cause: cannot read the dependencies of other@mp: not declared by its marketplace",
+              "    cause: cannot read the dependencies of other@mp: not declared by its marketplace, and its installed copy cannot be read",
               "",
               "Plugin reinstall: 1 failure",
             ].join("\n"),

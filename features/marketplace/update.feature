@@ -815,9 +815,9 @@ Feature: Marketplace update
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id         | name | status | reasons         | scope   | leaks | rollback partial | cause chain                                                                 | cause truncated |
-      | tools            | project           | demo@tools | demo | failed | not in manifest | project |       |                  | cannot read the dependencies of demo@tools: not declared by its marketplace | false           |
-      | tools            | project           | demo@tools | demo | failed | not in manifest | project |       |                  | cannot read the dependencies of demo@tools: not declared by its marketplace | false           |
+      | marketplace name | marketplace scope | id         | name | status | reasons         | scope   | leaks | rollback partial | cause chain                                    | cause truncated |
+      | tools            | project           | demo@tools | demo | failed | not in manifest | project |       |                  | Plugin "demo" not found in marketplace "tools" | false           |
+      | tools            | project           | demo@tools | demo | failed | not in manifest | project |       |                  | Plugin "demo" not found in marketplace "tools" | false           |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |

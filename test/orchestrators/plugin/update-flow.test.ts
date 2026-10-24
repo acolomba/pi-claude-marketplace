@@ -5696,7 +5696,7 @@ for (const { form, target, rowName, blockName } of [
               "",
               `● ${blockName} [project]`,
               `  ⊘ ${rowName} (failed) {unreadable}`,
-              "    cause: cannot read the dependencies of gone@mp: not declared by its marketplace",
+              "    cause: cannot read the dependencies of gone@mp: not declared by its marketplace, and its installed copy cannot be read",
               "",
               "Plugin update: 1 failure",
             ].join("\n"),
@@ -5753,7 +5753,7 @@ test("D-18-17: an update whose dependency walk cannot read another recorded plug
         refusedUpdateNotification(
           "hello v1.0.0",
           "unreadable",
-          "cannot read the dependencies of gone@mp: not declared by its marketplace",
+          "cannot read the dependencies of gone@mp: not declared by its marketplace, and its installed copy cannot be read",
         ),
       ]);
       assert.deepStrictEqual(await updateFileSnapshot(locations), filesBefore);
@@ -5780,7 +5780,7 @@ test("D-18-17: an autoupdate cascade fails a plugin whose dependency walk cannot
       assert.ok(outcome.partition === "failed");
       const { cause, ...failure } = outcome;
       const walkMessage =
-        "cannot read the dependencies of gone@mp: not declared by its marketplace";
+        "cannot read the dependencies of gone@mp: not declared by its marketplace, and its installed copy cannot be read";
       assert.deepStrictEqual(failure, {
         partition: "failed",
         name: "hello",

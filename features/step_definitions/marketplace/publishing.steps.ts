@@ -29,6 +29,7 @@ import {
   publishExternalMarketplace,
   publishMarketplace,
   publishOfficialMarketplace,
+  removePublishedPlugin,
   republishMarketplace,
   requireFreeRoot,
   rewritePublishedManifest,
@@ -97,6 +98,15 @@ Given(
   "the marketplace {string} offers these plugins with dependencies:",
   async function (this: ScenarioWorld, name: string, table: DataTable) {
     await offer(this, name, readOfferedPluginsWithDependencies(table));
+  },
+);
+
+Given(
+  "the marketplace {string} no longer holds the files of the plugin {string}",
+  async function (this: ScenarioWorld, name: string, plugin: string) {
+    const published = this.requirePublished(name);
+    await removePublishedPlugin(published, plugin);
+    await assert.rejects(stat(path.join(published.root, "plugins", plugin)), { code: "ENOENT" });
   },
 );
 

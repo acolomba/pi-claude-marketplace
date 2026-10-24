@@ -596,20 +596,6 @@ interface EnableCascadeResolution {
 }
 
 /**
- * WR-03 / ATTR-08: `readRecordDeclarations`'s only distinguishable-by-text
- * failure this cascade treats specially -- the record's OWN manifest entry
- * is absent from an otherwise-readable manifest. `dependency-index.ts`'s
- * `unreadableDeclarer` builds this exact, internally-owned literal (never
- * untrusted manifest text), so matching it is stable. Every OTHER
- * unreadable-declarer cause (the manifest itself failed to load, or its
- * `dependencies` field parses as unusable) is NOT this case and stays
- * fail-closed.
- */
-function isDeclarerAbsentFromManifest(cause: Error): boolean {
-  return cause.message.endsWith(": not declared by its marketplace");
-}
-
-/**
  * WR-03: reads ONE record's declarations as the walk visits it, so an
  * unreadable record OUTSIDE the closure never blocks the enable. D-05-07
  * fail-closed still applies, but scoped to records the walk actually
@@ -646,7 +632,11 @@ function enableCascadeLookup(
 
     const read = await readRecordDeclarations({ state, locations }, marketplace, subject.name);
     if (!read.ok) {
-      if (subject.key === rootKey && isDeclarerAbsentFromManifest(read.cause)) {
+      // WR-03 / ATTR-08: the root's entry is absent from a readable manifest
+      // and its installed copy cannot answer either. Every other read failure
+      // (the manifest failed to load, a declaration parses as unusable) is not
+      // this case and stays fail-closed.
+      if (subject.key === rootKey && read.reason === "not in manifest") {
         return { kind: "found", dependencies: [] };
       }
 

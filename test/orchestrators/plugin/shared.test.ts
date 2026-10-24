@@ -1743,7 +1743,8 @@ describe("keepLocalLayerTargets", () => {
           { declarer: error.declarer, message: error.message },
           {
             declarer: "app@tools",
-            message: "cannot read the dependencies of app@tools: not declared by its marketplace",
+            message:
+              "cannot read the dependencies of app@tools: not declared by its marketplace, and its installed copy cannot be read",
           },
         );
         return true;

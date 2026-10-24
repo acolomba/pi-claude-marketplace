@@ -279,7 +279,7 @@ describe("evaluateUpdateConstraint", () => {
   test("UPDT-02 / D-18-17: an unreadable declarer fails the update closed and names itself", async () => {
     // arrange
     const cause = new Error(
-      "cannot read the dependencies of alpha@mp: not declared by its marketplace",
+      "cannot read the dependencies of alpha@mp: not declared by its marketplace, and its installed copy cannot be read",
     );
     const seam = seamFailingWith("alpha@mp", cause);
 
@@ -291,7 +291,7 @@ describe("evaluateUpdateConstraint", () => {
         assert.strictEqual(error.declarer, "alpha@mp");
         assert.strictEqual(
           error.message,
-          "cannot read the dependencies of alpha@mp: not declared by its marketplace",
+          "cannot read the dependencies of alpha@mp: not declared by its marketplace, and its installed copy cannot be read",
         );
         return true;
       },
@@ -410,7 +410,7 @@ describe("evaluateUpdateConstraint", () => {
     {
       title: "D-05-07 / D-18-17: a declarer its marketplace does not list",
       cause: new Error(
-        "cannot read the dependencies of helper@mp: not declared by its marketplace",
+        "cannot read the dependencies of helper@mp: not declared by its marketplace, and its installed copy cannot be read",
       ),
     },
     {

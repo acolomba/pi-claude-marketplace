@@ -227,3 +227,33 @@ Feature: Plugin enable
       | app@tools | false   |
     When the user starts a new pi session
     Then the session offers no skills
+
+  Scenario: Enabling a plugin whose dependency its marketplace no longer lists reads that dependency's own dependencies and enables it
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   | base         |
+      | base | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin disable app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | base | 1.0.0   |              |
+    When the user runs "/claude:plugin enable app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name       | status    | reasons         | scope   | version |
+      | tools            | project           | app@tools  | app        | installed |                 | project | 1.0.0   |
+      | tools            | project           | base@tools | base@tools | skipped   | already enabled | project | 1.0.0   |
+      | tools            | project           | lib@tools  | lib@tools  | skipped   | already enabled | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id         | version | enabled |
+      | app@tools  | 1.0.0   | true    |
+      | base@tools | 1.0.0   | true    |
+      | lib@tools  | 1.0.0   | true    |

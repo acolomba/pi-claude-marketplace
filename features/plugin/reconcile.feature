@@ -183,9 +183,9 @@ Feature: Plugin reconcile
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id            | name | status | reasons         | scope   | cause chain                                                                    | cause truncated | leaks | rollback partial |
-      | fixtures         | project           | demo@fixtures | demo | failed | not in manifest | project | cannot read the dependencies of demo@fixtures: not declared by its marketplace | false           |       |                  |
-      | fixtures         | project           | demo@fixtures | demo | failed | not in manifest | project | cannot read the dependencies of demo@fixtures: not declared by its marketplace | false           |       |                  |
+      | marketplace name | marketplace scope | id            | name | status | reasons         | scope   | cause chain                                       | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | not in manifest | project | Plugin "demo" not found in marketplace "fixtures" | false           |       |                  |
+      | fixtures         | project           | demo@fixtures | demo | failed | not in manifest | project | Plugin "demo" not found in marketplace "fixtures" | false           |       |                  |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -195,9 +195,9 @@ Feature: Plugin reconcile
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
       | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | id            | name | status | reasons         | scope   | cause chain                                                                    | cause truncated | leaks | rollback partial |
-      | fixtures         | project           | demo@fixtures | demo | failed | not in manifest | project | cannot read the dependencies of demo@fixtures: not declared by its marketplace | false           |       |                  |
-      | fixtures         | project           | demo@fixtures | demo | failed | not in manifest | project | cannot read the dependencies of demo@fixtures: not declared by its marketplace | false           |       |                  |
+      | marketplace name | marketplace scope | id            | name | status | reasons         | scope   | cause chain                                       | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | not in manifest | project | Plugin "demo" not found in marketplace "fixtures" | false           |       |                  |
+      | fixtures         | project           | demo@fixtures | demo | failed | not in manifest | project | Plugin "demo" not found in marketplace "fixtures" | false           |       |                  |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -276,3 +276,25 @@ Feature: Plugin reconcile
       | fixtures         | project           | demo@fixtures | demo | failed | unsupported component | project |       |                  |
       | fixtures         | project           | demo@fixtures | demo | failed | unsupported component | project |       |                  |
     Then the project scope has no installed plugins
+
+  Scenario: Every new session warns once about a plugin its catalog no longer offers whose files are gone
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" no longer holds the files of the plugin "app"
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id        | name | status | reasons         | scope   | cause chain                                                                                                       | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app  | failed | not in manifest | project | cannot read the dependencies of app@tools: not declared by its marketplace, and its installed copy cannot be read | false           |       |                  |
+      | tools            | project           | app@tools | app  | failed | not in manifest | project | cannot read the dependencies of app@tools: not declared by its marketplace, and its installed copy cannot be read | false           |       |                  |

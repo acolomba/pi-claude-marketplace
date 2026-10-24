@@ -420,7 +420,9 @@ function appliedOutcomeRows(): AppliedOutcomeRows {
         marketplace: "mp",
         plugin: "cr",
         reason: "not in manifest",
-        cause: new Error("cannot read the dependencies of cr@mp: not declared by its marketplace"),
+        cause: new Error(
+          "cannot read the dependencies of cr@mp: not declared by its marketplace, and its installed copy cannot be read",
+        ),
       },
       expected: {
         kind: "reconcile-applied-cascade",
@@ -434,7 +436,7 @@ function appliedOutcomeRows(): AppliedOutcomeRows {
                 name: "cr",
                 reasons: ["not in manifest"],
                 cause: new Error(
-                  "cannot read the dependencies of cr@mp: not declared by its marketplace",
+                  "cannot read the dependencies of cr@mp: not declared by its marketplace, and its installed copy cannot be read",
                 ),
                 severity: "warning",
                 needsReload: false,
@@ -1534,7 +1536,7 @@ describe("buildReconcileAppliedCascade", () => {
     // arrange
     const cause = new UninstallRefusedError(
       "unreadable",
-      "cannot read the dependencies of keeper@mp: not declared by its marketplace",
+      "cannot read the dependencies of keeper@mp: not declared by its marketplace, and its installed copy cannot be read",
     );
     const outcomes: readonly PerEntryOutcome[] = [
       {

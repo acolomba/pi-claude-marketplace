@@ -254,7 +254,7 @@ export const PLUGIN_PRUNE_FIXTURES: FixtureMap = {
                 name: "other",
                 reasons: ["unreadable"],
                 cause: new Error(
-                  "cannot read the dependencies of other@official: not declared by its marketplace",
+                  "cannot read the dependencies of other@official: not declared by its marketplace, and its installed copy cannot be read",
                 ),
                 severity: "error",
                 needsReload: false,

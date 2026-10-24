@@ -110,6 +110,7 @@ import {
   MigrateConfigSaveError,
 } from "./apply-outcomes.ts";
 import { applyBackfillForScopeIsolated, runScopeIsolated } from "./backfill.ts";
+import { hasSuppressingRow, reportDelistedPlugins } from "./delisted-plugins.ts";
 import { buildScopeSatisfactionVerdict } from "./dependency-verdict.ts";
 import { migrateLegacyMcpEntries } from "./mcp-migration.ts";
 import { buildReconcileAppliedCascade } from "./notify.ts";
@@ -1287,15 +1288,6 @@ async function applyPlan(
   applySourceMismatches(plan, outcomes);
 }
 
-/** The outcomes after which the stale-declarer row would be redundant or false. */
-const SUPPRESSING_DECLARER_KINDS: ReadonlySet<PerEntryOutcome["kind"]> = new Set([
-  "plugin-install-failed",
-  "plugin-uninstall-failed",
-  "plugin-enable-failed",
-  "plugin-disable-failed",
-  "plugin-uninstalled",
-]);
-
 /**
  * D-05-07 / LOAD-01: report the one declarer whose declarations could not be
  * established, which is why no plugin in this scope was held down on this pass.
@@ -1337,15 +1329,7 @@ function reportUnreadableDeclarer(
   const at = verdict.declarer.lastIndexOf("@");
   const marketplace = verdict.declarer.slice(at + 1);
   const plugin = verdict.declarer.slice(0, at);
-  const reported = outcomes.some(
-    (outcome) =>
-      SUPPRESSING_DECLARER_KINDS.has(outcome.kind) &&
-      outcome.scope === scope &&
-      "plugin" in outcome &&
-      outcome.plugin === plugin &&
-      outcome.marketplace === marketplace,
-  );
-  if (reported) {
+  if (hasSuppressingRow(outcomes, scope, marketplace, plugin)) {
     return;
   }
 
@@ -1475,6 +1459,10 @@ async function applyReconcileWithReader(
     // REC-05: after the backfill, so a backfill failure for the same plugin
     // suppresses the row as an apply-pass failure does.
     reportUnreadableDeclarer(scope, readResult, outcomes);
+    // REC-05 / DLS-01: after the walk's row, which names a delisted plugin
+    // whose installed copy cannot be read with the fuller cause.
+    // eslint-disable-next-line no-await-in-loop -- per-scope rows follow the scope's own pass
+    await reportDelistedPlugins(scope, readResult.state, outcomes);
 
     // DISP-02: after the per-scope apply pass (or the no-plan arm), rebuild
     // this scope's routing tables so the next Pi event fires against a
