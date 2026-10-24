@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdir } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
@@ -25,6 +25,7 @@ interface PluginRecordOverrides {
   readonly compatibility?: PluginInstallRecord["compatibility"];
   readonly enabled?: boolean;
   readonly resources?: PluginInstallRecord["resources"];
+  readonly version?: string;
 }
 
 function pluginRecord(overrides: PluginRecordOverrides = {}): PluginInstallRecord {
@@ -375,6 +376,70 @@ test("degrades a candidate probe failure to an upgradable row", async (testConte
     name: "bad/name",
     reasons: [],
     version: "1.0.0",
+    description: "Alpha plugin.",
+  });
+});
+
+async function writePluginVersion(pluginRoot: string, version: string): Promise<void> {
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "alpha", version }),
+  );
+}
+
+test("VER-02: a path plugin at its plugin.json version lists as installed although the entry differs", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  await writePluginVersion(path.join(environment.marketplaceRoot, "alpha"), "2.0.0");
+  const entry = manifestEntry({ version: "1.0.0" });
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record: pluginRecord({ version: "2.0.0" }),
+    lookup: { kind: "declared", entry },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "installed",
+    name: "alpha",
+    dependencies: [],
+    version: "2.0.0",
+    description: "Alpha plugin.",
+    severity: "info",
+    needsReload: false,
+  });
+});
+
+test("VER-02: a path plugin whose plugin.json moved past the record lists as upgradable although the entry matches", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  await writePluginVersion(path.join(environment.marketplaceRoot, "alpha"), "2.1.0");
+  const entry = manifestEntry({ version: "2.0.0" });
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    pluginName: "alpha",
+    pluginScope: "user",
+    marketplaceScope: "user",
+    record: pluginRecord({ version: "2.0.0" }),
+    lookup: { kind: "declared", entry },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "upgradable",
+    name: "alpha",
+    reasons: [],
+    version: "2.0.0",
     description: "Alpha plugin.",
   });
 });

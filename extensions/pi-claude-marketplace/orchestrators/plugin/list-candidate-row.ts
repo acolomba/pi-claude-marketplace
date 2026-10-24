@@ -1,19 +1,15 @@
-import { resolveStrict } from "../../domain/plugin-resolver.ts";
-import { parsePluginSource } from "../../domain/source.ts";
 import { rowClaimsInstallDisabled } from "../../domain/unsupported-components.ts";
-import { shaVersion } from "../../domain/version.ts";
 import {
   narrowProbeError,
   narrowResolverNotes,
   narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
 
-import { makePresenceProbe } from "./git-source-probe.ts";
+import { resolveListCandidate } from "./list-candidate-version.ts";
 import { classifyManifestEntry } from "./plugin-state-classifier.ts";
-import { resolveDeclaredPluginVersion } from "./shared.ts";
 
 import type { ManifestPluginEntry } from "../../domain/manifest-lookup.ts";
-import type { ResolveContext } from "../../domain/resolver-types.ts";
+import type { ResolveContext, ResolvedPlugin } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type {
@@ -36,15 +32,6 @@ export interface CandidateRow {
     | PluginUnavailableMessage;
   readonly bucket: FilterBucket;
 }
-
-type ResolvedCandidate =
-  | { readonly kind: "cold" }
-  | {
-      readonly kind: "resolved";
-      readonly resolved: Awaited<ReturnType<typeof resolveStrict>>;
-      /** VER-01 / VER-02: the declared version of the tree, which replaces the entry's. */
-      readonly version?: string;
-    };
 
 interface CandidateRowFields {
   readonly name: string;
@@ -69,57 +56,6 @@ function installsDisabledField(claimsInstallDisabled: boolean): {
   return claimsInstallDisabled ? { reasons: ["installs disabled"] } : {};
 }
 
-type GitPluginSource = Parameters<ReturnType<typeof makePresenceProbe>>[0];
-
-function isGitPluginSource(
-  parsedSource: ReturnType<typeof parsePluginSource>,
-): parsedSource is GitPluginSource {
-  return (
-    parsedSource.kind === "url" ||
-    parsedSource.kind === "git-subdir" ||
-    parsedSource.kind === "github"
-  );
-}
-
-async function resolveCandidateEntry(
-  manifestEntry: ManifestPluginEntry,
-  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
-  locations: ScopedLocations,
-): Promise<ResolvedCandidate> {
-  const parsedSource = parsePluginSource(manifestEntry.source);
-  if (!isGitPluginSource(parsedSource)) {
-    const resolved = await resolveStrict(manifestEntry, marketplaceContext);
-    if (resolved.state === "unavailable") {
-      return { kind: "resolved", resolved };
-    }
-
-    // VER-02: a path source takes the declared version the same way.
-    const version = await resolveDeclaredPluginVersion(manifestEntry, resolved.pluginRoot);
-    return { kind: "resolved", resolved, ...(version !== undefined && { version }) };
-  }
-
-  const probe = makePresenceProbe(locations);
-  const presence = await probe(parsedSource);
-  if (presence.kind === "not-cached") {
-    return { kind: "cold" };
-  }
-
-  const resolved = await resolveStrict(manifestEntry, {
-    ...marketplaceContext,
-    resolveGitPluginRoot: probe,
-  });
-  if (presence.kind !== "materialized") {
-    return { kind: "resolved", resolved };
-  }
-
-  // VER-01: the version an install of the warm tree records -- the declared
-  // version (plugin.json, then the entry), else its commit.
-  const version =
-    (await resolveDeclaredPluginVersion(manifestEntry, presence.pluginRoot)) ??
-    shaVersion(presence.resolvedSha);
-  return { kind: "resolved", resolved, version };
-}
-
 function partialCandidateReasons(
   unsupported: Parameters<typeof narrowUnsupportedKinds>[0],
   claimsInstallDisabled: boolean,
@@ -132,7 +68,7 @@ function partialCandidateReasons(
 
 function resolvedCandidateRow(
   fields: CandidateRowFields,
-  resolved: Awaited<ReturnType<typeof resolveStrict>>,
+  resolved: ResolvedPlugin,
   claimsInstallDisabled: boolean,
 ): CandidateRow {
   const bucket = classifyManifestEntry(resolved);
@@ -194,7 +130,7 @@ export async function availableRowMessage(
   const claimsInstallDisabled = rowClaimsInstallDisabled(manifestEntry, declaredEnabled);
 
   try {
-    const outcome = await resolveCandidateEntry(manifestEntry, marketplaceContext, locations);
+    const outcome = await resolveListCandidate(manifestEntry, marketplaceContext, locations);
     if (outcome.kind === "cold") {
       return {
         message: {

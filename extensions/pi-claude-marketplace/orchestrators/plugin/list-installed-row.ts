@@ -1,13 +1,12 @@
-import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
-import { makePresenceProbe } from "./git-source-probe.ts";
+import { resolveListCandidate } from "./list-candidate-version.ts";
 import { classifyInstalledRecord } from "./plugin-state-classifier.ts";
 
-import type { ManifestLookup } from "../../domain/manifest-lookup.ts";
-import type { ResolveContext } from "../../domain/resolver-types.ts";
+import type { UpgradeCandidate } from "./plugin-state-classifier.ts";
+import type { ManifestLookup, ManifestPluginEntry } from "../../domain/manifest-lookup.ts";
 import type { PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
@@ -69,32 +68,39 @@ function disabledReasonsField(notInManifest: boolean): Pick<PluginDisabledMessag
   return notInManifest ? { reasons: ["not in manifest"] } : {};
 }
 
-async function probeUpgradeCandidate(
-  manifestEntry: Parameters<typeof resolveStrict>[0],
-  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
-  pluginScope: Scope,
-  cwd: string,
-): Promise<Awaited<ReturnType<typeof resolveStrict>> | undefined> {
-  const resolveContext: ResolveContext = {
-    ...marketplaceContext,
-    resolveGitPluginRoot: makePresenceProbe(locationsFor(pluginScope, cwd)),
-  };
-  try {
-    return await resolveStrict(manifestEntry, resolveContext);
-  } catch {
-    return undefined;
+/**
+ * PL-5 / VER-01 / VER-02: whether a newer candidate exists, decided by the one
+ * version rule rather than the entry alone. The candidate version is the one
+ * the offline derivation gives the tree, else the entry's when no candidate
+ * resolves (a cold git source, a throw, or a tree with no version). The
+ * resolved verdict travels only when the row is upgradable; a cold candidate
+ * or a throw carries none (the CR-01 "could not assert" degrade).
+ */
+async function upgradeCandidate(
+  manifestEntry: ManifestPluginEntry,
+  options: ComposeInstalledListRowOptions,
+): Promise<UpgradeCandidate> {
+  const candidate = await resolveListCandidate(
+    manifestEntry,
+    { marketplaceRoot: options.marketplaceRoot, marketplaceName: options.marketplaceName },
+    locationsFor(options.pluginScope, options.cwd),
+  ).catch((): undefined => undefined);
+  const resolved = candidate?.kind === "resolved" ? candidate : undefined;
+  const version = resolved?.version ?? manifestEntry.version;
+  if (version === undefined || version === options.record.version) {
+    return { upgradable: false };
   }
+
+  return { upgradable: true, resolved: resolved?.resolved };
 }
 
 /** Composes one exact installed-inventory row without network access. */
 export async function composeInstalledListRow(
   options: ComposeInstalledListRowOptions,
 ): Promise<InstalledListRow> {
-  const { pluginName, pluginScope, marketplaceScope, record, lookup, cwd } = options;
+  const { pluginName, pluginScope, marketplaceScope, record, lookup } = options;
   const manifestEntry = lookup.kind === "declared" ? lookup.entry : undefined;
   const notInManifest = lookup.kind === "absent";
-  const upgradable =
-    manifestEntry?.version !== undefined && manifestEntry.version !== record.version;
   const scopeField: { readonly scope?: Scope } =
     pluginScope === marketplaceScope ? {} : { scope: pluginScope };
   const descriptionField: { readonly description?: string } =
@@ -113,18 +119,12 @@ export async function composeInstalledListRow(
     };
   }
 
-  const candidateResolved = upgradable
-    ? await probeUpgradeCandidate(
-        manifestEntry,
-        { marketplaceRoot: options.marketplaceRoot, marketplaceName: options.marketplaceName },
-        pluginScope,
-        cwd,
-      )
-    : undefined;
-  const status = classifyInstalledRecord(
-    record,
-    upgradable ? { upgradable: true, resolved: candidateResolved } : { upgradable: false },
-  );
+  const candidate: UpgradeCandidate =
+    manifestEntry === undefined
+      ? { upgradable: false }
+      : await upgradeCandidate(manifestEntry, options);
+  const candidateResolved = candidate.upgradable ? candidate.resolved : undefined;
+  const status = classifyInstalledRecord(record, candidate);
 
   if (status === "partially-installed" || status === "partially-installed-upgradable") {
     return {
