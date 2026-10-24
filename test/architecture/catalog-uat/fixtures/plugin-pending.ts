@@ -178,6 +178,29 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
         ],
       },
     },
+    // D-10 / WCONV-03: a strictly grown supported set is a move at the same
+    // version, marked as a backfilled row is.
+    "plugin-pending-update-growth": {
+      pi: piWithBothLoaded(),
+      message: {
+        needsApply: true,
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "will update",
+                name: "hello",
+                from: "1.0.0",
+                to: "1.0.0",
+                reasons: ["components now supported"],
+              },
+            ],
+          },
+        ],
+      },
+    },
     // D-12 / D-23: a catalog move a dependent's range does not admit stays put
     // with update's range-hold row. No tag is listed, so the catalog version
     // alone is judged. A held move changes nothing, so it asks for no apply.

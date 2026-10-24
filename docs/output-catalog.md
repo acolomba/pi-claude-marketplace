@@ -3629,7 +3629,7 @@ A marketplace with two plugin children: one newly enabled in config (`will enabl
 
 ### Plugin pending update (APL-02 / D-10 / D-14)
 
-A recorded plugin whose catalog candidate on disk differs from its record: the plugin is enabled, its marketplace still lists it, and the candidate is not the recorded revision: its version or its plugin root differs (D-10, the D-18-11 same-revision test). `apply` moves it to the candidate, so `pending` and the load's block list it as `(will update)` with the `updated` row's `v<from> → v<to>` arrow. Disabled and delisted plugins, plugins the same plan uninstalls or disables, and candidates that cannot be read are never moves. A scope whose dependency declarations cannot be read previews no move at all (D-05-07). Severity `info`; no reload-hint; the apply trailer.
+A recorded plugin whose catalog candidate on disk differs from its record: the plugin is enabled, its marketplace still lists it, and the candidate is not the recorded revision: its version or its plugin root differs (D-10, the D-18-11 same-revision test). A git source is judged from the clone cache, offline (D-11, NFR-5). A cached tree, the fetched mirror of an unpinned source or the clone of a pinned commit, moves when its version or its commit differs; its plugin root is not compared, because the record names its per-commit copy (GIT-01). A git source with no cached tree moves only when the catalog itself shows a different target: a commit pin other than the recorded commit, which moves to the entry's version or else to the pin's `sha-` version, or else a declared version other than the recorded one. Otherwise it is not previewed. `apply` moves it to the candidate, so `pending` and the load's block list it as `(will update)` with the `updated` row's `v<from> → v<to>` arrow. Disabled and delisted plugins, plugins the same plan uninstalls or disables, and candidates that cannot be read are never moves. A scope whose dependency declarations cannot be read previews no move at all (D-05-07). Severity `info`; no reload-hint; the apply trailer.
 
 <!-- catalog-state: plugin-pending-update -->
 
@@ -3649,6 +3649,19 @@ A move to a new commit at the same version names each side's short commit, as th
 ```text
 ● mp [user]
   ● demo v1.0.0 (a1b2c3d) → v1.0.0 (2222333) (will update)
+
+/claude:plugin apply to make these changes
+```
+
+### Plugin pending update for a grown supported set (APL-02 / D-10 / WCONV-03)
+
+A recorded plugin whose candidate supports a strictly larger set of component kinds than its record, with every recorded kind still in it (BFILL-01). D-10 weighs this growth test on every pass, with no extension-version gate, so `pending` and the load's block list it as a move. With no version, commit or root change the arrow shows the same version on both sides. The row carries `{components now supported}`, the marker a backfilled row carries (WCONV-03). A git source with no cached tree is never a growth move, because its tree is unknown offline (D-11). Growth goes through the same range hold and consent decline as any move: a clean record whose grown candidate would drop components is declined. Severity `info`; no reload-hint; the apply trailer.
+
+<!-- catalog-state: plugin-pending-update-growth -->
+
+```text
+● mp [user]
+  ● hello v1.0.0 → v1.0.0 (will update) {components now supported}
 
 /claude:plugin apply to make these changes
 ```
