@@ -1223,6 +1223,59 @@ test("PRL-12: cache and data cleanup failures are SILENTLY swallowed after succe
   });
 });
 
+test("D-23: reinstall lets a dependent's range search release tags and names the current-copy fallback", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-tag-search-"));
+    try {
+      // arrange -- `alpha` declares `hello` at a range; the path marketplace
+      // has no release tag, so a tag search falls back to its current copy.
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedMarketplace({ cwd, marketplaceRoot, resources: { skill: "skill" }, install: true });
+      const alpha = await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        pluginName: "alpha",
+        resources: { skill: "alpha skill" },
+        install: true,
+      });
+      const dependencies = [{ name: "hello", version: ">=1.0.0" }];
+      await writeFile(
+        path.join(alpha.pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "alpha", dependencies }),
+      );
+      const manifest = JSON.parse(await readFile(alpha.manifestPath, "utf8")) as {
+        plugins: Record<string, unknown>[];
+      };
+      await writeFile(
+        alpha.manifestPath,
+        JSON.stringify({
+          ...manifest,
+          plugins: manifest.plugins.map((entry) =>
+            entry.name === "alpha" ? { ...entry, dependencies } : entry,
+          ),
+        }),
+      );
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.equal(outcome.partition, "reinstalled");
+      assert.match(notifications[0]?.message ?? "", /\(reinstalled\) \{dependency current copy\}/);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("PRL-12/RH-5: V2 per-variant reload-hint -- emitted on reinstalled even with zero resources changed (cascade stub); agents/MCP warn when unloaded", async () => {
   // The reload-hint is emitted structurally from
   // `PluginReinstalledMessage.status` per D-16-12 (the `reinstalled`

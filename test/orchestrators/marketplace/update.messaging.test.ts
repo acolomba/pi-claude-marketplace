@@ -20,6 +20,7 @@ const UPDATE_POLICY = {
   refreshSource: true,
   skipSameRevision: true,
   overwrite: false,
+  searchReleaseTags: true,
 } satisfies MaterializationPolicy;
 
 void ({

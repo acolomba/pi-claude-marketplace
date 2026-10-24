@@ -16,14 +16,13 @@
 // leaf reads no credential value, stores none, and places none on a
 // returned verdict.
 //
-// The holders, the range fold and the cause lines live in the network-free
-// `constraint-fold.ts`, which the convergence planner shares (D-23); this
-// leaf adds the declaration walk and the tag search on top.
+// The declaration walk, the holders, the range fold and the cause lines live
+// in the network-free `constraint-fold.ts`, which the convergence planner and
+// `apply`'s runner share (D-23); this leaf adds the tag search on top.
 
 import { parsePluginSource } from "../../domain/source.ts";
-import { DependencyDeclarationsUnreadableError } from "../../shared/errors.ts";
 
-import { admitsRange, foldDeclaredConstraint, transportHeld } from "./constraint-fold.ts";
+import { admitsRange, evaluateCatalogConstraint, transportHeld } from "./constraint-fold.ts";
 import { buildScopeDeclarationDetail } from "./dependency-index.ts";
 import { probeDependencyTags } from "./dependency-tag-probe.ts";
 import { probeMarketplaceTags } from "./marketplace-tag-probe.ts";
@@ -228,26 +227,9 @@ export async function evaluateUpdateConstraint(
 ): Promise<UpdateConstraintVerdict> {
   const seam = options.seam ?? REAL_UPDATE_CONSTRAINT_SEAM;
 
-  const walked = await seam.buildScopeDeclarationDetail({
-    state: options.state,
-    locations: options.locations,
-  });
-  if (!walked.ok) {
-    // D-10-05 / D-18-17: a walk that cannot read a record fails the operation
-    // closed, as the uninstall refusal does on an unreadable declarer, and the
-    // row names the true cause, `unreadable`. The walk's own message IS the
-    // rendered cause line: it carries no load-error text and chains no
-    // `{ cause }`, so the renderer's cause-chain walk cannot print a path or
-    // parser text behind it.
-    throw new DependencyDeclarationsUnreadableError(walked.declarer, walked.cause.message);
-  }
-
-  const verdict = foldDeclaredConstraint(
-    walked.declarations,
-    options.state,
-    options.plugin,
-    options.marketplace,
-  );
+  // D-10-05 / D-18-17: the walk and the fold are the tag-free gate's, so a
+  // walk that cannot read a record fails the operation closed here too.
+  const verdict = await evaluateCatalogConstraint({ ...options, seam });
   if (verdict.kind !== "admits") {
     return verdict;
   }

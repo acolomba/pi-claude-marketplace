@@ -5,11 +5,15 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import {
   admitResolvedVersion,
   admitsRange,
+  evaluateCatalogConstraint,
   foldDeclaredConstraint,
   transportHeld,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/constraint-fold.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { DependencyDeclarationsUnreadableError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type {
+  CatalogConstraintSeam,
   ConstraintHolder,
   UpdateConstraintVerdict,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/constraint-fold.ts";
@@ -430,5 +434,108 @@ describe("admitResolvedVersion", () => {
       admission.cause,
       'version 1.6.0 falls outside what the combined range admits (<=1.5.0) -- required by "a@mp"',
     );
+  });
+});
+
+describe("evaluateCatalogConstraint", () => {
+  const locations = locationsFor("project", "/cwd");
+
+  function seamReturning(
+    declarations: ReadonlyMap<string, readonly AddressedDependency[]>,
+  ): CatalogConstraintSeam {
+    return {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+    };
+  }
+
+  test("D-23: a declared range admits with no pin and discloses the range alone", async () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+    ]);
+    const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
+
+    // act
+    const verdict = await evaluateCatalogConstraint({
+      plugin: "target",
+      marketplace: "mp",
+      state,
+      locations,
+      seam: seamReturning(declarations),
+    });
+
+    // assert
+    assert.deepStrictEqual(verdict, {
+      kind: "admits",
+      range: ">=1.0.0 <2.0.0-0",
+      holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
+      fellBackToCurrentCopy: false,
+      disclosure: 'constrained to the combined range (^1.0.0) -- required by "alpha@mp"',
+    });
+  });
+
+  test("D-12: declared ranges with nothing in common hold the move", async () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+      ["beta@mp", [dependency({ name: "target", version: "^2.0.0" })]],
+    ]);
+    const state = stateOf({
+      mp: { target: pluginRecord(), alpha: pluginRecord(), beta: pluginRecord() },
+    });
+
+    // act
+    const verdict = await evaluateCatalogConstraint({
+      plugin: "target",
+      marketplace: "mp",
+      state,
+      locations,
+      seam: seamReturning(declarations),
+    });
+
+    // assert
+    assert.deepStrictEqual(verdict, {
+      kind: "held",
+      cause:
+        'the declared ranges admit no version in common (^1.0.0, ^2.0.0) -- required by "alpha@mp", "beta@mp"',
+    });
+  });
+
+  test("D-18-17: an unreadable declaration walk fails closed and names the declarer", async () => {
+    // arrange
+    const cause = new Error("cannot read the dependencies of alpha@mp: its manifest is unreadable");
+    const seam: CatalogConstraintSeam = {
+      buildScopeDeclarationDetail: () =>
+        Promise.resolve({ ok: false, declarer: "alpha@mp", reason: "unreadable manifest", cause }),
+    };
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        evaluateCatalogConstraint({
+          plugin: "target",
+          marketplace: "mp",
+          state: stateOf({ mp: { target: pluginRecord() } }),
+          locations,
+          seam,
+        }),
+      new DependencyDeclarationsUnreadableError(
+        "alpha@mp",
+        "cannot read the dependencies of alpha@mp: its manifest is unreadable",
+      ),
+    );
+  });
+
+  test("walks the scope's own records when no seam is given", async () => {
+    // act
+    const verdict = await evaluateCatalogConstraint({
+      plugin: "target",
+      marketplace: "mp",
+      state: { schemaVersion: 2, marketplaces: {} },
+      locations,
+    });
+
+    // assert
+    assert.deepStrictEqual(verdict, { kind: "unconstrained" });
   });
 });

@@ -143,6 +143,9 @@ test("reconcile contexts expose their exact labels and row policy statuses", () 
     "uninstalled",
     "disabled",
     "failed",
+    "updated",
+    "skipped",
+    "partially-upgradable",
   ];
 
   // act
@@ -429,6 +432,9 @@ test("RECONCILE_APPLIED_CONTEXT declares complete row policies", () => {
     uninstalled: { markers: false, contentReasons: false },
     disabled: { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
+    updated: { markers: true, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    "partially-upgradable": { markers: false, contentReasons: true },
   });
 });
 

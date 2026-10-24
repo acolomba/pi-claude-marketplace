@@ -370,18 +370,21 @@ test("AMIG-04: when claude-plugins.json declares the owner, the reload installs 
   });
 });
 
-const MANIFEST_SHA = "1111111111111111111111111111111111111111";
 const RECORDED_SHA = "2222222222222222222222222222222222222222";
 
 /**
  * Seeds marketplace `mp` whose `hello` has a `url` source pinned to
- * `MANIFEST_SHA`, a project record of it installed at `RECORDED_SHA`, and its
- * legacy `mcp.json` entry, as a released build left a git plugin installed
- * before a marketplace update moved the pin. Returns the recorded-sha clone
- * directory, which nothing creates.
+ * `RECORDED_SHA`, a project record of it installed at that pin, and its legacy
+ * `mcp.json` entry, as a released build left a git plugin installed. Returns
+ * the recorded-sha clone directory, which nothing creates.
+ *
+ * The catalog keeps the recorded pin: a pin a marketplace update moved is a
+ * catalog move that `apply` clones from the network (D-08, D-11). The
+ * recorded clone rather than the manifest pin is the MCP move's source, which
+ * the reconcile owner suite proves with two different pins.
  */
 async function seedGitPluginRecord(cwd: string): Promise<string> {
-  const source = { source: "url", url: "https://example.test/hello.git", sha: MANIFEST_SHA };
+  const source = { source: "url", url: "https://example.test/hello.git", sha: RECORDED_SHA };
   const parsed = parsePluginSource(source);
   assert.strictEqual(parsed.kind, "url");
   const locations = locationsFor("project", cwd);

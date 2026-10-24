@@ -10,6 +10,10 @@
 // `update`; the convergence planner judges the catalog version with the fold
 // alone, so `pending`, the load and `apply` reach no tag-listing code.
 //
+// `evaluateCatalogConstraint` adds the declaration walk to the fold: the gate
+// the shared runner selects when its policy lists no tag (D-23), so `apply`
+// judges a range against the catalog version exactly as `pending` previews it.
+//
 // The range algebra is `intersectDependencyRanges` alone: the two
 // project-owned caps on total input size and projected conjuncts live
 // there, and calling `semver` directly from this leaf would bypass both.
@@ -22,8 +26,12 @@ import {
   renderDeclaredRanges,
 } from "../../domain/dependency-range.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+import { DependencyDeclarationsUnreadableError } from "../../shared/errors.ts";
+
+import { buildScopeDeclarationDetail } from "./dependency-index.ts";
 
 import type { AddressedDependency } from "./dependency-index.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 
 /**
@@ -325,4 +333,54 @@ export function admitResolvedVersion(
     kind: "held",
     cause: describeConstraint(rejecting, { arm: "out-of-range", version: toVersion }),
   };
+}
+
+/** The declaration walk `evaluateCatalogConstraint` composes, injectable for tests. */
+export interface CatalogConstraintSeam {
+  readonly buildScopeDeclarationDetail: typeof buildScopeDeclarationDetail;
+}
+
+/** Inputs required to judge one plugin's declared constraints with no tag search. */
+export interface CatalogConstraintOptions {
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly state: ExtensionState;
+  readonly locations: ScopedLocations;
+  readonly seam?: CatalogConstraintSeam;
+}
+
+const REAL_CATALOG_CONSTRAINT_SEAM: CatalogConstraintSeam = Object.freeze({
+  buildScopeDeclarationDetail,
+});
+
+/**
+ * D-23: what the target's installed dependents hold it to, judged with no tag
+ * search. Walks the ONE scope document the caller loaded (D-10-07) and folds
+ * the declared ranges, so an `admits` verdict carries no pin and stage two
+ * judges the catalog version itself.
+ *
+ * Rejects with `DependencyDeclarationsUnreadableError` when the walk cannot
+ * read a recorded plugin's declarations (D-18-17). The walk's own message is
+ * the rendered cause line: it carries no load-error text and chains no
+ * `{ cause }`, so the renderer's cause-chain walk cannot print a path or
+ * parser text behind it.
+ */
+export async function evaluateCatalogConstraint(
+  options: CatalogConstraintOptions,
+): Promise<UpdateConstraintVerdict> {
+  const seam = options.seam ?? REAL_CATALOG_CONSTRAINT_SEAM;
+  const walked = await seam.buildScopeDeclarationDetail({
+    state: options.state,
+    locations: options.locations,
+  });
+  if (!walked.ok) {
+    throw new DependencyDeclarationsUnreadableError(walked.declarer, walked.cause.message);
+  }
+
+  return foldDeclaredConstraint(
+    walked.declarations,
+    options.state,
+    options.plugin,
+    options.marketplace,
+  );
 }

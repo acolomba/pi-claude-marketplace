@@ -10,6 +10,7 @@
 // The variants split on { entity-kind, success | failed }:
 //   - marketplace: add / remove
 //   - plugin:      install / uninstall / enable / disable
+//   - plugin:      converged (a catalog move, held move or declined move)
 //   - planner-only:    source-mismatch (report-only)
 //   - planner-only:    invalid-block (CFG-03 from the read pass)
 //   - planner-only:    layer-marketplace-gap (LAYER-06 from the read pass)
@@ -46,6 +47,7 @@ import {
 } from "./reconcile.messaging.ts";
 
 import type { UnsatisfiedKind } from "./dependency-verdict.ts";
+import type { ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { ReconcilePlan } from "./types.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
@@ -486,6 +488,20 @@ export interface PluginDeclarerUnreadableOutcome extends PluginOutcomeBase {
 }
 
 /**
+ * D-08 / D-12 / D-13: one catalog move's row in `apply`'s report -- `(updated)`
+ * for a realized move, the `(skipped) {dependents constrain}` and
+ * `(partially-upgradable)` warning rows for a blocked one, and `(failed)` with
+ * its closed-set reason for a move that failed to materialize. The row is
+ * composed where the move's verdict is read (`notify.ts`), so the blocked rows
+ * share their bytes with the rows `pending` lists; the projection pushes it
+ * as is.
+ */
+export interface PluginConvergedOutcome extends PluginOutcomeBase {
+  readonly kind: "plugin-converged";
+  readonly row: ReconcileAppliedMsg;
+}
+
+/**
  * Source-mismatch outcome from `planReconcile`. Report-only: apply.ts does
  * NOT drive an orchestrator for these; the planner surfaces them on the
  * cascade as a `(failed) {source mismatch}` mp row with an optional plugin
@@ -650,6 +666,7 @@ export type PerEntryOutcome =
   | PluginDependencyDisabledOutcome
   | PluginDisableFailedOutcome
   | PluginDeclarerUnreadableOutcome
+  | PluginConvergedOutcome
   | SourceMismatchOutcome
   | InvalidBlockOutcome
   | LayerMarketplaceGapOutcome;

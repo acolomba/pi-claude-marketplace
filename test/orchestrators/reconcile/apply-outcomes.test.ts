@@ -21,6 +21,7 @@ import {
   type OutcomeBase,
   type PerEntryOutcome,
   type PluginBackfilledOutcome,
+  type PluginConvergedOutcome,
   type PluginDeclarerUnreadableOutcome,
   type PluginDependencyDisabledOutcome,
   type PluginDisabledOutcome,
@@ -234,7 +235,37 @@ void ({
   basename: "claude-plugins.local.json",
   cause: new Error("the local layer declares alpha@mp without its marketplace"),
 } satisfies LayerMarketplaceGapOutcome);
+void ({
+  kind: "plugin-converged",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  row: {
+    status: "updated",
+    name: "formatter",
+    from: "1.0.0",
+    to: "1.1.0",
+    dependencies: [],
+    severity: "info",
+    needsReload: true,
+  },
+} satisfies PluginConvergedOutcome);
 void ({ kind: "mp-added", scope: "user", marketplace: "official" } satisfies PerEntryOutcome);
+void ({
+  kind: "plugin-converged",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  // @ts-expect-error a catalog move's outcome carries the row composed for it
+} satisfies PluginConvergedOutcome);
+void ({
+  kind: "plugin-converged",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  // @ts-expect-error an applied report's row cannot use a pending status
+  row: { status: "will update", name: "formatter", from: "1.0.0", to: "1.1.0" },
+} satisfies PluginConvergedOutcome);
 void ({
   kind: "plugin-uninstalled",
   scope: "project",

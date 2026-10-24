@@ -4121,10 +4121,16 @@ describe("applyReconcile", () => {
       "user bytes\n",
     );
     assert.deepStrictEqual(clonedUrls(), []);
+    // Each pass reads each scope twice through the selected-state reader: the
+    // read pass, then the catalog convergence over the scope it left (D-08).
     assert.deepStrictEqual(readerRoots, [
       project.extensionRoot,
+      project.extensionRoot,
+      user.extensionRoot,
       user.extensionRoot,
       project.extensionRoot,
+      project.extensionRoot,
+      user.extensionRoot,
       user.extensionRoot,
     ]);
     verifyBoundary();
@@ -7190,6 +7196,241 @@ describe("applyReconcile", () => {
       },
       APPLY_EMPTY_NOTICE,
     ]);
+    verifyBoundary();
+  });
+});
+
+/**
+ * APL-02: one project scope over the path marketplace `mp`, declaring and
+ * recording every plugin of `trees` at 1.0.0 with its supported kinds, so no
+ * move is a growth. `offered` then moves a plugin's catalog version, in both
+ * its own manifest and its marketplace entry; `dependencies` adds versioned
+ * declarations the same way.
+ */
+async function seedConvergenceScope(
+  t: TestContext,
+  label: string,
+  seed: {
+    readonly trees: Readonly<Record<string, PluginTree>>;
+    readonly supported: Readonly<Record<string, readonly string[]>>;
+    readonly offered?: Readonly<Record<string, string>>;
+    readonly dependencies?: Readonly<
+      Record<string, readonly { readonly name: string; readonly version: string }[]>
+    >;
+  },
+): Promise<{
+  readonly cwd: string;
+  readonly project: ScopedLocations;
+  readonly marketplaceRoot: string;
+}> {
+  const { cwd, project } = await createHermeticScopes(t, label);
+  const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(
+    cwd,
+    "mp-src",
+    "mp",
+    seed.trees,
+  );
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+    readonly name: string;
+    readonly plugins: readonly Record<string, unknown>[];
+  };
+  const plugins = Object.keys(seed.trees);
+  for (const plugin of plugins) {
+    const version = seed.offered?.[plugin] ?? "1.0.0";
+    const dependencies = seed.dependencies?.[plugin];
+    await writeFile(
+      path.join(marketplaceRoot, "plugins", plugin, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: plugin,
+        version,
+        ...(dependencies !== undefined && { dependencies }),
+      }),
+    );
+  }
+
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      ...manifest,
+      plugins: manifest.plugins.map((entry) => {
+        const name = entry["name"] as string;
+        const dependencies = seed.dependencies?.[name];
+        return {
+          ...entry,
+          version: seed.offered?.[name] ?? "1.0.0",
+          ...(dependencies !== undefined && { dependencies }),
+        };
+      }),
+    }),
+  );
+  await writeUnder(
+    project.baseConfigJsonPath,
+    configBytes({
+      marketplaces: { mp: { source: marketplaceRoot } },
+      plugins: Object.fromEntries(plugins.map((plugin) => [`${plugin}@mp`, {}])),
+    }),
+  );
+  await seedState(project, {
+    schemaVersion: 3,
+    lastReconciledExtensionVersion: EXTENSION_VERSION,
+    marketplaces: {
+      mp: marketplaceRecord({
+        cwd,
+        scope: "project",
+        marketplace: "mp",
+        rawSource: marketplaceRoot,
+        manifestPath,
+        marketplaceRoot,
+        plugins: Object.fromEntries(
+          plugins.map((plugin) => [
+            plugin,
+            pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", plugin),
+              supported: seed.supported[plugin] ?? [],
+            }),
+          ]),
+        ),
+      }),
+    },
+  });
+  return { cwd, project, marketplaceRoot };
+}
+
+describe("applyReconcile catalog convergence", () => {
+  test("APL-02 / D-08: a path-source plugin the catalog moved is updated, recorded and reported with the reload trailer", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "converge-move", {
+      trees: { demo: { skill: "clean" } },
+      supported: { demo: ["skills"] },
+      offered: { demo: "1.1.0" },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● demo v1.0.0 → v1.1.0 (updated)\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "demo"))?.version, "1.1.0");
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-08 / NFR-3: a second apply after a move has nothing to change", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "converge-settled", {
+      trees: { demo: { skill: "clean" } },
+      supported: { demo: ["skills"] },
+      offered: { demo: "1.1.0" },
+    });
+    const { gitOps } = createOfflineGitOps();
+    await applyReconcile({
+      ctx: createNotificationBoundary(1).ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+    });
+    const settled = await readFile(project.stateJsonPath, "utf8");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), settled);
+    verifyBoundary();
+  });
+
+  test("D-12: a range-blocked move and a consent-needing move stay put with warning rows and write nothing", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(t, "converge-blocked", {
+      trees: { app: { skill: "clean" }, lib: { skill: "clean" }, styled: { skill: "clean" } },
+      supported: { app: ["skills"], lib: ["skills"], styled: ["skills"] },
+      offered: { lib: "2.0.0", styled: "1.1.0" },
+      dependencies: { app: [{ name: "lib", version: "^1.0.0" }] },
+    });
+    await writeUnder(
+      path.join(marketplaceRoot, "plugins", "styled", ".lsp.json"),
+      JSON.stringify({ servers: { ts: { command: "tsserver" } } }),
+    );
+    const before = await readFile(project.stateJsonPath, "utf8");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some plugin operations need attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ lib v1.0.0 (skipped) {dependents constrain}\n" +
+          '    cause: version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"\n' +
+          "  ● styled v1.0.0 (partially-upgradable) {lsp}\n" +
+          "    Run update --partial on this plugin to update it with the supported components.\n" +
+          "\n" +
+          "Reconcile: 2 warnings",
+        severity: "warning",
+      },
+    ]);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), before);
+    verifyBoundary();
+  });
+
+  test("D-13: a move that fails to materialize reports its reason and the next move still runs", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(t, "converge-failed", {
+      trees: { alpha: { skill: "clean", command: true }, beta: { skill: "clean" } },
+      supported: { alpha: ["skills", "commands"], beta: ["skills"] },
+      offered: { alpha: "1.1.0", beta: "1.1.0" },
+    });
+    const unreadable = path.join(marketplaceRoot, "plugins", "alpha", "commands", "deploy.md");
+    if (typeof process.getuid === "function" && process.getuid() === 0) {
+      throw new Error("an unreadable file cannot deny root; run this suite as a non-root user");
+    }
+
+    // An unreadable file still unlinks, so the tree removal needs no restore.
+    await chmod(unreadable, 0o000);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ alpha v1.0.0 → v1.1.0 (failed) {permission denied}\n" +
+          "  ● beta v1.0.0 → v1.1.0 (updated)\n" +
+          "\n" +
+          "Reconcile: 1 failure, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "alpha"))?.version, "1.0.0");
+    assert.equal((await recordFor(project, "mp", "beta"))?.version, "1.1.0");
     verifyBoundary();
   });
 });

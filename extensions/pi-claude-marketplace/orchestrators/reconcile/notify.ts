@@ -71,6 +71,8 @@ import {
   type PluginInstalledMessage,
   type PluginNotificationMessage,
   type PluginPartiallyInstalledMessage,
+  type PluginPartiallyUpgradableMessage,
+  type PluginUpdateSkippedMessage,
   type Reason,
   type ReconcileAppliedCascadeMessage,
   type WithPlugins,
@@ -78,24 +80,31 @@ import {
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { enableRowDependencies } from "../plugin/shared.ts";
-import { revisionCommits } from "../plugin/update-row.ts";
+import {
+  constraintCauseFor,
+  revisionCommits,
+  revisionVersionSlot,
+  updatedRowFromOutcome,
+} from "../plugin/update-row.ts";
 
-import { sourceMismatchOutcomeSubject } from "./apply-outcomes.ts";
+import { carriedMcpConfigNotices, sourceMismatchOutcomeSubject } from "./apply-outcomes.ts";
 import { plannedSourceMismatchSubject } from "./types.ts";
 
 import type {
   PerEntryOutcome,
   PluginBackfilledOutcome,
+  PluginConvergedOutcome,
   PluginEnabledOutcome,
   PluginInstalledOutcome,
 } from "./apply-outcomes.ts";
-import type { ConvergencePlan } from "./convergence.ts";
+import type { ConvergencePlan, PlannedMove } from "./convergence.ts";
 import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { MarketplaceRows } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { PluginUpdateOutcome } from "../types.ts";
 
 /**
  * S8 (PR #51): `status` is narrowed to the closed set the pending /
@@ -318,28 +327,157 @@ function pushConvergence(
   }
 
   for (const hold of convergence.holds) {
-    ensureMarketplaceBlock(byMp, hold.scope, hold.marketplace).plugins.push({
-      status: "skipped",
-      name: hold.plugin,
-      version: hold.version,
-      reasons: ["dependents constrain"],
-      cause: new Error(hold.cause),
-      severity: "warning",
-      needsReload: false,
-    });
+    ensureMarketplaceBlock(byMp, hold.scope, hold.marketplace).plugins.push(holdRow(hold));
   }
 
   for (const decline of convergence.declines) {
-    ensureMarketplaceBlock(byMp, decline.scope, decline.marketplace).plugins.push({
-      status: "partially-upgradable",
-      name: decline.plugin,
-      version: decline.version,
-      reasons: narrowUnsupportedKinds(decline.unsupported),
-      catalogHint: true,
-      severity: "warning",
-      needsReload: false,
-    });
+    ensureMarketplaceBlock(byMp, decline.scope, decline.marketplace).plugins.push(
+      declineRow(decline),
+    );
   }
+}
+
+/**
+ * D-12: the row of a move that stays put, `update`'s skipped row. A range
+ * hold carries `{dependents constrain}` and the gate's cause line. A blocked
+ * move changes nothing, so it is a warning that asks for no reload.
+ */
+function skippedMoveRow(
+  plugin: string,
+  version: string,
+  reasons: readonly ContentReason[],
+  cause: Error | undefined,
+): PluginUpdateSkippedMessage {
+  return {
+    status: "skipped",
+    name: plugin,
+    version,
+    reasons,
+    ...(cause !== undefined && { cause }),
+    severity: "warning",
+    needsReload: false,
+  };
+}
+
+/**
+ * D-12 / D-24: the row of a move a clean record cannot take without consent,
+ * `update`'s decline row with the hint naming `update --partial`, because the
+ * commands that list it take no `--partial`.
+ */
+function partiallyUpgradableMoveRow(
+  plugin: string,
+  version: string,
+  reasons: readonly ContentReason[],
+): PluginPartiallyUpgradableMessage {
+  return {
+    status: "partially-upgradable",
+    name: plugin,
+    version,
+    reasons,
+    catalogHint: true,
+    severity: "warning",
+    needsReload: false,
+  };
+}
+
+function holdRow(hold: ConvergencePlan["holds"][number]): PluginUpdateSkippedMessage {
+  return skippedMoveRow(hold.plugin, hold.version, ["dependents constrain"], new Error(hold.cause));
+}
+
+function declineRow(
+  decline: ConvergencePlan["declines"][number],
+): PluginPartiallyUpgradableMessage {
+  return partiallyUpgradableMoveRow(
+    decline.plugin,
+    decline.version,
+    narrowUnsupportedKinds(decline.unsupported),
+  );
+}
+
+/**
+ * D-12: `apply` reports every move the planner blocked with the row `pending`
+ * lists for it, and drives no runner for it.
+ */
+export function blockedMoveOutcomes(convergence: ConvergencePlan): PluginConvergedOutcome[] {
+  return [
+    ...convergence.holds.map((hold) => convergedOutcome(hold, holdRow(hold))),
+    ...convergence.declines.map((decline) => convergedOutcome(decline, declineRow(decline))),
+  ];
+}
+
+/**
+ * D-08 / D-13: the row one materialized catalog move reports, or none when
+ * the runner found nothing to change.
+ *
+ *  - `updated`: update's row, without the range disclosure, because the
+ *    catalog chose the version (D-23). A record already installed partial that
+ *    drops a kind takes the `(partially-installed)` form. Both stay `info`: the
+ *    move carried out what the catalog offers.
+ *  - `skipped`: a block the runner met that the planner did not, such as a
+ *    dependent installed in between; it takes the blocked rows above.
+ *  - `failed`: the closed-set reason and the move it attempted, never the raw
+ *    error text (T-55-02-02). A second `apply` retries it (NFR-3).
+ */
+export function convergedMoveOutcomes(
+  move: PlannedMove,
+  outcome: PluginUpdateOutcome,
+): PluginConvergedOutcome[] {
+  switch (outcome.partition) {
+    case "unchanged":
+      return [];
+    case "updated":
+      return [
+        {
+          ...convergedOutcome(
+            move,
+            updatedRowFromOutcome({ ...outcome, constraint: undefined }, move.scope, {
+              updated: "info",
+              partiallyInstalled: "info",
+            }),
+          ),
+          ...carriedMcpConfigNotices(outcome),
+        },
+      ];
+    case "skipped": {
+      const version = outcome.fromVersion ?? move.fromVersion;
+      return [
+        convergedOutcome(
+          move,
+          outcome.partialUpgradable === true
+            ? partiallyUpgradableMoveRow(move.plugin, version, outcome.reasons)
+            : skippedMoveRow(move.plugin, version, outcome.reasons, constraintCauseFor(outcome)),
+        ),
+      ];
+    }
+
+    case "failed":
+      return [
+        {
+          ...convergedOutcome(move, {
+            status: "failed",
+            name: move.plugin,
+            ...revisionVersionSlot(move),
+            reasons: outcome.reasons ?? [],
+            severity: "error",
+            needsReload: false,
+          }),
+          ...carriedMcpConfigNotices(outcome),
+        },
+      ];
+  }
+}
+
+function convergedOutcome(
+  where: { readonly scope: Scope; readonly marketplace: string; readonly plugin: string },
+  row: PluginConvergedOutcome["row"],
+): PluginConvergedOutcome {
+  return {
+    kind: "plugin-converged",
+    scope: where.scope,
+    marketplace: where.marketplace,
+    plugin: where.plugin,
+    row,
+  };
 }
 
 const NO_CONVERGENCE: ConvergencePlan = Object.freeze({ moves: [], holds: [], declines: [] });
@@ -875,20 +1013,7 @@ function backfilledRowFromOutcome(
  */
 function applyMarketplaceOutcomeToBlock(
   block: MarketplaceBlock<ReconcileAppliedMsg>,
-  outcome: Extract<
-    PerEntryOutcome,
-    {
-      kind:
-        | "mp-added"
-        | "mp-removed"
-        | "mp-add-failed"
-        | "mp-remove-failed"
-        | "mp-remove-partial"
-        | "source-mismatch"
-        | "invalid-block"
-        | "layer-marketplace-gap";
-    }
-  >,
+  outcome: MarketplaceSubjectOutcome,
 ): MarketplaceBlock<ReconcileAppliedMsg> {
   switch (outcome.kind) {
     case "mp-added":
@@ -1030,7 +1155,8 @@ function applyPluginOutcomeToBlock(
         | "plugin-uninstall-failed"
         | "plugin-enable-failed"
         | "plugin-disable-failed"
-        | "plugin-declarer-unreadable";
+        | "plugin-declarer-unreadable"
+        | "plugin-converged";
     }
   >,
 ): MarketplaceBlock<ReconcileAppliedMsg> {
@@ -1150,47 +1276,64 @@ function applyPluginOutcomeToBlock(
         needsReload: false,
       });
       return block;
+    case "plugin-converged":
+      // D-08 / D-12: the row was composed where the move's verdict was read.
+      block.plugins.push(outcome.row);
+      return block;
   }
+}
+
+/** The outcomes whose row is the marketplace block's own header. */
+type MarketplaceSubjectOutcome = Extract<
+  PerEntryOutcome,
+  {
+    kind:
+      | "mp-added"
+      | "mp-removed"
+      | "mp-add-failed"
+      | "mp-remove-failed"
+      | "mp-remove-partial"
+      | "source-mismatch"
+      | "invalid-block"
+      | "layer-marketplace-gap";
+  }
+>;
+
+// Total over the marketplace-subject kinds, so the set below cannot miss one.
+const MARKETPLACE_SUBJECT: Record<MarketplaceSubjectOutcome["kind"], true> = {
+  "mp-added": true,
+  "mp-removed": true,
+  "mp-add-failed": true,
+  "mp-remove-failed": true,
+  "mp-remove-partial": true,
+  "source-mismatch": true,
+  "invalid-block": true,
+  "layer-marketplace-gap": true,
+};
+
+const MARKETPLACE_SUBJECT_KINDS: ReadonlySet<string> = new Set(Object.keys(MARKETPLACE_SUBJECT));
+
+function isMarketplaceSubject(outcome: PerEntryOutcome): outcome is MarketplaceSubjectOutcome {
+  return MARKETPLACE_SUBJECT_KINDS.has(outcome.kind);
 }
 
 /**
  * Route one per-entry outcome to the marketplace-subject or plugin-subject
  * applier.
  *
- * WR-03: the return type is the exhaustiveness mechanism, not the narrowed
- * `outcome` parameter. TypeScript proves a `switch` exhaustive only when the
- * declared return type forces a value on every path, so this same switch in a
- * `void` function would let a newly-added `PerEntryOutcome` kind fall through
- * and silently drop the row. Answering with the mutated block makes that
- * TS2366 at the edit site. The caller discards the value.
+ * WR-03: every other kind reaches `applyPluginOutcomeToBlock`, whose parameter
+ * names the plugin-subject kinds and whose return type makes its own switch
+ * exhaustive, so a newly-added `PerEntryOutcome` kind fails to compile at this
+ * call instead of silently dropping its row. A lookup rather than a switch
+ * over every kind keeps the router under the cyclomatic limit.
  */
 function applyOutcomeToBlock(
   block: MarketplaceBlock<ReconcileAppliedMsg>,
   outcome: PerEntryOutcome,
 ): MarketplaceBlock<ReconcileAppliedMsg> {
-  switch (outcome.kind) {
-    case "mp-added":
-    case "mp-removed":
-    case "mp-add-failed":
-    case "mp-remove-failed":
-    case "mp-remove-partial":
-    case "source-mismatch":
-    case "invalid-block":
-    case "layer-marketplace-gap":
-      return applyMarketplaceOutcomeToBlock(block, outcome);
-    case "plugin-installed":
-    case "plugin-backfilled":
-    case "plugin-uninstalled":
-    case "plugin-enabled":
-    case "plugin-disabled":
-    case "plugin-dependency-disabled":
-    case "plugin-install-failed":
-    case "plugin-uninstall-failed":
-    case "plugin-enable-failed":
-    case "plugin-disable-failed":
-    case "plugin-declarer-unreadable":
-      return applyPluginOutcomeToBlock(block, outcome);
-  }
+  return isMarketplaceSubject(outcome)
+    ? applyMarketplaceOutcomeToBlock(block, outcome)
+    : applyPluginOutcomeToBlock(block, outcome);
 }
 
 /**

@@ -576,6 +576,29 @@ export type PluginUpdateFn = (
   scope: Scope,
 ) => Promise<PluginUpdateOutcome>;
 
+/**
+ * D-26: one catalog move `apply` materializes. `cwd` is explicit, because the
+ * project scope is the command's, not the process's. `partial` admits a
+ * partially-available candidate, and the caller sets it only for a record
+ * already installed partial (`installable: false`).
+ */
+export interface PluginConvergeTarget {
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly scope: Scope;
+  readonly cwd: string;
+  readonly partial: boolean;
+}
+
+/**
+ * D-26: the runner entry `apply` drives for a catalog move. It runs the shared
+ * runner `update` uses, never reinstall, which would delete the plugin data
+ * directory and overwrite user-edited agents. Like `PluginUpdateFn`, it answers
+ * every failure as a `failed` outcome and throws only an invalid GitHub base
+ * override (GHB-03).
+ */
+export type PluginConvergeFn = (target: PluginConvergeTarget) => Promise<PluginUpdateOutcome>;
+
 // ───────────────────────────────────────────────────────────────────────────
 // It moved here from the install flow owner to join its three siblings. Leaving it in the
 // orchestrator meant install.messaging.ts could not name the type its own

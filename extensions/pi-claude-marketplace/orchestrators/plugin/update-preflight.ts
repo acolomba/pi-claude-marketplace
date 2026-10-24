@@ -41,7 +41,7 @@ import {
   resolveGitSubdirRoot,
   resolvePluginPin,
 } from "./clone-cache.ts";
-import { admitResolvedVersion } from "./constraint-fold.ts";
+import { admitResolvedVersion, evaluateCatalogConstraint } from "./constraint-fold.ts";
 import { isRecordedCandidate, isSameRevision, resolvePluginVersion } from "./shared.ts";
 import { evaluateUpdateConstraint } from "./update-constraint-gate.ts";
 
@@ -122,9 +122,9 @@ export interface PreparedPluginUpdate {
 }
 
 /**
- * D-18-04 / D-18-15: the three per-verb knobs of the shared materialization
- * path. They are the only behavioral difference between `update` and
- * `reinstall` inside it.
+ * D-18-04 / D-18-15 / D-23: the four per-verb knobs of the shared
+ * materialization path. They are the only behavioral difference between
+ * `update`, `reinstall` and `apply`'s catalog convergence inside it.
  */
 export interface MaterializationPolicy {
   /**
@@ -145,6 +145,12 @@ export interface MaterializationPolicy {
    * `false` keeps `update`'s refusal.
    */
   readonly overwrite: boolean;
+  /**
+   * D-23: `true` lets a dependent's range pick the highest release tag that
+   * satisfies it. `false` judges the range against the candidate the catalog
+   * names, with no tag listing, so `apply` takes what `pending` previewed.
+   */
+  readonly searchReleaseTags: boolean;
 }
 
 /** Inputs required to classify and prepare one installed plugin update. */
@@ -162,9 +168,10 @@ export interface PreparePluginUpdateOptions {
   readonly cloneCacheSeam?: UpdateCloneCacheSeam;
   /**
    * D-10-02 / D-10-19: the constraint gate is composed through this field,
-   * defaulted to the real `evaluateUpdateConstraint`. The field name is not
-   * one the network-free ESLint block in `eslint.config.js` bans, and
-   * production omits it.
+   * defaulted by `policy.searchReleaseTags` to the real
+   * `evaluateUpdateConstraint` or the tag-free `evaluateCatalogConstraint`
+   * (D-23). The field name is not one the network-free ESLint block in
+   * `eslint.config.js` bans, and production omits it.
    */
   readonly constraintGate?: typeof evaluateUpdateConstraint;
   /**
@@ -899,6 +906,21 @@ function constraintGateOptions(
   };
 }
 
+/**
+ * D-23: the gate a caller injected, else the one its policy selects. Kept out
+ * of `preparePluginUpdate`'s own body for the same cognitive-complexity reason
+ * as `resolvePinnedUpdateCandidate` above.
+ */
+function selectConstraintGate(
+  options: PreparePluginUpdateOptions,
+): typeof evaluateUpdateConstraint {
+  if (options.constraintGate !== undefined) {
+    return options.constraintGate;
+  }
+
+  return options.policy.searchReleaseTags ? evaluateUpdateConstraint : evaluateCatalogConstraint;
+}
+
 /** Resolves, validates, and classifies one plugin before any staged replacement. */
 export async function preparePluginUpdate(
   options: PreparePluginUpdateOptions,
@@ -929,7 +951,7 @@ export async function preparePluginUpdate(
   // verdict must never reach the clone probe). Every other constraint branch
   // stays inside the leaf -- `preparePluginUpdate` is already close to
   // ESLint's cognitive-complexity cap.
-  const constraintGate = options.constraintGate ?? evaluateUpdateConstraint;
+  const constraintGate = selectConstraintGate(options);
   const verdict = await constraintGate(
     constraintGateOptions(options, {
       plugin: options.plugin,

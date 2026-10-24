@@ -21,6 +21,7 @@
 //                  -> [D-09-07 re-plan when something landed] -> enable -> disable
 //                  -> dependency-disable (LOAD-01)
 //                  -> source-mismatch (report-only)
+//                  -> converge
 //
 //     MISS-01 / D-09-06: `applyDependencyInstalls` installs a recorded
 //     plugin's missing declared dependency on every apply, because `apply` is
@@ -47,6 +48,13 @@
 //     leaving a rollback partial or an MCP config rewrite (AFILE-04) answers
 //     with its failed outcome instead; the pass continues, and a later target
 //     that reads the base ends it -- see the note above each loop.
+//   - CONVERGE per readable scope, after the apply pass (APL-02 / D-08):
+//     `convergeScope` runs the planner `pending` uses over the scope as the
+//     pass left it and materializes each revision move through the update
+//     runner's converge entry (D-26), not reinstall. A move the planner holds
+//     or declines is reported with the row `pending` lists and is not run
+//     (D-12); a move that fails reports `(failed)` and the next move still
+//     runs (D-13).
 //   - AMIG-01 MCP MOVE per scope, after the read pass and before the apply
 //     pass, also when the config is invalid and never after a read pass that
 //     threw (`mcp-migration.ts`). It takes its own scope lock; a throw out of
@@ -79,6 +87,7 @@ import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { MarketplaceRemoveFailureError, removeMarketplace } from "../marketplace/remove.ts";
 import {
+  createConvergeOperation,
   createDependencyInstallOperation,
   createEnableOperation,
   createInstallOperation,
@@ -95,6 +104,8 @@ import {
   sourceMismatchOutcomes,
 } from "./apply-outcomes.ts";
 import { applyBackfillForScopeIsolated } from "./backfill.ts";
+import { planConvergence } from "./convergence.ts";
+import { blockedMoveOutcomes, convergedMoveOutcomes } from "./notify.ts";
 import {
   closeScopePass,
   notifyScopePasses,
@@ -104,6 +115,7 @@ import {
 } from "./read-pass.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
+import type { ConvergencePlan } from "./convergence.ts";
 import type { ReconcileStateReader, ScopePassAccumulators } from "./read-pass.ts";
 import type {
   ApplyReconcileOptions,
@@ -1042,6 +1054,58 @@ async function applyPlan(
 }
 
 /**
+ * APL-02 / D-08 / D-10: converge one scope on its catalog, after its apply
+ * pass. Only a scope whose read pass produced a plan gets here: a pristine
+ * scope (WR-05) and a scope whose config the read pass rejected (CFG-03) have
+ * none. The state is read fresh, so the planner takes no plan: the scope
+ * already reflects it. A read that throws moves nothing and adds no row: a
+ * state file that turned unreadable after the read pass is the apply steps'
+ * to report, and the next `apply`'s read pass stops on it (NFR-3).
+ *
+ * Each revision move runs through the update runner's converge entry, in the
+ * planner's order (D-26). The runner answers every failure as a `failed`
+ * outcome, so one failed move never stops the next (D-13); an
+ * `InvalidGitHubBaseUrlError` still ends the pass (GHB-03). A growth-only move
+ * is left to the backfill, whose RECON-04 dedupe skips every plugin this step
+ * reported.
+ */
+async function convergeScope(
+  reader: ReconcileStateReader,
+  opts: ApplyReconcileOptions,
+  scope: Scope,
+  outcomes: PerEntryOutcome[],
+): Promise<void> {
+  const locations = locationsFor(scope, opts.cwd);
+  let convergence: ConvergencePlan;
+  try {
+    const state = await reader.loadState(locations.extensionRoot);
+    convergence = await planConvergence({ scope, state, locations });
+  } catch (err) {
+    hookDebugLog(`convergeScope: skipped ${scope} scope: ${errorMessage(err)}`, "reconcile");
+    return;
+  }
+
+  const convergePlugin = createConvergeOperation(opts.hooksRouting, opts.completionCache);
+  for (const move of convergence.moves) {
+    if (!move.revisionChanged) {
+      continue;
+    }
+
+    // eslint-disable-next-line no-await-in-loop -- each move locks the scope (retries: 0)
+    const result = await convergePlugin({
+      plugin: move.plugin,
+      marketplace: move.marketplace,
+      scope,
+      cwd: opts.cwd,
+      partial: move.partial,
+    });
+    outcomes.push(...convergedMoveOutcomes(move, result));
+  }
+
+  outcomes.push(...blockedMoveOutcomes(convergence));
+}
+
+/**
  * RECON-01..05: the reconcile apply orchestrator. Fans out across both
  * scopes project-first (or just the explicit scope when `opts.scope` is
  * set), per-scope read pass under withLockedStateTransaction (migrate ->
@@ -1086,6 +1150,10 @@ async function applyReconcileWithReader(
     if (readResult.plan !== undefined) {
       // eslint-disable-next-line no-await-in-loop -- each scope's apply edits shared hooks routing
       await applyPlan(reader, opts, readResult.plan, outcomes);
+      // APL-02 / D-08: converge the scope on its catalog after its plan, and
+      // before the backfill, whose dedupe then skips every plugin moved here.
+      // eslint-disable-next-line no-await-in-loop -- each scope's moves edit shared hooks routing
+      await convergeScope(reader, opts, scope, outcomes);
     }
 
     // BFILL-01 / BFILL-02 / D-68-03: load-time backfill sibling step. Runs in

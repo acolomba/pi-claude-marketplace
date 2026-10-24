@@ -256,6 +256,9 @@ const MARKER_POLICY_TABLE = [
       uninstalled: { markers: false, contentReasons: false },
       disabled: { markers: false, contentReasons: true },
       failed: { markers: false, contentReasons: true },
+      updated: { markers: true, contentReasons: true },
+      skipped: { markers: false, contentReasons: true },
+      "partially-upgradable": { markers: false, contentReasons: true },
     },
   },
   {

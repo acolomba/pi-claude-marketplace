@@ -12,6 +12,10 @@
 // two-argument `createReinstallPlugin(hooksRouting, completionCache)`, so
 // neither binding carries anything the other lacks.
 //
+// `apply`'s catalog move is bound by `createConvergeOperation` below, from the
+// same update operations factory the extension entry point binds for `update`
+// (D-26).
+//
 // The two read commands are bound as values rather than behind a factory: they
 // take no routing or completion-cache owner from their caller, so there is
 // nothing left for a caller to supply once the filesystem and status
@@ -33,6 +37,7 @@ import { createPrunePlugin } from "./prune.ts";
 import { createReinstallPlugin } from "./reinstall-flow.ts";
 import { loadTargetLayers, writeAdoptingConfigEntries } from "./shared.ts";
 import { createUninstallPlugin, REAL_UNINSTALL_TRANSACTION } from "./uninstall.ts";
+import { createPluginUpdateOperations } from "./update-flow.ts";
 
 import type {
   EnableDisableHooksRouting,
@@ -51,7 +56,9 @@ import type { PruneRestoreOps } from "./prune-rollback.ts";
 import type { PrunePluginOptions } from "./prune.ts";
 import type { ReinstallHooksRouting, ReinstallPluginFn } from "./reinstall-flow.ts";
 import type { UninstallHooksRouting, UninstallPluginOperation } from "./uninstall.ts";
+import type { UpdateHooksRouting } from "./update-cascade.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
+import type { PluginConvergeFn } from "../types.ts";
 
 // The one concrete binding of install's semantic transaction contract. It is
 // module-private so no caller can pass a half-real transaction: the only way to
@@ -198,3 +205,21 @@ const NODE_PLUGIN_INFO_READER: PluginInfoReader = {
  * the value runs no work of its own -- only invoking it does.
  */
 export const getPluginInfo = createGetPluginInfo(NODE_PLUGIN_INFO_READER);
+
+/**
+ * D-26: composes `apply`'s catalog-move operation from the caller's routing
+ * and completion-cache owners. A move runs the shared runner `update` uses,
+ * under the converge policy, and not reinstall: reinstall deletes the plugin
+ * data directory and overwrites the agent files a user edited, which a move
+ * the user did not name must never do. Constructing the operation runs no work
+ * of its own -- only invoking the returned operation does.
+ *
+ * Like reinstall, the runner may clone a git source on a cache miss (NFR-5,
+ * D-11); this module names no git surface itself.
+ */
+export function createConvergeOperation(
+  hooksRouting: UpdateHooksRouting,
+  completionCache: CompletionCache,
+): PluginConvergeFn {
+  return createPluginUpdateOperations(hooksRouting, completionCache).convergePlugin;
+}

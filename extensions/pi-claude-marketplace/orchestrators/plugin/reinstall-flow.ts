@@ -206,7 +206,7 @@ const REINSTALL_FLOW_OWNERS: ReinstallFlowOwners = {
   selectReinstallTargets,
 };
 
-/** Reinstall's knobs on the shared runner (D-18-04, D-18-15). */
+/** Reinstall's knobs on the shared runner (D-18-04, D-18-15, D-23). */
 const REINSTALL_MATERIALIZATION: MaterializationPolicy = {
   /** D-18-04: read a present git mirror's HEAD offline; only a missing mirror clones. */
   refreshSource: false,
@@ -217,6 +217,8 @@ const REINSTALL_MATERIALIZATION: MaterializationPolicy = {
    * files a user edited.
    */
   overwrite: true,
+  /** D-23: a dependent's range still picks a release tag, as `update`'s does. */
+  searchReleaseTags: true,
 };
 
 /** The collaborators one reinstall binds. */

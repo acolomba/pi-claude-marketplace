@@ -7,6 +7,7 @@ import {
   type PluginPartiallyInstalledMessage,
   type PluginPartiallyUpgradableMessage,
   type PluginUninstalledMessage,
+  type PluginUpdatedMessage,
   type PluginUpdateSkippedMessage,
   type PluginWillDisableMessage,
   type PluginWillEnableMessage,
@@ -87,16 +88,32 @@ export const PENDING_CONTEXT = {
  * `(partially-installed)` row. A FULLY promoted backfill reuses the `installed`
  * row. The `partially-installed` literal already exists in the global
  * `PLUGIN_STATUSES` set; only this narrow applied set widens here.
+ *
+ * D-08 / D-12: `apply`'s catalog convergence adds update's rows. A realized
+ * move is `updated` (or `partially-installed` when a record already installed
+ * partial drops a kind), a move a dependent's range holds is `skipped` with
+ * its cause line, and a move that would drop components without consent is
+ * `partially-upgradable` -- the same two blocked rows `pending` lists.
  */
 type ReconcileAppliedStatus =
-  "installed" | "uninstalled" | "disabled" | "failed" | "partially-installed";
+  | "installed"
+  | "uninstalled"
+  | "disabled"
+  | "failed"
+  | "partially-installed"
+  | "updated"
+  | "skipped"
+  | "partially-upgradable";
 
 export type ReconcileAppliedMsg =
   | PluginInstalledMessage
   | PluginUninstalledMessage
   | PluginDisabledMessage
   | PluginFailedMessage
-  | PluginPartiallyInstalledMessage;
+  | PluginPartiallyInstalledMessage
+  | PluginUpdatedMessage
+  | PluginUpdateSkippedMessage
+  | PluginPartiallyUpgradableMessage;
 
 /**
  * LOAD-01: the brace of the load-time dependency-disable row, owned here beside
@@ -132,6 +149,9 @@ export const RECONCILE_APPLIED_CONTEXT = {
     uninstalled: { markers: false, contentReasons: false },
     disabled: { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
+    updated: { markers: true, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    "partially-upgradable": { markers: false, contentReasons: true },
   },
 } as const satisfies CommandContext<ReconcileAppliedStatus>;
 

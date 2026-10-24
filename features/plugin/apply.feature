@@ -280,3 +280,30 @@ Feature: Plugin apply
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
+
+  Scenario: Apply moves a path-source plugin to the version its marketplace now offers
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | true                      |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 1                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.1.0   | true    |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |

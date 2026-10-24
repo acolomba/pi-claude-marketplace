@@ -6,8 +6,10 @@ import { describe, test } from "node:test";
 
 import { UninstallRefusedError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import {
+  blockedMoveOutcomes,
   buildReconcileAppliedCascade,
   buildReconcilePendingNotification,
+  convergedMoveOutcomes,
   isReconcilePlanListEmpty,
   planListNeedsApply,
   recordedVersionEntries,
@@ -17,6 +19,7 @@ import {
 import { DependencyCascadeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
+import type { PlannedMove } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/convergence.ts";
 import type {
   PlannedPluginInstall,
   ReconcilePlan,
@@ -441,6 +444,45 @@ function appliedOutcomeRows(): AppliedOutcomeRows {
                 ),
                 severity: "warning",
                 needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+    "plugin-converged": {
+      outcome: {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "cr",
+        row: {
+          status: "updated",
+          name: "cr",
+          scope: "project",
+          from: "1.0.0",
+          to: "1.1.0",
+          dependencies: [],
+          severity: "info",
+          needsReload: true,
+        },
+      },
+      expected: {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "updated",
+                name: "cr",
+                scope: "project",
+                from: "1.0.0",
+                to: "1.1.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
               },
             ],
           },
@@ -1840,6 +1882,350 @@ describe("buildReconcileAppliedCascade", () => {
         { name: "shared", scope: "project", status: "added", plugins: [] },
         { name: "shared", scope: "user", status: "added", plugins: [] },
       ],
+    });
+  });
+});
+
+const DEMO_MOVE: PlannedMove = {
+  scope: "project",
+  marketplace: "mp",
+  plugin: "demo",
+  fromVersion: "1.0.0",
+  toVersion: "1.1.0",
+  revisionChanged: true,
+  grew: false,
+  partial: false,
+};
+
+const UPDATE_BASE = { name: "demo", declaresAgents: false, declaresMcp: false } as const;
+
+describe("blockedMoveOutcomes", () => {
+  test("D-12: reports a range hold and a consent decline with the rows pending lists", () => {
+    // arrange
+    const convergence = {
+      moves: [DEMO_MOVE],
+      holds: [
+        {
+          scope: "project",
+          marketplace: "mp",
+          plugin: "lib",
+          version: "1.0.0",
+          cause:
+            'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"',
+        },
+      ],
+      declines: [
+        {
+          scope: "user",
+          marketplace: "mp",
+          plugin: "styled",
+          version: "1.0.0",
+          unsupported: ["outputStyles"],
+        },
+      ],
+    } as const;
+
+    // act
+    const outcomes = blockedMoveOutcomes(convergence);
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "lib",
+        row: {
+          status: "skipped",
+          name: "lib",
+          version: "1.0.0",
+          reasons: ["dependents constrain"],
+          cause: new Error(
+            'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"',
+          ),
+          severity: "warning",
+          needsReload: false,
+        },
+      },
+      {
+        kind: "plugin-converged",
+        scope: "user",
+        marketplace: "mp",
+        plugin: "styled",
+        row: {
+          status: "partially-upgradable",
+          name: "styled",
+          version: "1.0.0",
+          reasons: ["unsupported component"],
+          catalogHint: true,
+          severity: "warning",
+          needsReload: false,
+        },
+      },
+    ]);
+  });
+
+  test("reports nothing for a plan with no blocked move", () => {
+    // act
+    const outcomes = blockedMoveOutcomes({ moves: [DEMO_MOVE], holds: [], declines: [] });
+
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+  });
+});
+
+describe("convergedMoveOutcomes", () => {
+  test("D-08: an updated move reports update's row without the range disclosure", () => {
+    // arrange
+    const notice = {
+      kind: "comments-dropped",
+      scope: "project",
+      file: "mcp-adapter.json",
+    } as const;
+
+    // act
+    const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "updated",
+      fromVersion: "1.0.0",
+      toVersion: "1.1.0",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresWorkflows: true,
+      constraint: {
+        disclosure: 'constrained to the combined range (>=1.0.0) -- required by "app@mp"',
+        fellBackToCurrentCopy: true,
+      },
+      mcpConfigNotices: [notice],
+    });
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        row: {
+          status: "updated",
+          name: "demo",
+          scope: "project",
+          from: "1.0.0",
+          to: "1.1.0",
+          dependencies: ["workflows"],
+          severity: "info",
+          needsReload: true,
+        },
+        mcpConfigNotices: [notice],
+      },
+    ]);
+  });
+
+  test("D-08: a partial record's move that drops a kind reports the partially-installed row at info", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(
+      { ...DEMO_MOVE, partial: true },
+      {
+        ...UPDATE_BASE,
+        partition: "updated",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresWorkflows: false,
+        constraint: undefined,
+        partialDegrade: { kinds: ["outputStyles"], newlyDegraded: false },
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        row: {
+          status: "partially-installed",
+          name: "demo",
+          scope: "project",
+          version: "1.1.0",
+          from: "1.0.0",
+          dependencies: [],
+          reasons: ["unsupported component"],
+          severity: "info",
+          needsReload: true,
+        },
+      },
+    ]);
+  });
+
+  test("a move the runner found at the recorded revision reports nothing", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "unchanged",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
+      declaresWorkflows: false,
+      constraint: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+  });
+
+  test("D-12: a range hold the runner met reports the hold row with its cause", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "skipped",
+      fromVersion: "1.0.0",
+      notes: [
+        'version 1.1.0 falls outside what the combined range admits (~1.0.0) -- required by "app@mp"',
+      ],
+      reasons: ["dependents constrain"],
+      declaresWorkflows: false,
+    });
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        row: {
+          status: "skipped",
+          name: "demo",
+          version: "1.0.0",
+          reasons: ["dependents constrain"],
+          cause: new Error(
+            'version 1.1.0 falls outside what the combined range admits (~1.0.0) -- required by "app@mp"',
+          ),
+          severity: "warning",
+          needsReload: false,
+        },
+      },
+    ]);
+  });
+
+  test("a skip with no cause and no recorded version names the planned version and its reason", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "skipped",
+      notes: [],
+      reasons: ["already disabled"],
+      declaresWorkflows: false,
+    });
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        row: {
+          status: "skipped",
+          name: "demo",
+          version: "1.0.0",
+          reasons: ["already disabled"],
+          severity: "warning",
+          needsReload: false,
+        },
+      },
+    ]);
+  });
+
+  test("D-12 / D-24: a consent decline the runner met reports the decline row with the catalog hint", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "skipped",
+      fromVersion: "1.0.0",
+      notes: ['Plugin "demo" is no longer installable: contains outputStyles'],
+      reasons: ["unsupported component"],
+      partialUpgradable: true,
+      declaresWorkflows: false,
+    });
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        row: {
+          status: "partially-upgradable",
+          name: "demo",
+          version: "1.0.0",
+          reasons: ["unsupported component"],
+          catalogHint: true,
+          severity: "warning",
+          needsReload: false,
+        },
+      },
+    ]);
+  });
+
+  test("D-13 / T-55-02-02: a failed move reports its reason and the planned move, never the raw error", () => {
+    // arrange
+    const notice = { kind: "left-unchanged", scope: "project", file: "mcp.json" } as const;
+
+    // act
+    const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "failed",
+      fromVersion: "1.0.0",
+      notes: ["EACCES: permission denied, open '/secret/path'"],
+      reasons: ["permission denied"],
+      cause: new Error("EACCES: permission denied, open '/secret/path'"),
+      declaresWorkflows: false,
+      mcpConfigNotices: [notice],
+    });
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        row: {
+          status: "failed",
+          name: "demo",
+          version: "1.1.0",
+          from: "1.0.0",
+          reasons: ["permission denied"],
+          severity: "error",
+          needsReload: false,
+        },
+        mcpConfigNotices: [notice],
+      },
+    ]);
+  });
+
+  test("a failed move with no classified reason renders an empty brace", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "failed",
+      notes: ["boom"],
+      declaresWorkflows: false,
+    });
+
+    // assert
+    assert.deepStrictEqual(outcomes[0]?.row, {
+      status: "failed",
+      name: "demo",
+      version: "1.1.0",
+      from: "1.0.0",
+      reasons: [],
+      severity: "error",
+      needsReload: false,
     });
   });
 });
