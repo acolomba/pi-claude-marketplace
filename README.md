@@ -161,7 +161,15 @@ Each scope declares its marketplaces and plugins in two layers: the base layer a
 | `user`    | `~/.pi/agent/claude-plugins.json` |
 | `project` | `<cwd>/.pi/claude-plugins.json`   |
 
-The configs of a scope are the authoritative record of its installed marketplaces and plugins. Pi applies their contents at extension load (`/reload`).
+The configs of a scope are the desired state of its marketplaces and plugins. The catalog of a marketplace is the list of plugins and versions that it offers. A new session or `/reload` does not change your installed plugins. It only lists the changes that your configs and the marketplace catalogs need.
+
+To see those changes, run `/claude:plugin pending`. To make them, run `/claude:plugin apply`. Then run `/reload` so that Pi loads the result.
+
+```text
+/claude:plugin pending
+/claude:plugin apply
+/reload
+```
 
 Whether Pi applies a declared plugin's components depends on the entry's optional `enabled` key and on the install-time default the plugin author declares. For more information, see [Plugin enablement](docs/plugin-enablement.md).
 
@@ -194,7 +202,7 @@ User-scope configs live in your home directory. They are personal and never shar
 
 ## Command reference
 
-This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations. After you install, uninstall, update, or reinstall plugins, run `/reload`. Then Pi discovers the changed resources.
+This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations. After you install, uninstall, update, or reinstall plugins, run `/reload`. Then Pi discovers the changed resources. If you edit a config by hand, run `/claude:plugin apply` before `/reload`.
 
 ### Marketplace
 
@@ -366,7 +374,7 @@ Also remove the dependencies that no remaining plugin needs with `--prune`.
 /claude:plugin uninstall context7-plugin@context7-marketplace --prune
 ```
 
-You can uninstall a plugin that another installed plugin needs. Its row names the enabled dependents as `{dependents unsatisfied}`. At the next reload, Pi disables those dependents. For more information, see [Dependency resolution](docs/dependency-resolution.md).
+You can uninstall a plugin that another installed plugin needs. Its row names the enabled dependents as `{dependents unsatisfied}`. The next `/claude:plugin apply` installs the plugin again as a dependency, because the dependents still declare it. If that install fails, `apply` disables those dependents. For more information, see [Dependency resolution](docs/dependency-resolution.md).
 
 To remove orphaned dependency installs without naming a plugin to uninstall, run `prune`. It selects the user scope by default. Use `--scope project` to select the project scope.
 
@@ -384,7 +392,7 @@ Preview the same scope with `--dry-run`. The preview reads the current state and
 
 Only dependency-installed plugins that no installed plugin in the same scope declares qualify. Even disabled plugins still hold their dependencies. Plugins you installed by name stay installed. The sweep repeats until no more plugins qualify. Actual rows read `(uninstalled) {dependency pruned}`; preview rows read `(will uninstall) {dependency pruned}`. If none qualify, both commands report `Nothing to prune in user scope: no orphaned dependency installs were found.` for the default scope.
 
-Reload Pi after changes. A reload never prunes orphaned dependencies. Run `prune` or `uninstall <plugin> --prune` to remove them.
+Reload Pi after changes. Neither `/reload` nor `/claude:plugin apply` prunes orphaned dependencies. Run `prune` or `uninstall <plugin> --prune` to remove them.
 
 ```text
 /reload
