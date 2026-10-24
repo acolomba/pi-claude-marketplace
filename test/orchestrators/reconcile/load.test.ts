@@ -407,7 +407,6 @@ test("D-22 / AMIG-04: the MCP move runs for each readable scope with the plan it
     moves.push({
       scope: input.scope,
       cwd: input.cwd,
-      reason: input.reason,
       installs: input.plan?.pluginsToInstall.map((planned) => planned.plugin),
     });
     return Promise.resolve();
@@ -421,8 +420,8 @@ test("D-22 / AMIG-04: the MCP move runs for each readable scope with the plan it
   // assert
   assert.deepStrictEqual(notifications, []);
   assert.deepStrictEqual(moves, [
-    { scope: "project", cwd: scope.cwd, reason: undefined, installs: ["hello"] },
-    { scope: "user", cwd: scope.cwd, reason: undefined, installs: undefined },
+    { scope: "project", cwd: scope.cwd, installs: ["hello"] },
+    { scope: "user", cwd: scope.cwd, installs: undefined },
   ]);
   verifyBoundary();
 });

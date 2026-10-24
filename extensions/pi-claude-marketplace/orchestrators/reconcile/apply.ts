@@ -13,19 +13,20 @@
 //   - Per-scope APPLY PASS with NO outer lock (CR-01 lesson preserved): for
 //     each scope's plan (skip when invalid-config aborted the read pass),
 //     drive the orchestrators (uninstallPlugin, removeMarketplace,
-//     addMarketplace, installPlugin, the reload-only missing-dependency
-//     install, setPluginEnabled) in fixed order so each step's precondition
+//     addMarketplace, installPlugin, the missing-dependency install,
+//     setPluginEnabled) in fixed order so each step's precondition
 //     is established by the previous step:
 //
-//        uninstall -> remove -> add -> install -> install missing deps (reload only)
+//        uninstall -> remove -> add -> install -> install missing deps
 //                  -> [D-09-07 re-plan when something landed] -> enable -> disable
 //                  -> dependency-disable (LOAD-01)
 //                  -> source-mismatch (report-only)
 //
-//     MISS-01 / D-09-06: `applyDependencyInstalls` runs only when
-//     `opts.reason === "reload"` (D-09-13) and drives the SAME cascade
-//     `installPlugin` drives, rooted at each missing dependency instead of at
-//     a user-typed plugin. When it materialized or found already-recorded at
+//     MISS-01 / D-09-06: `applyDependencyInstalls` installs a recorded
+//     plugin's missing declared dependency on every apply, because `apply` is
+//     the explicit command that changes state (D-02 supersedes D-09-13). It
+//     drives the SAME cascade `installPlugin` drives, rooted at each missing
+//     dependency instead of at a user-typed plugin. When it materialized or found already-recorded at
 //     least one key, D-09-07's `refreshTogglePlan` re-runs the read pass for
 //     this scope and substitutes ONLY the fresh plan's `pluginsToEnable`,
 //     `pluginsToDisable` and `pluginsToDependencyDisable` before the toggle
@@ -556,10 +557,8 @@ async function applyPluginInstalls(
 }
 
 /**
- * MISS-01 / MISS-02 / D-09-06: drive the reload-only missing-dependency
- * install for every entry the read pass's `pluginsToDependencyInstall`
- * bucket planned. Returns `false` at once when `opts.reason !== "reload"`
- * (D-09-13) -- the gate lives here, in one `if`, not in `applyPlan`.
+ * MISS-01 / MISS-02 / D-09-06: drive the missing-dependency install for
+ * every entry the read pass's `pluginsToDependencyInstall` bucket planned.
  *
  * D-09-09: on `installed`, one `plugin-installed` outcome is pushed PER
  * cascade member -- every materialized member gets a row under its own
@@ -583,10 +582,6 @@ async function applyDependencyInstalls(
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
-  if (opts.reason !== "reload") {
-    return false;
-  }
-
   const installMissingDependency = createDependencyInstallOperation(
     opts.hooksRouting,
     opts.completionCache,
@@ -1006,7 +1001,7 @@ async function applyToggleSteps(
  *   3. add new marketplaces BEFORE installing into them.
  *   4. install new plugins under the marketplaces from step 3.
  *   5. MISS-01 / D-09-06: install every missing declared dependency of an
- *      eligible dependent, ROOTED AT THE DEPENDENCY -- reload only (D-09-13).
+ *      eligible dependent, ROOTED AT THE DEPENDENCY -- on every apply (D-02).
  *      A config-declared install from step 4 that already claimed this key
  *      answers idempotently (D-09-06).
  *   5a. D-09-07: when step 5 materialized or found already-present at least
@@ -1083,7 +1078,6 @@ async function applyReconcileWithReader(
       scope,
       cwd: opts.cwd,
       migrateMcpEntries: opts.migrateMcpEntries,
-      reason: opts.reason,
     });
     if (readResult === undefined) {
       continue;

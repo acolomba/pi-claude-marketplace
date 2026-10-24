@@ -36,19 +36,20 @@
 // AMIG-04: an entry belongs to an install record of this scope only; a record
 // of the same plugin in the other scope does not own it. An owner with no
 // record stays in place and is reported, unless the scope's reconcile plan
-// installs it in the same reload: that install removes the entry itself. An
-// owner the plan uninstalls, disables or enables is skipped silently for the
-// same reason. The plan's toggle buckets come from the reload's first read,
-// so when a dependency install in the same reload refreshes them, an owner
-// skipped as planned for a dependency disable keeps its legacy entries with
-// no row for one reload, and the next reload moves or reports it. An owner
-// whose manifest no longer lists it in a valid form, whose source cannot be
-// read offline, whose new key another config source already defines, or
-// whose scope holds a config file that does not parse stays in place with a
-// row, and the next `/reload` tries again. So does a git owner whose cached
-// source has no plugin at the declared path (D-08-05). Each row names a
-// remedy that clears its cause. Nothing is damped: such an entry is reported
-// on every reload until its cause is cleared (COMPAT-01 keeps no state).
+// installs it, as a declared plugin or as a missing dependency: that install
+// removes the entry itself (D-22). An owner the plan uninstalls, disables or
+// enables is skipped silently for the same reason. The plan's toggle buckets
+// come from the reload's first read, so when a dependency install in the same
+// reload refreshes them, an owner skipped as planned for a dependency disable
+// keeps its legacy entries with no row for one reload, and the next reload
+// moves or reports it. An owner whose manifest no longer lists it in a valid
+// form, whose source cannot be read offline, whose new key another config
+// source already defines, or whose scope holds a config file that does not
+// parse stays in place with a row, and the next `/reload` tries again. So does
+// a git owner whose cached source has no plugin at the declared path (D-08-05).
+// Each row names a remedy that clears its cause. Nothing is damped: such an
+// entry is reported on every reload until its cause is cleared (COMPAT-01 keeps
+// no state).
 //
 // NFR-5: no network. This module stays outside `NETWORK_SEAMS` and never names
 // the git surface. A path source is read from the marketplace's current
@@ -172,8 +173,8 @@ function inBucket(bucket: readonly PlannedPlugin[], owner: LegacyMcpOwner): bool
 }
 
 /**
- * AMIG-04: whether this reload installs the owner, so its install removes the
- * legacy entry. Only a reload runs the dependency install.
+ * AMIG-04 / D-22: whether the plan installs the owner, as a declared plugin
+ * or as a missing dependency, so its install removes the legacy entry.
  */
 function plannedInstall(input: McpMigrationInput, owner: LegacyMcpOwner): boolean {
   const plan = input.plan;
@@ -181,10 +182,7 @@ function plannedInstall(input: McpMigrationInput, owner: LegacyMcpOwner): boolea
     return false;
   }
 
-  return (
-    inBucket(plan.pluginsToInstall, owner) ||
-    (input.reason === "reload" && inBucket(plan.pluginsToDependencyInstall, owner))
-  );
+  return inBucket(plan.pluginsToInstall, owner) || inBucket(plan.pluginsToDependencyInstall, owner);
 }
 
 /** Whether this reload uninstalls or disables an enabled owner, which rewrites both files. */

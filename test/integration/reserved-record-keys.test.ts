@@ -241,7 +241,6 @@ for (const { marketplace, plugins, plugin } of [
         cwd,
         completionCache: createCompletionCache(),
         hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
-        reason: "reload",
       });
 
       // assert

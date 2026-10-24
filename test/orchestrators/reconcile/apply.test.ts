@@ -658,6 +658,22 @@ function applyAfterSelectedStateRace(
 const APPLY_EMPTY_NOTICE = { message: "Apply: nothing to change." } satisfies Notification;
 
 /**
+ * MISS-02 / D-09-14: the row an apply reports for the missing dependency
+ * `secrets-vault@mp` that its marketplace does not list, once the dependent is
+ * already down.
+ */
+const SECRETS_VAULT_NOT_IN_MANIFEST = {
+  message:
+    "A plugin operation has failed.\n" +
+    "\n" +
+    "● mp [project]\n" +
+    "  ⊘ secrets-vault (failed) {not in manifest}\n" +
+    "\n" +
+    "Reconcile: 1 failure",
+  severity: "error",
+} satisfies Notification;
+
+/**
  * AFILE-04: the warning `notifyMcpConfigNotices` sends after a rewrite drops the
  * comments of the project-scope `mcp-adapter.json`.
  */
@@ -1246,7 +1262,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("LOAD-03: a config-driven uninstall of a still-declared plugin proceeds and the next pass holds the dependent down", async (t) => {
+  test("LOAD-03 / MISS-01: a config-driven uninstall of a still-declared plugin proceeds and the next pass installs it back as a missing dependency", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "uninstall-still-declared");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -1295,30 +1311,32 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ○ orphan v1.0.0 (uninstalled)\n" +
           "\n" +
-          "Reconcile: 1 success\n\n/reload to pick up changes",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       {
         message:
-          "A plugin operation needs attention.\n" +
-          "\n" +
           "● mp [project]\n" +
-          "  ◍ keeper v1.0.0 (disabled) {dependency unsatisfied}\n" +
-          '    cause: Install "orphan@mp" or uninstall "keeper@mp"\n' +
+          "  ● orphan v1.0.0 (installed) {dependency installed}\n" +
           "\n" +
-          "Reconcile: 1 warning\n" +
+          "Reconcile: 1 success\n" +
           "\n" +
           "/reload to pick up changes",
-        severity: "warning",
       },
       APPLY_EMPTY_NOTICE,
     ]);
     // LOAD-03: the removal happened on the FIRST pass -- the reconcile-driven
-    // uninstall does not refuse -- and the row that reports the consequence
-    // for `keeper` is the load-time check's, on the next pass (D-06-06).
+    // uninstall does not refuse. MISS-01 / D-02: the next pass finds `keeper`'s
+    // declared dependency missing and installs it, so `keeper` stays up.
     assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["mp"]?.plugins ?? {}), ["keeper"]);
     assert.equal(afterFirst.marketplaces["mp"]?.plugins["keeper"]?.enabled, true);
-    assert.equal(afterSecond.marketplaces["mp"]?.plugins["keeper"]?.enabled, false);
-    assert.equal(afterSecond.marketplaces["mp"]?.plugins["keeper"]?.dependencyDisabled, true);
+    assert.deepStrictEqual(Object.keys(afterSecond.marketplaces["mp"]?.plugins ?? {}), [
+      "keeper",
+      "orphan",
+    ]);
+    assert.equal(afterSecond.marketplaces["mp"]?.plugins["keeper"]?.enabled, true);
+    assert.equal(afterSecond.marketplaces["mp"]?.plugins["keeper"]?.dependencyDisabled, undefined);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
@@ -1460,7 +1478,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ○ orphan v1.0.0 (uninstalled)\n" +
           "\n" +
-          "Reconcile: 1 success\n\n/reload to pick up changes",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(
@@ -4211,16 +4231,17 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "A plugin operation needs attention.\n" +
+          "A plugin operation has failed.\n" +
           "\n" +
           "\u25cf mp [project]\n" +
+          "  \u2298 secrets-vault (failed) {not in manifest}\n" +
           "  \u25cd deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 warning\n" +
+          "Reconcile: 1 failure, 1 warning\n" +
           "\n" +
           "/reload to pick up changes",
-        severity: "warning",
+        severity: "error",
       },
     ]);
     const record = await recordFor(project, "mp", "deploy-kit");
@@ -4293,6 +4314,7 @@ describe("applyReconcile", () => {
           "Some operations have failed.\n" +
           "\n" +
           "● mp [project]\n" +
+          "  ⊘ secrets-vault (failed) {not in manifest}\n" +
           "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
@@ -4300,7 +4322,7 @@ describe("applyReconcile", () => {
           "  ⊘ state.json (failed) {lock held}\n" +
           "    cause: Another pi-claude-marketplace operation is in progress for project scope (.state-lock). Retry after it completes.\n" +
           "\n" +
-          "Reconcile: 2 failures, 1 warning\n" +
+          "Reconcile: 3 failures, 1 warning\n" +
           "\n" +
           "/reload to pick up changes",
         severity: "error",
@@ -4407,7 +4429,7 @@ describe("applyReconcile", () => {
     await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
-    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
+    assert.deepStrictEqual(notifications, [SECRETS_VAULT_NOT_IN_MANIFEST]);
     const record = await recordFor(project, "mp", "deploy-kit");
     assert.equal(record?.enabled, false);
     assert.equal(Object.hasOwn(record ?? {}, "dependencyDisabled"), false);
@@ -4486,7 +4508,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("LOAD-02: a second reload over an unchanged unsatisfied tree plans the retry bucket and reports nothing to change", async (t) => {
+  test("LOAD-02 / D-09-14: a second apply over an unchanged unsatisfied tree plans the retry bucket and retries the install", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-converges");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -4545,9 +4567,9 @@ describe("applyReconcile", () => {
     // later cannot slip past this case by being absent from a hand-written
     // literal. D-09-14: the dependency stays missing (mp never declared
     // secrets-vault), so the retry bucket re-plans the same entry every
-    // pass -- a deliberate non-fixpoint. This reconcile never opted into
-    // `reason: "reload"`, so the apply step drives nothing off it and the
-    // second pass reports nothing to change (D-08, D-09-13).
+    // pass -- a deliberate non-fixpoint. Every apply retries the install
+    // (D-02), so the second pass reports the dependency's failure row alone
+    // and writes nothing.
     assert.equal(first.notifications.length, 1);
     assert.deepStrictEqual(replanned, {
       ...emptyReconcilePlan("project"),
@@ -4562,7 +4584,7 @@ describe("applyReconcile", () => {
         },
       ],
     });
-    assert.deepStrictEqual(second.notifications, [APPLY_EMPTY_NOTICE]);
+    assert.deepStrictEqual(second.notifications, [SECRETS_VAULT_NOT_IN_MANIFEST]);
     assert.equal(await readFile(project.stateJsonPath, "utf8"), settledBytes);
     assert.equal((await stat(project.stateJsonPath)).mtimeMs, settledModifiedAt);
     assert.deepStrictEqual(clonedUrls(), []);
@@ -4616,18 +4638,19 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Some plugin operations need attention.\n" +
+          "A plugin operation has failed.\n" +
           "\n" +
           "● mp [project]\n" +
+          "  ⊘ charlie (failed) {not in manifest}\n" +
           "  ◍ bravo v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "charlie@mp" or uninstall "bravo@mp"\n' +
           "  ◍ alfa v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Enable "bravo@mp" or uninstall "alfa@mp"\n' +
           "\n" +
-          "Reconcile: 2 warnings\n" +
+          "Reconcile: 1 failure, 2 warnings\n" +
           "\n" +
           "/reload to pick up changes",
-        severity: "warning",
+        severity: "error",
       },
     ]);
     const alfa = await recordFor(project, "mp", "alfa");
@@ -4909,12 +4932,13 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "A plugin operation has failed.\n" +
+          "Some plugin operations have failed.\n" +
           "\n" +
           "\u25cf mp [project]\n" +
+          "  \u2298 secrets-vault (failed) {not in manifest}\n" +
           "  \u2298 deploy-kit (failed) {permission denied}\n" +
           "\n" +
-          "Reconcile: 1 failure",
+          "Reconcile: 2 failures",
         severity: "error",
       },
     ]);
@@ -4926,13 +4950,12 @@ describe("applyReconcile", () => {
   });
 
   // ───────────────────────────────────────────────────────────────────────
-  // MISS-01 / MISS-02 / D-09-04 .. D-09-14: the reload-only dependency-install
-  // step (`applyDependencyInstalls`) and its D-09-07 re-plan
-  // (`refreshTogglePlan`). Every case here passes `reason: "reload"` unless
-  // it is deliberately proving the startup/omitted posture.
+  // MISS-01 / MISS-02 / D-09-04 .. D-09-14: the dependency-install step
+  // (`applyDependencyInstalls`), which every apply runs (D-02), and its D-09-07
+  // re-plan (`refreshTogglePlan`).
   // ───────────────────────────────────────────────────────────────────────
 
-  test("MISS-01: a reload installs a missing declared dependency and the dependent stays up", async (t) => {
+  test("MISS-01 / D-02: a plain apply installs a missing declared dependency and the dependent stays enabled", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-reload-install");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -4976,7 +4999,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -5049,7 +5071,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert -- WARN-01: the root's own degradation signals ride the cascade row
@@ -5115,7 +5136,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -5204,7 +5224,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -5223,135 +5242,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("D-09-13: a startup reconcile plans the bucket but installs nothing and stays offline", async (t) => {
-    // arrange -- same fixture as the reload case above (secrets-vault is
-    // genuinely installable), but the host says `startup`.
-    const { cwd, project } = await createHermeticScopes(t, "dependency-startup-noop");
-    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
-      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
-      "secrets-vault": { skill: "clean" },
-    });
-    await writeUnder(
-      project.baseConfigJsonPath,
-      configBytes({
-        marketplaces: { mp: { source: marketplaceRoot } },
-        plugins: { "deploy-kit@mp": {} },
-      }),
-    );
-    await seedState(project, {
-      schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
-      marketplaces: {
-        mp: marketplaceRecord({
-          cwd,
-          scope: "project",
-          marketplace: "mp",
-          rawSource: marketplaceRoot,
-          manifestPath,
-          marketplaceRoot,
-          plugins: {
-            "deploy-kit": pluginRecord({
-              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
-            }),
-          },
-        }),
-      },
-    });
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const { gitOps, clonedUrls } = createOfflineGitOps();
-
-    // act
-    await applyReconcile({
-      ctx,
-      run: runWithNothingLoaded(),
-      cwd,
-      scope: "project",
-      gitOps,
-      reason: "startup",
-    });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "A plugin operation needs attention.\n" +
-          "\n" +
-          "● mp [project]\n" +
-          "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
-          '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
-          "\n" +
-          "Reconcile: 1 warning\n" +
-          "\n" +
-          "/reload to pick up changes",
-        severity: "warning",
-      },
-    ]);
-    assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
-    assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
-
-  test("D-09-13: an omitted reason plans the bucket but installs nothing and stays offline", async (t) => {
-    // arrange -- identical fixture; `reason` left out of the call entirely.
-    const { cwd, project } = await createHermeticScopes(t, "dependency-omitted-reason-noop");
-    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
-      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
-      "secrets-vault": { skill: "clean" },
-    });
-    await writeUnder(
-      project.baseConfigJsonPath,
-      configBytes({
-        marketplaces: { mp: { source: marketplaceRoot } },
-        plugins: { "deploy-kit@mp": {} },
-      }),
-    );
-    await seedState(project, {
-      schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
-      marketplaces: {
-        mp: marketplaceRecord({
-          cwd,
-          scope: "project",
-          marketplace: "mp",
-          rawSource: marketplaceRoot,
-          manifestPath,
-          marketplaceRoot,
-          plugins: {
-            "deploy-kit": pluginRecord({
-              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
-            }),
-          },
-        }),
-      },
-    });
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const { gitOps, clonedUrls } = createOfflineGitOps();
-
-    // act -- `reason` omitted entirely.
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "A plugin operation needs attention.\n" +
-          "\n" +
-          "● mp [project]\n" +
-          "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
-          '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
-          "\n" +
-          "Reconcile: 1 warning\n" +
-          "\n" +
-          "/reload to pick up changes",
-        severity: "warning",
-      },
-    ]);
-    assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
-    assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
-
-  test("D-09-07: a marker-held dependent comes back up in the same reload", async (t) => {
+  test("D-09-07: a marker-held dependent comes back up in the same apply", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-reload-lift");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -5396,7 +5287,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert -- the install row first (step 5), then the record-walk lift
@@ -5420,7 +5310,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("D-09-08: a provenance-independent dependent comes back up in the same reload", async (t) => {
+  test("D-09-08: a provenance-independent dependent comes back up in the same apply", async (t) => {
     // arrange -- app (explicit, config-declared) declares lib; lib
     // (provenance: "dependency", never named by config) declares core; core
     // is missing. Installing core lifts lib, and lib's own lift brings app
@@ -5479,7 +5369,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert -- both app and lib reach pluginsToEnable through the D-09-08
@@ -5557,7 +5446,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -5655,7 +5543,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -5713,7 +5600,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert -- the root's own ledger failure passes through unwrapped, no
@@ -5739,7 +5625,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("D-09-14: a failed dependency install is retried on the next reload and the dependent's row is silent once down", async (t) => {
+  test("D-09-14: a failed dependency install is retried on the next apply and the dependent's row is silent once down", async (t) => {
     // arrange -- the not-in-manifest fixture, reloaded twice.
     const { cwd, project } = await createHermeticScopes(t, "dependency-reload-retry");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -5782,7 +5668,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
     await applyReconcile({
       ctx: second.ctx,
@@ -5790,7 +5675,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert -- the second reload carries the same failure row; the disable
@@ -5813,7 +5697,7 @@ describe("applyReconcile", () => {
     second.verifyBoundary();
   });
 
-  test("D-09-04: a disabled recorded dependency is left alone by the reload", async (t) => {
+  test("D-09-04: a disabled recorded dependency is left alone by the apply", async (t) => {
     // arrange -- secrets-vault is recorded and disabled by the USER (no
     // marker); deploy-kit is enabled.
     const { cwd, project } = await createHermeticScopes(t, "dependency-reload-disabled-left-alone");
@@ -5862,7 +5746,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert -- no plugin-installed row (nothing was attempted); the LOAD-01
@@ -5935,7 +5818,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert -- app's own cascade row is the only row; helper is
@@ -5946,7 +5828,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● app v1.0.0 (installed)\n" +
           "\n" +
-          "Reconcile: 1 success\n\n/reload to pick up changes",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     const helper = await recordFor(project, "mp", "helper");
@@ -6014,7 +5898,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
       completionCache: createCompletionCache(),
       hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     });
@@ -6077,7 +5960,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6095,7 +5977,7 @@ describe("applyReconcile", () => {
     { name: "later same-marketplace source", secondMarketplace: "beta", secondAllows: false },
     { name: "neither original policy", secondMarketplace: "gamma", secondAllows: false },
   ] as const) {
-    test(`XMKT-01 reload evaluates ${scenario.name}`, async (t) => {
+    test(`XMKT-01 apply evaluates ${scenario.name}`, async (t) => {
       // arrange
       const { cwd, project, user } = await createHermeticScopes(t, "dependency-original-sources");
       const alpha = await writeMarketplaceSource(cwd, "alpha-src", "alpha", {
@@ -6195,7 +6077,6 @@ describe("applyReconcile", () => {
         cwd,
         scope: "project",
         gitOps,
-        reason: "reload",
       });
 
       // assert
@@ -6229,7 +6110,7 @@ describe("applyReconcile", () => {
     });
   }
 
-  test("XMKT-01 reload installs a user-sourced missing dependency into project scope", async (t) => {
+  test("XMKT-01 apply installs a user-sourced missing dependency into project scope", async (t) => {
     // arrange
     const { cwd, project, user } = await createHermeticScopes(t, "dependency-user-source");
     const alpha = await writeMarketplaceSource(
@@ -6290,7 +6171,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6391,7 +6271,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6462,7 +6341,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6559,7 +6437,6 @@ describe("applyReconcile", () => {
       completionCache: createCompletionCache(),
       hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       gitOps: createOfflineGitOps().gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6590,7 +6467,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6659,7 +6535,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6712,7 +6587,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6739,7 +6613,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6772,7 +6645,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6809,7 +6681,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6842,16 +6713,17 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "A plugin operation needs attention.\n" +
+          "A plugin operation has failed.\n" +
           "\n" +
           "● mp [project]\n" +
+          "  ⊘ secrets-vault (failed) {not in manifest}\n" +
           "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 warning\n" +
+          "Reconcile: 1 failure, 1 warning\n" +
           "\n" +
           "/reload to pick up changes",
-        severity: "warning",
+        severity: "error",
       },
       COMMENTS_REMOVED_NOTICE,
     ]);
@@ -6877,7 +6749,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6927,7 +6798,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6967,7 +6837,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -7004,7 +6873,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -7058,7 +6926,6 @@ describe("applyReconcile", () => {
       const state = await loadState(locationsFor(input.scope, cwd).extensionRoot);
       calls.push({
         scope: input.scope,
-        reason: input.reason,
         plannedUninstalls: input.plan?.pluginsToUninstall.map((planned) => planned.plugin),
         recorded: Object.keys(state.marketplaces["mp"]?.plugins ?? {}),
         uninstallsBefore: uninstallPlugin.mock.callCount(),
@@ -7076,7 +6943,6 @@ describe("applyReconcile", () => {
       gitOps,
       hooksRouting,
       completionCache,
-      reason: "reload",
       uninstallPlugin,
       migrateMcpEntries,
     });
@@ -7088,20 +6954,20 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ○ gone v1.0.0 (uninstalled)\n" +
           "\n" +
-          "Reconcile: 1 success\n\n/reload to pick up changes",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(calls, [
       {
         scope: "project",
-        reason: "reload",
         plannedUninstalls: ["gone"],
         recorded: ["gone"],
         uninstallsBefore: 0,
       },
       {
         scope: "user",
-        reason: "reload",
         plannedUninstalls: undefined,
         recorded: [],
         uninstallsBefore: 1,
@@ -7264,7 +7130,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ○ gone v1.0.0 (uninstalled)\n" +
           "\n" +
-          "Reconcile: 1 success\n\n/reload to pick up changes",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(

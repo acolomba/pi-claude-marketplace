@@ -50,7 +50,7 @@ import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.
 import type { ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { loadState } from "../../persistence/state-io.ts";
-import type { NotificationContext, ResourcesDiscoverEvent } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice, McpMigrationRow } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -349,15 +349,13 @@ export interface ScopePassAccumulators {
   readonly migration: { readonly rows: McpMigrationRow[]; readonly notices: McpConfigNotice[] };
 }
 
-/** One scope's pass inputs; `migrateMcpEntries` and `reason` are optional. */
+/** One scope's pass inputs; `migrateMcpEntries` is optional. */
 export interface ScopePassInput extends ScopePassAccumulators {
   readonly reader: ReconcileStateReader;
   readonly scope: Scope;
   readonly cwd: string;
   /** AMIG-01: the injected MCP move; `migrateLegacyMcpEntries` when absent. */
   readonly migrateMcpEntries?: McpMigrationStep | undefined;
-  /** The `reason` the MCP move reads to skip the owners a reload installs. */
-  readonly reason?: ResourcesDiscoverEvent["reason"] | undefined;
 }
 
 /**
@@ -382,7 +380,6 @@ export async function openScopePass(input: ScopePassInput): Promise<ScopeReadRes
     scope: input.scope,
     cwd: input.cwd,
     plan: readResult.plan,
-    reason: input.reason,
     rows: input.migration.rows,
     notices: input.migration.notices,
   });

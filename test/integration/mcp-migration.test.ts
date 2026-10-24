@@ -50,7 +50,6 @@ async function reload(cwd: string): Promise<NotifyRecord[]> {
   await createApplyReconcile({ loadState })({
     ...session,
     cwd,
-    reason: "reload",
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache: createCompletionCache(),
   });

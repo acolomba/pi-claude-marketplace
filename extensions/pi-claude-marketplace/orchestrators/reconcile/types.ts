@@ -54,7 +54,7 @@
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ScopeSatisfactionVerdict, UnsatisfiedKind } from "./dependency-verdict.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { NotificationContext, ResourcesDiscoverEvent } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice, McpMigrationRow } from "../../shared/notification-types.ts";
@@ -392,15 +392,6 @@ export interface ApplyReconcileOptions {
    * `applyReconcile`.
    */
   readonly migrateMcpEntries?: McpMigrationStep;
-  /**
-   * D-09-13: the host's `resources_discover` reason. Only `"reload"` runs the
-   * dependency-install step (`apply.ts::applyDependencyInstalls`) and its
-   * D-09-07 re-plan; an omitted value keeps the safer startup posture every
-   * caller that does not opt in already has -- the bucket still plans (the
-   * planner is reason-blind), but nothing installs and the scope stays
-   * offline.
-   */
-  readonly reason?: ResourcesDiscoverEvent["reason"];
 }
 
 /**
@@ -415,7 +406,6 @@ export interface McpMigrationInput {
   readonly scope: Scope;
   readonly cwd: string;
   readonly plan: ReconcilePlan | undefined;
-  readonly reason?: ResourcesDiscoverEvent["reason"] | undefined;
   readonly rows: McpMigrationRow[];
   readonly notices: McpConfigNotice[];
 }

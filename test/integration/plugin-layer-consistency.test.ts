@@ -96,7 +96,6 @@ async function reload(
     scope: scope.locations.scope,
     completionCache: createCompletionCache(),
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
-    reason: "reload",
   });
   boundary.verifyBoundary();
   return boundary.notifications;

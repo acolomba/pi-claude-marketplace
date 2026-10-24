@@ -373,7 +373,6 @@ describe("openScopePass", () => {
       scope: "project",
       cwd: scope.cwd,
       migrateMcpEntries: recordingMove(moves),
-      reason: "reload",
     });
 
     // assert
@@ -383,7 +382,6 @@ describe("openScopePass", () => {
         scope: "project",
         cwd: scope.cwd,
         plan: expectedPlan,
-        reason: "reload",
         rows: pass.migration.rows,
         notices: pass.migration.notices,
       },
