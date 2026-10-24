@@ -11,7 +11,7 @@ import { notifyWithContext } from "../../shared/notify-context.ts";
 import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
-import { revisionVersionSlot } from "./update-row.ts";
+import { disclosureCause, revisionVersionSlot } from "./update-row.ts";
 
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -214,6 +214,9 @@ export function reinstalledRowFromOutcome(
   // raises the row; a record that was already partial stays `info`.
   const raised =
     malformed.length > 0 || stale.length > 0 || outcome.partialDegrade?.newlyDegraded === true;
+  // D-10-13 / D-18-07: the range that admitted what landed rides the cause
+  // line, read through update's own carrier so the two verbs word it alike.
+  const cause = disclosureCause(outcome.constraint);
   return {
     status: "reinstalled",
     name: outcome.name,
@@ -230,6 +233,7 @@ export function reinstalledRowFromOutcome(
     ...revisionVersionSlot({ ...outcome, toVersion: outcome.version }),
     ...(rowScope !== undefined && { scope: rowScope }),
     ...(reasons.length > 0 && { reasons }),
+    ...(cause !== undefined && { cause }),
     // D-03/D-06: realized reinstall transition -> reloads Pi resources.
     severity: raised ? "warning" : "info",
     needsReload: true,

@@ -151,6 +151,8 @@ A skipped update's row reads `{dependents constrain}`, and the `cause:` line say
 
 A plugin whose entry is a relative path and whose marketplace has no satisfying tag falls back to the marketplace's current copy, and that copy is then measured like any other version. When it is in range the update goes through and the row reads `{dependency current copy}` -- the same phrase an install uses for the same fact. When it is out of range the update is skipped. This differs from the install side, on purpose: on an install the alternative is having nothing, while on an update the alternative is keeping a copy that is already in range, so an update never knowingly moves an in-range plugin out of it.
 
+An update or reinstall that a range admitted names that range and its holders on its row: the `(updated)` or `(reinstalled)` row's `cause:` line prints the ranges the holders declared and the holders, as Claude Code's update message does.
+
 When the plugin is already at the highest version its dependents admit, the row still reads `{up-to-date}`, and the `cause:` line names the ranges its holders declared and the holders, so you can tell "nothing newer exists" from "nothing newer is allowed."
 
 When the declarations of some other installed plugin in the scope cannot be read, the update or reinstall fails with `{unreadable}` and changes nothing. The `cause:` line names that plugin and says why. This is the same refusal that [the uninstall guard](#removing-a-plugin-other-plugins-need) makes. Repair or remove that plugin, then run the command again.

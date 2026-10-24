@@ -660,6 +660,9 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
                 to: "1.5.0",
                 dependencies: [],
                 reasons: ["dependency current copy"],
+                cause: new Error(
+                  'constrained to the combined range (^1.0.0) -- required by "alpha@mp"',
+                ),
               },
             ],
           },

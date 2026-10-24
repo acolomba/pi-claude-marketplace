@@ -311,6 +311,8 @@ export function constraintCauseFor(
  * `undefined` for an unconstrained outcome. Update's rows and reinstall's
  * `reinstalled` row both read it, so the two verbs cannot word it differently.
  */
-function disclosureCause(constraint: UpdateConstraintDisclosure | undefined): Error | undefined {
+export function disclosureCause(
+  constraint: UpdateConstraintDisclosure | undefined,
+): Error | undefined {
   return constraint === undefined ? undefined : new Error(constraint.disclosure);
 }

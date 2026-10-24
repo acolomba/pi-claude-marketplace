@@ -1721,7 +1721,7 @@ Plugin reinstall: 1 warning
 /reload to pick up changes
 ```
 
-The source the marketplace offers now resolves `partially-available`, so the reinstall installs the supported components and leaves the rest out. The row keeps `(reinstalled)` and names each left-out kind with the same token the `(partially-installed)` rows use, after any `{malformed ...}` token. Severity `warning` when the record left nothing out before the reinstall: working components were just removed, and the user did not ask for that. A record that was already partially installed renders the same token at `info`. When a dependent's range held the plugin to the marketplace's current copy, `{dependency current copy}` comes first in the brace, as on the `(updated)` row, and changes no severity.
+The source the marketplace offers now resolves `partially-available`, so the reinstall installs the supported components and leaves the rest out. The row keeps `(reinstalled)` and names each left-out kind with the same token the `(partially-installed)` rows use, after any `{malformed ...}` token. Severity `warning` when the record left nothing out before the reinstall: working components were just removed, and the user did not ask for that. A record that was already partially installed renders the same token at `info`. When a dependent's range held the plugin to the marketplace's current copy, `{dependency current copy}` comes first in the brace, as on the `(updated)` row, and changes no severity. A reinstall that a dependent's range admitted carries the same cause line as the `(updated)` row of the `update-current-copy` state, read through the same carrier.
 
 ### Reinstall that installed a newer version (REI-04 / UPR-03)
 
@@ -2251,11 +2251,12 @@ Stage one's tag probe found no satisfying tag, so the candidate resolves exactly
 ```text
 ● mp [user]
   ● formatter v1.0.0 → v1.5.0 (updated) {dependency current copy}
+    cause: constrained to the combined range (^1.0.0) -- required by "alpha@mp"
 
 /reload to pick up changes
 ```
 
-`formatter` is a constrained PATH-source dependency whose marketplace clone carries no release tag satisfying its dependents' combined range (UPDT-01). Rather than holding the update, `preparePluginUpdate` falls back to the marketplace's CURRENT copy and lets stage two decide (D-10-14) -- the arm that makes stage two earn its place: the install-side arm that always accepts is deliberately NOT ported here, because knowingly moving an in-range plugin to an out-of-range version is exactly what UPDT-01 forbids. Here the fallback landed IN range, so the update proceeds and the success row reuses the existing `{dependency current copy}` token (D-10-15) -- no catalog amendment, same fact, same phrase. The token is FIRST in the brace, ahead of orphan-rewake and malformed-kind tokens, and it moves no severity channel: the update was carried out in full. Single cardinality, so no trailing tally. Reload-hint fires because a resource transition landed.
+`formatter` is a constrained PATH-source dependency whose marketplace clone carries no release tag satisfying its dependents' combined range (UPDT-01). Rather than holding the update, `preparePluginUpdate` falls back to the marketplace's CURRENT copy and lets stage two decide (D-10-14) -- the arm that makes stage two earn its place: the install-side arm that always accepts is deliberately NOT ported here, because knowingly moving an in-range plugin to an out-of-range version is exactly what UPDT-01 forbids. Here the fallback landed IN range, so the update proceeds and the success row reuses the existing `{dependency current copy}` token (D-10-15) -- no catalog amendment, same fact, same phrase. The token is FIRST in the brace, ahead of orphan-rewake and malformed-kind tokens, and it moves no severity channel: the update was carried out in full. The range that admitted the copy and the dependents that declared it ride the cause line, composed by the same `describeConstraint` composer as on the ceiling and held rows (D-10-13); Claude Code's update message discloses the range too. An unconstrained `(updated)` row has no cause line. Single cardinality, so no trailing tally. Reload-hint fires because a resource transition landed.
 
 ### The ceiling version, still constrained (D-10-13)
 

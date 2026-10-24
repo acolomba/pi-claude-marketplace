@@ -124,6 +124,23 @@ Feature: Plugin reinstall
       | app@tools     |
     Then the "claude-plugins.local.json" file of the project scope does not exist
 
+  Scenario: Reinstalling a dependency within the version range its dependent declares names the range on its row
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^1.0.0   |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    When the user runs "/claude:plugin reinstall lib@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons                 | scope   | version | cause chain                                                            | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | reinstalled | dependency current copy | project | 1.0.0   | constrained to the combined range (^1.0.0) -- required by "app@tools" | false           |       |                  |
+
   Scenario: Reinstalling every plugin of a marketplace whose manifest became invalid shows no manifest text as a cause
     Given the manifest of the marketplace "fixtures" has become invalid
     When the user runs "/claude:plugin reinstall @fixtures --scope project"

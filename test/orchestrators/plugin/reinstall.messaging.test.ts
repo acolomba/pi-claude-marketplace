@@ -1241,7 +1241,7 @@ test("D-18-06: a reinstall that newly left a kind out raises a row that has no o
   });
 });
 
-test("D-10-15 / D-18-07: a reinstall that landed the marketplace's current copy names it first at info", () => {
+test("D-10-15 / D-18-07: a reinstall that landed the marketplace's current copy names it first at info, with its range on the cause line", () => {
   // arrange
   const outcome: ReinstallReinstalledOutcome = {
     partition: "reinstalled",
@@ -1272,6 +1272,40 @@ test("D-10-15 / D-18-07: a reinstall that landed the marketplace's current copy 
     dependencies: [],
     version: "1.1.0",
     reasons: ["dependency current copy", "lsp"],
+    cause: new Error('constrained to the combined range (^1.0.0) -- required by "app@official"'),
+    severity: "info",
+    needsReload: true,
+  });
+});
+
+test("D-10-13: a reinstall a dependent's range admitted names the range on its cause line", () => {
+  // arrange
+  const disclosure = 'constrained to the combined range (^1.0.0) -- required by "app@tools"';
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "lib",
+    marketplace: "tools",
+    scope: "project",
+    version: "1.0.0",
+    fromVersion: "1.0.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    constraint: { disclosure, fellBackToCurrentCopy: false },
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "lib",
+    dependencies: [],
+    version: "1.0.0",
+    cause: new Error(disclosure),
     severity: "info",
     needsReload: true,
   });
