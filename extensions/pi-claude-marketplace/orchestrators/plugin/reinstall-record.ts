@@ -61,8 +61,9 @@ export interface ReinstallPhaseFailure {
 
 /**
  * Projects the shared runner's outcome onto reinstall's. A swapped candidate
- * is `reinstalled` at the version the runner derived (D-18-08); every verdict
- * the runner reached without swapping keeps its notes and typed reasons.
+ * is `reinstalled` at the version the runner derived (D-18-08), and carries
+ * the version and commit it moved from (UPR-02, UPR-03); every verdict the
+ * runner reached without swapping keeps its notes and typed reasons.
  */
 export function reinstallOutcomeFromRun(
   target: ReinstallOutcomeTarget,
@@ -76,6 +77,9 @@ export function reinstallOutcomeFromRun(
         partition: "reinstalled",
         ...identity,
         version: run.toVersion,
+        fromVersion: run.fromVersion,
+        ...(run.fromCommit !== undefined && { fromCommit: run.fromCommit }),
+        ...(run.toCommit !== undefined && { toCommit: run.toCommit }),
         stagedAgentNames: run.stagedAgentNames,
         stagedMcpServerNames: run.stagedMcpServerNames,
         declaresAgents: run.declaresAgents,

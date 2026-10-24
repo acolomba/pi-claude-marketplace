@@ -632,6 +632,7 @@ for (const coexist of [false, true]) {
         marketplace: "mp",
         scope: "project",
         version: "1.0.0",
+        fromVersion: "1.0.0",
         stagedAgentNames: expectedNames,
         stagedMcpServerNames: [],
         declaresAgents: true,
@@ -1539,6 +1540,7 @@ test("REI-04: a reinstall after the marketplace offers a newer version records a
         marketplace: "mp",
         scope: "project",
         version: "1.1.0",
+        fromVersion: "1.0.0",
         stagedAgentNames: [],
         stagedMcpServerNames: [],
         declaresAgents: false,
@@ -3400,6 +3402,7 @@ test("LAYER-04: the unnamed flagless reinstall the load-time backfill runs on a 
         marketplace: "mp",
         scope: "project",
         version: "1.0.0",
+        fromVersion: "1.0.0",
         stagedAgentNames: [],
         stagedMcpServerNames: [],
         declaresAgents: false,
@@ -4805,6 +4808,9 @@ test("GIT-01 / D-18-04 / D-18-11: an unpinned reinstall of a record on the mirro
         marketplace: "mp",
         scope: "project",
         version: "9.9.9",
+        fromVersion: "sha-b2c3d4e5f607",
+        fromCommit: "b2c3d4e5f60718293a4b5c6d7e8f90123456789a",
+        toCommit: "b2c3d4e5f60718293a4b5c6d7e8f90123456789a",
         stagedAgentNames: [],
         stagedMcpServerNames: [],
         declaresAgents: false,
@@ -4884,6 +4890,9 @@ test("REI-04 / D-18-04: an unpinned reinstall copies the commit the mirror last 
         marketplace: "mp",
         scope: "project",
         version: "9.9.9",
+        fromVersion: "sha-b2c3d4e5f607",
+        fromCommit: "b2c3d4e5f60718293a4b5c6d7e8f90123456789a",
+        toCommit: "c3d4e5f60718293a4b5c6d7e8f90123456789abc",
         stagedAgentNames: [],
         stagedMcpServerNames: [],
         declaresAgents: false,
@@ -6289,6 +6298,7 @@ test("NREG-01: a hygiene-only reinstall carries neither notes nor discoveryWarni
         marketplace: "mp",
         scope: "project",
         version: "1.0.0",
+        fromVersion: "1.0.0",
         stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
         stagedMcpServerNames: [],
         declaresAgents: true,
@@ -7209,6 +7219,7 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
         stagedAgentNames: [],
         stagedMcpServerNames: [],
         version: "1.0.0",
+        fromVersion: "1.0.0",
       });
       assert.deepStrictEqual(notifications, []);
       assert.equal(firstStateBytes, stateBytes);
@@ -7350,6 +7361,7 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
         stagedAgentNames: [],
         stagedMcpServerNames: [],
         version: "1.0.0",
+        fromVersion: "1.0.0",
       });
       assert.deepStrictEqual(notifications, []);
       assert.equal(firstStateBytes, stateBytes);
@@ -7807,6 +7819,7 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
         marketplace: "mp",
         scope: "project",
         version: "1.0.0",
+        fromVersion: "1.0.0",
         stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
         stagedMcpServerNames: ["server1"],
         declaresAgents: true,
@@ -9225,6 +9238,7 @@ test("PRL-08 / PRL-11 / REI-04: a reinstall records the version its source now d
         marketplace: "mp",
         scope: "project",
         version: "9.9.9",
+        fromVersion: "1.0.0",
         stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
         stagedMcpServerNames: ["server1"],
         declaresAgents: true,
@@ -9262,7 +9276,8 @@ test("PRL-08 / PRL-11 / REI-04: a reinstall records the version its source now d
       });
       assert.deepStrictEqual(notifications, [
         {
-          message: "● mp [project]\n  ● hello v9.9.9 (reinstalled)\n\n/reload to pick up changes",
+          message:
+            "● mp [project]\n  ● hello v1.0.0 → v9.9.9 (reinstalled)\n\n/reload to pick up changes",
         },
       ]);
     } finally {
@@ -9493,6 +9508,7 @@ test("AFILE-04: an orchestrated reinstall returns the notice on its outcome and 
         marketplace: "mp",
         scope: "project",
         version: "1.0.0",
+        fromVersion: "1.0.0",
         stagedAgentNames: [],
         stagedMcpServerNames: ["server1"],
         declaresAgents: false,

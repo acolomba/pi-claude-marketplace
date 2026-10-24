@@ -26,6 +26,19 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly partition: "reinstalled";
   readonly version: string;
   /**
+   * UPR-03: the version the record held before the reinstall. The row shows
+   * the move from it to `version` only when the revision moved (D-18-08 as
+   * amended), so a repair at the recorded revision keeps its single version.
+   */
+  readonly fromVersion: string;
+  /**
+   * UPR-02: the full sha of the record the reinstall read and of the
+   * candidate, each omitted when that side has none (a path source), so a
+   * path reinstall's outcome shape is unchanged (NREG-01).
+   */
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
+  /**
    * WLIF-06: the reinstall's new source did not re-place at least one workflow
    * envelope the record named, so the command that envelope registered is still
    * live for the session. The row composer turns this into the

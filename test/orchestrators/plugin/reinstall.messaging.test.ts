@@ -88,6 +88,7 @@ test("reinstalledRowFromOutcome omits empty version, matching scope, reasons, an
     marketplace: "official",
     scope: "project",
     version: "",
+    fromVersion: "",
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,
@@ -117,6 +118,7 @@ test("reinstalledRowFromOutcome orders agent dependency and degraded reasons wit
     marketplace: "official",
     scope: "project",
     version: "2.0.0",
+    fromVersion: "2.0.0",
     stagedAgentNames: ["reviewer"],
     stagedMcpServerNames: [],
     declaresAgents: true,
@@ -149,6 +151,7 @@ test("reinstalledRowFromOutcome projects an MCP-only dependency", () => {
     marketplace: "official",
     scope: "user",
     version: "1.0.0",
+    fromVersion: "1.0.0",
     stagedAgentNames: [],
     stagedMcpServerNames: ["docs"],
     declaresAgents: false,
@@ -178,6 +181,7 @@ test("reinstalledRowFromOutcome preserves agents before MCP when both dependenci
     marketplace: "official",
     scope: "user",
     version: "1.0.0",
+    fromVersion: "1.0.0",
     stagedAgentNames: ["reviewer"],
     stagedMcpServerNames: ["docs"],
     declaresAgents: true,
@@ -207,6 +211,7 @@ test("WDEP-02: reinstalledRowFromOutcome places the workflows dependency LAST", 
     marketplace: "official",
     scope: "user",
     version: "1.0.0",
+    fromVersion: "1.0.0",
     stagedAgentNames: ["reviewer"],
     stagedMcpServerNames: ["docs"],
     declaresAgents: true,
@@ -237,6 +242,7 @@ test("WDEP-02: a reinstall declaring no workflow carries no host-engine dependen
     marketplace: "official",
     scope: "user",
     version: "1.0.0",
+    fromVersion: "1.0.0",
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,
@@ -249,6 +255,140 @@ test("WDEP-02: a reinstall declaring no workflow carries no host-engine dependen
 
   // assert
   assert.deepStrictEqual(row.dependencies, []);
+});
+
+test("UPR-03: a reinstall that moved its version composes the arrow from the replaced version", () => {
+  // arrange
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "alpha",
+    marketplace: "official",
+    scope: "project",
+    version: "1.1.0",
+    fromVersion: "1.0.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "alpha",
+    dependencies: [],
+    version: "1.1.0",
+    from: "1.0.0",
+    severity: "info",
+    needsReload: true,
+  });
+});
+
+test("REI-01: a reinstall at the recorded revision composes the single version", () => {
+  // arrange
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "alpha",
+    marketplace: "official",
+    scope: "project",
+    version: "1.0.0",
+    fromVersion: "1.0.0",
+    fromCommit: "1111111111111111111111111111111111111111",
+    toCommit: "1111111111111111111111111111111111111111",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "alpha",
+    dependencies: [],
+    version: "1.0.0",
+    severity: "info",
+    needsReload: true,
+  });
+});
+
+test("UPR-02: a reinstall onto a new commit at the same version names both commits", () => {
+  // arrange
+  const outcome: ReinstallReinstalledOutcome = {
+    partition: "reinstalled",
+    name: "alpha",
+    marketplace: "official",
+    scope: "project",
+    version: "1.0.0",
+    fromVersion: "1.0.0",
+    fromCommit: "1111111111111111111111111111111111111111",
+    toCommit: "2222222222222222222222222222222222222222",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  };
+
+  // act
+  const row = reinstalledRowFromOutcome(outcome, undefined);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "reinstalled",
+    name: "alpha",
+    dependencies: [],
+    version: "1.0.0",
+    from: "1.0.0",
+    commits: {
+      from: "1111111111111111111111111111111111111111",
+      to: "2222222222222222222222222222222222222222",
+    },
+    severity: "info",
+    needsReload: true,
+  });
+});
+
+test("UPR-03: renderReinstallPartitionAndNotify draws the arrow for a reinstall that moved its version", () => {
+  // arrange
+  const harness = createNotifyHarness({
+    message: [
+      "● official [project]",
+      "  ● alpha v1.0.0 → v1.1.0 (reinstalled)",
+      "",
+      "/reload to pick up changes",
+    ].join("\n"),
+  });
+  const outcomes: readonly ReinstallPluginOutcome[] = [
+    {
+      partition: "reinstalled",
+      name: "alpha",
+      marketplace: "official",
+      scope: "project",
+      version: "1.1.0",
+      fromVersion: "1.0.0",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    },
+  ];
+
+  // act
+  renderReinstallPartitionAndNotify(harness.ctx, harness.run, outcomes, "single");
+
+  // assert
+  verify(harness.ctx);
+  verify(harness.ui);
 });
 
 /**
@@ -276,6 +416,7 @@ test("renderReinstallPartitionAndNotify projects a clean reinstalled row with a 
       marketplace: "official",
       scope: "project",
       version: "1.0.0",
+      fromVersion: "1.0.0",
       stagedAgentNames: [],
       stagedMcpServerNames: [],
       declaresAgents: false,
@@ -764,6 +905,7 @@ test("renderReinstallPartitionAndNotify sorts case-insensitive names and scopes 
       marketplace: "acme",
       scope: "project",
       version: "2.0.0",
+      fromVersion: "2.0.0",
       stagedAgentNames: ["reviewer"],
       stagedMcpServerNames: ["docs"],
       declaresAgents: true,
@@ -832,6 +974,7 @@ test("WLIF-06: a retired workflow command takes the tail token and raises the ro
     marketplace: "official",
     scope: "project",
     version: "2.0.0",
+    fromVersion: "2.0.0",
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,
@@ -865,6 +1008,7 @@ test("WLIF-06: the token raises a row that has no other reason of its own", () =
     marketplace: "official",
     scope: "project",
     version: "2.0.0",
+    fromVersion: "2.0.0",
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,
@@ -897,6 +1041,7 @@ test("WLIF-06: a reinstall that retired nothing renders the row it always render
     marketplace: "official",
     scope: "project",
     version: "2.0.0",
+    fromVersion: "2.0.0",
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,
@@ -927,6 +1072,7 @@ test("D-18-06: a reinstall names its malformed kinds before the kinds it left ou
     marketplace: "official",
     scope: "project",
     version: "2.0.0",
+    fromVersion: "2.0.0",
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,
@@ -959,6 +1105,7 @@ test("D-18-06: an already partial record's reinstall names the left-out kind at 
     marketplace: "official",
     scope: "project",
     version: "2.0.0",
+    fromVersion: "2.0.0",
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,
@@ -990,6 +1137,7 @@ test("D-18-06: a reinstall that newly left a kind out raises a row that has no o
     marketplace: "official",
     scope: "project",
     version: "2.0.0",
+    fromVersion: "2.0.0",
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,
@@ -1021,6 +1169,7 @@ test("D-10-15 / D-18-07: a reinstall that landed the marketplace's current copy 
     marketplace: "official",
     scope: "project",
     version: "1.1.0",
+    fromVersion: "1.1.0",
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,

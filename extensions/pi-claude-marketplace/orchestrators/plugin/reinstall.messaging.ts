@@ -11,6 +11,8 @@ import { notifyWithContext } from "../../shared/notify-context.ts";
 import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 
+import { revisionVersionSlot } from "./update-row.ts";
+
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { CommandContext, MarketplaceRows, Plural } from "../../shared/notify-context.ts";
@@ -221,11 +223,11 @@ export function reinstalledRowFromOutcome(
     // deliberate and byte-pinned by the catalog's reinstall soft-dep state,
     // which carries no attention summary line; do not "repair" it with a raise.
     dependencies: declaredDependencies(outcome),
-    // IN-02: the spread is not defensive -- `resolvePluginVersion` always
-    // returns a non-empty string. It keeps a legacy record carrying an empty
-    // version from putting an empty slot in the payload; the renderer suppresses
-    // the `v<version>` token either way.
-    ...(outcome.version !== "" && { version: outcome.version }),
+    // UPR-03: the arrow only when the revision moved, so a repair at the
+    // recorded revision keeps its single version. IN-02: an empty version
+    // counts as unknown, so a legacy record carrying one puts no empty slot in
+    // the payload.
+    ...revisionVersionSlot({ ...outcome, toVersion: outcome.version }),
     ...(rowScope !== undefined && { scope: rowScope }),
     ...(reasons.length > 0 && { reasons }),
     // D-03/D-06: realized reinstall transition -> reloads Pi resources.

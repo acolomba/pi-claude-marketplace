@@ -28,6 +28,7 @@ const REINSTALL_REINSTALLED_CLEAN = {
   declaresAgents: false,
   declaresMcp: false,
   declaresWorkflows: false,
+  fromVersion: "1.0.0",
   marketplace: "official",
   name: "alpha",
   partition: "reinstalled",
@@ -43,6 +44,8 @@ const REINSTALL_REINSTALLED_FULL = {
   declaresWorkflows: false,
   degradedKinds: ["skill", "command"],
   discoveryWarnings: ["skill alpha could not be read", "command beta could not be read"],
+  fromCommit: "1111111111111111111111111111111111111111",
+  fromVersion: "1.0.0",
   marketplace: "official",
   name: "alpha",
   notes: ["warning: skill alpha could not be read", "warning: command beta could not be read"],
@@ -50,6 +53,7 @@ const REINSTALL_REINSTALLED_FULL = {
   scope: "user",
   stagedAgentNames: ["alpha-agent"],
   stagedMcpServerNames: ["alpha-mcp"],
+  toCommit: "2222222222222222222222222222222222222222",
   version: "2.0.0",
 } satisfies ReinstallReinstalledOutcome;
 

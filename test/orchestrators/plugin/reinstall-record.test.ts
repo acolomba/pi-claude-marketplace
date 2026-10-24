@@ -394,6 +394,7 @@ describe("reinstallOutcomeFromRun", () => {
       marketplace: "mp",
       scope: "project",
       version: "1.1.0",
+      fromVersion: "1.0.0",
       stagedAgentNames: ["hello-bot"],
       stagedMcpServerNames: ["hello-server"],
       declaresAgents: true,
@@ -429,6 +430,7 @@ describe("reinstallOutcomeFromRun", () => {
       marketplace: "mp",
       scope: "project",
       version: "1.0.0",
+      fromVersion: "1.0.0",
       stagedAgentNames: [],
       stagedMcpServerNames: [],
       declaresAgents: false,
@@ -468,6 +470,7 @@ describe("reinstallOutcomeFromRun", () => {
       marketplace: "mp",
       scope: "project",
       version: "1.1.0",
+      fromVersion: "1.0.0",
       stagedAgentNames: [],
       stagedMcpServerNames: [],
       declaresAgents: false,
@@ -478,6 +481,44 @@ describe("reinstallOutcomeFromRun", () => {
         disclosure: 'constrained to the combined range (^1.0.0) -- required by "app@mp"',
         fellBackToCurrentCopy: true,
       },
+    });
+  });
+
+  test("UPR-02: a swapped candidate carries the commits the run moved between", () => {
+    // arrange
+    const run: UpdateRunOutcome = {
+      partition: "updated",
+      name: "hello",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
+      fromCommit: "1111111111111111111111111111111111111111",
+      toCommit: "2222222222222222222222222222222222222222",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+      constraint: undefined,
+    };
+
+    // act
+    const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, undefined);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "reinstalled",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      version: "1.0.0",
+      fromVersion: "1.0.0",
+      fromCommit: "1111111111111111111111111111111111111111",
+      toCommit: "2222222222222222222222222222222222222222",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
     });
   });
 

@@ -119,8 +119,8 @@ Feature: Plugin git source update
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | version |
-      | gits             | project           | ghp@gits | ghp  | reinstalled |         | project | 2.0.0   |
+      | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | from  | version |
+      | gits             | project           | ghp@gits | ghp  | reinstalled |         | project | 1.0.0 | 2.0.0   |
     Then the git host receives no request
     Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
     Then the project scope holds these git clones:
