@@ -171,7 +171,7 @@ See `key-decisions` in the frontmatter.
 - Task 1 `<verify>` chain: passed (rerun as the tracer gate). Coverage at 100% for pending.ts, notify.ts and dependency-verdict.ts.
 - Task 2 `<verify>`: catalog-contract.test.ts passed with `EXPECTED_UTF8_BYTES = 51_136` unchanged.
 - Also run: the four features that call pending (143 scenarios), `npm run check:features`, `npm run test:unpaired`, test/edge/handlers/plugin/pending.test.ts, test/integration/plugin-layer-consistency.test.ts.
-- Acceptance: `buildScopeSatisfactionVerdict` in pending.ts = 3 (baseline 0); `claude:plugin apply` in dependency-resolution.md = 10 (baseline 0); `npm run lint` exit 0; the new scenario passes by `--name`.
+- Acceptance: `buildScopeSatisfactionVerdict` in pending.ts = 2 (baseline 0); `claude:plugin apply` in dependency-resolution.md = 10 (baseline 0); `npm run lint` exit 0; the new scenario passes by `--name`.
 - `npm run check` at plan end (HEAD 80780348): **exit 0**. Tail of the log:
 
 ```text

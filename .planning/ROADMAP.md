@@ -608,7 +608,7 @@ Plans:
 4. `pending`, help, completions and the docs name `apply` (APL-04).
 5. `npm run check` stays green.
 
-**Plans:** 6/14 plans executed
+**Plans:** 7/14 plans executed
 
 Plans:
 **Wave 1**
@@ -628,7 +628,7 @@ Plans:
 - [x] 29-06-PLAN.md — `pending` lists marketplace adds and removes as `(will add)` / `(will remove)` (D-20)
 
 **Wave 6** *(blocked on Wave 5 completion)*
-- [ ] 29-07-PLAN.md — `pending` lists the LOAD-01 dependency disables and missing-dependency installs (D-21)
+- [x] 29-07-PLAN.md — `pending` lists the LOAD-01 dependency disables and missing-dependency installs (D-21)
 
 **Wave 7** *(blocked on Wave 6 completion)*
 - [ ] 29-08-PLAN.md — A load prints `pending`'s block on a mismatch and nothing on a match
@@ -683,7 +683,7 @@ Plans:
 | 26. Git Mirror Access | 1/1 | Complete    | 2026-10-23 |
 | 27. Install and Reconcile Reason Residue | 1/1 | Complete    | 2026-10-23 |
 | 28. Delisted Plugin Dependency Walk | 1/1 | Complete    | 2026-10-24 |
-| 29. Apply Command and Read-Only Reload | 6/14 | In Progress | - |
+| 29. Apply Command and Read-Only Reload | 7/14 | In Progress | - |
 
 ## Carried Forward
 
