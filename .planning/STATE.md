@@ -4,12 +4,12 @@ milestone: lifecycle-coverage
 milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 29
 current_phase_name: Apply Command and Read-Only Reload
-status: completed
+status: executing
 stopped_at: Phase 29 context gathered
-last_updated: "2026-10-24T13:41:11.673Z"
-last_activity: 2026-10-23
-last_activity_desc: Phase 15 complete
-state_head: e3a9749ee5a8385e44417cba084cd3a1e3ea5e39
+last_updated: "2026-10-24T13:43:19.582Z"
+last_activity: 2026-10-24
+last_activity_desc: Phase 29 execution started
+state_head: 5cb5bc700846077db755eb9bff66a35cfafd9d78
 progress:
   total_phases: 29
   completed_phases: 28
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-10-22 at the lifecycle-coverage start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 1 — Suite Foundation
+**Current focus:** Phase 29 — Apply Command and Read-Only Reload
 
 ## Current Position
 
-Phase: 29 (Apply Command and Read-Only Reload) — READY TO EXECUTE
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-10-23 — Phase 15 complete
+Phase: 29 (Apply Command and Read-Only Reload) — EXECUTING
+Plan: 1 of 14
+Status: Executing Phase 29
+Last activity: 2026-10-24 — Phase 29 execution started
 
 Progress: [████████░░] 81%
 
