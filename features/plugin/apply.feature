@@ -307,3 +307,92 @@ Feature: Plugin apply
       | kind         | reconcile-pending-empty |
       | severity     | info                    |
       | needs reload | false                   |
+
+  Scenario: Apply moves a path-source and a git-source plugin to the versions a marketplace update brought
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "fixtures" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | true   |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin install ghp@fixtures --scope project"
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 2.0.0   |      |
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the marketplace "fixtures" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | true   |
+    Given the user has run "/claude:plugin marketplace update fixtures --scope project"
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | true                      |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 2                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
+      | fixtures         | project           | ghp@fixtures  | ghp  | updated |         | project | 1.0.0 | 2.0.0 |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.1.0   | true    |
+      | ghp@fixtures  | 2.0.0   | true    |
+    Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
+
+  Scenario: Apply keeps a range-blocked and a consent-needing move in place with warning rows, and pending still lists them
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^1.0.0   |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^1.0.0   |
+      | lib  | 2.0.0   |              |
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has an output style
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind           | reconcile-applied-cascade              |
+      | severity       | warning                                |
+      | needs reload   | false                                  |
+      | summary        | Some plugin operations need attention. |
+      | tally label    | Reconcile                              |
+      | tally failures | 0                                      |
+      | tally warnings | 2                                      |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status               | reasons               | hint                   | scope   | version | cause chain                                                                                    | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | partially-upgradable | unsupported component | catalog-partial-update | project | 1.0.0   |                                                                                                |                 |       |                  |
+      | tools            | project           | lib@tools     | lib  | skipped              | dependents constrain  |                        | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | app@tools     | 1.0.0   | true    |
+      | demo@fixtures | 1.0.0   | true    |
+      | lib@tools     | 1.0.0   | true    |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind           | cascade                                |
+      | severity       | warning                                |
+      | needs reload   | false                                  |
+      | summary        | Some plugin operations need attention. |
+      | tally label    | Reconcile pending                      |
+      | tally failures | 0                                      |
+      | tally warnings | 2                                      |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status               | reasons               | hint                   | scope   | version | cause chain                                                                                    | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | partially-upgradable | unsupported component | catalog-partial-update | project | 1.0.0   |                                                                                                |                 |       |                  |
+      | tools            | project           | lib@tools     | lib  | skipped              | dependents constrain  |                        | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
