@@ -660,6 +660,27 @@ const STATUS_CASES: { readonly [S in PluginStatus]: StatusCase<S> } = {
     row: { status: "will disable", name: "alpha", reasons: [] },
     expected: { status: "will disable", name: "alpha", id: "alpha@mp", reasons: [], scope: "user" },
   },
+  "will update": {
+    row: {
+      status: "will update",
+      name: "alpha",
+      reasons: [],
+      from: "1.0.0",
+      to: "1.0.0",
+      commits: { from: "a".repeat(40), to: "b".repeat(40) },
+    },
+    expected: {
+      status: "will update",
+      name: "alpha",
+      id: "alpha@mp",
+      reasons: [],
+      from: "1.0.0",
+      to: "1.0.0",
+      fromCommit: "a".repeat(40),
+      toCommit: "b".repeat(40),
+      scope: "user",
+    },
+  },
   disabled: {
     row: {
       status: "disabled",

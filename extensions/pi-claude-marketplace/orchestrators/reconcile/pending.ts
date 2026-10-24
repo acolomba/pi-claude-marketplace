@@ -44,6 +44,9 @@
 // and without the lock, and hands it to the planner. A walk the verdict cannot
 // complete plans no dependency disable, install or lift (D-05-07), as in
 // `apply`.
+//
+// APL-02 / D-10 / D-14: after planning, each scope's catalog moves come from
+// the offline convergence planner and render as `(will update)` rows.
 
 import path from "node:path";
 
@@ -69,6 +72,7 @@ import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { scanRetainedWorkflowsStaging } from "../plugin/workflows-staging-gc.ts";
 
+import { planConvergence } from "./convergence.ts";
 import { buildScopeSatisfactionVerdict } from "./dependency-verdict.ts";
 import {
   buildReconcilePendingNotification,
@@ -85,6 +89,7 @@ import {
   type PendingMsg,
 } from "./reconcile.messaging.ts";
 
+import type { PlannedMove } from "./convergence.ts";
 import type { ScopeSatisfactionVerdict, UnsatisfiedDeclaration } from "./dependency-verdict.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
@@ -417,6 +422,7 @@ export async function composePendingReport(opts: {
     { readonly marketplaceRoot: string; readonly manifestPath: string }
   >();
   const recordedVersions: (readonly [string, string])[] = [];
+  const moves: PlannedMove[] = [];
 
   for (const scope of opts.scopes) {
     const loc = locationsFor(scope, opts.cwd);
@@ -496,7 +502,14 @@ export async function composePendingReport(opts: {
       state,
       (released) => planReconcile(view, state, scope, released),
     );
-    plans.push(withoutDisabledDependents(plan, state));
+    const scopePlan = withoutDisabledDependents(plan, state);
+    plans.push(scopePlan);
+
+    // APL-02 / D-10 / D-14: the catalog moves `apply` would make once the plan
+    // has run, offline (NFR-5).
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one convergence plan each
+    const convergence = await planConvergence({ scope, state, locations: loc, plan: scopePlan });
+    moves.push(...convergence.moves);
   }
 
   // WR-06: name the workflow staging trees the sweeper keeps forever, because
@@ -512,7 +525,7 @@ export async function composePendingReport(opts: {
   // DIFF-01 SC #2 empty-steady-state: no invalid-config rows AND every plan
   // is empty -> no block. Every non-empty bucket yields a block, so an empty
   // list is exactly the empty case.
-  if (invalidBlocks.length === 0 && isReconcilePlanListEmpty(plans)) {
+  if (invalidBlocks.length === 0 && isReconcilePlanListEmpty(plans) && moves.length === 0) {
     return { marketplaces: [], retained, needsApply: false };
   }
 
@@ -554,6 +567,7 @@ export async function composePendingReport(opts: {
     plans,
     forceInstallKeys,
     new Map(recordedVersions),
+    moves,
   );
   // D-12 / OUT-07: the pending diff is bulk (it spans both scopes and many
   // marketplaces) -> Plural row cardinality. D-02: thread PENDING_CONTEXT so the
@@ -567,9 +581,14 @@ export async function composePendingReport(opts: {
     ...invalidBlocks,
   ].sort((a, b) => compareByNameThenScope(a, b));
 
-  // APL-04 / D-14: a list with a change `apply` would make ends with the apply
-  // trailer; a list of failures alone does not, since `apply` cannot fix them.
-  return { marketplaces, retained, needsApply: planListNeedsApply(plans) };
+  // APL-04 / D-14: a list with a change `apply` would make, a catalog move
+  // included, ends with the apply trailer; a list of failures alone does not,
+  // since `apply` cannot fix them.
+  return {
+    marketplaces,
+    retained,
+    needsApply: planListNeedsApply(plans) || moves.length > 0,
+  };
 }
 
 /**

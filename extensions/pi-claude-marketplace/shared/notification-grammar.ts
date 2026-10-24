@@ -29,6 +29,7 @@ import type {
   PluginPartiallyInstalledMessage,
   PluginReinstalledMessage,
   PluginUpdatedMessage,
+  PluginWillUpdateMessage,
   PruneEmptyMessage,
   Reason,
   ReconcilePendingEmptyMessage,
@@ -442,6 +443,7 @@ const PLUGIN_ROW_LAYOUT = {
   "will uninstall": { icon: ICON_AVAILABLE, scope: true, version: "single" },
   "will enable": { icon: ICON_INSTALLED, scope: true, version: "none" },
   "will disable": { icon: ICON_DISABLED, scope: true, version: "none" },
+  "will update": { icon: ICON_INSTALLED, scope: true, version: "arrow" },
   disabled: { icon: ICON_DISABLED, scope: true, version: "single" },
 } as const satisfies Record<PluginNotificationMessage["status"], PluginRowLayout>;
 
@@ -469,8 +471,8 @@ function renderVersionSlot(row: ResolvedRow, mode: PluginRowLayout["version"]): 
     case "single":
       return renderVersion("version" in row ? row.version : undefined);
     case "arrow": {
-      // Only the updated layout selects the from/to version slot.
-      const updated = row as ResolvedRow<PluginUpdatedMessage>;
+      // Only the updated and will-update layouts select the from/to version slot.
+      const updated = row as ResolvedRow<PluginUpdatedMessage | PluginWillUpdateMessage>;
       return composeVersionArrow(updated.from, updated.to, updated.commits);
     }
 
@@ -1048,6 +1050,7 @@ const DESCRIPTION_BEARING_STATUS = {
   "will uninstall": false,
   "will enable": false,
   "will disable": false,
+  "will update": false,
 } as const satisfies Record<PluginNotificationMessage["status"], boolean>;
 
 /**

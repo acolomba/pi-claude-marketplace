@@ -10,6 +10,7 @@ import {
   type PluginWillEnableMessage,
   type PluginWillInstallMessage,
   type PluginWillUninstallMessage,
+  type PluginWillUpdateMessage,
 } from "../../shared/notification-types.ts";
 
 import type { LayerMarketplaceGap } from "../../persistence/config-merge.ts";
@@ -23,17 +24,20 @@ import type { Scope } from "../../shared/types.ts";
 /**
  * The plugin-row statuses the pending diff emits. The pending-tense rows carry
  * no `reasons` (they are pre-transition), and only `will uninstall` carries the
- * recorded version (PRN-02); the `failed`
+ * recorded version (PRN-02); `will update` carries the catalog move's
+ * `from → to` (D-14). The `failed`
  * row (source-mismatch dangling reference) carries its `reasons` via the shared
  * row grammar.
  */
-type PendingStatus = "will install" | "will uninstall" | "will enable" | "will disable" | "failed";
+type PendingStatus =
+  "will install" | "will uninstall" | "will enable" | "will disable" | "will update" | "failed";
 
 export type PendingMsg =
   | PluginWillInstallMessage
   | PluginWillUninstallMessage
   | PluginWillEnableMessage
   | PluginWillDisableMessage
+  | PluginWillUpdateMessage
   | PluginFailedMessage;
 
 /**
@@ -48,6 +52,7 @@ export const PENDING_CONTEXT = {
     "will uninstall": { markers: false, contentReasons: false },
     "will enable": { markers: false, contentReasons: false },
     "will disable": { markers: false, contentReasons: false },
+    "will update": { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
   },
 } as const satisfies CommandContext<PendingStatus>;

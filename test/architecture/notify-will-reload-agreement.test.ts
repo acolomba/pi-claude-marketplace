@@ -16,7 +16,7 @@
  *
  * This test pins both halves at the realized-cascade seam. For each realized
  * plugin transition whose pending preview carries a `will` token -- plugin
- * install, uninstall, enable, disable, and the plugin-uninstall children of a
+ * install, uninstall, enable, disable, update (D-14), and the plugin-uninstall children of a
  * marketplace remove -- the rendered cascade MUST contain the trailer. For the
  * realized marketplace-level actions -- an `(added)` cascade and a header-only
  * `(removed)` cascade with no installed plugins -- the rendered cascade MUST
@@ -149,6 +149,31 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
               status: "disabled",
               name: "foo-plugin",
               version: "1.2.3",
+              severity: "info",
+              needsReload: true,
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    // D-14: a catalog move `apply` makes is the realized (updated) row.
+    label: "catalog move -- realized (updated) row",
+    pendingToken: "will update",
+    run: runWithAllLoaded(),
+    message: {
+      marketplaces: [
+        {
+          name: "official",
+          scope: "user",
+          plugins: [
+            {
+              status: "updated",
+              name: "helper",
+              from: "1.0.0",
+              to: "1.1.0",
+              dependencies: [],
               severity: "info",
               needsReload: true,
             },

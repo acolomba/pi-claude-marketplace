@@ -276,6 +276,11 @@ const STATUS_CASES = [
     line: "will-disable-row",
     actions: ["Info"],
   },
+  {
+    row: { status: "will update", name: "will-update-row", from: "1.0.0", to: "1.1.0" },
+    line: "will-update-row 1.1.0",
+    actions: ["Info"],
+  },
 ] as const satisfies readonly {
   row: PluginNotificationMessage;
   line: string;

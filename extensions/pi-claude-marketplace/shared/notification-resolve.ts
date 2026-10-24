@@ -351,6 +351,7 @@ export const CENTRAL_ROW_POLICY = {
   "will uninstall": { markers: false, contentReasons: true },
   "will enable": { markers: false, contentReasons: false },
   "will disable": { markers: false, contentReasons: false },
+  "will update": { markers: false, contentReasons: true },
 } as const satisfies Record<PluginNotificationMessage["status"], RowPolicy>;
 
 /** A marketplace row whose plugin rows are resolved. */

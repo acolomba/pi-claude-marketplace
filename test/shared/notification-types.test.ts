@@ -191,6 +191,7 @@ const EXPECTED_STATUS_TOKENS = [
   "will uninstall",
   "will enable",
   "will disable",
+  "will update",
   "will add",
   "will remove",
   "disabled",
@@ -215,6 +216,7 @@ const EXPECTED_PLUGIN_STATUSES = [
   "will uninstall",
   "will enable",
   "will disable",
+  "will update",
   "disabled",
   "partially-installed",
   "partially-upgradable",
@@ -234,30 +236,12 @@ const EXPECTED_MARKETPLACE_STATUSES = [
   "will remove",
 ] as const;
 
-function pluginStatusIsExhaustive(message: PluginNotificationMessage): string {
-  switch (message.status) {
-    case "installed":
-    case "updated":
-    case "reinstalled":
-    case "uninstalled":
-    case "available":
-    case "remote":
-    case "unavailable":
-    case "partially-available":
-    case "upgradable":
-    case "failed":
-    case "skipped":
-    case "manual recovery":
-    case "will install":
-    case "will uninstall":
-    case "will enable":
-    case "will disable":
-    case "disabled":
-    case "partially-installed":
-    case "partially-upgradable":
-      return message.status;
-  }
-}
+// The row union's statuses are exactly the plugin statuses. A switch naming all
+// twenty would exceed the cyclomatic ceiling, so the proof is type-level.
+void (true satisfies IsExact<
+  PluginNotificationMessage["status"],
+  (typeof EXPECTED_PLUGIN_STATUSES)[number]
+>);
 
 function marketplaceStatusIsExhaustive(message: MarketplaceNotificationMessage): string {
   switch (message.status) {
@@ -315,7 +299,6 @@ const contentReason: ContentReason = "marketplace in user scope";
 const crossMarketplaceReason: ContentReason = "cross-marketplace";
 const severity: Severity = "warning";
 
-void pluginStatusIsExhaustive;
 void marketplaceStatusIsExhaustive;
 void notificationKindIsExhaustive;
 void ({
@@ -565,6 +548,16 @@ for (const { name, row, expected } of [
     expected: true,
   },
   {
+    name: "recognizes a will-update row as not list-scope-bearing",
+    row: {
+      status: "will update",
+      name: "alpha",
+      from: "1.0.0",
+      to: "1.1.0",
+    } satisfies PluginNotificationMessage,
+    expected: false,
+  },
+  {
     name: "recognizes an available row as not scope-bearing",
     row: { status: "available", name: "alpha" } satisfies PluginNotificationMessage,
     expected: false,
@@ -806,6 +799,11 @@ const pluginVersionCases: readonly {
     title: "returns undefined for a will-disable row",
     row: { status: "will disable", name: "a" },
     expectedVersion: undefined,
+  },
+  {
+    title: "returns the catalog version of a will-update row",
+    row: { status: "will update", name: "a", from: "1.0.0", to: "1.1.0" },
+    expectedVersion: "1.1.0",
   },
 ];
 

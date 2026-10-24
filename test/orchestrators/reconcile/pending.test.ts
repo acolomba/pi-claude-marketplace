@@ -995,6 +995,115 @@ for (const { condition, seed, expected } of dependencyRows) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// APL-02 / D-10 / D-14: the catalog moves apply would make, each a
+// `(will update)` row with the move's version arrow.
+// ---------------------------------------------------------------------------
+
+/** Stage each offered plugin's directory, its own manifest declaring the offered version. */
+async function stageOfferedPlugins(
+  locations: ScopedLocations,
+  offered: Readonly<Record<string, OfferedPlugin>>,
+): Promise<void> {
+  const marketplaceRoot = path.join(locations.extensionRoot, "marketplaces", "tools");
+  await Promise.all(
+    Object.entries(offered).map(([name, plugin]) =>
+      writeUnder(
+        path.join(marketplaceRoot, name, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ version: plugin.version }),
+      ),
+    ),
+  );
+}
+
+const catalogMoveRows = [
+  {
+    condition: "a recorded plugin the catalog moved to a newer version",
+    seed: {
+      offered: { demo: { version: "1.1.0" } },
+      recorded: { demo: { version: "1.0.0" } },
+      declared: [{ key: "demo@tools", enabled: true }],
+    },
+    expected: pendingList(["● demo v1.0.0 → v1.1.0 (will update)"]),
+  },
+  {
+    condition: "a recorded plugin the catalog moved that the config disables",
+    seed: {
+      offered: { demo: { version: "1.1.0" } },
+      recorded: { demo: { version: "1.0.0" } },
+      declared: [{ key: "demo@tools", enabled: false }],
+    },
+    expected: pendingList(["◍ demo (will disable)"]),
+  },
+  {
+    condition: "a disabled plugin the config enables while the catalog moved it",
+    seed: {
+      offered: { demo: { version: "1.1.0" } },
+      recorded: { demo: { version: "1.0.0", enabled: false } },
+      declared: [{ key: "demo@tools", enabled: true }],
+    },
+    expected: pendingList(["● demo (will enable)", "● demo v1.0.0 → v1.1.0 (will update)"]),
+  },
+  {
+    condition: "a recorded plugin at the catalog version",
+    seed: {
+      offered: { demo: { version: "1.0.0" } },
+      recorded: { demo: { version: "1.0.0" } },
+      declared: [{ key: "demo@tools", enabled: true }],
+    },
+    expected: PENDING_EMPTY,
+  },
+] satisfies readonly {
+  readonly condition: string;
+  readonly seed: DependencyScopeSeed;
+  readonly expected: { readonly message: string };
+}[];
+
+for (const { condition, seed, expected } of catalogMoveRows) {
+  test(`APL-02 / D-14: pending previews what apply makes for ${condition}`, async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "catalog-move");
+    await stageDependencyScope(cwd, project, seed);
+    await stageOfferedPlugins(project, seed.offered);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+    // assert
+    assert.deepStrictEqual(notifications, [expected]);
+    verifyBoundary();
+  });
+}
+
+test("APL-02 / D-14: composePendingReport counts a catalog move alone as a change apply makes", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "compose-move");
+  const offered = { demo: { version: "1.1.0" } };
+  await stageDependencyScope(cwd, project, {
+    offered,
+    recorded: { demo: { version: "1.0.0" } },
+    declared: [{ key: "demo@tools", enabled: true }],
+  });
+  await stageOfferedPlugins(project, offered);
+
+  // act
+  const report = await composePendingReport({ cwd, scopes: ["project"] });
+
+  // assert
+  assert.deepStrictEqual(report, {
+    marketplaces: [
+      {
+        name: "tools",
+        scope: "project",
+        plugins: [{ status: "will update", name: "demo", from: "1.0.0", to: "1.1.0" }],
+      },
+    ],
+    retained: {},
+    needsApply: true,
+  });
+});
+
 test("D-05-07: a declarer whose manifest cannot be read plans no dependency row", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "dependency-unreadable");

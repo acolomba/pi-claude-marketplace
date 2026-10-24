@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   constraintCauseFor,
+  revisionCommits,
   revisionVersionSlot,
   updatedRowFromOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-row.ts";
@@ -804,6 +805,43 @@ function updatedOutcomeOver(move: RevisionMove): PluginUpdateUpdatedOutcome {
     stagedMcpServerNames: [],
     ...move,
   };
+}
+
+const REVISION_COMMIT_CASES: readonly {
+  readonly title: string;
+  readonly move: RevisionMove;
+  readonly expected: { readonly from: string; readonly to: string } | undefined;
+}[] = [
+  {
+    title: "UPR-02: revisionCommits names both commits of a same-version move",
+    move: { fromVersion: "1.0.0", toVersion: "1.0.0", fromCommit: COMMIT_A, toCommit: COMMIT_B },
+    expected: { from: COMMIT_A, to: COMMIT_B },
+  },
+  {
+    title: "UPR-02: revisionCommits names none when the version moved",
+    move: { fromVersion: "1.0.0", toVersion: "1.1.0", fromCommit: COMMIT_A, toCommit: COMMIT_B },
+    expected: undefined,
+  },
+  {
+    title: "UPR-02: revisionCommits names none when one side has no commit",
+    move: { fromVersion: "1.0.0", toVersion: "1.0.0", fromCommit: COMMIT_A },
+    expected: undefined,
+  },
+  {
+    title: "UPR-02: revisionCommits names none when the commits are equal",
+    move: { fromVersion: "1.0.0", toVersion: "1.0.0", fromCommit: COMMIT_A, toCommit: COMMIT_A },
+    expected: undefined,
+  },
+];
+
+for (const { title, move, expected } of REVISION_COMMIT_CASES) {
+  test(title, () => {
+    // act
+    const commits = revisionCommits(move);
+
+    // assert
+    assert.deepStrictEqual(commits, expected);
+  });
 }
 
 test("UPR-02: an updated row at the same version names the moved commits", () => {

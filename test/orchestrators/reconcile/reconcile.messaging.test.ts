@@ -68,6 +68,7 @@ void ({ name: "plugin", status: "will install" } satisfies PendingMsg);
 void ({ name: "plugin", status: "will uninstall" } satisfies PendingMsg);
 void ({ name: "plugin", status: "will enable" } satisfies PendingMsg);
 void ({ name: "plugin", status: "will disable" } satisfies PendingMsg);
+void ({ name: "plugin", status: "will update", from: "1.0.0", to: "1.1.0" } satisfies PendingMsg);
 void ({
   name: "plugin",
   reasons: ["not found"],
@@ -120,6 +121,7 @@ test("reconcile contexts expose their exact labels and row policy statuses", () 
     "will uninstall",
     "will enable",
     "will disable",
+    "will update",
     "failed",
   ];
   const expectedAppliedStatuses = [
@@ -217,6 +219,23 @@ test("pending will-disable renders its exact row bytes", () => {
 
   // assert
   assert.equal(rendered, "◍ alpha (will disable)");
+});
+
+test("pending will-update renders the catalog move's version arrow", () => {
+  // arrange
+  const message = {
+    name: "alpha",
+    status: "will update",
+    from: "1.0.0",
+    to: "1.1.0",
+    reasons: [],
+  } as const satisfies ResolvedRow<PendingMsg>;
+
+  // act
+  const rendered = composePluginLines(message, "user")[0]!.slice(2);
+
+  // assert
+  assert.equal(rendered, "● alpha v1.0.0 → v1.1.0 (will update)");
 });
 
 test("pending failed folds scope, version, and reasons while leaving failure detail to the envelope", () => {
@@ -379,6 +398,7 @@ test("PENDING_CONTEXT declares complete row policies", () => {
     "will uninstall": { markers: false, contentReasons: false },
     "will enable": { markers: false, contentReasons: false },
     "will disable": { markers: false, contentReasons: false },
+    "will update": { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
   });
 });

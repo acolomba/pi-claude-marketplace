@@ -2396,6 +2396,87 @@ describe("buildReconcilePendingNotification", () => {
     });
   });
 
+  test("D-14: previews a catalog move as a will-update row with its version arrow", () => {
+    // arrange
+    const plans = [reconcilePlan("project")];
+    const moves = [
+      {
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        revisionChanged: true,
+        grew: false,
+        partial: false,
+      },
+    ] as const;
+
+    // act
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), moves);
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [{ status: "will update", name: "demo", from: "1.0.0", to: "1.1.0" }],
+        },
+      ],
+    });
+  });
+
+  test("D-14 / UPR-02: a same-version move names its commits after the plan's rows", () => {
+    // arrange
+    const fromCommit = "a".repeat(40);
+    const toCommit = "b".repeat(40);
+    const plans = [
+      reconcilePlan("user", {
+        pluginsToInstall: [
+          { scope: "user", plugin: "ins", marketplace: "mp", configSource: "base" },
+        ],
+      }),
+    ];
+    const moves = [
+      {
+        scope: "user",
+        marketplace: "mp",
+        plugin: "ghp",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
+        fromCommit,
+        toCommit,
+        revisionChanged: true,
+        grew: false,
+        partial: false,
+      },
+    ] as const;
+
+    // act
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), moves);
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [
+            { status: "will install", name: "ins" },
+            {
+              status: "will update",
+              name: "ghp",
+              from: "1.0.0",
+              to: "1.0.0",
+              commits: { from: fromCommit, to: toCommit },
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   test("folds every planned action of one scope into name-ordered blocks", () => {
     // arrange
     const plans = [

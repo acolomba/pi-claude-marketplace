@@ -50,6 +50,7 @@ const PLUGIN_STATUSES = {
   "will uninstall": true,
   "will enable": true,
   "will disable": true,
+  "will update": true,
   disabled: true,
   "partially-installed": true,
   "partially-upgradable": true,

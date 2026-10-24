@@ -309,6 +309,19 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
       ],
     },
   },
+  {
+    label: "D-14 / will update plugin row",
+    run: runWithAllLoaded(),
+    message: {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [{ status: "will update", name: "p", from: "1.0.0", to: "1.1.0" }],
+        },
+      ],
+    },
+  },
 ];
 
 // Subject-first row grammar for DIFF-02 will-* rows: glyph + name + optional
@@ -320,11 +333,11 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
 // when present, ALWAYS follows the subject -- never precedes it.
 // FSTAT-06 / D-66-04: the `will install` token also admits the `will partially
 // install` form when the planned install would degrade (resolves
-// `partially-available`). It is a render modifier, not a new closed-set token;
-// there is deliberately no `will partially update` analog (the reconcile plan
-// has no update bucket -- D-66-05).
+// `partially-available`). It is a render modifier, not a new closed-set token.
+// D-14 (superseding D-66-05): the `will update` token carries the catalog
+// move's `v<from> → v<to>` arrow between the subject and the status token.
 const WILL_TOKEN_RE =
-  /^(?:[●○⊘◍]) [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: \(will (?:install|partially install|uninstall|enable|disable)\))?$/;
+  /^(?:[●○⊘◍]) [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: v[A-Za-z0-9.#_-]+ → v[A-Za-z0-9.#_-]+)?(?: \(will (?:install|partially install|uninstall|enable|disable|update)\))?$/;
 
 // D-54-01 / ENBL-04: subject-first row grammar for the new
 // `(disabled)` inventory token. Each row matches

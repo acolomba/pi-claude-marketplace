@@ -2965,6 +2965,7 @@ test("pending policies produce identical complete rows under opposite snapshots"
         { status: "will uninstall", name: "beta" },
         { status: "will enable", name: "gamma" },
         { status: "will disable", name: "delta" },
+        { status: "will update", name: "epsilon", from: "1.0.0", to: "1.1.0" },
       ],
     },
   ] as const;
@@ -2983,13 +2984,14 @@ test("pending policies produce identical complete rows under opposite snapshots"
         { status: "will uninstall", name: "beta", reasons: [] },
         { status: "will enable", name: "gamma", reasons: [] },
         { status: "will disable", name: "delta", reasons: [] },
+        { status: "will update", name: "epsilon", from: "1.0.0", to: "1.1.0", reasons: [] },
       ],
     },
   ];
   assert.deepStrictEqual(loaded, expected);
   assert.deepStrictEqual(absent, expected);
   const expectedText =
-    "● official [user]\n  ● alpha [project] (will partially install)\n  ○ beta (will uninstall)\n  ● gamma (will enable)\n  ◍ delta (will disable)";
+    "● official [user]\n  ● alpha [project] (will partially install)\n  ○ beta (will uninstall)\n  ● gamma (will enable)\n  ◍ delta (will disable)\n  ● epsilon v1.0.0 → v1.1.0 (will update)";
   assert.equal(composeReconcileAppliedBody([loaded[0]!]), expectedText);
   assert.equal(composeReconcileAppliedBody([absent[0]!]), expectedText);
 });

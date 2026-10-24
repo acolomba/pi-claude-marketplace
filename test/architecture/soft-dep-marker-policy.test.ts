@@ -242,6 +242,7 @@ const MARKER_POLICY_TABLE = [
       "will uninstall": { markers: false, contentReasons: false },
       "will enable": { markers: false, contentReasons: false },
       "will disable": { markers: false, contentReasons: false },
+      "will update": { markers: false, contentReasons: true },
       failed: { markers: false, contentReasons: true },
     },
   },
@@ -277,6 +278,7 @@ const MARKER_POLICY_TABLE = [
       "will uninstall": { markers: false, contentReasons: true },
       "will enable": { markers: false, contentReasons: false },
       "will disable": { markers: false, contentReasons: false },
+      "will update": { markers: false, contentReasons: true },
     },
   },
 ] satisfies readonly {

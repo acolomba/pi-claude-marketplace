@@ -327,6 +327,17 @@ const ROW_CASES = [
   },
   {
     plugin: {
+      status: "will update",
+      name: "demo",
+      scope: "user",
+      from: "1.0.0",
+      to: "1.1.0",
+      reasons: [],
+    },
+    expected: "● demo v1.0.0 → v1.1.0 (will update)",
+  },
+  {
+    plugin: {
       status: "disabled",
       name: "alpha",
       scope: "user",

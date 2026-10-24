@@ -42,6 +42,9 @@
 //                         -> child row { status: "will install" }, folded into
 //                            the pluginsToInstall loop (MISS-01, D-09-12). It
 //                            fills from the same verdict (D-21).
+//   catalog moves         -> child row { status: "will update" } with the
+//                            move's `from → to` (D-14). They come from the
+//                            convergence planner, not from a plan bucket.
 //
 // The empty-plan case is handled by the orchestrator (`pending.ts`) which
 // switches on `plans.every(isPlanEmpty)` and emits a free-form advisory line
@@ -69,6 +72,7 @@ import {
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import { enableRowDependencies } from "../plugin/shared.ts";
+import { revisionCommits } from "../plugin/update-row.ts";
 
 import { sourceMismatchOutcomeSubject } from "./apply-outcomes.ts";
 import { plannedSourceMismatchSubject } from "./types.ts";
@@ -79,6 +83,7 @@ import type {
   PluginEnabledOutcome,
   PluginInstalledOutcome,
 } from "./apply-outcomes.ts";
+import type { PlannedMove } from "./convergence.ts";
 import type { PendingMsg, ReconcileAppliedMsg } from "./reconcile.messaging.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
@@ -278,6 +283,26 @@ function pushMarketplaceActions(
   }
 }
 
+/**
+ * D-14: one `will update` row per catalog move, under its marketplace block.
+ * The arrow names commits only under the `updated` row's rule (UPR-02).
+ */
+function pushPlannedMoves(
+  byMp: Map<string, MarketplaceBlock<PendingMsg>>,
+  moves: readonly PlannedMove[],
+): void {
+  for (const move of moves) {
+    const commits = revisionCommits(move);
+    ensureMarketplaceBlock(byMp, move.scope, move.marketplace).plugins.push({
+      status: "will update",
+      name: move.plugin,
+      from: move.fromVersion,
+      to: move.toVersion,
+      ...(commits !== undefined && { commits }),
+    });
+  }
+}
+
 /** PRN-02: a `will uninstall` row naming the plugin's recorded version. */
 function willUninstallRow(
   recordedVersions: ReadonlyMap<string, string>,
@@ -439,6 +464,9 @@ export async function resolvePendingForceInstalls(
  *                              D-09-12). A bucket entry never matches a force-
  *                              install key, so its row is the bare token. It
  *                              fills from the same verdict (D-21).
+ *   - `moves`               -> child row { status: "will update" } per catalog
+ *                              move (D-14, superseding D-66-05's "no update
+ *                              bucket"), after the plan buckets.
  *
  * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
  * case-insensitive, project-before-user secondary). Plugin rows within a
@@ -449,6 +477,7 @@ export function buildReconcilePendingNotification(
   plans: readonly ReconcilePlan[],
   forceInstallKeys: ReadonlySet<string> = new Set<string>(),
   recordedVersions: ReadonlyMap<string, string> = new Map<string, string>(),
+  moves: readonly PlannedMove[] = [],
 ): {
   readonly marketplaces: readonly MarketplaceRows<PendingMsg>[];
 } {
@@ -474,11 +503,8 @@ export function buildReconcilePendingNotification(
       // FSTAT-06 / D-66-04: stamp the partial modifier when the planned install
       // candidate resolved `partially-available` (no-network resolveStrict, computed
       // ahead of time by resolvePendingForceInstalls). The modifier renders
-      // `(will partially install)` in place of `(will install)`. D-66-05: there is
-      // deliberately NO `will partially update` analog -- the ReconcilePlan has no
-      // update bucket (only install/uninstall/enable/disable/dependency-disable +
-      // marketplace add/remove + sourceMismatches), so no partial-update row is
-      // ever constructed here; the will-partially-update token is vacuous.
+      // `(will partially install)` in place of `(will install)`. A catalog move
+      // is a `will update` row from `moves` instead (D-14 supersedes D-66-05).
       const force = forceInstallKeys.has(forceInstallKey(o.scope, o.marketplace, o.plugin));
       block.plugins.push({
         status: "will install",
@@ -519,6 +545,8 @@ export function buildReconcilePendingNotification(
       });
     }
   }
+
+  pushPlannedMoves(byMp, moves);
 
   return {
     marketplaces: Object.freeze(
