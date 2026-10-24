@@ -1075,7 +1075,7 @@ async function enumerateMarketplaceTarget(
   // (`<plugin>@<mp>` and `@<mp>`). For the plugin form, first try the
   // installed-plugin target; a miss falls back to the marketplace-existence
   // resolver so a present-marketplace/absent-plugin row still reaches the
-  // downstream `(skipped) {not installed}` preflight. A
+  // downstream `(failed) {not installed}` preflight (UPR-04). A
   // marketplace-absent / other-scope outcome raises `MarketplaceNotAddedSignal`
   // -- caught at the `updatePlugins` entrypoint and re-attributed to the
   // standalone `{marketplace not added}` variant, so the miss is never
@@ -1135,8 +1135,8 @@ async function enumerateMarketplaceTarget(
  *  - PLUGIN form: prefer the installed-plugin target (CMP-5). When the plugin
  *    row is absent, fall back to the marketplace-existence resolver so a
  *    present-marketplace/absent-plugin target resolves against the container's
- *    scope (the downstream `preflightUpdate` emits `(skipped) {not installed}`
- *    ); a marketplace-absent / other-scope outcome signals
+ *    scope (the downstream `preflightUpdate` emits `(failed) {not installed}`,
+ *    UPR-04); a marketplace-absent / other-scope outcome signals
  *    `{marketplace not added}` carrying the REQUESTED scope (SCOPE-01).
  *  - MARKETPLACE form: consume the discriminated `resolveInstalledMarketplaceTarget`
  *    result directly; `marketplace-absent`/`other-scope` signal `{marketplace not added}`

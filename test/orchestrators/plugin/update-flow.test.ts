@@ -3517,9 +3517,9 @@ test("SEV-03 / D-69-01: prior-state read -- an ALREADY partially-installed plugi
   });
 });
 
-// ─── PUP-1 pl@mp form: not-installed plugin -> partition='skipped' ─────────────
+// ─── PUP-1 pl@mp form: not-installed plugin -> partition='failed' ──────────────
 
-test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not installed)", async () => {
+test("PUP-1 / UPR-04 pl@mp: targeting a plugin not in state -> partition='failed' (not installed)", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-pup1-pl-noinstall-");
     try {
@@ -3542,11 +3542,11 @@ test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not i
 
       const body = notifications[0]?.message ?? "";
       // V2 byte form. Plugin-row `[<scope>]` bracket suppressed by orphan-fold.
-      // D-01: an absent-target update (not installed) is error, severity-only
-      // flip; the `(skipped) {not installed}` per-row grammar is preserved.
+      // UPR-04: an absent-target update fails as not installed, as uninstall's
+      // does.
       assert.equal(
         body,
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not installed}",
       );
       assert.equal(notifications[0]?.severity, "error");
     } finally {
@@ -3557,13 +3557,11 @@ test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not i
 
 // ─── PUP-1 pl@mp: not in state AND not in manifest -> partition='failed' ───────
 
-// UXG-08 / D-29-08: `update <plugin>@<mp>` where the plugin is absent from both
-// local state AND the marketplace manifest now classifies as `(failed) {not in
-// manifest}` (matching `install`), not the prior `(skipped) {not installed}`.
-// `preflightUpdate` consults the manifest BEFORE concluding "not installed", so
-// a typo / nonexistent plugin name is distinguished from a real-but-uninstalled
-// plugin.
-test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partition='failed' (not in manifest)", async () => {
+// UPR-04: `update <plugin>@<mp>` checks the install record before the
+// marketplace manifest, as Claude Code does, so a plugin absent from both local
+// state AND the manifest fails as `(failed) {not installed}`, the same row a
+// plugin the manifest still lists renders.
+test("PUP-1 / UPR-04 pl@mp: targeting a plugin not in state AND not in manifest -> partition='failed' (not installed)", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-pup1-pl-nomanifest-");
     try {
@@ -3572,8 +3570,7 @@ test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partit
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         // Empty manifest: no entry for "hello", and hello is not installed
-        // (no installedVersions). The manifest check must fire before the
-        // "not installed" guard.
+        // (no installedVersions). The record check fires first.
         manifestPlugins: {},
       });
 
@@ -3589,7 +3586,7 @@ test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partit
       const body = notifications[0]?.message ?? "";
       assert.equal(
         body,
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not in manifest}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not installed}",
       );
       assert.equal(notifications[0]?.severity, "error");
     } finally {
@@ -3736,9 +3733,9 @@ test("SCOPE-01 @<mp>: marketplace present only in other scope -> scope-qualified
 // The plugin form reaches this via `resolveInstalledPluginTarget` returning the
 // explicit scope blindly, then `enumerateMarketplaceTarget` finding
 // `mp === undefined` for that scope and raising the signal -- the companion of
-// the `@<mp>` form test above (WR-01 gap closure). SEV-04 / D-01: an absent
-// target means the operation was NOT carried out, so the row is `error`.
-test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> (skipped) {not installed, marketplace in project scope}", async () => {
+// the `@<mp>` form test above (WR-01 gap closure). SEV-04 / UPR-04: an absent
+// target means the operation was NOT carried out, so the row is a failure.
+test("SCOPE-01 / UPR-04 <plugin>@<mp>: marketplace present only in other scope -> (failed) {not installed, marketplace in project scope}", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-scope01-plugin-other-");
     try {
@@ -3764,7 +3761,7 @@ test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> (skippe
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "A plugin operation has failed.\n\n● mp [user]\n  ⊘ hello (skipped) {not installed, marketplace in project scope}",
+        "A plugin operation has failed.\n\n● mp [user]\n  ⊘ hello (failed) {not installed, marketplace in project scope}",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -3775,7 +3772,7 @@ test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> (skippe
 // Covers the resolveInstalledPluginTarget → undefined → ?? resolveInstalledMarketplaceTarget
 // fallback in enumerateMarketplaceTarget. With no explicit scope, resolveInstalledPluginTarget
 // searches both scopes and finds nothing, so the fallback fires to locate the marketplace scope.
-test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback resolution; partition='skipped'", async () => {
+test("PUP-1 / UPR-04 pl@mp: no explicit scope + plugin absent -> marketplace-fallback resolution; partition='failed'", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await createCaseDir("update-pup1-noscope-fallback-");
@@ -3803,11 +3800,11 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
       // assert
       const body = notifications[0]?.message ?? "";
       // V2 byte form mirrors the pl@mp not-installed shape (PUP-1 above).
-      // Plugin-row `[<scope>]` bracket suppressed by orphan-fold. D-01:
-      // absent-target update (not installed) is error, severity-only flip.
+      // Plugin-row `[<scope>]` bracket suppressed by orphan-fold. UPR-04: an
+      // absent-target update fails as not installed.
       assert.equal(
         body,
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not installed}",
       );
       assert.equal(notifications[0]?.severity, "error");
     } finally {
@@ -4610,8 +4607,8 @@ test("swapState-plugin-gone: plugin removed from state between enumerateTargets 
   // gitOps.fetch removes the plugin record from state.json after
   // enumerateTargets has already collected "hello" as a target. When
   // preflightUpdate runs, loadState finds no "hello" in the marketplace
-  // plugins -> returns partition='skipped' (notes: "not installed"). D-01:
-  // the absent target flips that skip to an error row (severity-only).
+  // plugins -> returns partition='failed' (notes: "not installed"), the
+  // absent-target failure (UPR-04).
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-swap-plugin-gone-");
     try {
@@ -4679,13 +4676,12 @@ test("swapState-plugin-gone: plugin removed from state between enumerateTargets 
       });
 
       // preflightUpdate reads modified state -> "hello" not in plugins ->
-      // returns skipped (not installed). D-01: absent target -> error row
-      // (severity-only flip; the `(skipped) {not installed}` token is kept).
+      // returns failed (not installed), an error row (UPR-04).
       assert.ok(notifications.length >= 1, "expected at least one notification");
       const errs = notifications.filter((n) => n.severity === "error");
-      assert.equal(errs.length, 1, "absent-target update is now an error (D-01)");
+      assert.equal(errs.length, 1, "absent-target update is an error (UPR-04)");
       const body = notifications[0]?.message ?? "";
-      assert.match(body, /\(skipped\) \{not installed\}/);
+      assert.match(body, /\(failed\) \{not installed\}/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -12288,7 +12284,7 @@ test("owns plugin update flow composition", () => {
   assert.strictEqual(typeof operations.beginPluginUpdateRun(), "function");
 });
 
-test("routes cascade-safe preflight outcomes through the flow owner", async () => {
+test("UPR-04: routes a not-installed preflight failure through the flow owner", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await createCaseDir("update-flow-preflight-");
@@ -12310,7 +12306,7 @@ test("routes cascade-safe preflight outcomes through the flow owner", async () =
       const outcome = await operations.beginPluginUpdateRun()("present", "mp", "project");
 
       // assert
-      assert.strictEqual(outcome.partition, "skipped");
+      assert.strictEqual(outcome.partition, "failed");
       assert.strictEqual(outcome.name, "present");
       assert.deepStrictEqual(outcome.reasons, ["not installed"]);
     } finally {

@@ -63,6 +63,27 @@ Feature: Plugin update
       | marketplace name | marketplace scope | id            | name | status  | reasons    | scope   |
       | fixtures         | project           | demo@fixtures | demo | skipped | up-to-date | project |
 
+  Scenario: Updating a plugin that is not installed fails as not installed and changes nothing
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | pp   | 1.0.0   |
+    When the user runs "/claude:plugin update pp@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name | status | reasons       | scope   | leaks | rollback partial |
+      | fixtures         | project           | pp@fixtures | pp   | failed | not installed | project |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+
   Scenario: Updating with --local a plugin only the base layer declares fails as plugin in base layer only
     Given the marketplace "fixtures" offers these plugins:
       | name | version |

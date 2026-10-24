@@ -3038,12 +3038,12 @@ describe("emitMarketplaceNotAdded", () => {
 });
 
 describe("emitMarketplaceNotAddedSignal", () => {
-  test("renders the plugin row when nothing of the container is installed at the named scope", async () => {
+  test("UPR-04: renders the failed plugin row when nothing of the container is installed at the named scope", async () => {
     // arrange
     const context = {
       Messaging: { label: "Plugin reinstall" },
-      rowPolicies: { skipped: { markers: false, contentReasons: true } },
-    } satisfies CommandContext<"skipped">;
+      rowPolicies: { failed: { markers: false, contentReasons: true } },
+    } satisfies CommandContext<"failed">;
     const notifications: { message: string; severity?: string }[] = [];
     const { ctx } = makeRecordingBoundary(notifications);
 
@@ -3059,14 +3059,14 @@ describe("emitMarketplaceNotAddedSignal", () => {
 
     // assert
     assert.deepStrictEqual(context.rowPolicies, {
-      skipped: { markers: false, contentReasons: true },
+      failed: { markers: false, contentReasons: true },
     });
     assert.deepStrictEqual(notifications, [
       {
         message:
           "A plugin operation has failed.\n\n" +
           "● mp [project]\n" +
-          "  ⊘ hello (skipped) {not installed, marketplace in user scope}\n\n" +
+          "  ⊘ hello (failed) {not installed, marketplace in user scope}\n\n" +
           "Plugin reinstall: 1 failure",
         severity: "error",
       },
@@ -3078,8 +3078,8 @@ describe("emitMarketplaceNotAddedSignal", () => {
       // arrange
       const context = {
         Messaging: { label: "Plugin reinstall" },
-        rowPolicies: { skipped: { markers: false, contentReasons: false } },
-      } satisfies CommandContext<"skipped">;
+        rowPolicies: { failed: { markers: false, contentReasons: false } },
+      } satisfies CommandContext<"failed">;
       const notifications: { message: string; severity?: string }[] = [];
       const { ctx } = makeRecordingBoundary(notifications);
 

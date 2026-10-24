@@ -212,40 +212,30 @@ test("classifies a missing marketplace without reading a manifest", async (t) =>
   });
 });
 
-test("distinguishes an undeclared target from a declared uninstalled target", async (t) => {
-  // arrange
-  const undeclared = await seedUpdate({ declared: false });
-  const uninstalled = await seedUpdate();
-  t.after(() =>
-    Promise.all(
-      [undeclared.cwd, uninstalled.cwd].map((cwd) => rm(cwd, { force: true, recursive: true })),
-    ),
-  );
+for (const { declared, listing } of [
+  { declared: false, listing: "does not list" },
+  { declared: true, listing: "still lists" },
+] as const) {
+  test(`UPR-04: a target with no install record fails as not installed when the manifest ${listing} it`, async (t) => {
+    // arrange
+    const seed = await seedUpdate({ declared });
+    t.after(() => rm(seed.cwd, { force: true, recursive: true }));
 
-  // act
-  const undeclaredOutcome = await prepare(undeclared);
-  const uninstalledOutcome = await prepare(uninstalled);
+    // act
+    const outcome = await prepare(seed);
 
-  // assert
-  assert.deepStrictEqual(undeclaredOutcome, {
-    partition: "failed",
-    name: "hello",
-    notes: ["not in manifest"],
-    reasons: ["not in manifest"],
-    declaresAgents: false,
-    declaresMcp: false,
-    declaresWorkflows: false,
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "failed",
+      name: "hello",
+      notes: ["not installed"],
+      reasons: ["not installed"],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    });
   });
-  assert.deepStrictEqual(uninstalledOutcome, {
-    partition: "skipped",
-    name: "hello",
-    notes: ["not installed"],
-    reasons: ["not installed"],
-    declaresAgents: false,
-    declaresMcp: false,
-    declaresWorkflows: false,
-  });
-});
+}
 
 test("retains the recorded version when the refreshed manifest drops the plugin", async (t) => {
   // arrange

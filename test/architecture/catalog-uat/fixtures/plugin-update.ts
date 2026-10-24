@@ -76,7 +76,7 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
             scope: "user",
             plugins: [
               {
-                status: "skipped",
+                status: "failed",
                 name: "hello",
                 reasons: ["not installed", "marketplace in project scope"],
                 severity: "error",

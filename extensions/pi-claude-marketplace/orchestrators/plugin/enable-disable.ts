@@ -3186,9 +3186,8 @@ function composeOutcomeRow(args: {
         // operation was NOT carried out -> error. Severity is the tri-state
         // axis (info = desired state reached, warning = carried out but short,
         // error = not carried out), and `(skipped)` is the status token, not a
-        // severity: the same `["not installed"]` set is stamped `error` by
-        // `uninstall`'s `emitAlreadyGone`, `update`'s `cascadeSkipSeverity`,
-        // and `reinstall`'s in-scope skipped arm. No reload.
+        // severity: `uninstall`, `update`, and `reinstall` stamp the same
+        // `["not installed"]` set `error` on their `(failed)` rows. No reload.
         severity: "error",
         needsReload: false,
       };

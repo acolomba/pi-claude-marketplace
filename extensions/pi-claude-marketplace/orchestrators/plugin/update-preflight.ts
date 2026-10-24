@@ -555,9 +555,9 @@ interface StaticPreflightRowBase {
  * candidate.
  *
  * `fromVersion` is reachable on the `skipped` partition only. A `failed` row is
- * one the plugin is absent from the manifest for, so there is no install record
- * to read a version from; pinning the field `never` there keeps a version arrow
- * off a row for a plugin that was never installed.
+ * one for a plugin with no install record (UPR-04), so there is no record to
+ * read a version from; pinning the field `never` there keeps a version arrow
+ * off a row for a plugin that is not installed.
  */
 type StaticPreflightRowOptions =
   | (StaticPreflightRowBase & { readonly partition: "failed"; readonly fromVersion?: never })
@@ -596,21 +596,16 @@ function triageUpdateMembership(
   lookup: ReturnType<typeof lookupDeclaredPlugin>,
 ): UpdatePreflightOutcome | { readonly record: PluginStateRecord; readonly entry: PluginEntry } {
   if (record === undefined) {
-    return lookup.kind === "absent"
-      ? // Not installed AND absent from the manifest. No `fromVersion` -- there
-        // is no install record to read a version from.
-        staticPreflightRow({
-          partition: "failed",
-          plugin,
-          notes: ["not in manifest"],
-          reason: "not in manifest",
-        })
-      : staticPreflightRow({
-          partition: "skipped",
-          plugin,
-          notes: ["not installed"],
-          reason: "not installed",
-        });
+    // UPR-04: the record is checked before the manifest, as Claude Code does,
+    // so a plugin with no install record fails as not installed whether or not
+    // the manifest still lists it -- the row `uninstall` renders. No
+    // `fromVersion`: there is no record to read a version from.
+    return staticPreflightRow({
+      partition: "failed",
+      plugin,
+      notes: ["not installed"],
+      reason: "not installed",
+    });
   }
 
   if (lookup.kind === "absent") {

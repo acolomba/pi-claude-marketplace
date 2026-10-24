@@ -322,16 +322,16 @@ test("renders a partial bulk decline before the exact no-op headline", () => {
   boundary.verifyBoundary();
 });
 
-test("renders an absent targeted result as an exact error without a version", () => {
+test("UPR-04: renders an absent targeted result as an exact failure without a version", () => {
   // arrange
   const boundary = createNotificationBoundary(1);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
       outcome: {
-        partition: "skipped",
+        partition: "failed",
         name: "hello",
-        notes: [],
+        notes: ["not installed"],
         reasons: ["not installed"],
         declaresAgents: false,
         declaresMcp: false,
@@ -347,7 +347,7 @@ test("renders an absent targeted result as an exact error without a version", ()
   assert.deepStrictEqual(boundary.notifications, [
     {
       message:
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not installed}",
       severity: "error",
     },
   ]);

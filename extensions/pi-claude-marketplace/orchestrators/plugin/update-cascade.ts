@@ -45,10 +45,6 @@ function cascadeSkipSeverity(
   reasons: readonly ContentReason[],
   cardinality: "single" | "plural",
 ): "info" | "warning" | "error" {
-  if (reasons.includes("not installed") || reasons.includes("not found")) {
-    return "error";
-  }
-
   if (reasons.includes("no longer installable")) {
     return cardinality === "single" ? "warning" : "info";
   }

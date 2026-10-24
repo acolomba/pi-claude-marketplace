@@ -605,7 +605,7 @@ export const PLUGIN_REINSTALL_FIXTURES: FixtureMap = {
             scope: "project",
             plugins: [
               {
-                status: "skipped",
+                status: "failed",
                 name: "hello",
                 reasons: ["not installed", "marketplace in user scope"],
                 severity: "error",
