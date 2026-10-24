@@ -21,8 +21,8 @@
 // exists for -- it is how "one cleanup fails while its siblings succeed"
 // becomes expressible without patching a builtin module. Where the target is
 // minted inside the call being faulted and so cannot be named in advance, the
-// key moves to the nearest thing the case DOES know -- the target's parent, or
-// a rename's destination -- never to a predicate that could match a sibling.
+// key moves to the nearest thing the case DOES know -- the target's parent --
+// never to a predicate that could match a sibling.
 //
 // Two fidelity limits, recorded so a case does not read the fake as total:
 //
@@ -31,8 +31,8 @@
 //     decided by the `/` separator, so every seeded path must be absolute and
 //     `/`-separated (the tree's own fakes use synthetic `/memory/...` roots).
 //   - It simulates only the errno outcomes its contract pins: ENOENT for an
-//     unforced removal or a rename of an absent source, and ERR_FS_EISDIR for
-//     a non-recursive removal of a directory. Permission, quota, and
+//     unforced removal of an absent path, and ERR_FS_EISDIR for a
+//     non-recursive removal of a directory. Permission, quota, and
 //     cross-device failures arrive through the per-target fault map instead.
 
 import type { RemovalOps } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
@@ -52,11 +52,9 @@ export interface RemovalOpsFakeOptions {
    * never name the target. It always knows the parent: `ScopedLocations`
    * publishes one staging directory per bridge kind, which is also what makes
    * the key select exactly one bridge's cleanup and leave its siblings'
-   * alone. Same reason `renameDestinationErrors` exists below.
+   * alone.
    */
   readonly rmParentErrors?: ReadonlyArray<readonly [parent: string, error: Error]>;
-  /** Errors `rename` rejects with, keyed by the absolute source path. */
-  readonly renameErrors?: ReadonlyArray<readonly [from: string, error: Error]>;
 }
 
 export interface RemovalOpsFakeCalls {
@@ -64,7 +62,6 @@ export interface RemovalOpsFakeCalls {
     readonly target: string;
     readonly options: { readonly recursive?: boolean; readonly force?: boolean };
   }>;
-  readonly rename: Array<{ readonly from: string; readonly to: string }>;
 }
 
 export interface RemovalOpsFake {
@@ -73,8 +70,6 @@ export interface RemovalOpsFake {
   readonly calls: RemovalOpsFakeCalls;
   /** Whether the fake still considers `target` present; `false` once removed. */
   present(target: string): boolean;
-  /** The contents of a present file, or `null` for a directory or an absent path. */
-  readFile(target: string): string | null;
 }
 
 /** A directory entry carries no contents; a file entry carries its bytes. */
@@ -109,8 +104,7 @@ export function createRemovalOpsFake(options: RemovalOpsFakeOptions): RemovalOps
 
   const rmErrors = byPath(options.rmErrors);
   const rmParentErrors = byPath(options.rmParentErrors);
-  const renameErrors = byPath(options.renameErrors);
-  const calls: RemovalOpsFakeCalls = { rm: [], rename: [] };
+  const calls: RemovalOpsFakeCalls = { rm: [] };
 
   const descendantsOf = (target: string): string[] =>
     [...entries.keys()].filter((candidate) => candidate.startsWith(`${target}/`));
@@ -148,45 +142,12 @@ export function createRemovalOpsFake(options: RemovalOpsFakeOptions): RemovalOps
         entries.delete(descendant);
       }
     },
-    async rename(from, to) {
-      calls.rename.push({ from, to });
-      const failure = renameErrors.get(from);
-      if (failure !== undefined) {
-        throw failure;
-      }
-
-      await Promise.resolve();
-      if (!entries.has(from)) {
-        throw errnoError(
-          "ENOENT",
-          `ENOENT: no such file or directory, rename '${from}' -> '${to}'`,
-        );
-      }
-
-      const moved: Array<readonly [string, FakeEntry]> = [
-        [to, entries.get(from) ?? null],
-        ...descendantsOf(from).map(
-          (descendant) =>
-            [`${to}${descendant.slice(from.length)}`, entries.get(descendant) ?? null] as const,
-        ),
-      ];
-
-      for (const descendant of descendantsOf(from)) {
-        entries.delete(descendant);
-      }
-
-      entries.delete(from);
-      for (const [movedPath, movedEntry] of moved) {
-        entries.set(movedPath, movedEntry);
-      }
-    },
   };
 
   return {
     removalOps,
     calls,
     present: (target) => entries.has(target),
-    readFile: (target) => entries.get(target) ?? null,
   };
 }
 
@@ -200,34 +161,18 @@ export interface DelegatingRemovalOpsOptions {
   readonly delegate: RemovalOps;
   /** Errors `rm` rejects with, keyed by the absolute target path. */
   readonly rmErrors?: ReadonlyArray<readonly [target: string, error: Error]>;
-  /** Errors `rename` rejects with, keyed by the absolute source path. */
-  readonly renameErrors?: ReadonlyArray<readonly [from: string, error: Error]>;
-  /**
-   * Errors `rename` rejects with, keyed by the absolute DESTINATION path. The
-   * backup-restore stage of a replacement rollback moves a backup whose path
-   * was minted inside the forward pass's own unported rename, so a case that
-   * faults the restore cannot key on a source it has not seen yet. It always
-   * knows the destination: the target the backup is restored to.
-   */
-  readonly renameDestinationErrors?: ReadonlyArray<readonly [to: string, error: Error]>;
 }
 
-/** One recorded call, in a shape that keeps `rm` and `rename` comparable. */
-export type RemovalOpsOperation =
-  | {
-      readonly verb: "rm";
-      readonly target: string;
-      readonly options: { readonly recursive?: boolean; readonly force?: boolean };
-    }
-  | { readonly verb: "rename"; readonly from: string; readonly to: string };
+/** One recorded call. */
+export interface RemovalOpsOperation {
+  readonly verb: "rm";
+  readonly target: string;
+  readonly options: { readonly recursive?: boolean; readonly force?: boolean };
+}
 
 export interface DelegatingRemovalOps {
   readonly removalOps: RemovalOps;
-  /**
-   * Every call in the order it was received, both verbs in one list. The
-   * interleaving across verbs is itself a contract some cases pin, which the
-   * in-memory fake's per-verb `calls` cannot express.
-   */
+  /** Every call in the order it was received. */
   readonly operations: RemovalOpsOperation[];
 }
 
@@ -239,8 +184,6 @@ export function createDelegatingRemovalOps(
   }
 
   const rmErrors = byPath(options.rmErrors);
-  const renameErrors = byPath(options.renameErrors);
-  const renameDestinationErrors = byPath(options.renameDestinationErrors);
   const operations: RemovalOpsOperation[] = [];
 
   return {
@@ -254,15 +197,6 @@ export function createDelegatingRemovalOps(
         }
 
         await options.delegate.rm(target, rmOptions);
-      },
-      async rename(from, to) {
-        operations.push({ verb: "rename", from, to });
-        const failure = renameErrors.get(from) ?? renameDestinationErrors.get(to);
-        if (failure !== undefined) {
-          throw failure;
-        }
-
-        await options.delegate.rename(from, to);
       },
     },
   };

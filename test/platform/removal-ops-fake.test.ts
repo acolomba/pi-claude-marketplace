@@ -19,7 +19,6 @@ const TREE_PATH = `${MEMORY_ROOT}/tree`;
 const NESTED_PATH = `${TREE_PATH}/nested-a.md`;
 const OCCUPIED_PATH = `${MEMORY_ROOT}/file-b.md`;
 const ABSENT_PATH = `${MEMORY_ROOT}/absent`;
-const SPARE_PATH = `${MEMORY_ROOT}/spare`;
 
 function seededFake(): ReturnType<typeof createRemovalOpsFake> {
   return createRemovalOpsFake({
@@ -41,11 +40,8 @@ function createFakeParticipant(): RemovalOpsContractParticipant {
     filePath: FILE_PATH,
     treePath: TREE_PATH,
     nestedPath: NESTED_PATH,
-    occupiedPath: OCCUPIED_PATH,
     absentPath: ABSENT_PATH,
-    spareDestination: SPARE_PATH,
     present: (target) => Promise.resolve(removal.present(target)),
-    readFile: (target) => Promise.resolve(removal.readFile(target)),
   };
 }
 
@@ -105,39 +101,11 @@ describe("createRemovalOpsFake", () => {
     );
   });
 
-  test("rejects only the faulted rename source", async () => {
-    // arrange
-    const faultedRename = Object.assign(new Error("backup restore denied"), { code: "EPERM" });
-    const removal = createRemovalOpsFake({
-      boundary: "memory",
-      files: [
-        [FILE_PATH, FILE_CONTENTS],
-        [OCCUPIED_PATH, OCCUPIED_CONTENTS],
-      ],
-      renameErrors: [[FILE_PATH, faultedRename]],
-    });
-
-    // act
-    const faulted = removal.removalOps.rename(FILE_PATH, ABSENT_PATH);
-    await removal.removalOps.rename(OCCUPIED_PATH, SPARE_PATH);
-
-    // assert
-    await assert.rejects(faulted, (error: unknown) => {
-      assert.strictEqual(error, faultedRename);
-      return true;
-    });
-    assert.deepStrictEqual(
-      [removal.readFile(FILE_PATH), removal.readFile(ABSENT_PATH), removal.readFile(SPARE_PATH)],
-      [FILE_CONTENTS, null, OCCUPIED_CONTENTS],
-    );
-  });
-
   test("records every call in the order it received them", async () => {
     // arrange
     const removal = seededFake();
 
     // act
-    await removal.removalOps.rename(FILE_PATH, SPARE_PATH);
     await removal.removalOps.rm(TREE_PATH, { recursive: true, force: true });
     await removal.removalOps.rm(OCCUPIED_PATH, { force: true });
 
@@ -147,27 +115,7 @@ describe("createRemovalOpsFake", () => {
         { target: TREE_PATH, options: { recursive: true, force: true } },
         { target: OCCUPIED_PATH, options: { force: true } },
       ],
-      rename: [{ from: FILE_PATH, to: SPARE_PATH }],
     });
-  });
-
-  test("renames a directory with the entries it contains", async () => {
-    // arrange
-    const removal = seededFake();
-
-    // act
-    await removal.removalOps.rename(TREE_PATH, SPARE_PATH);
-
-    // assert
-    assert.deepStrictEqual(
-      [
-        removal.present(TREE_PATH),
-        removal.present(NESTED_PATH),
-        removal.present(SPARE_PATH),
-        removal.readFile(`${SPARE_PATH}/nested-a.md`),
-      ],
-      [false, false, true, NESTED_CONTENTS],
-    );
   });
 });
 

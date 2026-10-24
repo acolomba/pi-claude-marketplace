@@ -15,7 +15,6 @@ import {
 import {
   FILE_CONTENTS,
   NESTED_CONTENTS,
-  OCCUPIED_CONTENTS,
   registerRemovalOpsContract,
 } from "../platform/removal-ops-contract.ts";
 import { createRemovalOpsFake } from "../platform/removal-ops-fake.ts";
@@ -30,20 +29,11 @@ import { createRemovalOpsFake } from "../platform/removal-ops-fake.ts";
 //
 // D-08-13 leaves those two verbs outside the port's membership.
 
-/** The contract's file-contents probe: a directory or an absent path reads as `null`. */
-async function readTextOrNull(target: string): Promise<string | null> {
-  try {
-    return await fs.readFile(target, "utf8");
-  } catch {
-    return null;
-  }
-}
-
 /**
  * `createRemovalOps` and `createRemovalOpsFake` answer one shared contract. The
  * fake's half runs in `test/platform/removal-ops-fake.test.ts`; this half drives
  * the real adapter against a per-case temporary root, which is also what covers
- * the adapter's two bindings.
+ * the adapter's binding.
  */
 describe("createRemovalOps", () => {
   registerRemovalOpsContract(async (t) => {
@@ -51,11 +41,9 @@ describe("createRemovalOps", () => {
     t.after(() => fs.rm(root, { recursive: true, force: true, maxRetries: 3 }));
     const treePath = path.join(root, "tree");
     const filePath = path.join(root, "file-a.md");
-    const occupiedPath = path.join(root, "file-b.md");
     const nestedPath = path.join(treePath, "nested-a.md");
     await fs.mkdir(treePath);
     await fs.writeFile(filePath, FILE_CONTENTS);
-    await fs.writeFile(occupiedPath, OCCUPIED_CONTENTS);
     await fs.writeFile(nestedPath, NESTED_CONTENTS);
 
     return {
@@ -63,11 +51,8 @@ describe("createRemovalOps", () => {
       filePath,
       treePath,
       nestedPath,
-      occupiedPath,
       absentPath: path.join(root, "absent"),
-      spareDestination: path.join(root, "spare"),
       present: (target) => pathExists(target),
-      readFile: (target) => readTextOrNull(target),
     };
   });
 });

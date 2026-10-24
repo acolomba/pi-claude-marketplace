@@ -256,16 +256,35 @@ export async function materializePluginClone(args: {
 }
 
 /**
+ * GIT-04: check `ref` out of a copy of the git directory `gitDir` into the
+ * empty staging dir `staging`, the one copy-and-checkout step every
+ * per-commit copy and tag clone shares.
+ *
+ * Only `.git` is copied (symlinks verbatim), and its index is dropped, so the
+ * non-forced checkout compares against an empty tree and writes exactly the
+ * commit's tree: no untracked or edited file of the source work tree rides
+ * along, a relative symlink stays relative instead of pointing back into the
+ * source (NFR-10), and a directory that holds only a symlink checks out
+ * (a forced checkout refuses it). Throws raw; the caller owns the staging
+ * cleanup.
+ */
+async function checkoutGitDirCopy(
+  gitOps: GitOps,
+  gitDir: string,
+  staging: string,
+  ref: string,
+): Promise<void> {
+  await mkdir(staging, { recursive: true });
+  await cp(gitDir, path.join(staging, ".git"), { recursive: true, verbatimSymlinks: true });
+  await rm(path.join(staging, ".git", "index"), { force: true });
+  await gitOps.checkout({ dir: staging, ref });
+}
+
+/**
  * GIT-01: check out `sha` into `dest` from the URL-keyed mirror of
  * `cloneUrl`, local only. Returns false when there is no mirror or the mirror
- * does not hold `sha`, so the caller clones instead.
- *
- * Only the mirror's `.git` is copied, and its index is dropped, so the
- * checkout writes exactly the commit's tree into an empty work tree: no
- * untracked or edited mirror file rides along, and a relative symlink stays
- * relative instead of pointing back into the mirror (NFR-10). A checkout
- * failure other than a missing commit propagates with the staging leak
- * appended (MA-9).
+ * does not hold `sha`, so the caller clones instead. A checkout failure other
+ * than a missing commit propagates with the staging leak appended (MA-9).
  */
 async function copyMirrorAtCommit(
   ops: RemovalOps,
@@ -284,13 +303,7 @@ async function copyMirrorAtCommit(
 
   const staging = await args.locations.sourcesStagingDir(randomUUID());
   try {
-    await mkdir(staging, { recursive: true });
-    await cp(path.join(mirrorRoot, ".git"), path.join(staging, ".git"), {
-      recursive: true,
-      verbatimSymlinks: true,
-    });
-    await rm(path.join(staging, ".git", "index"), { force: true });
-    await args.gitOps.checkout({ dir: staging, ref: args.sha });
+    await checkoutGitDirCopy(args.gitOps, path.join(mirrorRoot, ".git"), staging, args.sha);
   } catch (err) {
     const leak = await cleanupStaging(ops, staging, "plugin commit copy staging");
     if (isGitCommitNotFetchedError(err) || isGitNotFoundError(err)) {
@@ -333,6 +346,52 @@ export async function materializePluginCommitCopy(args: {
   }
 
   return materializePluginClone({ ...args, gitOps, pin: args.sha });
+}
+
+/** The two clone-cache steps an unpinned source materializes through. */
+export interface UnpinnedSourceSteps {
+  readonly materializeOrRefreshPluginMirror: typeof materializeOrRefreshPluginMirror;
+  readonly materializePluginCommitCopy: typeof materializePluginCommitCopy;
+}
+
+/**
+ * GIT-01 / GIT-04: materialize an UNPINNED git source the way install,
+ * update, and reinstall all do: the mirror step (clone cold, refresh warm,
+ * or, with `refresh: false`, read the commit the mirror last fetched), then
+ * the per-commit copy at that commit, anchored to the source's subdir. The
+ * plugin runs from the copy, never from the mirror.
+ *
+ * The caller holds the scope's state lock around this call (GIT-03), so no
+ * `fetch` refreshes the mirror while its commit is read and copied.
+ */
+export async function materializeUnpinnedSource(
+  steps: UnpinnedSourceSteps,
+  args: {
+    readonly locations: ScopedLocations;
+    readonly source: GitBackedSource;
+    readonly auth: GitAuthBundle;
+    readonly refresh?: boolean;
+  },
+): Promise<GitPluginRootResult> {
+  const { locations, source, auth } = args;
+  const cloneUrl = canonicalCloneUrl(source);
+  const networkUrl = networkCloneUrl(source);
+  const mirror = await steps.materializeOrRefreshPluginMirror({
+    locations,
+    cloneUrl,
+    networkUrl,
+    ...(source.ref !== undefined && { ref: source.ref }),
+    auth,
+    ...(args.refresh !== undefined && { refresh: args.refresh }),
+  });
+  const copyRoot = await steps.materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl,
+    sha: mirror.resolvedSha,
+    resolveAuth: () => auth,
+  });
+  return resolveGitPluginRootWithSubdir(source, copyRoot, mirror.resolvedSha);
 }
 
 /**
@@ -589,19 +648,21 @@ async function seedOnePluginMirror(
 
   const staging = await locations.sourcesStagingDir(randomUUID());
   await mkdir(path.dirname(staging), { recursive: true });
-  // Copy the working tree AND `.git`, so the seeded mirror's origin remote is
-  // the real remote URL (SEED-05), never the local checkout path. `cp` is
-  // cross-FS safe; the visible mirror still appears only via the atomic rename.
-  await cp(marketplaceRoot, staging, { recursive: true });
-
-  // SEED-04: a pinned source is seeded ONLY after its sha checks out against the
-  // copied history -- a successful checkout IS the reachability proof. An
-  // unreachable pin (CommitNotFetchedError, or any throw) is skipped so the
-  // normal network path materializes it later; never fabricate an immutable
-  // per-sha entry from non-matching content.
-  if (source.sha !== undefined) {
+  if (source.sha === undefined) {
+    // The mirror is a download cache: copy the working tree AND `.git`, so its
+    // origin remote is the real remote URL (SEED-05), never the local checkout
+    // path, with symlinks kept as they are. `cp` is cross-FS safe; the visible
+    // mirror still appears only via the atomic rename.
+    await cp(marketplaceRoot, staging, { recursive: true, verbatimSymlinks: true });
+  } else {
+    // SEED-04 / GIT-04: a pinned source is a per-commit copy an install runs
+    // from, so it gets exactly the commit's tree through the shared step, and
+    // only when the sha checks out against the copied history -- a successful
+    // checkout IS the reachability proof. An unreachable pin (or any throw) is
+    // skipped so the normal network path materializes it later; never
+    // fabricate an immutable per-sha entry from non-matching content.
     try {
-      await gitOps.checkout({ dir: staging, ref: source.sha });
+      await checkoutGitDirCopy(gitOps, path.join(marketplaceRoot, ".git"), staging, source.sha);
     } catch {
       await cleanupStaging(ops, staging, "plugin mirror seed staging");
       return;
@@ -848,25 +909,16 @@ export async function materializeMarketplaceTagClone(args: {
   // content): no re-copy, no re-checkout.
   if (!(await pathExists(dest))) {
     const staging = await args.locations.sourcesStagingDir(randomUUID());
-    // Copy ONLY the gitdir into an otherwise-empty staging dir. A checkout
-    // never removes untracked/ignored files from an existing work tree, so
-    // starting from a copy of the marketplace's live work tree would let
-    // anything not part of the tag's tree (untracked files, gitignored
-    // trees) ride along into the cache. Starting empty means the checkout
-    // below is the ONLY thing that writes into the work tree, and it writes
-    // exactly the tag's tree.
-    await mkdir(staging, { recursive: true });
+    // GIT-04: the shared step checks the tag out of a copy of the
+    // marketplace's gitdir into an empty tree, so the checkout is the only
+    // thing that writes the work tree and it writes exactly the tag's tree.
     try {
-      await cp(path.join(args.marketplaceRoot, ".git"), path.join(staging, ".git"), {
-        recursive: true,
-      });
-      // `force: true` -- the copied `.git`'s index already matches `tagOid`
-      // whenever the tag names the marketplace's current HEAD (the common
-      // case for a freshly-tagged release), so a non-forced checkout would
-      // see index === target tree and write nothing at all, leaving the
-      // empty staging dir empty. Forcing makes the checkout compare against
-      // the actual (empty) work tree instead of trusting the index.
-      await gitOps.checkout({ dir: staging, ref: args.tagOid, force: true });
+      await checkoutGitDirCopy(
+        gitOps,
+        path.join(args.marketplaceRoot, ".git"),
+        staging,
+        args.tagOid,
+      );
     } catch (err) {
       const leak = await cleanupStaging(removalOps, staging, "marketplace tag clone staging");
       throw appendLeakToError(err, leak);
