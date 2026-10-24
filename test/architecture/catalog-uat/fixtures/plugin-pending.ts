@@ -158,6 +158,8 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
       // CFG-03: the marketplace `name` is the file BASENAME
       // (never the absolute path -- T-53-02-02 information-disclosure
       // mitigation). The orchestrator passes path.basename(filePath).
+      // I5: one failed child named by the basename carries the redacted
+      // parse detail, the only row that can carry a cause.
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
@@ -169,7 +171,18 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
             severity: "error",
             needsReload: false,
             reasons: ["invalid manifest"],
-            plugins: [],
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "claude-plugins.json",
+                reasons: ["invalid manifest"],
+                cause: new Error(
+                  "JSON parse failed: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+                ),
+              },
+            ],
           },
         ],
       },

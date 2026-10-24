@@ -152,6 +152,14 @@ Feature: Plugin apply
       | fixtures         | project           | ghost@fixtures | ghost | failed    | not in manifest | project |         |       |                  |
       | fixtures         | project           | demo@fixtures  | demo  | installed |                 | project | 1.0.0   |       |                  |
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id             | name  | status       | reasons | scope   |
+      | fixtures         | project           | ghost@fixtures | ghost | will install |         | project |
+      | fixtures         | project           | ghost@fixtures | ghost | will install |         | project |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |

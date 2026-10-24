@@ -226,6 +226,14 @@ Feature: Plugin git source
       | gits             | project           | ghp@gits | ghp  | failed | source missing | project |       |                  |
     Then the project scope has no installed plugins
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id       | name | status       | reasons | scope   |
+      | gits             | project           | ghp@gits | ghp  | will install |         | project |
+      | gits             | project           | ghp@gits | ghp  | will install |         | project |
     Then the session offers no skills
 
   Scenario: Apply reports a declared plugin whose dependency's clone the git host refuses as dependency failed
@@ -259,6 +267,14 @@ Feature: Plugin git source
       | gits             | project           | app@gits | app  | failed | dependency failed | project |       |                  | HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git | false           |
     Then the project scope has no installed plugins
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id       | name | status       | reasons | scope   |
+      | gits             | project           | app@gits | app  | will install |         | project |
+      | gits             | project           | app@gits | app  | will install |         | project |
     Then the session offers no skills
 
   Scenario: An install of a plugin pinned to a commit its repository lacks fails as source missing and leaves nothing behind

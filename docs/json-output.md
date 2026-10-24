@@ -207,6 +207,8 @@ The ten structured kinds through `prune-committed-warning` also permit this fiel
 
 Load and hook origins have only `kind`. Command IDs can repeat across runs. Invocation IDs keep their results separate, including overlapping commands.
 
+A load reports its pending changes as a `cascade` whose `origin.kind` is `load`, and its per-session warnings as a `reconcile-applied-cascade`.
+
 ### Command origin
 
 `internal-error` uses the command branch of [Origin](#origin). Both identifiers are required.
