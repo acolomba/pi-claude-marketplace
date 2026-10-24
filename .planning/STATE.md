@@ -5,17 +5,17 @@ milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 29
 current_phase_name: Apply Command and Read-Only Reload
 status: executing
-stopped_at: Completed 29-11-PLAN.md
-last_updated: "2026-10-24T20:51:55.354Z"
+stopped_at: Completed 29-12-PLAN.md
+last_updated: "2026-10-24T22:06:43.277Z"
 last_activity: 2026-10-24
-last_activity_desc: Plan 29-11 complete (pending and the load preview git-source and grown catalog moves)
-state_head: 8b3ae98fc1228976e5b818904b4058718dfbf944
+last_activity_desc: Plan 29-12 complete (apply converges installed plugins on the catalog)
+state_head: 4d69faf8850398ce0e9f8940449e63b8cbf446c0
 progress:
   total_phases: 29
   completed_phases: 28
   total_plans: 74
-  completed_plans: 71
-  percent: 96
+  completed_plans: 72
+  percent: 97
 ---
 
 # Project State
@@ -32,11 +32,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 29 (Apply Command and Read-Only Reload) — EXECUTING
-Plan: 12 of 14
+Plan: 13 of 14
 Status: Ready to execute
-Last activity: 2026-10-24 — Plan 29-11 complete (pending and the load preview git-source and grown catalog moves)
+Last activity: 2026-10-24 — Plan 29-12 complete (apply converges installed plugins on the catalog)
 
-Progress: [█████████░] 96%
+Progress: [█████████░] 97%
 
 Phases 2-15 depend only on Phase 1 and may run in parallel once it lands. Each
 owns its own feature files and step modules (the file ownership table in
@@ -187,8 +187,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-24T20:51:26.523Z
-**Stopped at:** Completed 29-11-PLAN.md
+**Last session:** 2026-10-24T22:06:07.476Z
+**Stopped at:** Completed 29-12-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -405,6 +405,7 @@ archived milestone artifacts.
 | Phase 29 P09 | 52 min | 3 tasks | 41 files |
 | Phase 29 P10 | 54 min | 3 tasks | 31 files |
 | Phase 29 P11 | 27 min | 2 tasks | 14 files |
+| Phase 29 P12 | 70 min | 3 tasks | 34 files |
 
 ## Decisions
 
@@ -600,6 +601,8 @@ archived milestone artifacts.
 - [Phase 29]: The catalog decline's hint is the new RowHint catalog-partial-update, set by PluginPartiallyUpgradableMessage.catalogHint, with the frozen trailer 'Run update --partial on this plugin to update it with the supported components.' because apply and pending take no --partial (D-24)
 - [Phase 29]: Git-source and growth catalog moves (D-10, D-11): planConvergence previews a git-source record from the clone cache offline, a cached tree by version and commit (root not compared, GIT-01) and a target with no cached tree only when the catalog pins another commit or declares another version; the BFILL-01 growth test runs on every pass, so a strictly grown supported set is a move (growth-only at the same version, row marked {components now supported}), still subject to the range hold and consent decline
 - [Phase 29]: supportedSetGrew moved to convergence.ts as an export; backfill.ts imports it until the backfill is removed
+- [Phase 29]: apply moves catalog plugins through PluginUpdateOperations.convergePlugin (the update runner, refreshSource off, skipSameRevision on, overwrite off, searchReleaseTags off), never reinstall; a failed move shows the planned move and its closed-set reason
+- [Phase 29]: The cascade failure classifier reads the errno a BridgeStagingError carries on its cause, so an unreadable plugin source is permission denied (also in the autoupdate cascade)
 
 ### mcp-4 decisions
 
