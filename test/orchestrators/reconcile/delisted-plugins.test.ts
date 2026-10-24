@@ -144,6 +144,38 @@ test("RECON-04: a plugin this pass already reported gets no delisted row", async
   assert.deepStrictEqual(outcomes, [unreadable, delistedRow("tools", "lib")]);
 });
 
+test("D-08: a delisted plugin this pass disabled gets no delisted row", async () => {
+  // arrange
+  const tools = marketplaceRecord("tools", ["app", "lib", "kit"]);
+  const disabled: PerEntryOutcome = {
+    kind: "plugin-disabled",
+    scope: "project",
+    marketplace: "tools",
+    plugin: "app",
+  };
+  const held: PerEntryOutcome = {
+    kind: "plugin-dependency-disabled",
+    scope: "project",
+    marketplace: "tools",
+    plugin: "lib",
+    reasons: ["dependency unsatisfied"],
+    cause: new Error('Install "base@tools" first, or uninstall "lib@tools"'),
+  };
+  const outcomes: PerEntryOutcome[] = [disabled, held];
+
+  // act
+  await reportDelistedPlugins(
+    "project",
+    stateOf(tools),
+    outcomes,
+    manifestLoader({ [tools.manifestPath]: manifestListing("tools", []) }),
+  );
+
+  // assert
+  assert.deepStrictEqual(outcomes, [disabled, held, delistedRow("tools", "kit")]);
+  assert.equal(hasSuppressingRow(outcomes, "project", "tools", "app"), false);
+});
+
 test("REC-05: a pristine scope with no state reports nothing", async () => {
   // arrange
   const outcomes: PerEntryOutcome[] = [];

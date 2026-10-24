@@ -889,3 +889,29 @@ test("D-05-07: a name with neither a record nor a catalog entry fails closed as 
     },
   );
 });
+
+test("DLS-01 / NFR-10: a delisted git-source record reads its copy under the scope's plugin clones", async () => {
+  // arrange
+  const clone = path.join(LOCATIONS.pluginClonesDir, "acme-app", "0123456");
+  const mp = marketplaceRecord("mp", { app: { resolvedSource: clone } });
+  const loadManifest = manifestLoader({ [mp.manifestPath]: manifestOf("mp", {}) });
+  const reader = ownManifests({
+    [path.join(clone, ".claude-plugin", "plugin.json")]: JSON.stringify({
+      dependencies: ["lib@^2.0.0"],
+    }),
+  });
+
+  // act
+  const read = await readRecordDeclarations(
+    { state: stateOf(mp), locations: LOCATIONS, reader, loadManifest },
+    mp,
+    "app",
+  );
+
+  // assert
+  assert.deepStrictEqual(read, {
+    ok: true,
+    declared: [{ name: "lib", version: "^2.0.0", marketplace: "mp" }],
+    delisted: true,
+  });
+});

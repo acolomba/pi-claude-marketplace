@@ -3,10 +3,10 @@
 // REC-05 / DLS-01: the load-time warning for an installed plugin its
 // marketplace no longer lists. Claude Code 2.1.309 raises a `plugin-not-found`
 // load error ("Plugin "x" not found in marketplace "m"") for such a plugin on
-// every load; this row is Pi's counterpart. Pi keeps the plugin running
-// (v1.18), and the dependency walk now reads its declarations from its
-// installed copy (DLS-D1), so the warning can no longer come from the walk
-// failing. It is derived here, from the records and their loaded manifests.
+// every load; this row is Pi's counterpart. Pi keeps the plugin running and
+// the walk reads its declarations from its installed copy (DLS-D1), so this
+// row is derived from the records and their loaded manifests, not from a walk
+// failure.
 //
 // Only enabled records are reported: upstream raises the error while loading
 // the plugins that are enabled. A marketplace whose manifest fails to load says
@@ -37,8 +37,20 @@ const SUPPRESSING_KINDS: ReadonlySet<PerEntryOutcome["kind"]> = new Set([
   "plugin-declarer-unreadable",
 ]);
 
-/** Whether this pass already reported `plugin@marketplace` in `scope`. */
-export function hasSuppressingRow(
+/**
+ * D-08: a plugin this pass disabled -- by its config or because the load-time
+ * check held it down -- is no longer an enabled plugin, so it gets no delisted
+ * row either. These kinds suppress only that row: a disable does not say the
+ * dependency check was lost, so the walk's own row still follows it.
+ */
+const DELISTED_SUPPRESSING_KINDS: ReadonlySet<PerEntryOutcome["kind"]> = new Set([
+  ...SUPPRESSING_KINDS,
+  "plugin-disabled",
+  "plugin-dependency-disabled",
+]);
+
+function hasRowOfKinds(
+  kinds: ReadonlySet<PerEntryOutcome["kind"]>,
   outcomes: readonly PerEntryOutcome[],
   scope: Scope,
   marketplace: string,
@@ -46,12 +58,22 @@ export function hasSuppressingRow(
 ): boolean {
   return outcomes.some(
     (outcome) =>
-      SUPPRESSING_KINDS.has(outcome.kind) &&
+      kinds.has(outcome.kind) &&
       outcome.scope === scope &&
       "plugin" in outcome &&
       outcome.plugin === plugin &&
       outcome.marketplace === marketplace,
   );
+}
+
+/** Whether this pass already reported `plugin@marketplace` in `scope`. */
+export function hasSuppressingRow(
+  outcomes: readonly PerEntryOutcome[],
+  scope: Scope,
+  marketplace: string,
+  plugin: string,
+): boolean {
+  return hasRowOfKinds(SUPPRESSING_KINDS, outcomes, scope, marketplace, plugin);
 }
 
 /** A manifest that loaded, or `undefined` for one that did not. */
@@ -68,8 +90,8 @@ async function loadOrUndefined(
 
 /**
  * Pushes one `{not in manifest}` warning for every enabled record in `state`
- * whose loaded manifest does not list it, unless this pass already reported
- * that plugin. The row reuses the walk's `plugin-declarer-unreadable` shape
+ * (the read-pass snapshot) whose loaded manifest does not list it, unless this
+ * pass already reported, uninstalled, or disabled that plugin. The row reuses the walk's `plugin-declarer-unreadable` shape
  * (REC-05: `(failed)` at `warning`, with a cause), carrying upstream's words as
  * its cause.
  */
@@ -93,7 +115,7 @@ export async function reportDelistedPlugins(
       if (
         record.enabled &&
         lookupDeclaredPlugin(manifest, plugin).kind === "absent" &&
-        !hasSuppressingRow(outcomes, scope, marketplace.name, plugin)
+        !hasRowOfKinds(DELISTED_SUPPRESSING_KINDS, outcomes, scope, marketplace.name, plugin)
       ) {
         outcomes.push({
           kind: "plugin-declarer-unreadable",

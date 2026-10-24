@@ -2260,8 +2260,22 @@ test("DLS-01: a recorded plugin the manifest no longer declares keeps its instal
           ["good", "reinstalled"],
         ],
       );
-      assert.equal(notifications.length, 1);
-      assert.ok(!notifications[0]!.message.includes("unreadable"));
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "A plugin operation needs attention.",
+            "",
+            "● mp [project]",
+            "  ⊘ bad (skipped) {not in manifest}",
+            "  ● good v1.0.0 (reinstalled) {requires pi-subagents, requires pi-mcp-adapter}",
+            "",
+            "Plugin reinstall: 1 warning, 1 success",
+            "",
+            "/reload to pick up changes",
+          ].join("\n"),
+          severity: "warning",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

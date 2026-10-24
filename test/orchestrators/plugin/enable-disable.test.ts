@@ -3112,6 +3112,54 @@ test("WR-06 / NREG-01: a re-enable that staged neither agents nor MCP servers re
   });
 });
 
+test("DLS-01 / ATTR-08: enable on a delisted root whose installed copy declares a missing dependency refuses as not found", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+      unsupportedKind: "lspServers",
+      omitFromManifest: true,
+    });
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: { mp: { plugins: Record<string, { resolvedSource: string }> } };
+    };
+    const copy = state.marketplaces.mp.plugins["foo-plugin"]!.resolvedSource;
+    await mkdir(path.join(copy, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(copy, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "foo-plugin", dependencies: ["missing@mp"] }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo-plugin",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      notifications.map((notification) => notification.message),
+      [
+        [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user]",
+          "  ⊘ foo-plugin v1.2.3 (failed)",
+          '    cause: Plugin "foo-plugin" not found in marketplace "mp".',
+        ].join("\n"),
+      ],
+    );
+  });
+});
+
 test("WR-03 / ATTR-08: enable on a delisted root whose installed copy is gone still refuses as not found, not as unreadable", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange

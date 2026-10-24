@@ -74,6 +74,7 @@ import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { InvalidMarketplaceManifestError, isErrnoException } from "../../shared/errors.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
 import {
@@ -193,7 +194,13 @@ export type ScopeDeclarationDetailResult =
 
 /** One record's declarations, or the failure that ends the walk. */
 export type RecordDeclarations =
-  { readonly ok: true; readonly declared: readonly AddressedDependency[] } | IndexFailure;
+  | {
+      readonly ok: true;
+      readonly declared: readonly AddressedDependency[];
+      /** DLS-01: the declarations came from the installed copy of a delisted record. */
+      readonly delisted?: true;
+    }
+  | IndexFailure;
 
 /**
  * The failure that names `key`. `phrase` is a fixed phrase or field path this
@@ -285,6 +292,7 @@ export async function readRecordDeclarations(
       ...dep,
       marketplace: dep.marketplace ?? marketplace.name,
     })),
+    ...(declared.kind === "absent" && { delisted: true }),
   };
 }
 
@@ -293,13 +301,18 @@ export async function readRecordDeclarations(
  * root its install recorded (`resolvedSource`), admitted only inside the
  * marketplace clone or the scope's `plugin-clones/` (NFR-10).
  */
-function readInstalledCopy(
+async function readInstalledCopy(
   options: ScopeDeclarationDetailOptions,
   marketplace: MarketplaceStateRecord,
   name: string,
 ): ReturnType<typeof readInstalledCopyDeclaration> {
+  const record = ownValue(marketplace.plugins, name);
+  if (record === undefined) {
+    return { kind: "absent" };
+  }
+
   return readInstalledCopyDeclaration({
-    pluginRoot: marketplace.plugins[name]?.resolvedSource ?? "",
+    pluginRoot: record.resolvedSource,
     ownerRoots: [marketplace.marketplaceRoot, options.locations.pluginClonesDir],
     ...(options.reader !== undefined && { reader: options.reader }),
   });

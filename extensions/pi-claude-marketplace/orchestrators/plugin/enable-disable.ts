@@ -112,6 +112,7 @@ import {
   type writeAdoptingConfigEntries,
 } from "./shared.ts";
 
+import type { RecordDeclarations } from "./dependency-index.ts";
 import type {
   InstallFailureCapture,
   InstallLedgerResult,
@@ -596,6 +597,16 @@ interface EnableCascadeResolution {
 }
 
 /**
+ * WR-03 / ATTR-08 / DLS-01: the record's entry is absent from a readable
+ * manifest -- read from its installed copy, or failed closed because that copy
+ * cannot answer. Every other read failure (the manifest failed to load, a
+ * declaration parses as unusable) is not this case.
+ */
+function isDelistedRead(read: RecordDeclarations): boolean {
+  return read.ok ? read.delisted === true : read.reason === "not in manifest";
+}
+
+/**
  * WR-03: reads ONE record's declarations as the walk visits it, so an
  * unreadable record OUTSIDE the closure never blocks the enable. D-05-07
  * fail-closed still applies, but scoped to records the walk actually
@@ -612,10 +623,11 @@ interface EnableCascadeResolution {
  * Throws `EnableRefusedError("unreadable", ...)` on a genuinely unreadable
  * declarer, fail-closed (D-05-07) -- EXCEPT for the root itself when its
  * manifest is readable and its own entry is simply absent (ATTR-08 "not in
- * manifest"): the ENBL-07 "not in manifest" refusal is rendered by the
- * ledger's own PI-3 lookup, so this cascade treats a manifest-readable,
- * entry-absent ROOT as declaring nothing rather than misreporting
- * `{unreadable}` over a fact this cascade cannot itself act on either way.
+ * manifest"), whether or not its installed copy can be read (DLS-01): the
+ * ENBL-07 "not in manifest" refusal is rendered by the ledger's own PI-3
+ * lookup, so this cascade treats an entry-absent ROOT as declaring nothing
+ * rather than refusing on a dependency or `{unreadable}` axis the user cannot
+ * act on either way.
  */
 function enableCascadeLookup(
   state: ExtensionState,
@@ -631,15 +643,11 @@ function enableCascadeLookup(
     }
 
     const read = await readRecordDeclarations({ state, locations }, marketplace, subject.name);
-    if (!read.ok) {
-      // WR-03 / ATTR-08: the root's entry is absent from a readable manifest
-      // and its installed copy cannot answer either. Every other read failure
-      // (the manifest failed to load, a declaration parses as unusable) is not
-      // this case and stays fail-closed.
-      if (subject.key === rootKey && read.reason === "not in manifest") {
-        return { kind: "found", dependencies: [] };
-      }
+    if (subject.key === rootKey && isDelistedRead(read)) {
+      return { kind: "found", dependencies: [] };
+    }
 
+    if (!read.ok) {
       throw new EnableRefusedError("unreadable", read.cause.message);
     }
 
