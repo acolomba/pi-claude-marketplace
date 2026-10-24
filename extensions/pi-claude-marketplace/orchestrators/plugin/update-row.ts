@@ -225,11 +225,11 @@ function revisionCommits(move: RevisionMove): VersionCommits | undefined {
  * revisions its producer knows. One rule for every such row:
  *
  *  - no version known: no version fields;
- *  - one side known, or both sides the same revision (the same version, and
- *    the same commit or none on both): that version alone;
+ *  - one side known, or the same version without two different commits to
+ *    tell the sides apart (no commits, the same commit, or a commit on one
+ *    side only, D-07): that version alone;
  *  - the revision moved: `version` (the to side) and `from`, plus `commits`
- *    under the `revisionCommits` rule (UPR-02). A commit on one side only
- *    counts as a move but names no commits.
+ *    under the `revisionCommits` rule (UPR-02).
  *
  * An empty version counts as unknown, so it never produces a version or an
  * arrow. Every key is absent rather than `undefined` (NREG-01).
@@ -244,15 +244,12 @@ export function revisionVersionSlot(
     return single === undefined ? {} : { version: single };
   }
 
-  if (from === to && known.fromCommit === known.toCommit) {
+  const commits = revisionCommits({ ...known, fromVersion: from, toVersion: to });
+  if (from === to && commits === undefined) {
     return { version: to };
   }
 
-  return {
-    version: to,
-    from,
-    ...withCommits(revisionCommits({ ...known, fromVersion: from, toVersion: to })),
-  };
+  return { version: to, from, ...withCommits(commits) };
 }
 
 function knownVersion(version: string | undefined): string | undefined {

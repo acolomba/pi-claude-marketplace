@@ -935,9 +935,14 @@ const VERSION_SLOTS: readonly {
     expected: { version: "1.0.0", from: "1.0.0", commits: { from: COMMIT_A, to: COMMIT_B } },
   },
   {
-    title: "the same version and a commit on the to side only gives the arrow without commits",
+    title: "the same version and a commit on the to side only gives the version alone",
     known: { fromVersion: "1.0.0", toVersion: "1.0.0", toCommit: COMMIT_B },
-    expected: { version: "1.0.0", from: "1.0.0" },
+    expected: { version: "1.0.0" },
+  },
+  {
+    title: "the same version and a commit on the from side only gives the version alone",
+    known: { fromVersion: "1.0.0", toVersion: "1.0.0", fromCommit: COMMIT_A },
+    expected: { version: "1.0.0" },
   },
   {
     title: "a moved version with commits gives the arrow without commits",
