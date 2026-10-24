@@ -140,6 +140,8 @@ const STATUS_TOKEN_ENROLLMENT: Record<StatusToken, true> = {
   "will uninstall": true,
   "will enable": true,
   "will disable": true,
+  "will add": true,
+  "will remove": true,
   disabled: true,
   "partially-installed": true,
   "partially-upgradable": true,
@@ -177,6 +179,8 @@ const MARKETPLACE_STATUS_ENROLLMENT: Record<MarketplaceStatus, true> = {
   "autoupdate enabled": true,
   "autoupdate disabled": true,
   skipped: true,
+  "will add": true,
+  "will remove": true,
 };
 
 const MCP_SERVER_STATUS_ENROLLMENT: Record<McpServerStatus, true> = {
@@ -227,17 +231,18 @@ test("OUT-08: Reason is the closed 78-entry reason set", () => {
   assert.strictEqual(memberCount, 78);
 });
 
-test("SNM-02: StatusToken is the closed 24-entry token set", () => {
+test("SNM-02: StatusToken is the closed 26-entry token set", () => {
   // FSTAT-02 / FSTAT-04 / D-66-05: `partially-installed` and `partially-upgradable`
   // are derived realized tokens. `will partially install` is a render modifier on
   // `will install`, not a token.
   // USTAT-02 / D-64-01: `partially-available` is the not-installed render token.
   // RSTA-01 / D-80-06: `remote` is the not-installed git-source token.
+  // D-20: `will add` and `will remove` are the pending-tense marketplace tokens.
   // act
   const memberCount = Object.keys(STATUS_TOKEN_ENROLLMENT).length;
 
   // assert
-  assert.strictEqual(memberCount, 24);
+  assert.strictEqual(memberCount, 26);
 });
 
 test("SNM-02: PluginStatus is the closed 19-entry plugin-status set", () => {
@@ -254,12 +259,13 @@ test("SNM-02: PluginStatus is the closed 19-entry plugin-status set", () => {
   assert.strictEqual(memberCount, 19);
 });
 
-test("SNM-02: MarketplaceStatus is the closed 7-entry marketplace-status set", () => {
+test("SNM-02: MarketplaceStatus is the closed 9-entry marketplace-status set", () => {
+  // D-20: `will add` and `will remove` preview the marketplace changes `apply` makes.
   // act
   const memberCount = Object.keys(MARKETPLACE_STATUS_ENROLLMENT).length;
 
   // assert
-  assert.strictEqual(memberCount, 7);
+  assert.strictEqual(memberCount, 9);
 });
 
 test("ASTAT-02: McpServerStatus is the closed 10-entry MCP server status set", () => {

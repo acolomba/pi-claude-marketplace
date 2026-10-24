@@ -184,8 +184,9 @@ async function seedBothScopes(workspace: HermeticWorkspace): Promise<void> {
   );
 }
 
-const PROJECT_BLOCK = "● mp [project]\n  ● p-proj (will install)";
-const USER_BLOCK = "● mp [user]\n  ● p-user (will install)";
+// D-20: neither scope records `mp`, so each block previews its add.
+const PROJECT_BLOCK = "● mp [project] (will add)\n  ● p-proj (will install)";
+const USER_BLOCK = "● mp [user] (will add)\n  ● p-user (will install)";
 
 // ---------------------------------------------------------------------------
 // The accepted arity of ZERO positionals, and the scope member. The omitted row
@@ -197,19 +198,19 @@ const USER_BLOCK = "● mp [user]\n  ● p-user (will install)";
 for (const { args, expectedMessage, label, summary } of [
   {
     args: "",
-    expectedMessage: `${PROJECT_BLOCK}\n\n${USER_BLOCK}\n\nReconcile pending: 2 successes\n\n/claude:plugin apply to make these changes`,
+    expectedMessage: `${PROJECT_BLOCK}\n\n${USER_BLOCK}\n\nReconcile pending: 4 successes\n\n/claude:plugin apply to make these changes`,
     label: "scope-omitted",
     summary: "for both scopes, project first, when no scope flag is supplied",
   },
   {
     args: "--scope user",
-    expectedMessage: `${USER_BLOCK}\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes`,
+    expectedMessage: `${USER_BLOCK}\n\nReconcile pending: 2 successes\n\n/claude:plugin apply to make these changes`,
     label: "scope-user",
     summary: "for the user scope alone when a user scope flag is supplied",
   },
   {
     args: "--scope project",
-    expectedMessage: `${PROJECT_BLOCK}\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes`,
+    expectedMessage: `${PROJECT_BLOCK}\n\nReconcile pending: 2 successes\n\n/claude:plugin apply to make these changes`,
     label: "scope-project",
     summary: "for the project scope alone when a project scope flag is supplied",
   },

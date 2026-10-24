@@ -206,6 +206,29 @@ Feature: Plugin apply
       | fixtures         | project           | demo@fixtures | demo | failed | unsupported component | project |       |                  |
     Then the project scope has no installed plugins
 
+  Scenario: Apply removes a marketplace the base config no longer declares and uninstalls its plugins
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin install alpha@fixtures --scope project"
+    Given a config in scope project and layer base, with this text:
+      """
+      {}
+      """
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | true                      |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 3                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id             | name  | status      | reasons | scope   |
+      | fixtures         | project           | removed            | demo@fixtures  | demo  | uninstalled |         | project |
+      | fixtures         | project           | removed            | alpha@fixtures | alpha | uninstalled |         | project |
+    Then the project scope has no installed plugins
+
   Scenario: Apply makes every change one hand edit of the base config causes, after which pending lists nothing
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"

@@ -231,6 +231,12 @@ export function renderMpHeader(mp: ResolvedMarketplace): string {
         : `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (skipped) ${reasonsBrace}`;
     }
 
+    case "will add":
+      // D-20: pending-tense marketplace header. Names only the marketplace
+      // and scope, never its declared source, and carries no reasons.
+      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (will add)`;
+    case "will remove":
+      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (will remove)`;
     case undefined: {
       // List-surface case. mp.details is OPTIONAL and INDEPENDENT of mp.status.
       // Guard explicitly with an early return for SUB-BRANCH A

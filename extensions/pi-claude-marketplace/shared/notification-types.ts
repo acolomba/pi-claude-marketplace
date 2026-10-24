@@ -324,6 +324,8 @@ export type StatusToken =
   | "will uninstall"
   | "will enable"
   | "will disable"
+  | "will add"
+  | "will remove"
   | "disabled"
   | "partially-installed"
   | "partially-upgradable"
@@ -366,7 +368,9 @@ export type MarketplaceStatus =
   | "failed"
   | "autoupdate enabled"
   | "autoupdate disabled"
-  | "skipped";
+  | "skipped"
+  | "will add"
+  | "will remove";
 
 /** Marketplace details shown by list and info messages. */
 export interface MarketplaceDetails {
@@ -868,6 +872,22 @@ export interface MpSkipped extends MpCommon {
   readonly reasons?: readonly ContentReason[];
 }
 
+/**
+ * D-20: pending-tense header for a marketplace a config declares and the scope
+ * has not added, which `apply` will add.
+ */
+export interface MpWillAdd extends MpCommon {
+  readonly status: "will add";
+}
+
+/**
+ * D-20: pending-tense header for a recorded marketplace no config declares,
+ * which `apply` will remove together with its plugins.
+ */
+export interface MpWillRemove extends MpCommon {
+  readonly status: "will remove";
+}
+
 /** Statusless marketplace inventory row. */
 export interface MpList extends MpCommon {
   readonly status?: undefined;
@@ -883,6 +903,8 @@ export type MarketplaceNotificationMessage =
   | MpAutoupdateEnabled
   | MpAutoupdateDisabled
   | MpSkipped
+  | MpWillAdd
+  | MpWillRemove
   | MpList;
 
 /**

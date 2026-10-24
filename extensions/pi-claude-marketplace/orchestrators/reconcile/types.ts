@@ -88,9 +88,8 @@ export interface PlannedMarketplaceRemove {
   /**
    * Recorded plugin names under this marketplace
    * (`state.marketplaces[mp].plugins` keys). The PENDING projection
-   * synthesizes one `will uninstall` child row per name under a bare list-arm
-   * header: de-registration is immediate, only the plugin-uninstall cascade is
-   * reload-deferred (WILL-03 / D-65.1-03). These are deliberately NOT routed
+   * synthesizes one `will uninstall` child row per name under the
+   * marketplace's `will remove` header (D-20). These are deliberately NOT routed
    * through `pluginsToUninstall` -- the apply path cascades them internally, so
    * enumerating them there would double-bill (see `buildUninstallBucket`).
    */

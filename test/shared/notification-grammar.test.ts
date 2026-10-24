@@ -148,6 +148,8 @@ for (const { status, extra, expected } of [
     extra: { reasons: ["already no autoupdate"] },
     expected: "● official [user] <no autoupdate> {already no autoupdate}",
   },
+  { status: "will add", extra: {}, expected: "● official [user] (will add)" },
+  { status: "will remove", extra: {}, expected: "● official [user] (will remove)" },
   { status: undefined, extra: {}, expected: "● official [user]" },
   {
     status: undefined,

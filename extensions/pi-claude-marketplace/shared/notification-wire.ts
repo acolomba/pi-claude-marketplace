@@ -77,6 +77,8 @@ const MARKETPLACE_STATUSES = {
   "autoupdate enabled": true,
   "autoupdate disabled": true,
   skipped: true,
+  "will add": true,
+  "will remove": true,
 } as const satisfies Record<MarketplaceStatus, true>;
 
 const REASONS = {

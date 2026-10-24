@@ -236,7 +236,9 @@
                   "failed",
                   "autoupdate enabled",
                   "autoupdate disabled",
-                  "skipped"
+                  "skipped",
+                  "will add",
+                  "will remove"
                 ]
               },
               "details": {
@@ -584,7 +586,9 @@
                   "failed",
                   "autoupdate enabled",
                   "autoupdate disabled",
-                  "skipped"
+                  "skipped",
+                  "will add",
+                  "will remove"
                 ]
               },
               "details": {

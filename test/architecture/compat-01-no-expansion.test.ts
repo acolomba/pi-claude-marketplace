@@ -335,6 +335,8 @@ const EXPECTED_STATUS_TOKENS = [
   "will uninstall",
   "will enable",
   "will disable",
+  "will add",
+  "will remove",
   "disabled",
   "partially-installed",
   "partially-upgradable",
@@ -372,6 +374,8 @@ const EXPECTED_MARKETPLACE_STATUSES = [
   "autoupdate enabled",
   "autoupdate disabled",
   "skipped",
+  "will add",
+  "will remove",
 ] as const;
 
 /**

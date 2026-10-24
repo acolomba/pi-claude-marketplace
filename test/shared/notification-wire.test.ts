@@ -555,3 +555,25 @@ for (const { title, status, expectedValid } of [
     assert.strictEqual(valid, expectedValid);
   });
 }
+
+for (const status of ["will add", "will remove"]) {
+  test(`D-20: accepts a pending cascade whose marketplace status is ${status}`, () => {
+    // arrange
+    const payload = {
+      schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin pending", invocationId: "test-run" },
+      kind: "cascade",
+      severity: "info",
+      needsReload: false,
+      needsApply: true,
+      marketplaces: [{ name: "mp", scope: "project", status, plugins: [] }],
+    };
+    const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+
+    // act
+    const valid = validator.Check(payload);
+
+    // assert
+    assert.strictEqual(valid, true, JSON.stringify([...validator.Errors(payload)]));
+  });
+}

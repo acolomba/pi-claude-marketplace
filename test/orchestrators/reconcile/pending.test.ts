@@ -172,9 +172,9 @@ test("MSG-GR-3: an omitted scope walks both scopes and orders a shared marketpla
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [project]\n  ● p-proj (will install)\n\n" +
-        "● mp [user]\n  ● p-user (will install)\n\n" +
-        "Reconcile pending: 2 successes\n\n/claude:plugin apply to make these changes",
+        "● mp [project] (will add)\n  ● p-proj (will install)\n\n" +
+        "● mp [user] (will add)\n  ● p-user (will install)\n\n" +
+        "Reconcile pending: 4 successes\n\n/claude:plugin apply to make these changes",
     },
   ]);
   verifyBoundary();
@@ -200,7 +200,7 @@ test("an explicit user scope reports the user scope's pending work and never rea
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [user]\n  ● p-user (will install)\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
+        "● mp [user] (will add)\n  ● p-user (will install)\n\nReconcile pending: 2 successes\n\n/claude:plugin apply to make these changes",
     },
   ]);
   verifyBoundary();
@@ -226,7 +226,7 @@ test("an explicit project scope reports the project scope's pending work and nev
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [project]\n  ● p-proj (will install)\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
+        "● mp [project] (will add)\n  ● p-proj (will install)\n\nReconcile pending: 2 successes\n\n/claude:plugin apply to make these changes",
     },
   ]);
   verifyBoundary();
@@ -445,8 +445,8 @@ test("MSG-GR-3: a failed configuration block sorts among the plan blocks by name
       message:
         "A marketplace operation has failed.\n\n" +
         "⊘ claude-plugins.json [project] (failed) {invalid manifest}\n\n" +
-        "● zzz-mp [user]\n  ● pp (will install)\n\n" +
-        "Reconcile pending: 1 failure, 1 success\n\n/claude:plugin apply to make these changes",
+        "● zzz-mp [user] (will add)\n  ● pp (will install)\n\n" +
+        "Reconcile pending: 1 failure, 2 successes\n\n/claude:plugin apply to make these changes",
       severity: "error",
     },
   ]);
@@ -527,7 +527,7 @@ test("MIG-01 / NFR-5: the pre-migration projection is read-only and never writes
   verifyBoundary();
 });
 
-test("MIG-01: a local-only marketplace merges over the state projection and adds no uninstalls", async (t) => {
+test("MIG-01 / D-20: a local-only marketplace merges over the state projection as a will-add header and adds no uninstalls", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "premigration-local");
   await writeUnder(
@@ -544,7 +544,10 @@ test("MIG-01: a local-only marketplace merges over the state projection and adds
 
   // assert
   assert.deepStrictEqual(notifications, [
-    { message: "Pending: /claude:plugin apply has nothing to change." },
+    {
+      message:
+        "● zzz-extra [project] (will add)\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
+    },
   ]);
   verifyBoundary();
 });
@@ -693,7 +696,7 @@ const plannedInstallRows = [
     },
     rendered: "● pp (will install)",
     expectedMessage:
-      "● newmp [project]\n  ● pp (will install)\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
+      "● newmp [project] (will add)\n  ● pp (will install)\n\nReconcile pending: 2 successes\n\n/claude:plugin apply to make these changes",
   },
   {
     condition: "a recorded manifest that does not parse",
@@ -856,7 +859,7 @@ test("WR-06: renders the advisory once for an invocation that walks both scopes"
   // assert
   assert.deepStrictEqual(notifications, [
     {
-      message: `● mp [project]\n  ● p-proj (will install)\n\n● mp [user]\n  ● p-user (will install)\n\n${RETAINED_LINE}\n\nReconcile pending: 2 successes\n\n/claude:plugin apply to make these changes`,
+      message: `● mp [project] (will add)\n  ● p-proj (will install)\n\n● mp [user] (will add)\n  ● p-user (will install)\n\n${RETAINED_LINE}\n\nReconcile pending: 4 successes\n\n/claude:plugin apply to make these changes`,
     },
   ]);
   assert.deepStrictEqual(

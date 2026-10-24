@@ -13,7 +13,7 @@ Feature: Plugin pending
       | beta  | 1.0.0   |
       | gamma | 1.0.0   |
 
-  Scenario: Pending lists the install that a marketplace and a plugin declared by hand in the base config would cause
+  Scenario: Pending lists the marketplace add and the install that a marketplace and a plugin declared by hand in the base config would cause
     Given a config in scope project and layer base, with these marketplaces:
       | name     | source                       | autoupdate |
       | fixtures | {home}/marketplaces/fixtures |            |
@@ -29,12 +29,12 @@ Feature: Plugin pending
       | tally label         | Reconcile pending |
       | tally failures      | 0                 |
       | tally warnings      | 0                 |
-      | tally success count | 1                 |
+      | tally success count | 2                 |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status       | reasons | scope   |
-      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
+      | marketplace name | marketplace scope | marketplace status | id            | name | status       | reasons | scope   |
+      | fixtures         | project           | will add           | demo@fixtures | demo | will install |         | project |
 
-  Scenario: Pending lists the install that a marketplace and a plugin declared by hand in the local config would cause
+  Scenario: Pending lists the marketplace add and the install that a marketplace and a plugin declared by hand in the local config would cause
     Given a config in scope project and layer local, with these marketplaces:
       | name     | source                       | autoupdate |
       | fixtures | {home}/marketplaces/fixtures |            |
@@ -50,10 +50,28 @@ Feature: Plugin pending
       | tally label         | Reconcile pending |
       | tally failures      | 0                 |
       | tally warnings      | 0                 |
-      | tally success count | 1                 |
+      | tally success count | 2                 |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status       | reasons | scope   |
-      | fixtures         | project           | demo@fixtures | demo | will install |         | project |
+      | marketplace name | marketplace scope | marketplace status | id            | name | status       | reasons | scope   |
+      | fixtures         | project           | will add           | demo@fixtures | demo | will install |         | project |
+
+  Scenario: Pending lists a marketplace that a config declares by hand with no plugin
+    Given a config in scope project and layer base, with these marketplaces:
+      | name     | source                       | autoupdate |
+      | fixtures | {home}/marketplaces/fixtures |            |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | needs apply         | true              |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 1                 |
+    Then the result lists these marketplaces:
+      | name     | scope   | status   |
+      | fixtures | project | will add |
 
   Scenario: Pending reports nothing when the configs and the records agree
     Given the marketplace "fixtures" is added to the project scope
@@ -92,7 +110,7 @@ Feature: Plugin pending
       | fixtures         | project           | beta@fixtures  | beta  | will disable   |         | project |         |
       | fixtures         | project           | gamma@fixtures | gamma | will enable    |         | project |         |
 
-  Scenario: Pending lists an uninstall with its version for each plugin of a marketplace the base config no longer declares
+  Scenario: Pending lists the marketplace remove and an uninstall with its version for each plugin of a marketplace the base config no longer declares
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has run "/claude:plugin install alpha@fixtures --scope project"
@@ -109,11 +127,11 @@ Feature: Plugin pending
       | tally label         | Reconcile pending |
       | tally failures      | 0                 |
       | tally warnings      | 0                 |
-      | tally success count | 2                 |
+      | tally success count | 3                 |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id             | name  | status         | reasons | scope   | version |
-      | fixtures         | project           | demo@fixtures  | demo  | will uninstall |         | project | 1.0.0   |
-      | fixtures         | project           | alpha@fixtures | alpha | will uninstall |         | project | 1.0.0   |
+      | marketplace name | marketplace scope | marketplace status | id             | name  | status         | reasons | scope   | version |
+      | fixtures         | project           | will remove        | demo@fixtures  | demo  | will uninstall |         | project | 1.0.0   |
+      | fixtures         | project           | will remove        | alpha@fixtures | alpha | will uninstall |         | project | 1.0.0   |
 
   Scenario: Pending with --scope user lists only the changes of the user scope
     Given the marketplace "fixtures" is added to the project scope

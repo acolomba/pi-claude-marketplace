@@ -1867,7 +1867,7 @@ describe("buildReconcilePendingNotification", () => {
     assert.deepStrictEqual(pending, { marketplaces: [] });
   });
 
-  test("shows nothing pending for a marketplace add that carries no child work", () => {
+  test("D-20: previews a marketplace add with no child work as a bare will-add header", () => {
     // arrange
     const plans = [
       reconcilePlan("project", {
@@ -1881,10 +1881,21 @@ describe("buildReconcilePendingNotification", () => {
     const pending = buildReconcilePendingNotification(plans);
 
     // assert
-    assert.deepStrictEqual(pending, { marketplaces: [] });
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          status: "will add",
+          severity: "info",
+          needsReload: false,
+          plugins: [],
+        },
+      ],
+    });
   });
 
-  test("rides a planned install of a newly added marketplace on a bare header", () => {
+  test("D-20: rides a planned install of a newly added marketplace on its will-add header", () => {
     // arrange
     const plans = [
       reconcilePlan("project", {
@@ -1906,13 +1917,16 @@ describe("buildReconcilePendingNotification", () => {
         {
           name: "mp",
           scope: "project",
+          status: "will add",
+          severity: "info",
+          needsReload: false,
           plugins: [{ status: "will install", name: "cr" }],
         },
       ],
     });
   });
 
-  test("synthesizes one will-uninstall child per recorded plugin of a removed marketplace", () => {
+  test("D-20: synthesizes one will-uninstall child per recorded plugin of a will-remove marketplace", () => {
     // arrange
     const plans = [
       reconcilePlan("project", {
@@ -1929,6 +1943,9 @@ describe("buildReconcilePendingNotification", () => {
         {
           name: "old-mp",
           scope: "project",
+          status: "will remove",
+          severity: "info",
+          needsReload: false,
           plugins: [
             { status: "will uninstall", name: "p1" },
             { status: "will uninstall", name: "p2" },
@@ -1996,13 +2013,16 @@ describe("buildReconcilePendingNotification", () => {
         {
           name: "old-mp",
           scope: "project",
+          status: "will remove",
+          severity: "info",
+          needsReload: false,
           plugins: [{ status: "will uninstall", name: "p1", version: "1.0.0" }],
         },
       ],
     });
   });
 
-  test("shows nothing pending for a marketplace removal that has no recorded plugins", () => {
+  test("D-20: previews a marketplace removal with no recorded plugins as a bare will-remove header", () => {
     // arrange
     const plans = [
       reconcilePlan("project", {
@@ -2014,7 +2034,18 @@ describe("buildReconcilePendingNotification", () => {
     const pending = buildReconcilePendingNotification(plans);
 
     // assert
-    assert.deepStrictEqual(pending, { marketplaces: [] });
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "old-mp",
+          scope: "project",
+          status: "will remove",
+          severity: "info",
+          needsReload: false,
+          plugins: [],
+        },
+      ],
+    });
   });
 
   for (const { bucket, actions, expectedRow } of [
@@ -2392,6 +2423,9 @@ describe("buildReconcilePendingNotification", () => {
         {
           name: "gone-mp",
           scope: "project",
+          status: "will remove",
+          severity: "info",
+          needsReload: false,
           plugins: [{ status: "will uninstall", name: "g1" }],
         },
         {
@@ -2431,9 +2465,23 @@ describe("buildReconcilePendingNotification", () => {
  */
 const CHANGE_BUCKETS = [
   {
+    bucket: "a marketplace add on its own",
+    actions: {
+      marketplacesToAdd: [
+        { scope: "project", marketplace: "mp", source: "acme/tools", configSource: "base" },
+      ],
+    },
+  },
+  {
     bucket: "a marketplace removal carrying recorded plugins",
     actions: {
       marketplacesToRemove: [{ scope: "project", marketplace: "old-mp", plugins: ["p1"] }],
+    },
+  },
+  {
+    bucket: "a marketplace removal with no recorded plugins",
+    actions: {
+      marketplacesToRemove: [{ scope: "project", marketplace: "old-mp", plugins: [] }],
     },
   },
   {
@@ -2520,21 +2568,6 @@ describe("isReconcilePlanListEmpty", () => {
     assert.strictEqual(planListEmpty, true);
   });
 
-  test("reports a marketplace removal with no recorded plugins as empty", () => {
-    // arrange
-    const plans = [
-      reconcilePlan("project", {
-        marketplacesToRemove: [{ scope: "project", marketplace: "old-mp", plugins: [] }],
-      }),
-    ];
-
-    // act
-    const planListEmpty = isReconcilePlanListEmpty(plans);
-
-    // assert
-    assert.strictEqual(planListEmpty, true);
-  });
-
   for (const { bucket, actions } of [
     ...CHANGE_BUCKETS,
     { bucket: "a source mismatch", actions: SOURCE_MISMATCH_ACTIONS },
@@ -2550,23 +2583,6 @@ describe("isReconcilePlanListEmpty", () => {
       assert.strictEqual(planListEmpty, false);
     });
   }
-
-  test("reports a marketplace add on its own as empty", () => {
-    // arrange
-    const plans = [
-      reconcilePlan("project", {
-        marketplacesToAdd: [
-          { scope: "project", marketplace: "mp", source: "acme/tools", configSource: "base" },
-        ],
-      }),
-    ];
-
-    // act
-    const planListEmpty = isReconcilePlanListEmpty(plans);
-
-    // assert
-    assert.strictEqual(planListEmpty, true);
-  });
 });
 
 describe("planListNeedsApply", () => {
@@ -2594,26 +2610,16 @@ describe("planListNeedsApply", () => {
     });
   }
 
-  for (const { condition, actions } of [
-    { condition: "only a source mismatch", actions: SOURCE_MISMATCH_ACTIONS },
-    {
-      condition: "only a marketplace removal with no recorded plugins",
-      actions: {
-        marketplacesToRemove: [{ scope: "project", marketplace: "old-mp", plugins: [] }],
-      },
-    },
-  ] satisfies readonly { condition: string; actions: PlannedActions }[]) {
-    test(`reports a plan carrying ${condition} as needing no apply`, () => {
-      // arrange
-      const plans = [reconcilePlan("project", actions)];
+  test("reports a plan carrying only a source mismatch as needing no apply", () => {
+    // arrange
+    const plans = [reconcilePlan("project", SOURCE_MISMATCH_ACTIONS)];
 
-      // act
-      const needsApply = planListNeedsApply(plans);
+    // act
+    const needsApply = planListNeedsApply(plans);
 
-      // assert
-      assert.strictEqual(needsApply, false);
-    });
-  }
+    // assert
+    assert.strictEqual(needsApply, false);
+  });
 });
 
 describe("resolvePendingForceInstalls", () => {
