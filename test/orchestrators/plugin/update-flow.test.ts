@@ -2431,6 +2431,9 @@ test("FLR-02: updateSinglePlugin under a held state lock fails as lock held with
       assert.deepStrictEqual(failure, {
         partition: "failed",
         name: "hello",
+        // UPR-03: the lock is hit at the intent mark, after the candidate.
+        fromVersion: "1.0.0",
+        toVersion: "1.0.1",
         notes: [`${lockMessage}\n\ncause: ${lockMessage} -> Lock file is already being held`],
         declaresAgents: false,
         declaresMcp: false,
@@ -5323,7 +5326,7 @@ async function updateFileSnapshot(locations: ReturnType<typeof locationsFor>): P
 
 /** The single failed-row notification a refused named update of `plugin` renders. */
 function refusedUpdateNotification(
-  plugin: string,
+  subject: string,
   reason: string,
   cause: string,
 ): { readonly message: string; readonly severity: "error" } {
@@ -5332,7 +5335,7 @@ function refusedUpdateNotification(
       "A plugin operation has failed.",
       "",
       "● mp [project]",
-      `  ⊘ ${plugin} (failed) {${reason}}`,
+      `  ⊘ ${subject} (failed) {${reason}}`,
       `    cause: ${cause}`,
     ].join("\n"),
     severity: "error",
@@ -6048,10 +6051,11 @@ test("FLR-01: a held scope lock fails an update that is due as lock held and kee
         await release();
       }
 
-      // assert
+      // assert: the lock is hit at the intent mark, after the candidate, so
+      // the row names the move it attempted (UPR-03).
       assert.deepStrictEqual(notifications, [
         refusedUpdateNotification(
-          "hello",
+          "hello v1.0.0 → v1.1.0",
           "lock held",
           `Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes. -> Lock file is already being held`,
         ),
@@ -7645,7 +7649,7 @@ test("FORCE-02: --partial on a candidate that became partially available degrade
       assert.equal(
         notifications[0]?.message,
         "● mp [project]\n" +
-          "  ◉ hello v1.1.0 (partially-installed) {unsupported component}\n" +
+          "  ◉ hello v1.0.0 → v1.1.0 (partially-installed) {unsupported component}\n" +
           "\n" +
           "/reload to pick up changes",
       );
@@ -10405,7 +10409,7 @@ test("CR-01: a --partial update that drops a kind AND degrades a component names
         "A plugin operation needs attention.\n" +
           "\n" +
           "● mp [project]\n" +
-          "  ◉ hello v1.1.0 (partially-installed) {malformed skill, unsupported component}\n" +
+          "  ◉ hello v1.0.0 → v1.1.0 (partially-installed) {malformed skill, unsupported component}\n" +
           "\n" +
           "/reload to pick up changes",
       );
@@ -10693,7 +10697,7 @@ test("ST-9: a version that advanced under an in-flight update aborts on the inte
       const body = notifications.map((n) => n.message).join("\n");
       assert.match(
         body,
-        /⊘ gp \(failed\) \{concurrently updated\}/,
+        /⊘ gp v9\.9\.9 \(1111111\) → v9\.9\.9 \(2222222\) \(failed\) \{concurrently updated\}/,
         `the version drift must reach the closed-set reason in:\n${body}`,
       );
       assert.match(body, /was concurrently updated; expected version/, `no cause in:\n${body}`);
@@ -10751,7 +10755,7 @@ test("ST-9: a record uninstalled under an in-flight update aborts instead of res
       const body = notifications.map((n) => n.message).join("\n");
       assert.match(
         body,
-        /⊘ gp \(failed\) \{concurrently uninstalled\}/,
+        /⊘ gp v9\.9\.9 \(1111111\) → v9\.9\.9 \(2222222\) \(failed\) \{concurrently uninstalled\}/,
         `the vanished record must reach the closed-set reason in:\n${body}`,
       );
       assert.match(body, /was concurrently uninstalled/, `no cause in:\n${body}`);
@@ -12759,7 +12763,7 @@ test("AFILE-04: an update that fails after its MCP commit still reports the remo
           message:
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
-            "  ⊘ hello (failed) {rollback partial}\n" +
+            "  ⊘ hello v1.0.0 → v1.0.1 (failed) {rollback partial}\n" +
             `    cause: Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it. -> ${refusal}\n` +
             "    [workflows] (rollback failed)\n" +
             `      cause: ${refusal}`,
@@ -12913,10 +12917,10 @@ test("AFILE-02: updating a plugin with no MCP servers over an unparseable mcp-ad
 
 /**
  * AFILE-04: binds update operations whose next locked state load throws once a
- * save has recorded `hello` at 1.0.1, so the target after `hello` fails before
- * its swap.
+ * save has recorded `hello` at `helloVersion`, so the target after `hello`
+ * fails at its intent mark, after its candidate.
  */
-function failLoadsAfterHelloUpdate(): UpdatePluginsFn {
+function failLoadsAfterHelloUpdate(helloVersion: string): UpdatePluginsFn {
   let helloUpdated = false;
   return createPluginUpdateOperations(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -12931,7 +12935,7 @@ function failLoadsAfterHelloUpdate(): UpdatePluginsFn {
       },
       saveState: async (extensionRoot, state) => {
         await saveState(extensionRoot, state);
-        helloUpdated ||= state.marketplaces["mp"]?.plugins["hello"]?.version === "1.0.1";
+        helloUpdated ||= state.marketplaces["mp"]?.plugins["hello"]?.version === helloVersion;
       },
     },
   ).updatePlugins;
@@ -12954,7 +12958,7 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later plugin's failure st
       });
       const locations = locationsFor("project", cwd);
       await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ADAPTER_TEXT);
-      const updateAll = failLoadsAfterHelloUpdate();
+      const updateAll = failLoadsAfterHelloUpdate("1.0.1");
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -12972,7 +12976,7 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later plugin's failure st
           message:
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
-            "  ⊘ zzz (failed) {unreadable manifest}\n" +
+            "  ⊘ zzz v1.0.0 → v1.0.1 (failed) {unreadable manifest}\n" +
             "    cause: state read failed\n\n" +
             "Plugin update: 1 failure",
           severity: "error",
@@ -12987,6 +12991,55 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later plugin's failure st
           severity: "warning",
         },
         PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("UPR-03: a later target's failure in a bulk update names its own move, not the earlier target's", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-bulk-own-move-");
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "2.0.0" }, zzz: { version: "1.0.1" } },
+        installedVersions: { hello: "1.0.0", zzz: "1.0.0" },
+      });
+      const updateAll = failLoadsAfterHelloUpdate("2.0.0");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updateAll({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ zzz v1.0.0 → v1.0.1 (failed) {unreadable manifest}\n" +
+            "    cause: state read failed\n\n" +
+            "Plugin update: 1 failure",
+          severity: "error",
+        },
+        {
+          message:
+            "● mp [project]\n" +
+            "  ● hello v1.0.0 → v2.0.0 (updated)\n\n" +
+            "Plugin update: 1 updated\n\n" +
+            "/reload to pick up changes",
+        },
       ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });

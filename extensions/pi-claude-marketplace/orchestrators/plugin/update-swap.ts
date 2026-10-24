@@ -146,7 +146,7 @@ import type {
   PreparePluginUpdateOptions,
   UpdateCloneCacheSeam,
 } from "./update-preflight.ts";
-import type { PluginUpdateFailedOutcome, PluginUpdateOutcome } from "../types.ts";
+import type { PluginUpdateFailedOutcome, PluginUpdateOutcome, RevisionMove } from "../types.ts";
 
 /** Common collaborators and identity for one prepared plugin replacement. */
 export interface ThreePhaseArgsBase {
@@ -180,6 +180,13 @@ export interface ThreePhaseArgsBase {
     PreparePluginUpdateOptions["constraintMarketplaceTagMemo"]
   >;
   readonly cleanupClones: (locations: ScopedLocations) => Promise<unknown>;
+  /**
+   * UPR-03: receives the revisions of the derived candidate, reported once
+   * before the swap starts and never for a verdict the preflight returns, so
+   * a caller can name the move on a failure the swap throws without wrapping
+   * the error. Production callers that render failures set it.
+   */
+  readonly onCandidate?: (move: RevisionMove) => void;
   /**
    * State I/O for the intent-mark and finalize guards (and the disabled-pin
    * refresh in preflight). Production callers omit it and get the real state
@@ -1227,7 +1234,7 @@ function hasUpdatePhase3Failures(
 function composePhase3FailureOutcome(
   args: ThreePhaseArgs,
   failures: NonEmptyUpdatePhase3Failures,
-  versions: { readonly fromVersion: string; readonly toVersion: string },
+  move: RevisionMove,
   mcpConfigNotices: readonly McpConfigNotice[],
 ): UpdatePhase3FailedOutcome {
   const { plugin, marketplace } = args;
@@ -1259,8 +1266,8 @@ function composePhase3FailureOutcome(
   return {
     partition: "failed",
     name: plugin,
-    fromVersion: versions.fromVersion,
-    toVersion: versions.toVersion,
+    // UPR-03: the versions, and the commits when a side has one.
+    ...move,
     notes: [aggregateMsg, ...failures.map((f) => `${f.phase}: ${f.msg}`)],
     // Pre-narrowed: phase-3 aggregate failures always render as `(failed)
     // {rollback partial}` per docs/output-catalog.md. The direct entrypoint
@@ -1294,7 +1301,7 @@ export async function swapPluginUpdate(
   policy: MaterializationPolicy,
 ): Promise<UpdateRunOutcome> {
   const { plugin, marketplace, scope } = args;
-  const { installable, fromVersion, toVersion } = preflight;
+  const { installable } = preflight;
 
   // ─── : prepare into tmp ────────────────────────────────────────────
   //
@@ -1401,7 +1408,7 @@ export async function swapPluginUpdate(
     return composePhase3FailureOutcome(
       args,
       phase3aFailures,
-      { fromVersion, toVersion },
+      preflightMove(preflight),
       mcpConfigNotices,
     );
   }
@@ -1458,9 +1465,7 @@ export async function swapPluginUpdate(
   return {
     partition: "updated",
     name: plugin,
-    fromVersion,
-    toVersion,
-    ...revisionCommitFields(preflight),
+    ...preflightMove(preflight),
     stagedAgentNames,
     stagedMcpServerNames,
     declaresAgents: stagedAgentNames.length > 0,
@@ -1512,17 +1517,18 @@ export async function swapPluginUpdate(
 }
 
 /**
- * UPR-02: the record's and the candidate's commits, each key present exactly
- * when its side has a sha (NREG-01). Extracted so the success-outcome body
- * gains no branch.
+ * UPR-02 / UPR-03: the revisions a prepared update moves between -- the
+ * versions, and the record's and the candidate's commits, each commit key
+ * present exactly when its side has a sha (NREG-01). The one place both shas
+ * are read: the success outcome, the phase-3 failure outcome, and the
+ * runner's candidate report all take it from here.
  */
-function revisionCommitFields(preflight: PreparedPluginUpdate): {
-  readonly fromCommit?: string;
-  readonly toCommit?: string;
-} {
+export function preflightMove(preflight: PreparedPluginUpdate): RevisionMove {
   const fromCommit = preflight.record.resolvedSha;
   const toCommit = preflight.resolvedSha;
   return {
+    fromVersion: preflight.fromVersion,
+    toVersion: preflight.toVersion,
     ...(fromCommit !== undefined && { fromCommit }),
     ...(toCommit !== undefined && { toCommit }),
   };

@@ -98,6 +98,7 @@ import {
   surfaceDiscoveryWarnings,
 } from "./shared.ts";
 import { composeUpdateCascade } from "./update-cascade.ts";
+import { revisionVersionSlot } from "./update-row.ts";
 import { UPDATE_CONTEXT } from "./update.messaging.ts";
 
 import type { UpdateCascadeOutcome, UpdateHooksRouting } from "./update-cascade.ts";
@@ -125,7 +126,7 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult } from "../auth-host.ts";
-import type { PluginUpdateFn, PluginUpdateOutcome } from "../types.ts";
+import type { PluginUpdateFn, PluginUpdateOutcome, RevisionMove } from "../types.ts";
 
 /** Runs one prepared update target for the update flow. */
 type UpdatePluginRunner = (args: ThreePhaseArgs) => Promise<UpdateRunOutcome>;
@@ -206,6 +207,21 @@ function makeSyncCloneOnce(
 type UpdateBindings = Pick<ThreePhaseArgsBase, "hooksRouting" | "completionCache" | "env">;
 
 /**
+ * UPR-03: the candidate one target's runner reported, so a failure the swap
+ * throws can name the move it attempted. A caller creates a fresh one per
+ * target, so a later target never renders an earlier target's versions.
+ */
+interface CandidateReport {
+  move?: RevisionMove;
+}
+
+function recordCandidate(report: CandidateReport): (move: RevisionMove) => void {
+  return (move) => {
+    report.move = move;
+  };
+}
+
+/**
  * Build the per-target `runThreePhaseUpdate` argument bag for the DIRECT
  * update path. Every optional seam is spread only when set, so the cascade
  * entrypoint (`updateSinglePlugin`) and the direct path stay distinguishable
@@ -218,6 +234,7 @@ function buildDirectThreePhaseArgs(
   bindings: UpdateBindings,
   constraintTagMemo: Map<string, readonly RemoteTag[]>,
   constraintMarketplaceTagMemo: Map<string, readonly ReleaseTagCandidate[]>,
+  report: CandidateReport,
 ): DirectThreePhaseArgs {
   return {
     plugin: target.plugin,
@@ -257,6 +274,7 @@ function buildDirectThreePhaseArgs(
     constraintTagMemo,
     constraintMarketplaceTagMemo,
     cleanupClones: garbageCollectPluginClones,
+    onCandidate: recordCandidate(report),
     notifyPhaseFailure: (error, failures) => {
       notifyDirectFailure({
         ctx: opts.ctx,
@@ -268,6 +286,7 @@ function buildDirectThreePhaseArgs(
         err: error,
         reasonOverride: "rollback partial",
         rollbackPartial: failures,
+        report,
       });
     },
   };
@@ -367,6 +386,7 @@ async function updatePluginsWith(
     }
 
     let outcome: UpdateRunOutcome;
+    const report: CandidateReport = {};
     try {
       // eslint-disable-next-line no-await-in-loop -- each update locks the scope (retries: 0)
       outcome = await runPluginUpdate(
@@ -377,6 +397,7 @@ async function updatePluginsWith(
           bindings,
           constraintTagMemo,
           constraintMarketplaceTagMemo,
+          report,
         ),
       );
     } catch (err) {
@@ -397,6 +418,7 @@ async function updatePluginsWith(
         scope: t.scope,
         pluginName: t.plugin,
         err,
+        report,
       });
       abortUpdateBatch(ctx, run, outcomes, cardinality, composeCascade);
       return;
@@ -635,6 +657,7 @@ async function updateSinglePluginWith(
   // dependency-injection seam if needed.
   const cwd = process.cwd();
   const locations = locationsFor(scope, cwd);
+  const report: CandidateReport = {};
 
   try {
     return await runPluginUpdate({
@@ -662,6 +685,7 @@ async function updateSinglePluginWith(
       constraintTagMemo: constraintMemos.tagMemo,
       constraintMarketplaceTagMemo: constraintMemos.marketplaceTagMemo,
       cleanupClones: garbageCollectPluginClones,
+      onCandidate: recordCandidate(report),
     });
   } catch (err) {
     // GHB-03: an invalid GitHub base override fails the marketplace command
@@ -678,6 +702,9 @@ async function updateSinglePluginWith(
     const base: PluginUpdateOutcome = {
       partition: "failed",
       name: plugin,
+      // UPR-03: the move a throw after the candidate attempted; nothing
+      // before one.
+      ...report.move,
       notes: [composeErrorWithCauseChain(err)],
       ...(cleanupFailures.length > 0 && {
         cause: err as Error,
@@ -771,6 +798,12 @@ interface NotifyDirectFailureArgs {
    * identity for the renderer's cause-chain walker.
    */
   readonly rollbackPartial?: readonly UpdatePhase3Failure[];
+  /**
+   * UPR-03: the target's candidate report. A failure after the candidate
+   * shows the move it attempted; the marketplace-sync, enumeration, and
+   * pre-candidate failures carry none and show no version.
+   */
+  readonly report?: CandidateReport;
 }
 
 function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
@@ -787,6 +820,7 @@ function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
   const failedRow: PluginFailedMessage = {
     status: "failed",
     name: pluginName,
+    ...revisionVersionSlot(args.report?.move ?? {}),
     reasons,
     cause,
     // D-03/D-06: a direct update failure -> error, no reload.

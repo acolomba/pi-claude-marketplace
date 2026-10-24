@@ -1123,20 +1123,75 @@ test("AFILE-04: a swap over a comment-free mcp-adapter.json carries no notice", 
   });
 });
 
+/**
+ * Gives `hello` a workflow whose saved target holds foreign content, so the
+ * swap's workflows commit refuses it after the MCP commit. Returns that path.
+ */
+async function seedRefusedWorkflowTarget(
+  locations: ReturnType<typeof locationsFor>,
+  pluginRoot: string,
+): Promise<string> {
+  await mkdir(path.join(pluginRoot, "workflows"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, "workflows", "greet.js"),
+    'export const meta = { name: "greet", description: "does greet" };\n',
+  );
+  const foreignPath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+  await mkdir(locations.workflowsSavedDir, { recursive: true });
+  await writeFile(foreignPath, "{}");
+  return foreignPath;
+}
+
+test("UPR-03: a phase-3 failure outcome carries the commits of the move it attempted", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-phase3-commits-"));
+    try {
+      const { locations, pluginRoot, args } = await prepareMcpUpdate(cwd, COMMENTED_ADAPTER_TEXT);
+      await seedRefusedWorkflowTarget(locations, pluginRoot);
+      const fromCommit = "a".repeat(40);
+      const toCommit = "b".repeat(40);
+      const state = await loadState(locations.extensionRoot);
+      const record = state.marketplaces.mp?.plugins.hello;
+      assert.ok(record !== undefined);
+      record.resolvedSha = fromCommit;
+      await saveState(locations.extensionRoot, state);
+      const preflight = { ...(await preflightOf(args)), resolvedSha: toCommit };
+
+      // act
+      const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+      // assert
+      assert.ok(outcome.partition === "failed");
+      assert.deepStrictEqual(
+        {
+          fromVersion: outcome.fromVersion,
+          toVersion: outcome.toVersion,
+          fromCommit: outcome.fromCommit,
+          toCommit: outcome.toCommit,
+          reasons: outcome.reasons,
+        },
+        {
+          fromVersion: "1.0.0",
+          toVersion: "2.0.0",
+          fromCommit,
+          toCommit,
+          reasons: ["rollback partial"],
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("AFILE-04: a swap whose workflows commit fails after the MCP commit carries the notice", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-afile04-failed-"));
     try {
       const { locations, pluginRoot, args } = await prepareMcpUpdate(cwd, COMMENTED_ADAPTER_TEXT);
-      await mkdir(path.join(pluginRoot, "workflows"), { recursive: true });
-      await writeFile(
-        path.join(pluginRoot, "workflows", "greet.js"),
-        'export const meta = { name: "greet", description: "does greet" };\n',
-      );
-      const foreignPath = path.join(locations.workflowsSavedDir, "hello:greet.json");
-      await mkdir(locations.workflowsSavedDir, { recursive: true });
-      await writeFile(foreignPath, "{}");
+      const foreignPath = await seedRefusedWorkflowTarget(locations, pluginRoot);
       const preflight = await preflightOf(args);
       const refusal = `Cannot replace workflow target with non-previous content at ${foreignPath}`;
 

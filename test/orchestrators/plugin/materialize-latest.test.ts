@@ -21,6 +21,7 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { MaterializationPolicy } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type { ThreePhaseArgsBase } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
+import type { RevisionMove } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { TestContext } from "node:test";
@@ -208,4 +209,49 @@ test("REI-01: a policy that does not skip the recorded revision restores its del
     ...recordedPlugin("1.0.0", pluginRoot),
     updatedAt: "2026-01-02T00:00:00.000Z",
   });
+});
+
+test("UPR-03: reports the derived candidate's revisions once before the swap", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  const reported: RevisionMove[] = [];
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      onCandidate: (move) => {
+        reported.push(move);
+      },
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.strictEqual(outcome.partition, "updated");
+  assert.deepStrictEqual(reported, [{ fromVersion: "1.0.0", toVersion: "1.1.0" }]);
+});
+
+test("UPR-03: reports no candidate for a verdict the preflight returns", async (t) => {
+  // arrange
+  const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.0.0" });
+  const reported: RevisionMove[] = [];
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      onCandidate: (move) => {
+        reported.push(move);
+      },
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.strictEqual(outcome.partition, "unchanged");
+  assert.deepStrictEqual(reported, []);
 });

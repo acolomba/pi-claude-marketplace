@@ -386,6 +386,19 @@ void ({
   toVersion: "1.0.0",
   toCommit: "b".repeat(40),
 } satisfies RevisionMove);
+// UPR-03: a failure after the candidate names the move it attempted.
+void ({
+  declaresAgents: false,
+  declaresMcp: false,
+  declaresWorkflows: false,
+  fromCommit: "a".repeat(40),
+  fromVersion: "1.0.0",
+  name: "alpha",
+  notes: [],
+  partition: "failed",
+  toCommit: "b".repeat(40),
+  toVersion: "1.0.0",
+} satisfies PluginUpdateFailedOutcome);
 // @ts-expect-error a revision move always names both versions
 void ({ fromVersion: "1.0.0", fromCommit: "a".repeat(40) } satisfies RevisionMove);
 

@@ -7,7 +7,7 @@
 // names no git surface.
 
 import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-preflight.ts";
-import { swapPluginUpdate } from "./update-swap.ts";
+import { preflightMove, swapPluginUpdate } from "./update-swap.ts";
 
 import type { MaterializationPolicy } from "./update-preflight.ts";
 import type { ThreePhaseArgs, UpdateRunOutcome } from "./update-swap.ts";
@@ -23,6 +23,10 @@ import type { ThreePhaseArgs, UpdateRunOutcome } from "./update-swap.ts";
  * `phaseFailures` would fail to compile here, because neither failed arm of
  * `UpdateRunOutcome` admits one, and `isPhase3aAggregateFailure` narrows on
  * exactly that gap.
+ *
+ * UPR-03: once the preflight derived a candidate, and before the swap starts,
+ * the runner reports the candidate's revisions through `args.onCandidate`, so
+ * a caller can name the move on a failure the swap throws.
  */
 export async function materializeLatestVersion(
   args: ThreePhaseArgs,
@@ -37,5 +41,6 @@ export async function materializeLatestVersion(
     return preflight;
   }
 
+  args.onCandidate?.(preflightMove(preflight));
   return swapPluginUpdate(args, preflight, policy);
 }
