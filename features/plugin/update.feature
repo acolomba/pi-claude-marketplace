@@ -325,7 +325,7 @@ Feature: Plugin update
       | summary      | A plugin operation needs attention. |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id        | name | status  | reasons              | scope   | version | cause chain                                                                                              | cause truncated | leaks | rollback partial |
-      | tools            | project           | lib@tools | lib  | skipped | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (>=1.0.0 <2.0.0-0) -- required by "app@tools" | false           |       |                  |
+      | tools            | project           | lib@tools | lib  | skipped | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | app@tools     | 1.0.0   | true    |

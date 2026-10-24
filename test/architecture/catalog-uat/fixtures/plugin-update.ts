@@ -576,7 +576,7 @@ export const PLUGIN_UPDATE_FIXTURES: FixtureMap = {
                 version: "1.0.0",
                 reasons: ["dependents constrain"],
                 cause: new Error(
-                  'the declared ranges admit no version in common (no version satisfies all 2 declared ranges) -- required by "alpha@mp", "beta@mp" (currently disabled)',
+                  'the declared ranges admit no version in common (^1.0.0, ^2.0.0) -- required by "alpha@mp", "beta@mp" (currently disabled)',
                 ),
               },
             ],

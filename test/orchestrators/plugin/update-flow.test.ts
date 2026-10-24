@@ -8998,7 +8998,7 @@ test("D-10-13: an up-to-date constrained plugin discloses the range that admits 
           message: [
             "● mp [project]",
             "  ⊘ pathfoo (skipped) {up-to-date}",
-            '    cause: constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "app@mp"',
+            '    cause: constrained to the combined range (^1.0.0) -- required by "app@mp"',
           ].join("\n"),
         },
       ]);

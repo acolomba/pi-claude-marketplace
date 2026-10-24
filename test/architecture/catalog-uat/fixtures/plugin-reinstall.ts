@@ -399,7 +399,7 @@ export const PLUGIN_REINSTALL_FIXTURES: FixtureMap = {
                 name: "shared-lib",
                 reasons: ["dependents constrain"],
                 cause: new Error(
-                  'version 2.0.0 falls outside what the combined range admits (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+                  'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "alpha@mp"',
                 ),
                 severity: "warning",
                 needsReload: false,

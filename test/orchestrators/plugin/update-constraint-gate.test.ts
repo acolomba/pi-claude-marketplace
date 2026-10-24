@@ -162,7 +162,7 @@ describe("evaluateUpdateConstraint", () => {
     assert.deepStrictEqual(verdict, {
       kind: "held",
       cause:
-        'the declared ranges admit no version in common (no version satisfies all 2 declared ranges) -- required by "alpha@mp", "beta@mp"',
+        'the declared ranges admit no version in common (^1.0.0, ^2.0.0) -- required by "alpha@mp", "beta@mp"',
     });
   });
 
@@ -214,7 +214,7 @@ describe("evaluateUpdateConstraint", () => {
     assert.deepStrictEqual(verdict, {
       kind: "held",
       cause:
-        'the declared ranges admit no version in common (no version satisfies all 2 declared ranges) -- required by "alpha@mp", "beta@mp" (currently disabled)',
+        'the declared ranges admit no version in common (^1.0.0, ^2.0.0) -- required by "alpha@mp", "beta@mp" (currently disabled)',
     });
   });
 
@@ -329,7 +329,7 @@ describe("evaluateUpdateConstraint", () => {
       // D-10-13: no tag matched, so nothing established a ceiling and the
       // disclosure names the range alone.
       disclosure:
-        'constrained to the combined range (>=1.0.0 <2.0.0-0 >=1.2.0) -- required by "alpha@mp", "beta@mp"',
+        'constrained to the combined range (^1.0.0, >=1.2.0) -- required by "alpha@mp", "beta@mp"',
     });
   });
 
@@ -369,7 +369,7 @@ describe("evaluateUpdateConstraint", () => {
       // D-10-14: a `path` entry source with no satisfying marketplace tag
       // falls back to the current copy.
       fellBackToCurrentCopy: true,
-      disclosure: 'constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+      disclosure: 'constrained to the combined range (^1.0.0) -- required by "alpha@mp"',
     });
   });
 
@@ -443,19 +443,20 @@ describe("evaluateUpdateConstraint", () => {
     });
   }
 
-  for (const { title, holder, expectedClause } of [
+  for (const { title, holder, expectedCause } of [
     {
       title: "invalid",
       holder: dependency({ name: "target", version: "not-a-valid-range" }),
-      expectedClause: "a declared range could not be read",
+      expectedCause:
+        'a declared range could not be read (not-a-valid-range) -- required by "alpha@mp"',
     },
     {
       title: "too-complex",
       holder: dependency({ name: "target", version: "^1.0.0".repeat(700) }),
-      expectedClause: "the declared ranges are too complex to combine",
+      expectedCause: `the declared ranges are too complex to combine (${"^1.0.0".repeat(700).slice(0, 200)}... (+4000 chars)) -- required by "alpha@mp"`,
     },
   ] as const) {
-    test(`UPDT-01: a ${title} declared range holds the update with a distinct arm clause`, async () => {
+    test(`UPDT-01 / INR-05: a ${title} declared range holds the update, naming the declared range`, async () => {
       // arrange
       const declarations = new Map<string, readonly AddressedDependency[]>([
         ["alpha@mp", [holder]],
@@ -468,10 +469,41 @@ describe("evaluateUpdateConstraint", () => {
       );
 
       // assert
-      assert.ok(verdict.kind === "held");
-      assert.ok(verdict.cause.startsWith(expectedClause));
+      assert.deepStrictEqual(verdict, { kind: "held", cause: expectedCause });
     });
   }
+
+  test("INR-05: a holder that declared no range is named but adds no range to the disclosure", async () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+      ["beta@mp", [dependency({ name: "target" })]],
+    ]);
+    const state = stateOf({
+      mp: { target: pluginRecord(), alpha: pluginRecord(), beta: pluginRecord() },
+    });
+
+    // act
+    const verdict = await evaluateUpdateConstraint(
+      options({
+        state,
+        entry: { name: "target", source: "not-a-valid-source" },
+        seam: seamReturning(declarations),
+      }),
+    );
+
+    // assert
+    assert.deepStrictEqual(verdict, {
+      kind: "admits",
+      range: ">=1.0.0 <2.0.0-0",
+      holders: [
+        { key: "alpha@mp", range: "^1.0.0", disabled: false },
+        { key: "beta@mp", disabled: false },
+      ],
+      fellBackToCurrentCopy: false,
+      disclosure: 'constrained to the combined range (^1.0.0) -- required by "alpha@mp", "beta@mp"',
+    });
+  });
 
   test("UPDT-01: the highest git tag satisfying the intersection is pinned", async () => {
     // arrange
@@ -519,7 +551,7 @@ describe("evaluateUpdateConstraint", () => {
       pin: { oid: "oid-git", version: "1.4.0" },
       fellBackToCurrentCopy: false,
       disclosure:
-        'already the highest version the combined range admits (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+        'already the highest version the combined range admits (^1.0.0) -- required by "alpha@mp"',
     });
     assert.strictEqual(calls.length, 1);
     assert.strictEqual(calls[0]?.pluginName, "target");
@@ -580,7 +612,7 @@ describe("evaluateUpdateConstraint", () => {
       pin: { oid: tagOid, version: "1.4.0" },
       fellBackToCurrentCopy: false,
       disclosure:
-        'already the highest version the combined range admits (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+        'already the highest version the combined range admits (^1.0.0) -- required by "alpha@mp"',
     });
     assert.strictEqual(calls.length, 1);
     assert.deepStrictEqual(calls[0]?.source, source);
@@ -662,7 +694,7 @@ describe("evaluateUpdateConstraint", () => {
       range: ">=1.0.0 <2.0.0-0",
       holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
       fellBackToCurrentCopy: false,
-      disclosure: 'constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+      disclosure: 'constrained to the combined range (^1.0.0) -- required by "alpha@mp"',
     });
   });
 
@@ -700,7 +732,7 @@ describe("evaluateUpdateConstraint", () => {
       pin: { oid: "oid-path", version: "1.4.0" },
       fellBackToCurrentCopy: false,
       disclosure:
-        'already the highest version the combined range admits (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+        'already the highest version the combined range admits (^1.0.0) -- required by "alpha@mp"',
     });
     assert.strictEqual(calls.length, 1);
     assert.strictEqual(calls[0]?.pluginName, "target");
@@ -872,9 +904,12 @@ describe("evaluateUpdateConstraint", () => {
     );
 
     // assert -- a repository that could not be reached has not told us
-    // anything, unlike the path arm's fallback above.
-    assert.ok(verdict.kind === "held");
-    assert.match(verdict.cause, /network unreachable/);
+    // anything, unlike the path arm's fallback above; the line names the
+    // classification, not a range.
+    assert.deepStrictEqual(verdict, {
+      kind: "held",
+      cause: 'the release tags could not be listed (network unreachable) -- required by "alpha@mp"',
+    });
   });
 
   test("UPDT-01: an entry source with no tag listing queries no probe", async () => {
@@ -904,7 +939,7 @@ describe("evaluateUpdateConstraint", () => {
       range: ">=1.0.0 <2.0.0-0",
       holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
       fellBackToCurrentCopy: false,
-      disclosure: 'constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+      disclosure: 'constrained to the combined range (^1.0.0) -- required by "alpha@mp"',
     });
   });
 
@@ -1066,6 +1101,25 @@ describe("admitResolvedVersion", () => {
       admission.cause,
       'version 1.6.0 falls outside what the combined range admits (<=1.5.0) -- required by "a@mp"',
     );
+  });
+
+  test("UPDT-02 / INR-05: the out-of-range hold prints the rejecting holders' declared ranges, not the fold", () => {
+    // arrange
+    const holders: readonly ConstraintHolder[] = [
+      { key: "app@tools", range: "^1.0.0", disabled: false },
+      { key: "other@tools", range: ">=0.5.0", disabled: false },
+    ];
+    const verdict = admits(">=1.0.0 <2.0.0-0", holders);
+
+    // act
+    const admission = admitResolvedVersion(verdict, "2.0.0");
+
+    // assert
+    assert.deepStrictEqual(admission, {
+      kind: "held",
+      cause:
+        'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools"',
+    });
   });
 
   test("UPDT-02: an inclusive upper bound admits the boundary version", () => {
