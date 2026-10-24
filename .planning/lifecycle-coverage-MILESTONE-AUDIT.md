@@ -18,9 +18,10 @@ nyquist:
   missing_phases: ["02-27"]
   overall: missing
 open_decisions:
-  - "INR-03 pinned sha that no branch or tag reaches: record as an isomorphic-git capability gap, or add a by-sha fetch"
   - "WR-06 (phase 18): a plugin the marketplace no longer lists fails every update/reinstall in its scope as {unreadable}; it should not be treated as corruption"
   - "WR-05 (phase 18): a load-time reinstall that a dependent's range blocks retries silently on every load"
+decisions:
+  - "INR-03 (user, 2026-10-24): a pinned sha that no branch or tag reaches fails {source missing}. Recorded Pi capability gap: isomorphic-git 1.43.1 fetches only advertised refs over protocol v1, so it cannot do Claude Code's `git fetch origin <sha>`; D-13 keeps the git binary out."
 tech_debt:
   - area: cross-phase (integration check)
     items:
