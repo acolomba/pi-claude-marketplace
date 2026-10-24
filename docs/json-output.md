@@ -344,7 +344,7 @@ A requested marketplace is absent from the selected scope.
 
 #### reconcile-pending-empty
 
-No pending reconciliation changes, with any retained staging information.
+No pending reconciliation changes. `pending` and `apply` both report it; `origin.commandId` names which. A `pending` report can carry retained staging information.
 
 <!-- fields: kind:reconcile-pending-empty -->
 

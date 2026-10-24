@@ -5,6 +5,7 @@ import { MARKETPLACE_LIST_FIXTURES } from "./fixtures/marketplace-list.ts";
 import { MARKETPLACE_NOAUTOUPDATE_FIXTURES } from "./fixtures/marketplace-noautoupdate.ts";
 import { MARKETPLACE_REMOVE_FIXTURES } from "./fixtures/marketplace-remove.ts";
 import { MARKETPLACE_UPDATE_FIXTURES } from "./fixtures/marketplace-update.ts";
+import { PLUGIN_APPLY_FIXTURES } from "./fixtures/plugin-apply.ts";
 import { PLUGIN_BOOTSTRAP_FIXTURES } from "./fixtures/plugin-bootstrap.ts";
 import { PLUGIN_DISABLE_FIXTURES } from "./fixtures/plugin-disable.ts";
 import { PLUGIN_ENABLE_FIXTURES } from "./fixtures/plugin-enable.ts";
@@ -42,6 +43,7 @@ export const FIXTURE_MAPS: readonly FixtureMap[] = [
   MARKETPLACE_INFO_FIXTURES,
   PLUGIN_INFO_FIXTURES,
   PLUGIN_PENDING_FIXTURES,
+  PLUGIN_APPLY_FIXTURES,
   RECONCILE_APPLIED_FIXTURES,
   MARKETPLACE_REMOVE_FIXTURES,
   MARKETPLACE_UPDATE_FIXTURES,

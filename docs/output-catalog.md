@@ -3510,7 +3510,7 @@ DIFF-01 SC #2 / D-53-01 read-only diff/pending surface. It lists what the next `
 
 ### Empty steady-state (no actions pending)
 
-The merged config matches the recorded state byte-for-byte in every scope -- the next reload's reconcile would apply zero actions. The orchestrator emits a free-form advisory body line (no cascade, no marketplaces array projection). Severity `info`; no reload-hint; no summary line.
+The merged config matches the recorded state in every scope, so `/claude:plugin apply` would change nothing (D-14). The orchestrator emits a free-form advisory body line (no cascade, no marketplaces array projection). Severity `info`; no reload-hint; no summary line.
 
 <!-- catalog-state: empty-steady-state -->
 
@@ -3520,7 +3520,7 @@ Pending: /claude:plugin apply has nothing to change.
 
 ### Empty steady-state carrying a retained workflow staging tree (WR-06)
 
-The next reload would apply zero actions, AND a workflow staging tree survives that the sweeper keeps forever: its `.previous/` still holds displaced envelopes, which are the only surviving copy of the user's previous workflow scripts. The tree sits under the workflow home rather than under any scope root, so uninstall and `/reload` never reach it and no other surface names it. One free-form advisory body line per retained tree is appended after the body, sorted by directory name, each carrying the tree's directory NAME and its envelope count. The line interpolates NO absolute path (T-53-02-02 -- the same information-disclosure rule that puts a basename on the invalid-config row), and states the containing location as fixed text. An empty set renders nothing at all: no header, no zero-count line. Severity `info`; no reload-hint; no summary line.
+`/claude:plugin apply` would change nothing, AND a workflow staging tree survives that the sweeper keeps forever: its `.previous/` still holds displaced envelopes, which are the only surviving copy of the user's previous workflow scripts. The tree sits under the workflow home rather than under any scope root, so uninstall and `/reload` never reach it and no other surface names it. One free-form advisory body line per retained tree is appended after the body, sorted by directory name, each carrying the tree's directory NAME and its envelope count. The line interpolates NO absolute path (T-53-02-02 -- the same information-disclosure rule that puts a basename on the invalid-config row), and states the containing location as fixed text. An empty set renders nothing at all: no header, no zero-count line. Severity `info`; no reload-hint; no summary line.
 
 <!-- catalog-state: empty-steady-state-retained-workflow-staging -->
 
@@ -3654,9 +3654,25 @@ Reconcile pending: 1 failure
 
 ______________________________________________________________________
 
+## `/claude:plugin apply`
+
+APL-01 / D-07 / D-08: `apply` runs the reconcile apply step for the selected scopes, project first, and makes the changes `/claude:plugin pending` lists. Its change rows are the `reconcile-applied-cascade` states below. With nothing to change it emits the standalone advisory in this section and writes nothing: `state.json` and both configs keep their bytes and modification times.
+
+### Nothing to change
+
+The merged config matches the recorded state in every selected scope, so the pass accumulated no row. The orchestrator emits the same `reconcile-pending-empty` kind as the pending empty state, in apply's wording; a JSON consumer tells the two apart by `origin.commandId`. Severity `info`; no reload-hint; no summary line.
+
+<!-- catalog-state: nothing-to-change -->
+
+```text
+Apply: nothing to change.
+```
+
+______________________________________________________________________
+
 ## reconcile-applied-cascade
 
-RECON-04 (Phase 55 Plan 02) load-time reconcile apply cascade emitted by `applyReconcile` after every `resources_discover` invocation that performed at least one apply action OR carried at least one invalid-config / source-mismatch row. Wraps the same per-status `MarketplaceNotificationMessage[]` shape the cascade arm carries -- realized transition tokens (`added` / `removed` / `installed` / `uninstalled` / `disabled` / `failed`) reused per RESEARCH Pattern 5 Option A -- so the rendered bytes match each token's standalone-command counterpart. The `Run /reload to pick up changes` trailer is STRUCTURALLY EXCLUDED (RECON-04 -- the reconcile already ran ON /reload). OUT-03/OUT-06/D-03/D-04: a reconcile apply is a plural mixed-subject operation, so a trailing per-operation tally (`Reconcile: <n> failure(s), <n> warning(s), <n> success(es)`) is appended as the cascade's FINAL block, counting all marketplace + plugin rows uniformly under the `Reconcile` operation name (the reload-hint slot the apply structurally suppresses). Empty-and-clean reconciles are silent (no notify) per the load-time silence contract (NFR-2 / A4).
+RECON-04 (Phase 55 Plan 02) load-time reconcile apply cascade emitted by `applyReconcile` after every `resources_discover` invocation that performed at least one apply action OR carried at least one invalid-config / source-mismatch row. Wraps the same per-status `MarketplaceNotificationMessage[]` shape the cascade arm carries -- realized transition tokens (`added` / `removed` / `installed` / `uninstalled` / `disabled` / `failed`) reused per RESEARCH Pattern 5 Option A -- so the rendered bytes match each token's standalone-command counterpart. The `Run /reload to pick up changes` trailer is STRUCTURALLY EXCLUDED (RECON-04 -- the reconcile already ran ON /reload). OUT-03/OUT-06/D-03/D-04: a reconcile apply is a plural mixed-subject operation, so a trailing per-operation tally (`Reconcile: <n> failure(s), <n> warning(s), <n> success(es)`) is appended as the cascade's FINAL block, counting all marketplace + plugin rows uniformly under the `Reconcile` operation name (the reload-hint slot the apply structurally suppresses). An empty-and-clean load is silent (no notify, D-05); an empty-and-clean `apply` emits the advisory in the `/claude:plugin apply` section instead (D-08).
 
 ### Success cascade -- mixed marketplace add + plugin install across both scopes
 

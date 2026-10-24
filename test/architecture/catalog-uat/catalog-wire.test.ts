@@ -128,6 +128,7 @@ const CATALOG_COMMANDS = new Map([
   ["/claude:plugin marketplace info <name>", "marketplace info"],
   ["/claude:plugin info <plugin>@<marketplace>", "plugin info"],
   ["/claude:plugin pending", "plugin pending"],
+  ["/claude:plugin apply", "plugin apply"],
   ["/claude:plugin marketplace remove <name>", "marketplace remove"],
   ["/claude:plugin marketplace update [<name>]", "marketplace update"],
   ["/claude:plugin enable <plugin>@<marketplace>", "plugin enable"],
@@ -494,7 +495,7 @@ test("WIRE-02: the retained inventory and separate command error cover all 21 ki
     "usage-error",
     "usage-info",
   ]);
-  assert.strictEqual(PRESENTED.length, 318);
+  assert.strictEqual(PRESENTED.length, 319);
 
   for (const payload of payloads) {
     assert.ok(PAYLOAD_VALIDATOR.Check(payload));
@@ -704,7 +705,7 @@ for (const mode of ["json", "rpc"] as const) {
 
     const emittedKeys = emitted.flatMap(({ key, payloads }) => payloads.map(() => key));
     assert.deepStrictEqual(emittedKeys, tupleKeys(EXAMPLES));
-    assert.strictEqual(new Set(emittedKeys).size, 308);
+    assert.strictEqual(new Set(emittedKeys).size, 309);
     assert.deepStrictEqual(
       capture.entries.map(({ customType }) => customType),
       EXAMPLES.map(() => "claude-plugin"),
