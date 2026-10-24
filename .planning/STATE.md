@@ -5,17 +5,17 @@ milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 29
 current_phase_name: Apply Command and Read-Only Reload
 status: executing
-stopped_at: Completed 29-05-PLAN.md
-last_updated: "2026-10-24T17:01:50.706Z"
+stopped_at: Completed 29-06-PLAN.md
+last_updated: "2026-10-24T17:30:37.059Z"
 last_activity: 2026-10-24
-last_activity_desc: Plan 29-05 complete (the apply reload hint and dependency installs)
-state_head: f78a3844b37b52fc9e5584e513f9dd3cdc6d8093
+last_activity_desc: Plan 29-06 complete (pending previews marketplace adds and removes)
+state_head: 40f11c886da48f410cc9038dd427627fecd163ea
 progress:
   total_phases: 29
   completed_phases: 28
   total_plans: 74
-  completed_plans: 65
-  percent: 88
+  completed_plans: 66
+  percent: 89
 ---
 
 # Project State
@@ -32,11 +32,11 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 29 (Apply Command and Read-Only Reload) — EXECUTING
-Plan: 6 of 14
+Plan: 7 of 14
 Status: Ready to execute
-Last activity: 2026-10-24 — Plan 29-05 complete (the apply reload hint and dependency installs)
+Last activity: 2026-10-24 — Plan 29-06 complete (pending previews marketplace adds and removes)
 
-Progress: [█████████░] 88%
+Progress: [█████████░] 89%
 
 Phases 2-15 depend only on Phase 1 and may run in parallel once it lands. Each
 owns its own feature files and step modules (the file ownership table in
@@ -187,8 +187,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-24T17:01:44.547Z
-**Stopped at:** Completed 29-05-PLAN.md
+**Last session:** 2026-10-24T17:30:31.150Z
+**Stopped at:** Completed 29-06-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -399,6 +399,7 @@ archived milestone artifacts.
 | Phase 29 P03 | 27 min | 2 tasks | 24 files |
 | Phase 29 P04 | 29 min | 2 tasks | 27 files |
 | Phase 29 P05 | 40 min | 2 tasks | 24 files |
+| Phase 29 P06 | 24 min | 2 tasks | 24 files |
 
 ## Decisions
 
@@ -585,6 +586,7 @@ archived milestone artifacts.
 - [Phase 29]: The apply-empty advisory is sent in applyReconcileWithReader, not in the shared notifyScopePasses, so the load stays silent on an empty pass (D-05)
 - [Phase 29]: Every apply report with a realized row ends with the reload trailer: shouldEmitReloadHint reads reconcile-applied-cascade rows through rowsNeedReload, the cascade's RLD-02 OR-reduce (D-08)
 - [Phase 29]: The reason option is gone from ApplyReconcileOptions, McpMigrationInput and ScopePassInput; every apply installs missing declared dependencies and the MCP move skips planned dependency installs (D-02, D-22)
+- [Phase 29]: Pending previews marketplace adds and removes as (will add) / (will remove) headers stamped severity info and needsReload false; each counts as one tally success and toward needsApply, and a remove with no plugin still shows its header (D-20)
 
 ### mcp-4 decisions
 
