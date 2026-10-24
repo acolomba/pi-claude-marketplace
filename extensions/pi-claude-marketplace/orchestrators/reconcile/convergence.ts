@@ -6,7 +6,8 @@
 //
 // D-12 / D-23: a move a dependent's declared range does not admit is held, not
 // moved. The range is judged against the catalog version alone, through the
-// network-free `constraint-fold.ts`; no release tag is listed here.
+// network-free `constraint-fold.ts`; no release tag is listed here. A clean
+// record whose candidate would drop components is declined (WCONV-01).
 //
 // MUST NOT touch the network (NFR-5). The module is outside `NETWORK_SEAMS`, so
 // BLOCK F in `eslint.config.js` rejects a git surface here; the candidate
@@ -70,23 +71,45 @@ export interface PlannedHold {
   readonly cause: string;
 }
 
-/** The scope's moves and holds, each sorted by marketplace then plugin. */
+/**
+ * D-12 / WCONV-01: a clean record whose candidate resolves
+ * `partially-available`. Moving it would drop the listed component
+ * kinds without consent, so it stays at its recorded `version`.
+ */
+export interface PlannedDecline {
+  readonly scope: Scope;
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly version: string;
+  readonly unsupported: readonly string[];
+}
+
+/** The scope's moves, holds and declines, each sorted by marketplace then plugin. */
 export interface ConvergencePlan {
   readonly moves: readonly PlannedMove[];
   readonly holds: readonly PlannedHold[];
+  readonly declines: readonly PlannedDecline[];
 }
 
-/** One move found on disk, before the range check judges it. */
+/** One move found on disk, before the range and consent checks judge it. */
 interface CandidateMove {
   readonly key: string;
   readonly move: PlannedMove;
+  /** The kinds a clean record's partial candidate would drop (D-12). */
+  readonly consent?: readonly string[];
   /** DLS-D1: what the installed copy declares; absent when it cannot be read. */
   readonly installed?: readonly AddressedDependency[];
 }
 
+type FoundMove = Pick<CandidateMove, "move" | "consent">;
+
+type Blocked =
+  | { readonly kind: "hold"; readonly hold: PlannedHold }
+  | { readonly kind: "decline"; readonly decline: PlannedDecline };
+
 type Declarations = ReadonlyMap<string, readonly AddressedDependency[]>;
 
-const NO_CONVERGENCE: ConvergencePlan = Object.freeze({ moves: [], holds: [] });
+const NO_CONVERGENCE: ConvergencePlan = Object.freeze({ moves: [], holds: [], declines: [] });
 
 function compareNames(a: string, b: string): number {
   return a.localeCompare(b);
@@ -135,14 +158,16 @@ function isGitSource(source: unknown): boolean {
 /**
  * D-10: the move one enabled record would make, or `undefined`. A delisted
  * record (DLS-D1), an invalid entry, a git source and an `unavailable`
- * candidate are not moves.
+ * candidate are not moves. A clean record's `partially-available` candidate
+ * carries the kinds it would drop; a record already installed partial moves
+ * without consent (D-12).
  */
 async function recordMove(
   input: ConvergenceInput,
   mp: MarketplaceRecord,
   plugin: string,
   record: PluginRecord,
-): Promise<PlannedMove | undefined> {
+): Promise<FoundMove | undefined> {
   const manifest = await loadMarketplaceManifest(mp.manifestPath);
   const declared = lookupDeclaredPlugin(manifest, plugin);
   if (declared.kind === "absent" || !PLUGIN_ENTRY_VALIDATOR.Check(declared.entry)) {
@@ -175,7 +200,7 @@ async function recordMove(
     return undefined;
   }
 
-  return {
+  const move: PlannedMove = {
     scope: input.scope,
     marketplace: mp.name,
     plugin,
@@ -186,6 +211,8 @@ async function recordMove(
     grew: false,
     partial: !record.compatibility.installable,
   };
+  const needsConsent = record.compatibility.installable && resolved.state === "partially-available";
+  return { move, ...(needsConsent && { consent: resolved.unsupported }) };
 }
 
 /**
@@ -217,13 +244,13 @@ async function recordMoveIsolated(
   record: PluginRecord,
 ): Promise<CandidateMove | undefined> {
   try {
-    const move = await recordMove(input, mp, plugin, record);
-    if (move === undefined) {
+    const found = await recordMove(input, mp, plugin, record);
+    if (found === undefined) {
       return undefined;
     }
 
     const installed = await installedCopyDeclarations(input, mp, record);
-    return { key: `${plugin}@${mp.name}`, move, ...(installed !== undefined && { installed }) };
+    return { key: `${plugin}@${mp.name}`, ...found, ...(installed !== undefined && { installed }) };
   } catch (err) {
     hookDebugLog(
       `planConvergence: skipped ${plugin}@${mp.name}: ${errorMessage(err)}`,
@@ -253,32 +280,54 @@ function rangeHoldCause(
 }
 
 /**
- * One round of the fixed point: holds every candidate the current
- * declarations block and gives it its installed-copy declarations, because a
- * held plugin keeps running the copy it has. Returns whether a hold was added.
+ * D-12: why a candidate stays put under the current declarations, or
+ * `undefined` when it moves. The range comes first and consent second, the
+ * order `update` checks them in.
  */
-function holdBlockedRound(
+function blockOf(
+  candidate: CandidateMove,
+  declarations: Declarations,
+  view: ExtensionState,
+): Blocked | undefined {
+  const { move, consent } = candidate;
+  const where = { scope: move.scope, marketplace: move.marketplace, plugin: move.plugin };
+  const cause = rangeHoldCause(declarations, view, move);
+  if (cause !== undefined) {
+    return { kind: "hold", hold: { ...where, version: move.fromVersion, cause } };
+  }
+
+  if (consent !== undefined) {
+    return {
+      kind: "decline",
+      decline: { ...where, version: move.fromVersion, unsupported: consent },
+    };
+  }
+
+  return undefined;
+}
+
+/**
+ * One round of the fixed point: blocks every candidate the current
+ * declarations block and gives it its installed-copy declarations, because a
+ * plugin that stays put keeps running the copy it has. Returns whether a
+ * block was added.
+ */
+function blockRound(
   candidates: readonly CandidateMove[],
   declarations: Map<string, readonly AddressedDependency[]>,
   view: ExtensionState,
-  holds: Map<string, PlannedHold>,
+  blocked: Map<string, Blocked>,
 ): boolean {
   let added = false;
-  for (const { key, move, installed } of candidates) {
-    const cause = holds.has(key) ? undefined : rangeHoldCause(declarations, view, move);
-    if (cause === undefined) {
+  for (const candidate of candidates) {
+    const block = blocked.has(candidate.key) ? undefined : blockOf(candidate, declarations, view);
+    if (block === undefined) {
       continue;
     }
 
-    holds.set(key, {
-      scope: move.scope,
-      marketplace: move.marketplace,
-      plugin: move.plugin,
-      version: move.fromVersion,
-      cause,
-    });
-    if (installed !== undefined) {
-      declarations.set(key, installed);
+    blocked.set(candidate.key, block);
+    if (candidate.installed !== undefined) {
+      declarations.set(candidate.key, candidate.installed);
     }
 
     added = true;
@@ -290,7 +339,7 @@ function holdBlockedRound(
 /**
  * D-12: judges every candidate against the scope as the plan leaves it, to a
  * fixed point. A dependent that moves is judged by its catalog declarations
- * and one that is held by its installed copy (DLS-D1). Holds only grow and
+ * and one that stays put by its installed copy (DLS-D1). Blocks only grow and
  * the candidates arrive sorted, so the answer does not depend on input order.
  */
 function settleCandidates(
@@ -299,16 +348,18 @@ function settleCandidates(
   view: ExtensionState,
 ): ConvergencePlan {
   const declarations = new Map(walked);
-  const holds = new Map<string, PlannedHold>();
-  // A new hold may change what a dependent declares, so judge again.
+  const blocked = new Map<string, Blocked>();
+  // A new block may change what a dependent declares, so judge again.
   let added = true;
   while (added) {
-    added = holdBlockedRound(candidates, declarations, view, holds);
+    added = blockRound(candidates, declarations, view, blocked);
   }
 
+  const blocks = candidates.flatMap(({ key }) => blocked.get(key) ?? []);
   return {
-    moves: candidates.filter(({ key }) => !holds.has(key)).map(({ move }) => move),
-    holds: candidates.flatMap(({ key }) => holds.get(key) ?? []),
+    moves: candidates.filter(({ key }) => !blocked.has(key)).map(({ move }) => move),
+    holds: blocks.flatMap((block) => (block.kind === "hold" ? [block.hold] : [])),
+    declines: blocks.flatMap((block) => (block.kind === "decline" ? [block.decline] : [])),
   };
 }
 

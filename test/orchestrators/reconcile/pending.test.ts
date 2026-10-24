@@ -1153,6 +1153,40 @@ test("D-12: pending lists a range-held move as update's warning hold row, with n
   verifyBoundary();
 });
 
+test("D-12 / D-24: pending lists a consent decline with the hint naming update --partial", async (t) => {
+  // arrange
+  const { cwd, project } = await createHermeticScopes(t, "consent-decline");
+  const seed: DependencyScopeSeed = {
+    offered: { demo: { version: "1.1.0" } },
+    recorded: { demo: { version: "1.0.0" } },
+    declared: [{ key: "demo@tools", enabled: true }],
+  };
+  await stageDependencyScope(cwd, project, seed);
+  await stageOfferedPlugins(project, seed.offered);
+  await writeUnder(
+    path.join(project.extensionRoot, "marketplaces", "tools", "demo", "output-styles", "terse.md"),
+    "# Terse\n",
+  );
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation needs attention.\n\n" +
+        "● tools [project]\n" +
+        "  ● demo v1.0.0 (partially-upgradable) {unsupported component}\n" +
+        "    Run update --partial on this plugin to update it with the supported components.\n" +
+        "\nReconcile pending: 1 warning",
+      severity: "warning",
+    },
+  ]);
+  verifyBoundary();
+});
+
 test("D-12: composePendingReport does not count a range hold as a change apply makes", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "compose-hold");

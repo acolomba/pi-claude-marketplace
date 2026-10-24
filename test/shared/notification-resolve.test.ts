@@ -1226,6 +1226,15 @@ describe("resolveRows", () => {
       },
     },
     {
+      row: { status: "partially-upgradable", name: "alpha", reasons: ["lsp"], catalogHint: true },
+      expectedRow: {
+        status: "partially-upgradable",
+        name: "alpha",
+        reasons: ["lsp"],
+        hint: "catalog-partial-update",
+      },
+    },
+    {
       row: {
         status: "failed",
         severity: "error",

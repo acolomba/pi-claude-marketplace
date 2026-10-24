@@ -177,6 +177,7 @@ const SCOPES = {
 const ROW_HINTS = {
   "partial-install": true,
   "partial-update": true,
+  "catalog-partial-update": true,
   "stale-gate-update": true,
   enable: true,
 } as const satisfies Record<RowHint, true>;

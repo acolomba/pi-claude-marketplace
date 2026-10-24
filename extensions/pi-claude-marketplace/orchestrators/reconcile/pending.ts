@@ -89,7 +89,7 @@ import {
   type PendingMsg,
 } from "./reconcile.messaging.ts";
 
-import type { PlannedHold, PlannedMove } from "./convergence.ts";
+import type { PlannedDecline, PlannedHold, PlannedMove } from "./convergence.ts";
 import type { ScopeSatisfactionVerdict, UnsatisfiedDeclaration } from "./dependency-verdict.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
@@ -422,8 +422,11 @@ export async function composePendingReport(opts: {
     { readonly marketplaceRoot: string; readonly manifestPath: string }
   >();
   const recordedVersions: (readonly [string, string])[] = [];
-  const moves: PlannedMove[] = [];
-  const holds: PlannedHold[] = [];
+  const convergence: {
+    readonly moves: PlannedMove[];
+    readonly holds: PlannedHold[];
+    readonly declines: PlannedDecline[];
+  } = { moves: [], holds: [], declines: [] };
 
   for (const scope of opts.scopes) {
     const loc = locationsFor(scope, opts.cwd);
@@ -509,9 +512,10 @@ export async function composePendingReport(opts: {
     // APL-02 / D-10 / D-14: the catalog moves `apply` would make once the plan
     // has run, offline (NFR-5).
     // eslint-disable-next-line no-await-in-loop -- at most two scopes, one convergence plan each
-    const convergence = await planConvergence({ scope, state, locations: loc, plan: scopePlan });
-    moves.push(...convergence.moves);
-    holds.push(...convergence.holds);
+    const scoped = await planConvergence({ scope, state, locations: loc, plan: scopePlan });
+    convergence.moves.push(...scoped.moves);
+    convergence.holds.push(...scoped.holds);
+    convergence.declines.push(...scoped.declines);
   }
 
   // WR-06: name the workflow staging trees the sweeper keeps forever, because
@@ -527,11 +531,11 @@ export async function composePendingReport(opts: {
   // DIFF-01 SC #2 empty-steady-state: no invalid-config rows AND every plan
   // is empty -> no block. Every non-empty bucket yields a block, so an empty
   // list is exactly the empty case.
-  const convergence = { moves, holds };
+  const { moves, holds, declines } = convergence;
   if (
     invalidBlocks.length === 0 &&
     isReconcilePlanListEmpty(plans) &&
-    moves.length + holds.length === 0
+    moves.length + holds.length + declines.length === 0
   ) {
     return { marketplaces: [], retained, needsApply: false };
   }

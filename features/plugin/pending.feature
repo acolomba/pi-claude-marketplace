@@ -127,6 +127,26 @@ Feature: Plugin pending
       | marketplace name | marketplace scope | id        | name | status  | reasons              | scope   | version | cause chain                                                                                    | cause truncated | leaks | rollback partial |
       | tools            | project           | lib@tools | lib  | skipped | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
 
+  Scenario: Pending lists a partial move a clean plugin needs consent for as partially upgradable
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has an output style
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind           | cascade                             |
+      | severity       | warning                             |
+      | needs reload   | false                               |
+      | summary        | A plugin operation needs attention. |
+      | tally label    | Reconcile pending                   |
+      | tally failures | 0                                   |
+      | tally warnings | 1                                   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status               | reasons               | hint                   | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | partially-upgradable | unsupported component | catalog-partial-update | project | 1.0.0   |
+
   Scenario: Pending lists the install, uninstall, disable, and enable that one hand edit of the base config would cause
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"

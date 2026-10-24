@@ -291,7 +291,8 @@ export interface ResolvedFailure {
  * D-10: the remediation hint a row carries, as an id. The text strategy maps
  * each id to its frozen trailer literal.
  */
-export type RowHint = "partial-install" | "partial-update" | "stale-gate-update" | "enable";
+export type RowHint =
+  "partial-install" | "partial-update" | "catalog-partial-update" | "stale-gate-update" | "enable";
 
 /**
  * The per-row facts `resolveRows` adds to a producer row. `reasons` is the
@@ -314,7 +315,13 @@ export type ResolvedRow<M extends PluginNotificationMessage = PluginNotification
   M extends unknown
     ? Omit<
         M,
-        "reasons" | "dependencies" | "cause" | "rollbackPartial" | "partialHint" | "enableHint"
+        | "reasons"
+        | "dependencies"
+        | "cause"
+        | "rollbackPartial"
+        | "partialHint"
+        | "catalogHint"
+        | "enableHint"
       > &
         ResolvedRowFacts
     : never;
@@ -490,11 +497,13 @@ function resolveRow(row: PluginNotificationMessage, compose: ReasonComposer): Re
   }
 
   if (row.status === "partially-upgradable") {
-    const { partialHint, reasons, ...rest } = row;
+    // D-24: a producer sets at most one of the two hint flags.
+    const { partialHint, catalogHint, reasons, ...rest } = row;
     return {
       ...rest,
       reasons: compose(reasons, undefined),
       ...hintFor(partialHint, "partial-update"),
+      ...hintFor(catalogHint, "catalog-partial-update"),
     };
   }
 

@@ -605,6 +605,13 @@ export interface PluginPartiallyUpgradableMessage extends MessageBase {
   readonly scope?: Scope;
   readonly description?: string;
   readonly partialHint?: boolean;
+  /**
+   * D-24: the catalog decline's hint, set only by the convergence planner's
+   * row in `pending`, the load and `apply`. It names the per-plugin `update
+   * --partial` command, because the command that holds the row takes no
+   * `--partial`. A producer never sets both this and `partialHint`.
+   */
+  readonly catalogHint?: boolean;
 }
 
 /** Failed plugin row. */

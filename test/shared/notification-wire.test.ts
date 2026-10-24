@@ -577,3 +577,20 @@ for (const status of ["will add", "will remove"]) {
     assert.strictEqual(valid, true, JSON.stringify([...validator.Errors(payload)]));
   });
 }
+
+test("D-24: accepts a pending decline row carrying the catalog partial-update hint", () => {
+  // arrange
+  const payload = cascadePayloadWith({
+    ...failedRow(),
+    status: "partially-upgradable",
+    reasons: ["unsupported component"],
+    hint: "catalog-partial-update",
+  });
+  const validator = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
+
+  // act
+  const valid = validator.Check(payload);
+
+  // assert
+  assert.strictEqual(valid, true, JSON.stringify([...validator.Errors(payload)]));
+});

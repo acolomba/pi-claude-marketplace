@@ -545,6 +545,19 @@ for (const { plugin, expectedLines } of [
   },
   {
     plugin: {
+      status: "partially-upgradable",
+      name: "alpha",
+      reasons: ["unsupported component"],
+      version: "1.0.0",
+      hint: "catalog-partial-update",
+    },
+    expectedLines: [
+      "  ● alpha v1.0.0 (partially-upgradable) {unsupported component}",
+      "    Run update --partial on this plugin to update it with the supported components.",
+    ],
+  },
+  {
+    plugin: {
       status: "disabled",
       severity: "info",
       needsReload: true,

@@ -145,7 +145,7 @@ test("D-10: a newer catalog version is a move that names both versions", async (
   const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
 
   // assert
-  assert.deepStrictEqual(plan, { moves: [demoMove()], holds: [] });
+  assert.deepStrictEqual(plan, { moves: [demoMove()], holds: [], declines: [] });
 });
 
 test("D-10: a move of a record installed partial says so", async (t) => {
@@ -159,7 +159,7 @@ test("D-10: a move of a record installed partial says so", async (t) => {
   const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
 
   // assert
-  assert.deepStrictEqual(plan, { moves: [demoMove({ partial: true })], holds: [] });
+  assert.deepStrictEqual(plan, { moves: [demoMove({ partial: true })], holds: [], declines: [] });
 });
 
 test("D-10: the recorded version at the recorded root is not a move", async (t) => {
@@ -171,7 +171,7 @@ test("D-10: the recorded version at the recorded root is not a move", async (t) 
   const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
 
   // assert
-  assert.deepStrictEqual(plan, { moves: [], holds: [] });
+  assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
 });
 
 test("D-10 / D-18-11: a changed plugin root at the same version is a move", async (t) => {
@@ -185,7 +185,11 @@ test("D-10 / D-18-11: a changed plugin root at the same version is a move", asyn
   const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
 
   // assert
-  assert.deepStrictEqual(plan, { moves: [demoMove({ toVersion: "1.0.0" })], holds: [] });
+  assert.deepStrictEqual(plan, {
+    moves: [demoMove({ toVersion: "1.0.0" })],
+    holds: [],
+    declines: [],
+  });
 });
 
 test("D-10: a move from a recorded commit carries it as the from side", async (t) => {
@@ -198,7 +202,7 @@ test("D-10: a move from a recorded commit carries it as the from side", async (t
   const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
 
   // assert
-  assert.deepStrictEqual(plan, { moves: [demoMove({ fromCommit })], holds: [] });
+  assert.deepStrictEqual(plan, { moves: [demoMove({ fromCommit })], holds: [], declines: [] });
 });
 
 test("ENBL-08: a disabled record is never a move", async (t) => {
@@ -210,7 +214,7 @@ test("ENBL-08: a disabled record is never a move", async (t) => {
   const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
 
   // assert
-  assert.deepStrictEqual(plan, { moves: [], holds: [] });
+  assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
 });
 
 const PLANS_THAT_LEAVE_NO_MOVE: readonly {
@@ -254,7 +258,7 @@ for (const { title, plan: reconcilePlan } of PLANS_THAT_LEAVE_NO_MOVE) {
     });
 
     // assert
-    assert.deepStrictEqual(plan, { moves: [], holds: [] });
+    assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
   });
 }
 
@@ -272,7 +276,7 @@ test("D-10: a record the plan enables is a move", async (t) => {
   });
 
   // assert
-  assert.deepStrictEqual(plan, { moves: [demoMove()], holds: [] });
+  assert.deepStrictEqual(plan, { moves: [demoMove()], holds: [], declines: [] });
 });
 
 test("D-10: a record the plan leaves alone keeps its move", async (t) => {
@@ -289,7 +293,7 @@ test("D-10: a record the plan leaves alone keeps its move", async (t) => {
   });
 
   // assert
-  assert.deepStrictEqual(plan, { moves: [demoMove()], holds: [] });
+  assert.deepStrictEqual(plan, { moves: [demoMove()], holds: [], declines: [] });
 });
 
 test("DLS-D1: a record its marketplace no longer lists is not a move", async (t) => {
@@ -304,7 +308,7 @@ test("DLS-D1: a record its marketplace no longer lists is not a move", async (t)
   const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
 
   // assert
-  assert.deepStrictEqual(plan, { moves: [], holds: [] });
+  assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
 });
 
 test("D-10: an entry that fails the entry schema is not a move", async (t) => {
@@ -321,7 +325,7 @@ test("D-10: an entry that fails the entry schema is not a move", async (t) => {
   const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
 
   // assert
-  assert.deepStrictEqual(plan, { moves: [], holds: [] });
+  assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
 });
 
 test("D-10: an unavailable candidate is not a move", async (t) => {
@@ -337,7 +341,7 @@ test("D-10: an unavailable candidate is not a move", async (t) => {
   const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
 
   // assert
-  assert.deepStrictEqual(plan, { moves: [], holds: [] });
+  assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
 });
 
 test("D-10: a git-source record is skipped by the path-source planner", async (t) => {
@@ -359,7 +363,7 @@ test("D-10: a git-source record is skipped by the path-source planner", async (t
   const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
 
   // assert
-  assert.deepStrictEqual(plan, { moves: [], holds: [] });
+  assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
 });
 
 test("D-05-07: a scope whose marketplace manifest cannot be read previews no move", async (t) => {
@@ -376,7 +380,7 @@ test("D-05-07: a scope whose marketplace manifest cannot be read previews no mov
   const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
 
   // assert
-  assert.deepStrictEqual(plan, { moves: [], holds: [] });
+  assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
 });
 
 test("D-05-07: a scope whose declaration walk cannot be read previews no move at all", async (t) => {
@@ -397,7 +401,7 @@ test("D-05-07: a scope whose declaration walk cannot be read previews no move at
   const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
 
   // assert
-  assert.deepStrictEqual(plan, { moves: [], holds: [] });
+  assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
 });
 
 test("T-29-22: a candidate whose version cannot be read is skipped and traced", async (t) => {
@@ -416,7 +420,7 @@ test("T-29-22: a candidate whose version cannot be read is skipped and traced", 
   const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
 
   // assert
-  assert.deepStrictEqual(plan, { moves: [], holds: [] });
+  assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
   assert.equal(
     logged.some((line) => line.includes("planConvergence: skipped demo@tools")),
     true,
@@ -520,7 +524,11 @@ test("D-12 / D-23: a catalog version a dependent's range does not admit is held,
   const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
 
   // assert
-  assert.deepStrictEqual(plan, { moves: [], holds: [toolsHold("lib", LIB_OUT_OF_RANGE)] });
+  assert.deepStrictEqual(plan, {
+    moves: [],
+    holds: [toolsHold("lib", LIB_OUT_OF_RANGE)],
+    declines: [],
+  });
 });
 
 test("D-12: a catalog version the dependent's range admits moves", async (t) => {
@@ -538,6 +546,7 @@ test("D-12: a catalog version the dependent's range admits moves", async (t) => 
   assert.deepStrictEqual(plan, {
     moves: [demoMove({ plugin: "lib" })],
     holds: [],
+    declines: [],
   });
 });
 
@@ -562,6 +571,7 @@ test("D-12: ranges that admit no version in common hold the move", async (t) => 
         'the declared ranges admit no version in common (^1.0.0, ^2.0.0) -- required by "alpha@tools", "beta@tools"',
       ),
     ],
+    declines: [],
   });
 });
 
@@ -582,6 +592,7 @@ test("D-12: a dependent the plan uninstalls no longer holds the move", async (t)
   assert.deepStrictEqual(plan, {
     moves: [demoMove({ plugin: "lib", toVersion: "2.0.0" })],
     holds: [],
+    declines: [],
   });
 });
 
@@ -605,6 +616,7 @@ test("D-12 / UPDT-02: a disabled dependent still holds the move and is marked", 
   assert.deepStrictEqual(plan, {
     moves: [],
     holds: [toolsHold("lib", `${LIB_OUT_OF_RANGE} (currently disabled)`)],
+    declines: [],
   });
 });
 
@@ -655,6 +667,7 @@ test("D-12 / DLS-D1: a held dependent is judged by its installed copy, to a fixe
       ),
       WIDGET_HOLD,
     ],
+    declines: [],
   });
 });
 
@@ -699,5 +712,72 @@ test("D-12: a held dependent whose installed copy cannot be read keeps its catal
   assert.deepStrictEqual(plan, {
     moves: [demoMove({ plugin: "core", toVersion: "2.0.0" })],
     holds: [WIDGET_HOLD],
+    declines: [],
+  });
+});
+
+/** Gives the plugin under `root` an output style, a component Pi cannot load. */
+async function stageOutputStyle(root: string): Promise<void> {
+  await writeUnder(path.join(root, "output-styles", "terse.md"), "# Terse\n");
+}
+
+test("D-12 / WCONV-01: a clean record whose candidate would drop components is declined", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "declined");
+  const state = await stageDemo(fixture, "1.1.0");
+  await stageOutputStyle(path.join(marketplaceRootOf(fixture, "tools"), "demo"));
+
+  // act
+  const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [],
+    holds: [],
+    declines: [
+      {
+        scope: "project",
+        marketplace: "tools",
+        plugin: "demo",
+        version: "1.0.0",
+        unsupported: ["outputStyles"],
+      },
+    ],
+  });
+});
+
+test("D-12: a record already installed partial moves to a partial candidate", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "partial-to-partial");
+  const state = await stageDemo(fixture, "1.1.0", {
+    compatibility: { installable: false, notes: [], supported: [], unsupported: ["outputStyles"] },
+  });
+  await stageOutputStyle(path.join(marketplaceRootOf(fixture, "tools"), "demo"));
+
+  // act
+  const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [demoMove({ partial: true })],
+    holds: [],
+    declines: [],
+  });
+});
+
+test("D-12: a partial candidate a dependent's range does not admit is held, not declined", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "held-and-partial");
+  const state = await stageTools(fixture, APP_HOLDS_LIB);
+  await stageOutputStyle(path.join(marketplaceRootOf(fixture, "tools"), "lib"));
+
+  // act
+  const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [],
+    holds: [toolsHold("lib", LIB_OUT_OF_RANGE)],
+    declines: [],
   });
 });

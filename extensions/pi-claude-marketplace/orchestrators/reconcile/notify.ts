@@ -48,6 +48,9 @@
 //   range holds           -> child row { status: "skipped" } with
 //                            {dependents constrain} and the gate's cause line
 //                            (D-12), update's range-hold row.
+//   consent declines      -> child row { status: "partially-upgradable" }
+//                            with the dropped kinds and the catalog hint
+//                            (D-12, D-24), update's decline row.
 //
 // The empty-plan case is handled by the orchestrator (`pending.ts`) which
 // switches on `plans.every(isPlanEmpty)` and emits a free-form advisory line
@@ -292,7 +295,9 @@ function pushMarketplaceActions(
  *
  * D-12: then one row per blocked move, the row `update` gives the same block:
  * a range hold is `(skipped) {dependents constrain}` with the gate's cause
- * line, at warning. A blocked move changes nothing, so it asks for no reload.
+ * line, and a consent decline is `(partially-upgradable)` with the dropped
+ * kinds and the hint naming `update --partial` (D-24). Both are warnings in
+ * every cardinality; a blocked move changes nothing, so it asks for no reload.
  */
 function pushConvergence(
   byMp: Map<string, MarketplaceBlock<PendingMsg>>,
@@ -320,9 +325,21 @@ function pushConvergence(
       needsReload: false,
     });
   }
+
+  for (const decline of convergence.declines) {
+    ensureMarketplaceBlock(byMp, decline.scope, decline.marketplace).plugins.push({
+      status: "partially-upgradable",
+      name: decline.plugin,
+      version: decline.version,
+      reasons: narrowUnsupportedKinds(decline.unsupported),
+      catalogHint: true,
+      severity: "warning",
+      needsReload: false,
+    });
+  }
 }
 
-const NO_CONVERGENCE: ConvergencePlan = Object.freeze({ moves: [], holds: [] });
+const NO_CONVERGENCE: ConvergencePlan = Object.freeze({ moves: [], holds: [], declines: [] });
 
 /** PRN-02: a `will uninstall` row naming the plugin's recorded version. */
 function willUninstallRow(
@@ -488,7 +505,8 @@ export async function resolvePendingForceInstalls(
  *   - `convergence`         -> child row { status: "will update" } per catalog
  *                              move (D-14, superseding D-66-05's "no update
  *                              bucket"), then one `skipped` row per range
- *                              hold (D-12), after the plan buckets.
+ *                              hold and one `partially-upgradable` row per
+ *                              consent decline (D-12), after the plan buckets.
  *
  * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
  * case-insensitive, project-before-user secondary). Plugin rows within a

@@ -2416,6 +2416,7 @@ describe("buildReconcilePendingNotification", () => {
     const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), {
       moves,
       holds: [],
+      declines: [],
     });
 
     // assert
@@ -2430,7 +2431,7 @@ describe("buildReconcilePendingNotification", () => {
     });
   });
 
-  test("D-12: previews a range hold as update's warning hold row after the moves", () => {
+  test("D-12 / D-24: previews a range hold and a consent decline as update's warning rows after the moves", () => {
     // arrange
     const plans = [reconcilePlan("project")];
     const convergence = {
@@ -2456,6 +2457,15 @@ describe("buildReconcilePendingNotification", () => {
             'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"',
         },
       ],
+      declines: [
+        {
+          scope: "project",
+          marketplace: "mp",
+          plugin: "styled",
+          version: "1.0.0",
+          unsupported: ["outputStyles", "lspServers"],
+        },
+      ],
     } as const;
 
     // act
@@ -2477,6 +2487,15 @@ describe("buildReconcilePendingNotification", () => {
               cause: new Error(
                 'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"',
               ),
+              severity: "warning",
+              needsReload: false,
+            },
+            {
+              status: "partially-upgradable",
+              name: "styled",
+              version: "1.0.0",
+              reasons: ["unsupported component", "lsp"],
+              catalogHint: true,
               severity: "warning",
               needsReload: false,
             },
@@ -2516,6 +2535,7 @@ describe("buildReconcilePendingNotification", () => {
     const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), {
       moves,
       holds: [],
+      declines: [],
     });
 
     // assert

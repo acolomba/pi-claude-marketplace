@@ -527,6 +527,19 @@ const PARTIAL_UPDATE_HINT_TRAILER =
 const STALE_GATE_UPDATE_HINT_TRAILER = "Run update --partial on this plugin, then enable it again.";
 
 /**
+ * D-24: the catalog decline's hint trailer, rendered below the
+ * partially-upgradable row `pending`, the load and `apply` give a catalog move
+ * that would drop components without consent. DISTINCT from
+ * `PARTIAL_UPDATE_HINT_TRAILER` because the command that holds the row is
+ * `apply` or `pending`, which take no `--partial`: the remedy names the
+ * per-plugin `update` consent command instead. Interpolates no plugin /
+ * marketplace identifier (T-73-01) and is locked byte-for-byte in
+ * docs/output-catalog.md and docs/messaging-style-guide.md.
+ */
+const CATALOG_PARTIAL_UPDATE_HINT_TRAILER =
+  "Run update --partial on this plugin to update it with the supported components.";
+
+/**
  * OUT-04 / D-102-10: the enable-hint trailer literal, rendered below an
  * install-disabled `(disabled)` row. The install materialized nothing the user
  * can reach, so the row alone leaves them with a fact and no next step; this
@@ -544,6 +557,7 @@ const ENABLE_HINT_TRAILER = "Run enable on this plugin to use its components.";
 const ROW_HINT_TRAILERS = {
   "partial-install": PARTIAL_INSTALL_HINT_TRAILER,
   "partial-update": PARTIAL_UPDATE_HINT_TRAILER,
+  "catalog-partial-update": CATALOG_PARTIAL_UPDATE_HINT_TRAILER,
   "stale-gate-update": STALE_GATE_UPDATE_HINT_TRAILER,
   enable: ENABLE_HINT_TRAILER,
 } as const satisfies Record<RowHint, string>;

@@ -193,7 +193,13 @@
                     "description": { "type": "string" },
                     "partial": { "type": "boolean" },
                     "hint": {
-                      "enum": ["partial-install", "partial-update", "stale-gate-update", "enable"]
+                      "enum": [
+                        "partial-install",
+                        "partial-update",
+                        "catalog-partial-update",
+                        "stale-gate-update",
+                        "enable"
+                      ]
                     },
                     "cause": {
                       "type": "object",
@@ -544,7 +550,13 @@
                     "description": { "type": "string" },
                     "partial": { "type": "boolean" },
                     "hint": {
-                      "enum": ["partial-install", "partial-update", "stale-gate-update", "enable"]
+                      "enum": [
+                        "partial-install",
+                        "partial-update",
+                        "catalog-partial-update",
+                        "stale-gate-update",
+                        "enable"
+                      ]
                     },
                     "cause": {
                       "type": "object",
