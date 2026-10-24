@@ -1,8 +1,9 @@
 Feature: Plugin reconcile
 
-  A new session brings a scope in line with the configs a user edits by hand
-  and reports what it changed. The scenarios run the real extension in a
-  headless Pi and use a local marketplace in place of a published one.
+  A new session changes no installed plugin. It reports the warnings that come
+  back every session, and /claude:plugin apply makes the changes that the
+  configs a user edits by hand ask for. The scenarios run the real extension in
+  a headless Pi and use a local marketplace in place of a published one.
 
   Background:
     Given the marketplace "fixtures" is published as a dir source
@@ -10,6 +11,15 @@ Feature: Plugin reconcile
       | name  | version |
       | demo  | 1.0.0   |
       | alpha | 1.0.0   |
+
+  Scenario: A new session after a hand edit of the config changes no installation state
+    Given the marketplace "fixtures" is added to the project scope
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    When the user starts a new pi session
+    Then the project scope has no installed plugins
+    Then the session offers no skills
 
   Scenario: A new session installs a plugin that a config declares by hand and reports it
     Given the marketplace "fixtures" is added to the project scope

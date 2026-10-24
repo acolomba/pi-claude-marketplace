@@ -17,15 +17,11 @@ import { declaredDependencies } from "../../shared/concerns/soft-dep.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { EXTENSION_VERSION } from "../../shared/extension-version.ts";
-import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { createReinstallOperation } from "../plugin/operations.ts";
 
-import {
-  carriedMcpConfigNotices,
-  classifyOrchestratorThrow,
-  classifyReadPassThrow,
-} from "./apply-outcomes.ts";
+import { carriedMcpConfigNotices, classifyOrchestratorThrow } from "./apply-outcomes.ts";
+import { runScopeIsolated } from "./read-pass.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ApplyReconcileOptions, ScopeReadResult } from "./types.ts";
@@ -134,30 +130,6 @@ export async function applyBackfillForScopeIsolated(
   await runScopeIsolated(scope, outcomes, () =>
     applyBackfillForScope(opts, scope, readResult, outcomes),
   );
-}
-
-/**
- * The throw-to-`invalid-block` coercion both isolated wrappers apply. A
- * transient `StateLockHeldError` or EACCES becomes a structured row (subject
- * `state.json`, closed-set reason) carrying a redacted cause, so one scope's
- * transient failure never aborts the cascade for the other.
- */
-export async function runScopeIsolated(
-  scope: Scope,
-  outcomes: PerEntryOutcome[],
-  op: () => Promise<void>,
-): Promise<void> {
-  try {
-    await op();
-  } catch (err) {
-    outcomes.push({
-      kind: "invalid-block",
-      scope,
-      basename: "state.json",
-      reason: classifyReadPassThrow(err),
-      cause: new Error(redactAbsolutePaths(errorMessage(err))),
-    });
-  }
 }
 
 /**

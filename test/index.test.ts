@@ -1179,10 +1179,14 @@ for (const unsupportedRead of [2, 3]) {
   });
 }
 
-test("a refused reconcile append retains committed state and independent PATH work", async (t) => {
+test("a refused load append leaves install state untouched and still runs the independent PATH work", async (t) => {
   // arrange
-  const scope = await createHermeticScope(t, "committed-append-refusal");
-  await seedEnabledPluginWithMissingDependency(scope.cwd);
+  const scope = await createHermeticScope(t, "load-append-refusal");
+  const resolvedSource = path.join(scope.cwd, "vendored-plugin");
+  await seedEnabledPlugin(scope.cwd, resolvedSource);
+  await seedInvalidConfig(scope.cwd);
+  const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
+  const stateBytes = await readFile(statePath, "utf8");
   const capture = createJsonCapture();
   const loaded = await loadExtension(0, PROBES_PER_DISCOVER, undefined, 0, {
     attempts: 2,
@@ -1197,9 +1201,9 @@ test("a refused reconcile append retains committed state and independent PATH wo
       return capture.ui;
     },
   };
-  const pluginBin = path.join(scope.cwd, "mp-src", "plugins", "plug", "bin");
-  process.env.PATH = `/usr/bin${path.delimiter}${pluginBin}`;
-  process.env.PI_CLAUDE_MARKETPLACE_PATH = pluginBin;
+  const binDir = path.join(resolvedSource, "bin");
+  process.env.PATH = "/usr/bin";
+  Reflect.deleteProperty(process.env, "PI_CLAUDE_MARKETPLACE_PATH");
 
   // act
   const discovered: unknown = await Reflect.apply(loaded.discover, undefined, [
@@ -1209,12 +1213,10 @@ test("a refused reconcile append retains committed state and independent PATH wo
 
   // assert
   assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
-  const state = await loadState(path.join(scope.cwd, ".pi", "pi-claude-marketplace"));
-  assert.strictEqual(state.marketplaces["mp"]?.plugins["plug"]?.enabled, false);
-  assert.strictEqual(state.marketplaces["mp"]?.plugins["helper"], undefined);
+  assert.equal(await readFile(statePath, "utf8"), stateBytes);
   assert.deepStrictEqual(
     [process.env.PATH, process.env.PI_CLAUDE_MARKETPLACE_PATH],
-    ["/usr/bin", ""],
+    [`/usr/bin${path.delimiter}${binDir}`, binDir],
   );
   assert.strictEqual(capture.entries.length, 2);
   capture.assertValid();
@@ -1288,6 +1290,7 @@ test("constructs one runtime, completion cache and reconcile operation per exten
   const updateConstructions =
     source.match(/createPluginUpdateOperations\(hooksRouting, completionCache\)/g) ?? [];
   const reconcileConstructions = source.match(/createApplyReconcile\(\{ loadState \}\)/g) ?? [];
+  const loadConstructions = source.match(/createLoadReconcile\(\{ loadState \}\)/g) ?? [];
 
   // act
   const hydrationConstruction = source.match(
@@ -1307,59 +1310,46 @@ test("constructs one runtime, completion cache and reconcile operation per exten
     "createHooksHydration(hooksRuntime, { loadState, readHooksJson })",
   ]);
   assert.deepStrictEqual(reconcileConstructions, ["createApplyReconcile({ loadState })"]);
+  assert.deepStrictEqual(loadConstructions, ["createLoadReconcile({ loadState })"]);
 });
 
-test("D-09-13: the discover handler hands the event's reason to the reconcile", async () => {
-  // arrange -- whitespace-tolerant so a Prettier reflow (the literal exceeds
-  // one line's print width) cannot silently stop matching.
+test("APL-03: the discover handler hands the load reconcile the event's cwd and no reason", async () => {
+  // arrange -- whitespace-tolerant so a Prettier reflow cannot silently stop
+  // matching.
   const source = await readFile(
     path.join(import.meta.dirname, "../extensions/pi-claude-marketplace/index.ts"),
     "utf8",
   );
 
   // act
-  const reasonThreadConstructions =
-    source.match(
-      /applyReconcile\(\{\s*ctx,\s*run,\s*cwd:\s*event\.cwd,\s*hooksRouting,\s*completionCache,\s*reason:\s*event\.reason,?\s*\}\)/g,
-    ) ?? [];
+  const loadCalls =
+    source.match(/loadReconcile\(\{\s*ctx,\s*run,\s*cwd:\s*event\.cwd,\s*hooksRouting,?\s*\}\)/g) ??
+    [];
 
   // assert
-  assert.equal(reasonThreadConstructions.length, 1);
+  assert.equal(loadCalls.length, 1);
 });
 
-test("MISS-01 / D-09-13: a reload event installs a missing dependency that a startup event left alone", async (t) => {
-  // arrange -- two independent project roots under one hermetic scope: one
-  // for the startup event, one for the reload event.
-  const scope = await createHermeticScope(t, "dep-reason");
-  const startupCwd = path.join(scope.cwd, "startup-project");
-  const reloadCwd = path.join(scope.cwd, "reload-project");
-  await mkdir(startupCwd, { recursive: true });
-  await mkdir(reloadCwd, { recursive: true });
-  await seedEnabledPluginWithMissingDependency(startupCwd);
-  await seedEnabledPluginWithMissingDependency(reloadCwd);
+test("APL-03 / D-21: a reload event leaves a missing dependency uninstalled and its dependent's record unchanged", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "dep-reload");
+  await seedEnabledPluginWithMissingDependency(scope.cwd);
+  const extensionRoot = path.join(scope.cwd, ".pi", "pi-claude-marketplace");
+  const before = await loadState(extensionRoot);
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
+    0,
+    PROBES_PER_DISCOVER,
+  );
 
-  // act -- startup: the load-time check disables "plug", "helper" untouched.
-  process.chdir(startupCwd);
-  const startup = await loadExtension(1, 1);
-  await startup.discover(discoverEvent(startupCwd, "startup"), startup.ctx);
+  // act
+  await discover(discoverEvent(scope.cwd, "reload"), ctx);
 
   // assert
-  const afterStartup = await loadState(path.join(startupCwd, ".pi", "pi-claude-marketplace"));
-  assert.equal(afterStartup.marketplaces["mp"]?.plugins["helper"], undefined);
-  assert.equal(afterStartup.marketplaces["mp"]?.plugins["plug"]?.enabled, false);
-  startup.verifyBoundary();
-
-  // act -- reload: the missing dependency installs and "plug" stays up.
-  process.chdir(reloadCwd);
-  const reload = await loadExtension(1, 1);
-  await reload.discover(discoverEvent(reloadCwd, "reload"), reload.ctx);
-
-  // assert
-  const afterReload = await loadState(path.join(reloadCwd, ".pi", "pi-claude-marketplace"));
-  assert.equal(afterReload.marketplaces["mp"]?.plugins["helper"]?.provenance, "dependency");
-  assert.equal(afterReload.marketplaces["mp"]?.plugins["helper"]?.enabled, true);
-  assert.equal(afterReload.marketplaces["mp"]?.plugins["plug"]?.enabled, true);
-  reload.verifyBoundary();
+  assert.deepStrictEqual(notifications, []);
+  const after = await loadState(extensionRoot);
+  assert.equal(after.marketplaces["mp"]?.plugins["helper"], undefined);
+  assert.deepStrictEqual(after, before);
+  verifyBoundary();
 });
 
 /**
@@ -1689,30 +1679,20 @@ test("reports the scope whose install state it cannot read once as a reconcile f
 // observable per stage: the PATH the recompute leaves behind, and which of the
 // two lines the reconcile stage emits.
 
-test("converges silently over a recorded plugin whose marketplace source is absent (WCONV-01)", async (t) => {
+test("APL-03: a load reports nothing and writes nothing over a recorded plugin whose source tree is absent (WCONV-01)", async (t) => {
   // arrange -- the seed the PATH cases use with the version stamp left OUT, so
-  // the load-time backfill gate is OPEN and the scan reaches this record. Its
-  // `marketplaceRoot` (<cwd>/mp-src) is never created, so the offline re-resolve
-  // throws on the manifest read. The record is recorded `installable: true`, so
-  // that throw is a reason to promote nothing rather than a failure to report.
-  //
-  // This is the only case at the entry-point layer that observes a reconcile
-  // over a record whose marketplace source is gone, and it is the layer that
-  // matters: a `(failed)` row here reaches the user on a reload they did not
-  // initiate.
+  // a backfill gate would be open, and with the plugin's source tree never
+  // created. A load runs no backfill (D-04), so no stamp lands and no row
+  // reaches the user on a reload they did not initiate.
   const scope = await createHermeticScope(t, "backfill-absent-source");
   const resolvedSource = path.join(scope.cwd, "vendored-plugin");
   await seedEnabledPlugin(scope.cwd, resolvedSource, { stamped: false });
-  // The zero-emission boundary states that nothing may be emitted at all. It is
-  // the weaker of the two observables here: NFR-2 makes `resources_discover`
-  // swallow every throw, including the boundary's own refusal of an unexpected
-  // emission, so the empty array below bounds what reached the user without
-  // bounding what the scan produced. The landed stamp is what carries the claim.
+  const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
+  const stateBytes = await readFile(statePath, "utf8");
   const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
     0,
     PROBES_PER_DISCOVER,
   );
-  const statePath = path.join(scope.cwd, ".pi", "pi-claude-marketplace", "state.json");
 
   // act
   const discovered = await discover(discoverEvent(scope.cwd), ctx);
@@ -1720,14 +1700,7 @@ test("converges silently over a recorded plugin whose marketplace source is abse
   // assert
   assert.deepStrictEqual(discovered, EMPTY_DISCOVERY);
   assert.deepStrictEqual(notifications, []);
-  // The gate CLOSED. Silence alone would also be produced by a scan that never
-  // ran, and by a scan whose row the boundary refused; the landed stamp is what
-  // makes this load the last one that reads the absent manifest rather than the
-  // first of an unbounded series.
-  const stamped = JSON.parse(await readFile(statePath, "utf8")) as {
-    lastReconciledExtensionVersion?: string;
-  };
-  assert.deepStrictEqual(stamped.lastReconciledExtensionVersion, EXTENSION_VERSION);
+  assert.equal(await readFile(statePath, "utf8"), stateBytes);
   verifyBoundary();
 });
 

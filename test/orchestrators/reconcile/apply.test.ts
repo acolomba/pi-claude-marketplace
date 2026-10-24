@@ -21,10 +21,9 @@
 //
 // D-115-07: every outcome kind the cascade can accumulate is produced here.
 //
-//   invalid-block            unparseable base / local config, an
-//                            unparseable state file, a held scope lock, a
-//                            refused first-run configuration write, and the
-//                            routing rebuild's own isolated failure
+//   invalid-block            an unparseable base config and an unparseable
+//                            state file; the read pass's other rows have
+//                            their owner in read-pass.test.ts
 //   mp-added                 a declared marketplace absent from the record
 //   mp-add-failed            a source directory that is not there, and a clone
 //                            that cannot reach its remote
@@ -59,7 +58,6 @@ import path from "node:path";
 import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import lockfile from "proper-lockfile";
 import { mock, verify, when } from "strong-mock";
 
 import {
@@ -97,7 +95,7 @@ import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bri
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type * as ApplyOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
-import type { ReconcileStateReader } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import type { ReconcileStateReader } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/read-pass.ts";
 import type {
   ApplyReconcileOptions,
   McpMigrationStep,
@@ -657,15 +655,6 @@ function applyAfterSelectedStateRace(
 }
 
 /**
- * The atomic writer names its temporary file `<basename>.<random>` and the
- * EACCES message quotes that name, so the digits differ per run. Replacing them
- * keeps the assertion a whole-value comparison rather than a pattern match.
- */
-function withoutTempSuffix(message: string): string {
-  return message.replaceAll(/claude-plugins\.json\.\d+/g, "claude-plugins.json.<tmp>");
-}
-
-/**
  * AFILE-04: the warning `notifyMcpConfigNotices` sends after a rewrite drops the
  * comments of the project-scope `mcp-adapter.json`.
  */
@@ -850,160 +839,6 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("CFG-03: reports a schema-invalid local config alongside an unparseable base one, each on its own row", async (t) => {
-    // arrange
-    const { cwd, project } = await createHermeticScopes(t, "invalid-both");
-    const seeded: ExtensionState = {
-      schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
-      marketplaces: {},
-    };
-    await seedState(project, seeded);
-    await writeUnder(project.baseConfigJsonPath, "{");
-    await writeUnder(project.localConfigJsonPath, JSON.stringify({ schemaVersion: 1, plugins: 7 }));
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const { gitOps, clonedUrls } = createOfflineGitOps();
-
-    // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "Some operations have failed.\n" +
-          "\n" +
-          "⊘ claude-plugins.json [project] (failed) {invalid manifest}\n" +
-          "  ⊘ claude-plugins.json (failed) {invalid manifest}\n" +
-          "    cause: JSON parse failed: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n" +
-          "\n" +
-          "⊘ claude-plugins.local.json [project] (failed) {invalid manifest}\n" +
-          "  ⊘ claude-plugins.local.json (failed) {invalid manifest}\n" +
-          "    cause: schema validation failed: /plugins: must be object\n" +
-          "\n" +
-          "Reconcile: 4 failures",
-        severity: "error",
-      },
-    ]);
-    assert.deepStrictEqual(await loadState(project.extensionRoot), seeded);
-    assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
-
-  test("CFG-03: reports a schema-invalid local config on its own when the base config is valid", async (t) => {
-    // arrange
-    const { cwd, project } = await createHermeticScopes(t, "invalid-local");
-    await seedState(project, {
-      schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
-      marketplaces: {},
-    });
-    await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {} }));
-    await writeUnder(project.localConfigJsonPath, JSON.stringify({ schemaVersion: 1, plugins: 7 }));
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const { gitOps, clonedUrls } = createOfflineGitOps();
-
-    // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "Some operations have failed.\n" +
-          "\n" +
-          "⊘ claude-plugins.local.json [project] (failed) {invalid manifest}\n" +
-          "  ⊘ claude-plugins.local.json (failed) {invalid manifest}\n" +
-          "    cause: schema validation failed: /plugins: must be object\n" +
-          "\n" +
-          "Reconcile: 2 failures",
-        severity: "error",
-      },
-    ]);
-    assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
-
-  test("LAYER-06: a local layer that declares a plugin whose marketplace only the base layer declares stops the reload and writes nothing", async (t) => {
-    // arrange
-    const { cwd, project } = await seedLayerScope(t, "layer-gap-local", {
-      base: (root) => configBytes({ marketplaces: { mp: { source: root } } }),
-      local: () => configBytes({ plugins: { "hello@mp": {} } }),
-    });
-    const baseBytes = await readFile(project.baseConfigJsonPath, "utf8");
-    const localBytes = await readFile(project.localConfigJsonPath, "utf8");
-    const stateBytes = await readFile(project.stateJsonPath, "utf8");
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const { gitOps, clonedUrls } = createOfflineGitOps();
-
-    // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "A plugin operation has failed.\n" +
-          "\n" +
-          "● claude-plugins.local.json [project]\n" +
-          "  ⊘ claude-plugins.local.json (failed) {invalid manifest}\n" +
-          "    cause: The local config (claude-plugins.local.json) declares hello@mp, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config.\n" +
-          "\n" +
-          "Reconcile: 1 failure",
-        severity: "error",
-      },
-    ]);
-    assert.equal(await readFile(project.baseConfigJsonPath, "utf8"), baseBytes);
-    assert.equal(await readFile(project.localConfigJsonPath, "utf8"), localBytes);
-    assert.equal(await readFile(project.stateJsonPath, "utf8"), stateBytes);
-    assert.deepStrictEqual(await retryTree(project.scopeRoot), [
-      "claude-plugins.json",
-      "claude-plugins.local.json",
-      "pi-claude-marketplace/",
-      "pi-claude-marketplace/state.json",
-    ]);
-    assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
-
-  test("LAYER-06: each layer that declares a plugin whose marketplace only the other layer declares reports its own row", async (t) => {
-    // arrange
-    const { cwd, project } = await seedLayerScope(t, "layer-gap-both", {
-      base: (root) =>
-        configBytes({ marketplaces: { mp: { source: root } }, plugins: { "lib@other": {} } }),
-      local: (root) =>
-        configBytes({ marketplaces: { other: { source: root } }, plugins: { "hello@mp": {} } }),
-    });
-    const stateBytes = await readFile(project.stateJsonPath, "utf8");
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const { gitOps, clonedUrls } = createOfflineGitOps();
-
-    // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "Some plugin operations have failed.\n" +
-          "\n" +
-          "● claude-plugins.json [project]\n" +
-          "  ⊘ claude-plugins.json (failed) {invalid manifest}\n" +
-          "    cause: The base config (claude-plugins.json) declares lib@other, but only the local config (claude-plugins.local.json) declares its marketplace. Run /claude:plugin marketplace add <source> --scope project with the source the local config declares, or remove the plugin from the base config.\n" +
-          "\n" +
-          "● claude-plugins.local.json [project]\n" +
-          "  ⊘ claude-plugins.local.json (failed) {invalid manifest}\n" +
-          "    cause: The local config (claude-plugins.local.json) declares hello@mp, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config.\n" +
-          "\n" +
-          "Reconcile: 2 failures",
-        severity: "error",
-      },
-    ]);
-    assert.equal(await readFile(project.stateJsonPath, "utf8"), stateBytes);
-    assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
-
   test("LAYER-06: a plugin whose marketplace no layer declares keeps its dangling reference row while the scope still installs", async (t) => {
     // arrange
     const { cwd, project } = await seedLayerScope(t, "layer-gap-dangling", {
@@ -1092,94 +927,6 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("WR-01: a scope lock held by another process reports lock held rather than falling back to unparseable", async (t) => {
-    // arrange
-    const { cwd, project } = await createHermeticScopes(t, "lock-held");
-    await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {} }));
-    await seedState(project, {
-      schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
-      marketplaces: {},
-    });
-    const release = await lockfile.lock(project.extensionRoot, {
-      lockfilePath: path.join(project.extensionRoot, ".state-lock"),
-      realpath: false,
-    });
-    t.after(async () => {
-      await release();
-    });
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const { gitOps, clonedUrls } = createOfflineGitOps();
-
-    // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "Some operations have failed.\n" +
-          "\n" +
-          "⊘ state.json [project] (failed) {lock held}\n" +
-          "  ⊘ state.json (failed) {lock held}\n" +
-          "    cause: Another pi-claude-marketplace operation is in progress for project scope (.state-lock). Retry after it completes.\n" +
-          "\n" +
-          "Reconcile: 2 failures",
-        severity: "error",
-      },
-    ]);
-    assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
-
-  test("MIG-01: a first-run config write blocked by permissions names the base config, not the state file", async (t) => {
-    // arrange
-    const { cwd, denyWrites, project } = await createHermeticScopes(t, "migrate-refused");
-    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {});
-    await seedState(project, {
-      schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
-      marketplaces: {
-        mp: marketplaceRecord({
-          cwd,
-          scope: "project",
-          marketplace: "mp",
-          rawSource: marketplaceRoot,
-          manifestPath,
-          marketplaceRoot,
-        }),
-      },
-    });
-    await denyWrites(project.scopeRoot);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const { gitOps, clonedUrls } = createOfflineGitOps();
-
-    // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
-
-    // assert
-    assert.deepStrictEqual(
-      notifications.map((notification) => ({
-        ...notification,
-        message: withoutTempSuffix(notification.message),
-      })),
-      [
-        {
-          message:
-            "Some operations have failed.\n" +
-            "\n" +
-            "⊘ claude-plugins.json [project] (failed) {permission denied}\n" +
-            "  ⊘ claude-plugins.json (failed) {permission denied}\n" +
-            "    cause: EACCES: permission denied, open 'claude-plugins.json.<tmp>'\n" +
-            "\n" +
-            "Reconcile: 2 failures",
-          severity: "error",
-        },
-      ],
-    );
-    assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
   const addBatchOrders = [
     { name: "first", keys: ["mike-mp", "zulu-mp", "alfa-mp"] },
     { name: "middle", keys: ["zulu-mp", "mike-mp", "alfa-mp"] },

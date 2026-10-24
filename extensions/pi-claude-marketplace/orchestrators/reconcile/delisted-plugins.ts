@@ -18,6 +18,7 @@ import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
+import type { ScopeReadResult } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -67,13 +68,68 @@ function hasRowOfKinds(
 }
 
 /** Whether this pass already reported `plugin@marketplace` in `scope`. */
-export function hasSuppressingRow(
+function hasSuppressingRow(
   outcomes: readonly PerEntryOutcome[],
   scope: Scope,
   marketplace: string,
   plugin: string,
 ): boolean {
   return hasRowOfKinds(SUPPRESSING_KINDS, outcomes, scope, marketplace, plugin);
+}
+
+/**
+ * D-05-07 / LOAD-01: report the one declarer whose declarations could not be
+ * established, which is why no plugin in this scope was held down on this pass.
+ *
+ * REC-05: the row is a warning naming the fault (`not in manifest`, `invalid
+ * manifest`, `unreadable manifest`) with the walk's cause line. The plugin
+ * keeps loading; only the check is lost. The verdict is re-derived on every
+ * pass, so the row returns every session until the fault is fixed.
+ *
+ * The walk fails closed, so an unreadable declarer never reads as a plugin that
+ * declares nothing -- but it must not be silent either: a silent pass is
+ * indistinguishable from a scope whose declarations are all satisfied, and the
+ * dependent that should have been held down keeps loading. The row names the
+ * DECLARER rather than `state.json`, because the read that failed was of that
+ * plugin's own or marketplace manifest and the read-pass catch's file row would
+ * make a false claim about the state document.
+ *
+ * The key is built by the walk as `${name}@${marketplace}`, so splitting on the
+ * last `@` is total and needs no fallback arm.
+ *
+ * RECON-04 single-emit: a declarer this pass already reported as failed -- its
+ * clone is gone, its install failed -- gets no second row. The same tree that
+ * stops a manifest being read is usually the one that already failed something
+ * else about that plugin, and two rows for one plugin state the same fact
+ * twice. A declarer this pass uninstalled is gone, so it gets none either. A
+ * success row (installed, enabled, disabled, backfilled) does not say the check
+ * was lost, so the warning still follows it (REC-05).
+ */
+export function reportUnreadableDeclarer(
+  scope: Scope,
+  readResult: ScopeReadResult,
+  outcomes: PerEntryOutcome[],
+): void {
+  const verdict = readResult.verdict;
+  if (verdict === undefined || verdict.ok) {
+    return;
+  }
+
+  const at = verdict.declarer.lastIndexOf("@");
+  const marketplace = verdict.declarer.slice(at + 1);
+  const plugin = verdict.declarer.slice(0, at);
+  if (hasSuppressingRow(outcomes, scope, marketplace, plugin)) {
+    return;
+  }
+
+  outcomes.push({
+    kind: "plugin-declarer-unreadable",
+    scope,
+    marketplace,
+    plugin,
+    reason: verdict.reason,
+    cause: verdict.cause,
+  });
 }
 
 /** A manifest that loaded, or `undefined` for one that did not. */

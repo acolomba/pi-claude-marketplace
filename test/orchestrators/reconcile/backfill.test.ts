@@ -26,10 +26,7 @@ import {
   readHooksJson,
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import {
-  applyBackfillForScopeIsolated,
-  runScopeIsolated,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts";
+import { applyBackfillForScopeIsolated } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/backfill.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -1028,47 +1025,6 @@ describe("applyBackfillForScopeIsolated", () => {
     assert.deepStrictEqual(await savedWorkflowEntries(locations), []);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
-  });
-});
-
-// `runScopeIsolated` is a pure wrapper over a caller-supplied operation: it
-// reads no file, no environment variable and no scope root, so these two cases
-// own no temporary tree.
-describe("runScopeIsolated", () => {
-  test("leaves the accumulated outcomes untouched when the operation completes", async () => {
-    // arrange
-    const outcomes: PerEntryOutcome[] = [
-      { kind: "mp-added", scope: "project", marketplace: "sibling" },
-    ];
-
-    // act
-    await runScopeIsolated("project", outcomes, () => Promise.resolve());
-
-    // assert
-    assert.deepStrictEqual(outcomes, [
-      { kind: "mp-added", scope: "project", marketplace: "sibling" },
-    ]);
-  });
-
-  test("WR-02: appends a state.json row carrying the redacted cause when the operation throws", async () => {
-    // arrange
-    const outcomes: PerEntryOutcome[] = [];
-
-    // act
-    await runScopeIsolated("user", outcomes, () =>
-      Promise.reject(new Error("cannot write /home/someone/.pi/pi-claude-marketplace/state.json")),
-    );
-
-    // assert
-    assert.deepStrictEqual(outcomes, [
-      {
-        kind: "invalid-block",
-        scope: "user",
-        basename: "state.json",
-        reason: "unreadable",
-        cause: new Error("cannot write state.json"),
-      },
-    ]);
   });
 });
 

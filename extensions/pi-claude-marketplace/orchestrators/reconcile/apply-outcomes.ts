@@ -46,6 +46,7 @@ import {
 } from "./reconcile.messaging.ts";
 
 import type { UnsatisfiedKind } from "./dependency-verdict.ts";
+import type { ReconcilePlan } from "./types.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -533,6 +534,51 @@ export type SourceMismatchOutcome =
  */
 export function sourceMismatchOutcomeSubject(outcome: SourceMismatchOutcome): string {
   return outcome.cause === "malformed-plugin-key" ? outcome.rawKey : outcome.marketplace;
+}
+
+/**
+ * Source-mismatch and dangling-reference rows from the planner are NOT
+ * actionable at apply time -- they surface as `(failed) {source mismatch}`
+ * marketplace rows (with an optional plugin child for dangling references).
+ * Routing them through the same per-entry outcome accumulator keeps the
+ * projection a single seam. Each planner cause lifts its renderable fields
+ * onto the matching `SourceMismatchOutcome` arm; the renderer derives the
+ * subject through `sourceMismatchOutcomeSubject`.
+ */
+export function sourceMismatchOutcomes(plan: ReconcilePlan): PerEntryOutcome[] {
+  return plan.sourceMismatches.map((m): SourceMismatchOutcome => {
+    switch (m.cause) {
+      case "source-mismatch":
+        return {
+          kind: "source-mismatch",
+          cause: "source-mismatch",
+          scope: m.scope,
+          marketplace: m.marketplace,
+        };
+      case "unknown-stored":
+        return {
+          kind: "source-mismatch",
+          cause: "unknown-stored",
+          scope: m.scope,
+          marketplace: m.marketplace,
+        };
+      case "dangling-reference":
+        return {
+          kind: "source-mismatch",
+          cause: "dangling-reference",
+          scope: m.scope,
+          marketplace: m.marketplace,
+          plugin: m.plugin,
+        };
+      case "malformed-plugin-key":
+        return {
+          kind: "source-mismatch",
+          cause: "malformed-plugin-key",
+          scope: m.scope,
+          rawKey: m.rawKey,
+        };
+    }
+  });
 }
 
 /**
