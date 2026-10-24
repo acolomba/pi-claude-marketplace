@@ -20,6 +20,7 @@ import type {
   ReinstallFailedOutcome,
   ReinstallPluginOutcome,
   ReinstallSkippedOutcome,
+  RevisionMove,
 } from "../types.ts";
 
 /** Identity shared by every composed reinstall outcome. */
@@ -37,6 +38,8 @@ export interface RecordSkippedOutcomeInput extends ReinstallOutcomeTarget {
 export interface RecordFailedOutcomeInput extends ReinstallOutcomeTarget {
   readonly partition: "failed";
   readonly error: unknown;
+  /** UPR-03: the move the shared runner reported before the failure was thrown. */
+  readonly move?: RevisionMove;
 }
 
 export type RecordReinstallOutcomeInput = RecordSkippedOutcomeInput | RecordFailedOutcomeInput;
@@ -78,8 +81,7 @@ export function reinstallOutcomeFromRun(
         ...identity,
         version: run.toVersion,
         fromVersion: run.fromVersion,
-        ...(run.fromCommit !== undefined && { fromCommit: run.fromCommit }),
-        ...(run.toCommit !== undefined && { toCommit: run.toCommit }),
+        ...knownCommits(run),
         stagedAgentNames: run.stagedAgentNames,
         stagedMcpServerNames: run.stagedMcpServerNames,
         declaresAgents: run.declaresAgents,
@@ -102,6 +104,8 @@ export function reinstallOutcomeFromRun(
       return {
         partition: "failed",
         ...identity,
+        // UPR-03: a commit or finalize failure names the move it attempted.
+        ...knownMove(run),
         notes: run.notes,
         reasons: run.reasons,
         ...(phaseFailure !== undefined && {
@@ -113,6 +117,24 @@ export function reinstallOutcomeFromRun(
         ...(run.mcpConfigNotices !== undefined && { mcpConfigNotices: run.mcpConfigNotices }),
       };
   }
+}
+
+/** The sides of a move that are known; an unknown side's key stays absent (NREG-01). */
+function knownMove(move: Partial<RevisionMove>): Partial<RevisionMove> {
+  return {
+    ...(move.fromVersion !== undefined && { fromVersion: move.fromVersion }),
+    ...(move.toVersion !== undefined && { toVersion: move.toVersion }),
+    ...knownCommits(move),
+  };
+}
+
+function knownCommits(
+  move: Partial<RevisionMove>,
+): Pick<Partial<RevisionMove>, "fromCommit" | "toCommit"> {
+  return {
+    ...(move.fromCommit !== undefined && { fromCommit: move.fromCommit }),
+    ...(move.toCommit !== undefined && { toCommit: move.toCommit }),
+  };
 }
 
 /**
@@ -240,6 +262,7 @@ function failedOutcome(input: RecordFailedOutcomeInput): ReinstallFailedOutcome 
     name: input.name,
     marketplace: input.marketplace,
     scope: input.scope,
+    ...knownMove(input.move ?? {}),
     notes: [message],
     ...(isManualRecovery && { failureClass: "manual-recovery" as const }),
     ...(typedReasons !== undefined && { reasons: typedReasons }),

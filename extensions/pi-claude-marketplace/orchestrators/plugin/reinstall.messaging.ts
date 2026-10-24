@@ -301,6 +301,8 @@ function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
       const failed: PluginFailedMessage = {
         status: "failed",
         name: outcome.name,
+        // UPR-03: the move the reinstall attempted, when the runner knew it.
+        ...revisionVersionSlot(outcome),
         reasons,
         ...(outcome.cause !== undefined && { cause: outcome.cause }),
         // D-18-10: one child per bridge whose commit or finalize failed.

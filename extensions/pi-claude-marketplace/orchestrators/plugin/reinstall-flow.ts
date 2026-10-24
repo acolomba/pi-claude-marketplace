@@ -90,7 +90,7 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts";
+import type { ReinstallFailedOutcome, ReinstallPluginOutcome, RevisionMove } from "../types.ts";
 import type { ReinstallPhaseFailure } from "./reinstall-record.ts";
 import type { ReinstallPluginsTarget, ReinstallTargetSelection } from "./reinstall-targets.ts";
 import type { MaterializationPolicy, UpdateCloneCacheSeam } from "./update-preflight.ts";
@@ -271,6 +271,14 @@ interface ReinstallReached {
 // The `reinstallPlugins` enumeration catch detects it via `instanceof` and
 // emits ONE standalone `MarketplaceNotAddedMessage` before any cascade row.
 
+/**
+ * UPR-03: the move the shared runner reported once it derived a candidate, so
+ * a failure the swap throws can name the move it attempted.
+ */
+interface ReportedCandidate {
+  move?: RevisionMove;
+}
+
 /** Runs one reinstall, its maintenance, and its notification. */
 async function reinstallPluginWith(
   owners: ReinstallFlowOwners,
@@ -281,14 +289,16 @@ async function reinstallPluginWith(
   const render = opts.render ?? "default";
   const locations = locationsFor(scope, cwd);
 
+  // UPR-03: one holder per call, so a failure names this target's move only.
+  const candidate: ReportedCandidate = {};
   let reached: ReinstallReached;
   try {
-    reached = await runReinstall(owners, bindings, opts, locations);
+    reached = await runReinstall(owners, bindings, opts, locations, candidate);
   } catch (err) {
     // GHB-03 / D-18-16: an invalid GitHub base override fails the command,
     // warm cache or not.
     rethrowInvalidGitHubBaseUrl(err);
-    return failReinstall(owners, opts, err, render);
+    return failReinstall(owners, opts, err, render, candidate.move);
   }
 
   const { outcome } = reached;
@@ -365,6 +375,7 @@ async function runReinstall(
   bindings: ReinstallBindings,
   opts: ReinstallPluginOptions,
   locations: ScopedLocations,
+  candidate: ReportedCandidate,
 ): Promise<ReinstallReached> {
   const target = { name: opts.plugin, marketplace: opts.marketplace, scope: opts.scope };
   const state = await (opts.stateTransaction?.loadState ?? loadState)(locations.extensionRoot);
@@ -415,6 +426,9 @@ async function runReinstall(
       // render, so the callback only captures it.
       notifyPhaseFailure: (error, failures) => {
         phaseFailure = { error, failures };
+      },
+      onCandidate: (move) => {
+        candidate.move = move;
       },
     },
     REINSTALL_MATERIALIZATION,
@@ -482,6 +496,7 @@ function failReinstall(
   opts: ReinstallPluginOptions,
   err: unknown,
   render: "default" | "none",
+  move?: RevisionMove,
 ): ReinstallFailedOutcome {
   const outcome = owners.recordReinstallOutcome({
     partition: "failed",
@@ -489,6 +504,7 @@ function failReinstall(
     marketplace: opts.marketplace,
     scope: opts.scope,
     error: err,
+    ...(move !== undefined && { move }),
   });
   if (render !== "none") {
     renderReinstallPartitionAndNotify(opts.ctx, opts.run, [outcome], "single");

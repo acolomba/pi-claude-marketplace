@@ -6,6 +6,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import lockfile from "proper-lockfile";
+
 import {
   createHooksRouting,
   createHooksRuntime,
@@ -42,6 +44,7 @@ import {
   PluginInBaseLayerOnlyError,
   PluginInLocalLayerOnlyError,
   PluginUpdatePhase3Error,
+  StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
@@ -767,6 +770,8 @@ test("AGENT-01 / NFR-3: a reinstall refuses a file no index row names at its new
       name: "hello",
       marketplace: "mp",
       scope: "project",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
       notes: [`${message}\n\ncause: ${message}`],
     });
     assert.strictEqual(await readFile(newTarget, "utf8"), "Other owner's bytes.\n");
@@ -829,6 +834,8 @@ test("AGENT-01: reinstall preserves legacy bytes and state when another plugin o
       name: "hello",
       marketplace: "mp",
       scope: "project",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
       notes: [`${message}\n\ncause: ${message}`],
     });
     assert.strictEqual(await readFile(newTarget, "utf8"), "Other owner's bytes.\n");
@@ -874,6 +881,8 @@ test("AGENT-01: reinstall preserves legacy bytes and state when the post-migrati
       name: "hello",
       marketplace: "mp",
       scope: "project",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
       notes: ["save failure after migration\n\ncause: save failure after migration"],
     });
     await assert.rejects(readFile(newTarget), { code: "ENOENT" });
@@ -1556,6 +1565,187 @@ test("REI-04: a reinstall after the marketplace offers a newer version records a
         },
         { version: "1.1.0", installedAt: before.installedAt, provenance: before.provenance },
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("UPR-03: a reinstall refused at its intent mark by a held lock names the version it attempted", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-lock-held-"));
+    try {
+      // arrange
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        resources: { skill: "old" },
+        install: true,
+      });
+      const locations = locationsFor("project", cwd);
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const { ctx, run, notifications } = makeCtx();
+      const lockMessage = `Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`;
+      const release = await lockfile.lock(locations.extensionRoot, {
+        lockfilePath: locations.stateLockFile,
+        realpath: false,
+      });
+      let outcome;
+      try {
+        // act
+        outcome = await reinstallPlugin({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "hello",
+        });
+      } finally {
+        await release();
+      }
+
+      // assert
+      assert.ok(outcome.partition === "failed");
+      const { cause, ...rest } = outcome;
+      assert.deepStrictEqual(rest, {
+        partition: "failed",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
+        notes: [`${lockMessage}\n\ncause: ${lockMessage} -> Lock file is already being held`],
+        reasons: ["lock held"],
+      });
+      assert.ok(cause instanceof StateLockHeldError);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v1.0.0 (failed) {lock held}\n" +
+            `    cause: ${lockMessage} -> Lock file is already being held`,
+          severity: "error",
+        },
+      ]);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("UPR-03: a reinstall whose finalize fails after moving its version names the move it attempted", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-phase3-move-"));
+    try {
+      // arrange
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedMarketplace({ cwd, marketplaceRoot, resources: { skill: "old" }, install: true });
+      const { pluginRoot } = await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        version: "1.1.0",
+        resources: { skill: "new" },
+      });
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "hello", version: "1.1.0" }),
+      );
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await reinstallPlugins({
+        ctx,
+        run,
+        cwd,
+        scope: "project",
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        stateTransaction: { saveState: refuseFinalizeSave() },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v1.0.0 → v1.1.0 (failed) {rollback partial}\n" +
+            '    cause: Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it. -> finalize refused\n' +
+            "    [mcp] (rollback failed)\n      cause: finalize refused",
+          severity: "error",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("UPR-03: a failure in a bulk reinstall names its own target's move, not an earlier target's", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bulk-own-move-"));
+    try {
+      // arrange
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        pluginName: "alpha",
+        resources: { skill: "old alpha" },
+        install: true,
+      });
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        pluginName: "beta",
+        resources: { skill: "old beta" },
+        install: true,
+      });
+      const { pluginRoot } = await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        pluginName: "alpha",
+        version: "2.0.0",
+        resources: { skill: "new alpha" },
+      });
+      await writeFile(
+        path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+        JSON.stringify({ name: "alpha", version: "2.0.0" }),
+      );
+      // Once alpha's record holds 2.0.0, beta's first state read fails, before
+      // beta's runner derives any candidate.
+      let alphaReinstalled = false;
+      const stateTransaction: LockedStateTransactionDeps = {
+        loadState: async (extensionRoot) => {
+          if (alphaReinstalled) {
+            throw new Error("state read failed");
+          }
+
+          return loadState(extensionRoot);
+        },
+        saveState: async (extensionRoot, state) => {
+          await saveState(extensionRoot, state);
+          alphaReinstalled ||= state.marketplaces["mp"]?.plugins["alpha"]?.version === "2.0.0";
+        },
+      };
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await reinstallPlugins({
+        ctx,
+        run,
+        cwd,
+        scope: "project",
+        target: { kind: "marketplace", marketplace: "mp" },
+        stateTransaction,
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ● alpha v1.0.0 → v2.0.0 (reinstalled)\n  ⊘ beta (failed) {unreadable}\n\nPlugin reinstall: 1 failure, 1 success\n\n/reload to pick up changes",
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -7192,12 +7382,14 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
       // assert
       assert.equal(first.partition, "failed");
       assert.deepStrictEqual(Object.keys(first).sort(), [
+        "fromVersion",
         "marketplace",
         "name",
         "notes",
         "partition",
         "reasons",
         "scope",
+        "toVersion",
       ]);
       assert.deepStrictEqual(first.reasons, ["source missing"]);
       assert.match(
@@ -7769,6 +7961,8 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
         name: "hello",
         marketplace: "mp",
         scope: "project",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
         notes: [aggregate, "mcp: state finalize failed: state persistence refused"],
         reasons: ["rollback partial"],
       });
@@ -8427,7 +8621,7 @@ test("retry proof: reinstall: a bulk cascade keeps the earlier committed target 
       assert.deepStrictEqual(firstNotifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ● alpha v1.0.0 (reinstalled)\n  ⊘ beta (failed) {unreadable}\n\nPlugin reinstall: 1 failure, 1 success\n\n/reload to pick up changes",
+            "A plugin operation has failed.\n\n● mp [project]\n  ● alpha v1.0.0 (reinstalled)\n  ⊘ beta v1.0.0 (failed) {unreadable}\n\nPlugin reinstall: 1 failure, 1 success\n\n/reload to pick up changes",
           severity: "error",
         },
       ]);
@@ -9341,7 +9535,7 @@ test("AFILE-06: a disabled plugin MCP server stays disabled through reinstall", 
 
 /** The failed row of a reinstall of `hello@mp` whose finalize save was refused. */
 const FINALIZE_FAILED_ROW =
-  "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {rollback partial}\n" +
+  "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v1.0.0 (failed) {rollback partial}\n" +
   '    cause: Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it. -> finalize refused\n' +
   "    [mcp] (rollback failed)\n      cause: finalize refused";
 
@@ -9422,7 +9616,7 @@ test("AFILE-04: a reinstall refused at its intent mark keeps the comments and sh
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {unreadable}",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v1.0.0 (failed) {unreadable}",
           severity: "error",
         },
       ]);

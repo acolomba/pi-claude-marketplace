@@ -170,6 +170,16 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
   readonly partition: "failed";
   readonly notes: readonly string[];
   /**
+   * UPR-03: whatever the shared runner knew of the move the reinstall
+   * attempted -- the record's and the candidate's versions and shas. Each is
+   * absent when that side is unknown, as on a failure before any candidate
+   * exists (NREG-01).
+   */
+  readonly fromVersion?: string;
+  readonly toVersion?: string;
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
+  /**
    * CMC-16 / CMC-11: structural failure-class tag
    * consumed by `outcomeToCascadePluginMessage`'s closed-set Reason mapping. When the
    * orchestrator catches a `ManualRecoveryError` (thrown by the bridges'

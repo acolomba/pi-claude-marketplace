@@ -75,12 +75,16 @@ const REINSTALL_FAILED_CLEAN = {
 
 const REINSTALL_FAILED_FULL = {
   failureClass: "manual-recovery",
+  fromCommit: "1111111111111111111111111111111111111111",
+  fromVersion: "1.0.0",
   marketplace: "official",
   name: "alpha",
   notes: ["rollback left alpha-agent on disk"],
   partition: "failed",
   reasons: ["rollback partial", "permission denied"],
   scope: "user",
+  toCommit: "2222222222222222222222222222222222222222",
+  toVersion: "1.1.0",
 } satisfies ReinstallFailedOutcome;
 
 void REINSTALL_BASE;

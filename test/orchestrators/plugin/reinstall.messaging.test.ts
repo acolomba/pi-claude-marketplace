@@ -669,6 +669,52 @@ test("FIX-03: a failed reinstall that carries a cause renders its cause line", (
   verify(harness.ui);
 });
 
+for (const { move, subject } of [
+  { move: { fromVersion: "1.0.0", toVersion: "1.1.0" }, subject: "hello v1.0.0 → v1.1.0" },
+  {
+    move: {
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
+      fromCommit: "1111111111111111111111111111111111111111",
+      toCommit: "2222222222222222222222222222222222222222",
+    },
+    subject: "hello v1.0.0 (1111111) → v1.0.0 (2222222)",
+  },
+  { move: { fromVersion: "1.0.0", toVersion: "1.0.0" }, subject: "hello v1.0.0" },
+  { move: { fromVersion: "1.0.0" }, subject: "hello v1.0.0" },
+] as const) {
+  test(`UPR-03: a failed reinstall that knew its move renders ${subject}`, () => {
+    // arrange
+    const harness = createNotifyHarness({
+      message: [
+        "A plugin operation has failed.",
+        "",
+        "● mp [project]",
+        `  ⊘ ${subject} (failed) {lock held}`,
+      ].join("\n"),
+      severity: "error",
+    });
+    const outcomes: readonly ReinstallFailedOutcome[] = [
+      {
+        partition: "failed",
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        ...move,
+        notes: ["refused"],
+        reasons: ["lock held"],
+      },
+    ];
+
+    // act
+    renderReinstallPartitionAndNotify(harness.ctx, harness.run, outcomes, "single");
+
+    // assert
+    verify(harness.ctx);
+    verify(harness.ui);
+  });
+}
+
 test("D-18-07: a dependents constrain skip renders its typed reason and names the holders on its cause line", () => {
   // arrange
   const harness = createNotifyHarness({
