@@ -277,13 +277,15 @@ function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
       //  (3) narrowReasons(outcome.notes) -> substring fallback
       // WR-04: `narrowReasons([])` and `narrowReasons(undefined)` both return
       // `[]`, which would render a failed row with no `{<reason>}` brace. Guard
-      // with the `"unreadable"` fallback (ATTR-09 / D-47-B) so a failed row never
-      // renders bare.
+      // with the `"unreadable"` fallback (ATTR-09 / D-47-B) so a failed row with
+      // nothing to explain it never renders bare. A failure no ladder
+      // classifies keeps no reason and explains itself through its cause line,
+      // as update's row does.
       const narrowed: readonly ContentReason[] = isManualRecoveryOutcome(outcome)
         ? (["rollback partial"] as const)
         : (outcome.reasons ?? narrowReasons(outcome.notes));
       const reasons: readonly ContentReason[] =
-        narrowed.length > 0 ? narrowed : (["unreadable"] as const);
+        narrowed.length > 0 || outcome.cause !== undefined ? narrowed : (["unreadable"] as const);
 
       if (isManualRecoveryOutcome(outcome)) {
         const manualRecovery: PluginManualRecoveryMessage = {

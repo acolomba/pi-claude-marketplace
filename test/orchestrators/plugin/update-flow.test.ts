@@ -9298,7 +9298,7 @@ test("PURL-06 / D-78-01 shared clone NOT GC'd: two git plugins share the old url
   });
 });
 
-test("MIRR-01 / NFR-3 vanished repo: unpinned mirror update whose clone throws -> fails clean; plugin stays on recorded sha, existing REASONS token, no new token", async () => {
+test("MIRR-01 / NFR-3 / SRC-01 vanished repo: unpinned mirror update whose clone throws -> fails with its cause; plugin stays on recorded sha, existing REASONS token, no new token", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-git-vanished-");
     try {
@@ -9343,8 +9343,13 @@ test("MIRR-01 / NFR-3 vanished repo: unpinned mirror update whose clone throws -
       assert.equal(await pathExists(seeded.oldCloneRoot ?? ""), true, "recorded clone untouched");
       // A failure surfaced through the EXISTING network-unreachable REASON token
       // (no new token); the plugin declined its swap and stayed put.
-      const body = notifications.map((n) => n.message).join("\n");
-      assert.match(body, /\{network unreachable\}/, "existing network-unreachable REASON token");
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {network unreachable}\n    cause: getaddrinfo ENOTFOUND example.com",
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -9949,17 +9954,14 @@ test("NFR-3 device-flow auth failure: a clone throw shaped UserCanceledError cla
         SHA_OLD,
         "plugin stays on its recorded sha",
       );
-      const body = notifications.map((n) => n.message).join("\n");
-      assert.match(
-        body,
-        /\{authentication required\}/,
-        "an auth failure renders the existing authentication-required REASON token",
-      );
-      assert.doesNotMatch(
-        body,
-        /\{no longer installable\}/,
-        "an auth failure must NOT render the lying no-longer-installable reason",
-      );
+      // The bare auth row carries no cause line, as install's does.
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {authentication required}",
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

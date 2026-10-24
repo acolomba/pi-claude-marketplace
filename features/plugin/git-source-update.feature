@@ -180,3 +180,37 @@ Feature: Plugin git source update
       | verb      |
       | update    |
       | reinstall |
+
+  Scenario Outline: An update fails as <reason> when the git host <refusal> and keeps the installed revision
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 2.0.0   |      |
+    Given the git host <refusal> for the plugin "ghp"
+    When the user runs "/claude:plugin update ghp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status | reasons  | scope   | version | leaks | rollback partial | cause chain   | cause truncated |
+      | gits             | project           | ghp@gits | ghp  | failed | <reason> | project | 1.0.0   |       |                  | <cause chain> | false           |
+    Then the git host receives these requests:
+      | method | path                                            | status   |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | <status> |
+    Then the git-source plugin "ghp" installed in the project scope runs revision 1 of its repository
+
+    Examples:
+      | refusal              | reason              | status  | cause chain                                                                  |
+      | answers 404          | source missing      | 404     | HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git           |
+      | drops the connection | network unreachable | dropped | socket hang up, fetched https://{git host}/acme/ghp.git                      |
+      | answers 503          | network error       | 503     | HTTP Error: 503 Service Unavailable, fetched https://{git host}/acme/ghp.git |

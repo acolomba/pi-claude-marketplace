@@ -965,13 +965,43 @@ test("prefers a typed rollback reason while truly omitting an absent cause", () 
   assert.equal(Object.hasOwn(message, "cause"), false);
 });
 
+test("SRC-01: renders an empty typed reason set with its cause and no reason token", () => {
+  // arrange
+  const cause = new Error("mirror gone");
+  const outcome = {
+    partition: "failed",
+    name: "upsilon",
+    fromVersion: "1.0.0",
+    notes: ["mirror gone"],
+    reasons: [],
+    cause,
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  } satisfies PluginUpdateOutcome;
+
+  // act
+  const message = outcomeToCascadePluginMessage(outcome, "user");
+
+  // assert
+  assert.deepStrictEqual(message, {
+    status: "failed",
+    name: "upsilon",
+    scope: "user",
+    version: "1.0.0",
+    reasons: [],
+    cause,
+    severity: "error",
+    needsReload: false,
+  });
+});
+
 test("classifies an empty notes-only failure as an unreadable manifest", () => {
   // arrange
   const outcome = {
     partition: "failed",
     name: "psi",
     notes: [],
-    reasons: [],
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,

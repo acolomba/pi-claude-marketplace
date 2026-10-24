@@ -9,12 +9,13 @@ import { parsePluginSource } from "../../domain/source.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
+  CleanupLeakError,
   errorMessage,
   PluginShapeError,
   rethrowInvalidGitHubBaseUrl,
   StateLockHeldError,
 } from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { narrowResolverNotes, narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
 import {
@@ -482,46 +483,44 @@ async function resolveUpdateCandidate(
 /**
  * The verdict for a candidate the resolver could not produce. Only reached
  * after the GHB-03 and GIT-03 rethrows, which fail the whole command.
+ *
+ * SRC-01: a source the update could not read or fetch fails, as Claude Code's
+ * update does. A clone the git host refused reads install's reason for the
+ * same answer, and a throw no ladder classifies keeps its cause and no reason
+ * -- the source has not stopped being installable. Only the resolver's own
+ * refusal skips.
  */
 function candidateFailure(
   error: unknown,
   options: { readonly plugin: string; readonly fromVersion: string },
 ): PluginUpdateSkippedOutcome | PreflightFailedOutcome {
-  const networkReason = classifyGitTransportFailure(error);
-  if (networkReason !== undefined) {
-    return skippedCandidate(options, [errorMessage(error)], [networkReason]);
+  const notes = [errorMessage(error)];
+  const cause = error instanceof Error ? error : new Error(errorMessage(error));
+  const hostReason = classifyGitHostFailure(error);
+  if (hostReason !== undefined) {
+    // The bare auth row keeps no cause, unless a cleanup leaked: its cause
+    // carries the manual-cleanup hint (MA-9, INR-02).
+    const keepsCause =
+      hostReason !== "authentication required" || error instanceof CleanupLeakError;
+    return failedCandidate(options, notes, [hostReason], keepsCause ? cause : undefined);
   }
 
   if (isPartialableUpdateShapeError(error)) {
     return {
-      ...skippedCandidate(
-        options,
-        [errorMessage(error)],
-        narrowUnsupportedKinds(error.shape.unsupportedKinds),
-      ),
+      ...skippedCandidate(options, notes, narrowUnsupportedKinds(error.shape.unsupportedKinds)),
       partialUpgradable: true,
     };
   }
 
   if (error instanceof PluginShapeError && error.shape.kind === "no-longer-installable") {
-    // SRC-01: a plugin directory that is not on disk fails, as install's
-    // does. The reason carries it; the note embeds the absolute path, so no
-    // cause rides along.
+    // The reason carries a missing directory; the note embeds the absolute
+    // path, so no cause rides along.
     return narrowResolverNotes(error.shape.reasons).includes("source missing")
-      ? failedCandidate(options, [errorMessage(error)], ["source missing"])
-      : skippedCandidate(options, [errorMessage(error)], ["no longer installable"]);
+      ? failedCandidate(options, notes, ["source missing"])
+      : skippedCandidate(options, notes, ["no longer installable"]);
   }
 
-  // Anything else is genuinely unexpected -- not an invalid GitHub base
-  // override (rethrown above, GHB-03), not a classified git-transport
-  // failure, and not the resolver's typed `no-longer-installable` shape.
-  // "no longer installable" stays the user-facing verdict (the candidate
-  // could not be resolved either way), but it is not necessarily the real
-  // cause, so log the actual error for diagnosis.
-  hookDebugLog(
-    `resolveUpdateCandidate: unclassified error for "${options.plugin}": ${errorMessage(error)}`,
-  );
-  return skippedCandidate(options, [errorMessage(error)], ["no longer installable"]);
+  return failedCandidate(options, notes, [], cause);
 }
 
 function skippedCandidate(
@@ -546,6 +545,7 @@ function failedCandidate(
   options: { readonly plugin: string; readonly fromVersion: string },
   notes: readonly string[],
   reasons: readonly ContentReason[],
+  cause?: Error,
 ): PreflightFailedOutcome {
   return {
     partition: "failed",
@@ -553,6 +553,7 @@ function failedCandidate(
     fromVersion: options.fromVersion,
     notes: [...notes],
     reasons: [...reasons],
+    ...(cause !== undefined && { cause }),
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,

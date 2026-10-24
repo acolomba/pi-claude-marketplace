@@ -59,9 +59,8 @@ function classifyNetworkErrno(code: string | undefined): GitTransportReason | un
  *   - network errno ladder -> `network unreachable`.
  *
  * Returns undefined for any other throw so each caller keeps its own
- * fallthrough (e.g. update's `no longer installable`, info's
- * `narrowProbeError` ladder). The error behind a cleanup leak is the one
- * classified (INR-02).
+ * fallthrough (e.g. info's `narrowProbeError` ladder). The error behind a
+ * cleanup leak is the one classified (INR-02).
  */
 export function classifyGitTransportFailure(
   thrown: unknown,

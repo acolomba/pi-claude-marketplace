@@ -117,6 +117,9 @@ export function reinstallOutcomeFromRun(
         ...knownMove(run),
         notes: run.notes,
         reasons: run.reasons,
+        // SRC-01: a preflight failure carries the error behind it; a phase-3
+        // failure's own error wins.
+        ...(run.cause !== undefined && { cause: run.cause }),
         ...(phaseFailure !== undefined && {
           cause: phaseFailure.error,
           rollbackPartial: phaseFailure.failures.map((f) => ({ phase: f.phase, cause: f.cause })),

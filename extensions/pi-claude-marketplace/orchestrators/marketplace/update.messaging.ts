@@ -169,11 +169,14 @@ export function outcomeToCascadePluginMessage(
         // UPR-03: the move a failure after the candidate attempted, or the
         // installed version alone, or nothing when the outcome knows none.
         ...revisionVersionSlot(outcome),
-        reasons: [narrowFailReason(outcome)],
-        // The per-plugin cause-chain trailer. `outcome.cause` is populated by
-        // the cascadeAutoupdates catch where the raw thrown Error is in scope;
-        // failed outcomes produced by plugin/update.ts (no err in scope) leave
-        // this undefined and the renderer simply omits the trailer.
+        // A failure no ladder classifies carries an empty reason list and its
+        // cause, so the outcome's own reasons win, an empty list included.
+        reasons: outcome.reasons ?? [narrowFailReason(outcome)],
+        // The per-plugin cause-chain trailer. `outcome.cause` is set by the
+        // cascadeAutoupdates catch, where the raw thrown Error is in scope, and
+        // by the preflight for a source it could not read or fetch; every
+        // other failed outcome leaves it undefined and the renderer omits the
+        // trailer.
         ...(outcome.cause !== undefined && { cause: outcome.cause }),
         // D-03/D-06: a failed update -> error, no reload.
         severity: "error",
@@ -215,13 +218,11 @@ function narrowSkipReason(outcome: PluginUpdateSkippedOutcome): ContentReason {
 }
 
 /**
- * Narrow a `failed` outcome to a closed-set Reason.
- *
- * Prefer pre-narrowed `outcome.reasons[0]` over notes parsing (same rationale
- * as `narrowSkipReason` above).
+ * Narrow a `failed` outcome that carries no reasons to a closed-set Reason,
+ * from its notes (same rationale as `narrowSkipReason` above).
  */
 function narrowFailReason(outcome: PluginUpdateFailedOutcome): ContentReason {
-  return outcome.reasons?.[0] ?? reasonFromNotes(outcome.notes, FAIL_NOTE_REASONS);
+  return reasonFromNotes(outcome.notes, FAIL_NOTE_REASONS);
 }
 
 /**

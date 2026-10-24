@@ -645,6 +645,37 @@ describe("reinstallOutcomeFromRun", () => {
     });
   });
 
+  test("SRC-01: a preflight failure carries its cause and the installed version", () => {
+    // arrange
+    const cause = new Error("HTTP Error: 404 Not Found");
+    const run: UpdateRunOutcome = {
+      partition: "failed",
+      name: "hello",
+      fromVersion: "1.0.0",
+      notes: ["HTTP Error: 404 Not Found"],
+      reasons: ["source missing"],
+      cause,
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    };
+
+    // act
+    const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, undefined);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      fromVersion: "1.0.0",
+      notes: ["HTTP Error: 404 Not Found"],
+      reasons: ["source missing"],
+      cause,
+    });
+  });
+
   test("D-18-10: a commit failure carries the captured aggregate error and one child per failed bridge", () => {
     // arrange
     const skillsCause = new Error("skills refused");

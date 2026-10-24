@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import * as git from "isomorphic-git";
 import lockfile from "proper-lockfile";
 
 import {
@@ -4273,7 +4274,7 @@ async function seedInstalledGitSourcePlugin(opts: {
   });
 }
 
-test("a clone-cache seam non-Error rejection becomes a complete skipped outcome", async () => {
+test("SRC-01: a clone-cache seam non-Error rejection fails with no reason, its cause, and the installed version", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-clone-string-failure-"));
     try {
@@ -4312,14 +4313,75 @@ test("a clone-cache seam non-Error rejection becomes a complete skipped outcome"
 
       // assert
       assert.deepStrictEqual(outcome, {
-        partition: "skipped",
+        partition: "failed",
         name: "gp",
         marketplace: "mp",
         scope: "project",
+        fromVersion: "9.9.9",
         notes: ["clone-cache string failure"],
-        reasons: ["no longer installable"],
+        reasons: [],
+        cause: new Error("clone-cache string failure"),
       });
       assert.deepEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("SRC-01: a cold-cache reinstall whose git host answers 404 fails as source missing with its cause", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-clone-404-"));
+    try {
+      // arrange
+      await seedInstalledGitSourcePlugin({
+        cwd,
+        marketplaceName: "mp",
+        pluginName: "gp",
+        source: { source: "github", repo: "org/repo", sha: GIT_SOURCE_SHA },
+      });
+      const locations = locationsFor("project", cwd);
+      await rm(
+        await locations.pluginCloneDir(
+          pluginCloneKey("https://github.com/org/repo", GIT_SOURCE_SHA),
+        ),
+        { recursive: true, force: true },
+      );
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const notFound = new git.Errors.HttpError(404, "Not Found", "");
+      const { gitOps } = createGitOps({ cloneThrows: notFound });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "gp",
+        cloneCacheSeam: installSeamWith(gitOps),
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "failed",
+        name: "gp",
+        marketplace: "mp",
+        scope: "project",
+        fromVersion: "9.9.9",
+        notes: ["HTTP Error: 404 Not Found"],
+        reasons: ["source missing"],
+        cause: notFound,
+      });
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {source missing}\n    cause: HTTP Error: 404 Not Found",
+          severity: "error",
+        },
+      ]);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -5180,7 +5242,7 @@ test("MIRR-06 / D-18-04: an unpinned reinstall with no mirror clones it once and
   });
 });
 
-test("D-18-04: an unpinned reinstall whose mirror clone fails is skipped and materializes nothing", async () => {
+test("D-18-04 / SRC-01: an unpinned reinstall whose mirror clone fails fails with its cause and materializes nothing", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-mirror-cold-"));
     try {
@@ -5196,8 +5258,9 @@ test("D-18-04: an unpinned reinstall whose mirror clone fails is skipped and mat
         resolvedSha: GIT_SOURCE_SHA,
         source: { source: "url", url: cloneUrl },
       });
+      const cloneFailure = new Error("network unreachable: clone");
       const { gitOps, state: gitState } = createGitOps({
-        cloneThrows: new Error("network unreachable: clone"),
+        cloneThrows: cloneFailure,
         resolveRemoteRefThrows: new Error("network unreachable: resolveRemoteRef"),
       });
       const { ctx, run } = makeCtx();
@@ -5216,12 +5279,14 @@ test("D-18-04: an unpinned reinstall whose mirror clone fails is skipped and mat
 
       // assert
       assert.deepStrictEqual(outcome, {
-        partition: "skipped",
+        partition: "failed",
         name: "gp",
         marketplace: "mp",
         scope: "project",
+        fromVersion: `sha-${GIT_SOURCE_SHA.slice(0, 12)}`,
         notes: ["network unreachable: clone"],
-        reasons: ["no longer installable"],
+        reasons: [],
+        cause: cloneFailure,
       });
       assert.equal(gitState.cloneCalls.length, 1);
       // Neither a mirror nor a per-commit copy is left behind.

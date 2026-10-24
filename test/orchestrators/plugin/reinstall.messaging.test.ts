@@ -608,6 +608,39 @@ test("renderReinstallPartitionAndNotify replaces an empty typed failed reason se
   verify(harness.ui);
 });
 
+test("SRC-01: an empty typed failed reason set with a cause renders no reason token and the cause line", () => {
+  // arrange
+  const harness = createNotifyHarness({
+    message: [
+      "A plugin operation has failed.",
+      "",
+      "● official [project]",
+      "  ⊘ alpha v1.0.0 (failed)",
+      "    cause: mirror gone",
+    ].join("\n"),
+    severity: "error",
+  });
+  const outcomes: readonly ReinstallFailedOutcome[] = [
+    {
+      partition: "failed",
+      name: "alpha",
+      marketplace: "official",
+      scope: "project",
+      fromVersion: "1.0.0",
+      notes: ["mirror gone"],
+      reasons: [],
+      cause: new Error("mirror gone"),
+    },
+  ];
+
+  // act
+  renderReinstallPartitionAndNotify(harness.ctx, harness.run, outcomes, "single");
+
+  // assert
+  verify(harness.ctx);
+  verify(harness.ui);
+});
+
 test("renderReinstallPartitionAndNotify narrows a rollback note for an ordinary failure", () => {
   // arrange
   const harness = createNotifyHarness({
