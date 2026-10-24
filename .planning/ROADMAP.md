@@ -140,6 +140,7 @@ Step module paths are relative to `features/step_definitions/`.
 - [x] **Phase 26: Git Mirror Access** — Mirror refreshes take the state lock, one copy helper serves all clones, and a cold `info --fetch` contacts the host once
 - [x] **Phase 27: Install and Reconcile Reason Residue** — Dependency ranges read as upstream, pinned-commit failures read cleanly, reconcile and import narrow reasons like install, and marketplace remove ignores disabled holders
 - [ ] **Phase 28: Delisted Plugin Dependency Walk** — A plugin its marketplace no longer lists keeps its dependencies from its installed copy, so it no longer blocks the scope's dependency walk
+- [ ] **Phase 29: Load Converges on the Catalog** — A load moves every plugin to its marketplace catalog's version, offline, and reports what it could not move
 
 ## Phase Details
 
@@ -592,6 +593,21 @@ Plans:
 4. A delisted plugin whose installed copy is unreadable still fails the walk closed with `{unreadable}` (D-17).
 5. `npm run check` stays green.
 
+### Phase 29: Load Converges on the Catalog
+
+**Goal:** A load applies the desired state against one internally consistent catalog version per marketplace.
+**Depends on:** Phase 28
+**Decision:** 2026-10-24 (user): load converges every installed plugin on its marketplace's catalog version, so plugin versions stay internally consistent; this replaces the narrower "backfill reinstalls partial plugins" behavior and the silent retry (phase 18 WR-05). Divergence from Claude Code, which keeps installed versions until `update` or marketplace autoupdate: record it with a decision ID. Uncached git targets stay put and read `upgradable` (option b), so a load stays network-free (NFR-5).
+**Requirements:** CAT-01, CAT-02, CAT-03, CAT-04
+**Files:** `orchestrators/reconcile/plan.ts`, `apply.ts`, `backfill.ts`, `notify.ts`, `orchestrators/plugin/materialize-latest.ts`, `update-constraint-gate.ts`, `orchestrators/reconcile/pending.ts`; `features/plugin/pending.feature`, `features/plugin/reconcile*.feature`, `features/plugin/update.feature`.
+**Success Criteria** (what must be TRUE):
+
+1. After `marketplace update` moves a path-source and a cached git-source plugin, `/reload` installs both at the catalog version; a second `/reload` writes nothing (CAT-01).
+2. A git-source plugin whose new commit is not cached stays at its version, reads `upgradable`, and the load makes no network request (CAT-02).
+3. A range-blocked plugin and a plugin whose new version drops components stay put with a warning row and appear in `pending`; the next load does not retry silently (CAT-03).
+4. A partially installed plugin whose components became supported is made whole by the same convergence, and `pending` previews every move (CAT-04).
+5. `npm run check` stays green.
+
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
@@ -624,6 +640,7 @@ Plans:
 | 26. Git Mirror Access | 1/1 | Complete    | 2026-10-23 |
 | 27. Install and Reconcile Reason Residue | 1/1 | Complete    | 2026-10-23 |
 | 28. Delisted Plugin Dependency Walk | 0/TBD | Not started | - |
+| 29. Load Converges on the Catalog | 0/TBD | Not started | - |
 
 ## Carried Forward
 
