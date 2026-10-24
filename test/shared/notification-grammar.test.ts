@@ -1351,6 +1351,51 @@ test("composeVersionArrow renders complete version bytes on both sides", () => {
   assert.equal(arrow, expectedArrow);
 });
 
+test("UPR-02: an updated row with commits names each side's short commit", () => {
+  // arrange
+  const expectedArrow = "  ● ghp v1.0.0 (aaaaaaa) → v1.0.0 (bbbbbbb) (updated)";
+
+  // act
+  const arrow = composePluginLines(
+    {
+      status: "updated",
+      name: "ghp",
+      from: "1.0.0",
+      to: "1.0.0",
+      commits: { from: "a".repeat(40), to: "b".repeat(40) },
+      reasons: [],
+      severity: "info",
+      needsReload: true,
+    },
+    "user",
+  )[0];
+
+  // assert
+  assert.equal(arrow, expectedArrow);
+});
+
+test("NREG-01: an updated row without commits keeps the plain sha arrow", () => {
+  // arrange
+  const expectedArrow = "  ● ghp v#aaaaaaa → v#bbbbbbb (updated)";
+
+  // act
+  const arrow = composePluginLines(
+    {
+      status: "updated",
+      name: "ghp",
+      from: "sha-aaaaaaaaaaaa",
+      to: "sha-bbbbbbbbbbbb",
+      reasons: [],
+      severity: "info",
+      needsReload: true,
+    },
+    "user",
+  )[0];
+
+  // assert
+  assert.equal(arrow, expectedArrow);
+});
+
 for (const { name, reasons, expected } of [
   {
     name: "omits an undefined reasons block",

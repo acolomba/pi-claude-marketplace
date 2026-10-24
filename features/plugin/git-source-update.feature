@@ -95,8 +95,8 @@ Feature: Plugin git source update
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id       | name | status  | reasons | scope   | from  | to    |
-      | gits             | project           | ghp@gits | ghp  | updated |         | project | 1.0.0 | 1.0.0 |
+      | marketplace name | marketplace scope | id       | name | status  | reasons | scope   | from  | to    | from commit    | to commit      |
+      | gits             | project           | ghp@gits | ghp  | updated |         | project | 1.0.0 | 1.0.0 | {ghp commit 1} | {ghp commit 2} |
     Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
 
   Scenario: Reinstalling a git-source plugin after a fetch installs the fetched revision with no request

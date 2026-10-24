@@ -801,6 +801,10 @@ test("WR-01: a successful path-source swap drops a stale resolvedSha the fresh r
 
       // assert
       assert.strictEqual(outcome.partition, "updated");
+      // UPR-02: the record side had a sha and the candidate none, so only the
+      // record's commit is stamped.
+      assert.strictEqual(outcome.fromCommit, "stale-sha-from-a-prior-tag-pin");
+      assert.strictEqual(Object.hasOwn(outcome, "toCommit"), false);
       const after = await loadState(locations.extensionRoot);
       const afterRecord = after.marketplaces.mp?.plugins.hello;
       assert.ok(afterRecord !== undefined);
@@ -810,6 +814,68 @@ test("WR-01: a successful path-source swap drops a stale resolvedSha the fresh r
       // the old clone is now orphaned -- the post-swap sweep must not skip
       // this case the way "resolvedSha !== undefined" alone would have.
       assert.strictEqual(cleanupCalls, 1);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("UPR-02: the updated outcome stamps the record's and the candidate's commits", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-commits-"));
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "2.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const locations = locationsFor("project", cwd);
+      const fromCommit = "a".repeat(40);
+      const toCommit = "b".repeat(40);
+      const state = await loadState(locations.extensionRoot);
+      const record = state.marketplaces.mp?.plugins.hello;
+      assert.ok(record !== undefined);
+      record.resolvedSha = fromCommit;
+      await saveState(locations.extensionRoot, state);
+      const prepared = await preparePluginUpdate({
+        policy: UPDATE_POLICY,
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        locations,
+        cleanupClones: () => Promise.resolve(),
+      });
+      assert.ok(!("partition" in prepared));
+      // The candidate's sha, as a git source's clone would report it.
+      const preflight = { ...prepared, resolvedSha: toCommit };
+
+      // act
+      const outcome = await swapPluginUpdate(
+        {
+          plugin: "hello",
+          marketplace: "mp",
+          scope: "project",
+          cwd,
+          locations,
+          hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+          completionCache: createCompletionCache(),
+          env: {},
+          cascade: true,
+          cleanupClones: () => Promise.resolve(),
+        },
+        preflight,
+        UPDATE_POLICY,
+      );
+
+      // assert
+      assert.ok(outcome.partition === "updated");
+      assert.deepStrictEqual(
+        { fromCommit: outcome.fromCommit, toCommit: outcome.toCommit },
+        { fromCommit, toCommit },
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

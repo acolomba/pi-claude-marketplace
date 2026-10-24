@@ -22,6 +22,7 @@ import {
   type PluginPathSkippedSurface,
   type PluginSkippedMessage,
   type PluginUninstallSkippedMessage,
+  type PluginUpdatedMessage,
   type PluginUpdateSkippedMessage,
   type PluginStatus,
   type Reason,
@@ -33,6 +34,7 @@ import {
   type StopOverrideCapSurface,
   type UsageErrorSurface,
   type UsageInfoSurface,
+  type VersionCommits,
   type WithPlugins,
 } from "../../extensions/pi-claude-marketplace/shared/notification-types.ts";
 
@@ -302,6 +304,18 @@ const severity: Severity = "warning";
 void pluginStatusIsExhaustive;
 void marketplaceStatusIsExhaustive;
 void notificationKindIsExhaustive;
+void ({
+  status: "updated",
+  name: "ghp",
+  from: "1.0.0",
+  to: "1.0.0",
+  commits: { from: "a".repeat(40), to: "b".repeat(40) },
+  dependencies: [],
+  severity: "info",
+  needsReload: true,
+} satisfies PluginUpdatedMessage);
+// @ts-expect-error UPR-02: the commits travel together, so one side alone is no VersionCommits
+void ({ from: "a".repeat(40) } satisfies VersionCommits);
 void ({ kind: "prune-empty", scope: "user" } satisfies NotificationMessage);
 // @ts-expect-error a prune empty result must name its selected scope
 void ({ kind: "prune-empty" } satisfies NotificationMessage);

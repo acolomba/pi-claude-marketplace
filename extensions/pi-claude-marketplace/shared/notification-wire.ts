@@ -290,6 +290,8 @@ const PLUGIN_ROW = Type.Object(
     version: Type.Optional(Type.String()),
     from: Type.Optional(Type.String()),
     to: Type.Optional(Type.String()),
+    fromCommit: Type.Optional(Type.String()),
+    toCommit: Type.Optional(Type.String()),
     scope: Type.Optional(SCOPE),
     description: Type.Optional(Type.String()),
     partial: Type.Optional(Type.Boolean()),

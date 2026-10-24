@@ -383,6 +383,8 @@ interface ExpectedRow {
   readonly version?: string;
   readonly from?: string;
   readonly to?: string;
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
   readonly scope?: Scope;
   readonly description?: string;
   readonly partial?: boolean;
@@ -753,6 +755,54 @@ for (const [status, { row, expected }] of Object.entries(STATUS_CASES)) {
     );
   });
 }
+
+test("UPR-02: an updated row with commits carries them whole as fromCommit and toCommit", () => {
+  // arrange
+  const fromCommit = "a".repeat(40);
+  const toCommit = "b".repeat(40);
+  const row: ResolvedRow = {
+    status: "updated",
+    name: "ghp",
+    severity: "info",
+    needsReload: true,
+    reasons: [],
+    from: "1.0.0",
+    to: "1.0.0",
+    commits: { from: fromCommit, to: toCommit },
+  };
+  const presentation = presentationOf([{ name: "mp", scope: "user", plugins: [row] }]);
+
+  // act
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    payload,
+    expectedInfoPayload([
+      {
+        name: "mp",
+        scope: "user",
+        plugins: [
+          {
+            status: "updated",
+            name: "ghp",
+            id: "ghp@mp",
+            reasons: [],
+            from: "1.0.0",
+            to: "1.0.0",
+            fromCommit,
+            toCommit,
+            scope: "user",
+          },
+        ],
+      },
+    ]),
+  );
+});
 
 for (const { title, envelope, expectedEnvelope } of [
   {

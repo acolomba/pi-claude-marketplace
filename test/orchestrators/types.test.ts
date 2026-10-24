@@ -13,6 +13,7 @@ import type {
   ReinstallPluginOutcome,
   ReinstallReinstalledOutcome,
   ReinstallSkippedOutcome,
+  RevisionMove,
   UpdatePhaseBridge,
   UpdatePhaseFailure,
 } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
@@ -364,6 +365,29 @@ void ({
   stagedMcpServerNames: [],
   version: "1.0.0",
 } satisfies ReinstallReinstalledOutcome);
+
+void ({
+  constraint: undefined,
+  declaresAgents: false,
+  declaresMcp: false,
+  declaresWorkflows: false,
+  fromCommit: "a".repeat(40),
+  fromVersion: "1.0.0",
+  name: "alpha",
+  partition: "updated",
+  stagedAgentNames: [],
+  stagedMcpServerNames: [],
+  toCommit: "b".repeat(40),
+  toVersion: "1.0.0",
+} satisfies PluginUpdateUpdatedOutcome);
+// UPR-02: each side's commit is optional on its own; a path source has none.
+void ({
+  fromVersion: "1.0.0",
+  toVersion: "1.0.0",
+  toCommit: "b".repeat(40),
+} satisfies RevisionMove);
+// @ts-expect-error a revision move always names both versions
+void ({ fromVersion: "1.0.0", fromCommit: "a".repeat(40) } satisfies RevisionMove);
 
 // @ts-expect-error an update outcome always carries its partition discriminant
 void ({ declaresAgents: false, declaresMcp: false, name: "alpha" } satisfies PluginUpdateOutcome);

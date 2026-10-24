@@ -406,12 +406,25 @@ export interface PluginInstalledMessage extends TransitionMessageBase {
   readonly description?: string;
 }
 
+/**
+ * UPR-02: the commit on each side of a move whose version did not change. Both
+ * are full commit shas; the text form shortens each to 7 hex characters and
+ * the wire carries them whole. Both sides travel together or the whole
+ * sub-object is absent, so no row can draw a half-annotated arrow.
+ */
+export interface VersionCommits {
+  readonly from: string;
+  readonly to: string;
+}
+
 /** Updated plugin row. */
 export interface PluginUpdatedMessage extends TransitionMessageBase {
   readonly status: "updated";
   readonly name: string;
   readonly from: string;
   readonly to: string;
+  /** UPR-02: present only when the producer decided the arrow names commits. */
+  readonly commits?: VersionCommits;
   readonly dependencies: readonly Dependency[];
   readonly scope?: Scope;
   readonly reasons?: readonly ContentReason[];

@@ -29,6 +29,7 @@ import type {
   PruneEmptyMessage,
   Reason,
   Severity,
+  VersionCommits,
 } from "./notification-types.ts";
 import type { Scope } from "./types.ts";
 
@@ -359,8 +360,21 @@ function renderScopeBracket(pluginScope: Scope | undefined, mpScope: Scope): str
   return `[${pluginScope}]`;
 }
 
-function composeVersionArrow(from: string, to: string): string {
-  return `${renderVersion(from)} → ${renderVersion(to)}`;
+/**
+ * The `from → to` version slot. UPR-02: when the row carries `commits`, each
+ * side's version is followed by its commit's first 7 characters in
+ * parentheses. The producer decides whether a row carries them.
+ */
+function composeVersionArrow(from: string, to: string, commits?: VersionCommits): string {
+  if (commits === undefined) {
+    return `${renderVersion(from)} → ${renderVersion(to)}`;
+  }
+
+  return `${renderVersion(from)} (${shortCommit(commits.from)}) → ${renderVersion(to)} (${shortCommit(commits.to)})`;
+}
+
+function shortCommit(commit: string): string {
+  return commit.slice(0, 7);
 }
 
 /**
@@ -425,7 +439,7 @@ function formatPluginRow(row: ResolvedRow, mpScope: Scope): string {
   } else if (layout.version === "arrow") {
     // Only the updated layout selects the from/to version slot.
     const updated = row as ResolvedRow<PluginUpdatedMessage>;
-    version = composeVersionArrow(updated.from, updated.to);
+    version = composeVersionArrow(updated.from, updated.to, updated.commits);
   }
 
   const status =

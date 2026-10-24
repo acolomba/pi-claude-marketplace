@@ -9,7 +9,12 @@ import {
 import type {
   PluginUpdateSkippedOutcome,
   PluginUpdateUnchangedOutcome,
+  PluginUpdateUpdatedOutcome,
+  RevisionMove,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
+
+const COMMIT_A = "a".repeat(40);
+const COMMIT_B = "b".repeat(40);
 
 test("composes agent and MCP dependencies in declared display order", () => {
   // arrange
@@ -748,3 +753,112 @@ test("WLIF-06: the dropped-kind row raises on the stale token alone", () => {
   assert.equal(row.severity, "warning");
   assert.deepStrictEqual(row.reasons, ["unsupported component", "stale workflow command"]);
 });
+
+// A clean updated outcome over `move`, as the swap stamps it.
+function updatedOutcomeOver(move: RevisionMove): PluginUpdateUpdatedOutcome {
+  return {
+    constraint: undefined,
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    name: "ghp",
+    partition: "updated",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    ...move,
+  };
+}
+
+test("UPR-02: an updated row at the same version names the moved commits", () => {
+  // arrange
+  const outcome = updatedOutcomeOver({
+    fromVersion: "1.0.0",
+    toVersion: "1.0.0",
+    fromCommit: COMMIT_A,
+    toCommit: COMMIT_B,
+  });
+  const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
+
+  // act
+  const row = updatedRowFromOutcome(outcome, "project", severity);
+
+  // assert
+  assert.deepStrictEqual(row, {
+    commits: { from: COMMIT_A, to: COMMIT_B },
+    dependencies: [],
+    from: "1.0.0",
+    name: "ghp",
+    needsReload: true,
+    scope: "project",
+    severity: "info",
+    status: "updated",
+    to: "1.0.0",
+  });
+});
+
+const PLAIN_ARROW_MOVES: readonly { readonly title: string; readonly move: RevisionMove }[] = [
+  {
+    title: "equal commits at the same version",
+    move: { fromVersion: "1.0.0", toVersion: "1.0.0", fromCommit: COMMIT_A, toCommit: COMMIT_A },
+  },
+  {
+    title: "different commits at different versions",
+    move: { fromVersion: "1.0.0", toVersion: "1.1.0", fromCommit: COMMIT_A, toCommit: COMMIT_B },
+  },
+  {
+    title: "a commit on the record side only",
+    move: { fromVersion: "1.0.0", toVersion: "1.0.0", fromCommit: COMMIT_A },
+  },
+  {
+    title: "a commit on the candidate side only",
+    move: { fromVersion: "1.0.0", toVersion: "1.0.0", toCommit: COMMIT_B },
+  },
+  {
+    title: "a path source with no commits",
+    move: { fromVersion: "1.0.0", toVersion: "1.0.0" },
+  },
+  {
+    title: "equal sha- versions from one commit",
+    move: {
+      fromVersion: "sha-aaaaaaaaaaaa",
+      toVersion: "sha-aaaaaaaaaaaa",
+      fromCommit: COMMIT_A,
+      toCommit: COMMIT_A,
+    },
+  },
+  {
+    title: "different sha- versions",
+    move: {
+      fromVersion: "sha-aaaaaaaaaaaa",
+      toVersion: "sha-bbbbbbbbbbbb",
+      fromCommit: COMMIT_A,
+      toCommit: COMMIT_B,
+    },
+  },
+  {
+    title: "hash- versions, which carry no commit",
+    move: { fromVersion: "hash-aaaaaaaaaaaa", toVersion: "hash-bbbbbbbbbbbb" },
+  },
+];
+
+for (const { title, move } of PLAIN_ARROW_MOVES) {
+  test(`UPR-02 / NREG-01: an updated row over ${title} names no commits`, () => {
+    // arrange
+    const severity = { partiallyInstalled: "info" as const, updated: "info" as const };
+
+    // act
+    const row = updatedRowFromOutcome(updatedOutcomeOver(move), "project", severity);
+
+    // assert
+    assert.deepStrictEqual(row, {
+      dependencies: [],
+      from: move.fromVersion,
+      name: "ghp",
+      needsReload: true,
+      scope: "project",
+      severity: "info",
+      status: "updated",
+      to: move.toVersion,
+    });
+  });
+}

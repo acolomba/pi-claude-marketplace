@@ -24,6 +24,7 @@ import type {
   PluginStatus,
   RenderedMcpConfigNotice,
   RetainedWorkflowStaging,
+  VersionCommits,
 } from "./notification-types.ts";
 import type { CASCADE_PAYLOAD_SCHEMA, NOTIFICATION_PAYLOAD_SCHEMA } from "./notification-wire.ts";
 import type { Scope } from "./types.ts";
@@ -611,6 +612,8 @@ function wireVersion(row: ResolvedRow): {
   readonly version?: string;
   readonly from?: string;
   readonly to?: string;
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
 } {
   switch (row.status) {
     case "installed":
@@ -629,7 +632,7 @@ function wireVersion(row: ResolvedRow): {
     case "will uninstall":
       return versionField(row.version);
     case "updated":
-      return { from: row.from, to: row.to };
+      return { from: row.from, to: row.to, ...commitFields(row.commits) };
     case "manual recovery":
     case "will install":
     case "will enable":
@@ -640,6 +643,14 @@ function wireVersion(row: ResolvedRow): {
 
 function versionField(version: string | undefined): { readonly version?: string } {
   return version === undefined ? {} : { version };
+}
+
+/** UPR-02: the full commits of a same-version move, absent when the row has none. */
+function commitFields(commits: VersionCommits | undefined): {
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
+} {
+  return commits === undefined ? {} : { fromCommit: commits.from, toCommit: commits.to };
 }
 
 /** D-11: the serialized failure detail resolve set on a row. */

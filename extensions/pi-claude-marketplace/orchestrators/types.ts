@@ -251,6 +251,18 @@ export interface UpdatePhaseFailure {
   readonly cleanupFailures?: readonly CleanupFailure[];
 }
 
+/**
+ * UPR-02 / UPR-03: the revisions a materialization moves between, read by the
+ * row composers. Each commit is optional on its own: a path source records
+ * none, and a switch between source kinds has one on one side only.
+ */
+export interface RevisionMove {
+  readonly fromVersion: string;
+  readonly toVersion: string;
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
+}
+
 export interface PluginUpdateBase {
   readonly name: string;
   /**
@@ -290,6 +302,15 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
   readonly partition: "updated";
   readonly fromVersion: string;
   readonly toVersion: string;
+  /**
+   * UPR-02: the full sha of the record the preflight read and of the
+   * candidate, each omitted when that side has none (a path source, or a
+   * record written before commits were recorded), so a path update's outcome
+   * shape is unchanged (NREG-01). The row composer decides whether a row
+   * shows them.
+   */
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
   /**
    * D-99-02c: generated NAMES, spelled apart from the same-subject presence
    * flags on `LedgerDegradationSignals` (`plugin/shared.ts`). While both

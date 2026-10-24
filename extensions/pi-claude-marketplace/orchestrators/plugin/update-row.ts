@@ -22,6 +22,7 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type PluginPartiallyInstalledMessage,
   type PluginUpdatedMessage,
+  type VersionCommits,
 } from "../../shared/notification-types.ts";
 import { malformedReasonsForKinds } from "../../shared/notify-reasons.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
@@ -32,6 +33,7 @@ import type {
   PluginUpdateSkippedOutcome,
   PluginUpdateUnchangedOutcome,
   PluginUpdateUpdatedOutcome,
+  RevisionMove,
 } from "../types.ts";
 
 /**
@@ -165,6 +167,7 @@ export function updatedRowFromOutcome(
     scope: rowScope,
     from: outcome.fromVersion,
     to: outcome.toVersion,
+    ...withCommits(revisionCommits(outcome)),
     dependencies,
     // Optional spread, not a required key: an unaffected row renders the legacy
     // brace-less bytes because the key is ABSENT, not `undefined` (NREG-01).
@@ -178,6 +181,37 @@ export function updatedRowFromOutcome(
     severity: raised ? "warning" : baseSeverity.updated,
     needsReload: true,
   };
+}
+
+/**
+ * UPR-02: the commits a row names, or `undefined` when its arrow stays plain.
+ * A row names them only when the version did not move, both sides carry a
+ * commit, and the commits differ -- the one case where the version arrow alone
+ * reads as a no-op. Consequences:
+ *
+ *  - a path source records no commit, so its row never names one;
+ *  - a switch between a git and a path source, or a record written before
+ *    commits were recorded, has a commit on one side only and names none;
+ *  - equal `sha-` versions come from one commit prefix, and different ones
+ *    already differ in the version, so a `sha-` row never names a second sha.
+ */
+function revisionCommits(move: RevisionMove): VersionCommits | undefined {
+  const { fromVersion, toVersion, fromCommit, toCommit } = move;
+  if (
+    fromVersion !== toVersion ||
+    fromCommit === undefined ||
+    toCommit === undefined ||
+    fromCommit === toCommit
+  ) {
+    return undefined;
+  }
+
+  return { from: fromCommit, to: toCommit };
+}
+
+// NREG-01: an arrow without commits keeps the key absent, not `undefined`.
+function withCommits(commits: VersionCommits | undefined): { readonly commits?: VersionCommits } {
+  return commits === undefined ? {} : { commits };
 }
 
 /**

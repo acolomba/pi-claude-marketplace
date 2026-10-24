@@ -1460,6 +1460,7 @@ export async function swapPluginUpdate(
     name: plugin,
     fromVersion,
     toVersion,
+    ...revisionCommitFields(preflight),
     stagedAgentNames,
     stagedMcpServerNames,
     declaresAgents: stagedAgentNames.length > 0,
@@ -1507,6 +1508,23 @@ export async function swapPluginUpdate(
     // AFILE-04: same NREG-01 spread rule; the caller that renders the row
     // routes these through `notifyMcpConfigNotices`.
     ...(mcpConfigNotices.length > 0 && { mcpConfigNotices }),
+  };
+}
+
+/**
+ * UPR-02: the record's and the candidate's commits, each key present exactly
+ * when its side has a sha (NREG-01). Extracted so the success-outcome body
+ * gains no branch.
+ */
+function revisionCommitFields(preflight: PreparedPluginUpdate): {
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
+} {
+  const fromCommit = preflight.record.resolvedSha;
+  const toCommit = preflight.resolvedSha;
+  return {
+    ...(fromCommit !== undefined && { fromCommit }),
+    ...(toCommit !== undefined && { toCommit }),
   };
 }
 
