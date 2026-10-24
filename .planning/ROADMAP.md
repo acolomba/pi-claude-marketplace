@@ -140,7 +140,7 @@ Step module paths are relative to `features/step_definitions/`.
 - [x] **Phase 26: Git Mirror Access** — Mirror refreshes take the state lock, one copy helper serves all clones, and a cold `info --fetch` contacts the host once
 - [x] **Phase 27: Install and Reconcile Reason Residue** — Dependency ranges read as upstream, pinned-commit failures read cleanly, reconcile and import narrow reasons like install, and marketplace remove ignores disabled holders
 - [x] **Phase 28: Delisted Plugin Dependency Walk** — A plugin its marketplace no longer lists keeps its dependencies from its installed copy, so it no longer blocks the scope's dependency walk
-- [ ] **Phase 29: Load Converges on the Catalog** — A load moves every plugin to its marketplace catalog's version, offline, and reports what it could not move
+- [ ] **Phase 29: Apply Command and Read-Only Reload** — A new `apply` makes every pending change and converges plugins on the catalog version; `/reload` only reloads resources and prints what is pending
 
 ## Phase Details
 
@@ -593,20 +593,21 @@ Plans:
 4. A delisted plugin whose installed copy is unreadable still fails the walk closed with `{unreadable}` (D-17).
 5. `npm run check` stays green.
 
-### Phase 29: Load Converges on the Catalog
+### Phase 29: Apply Command and Read-Only Reload
 
-**Goal:** A load applies the desired state against one internally consistent catalog version per marketplace.
+**Goal:** Changing installation state is always an explicit command: `apply` reaches the desired state, and a load only reloads resources and reports what is pending.
 **Depends on:** Phase 28
-**Decision:** 2026-10-24 (user): load converges every installed plugin on its marketplace's catalog version, so plugin versions stay internally consistent; this replaces the narrower "backfill reinstalls partial plugins" behavior and the silent retry (phase 18 WR-05). Divergence from Claude Code, which keeps installed versions until `update` or marketplace autoupdate: record it with a decision ID. Uncached git targets stay put and read `upgradable` (option b), so a load stays network-free (NFR-5).
-**Requirements:** CAT-01, CAT-02, CAT-03, CAT-04
-**Files:** `orchestrators/reconcile/plan.ts`, `apply.ts`, `backfill.ts`, `notify.ts`, `orchestrators/plugin/materialize-latest.ts`, `update-constraint-gate.ts`, `orchestrators/reconcile/pending.ts`; `features/plugin/pending.feature`, `features/plugin/reconcile*.feature`, `features/plugin/update.feature`.
+**Decision:** 2026-10-24 (user), superseding the same day's "load converges on the catalog": a load (`/reload`, session start) changes no installation state; on a mismatch it prints `pending`'s block and advises `/claude:plugin apply`. `apply` makes every change `pending` lists, converges installed plugins on their marketplace's catalog version (including the partial-plugin backfill), may clone on cache miss, and then suggests `/reload`. Marketplace autoupdate at session start refreshes marketplaces only. Amends NFR-2 ("`/reload` must suffice" becomes "`apply`, then `/reload`"); record both as decision IDs, with the Claude Code comparison.
+**Requirements:** APL-01, APL-02, APL-03, APL-04
+**Files:** `orchestrators/reconcile/*` (`plan.ts`, `apply.ts`, `backfill.ts`, `notify.ts`, `pending.ts`), `index.ts` (`resources_discover`, `session_start`), `orchestrators/marketplace/autoupdate.ts`, a new edge handler and router entry for `apply`, help, completions, `docs/output-catalog.md`, `docs/json-output.md`; `features/plugin/pending.feature`, `features/plugin/reconcile*.feature`, a new `features/plugin/apply.feature`.
 **Success Criteria** (what must be TRUE):
 
-1. After `marketplace update` moves a path-source and a cached git-source plugin, `/reload` installs both at the catalog version; a second `/reload` writes nothing (CAT-01).
-2. A git-source plugin whose new commit is not cached stays at its version, reads `upgradable`, and the load makes no network request (CAT-02).
-3. A range-blocked plugin and a plugin whose new version drops components stay put with a warning row and appear in `pending`; the next load does not retry silently (CAT-03).
-4. A partially installed plugin whose components became supported is made whole by the same convergence, and `pending` previews every move (CAT-04).
-5. `npm run check` stays green.
+1. `apply` makes every change `pending` listed, then `pending` lists nothing; `apply` with nothing pending reports so and writes nothing (APL-01).
+2. After `marketplace update` moves a path-source and a git-source plugin, `apply` installs both at the catalog version; a range-blocked move and a consent-needing partial move stay put with warning rows and remain in `pending` (APL-02).
+3. `/reload` after hand-editing the config changes no state and prints `pending`'s block with the `apply` trailer; `/reload` with nothing pending prints nothing (APL-03).
+4. Session start with an autoupdate marketplace refreshes it and reports its plugin moves as pending, without applying them (APL-03).
+5. `pending`, help, completions and the docs name `apply` (APL-04).
+6. `npm run check` stays green.
 
 ## Progress
 
@@ -640,7 +641,7 @@ Plans:
 | 26. Git Mirror Access | 1/1 | Complete    | 2026-10-23 |
 | 27. Install and Reconcile Reason Residue | 1/1 | Complete    | 2026-10-23 |
 | 28. Delisted Plugin Dependency Walk | 1/1 | Complete    | 2026-10-24 |
-| 29. Load Converges on the Catalog | 0/TBD | Not started | - |
+| 29. Apply Command and Read-Only Reload | 0/TBD | Not started | - |
 
 ## Carried Forward
 
