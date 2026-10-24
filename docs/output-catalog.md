@@ -139,7 +139,7 @@ The table below holds ONE row per member of the 20-member `PLUGIN_STATUSES` tupl
 | ------------------------ | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `(installed)`            | ●    | Plugin row -- `list` (steady-state inventory), install, import cascade, reinstall (rare), update (rare). On the list surface the same token is the steady-state inventory row; it does not trigger the reload-hint per SNM-15 / G-21-01, while the install/cascade transition does.                                                                                                                                                                                                                                                                                                                                                                                |
 | `(partially-installed)`  | ◉    | Plugin row -- list / info inventory surfaces AND the install / update / enable success cascades for a recorded-installed plugin that currently re-resolves `partially-available` (FSTAT-02 / D-66-03). DERIVED, never persisted. Carries the dropped-component kinds in the brace; the success rows also thread `dependencies`, so the soft-dep markers can follow the kinds in the same brace.                                                                                                                                                                                                                                                                    |
-| `(updated)`              | ●    | Plugin row -- update cascade; carries `v<from> → v<to>` version arrow.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| `(updated)`              | ●    | Plugin row -- update cascade, and `apply`'s catalog move (D-08); carries `v<from> → v<to>` version arrow.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
 | `(reinstalled)`          | ●    | Plugin row -- reinstall cascade.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | `(uninstalled)`          | ○    | Plugin row -- uninstall single-plugin, marketplace-remove partial success rows. It admits up to two tokens: the data-disposition marker `{data kept}`, stamped by `uninstall --keep-data` (DATA-01 / WR-06) on any `(uninstalled)` row; and `{dependency pruned}` (D-05-11 / PRUNE-04), stamped only on a dependency record `uninstall --prune` swept out after the named plugin, ordered before `{data kept}` when both apply (`{dependency pruned, data kept}`). A bare row means the plugin's data directory went with it and, for the named plugin's own row, that no pruning happened. `marketplace remove` has no such opt-out, so its rows are always bare. |
 | `(available)`            | ○    | Plugin row -- `marketplace list` / plugin-list surface (no scope bracket per MSG-PL-6 / SNM-11). It admits exactly one entry-derived token, the author-declared `{installs disabled}` install-time-state marker, answered from the marketplace entry in the cached manifest and never from the plugin's own `plugin.json`, which this path declines to fetch (OUT-02 / OUT-05).                                                                                                                                                                                                                                                                                    |
@@ -3740,7 +3740,7 @@ ______________________________________________________________________
 
 ## `/claude:plugin apply`
 
-APL-01 / D-07 / D-08: `apply` runs the reconcile apply step for the selected scopes, project first, and makes the changes `/claude:plugin pending` lists. Its change rows are the `reconcile-applied-cascade` states below. With nothing to change it emits the standalone advisory in this section and writes nothing: `state.json` and both configs keep their bytes and modification times.
+APL-01 / APL-02 / D-07 / D-08: `apply` runs the reconcile apply step for the selected scopes, project first, and makes the changes `/claude:plugin pending` lists. After its plan it converges each installed plugin on the catalog: it moves a plugin the catalog offers at another revision, and keeps a move a dependent's range or a missing consent blocks. Its change rows are the `reconcile-applied-cascade` states below. With nothing to change it emits the standalone advisory in this section and writes nothing: `state.json` and both configs keep their bytes and modification times.
 
 ### Nothing to change
 
@@ -3756,7 +3756,7 @@ ______________________________________________________________________
 
 ## reconcile-applied-cascade
 
-RECON-04 / D-08: `/claude:plugin apply`'s report of what it changed, emitted by `applyReconcile` after a pass that performed at least one apply action OR carried at least one invalid-config / source-mismatch row. A load emits this kind only for its per-session warnings (the `{not in manifest}` row and the unreadable declarer, D-18) and for a scope it cannot read (a corrupt `state.json`, a held lock), and those rows never reload. A load reports an invalid config and a source mismatch in the pending block instead (see `/claude:plugin pending`). Wraps the same per-status `MarketplaceNotificationMessage[]` shape the cascade arm carries -- realized transition tokens (`added` / `removed` / `installed` / `uninstalled` / `disabled` / `failed`) reused per RESEARCH Pattern 5 Option A -- so the rendered bytes match each token's standalone-command counterpart. OUT-03/OUT-06/D-03/D-04: a reconcile apply is a plural mixed-subject operation, so a trailing per-operation tally (`Reconcile: <n> failure(s), <n> warning(s), <n> success(es)`) follows the rows, counting all marketplace + plugin rows uniformly under the `Reconcile` operation name. RLD-02 / D-08: the `/reload to pick up changes` trailer follows the tally whenever a row stamps a reload (a realized install, uninstall, enable, or disable), because the running session has not loaded what `apply` changed. A report whose rows only failed or warned carries no trailer. An empty-and-clean load is silent (no notify, D-05); an empty-and-clean `apply` emits the advisory in the `/claude:plugin apply` section instead (D-08).
+RECON-04 / D-08: `/claude:plugin apply`'s report of what it changed, emitted by `applyReconcile` after a pass that performed at least one apply action OR carried at least one invalid-config / source-mismatch row. A load emits this kind only for its per-session warnings (the `{not in manifest}` row and the unreadable declarer, D-18) and for a scope it cannot read (a corrupt `state.json`, a held lock), and those rows never reload. A load reports an invalid config and a source mismatch in the pending block instead (see `/claude:plugin pending`). Wraps the same per-status `MarketplaceNotificationMessage[]` shape the cascade arm carries -- realized transition tokens (`added` / `removed` / `installed` / `uninstalled` / `disabled` / `updated` / `failed`) reused per RESEARCH Pattern 5 Option A -- so the rendered bytes match each token's standalone-command counterpart. A catalog move `apply` keeps in place shows the row `pending` lists for it, `(skipped) {dependents constrain}` or `(partially-upgradable)` (D-12). OUT-03/OUT-06/D-03/D-04: a reconcile apply is a plural mixed-subject operation, so a trailing per-operation tally (`Reconcile: <n> failure(s), <n> warning(s), <n> success(es)`) follows the rows, counting all marketplace + plugin rows uniformly under the `Reconcile` operation name. RLD-02 / D-08: the `/reload to pick up changes` trailer follows the tally whenever a row stamps a reload (a realized install, uninstall, enable, disable, or catalog move), because the running session has not loaded what `apply` changed. A report whose rows only failed or warned carries no trailer. An empty-and-clean load is silent (no notify, D-05); an empty-and-clean `apply` emits the advisory in the `/claude:plugin apply` section instead (D-08).
 
 ### Success cascade -- mixed marketplace add + plugin install across both scopes
 
@@ -4113,6 +4113,71 @@ A plugin operation has failed.
     cause: Dependency "b@beta", declared by "a@alpha", is from marketplace "beta", which root marketplace "alpha" does not allow. Install "b@beta" manually first, or add "beta" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "alpha".
 
 Reconcile: 1 failure, 1 warning
+
+/reload to pick up changes
+```
+
+### Apply moved a plugin to the version its catalog offers (APL-02 / D-08 / D-26)
+
+After its plan, `apply` runs the planner `pending` uses over each scope it changed and moves every enabled record whose catalog candidate has another version, commit or plugin root. The move runs the runner `update` uses, not reinstall: the plugin data directory and the agent files a user edited are kept, a present git mirror is read without a fetch, and only a cache miss clones (D-11, D-26). The catalog chooses the version and no release tag is searched (D-23), so the row carries no range disclosure. A record already installed partial moves with `--partial`'s consent and reports `(partially-installed)` when a kind drops. Severity `info`; the reload trailer, because the running session has not loaded the new version (D-08).
+
+<!-- catalog-state: apply-updated -->
+
+```text
+● mp [project]
+  ● demo v1.0.0 → v1.1.0 (updated)
+
+Reconcile: 1 success
+
+/reload to pick up changes
+```
+
+### Apply kept a move a dependent's range holds (APL-02 / D-12)
+
+A catalog move whose version a dependent's declared range does not admit stays put. `apply` reports the row `pending` lists for it, `update`'s range-hold row, and `pending` keeps listing it (D-12). No runner runs for it, so nothing is written. Severity `warning`; summary line prepended; no reload-hint.
+
+<!-- catalog-state: apply-update-held -->
+
+```text
+A plugin operation needs attention.
+
+● mp [project]
+  ⊘ lib v1.0.0 (skipped) {dependents constrain}
+    cause: version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"
+
+Reconcile: 1 warning
+```
+
+### Apply kept a move that needs consent (APL-02 / D-12 / D-24)
+
+A clean record whose catalog candidate resolves `partially-available` stays put, because the move would drop components without consent (WCONV-01). `apply` reports the decline row `pending` lists, with the hint naming the per-plugin consent command, since `apply` takes no `--partial` (D-24). Severity `warning`; summary line prepended; no reload-hint.
+
+<!-- catalog-state: apply-update-partial-consent -->
+
+```text
+A plugin operation needs attention.
+
+● mp [project]
+  ● demo v1.0.0 (partially-upgradable) {unsupported component}
+    Run update --partial on this plugin to update it with the supported components.
+
+Reconcile: 1 warning
+```
+
+### Apply could not materialize a move (APL-02 / D-13)
+
+A move that fails while it materializes, such as a source file `apply` cannot read, reports `(failed)` with its closed-set reason and the move it attempted, never the raw error text (T-55-02-02). The record keeps its version, and the next move still runs. `apply` is safe to retry: the next run plans the same move again (NFR-3). Severity `error`; summary line prepended; the realized move beside it brings the reload trailer.
+
+<!-- catalog-state: apply-update-failed -->
+
+```text
+A plugin operation has failed.
+
+● mp [project]
+  ⊘ alpha v1.0.0 → v1.1.0 (failed) {permission denied}
+  ● beta v1.0.0 → v1.1.0 (updated)
+
+Reconcile: 1 failure, 1 success
 
 /reload to pick up changes
 ```
