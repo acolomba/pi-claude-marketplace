@@ -1,37 +1,31 @@
-# Phase 29: Load Converges on the Catalog - Context
+# Phase 29: Apply Command and Read-Only Reload - Context
 
-**Gathered:** 2026-10-24
+**Gathered:** 2026-10-24 (revised the same day)
 **Status:** Ready for planning
-**Mode:** autonomous smart discuss (`--auto`); the orchestrating session relayed the user's 2026-10-24 decision and asked for a run without prompts, so every recommended answer below was taken without a prompt.
+**Mode:** autonomous smart discuss (`--auto`). The orchestrating session relayed the user's 2026-10-24 decision and asked for a run without prompts, so every recommended answer below was taken without a prompt. This revision supersedes the first version of this file (decision CAT-D1, "load converges on the catalog"), which is withdrawn.
 
 <domain>
 ## Phase Boundary
 
-CAT-01..04: a load (`/reload`, session start) applies the desired state
-against one internally consistent catalog version per marketplace. Every
-enabled installed plugin whose recorded revision differs from what its
-marketplace's catalog on disk offers moves to the catalog revision, offline.
-A move that cannot happen offline (an uncached git target) stays put silently
-and reads `upgradable` in `list`. A move that is blocked (a dependent's range,
-or a new version that would drop components from a clean record) stays put
-with a warning row on every load and appears in `pending`.
+APL-01..04: changing installation state is always an explicit command.
+`/claude:plugin apply` reaches the desired state. A load (`/reload`, session
+start) only reloads resources and reports what is pending.
 
-This replaces two things:
+- **Load:** no install, uninstall, enable, disable, update, reinstall or
+  backfill. Resource discovery, the hook routing table and the plugin path
+  keep running. On a mismatch the load prints the block `pending` prints,
+  with a trailer that says to run `/claude:plugin apply`. A matching state
+  prints nothing.
+- **`apply`:** makes every change `pending` lists, converges every installed
+  plugin on its marketplace's catalog version on disk (this includes the old
+  partial-plugin backfill), and ends by suggesting `/reload`.
+- **Session-start marketplace autoupdate:** refreshes marketplaces only. Their
+  plugin moves show as pending.
+- **`pending`:** advises `apply` instead of `/reload`.
 
-- the load-time backfill of partially installed plugins
-  (`orchestrators/reconcile/backfill.ts`, BFILL-01..03 / WCONV-01), which
-  phase 18 routed through `reinstall` and which only fired when the extension
-  version changed;
-- phase 18 WR-05's silent retry, where a range hold kept the backfill gate
-  open with no row.
-
-Out of scope: marketplace autoupdate (unchanged; it already moves plugins
-over the network); the `update` and `reinstall` verbs' user-visible behavior;
-disabled records (ENBL-08 stays: a load never re-materializes a plugin the
-user disabled); delisted plugins (DLS-D1 stays: no catalog entry, so no
-move, and the phase 28 `{not in manifest}` row and installed-copy dependency
-read stay as they are); UAT-02 (Pi erases reload-time rows; it stays in
-BACKLOG.md, which is why `pending` must preview everything).
+Out of scope: UAT-02 (Pi erases rows emitted during `/reload`; it stays in
+BACKLOG.md). The explicit `marketplace update` verb's own plugin cascade is
+unchanged. Only the session-start autoupdate pass changes (D-09).
 
 </domain>
 
@@ -39,157 +33,216 @@ BACKLOG.md, which is why `pending` must preview everything).
 ## Implementation Decisions
 
 ### Upstream position
-- **D-01:** Claude Code keeps an installed plugin at its cached version until
-  the user runs `/plugin marketplace update <name>` / `claude plugin update`,
-  or until background auto-update (off by default per marketplace) runs.
-  Evidence, retrieved 2026-10-24:
-  `https://code.claude.com/docs/en/plugins/host-marketplace.md` ("Keep users
-  up to date": "Without auto-update, users receive your changes when they run
-  `/plugin marketplace update <name>` in a session or `claude plugin update
-  <plugin>@<name>` in the shell"; "Bump `version` on each release: users stay
-  on their cached copy until the string changes"; "Background auto-update is
-  off for your marketplace by default"). One upstream case already converges
-  at load: a plugin loaded in place from a marketplace added from a local path
-  "loads your current files at every session start, whatever its version
-  string says" (same page, "Release a new version"; also
-  `plugin-marketplaces` "Test an edit to a plugin"). Phase 18 D-01 (binary
-  2.1.309) established that an upstream install or reinstall always takes the
-  catalog's current version. Confidence: high for the default (docs are
-  explicit); the binary grep was not repeated for this phase (a whole-binary
-  `grep -oa` with context timed out).
+- **D-01:** Claude Code separates three stages: declared (settings
+  `enabledPlugins` / `extraKnownMarketplaces`), fetched (on disk), and loaded
+  (the running session). Evidence from
+  `https://code.claude.com/docs/en/plugins/loading.md`, retrieved 2026-10-24:
+  - "Plugins load at session start from `installed_plugins.json` and the
+    cache without using the network."
+  - "Changes to settings or to disk don't reach this layer until you run
+    `/reload-plugins` or start a new session."
+  - After the session starts, a background pass clones a declared marketplace
+    that `known_marketplaces.json` lacks, "then reloads plugins and downloads
+    enabled plugins that aren't cached yet". A changed marketplace source is
+    re-fetched with "Plugins changed. Run /reload-plugins to activate."
+  - A plugin enabled only in the project's `.claude/settings.json` with an
+    external source is NOT fetched: "Plugin "<name>" is enabled in project
+    settings but isn't installed here". The user installs it by command.
+    Relative-path plugins load from the marketplace copy with no install.
+  - Background auto-update (off by default except for official marketplaces)
+    "refreshes every marketplace with auto-update on and updates the plugins
+    installed from them on disk. The running session keeps the versions it
+    loaded, and you see `Plugin updated: <name> · Run /reload-plugins to
+    apply`".
+  - `org.md` (same date): managed-settings `enabledPlugins` plugins are
+    installed "at the start of the user's next session", in the background.
+  - `host-marketplace.md` (same date): without auto-update, users get changes
+    from `/plugin marketplace update` or `claude plugin update`. "Users stay
+    on their cached copy until the string changes".
 
-### The divergence (CAT-D1)
-- **D-02 (CAT-D1, user, 2026-10-24):** a load moves every enabled installed
-  plugin to its marketplace catalog's revision on disk, so a scope never runs
-  plugins from two catalog versions of one marketplace (a dependent from the
-  new catalog beside a dependency from the old one). Upstream keeps installed
-  versions until `update` or auto-update. License: a recorded project decision
-  (this ID). It extends upstream's own in-place behavior for local-path
-  marketplaces to every source the load can serve offline, and it stays
-  inside NFR-5 (D-05). REQUIREMENTS.md CAT-01..04 and PROJECT.md decisions
-  cite CAT-D1.
+  So upstream's load itself never changes what is installed. The disk
+  changes (declared installs from user/managed settings, auto-updates) happen
+  in an automatic background pass after start, and the user activates them
+  with `/reload-plugins`. Confidence: high (explicit docs). The binary was not
+  grepped for this revision.
 
-### What counts as a move (CAT-01, CAT-04)
-- **D-03:** a recorded plugin is a move candidate when it is enabled, its
-  marketplace manifest lists it, and its offline candidate differs from the
-  record: the candidate's version, sha, or plugin root differs (phase 18
-  D-11's same-revision test), OR its supported component set strictly grew
-  (the BFILL-01 growth test, now evaluated on every load). The candidate is
-  derived by the same offline resolution `list` uses for `upgradable`
-  (`resolveListCandidate` / the one version rule), so `list`, `pending` and
-  the load agree on every plugin.
-- **D-04:** CAT-04 — the growth test and the version test are one predicate
-  in one pass; there is no separate backfill scan. `backfill.ts` as a module
-  is replaced (renamed or rewritten) by the convergence pass; its fault
-  isolation (per-plugin try/catch, per-scope `runScopeIsolated`), its RECON-04
-  already-touched dedupe, its ENBL-08 disabled filter, and its SF-01/SF-02
-  failed-row behavior carry over.
-- **D-05:** the extension-version gate (`lastReconciledExtensionVersion`,
-  D-68-01/D-68-03) no longer gates anything: a catalog can change without the
-  extension version changing, so the pass runs on every load. RECON-05 holds
-  because a load with no move candidate writes nothing (no stamp, no record
-  write, state.json mtime unchanged). The persisted field stays readable in
-  the schema (no migration); whether it is still written is the planner's
-  call, but no write may happen on a no-change load.
+### The divergence (APL-D1)
+- **D-02 (APL-D1, user, 2026-10-24):** a load changes no installation state.
+  Every install, uninstall, enable, disable, update, reinstall and backfill
+  that the declared config or the catalog implies waits for an explicit
+  `/claude:plugin apply`. Upstream matches the read-only load. It diverges in
+  two places:
+  - Upstream installs declared user/managed-settings plugins and auto-updates
+    in an unattended background pass. Pi does neither until `apply` runs.
+  - Upstream `/reload-plugins` activates what is on disk. Pi's `apply` writes
+    the disk, and `/reload` activates.
 
-### Network (CAT-02, NFR-5)
-- **D-06 (option b):** the load makes no network request. A git-source
-  candidate whose target commit is not already in the scope's cache (mirror
-  or per-commit copy) is not a move: the plugin stays at its version, the
-  load emits no row for it, `pending` lists no move for it, and `list` reads
-  `upgradable` for it (where the catalog shows a different target offline,
-  e.g. a sha/ref pin or a version that differs from the record). `update`
-  fetches it. The shared runner gets whatever policy knob it needs so a load
-  never clones a missing mirror and never refreshes one (today
-  `refreshSource: false` still clones a missing mirror).
-- **D-07:** the dependency-constraint gate runs offline at load: it never
-  lists a dependency repository's tags (D-03-03's network read is for the
-  verbs). A candidate a dependent's range does not admit is blocked (D-09);
-  the load does not look for an admitting tag.
+  License: a recorded project decision (this ID). It also covers Pi's own
+  extra: `apply` converges installed plugins on the catalog version
+  (APL-02), which upstream only does through `update` or auto-update.
+- **D-03 (APL-D2, user, 2026-10-24):** NFR-2 is amended. "`Run /reload` must
+  suffice" becomes "`/claude:plugin apply`, then `/reload`, must suffice". No
+  fix may require a Pi process restart. AGENTS.md (Constraints, Recovery
+  model) and `.planning/PROJECT.md` carry the amended wording, done in this
+  discuss commit. REQUIREMENTS.md's NFR-2 text, if it carries one, follows in
+  the plan.
 
-### One catalog version (CAT-01)
-- **D-08:** ranges are judged against the scope as it will stand after the
-  load: a dependent that also moves this load is judged by the declarations
-  of its catalog candidate, a dependent that stays (blocked, uncached,
-  disabled, delisted) by its recorded or installed-copy declarations (DLS-D1).
-  So when a catalog bumps a dependency and widens its dependent's range
-  together, both move. The ordering or fixed-point that achieves this is the
-  planner's call; the result must be deterministic and identical between the
-  load and `pending`.
+### Load (APL-03)
+- **D-04:** at load, the reconcile apply step (`applyPlan`'s installs,
+  uninstalls, enables, disables, dependency-disables) and the backfill pass
+  stop running. What keeps running:
+  - resource discovery (`aggregateDiscoveredResources`)
+  - the hook routing rebuild
+  - `recomputePluginPath`
+  - the phase 28 delisted `{not in manifest}` warning (DLS-D1 kept)
+  - the load-time format migrations that change no installed set: MIG-01
+    first-run config migration, the `mcp.json` -> `mcp-adapter.json` move
+    (mcp-migration), and the legacy state migration
 
-### Blocked moves (CAT-03)
-- **D-09:** two block reasons, each a warning row on every load (no silent
-  retry; WR-05's silent gate-open is gone):
-  - a dependent's range does not admit the candidate: the update verb's
-    range-hold row shape, `(skipped) {dependents constrain}` at `warning`;
+  The planner confirms each migration against "changes no installation
+  state". Any doubt goes to the deferred list rather than being dropped.
+- **D-05:** on a mismatch, the load emits one block: the same composer and
+  rows `pending` uses, with the reload's own trailer `Run /claude:plugin
+  apply to apply these changes.` (exact wording is the planner's call, within
+  `docs/output-catalog.md`'s grammar). It sends no `Run /reload` hint, since
+  nothing changed. A matching state emits nothing (RECON-05 also holds: a load
+  writes nothing to state.json). The rows the load used to emit for applied
+  transitions (`reconcile-applied-cascade`) are no longer emitted at load.
+  Their composers move to `apply`'s report.
+- **D-06:** the load computes the same offline plan `pending` computes
+  (NFR-5: a load and `pending` never touch the network). This includes the
+  catalog moves of D-10 and the blocked rows of D-12. The load's block and
+  `pending`'s rows are byte-identical apart from the trailer.
+
+### `apply` (APL-01, APL-02)
+- **D-07:** `/claude:plugin apply [--scope user|project]` takes the same scope
+  flags as `pending`. With no flag it covers both scopes, project first
+  (MSG-GR-3). It runs the existing reconcile apply machinery
+  (`applyReconcile`'s plan + apply step + the catalog convergence pass) under
+  the per-scope state lock, using the same lock discipline the load used.
+  Proper-lockfile is not re-entrant (CR-01), so guard-free bodies stay as
+  they are.
+- **D-08:** `apply` reports one row per change: the composers the load used
+  (`reconcile-applied-cascade` rows for install/uninstall/enable/disable,
+  backfill rows), plus `(updated) <from> → <to>` for a catalog move. It ends
+  with the `Run /reload` hint, because `apply` changed state that the running
+  session has not loaded. With nothing to do, it reports so, uses the same
+  empty advisory form `pending` uses but in apply's wording, and writes
+  nothing. Afterwards `pending` lists nothing except blocked moves (D-12).
+- **D-09 (autoupdate):** the session-start marketplace autoupdate refreshes
+  marketplace clones only. Its plugin cascade (`autoupdate.ts` calling the
+  plugin update seam) no longer runs at session start. The moves it would
+  have made show up as catalog moves in the load's pending block (D-10) and
+  are applied by `apply`. The explicit `marketplace update` command keeps its
+  current behavior.
+
+### Catalog convergence inside `apply` (APL-02)
+- **D-10:** a recorded plugin is a move when all of these hold:
+  - it is enabled
+  - its marketplace manifest lists it (delisted plugins are DLS-D1:
+    no move)
+  - its catalog candidate differs from the record: the version, sha or
+    plugin root differs (phase 18 D-11's same-revision test), OR its
+    supported component set strictly grew (the BFILL-01 growth test,
+    evaluated on every `apply`, so the extension-version stamp no longer
+    gates it)
+
+  Disabled records are never moved (ENBL-08).
+- **D-11:** `apply` materializes moves through the shared runner
+  (`materialize-latest.ts`, phase 18), the same path `update` uses. It may
+  clone a git target on a cache miss and may list a dependency's tags for a
+  constraint, as install and update do (NFR-5 allows it, D-03-03). `pending`
+  and the load preview moves offline. A git target `pending` cannot resolve
+  offline shows as a move when the catalog shows a different target offline
+  (a different sha/ref pin or version). Otherwise it is not previewed. The
+  planner chooses whether `apply` refreshes an unpinned mirror (update's
+  `refreshSource: true`) or reads the mirror's HEAD (`false`). The
+  recommended default is `false`, so `apply` applies exactly what `pending`
+  previewed, and `update` stays the verb that fetches.
+- **D-12 (blocked moves):** two reasons. Each stays put with a warning row in
+  `apply`'s report, and `pending` keeps listing it with the same row:
+  - a dependent's range does not admit the candidate:
+    `(skipped) {dependents constrain}` at `warning`, the update verb's
+    range-hold row;
   - a clean record (`installable: true`) whose candidate resolves
-    `partially-available` (it would drop components): the update decline row,
-    `(partially-upgradable)` at `warning` with its `--partial` hint (XSURF-03),
-    because flipping a clean record to degraded is a consent the user has not
-    given (WCONV-01's stance, unchanged). A record already `installable:
-    false` was installed under that consent and moves.
-  A blocked plugin stays at its recorded version and the load writes nothing
-  for it.
-- **D-10:** a move that fails at materialization (EACCES, bridge failure)
-  keeps backfill's `(failed)` row with its closed-set reason and is retried on
-  the next load; that retry is visible because the row repeats.
+    `partially-available` (it would drop components without consent):
+    `(partially-upgradable)` at `warning`, the update decline row with its
+    `--partial` hint (XSURF-03). WCONV-01's consent stance is unchanged. A
+    record already `installable: false` moves.
 
-### Rows (load cascade)
-- **D-11:** a move whose version changed renders as the update row,
-  `(updated) <from> → <to>` (same composer as the `update` verb's row), inside
-  the reload cascade. A growth-only move (same version, supported set grew)
-  keeps the existing backfill rows (`(installed)` / `(partially-installed)`
-  with the WCONV-03 `{components now supported}` marker). When both happen,
-  the `(updated)` row carries the convergence marker; the exact composition is
-  the planner's call within `docs/output-catalog.md`'s grammar. RECON-04
-  single-emit stays: one row per plugin per load. Severity follows the
-  existing projections (a clean move is `info`; blocked rows are `warning`).
+  Phase 18 WR-05's silent gate-open retry is gone: no row, no retry. Ranges
+  are judged against the scope as it will stand after `apply`. A dependent
+  that also moves is judged by its candidate's declarations, and one that
+  stays is judged by its recorded or installed-copy declarations (DLS-D1).
+  The algorithm (ordering or fixed point) is the planner's call. It must be
+  deterministic and shared by `apply`, `pending` and the load.
+- **D-13:** a move that fails at materialization (EACCES, a bridge failure)
+  gets the `(failed)` row with its closed-set reason. `apply` is safe to
+  retry (NFR-3). The extension-version stamp (`lastReconciledExtensionVersion`)
+  no longer gates the backfill. It stays readable in the schema with no
+  migration, and whether `apply` still writes it is the planner's call
+  (fallow dead-code must stay green).
 
-### Pending (CAT-03, CAT-04)
-- **D-12:** `pending` previews exactly what the next load would do, from the
-  same planning function the load runs (one async, offline convergence
-  planner shared by `apply.ts` and `pending.ts`, beside the synchronous
-  `planReconcile`). It lists every move as a `(will update) <from> → <to>`
-  row (a new pending-tense status, with a growth-only move at equal versions
-  as the D-18-11 precedent allows) and every blocked plugin with the row the
-  load would emit (D-09). D-66-05 ("no `will partially update` analog,
-  because the plan has no update bucket") is superseded: the plan now has
-  one. The empty advisory (`Pending: next reload will apply 0 actions.`)
-  still renders when there is no move and no block.
-- **D-13:** adding a pending status touches a closed set
-  (`PLUGIN_STATUSES`, the pending row policies, the output catalog's status
-  table and count, completions and LLM-tool projections that switch over it).
-  Every switch over the set must handle it explicitly (the optional-field
-  silent-omission class); `docs/output-catalog.md` gains the new rows and its
-  counts are updated.
+### Pending (APL-04)
+- **D-14:** `pending` lists every change `apply` would make: the existing
+  plan buckets, plus `(will update) <from> → <to>` for each catalog move (a
+  new pending-tense status; a growth-only move renders with equal versions,
+  the D-18-11 precedent), plus the D-12 blocked rows. D-66-05 ("no `will
+  partially update` analog, because the plan has no update bucket") is
+  superseded. The trailer and the empty advisory change from `/reload` to
+  `/claude:plugin apply`.
+- **D-15:** a new status is a closed-set change: `PLUGIN_STATUSES`, the
+  pending row policies, the output catalog's status table and counts,
+  completions, the browser and the LLM-tool projections. Every switch over
+  the set handles the new member explicitly (the optional-field
+  silent-omission class).
+
+### Command surface (APL-04)
+- **D-16:** `apply` gets an edge handler, a router entry, args-schema and
+  flag-catalog entries, completions, help text, the JSON output wire format
+  (`docs/json-output.md`), and `docs/output-catalog.md` catalog states for
+  its rows and its empty case. Use the closest existing verb (`pending` /
+  `import`) as the template. `apply` is not an LLM tool unless the existing
+  read-only tool policy says otherwise; the planner checks `edge/handlers/tools.ts`.
+
+### Kept behavior
+- **D-17:** `import` (phase 19) still installs directly through the reconcile
+  planner. It is an explicit command, so it keeps changing state.
+- **D-18:** phase 28's DLS-D1 (a delisted plugin's dependencies come from its
+  installed copy) and the per-session `{not in manifest}` warning at load
+  stay.
 
 ### Scenarios
-- **D-14:** cucumber coverage, in a new `features/plugin/reconcile-catalog.feature`
-  plus `pending.feature` additions (and `update.feature` only if an existing
-  scenario's expectation changes), each scenario hermetic:
-  1. after `marketplace update` moves a path-source plugin and a git-source
-     plugin whose new commit is already cached, `/reload` reports both
-     `(updated)` and the records, `list`, and a new session show the catalog
-     versions; a second `/reload` changes nothing and writes nothing (CAT-01);
-  2. a git-source plugin whose new commit is not cached stays, `list` reads
-     `upgradable`, and the request log shows no request during the load
-     (CAT-02);
-  3. a range-blocked plugin and a clean plugin whose new version drops a
-     component each stay with their warning rows, `pending` lists both, and a
-     second load shows the same rows again (CAT-03);
-  4. a partially installed plugin whose components became supported is made
-     whole by the load, and `pending` beforehand shows the move (CAT-04).
-  Existing scenarios and unit tests that assert a load leaves a moved catalog
-  alone are updated to CAT-D1, each change named in the plan.
+- **D-19:** a new `features/plugin/apply.feature` covers APL-01/02:
+  - apply makes every pending change, after which pending is empty;
+  - apply with nothing pending writes nothing;
+  - after `marketplace update` moves a path-source and a git-source plugin,
+    apply installs both at the catalog version;
+  - a range-blocked move and a consent-needing partial move stay put with
+    warning rows and remain in pending;
+  - a partially installed plugin whose kind became supported is made whole.
+
+  `reconcile*.feature` and `pending.feature` cover APL-03/04:
+  - `/reload` after hand-editing the config changes no state and prints the
+    pending block with the `apply` trailer;
+  - `/reload` with nothing pending prints nothing;
+  - session start with an autoupdate marketplace refreshes it and shows its
+    plugin moves as pending without applying them;
+  - pending names `apply`.
+
+  Existing scenarios that trigger installation changes through a reload or a
+  new session move to `apply`. They keep their assertions; only the trigger
+  and the trailer change, and the plan names each moved scenario. All
+  scenarios are hermetic.
 
 ### Claude's Discretion
-- Module names (the convergence planner, the replacement for `backfill.ts`),
-  the policy knob's name and shape, and how the shared planner is threaded
-  into `apply.ts` and `pending.ts`.
-- Whether `lastReconciledExtensionVersion` is still written on a load that
-  moved something (D-05 bounds it).
-- Exact row composition for the combined version-plus-growth move (D-11) and
-  the `(will update)` glyph, within the output catalog's grammar.
+- Module names and the split between `apply.ts`, `backfill.ts` and a new
+  convergence planner, and how the shared offline planner is threaded into
+  the load, `pending` and `apply`.
+- Exact trailer and empty-advisory wording, the `(will update)` glyph, and
+  the combined version-plus-growth row composition, within the output
+  catalog's grammar.
+- `refreshSource` for `apply` (D-11's default recommended).
 - Scenario titles and step wording within `.agents/skills/cucumber/rules/`.
 
 </decisions>
@@ -197,14 +250,15 @@ BACKLOG.md, which is why `pending` must preview everything).
 <canonical_refs>
 ## Canonical References
 
-- `.planning/ROADMAP.md` Phase 29; `.planning/REQUIREMENTS.md` CAT-01..04
-- `.planning/phases/18-update-and-reinstall-unification/18-CONTEXT.md` (D-04 policy knobs, D-11 same-revision test, D-12 backfill via reinstall)
-- `.planning/phases/18-update-and-reinstall-unification/18-REVIEW.md` WR-05 (silent retry being replaced)
+- `.planning/ROADMAP.md` "### Phase 29: Apply Command and Read-Only Reload"; `.planning/REQUIREMENTS.md` APL-01..04
+- `AGENTS.md` Constraints (NFR-2, NFR-5, Upstream parity); `.planning/PROJECT.md`
+- `.planning/phases/18-update-and-reinstall-unification/18-CONTEXT.md` (D-04 policy knobs, D-11 same-revision test, D-12 backfill via reinstall), `18-REVIEW.md` WR-05
+- `.planning/phases/19-*/` (import on the reconcile path, kept)
 - `.planning/phases/28-delisted-plugin-dependency-walk/28-CONTEXT.md` (DLS-D1, kept)
-- `.planning/BACKLOG.md` UAT-02 (reload rows erased; reason `pending` must preview)
-- `docs/output-catalog.md` (backfill rows WCONV-03, `(partially-upgradable)` decline XSURF-03, `(updated)` row, status table)
-- `.agents/skills/claude-code-compat-research/SKILL.md`; upstream docs `https://code.claude.com/docs/en/plugins/host-marketplace.md`
-- `.agents/skills/cucumber/`, `.agents/skills/local-verification/SKILL.md`
+- `.planning/BACKLOG.md` UAT-02
+- `docs/output-catalog.md`, `docs/json-output.md`
+- Upstream: `https://code.claude.com/docs/en/plugins/loading.md`, `.../plugins/org.md`, `.../plugins/host-marketplace.md` (retrieved 2026-10-24)
+- `.agents/skills/claude-code-compat-research/SKILL.md`, `.agents/skills/cucumber/`, `.agents/skills/local-verification/SKILL.md`
 
 </canonical_refs>
 
@@ -212,39 +266,38 @@ BACKLOG.md, which is why `pending` must preview everything).
 ## Existing Code Insights
 
 ### Reusable Assets
-- `orchestrators/plugin/materialize-latest.ts::materializeLatestVersion(args, policy)` — the shared update/reinstall runner; `MaterializationPolicy` (`update-preflight.ts`) has `refreshSource`, `skipSameRevision`, `overwrite`.
-- `orchestrators/plugin/update-constraint-gate.ts::evaluateUpdateConstraint` — the range gate (has a tag-listing network path the load must not take).
-- `orchestrators/plugin/list-installed-row.ts::upgradeCandidate` and `resolveListCandidate` — offline candidate + version rule used for `upgradable`.
-- `orchestrators/reconcile/backfill.ts` — fault isolation, dedupe, disabled filter, failed rows, growth test (`supportedSetGrew`), WCONV-01 clean-record refusal.
-- `orchestrators/reconcile/notify.ts::resolvePendingForceInstalls` / `buildReconcilePendingNotification` — pending projection.
+- `orchestrators/reconcile/apply.ts::applyReconcile`: plan + apply + backfill + delisted scan, called from `index.ts` `resources_discover`. The apply machinery moves behind the new verb.
+- `orchestrators/reconcile/pending.ts::pendingReconcile` and `notify.ts::buildReconcilePendingNotification`: the block the load and `pending` share.
+- `orchestrators/plugin/materialize-latest.ts::materializeLatestVersion` (`MaterializationPolicy`: `refreshSource`, `skipSameRevision`, `overwrite`), `update-constraint-gate.ts::evaluateUpdateConstraint`.
+- `orchestrators/plugin/list-installed-row.ts::upgradeCandidate` / `resolveListCandidate`: the offline candidate and version rule.
+- `orchestrators/reconcile/backfill.ts`: growth test, WCONV-01 refusal, per-plugin fault isolation.
+- `orchestrators/marketplace/autoupdate.ts`: the session-start pass.
 
 ### Established Patterns
-- Guard-free bodies under one per-scope lock; `proper-lockfile` is not re-entrant (backfill runs with no outer lock).
-- BLOCK F network-free ESLint rule over `orchestrators/` and `domain/`; reconcile `apply.ts`/`types.ts` are `NETWORK_SEAMS`, `pending.ts` is not.
-- RECON-05 mtime invariant; RECON-04 single-emit per plugin per load.
+- One `notify()` per command (IL-2). Guard-free bodies under per-scope locks (not re-entrant).
+- BLOCK F network-free rule: `pending.ts` is not a NETWORK_SEAM. `reconcile/apply.ts`/`types.ts` are.
+- RECON-04 single-emit per plugin. RECON-05 no write on a no-change pass.
 
 ### Integration Points
-- `orchestrators/reconcile/apply.ts` calls `applyBackfillForScopeIsolated` per scope after `applyPlan`.
-- `orchestrators/reconcile/pending.ts::pendingReconcile` builds plans then the projection.
+- `extensions/pi-claude-marketplace/index.ts` (`resources_discover`, `session_start`), `edge/router.ts`, `edge/register.ts`, `edge/handlers/`, `edge/completions/`, help.
 
 </code_context>
 
 <specifics>
 ## Specific Ideas
 
-- The user's words: "one internally consistent catalog version per marketplace"; "No load retries silently."
+- The user's words: "Changing installation state is always an explicit command."
 
 </specifics>
 
 <deferred>
 ## Deferred Ideas
 
-- UAT-02 (Pi erases reload-time rows) stays in BACKLOG.md.
-- Offering an admitting tag at load for a range-blocked plugin (needs the network; `update` does it).
+- UAT-02 (Pi erases reload-time rows) stays in BACKLOG.md. The load's pending block is visible at session start but may be erased on `/reload`. `pending` and `apply` are the reliable surfaces.
 
 </deferred>
 
 ---
 
-*Phase: 29-load-converges-on-the-catalog*
-*Context gathered: 2026-10-24*
+*Phase: 29-apply-command-and-read-only-reload*
+*Context gathered: 2026-10-24 (revised)*
