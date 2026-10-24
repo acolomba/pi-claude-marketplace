@@ -7,8 +7,11 @@ Feature: Plugin apply
   Background:
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
-      | name | version |
-      | demo | 1.0.0   |
+      | name  | version |
+      | demo  | 1.0.0   |
+      | alpha | 1.0.0   |
+      | beta  | 1.0.0   |
+      | gamma | 1.0.0   |
 
   Scenario: Apply installs a plugin that a config declares by hand and reports it
     Given the marketplace "fixtures" is added to the project scope
@@ -30,3 +33,207 @@ Feature: Plugin apply
     Then the installation record of the project scope holds these plugins:
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Apply adds a marketplace that a config declares by hand and installs its plugin
+    Given a config in scope project and layer base, with these marketplaces:
+      | name     | source                       | autoupdate |
+      | fixtures | {home}/marketplaces/fixtures |            |
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | false                     |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 2                         |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | added              | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Apply uninstalls a plugin removed from a config by hand and keeps the others
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin install alpha@fixtures --scope project"
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | alpha  |         |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | false                     |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 1                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | uninstalled |         | project | 1.0.0   |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command            | description             |
+      | /skill:alpha-skill | A skill of alpha 1.0.0. |
+
+  Scenario: Apply disables a plugin set to disabled in a config by hand
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   | false   |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | false                     |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 1                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status   | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | disabled |         | project | 1.0.0   |
+    When the user starts a new pi session
+    Then the session offers no skills
+
+  Scenario: Apply enables a plugin set to enabled in a config by hand
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope project"
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   | true    |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | false                     |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 1                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Apply that cannot install one hand-declared plugin reports it and installs the other
+    Given the marketplace "fixtures" is added to the project scope
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | ghost  |         |
+      | fixtures    | demo   |         |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade      |
+      | severity            | error                          |
+      | needs reload        | false                          |
+      | summary             | A plugin operation has failed. |
+      | tally label         | Reconcile                      |
+      | tally failures      | 1                              |
+      | tally warnings      | 0                              |
+      | tally success count | 1                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id             | name  | status    | reasons         | scope   | version | leaks | rollback partial |
+      | fixtures         | project           | ghost@fixtures | ghost | failed    | not in manifest | project |         |       |                  |
+      | fixtures         | project           | demo@fixtures  | demo  | installed |                 | project | 1.0.0   |       |                  |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Apply disables a plugin that an update left needing a newer version of its dependency
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 2.0.0   | lib@^2.0.0   |
+      | lib  | 1.0.0   |              |
+    Given the user has run "/claude:plugin update app@tools --scope project"
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind           | reconcile-applied-cascade           |
+      | severity       | warning                             |
+      | needs reload   | false                               |
+      | summary        | A plugin operation needs attention. |
+      | tally label    | Reconcile                           |
+      | tally failures | 0                                   |
+      | tally warnings | 1                                   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status   | reasons                        | scope   | version | cause chain                                                    | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app  | disabled | dependency version unsatisfied | project | 2.0.0   | Update "lib@tools" to satisfy ^2.0.0, or uninstall "app@tools" | false           |       |                  |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command          | description           |
+      | /skill:lib-skill | A skill of lib 1.0.0. |
+
+  Scenario: Apply reports a hand-declared plugin pi supports only in part with the reason install gives
+    Given the published plugin "demo" of the marketplace "fixtures" has an output style
+    Given the marketplace "fixtures" is added to the project scope
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind           | reconcile-applied-cascade      |
+      | severity       | error                          |
+      | needs reload   | false                          |
+      | summary        | A plugin operation has failed. |
+      | tally label    | Reconcile                      |
+      | tally failures | 1                              |
+      | tally warnings | 0                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons               | scope   | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | unsupported component | project |       |                  |
+    Then the project scope has no installed plugins
+
+  Scenario: Apply makes every change one hand edit of the base config causes, after which pending lists nothing
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin install beta@fixtures --scope project"
+    Given the user has run "/claude:plugin install gamma@fixtures --scope project"
+    Given the user has run "/claude:plugin disable gamma@fixtures --scope project"
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | alpha  |         |
+      | fixtures    | beta   | false   |
+      | fixtures    | gamma  | true    |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | false                     |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 4                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id             | name  | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures  | demo  | uninstalled |         | project | 1.0.0   |
+      | fixtures         | project           | alpha@fixtures | alpha | installed   |         | project | 1.0.0   |
+      | fixtures         | project           | gamma@fixtures | gamma | installed   |         | project | 1.0.0   |
+      | fixtures         | project           | beta@fixtures  | beta  | disabled    |         | project | 1.0.0   |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
