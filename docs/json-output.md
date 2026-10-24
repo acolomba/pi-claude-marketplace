@@ -841,7 +841,7 @@ These are native wire values, including spaces and hyphens. They are not the lab
 
 `PluginInfoStatus`: `installed`, `available`, `remote`, `unavailable`, `partially-available`, `failed`, `partially-installed`, `disabled`.
 
-`MarketplaceStatus`: `added`, `removed`, `updated`, `failed`, `autoupdate enabled`, `autoupdate disabled`, `skipped`.
+`MarketplaceStatus`: `added`, `removed`, `updated`, `failed`, `autoupdate enabled`, `autoupdate disabled`, `skipped`, `will add`, `will remove`.
 
 `RowHint`: `partial-install`, `partial-update`, `stale-gate-update`, `enable`.
 

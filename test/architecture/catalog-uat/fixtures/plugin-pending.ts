@@ -26,9 +26,8 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
         retainedWorkflows: [{ name: "9f1c4d2a-3b7e", envelopeCount: 2 }],
       },
     },
-    // WILL-01 / D-65.1-02: marketplace add is immediate (no `will add` token);
-    // the child install is the reload-deferred work, rendered under a bare
-    // list-arm header (no marketplace status).
+    // D-20: `apply` adds the declared marketplace, so its header carries the
+    // pending-tense `will add` status above the child install.
     "mp-add-plugin-install": {
       pi: piWithBothLoaded(),
       message: {
@@ -37,6 +36,7 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
           {
             name: "new-mp",
             scope: "user",
+            status: "will add",
             plugins: [{ status: "will install", name: "new-plugin" }],
           },
         ],
@@ -54,6 +54,7 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
           {
             name: "new-mp",
             scope: "user",
+            status: "will add",
             plugins: [{ status: "will install", name: "degraded-plugin", partial: true }],
           },
         ],
@@ -87,12 +88,9 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
         retainedWorkflows: [{ name: "9f1c4d2a-3b7e", envelopeCount: 2 }],
       },
     },
-    // WILL-03 / D-65.1-03: removing a marketplace that still has installed
-    // plugins is reload-deferred ONLY for its plugin-uninstall cascade --
-    // de-registration itself is immediate (no `will remove` marketplace token).
-    // The pending preview renders the bare list-arm header (no marketplace
-    // status) plus one `(will uninstall)` row per recorded plugin, byte-identical
-    // to the surviving `plugin-pending-uninstall` form above.
+    // D-20: `apply` removes a recorded marketplace no config declares, so its
+    // header carries `will remove` above one `(will uninstall)` row per
+    // recorded plugin.
     "marketplace-remove-with-installed-plugins": {
       pi: piWithBothLoaded(),
       message: {
@@ -101,12 +99,22 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
           {
             name: "old-mp",
             scope: "user",
+            status: "will remove",
             plugins: [
               { status: "will uninstall", name: "p1", version: "1.0.0" },
               { status: "will uninstall", name: "p2", version: "2.3.0" },
             ],
           },
         ],
+      },
+    },
+    // D-20: the remove itself is a listed change, so a marketplace with no
+    // recorded plugin still shows its header.
+    "marketplace-remove-no-plugins": {
+      pi: piWithBothLoaded(),
+      message: {
+        needsApply: true,
+        marketplaces: [{ name: "old-mp", scope: "user", status: "will remove", plugins: [] }],
       },
     },
     "enable-disable-transitions": {
