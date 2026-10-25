@@ -861,31 +861,53 @@ test("D-12 / D-05-06: a held dependent whose catalog copy is stricter than its i
   });
 });
 
-test("D-12: the blocked moves are the same for any input order", async (t) => {
-  // arrange
-  const forwardFixture = await createFixture(t, "forward");
-  const reversedFixture = await createFixture(t, "reversed");
-  const forward = await stageTools(forwardFixture, heldDependentChain("widget-installed"));
-  const reversed = await stageTools(
-    reversedFixture,
-    [...heldDependentChain("widget-installed")].reverse(),
-  );
+/**
+ * `xray` stays put and holds `dep` with `^1.0.0`; `host` holds `widget`, whose
+ * installed copy also holds `dep` with `~1.0.0`. Whether `dep` sorts before or
+ * after `widget` decides nothing.
+ */
+function heldByTwoCopies(dep: string, host: string): readonly StagedPlugin[] {
+  return [
+    { name: dep, offered: "2.0.0" },
+    {
+      name: "widget",
+      offered: "1.1.0",
+      installed: { dir: "widget-installed", declares: [{ name: dep, version: "~1.0.0" }] },
+    },
+    { name: "xray", offered: "1.0.0", declares: [{ name: dep, version: "^1.0.0" }] },
+    { name: host, offered: "1.0.0", declares: [{ name: "widget", version: "~1.0.0" }] },
+  ];
+}
 
-  // act
-  const forwardPlan = await planConvergence({
-    scope: "project",
-    state: forward,
-    locations: forwardFixture.locations,
-  });
-  const reversedPlan = await planConvergence({
-    scope: "project",
-    state: reversed,
-    locations: reversedFixture.locations,
-  });
+for (const { dep, host } of [
+  { dep: "core", host: "zhost" },
+  { dep: "zcore", host: "zzhost" },
+]) {
+  test(`D-12: a hold names every range in force whatever the plugin names (${dep}, ${host})`, async (t) => {
+    // arrange
+    const fixture = await createFixture(t, `names-${dep}`);
+    const state = await stageTools(fixture, heldByTwoCopies(dep, host));
 
-  // assert
-  assert.deepStrictEqual(reversedPlan, forwardPlan);
-});
+    // act
+    const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+    // assert
+    assert.deepStrictEqual(plan.moves, []);
+    assert.deepStrictEqual(
+      [...plan.holds].sort((a, b) => a.plugin.localeCompare(b.plugin)),
+      [
+        toolsHold(
+          dep,
+          `version 2.0.0 falls outside what the combined range admits (~1.0.0, ^1.0.0) -- required by "widget@tools", "xray@tools"`,
+        ),
+        toolsHold(
+          "widget",
+          `version 1.1.0 falls outside what the combined range admits (~1.0.0) -- required by "${host}@tools"`,
+        ),
+      ].sort((a, b) => a.plugin.localeCompare(b.plugin)),
+    );
+  });
+}
 
 test("D-12: a held dependent whose installed copy cannot be read keeps its catalog declarations", async (t) => {
   // arrange: the recorded root holds no manifest, so `widget` keeps `core@^2.0.0`

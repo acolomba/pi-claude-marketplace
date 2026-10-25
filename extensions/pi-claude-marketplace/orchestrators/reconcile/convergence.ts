@@ -439,61 +439,73 @@ function alreadyDeclared(known: readonly AddressedDependency[], dep: AddressedDe
 }
 
 /**
- * One round of the fixed point: blocks every candidate the current
- * declarations block and adds its installed-copy declarations to its catalog
- * ones. A plugin that stays put keeps running the copy it has, and every other
+ * D-12: what each record declares while the candidates in `blocked` stay put.
+ * A plugin that stays put keeps running the copy it has, and every other
  * check of the scope (the load-time dependency check, `apply`'s runner) reads
- * its catalog copy (D-05-06), so a range either copy names constrains a move.
- * Returns whether a block was added.
+ * its catalog copy (D-05-06), so a staying record keeps its catalog
+ * declarations and adds its installed copy's: a range either copy names
+ * constrains a move. A block only adds ranges, so blocks only grow.
  */
-function blockRound(
+function declarationsWhileBlocked(
   candidates: readonly CandidateMove[],
-  declarations: Map<string, readonly AddressedDependency[]>,
-  view: ExtensionState,
-  blocked: Map<string, Blocked>,
-): boolean {
-  let added = false;
-  for (const candidate of candidates) {
-    const block = blocked.has(candidate.key) ? undefined : blockOf(candidate, declarations, view);
-    if (block === undefined) {
+  walked: Declarations,
+  blocked: ReadonlyMap<string, Blocked>,
+): Declarations {
+  const declarations = new Map(walked);
+  for (const { key, installed } of candidates) {
+    const catalog = walked.get(key);
+    if (installed === undefined || catalog === undefined || !blocked.has(key)) {
       continue;
     }
 
-    blocked.set(candidate.key, block);
-    const catalog = declarations.get(candidate.key);
-    if (candidate.installed !== undefined && catalog !== undefined) {
-      const extra = candidate.installed.filter((dep) => !alreadyDeclared(catalog, dep));
-      declarations.set(candidate.key, [...catalog, ...extra]);
-    }
-
-    added = true;
+    const extra = installed.filter((dep) => !alreadyDeclared(catalog, dep));
+    declarations.set(key, [...catalog, ...extra]);
   }
 
-  return added;
+  return declarations;
+}
+
+/** One round of the fixed point: every candidate is judged against the same declarations. */
+function judgeCandidates(
+  candidates: readonly CandidateMove[],
+  declarations: Declarations,
+  view: ExtensionState,
+): ReadonlyMap<string, Blocked> {
+  const blocked = new Map<string, Blocked>();
+  for (const candidate of candidates) {
+    const block = blockOf(candidate, declarations, view);
+    if (block !== undefined) {
+      blocked.set(candidate.key, block);
+    }
+  }
+
+  return blocked;
 }
 
 /**
  * D-12: judges every candidate against the scope as the plan leaves it, to a
  * fixed point. A dependent that moves is judged by its catalog declarations,
  * and one that stays put by its catalog and installed-copy declarations
- * together (DLS-D1). Blocks only grow, because a block only adds ranges.
+ * together (DLS-D1). Each round judges every candidate against the same
+ * declarations, and the causes reported are the last round's, so neither the
+ * moves nor the cause lines depend on plugin names or input order.
  */
 function settleCandidates(
   candidates: readonly CandidateMove[],
   walked: Declarations,
   view: ExtensionState,
 ): ConvergencePlan {
-  const declarations = new Map(walked);
-  const blocked = new Map<string, Blocked>();
-  // A new block may change what a dependent declares, so judge again.
-  let added = true;
-  while (added) {
-    added = blockRound(candidates, declarations, view, blocked);
+  let blocked: ReadonlyMap<string, Blocked> = new Map();
+  let next = judgeCandidates(candidates, walked, view);
+  // A new block adds an installed copy's ranges, so judge again until no block is added.
+  while (next.size > blocked.size) {
+    blocked = next;
+    next = judgeCandidates(candidates, declarationsWhileBlocked(candidates, walked, blocked), view);
   }
 
-  const blocks = candidates.flatMap(({ key }) => blocked.get(key) ?? []);
+  const blocks = candidates.flatMap(({ key }) => next.get(key) ?? []);
   return {
-    moves: candidates.filter(({ key }) => !blocked.has(key)).map(({ move }) => move),
+    moves: candidates.filter(({ key }) => !next.has(key)).map(({ move }) => move),
     holds: blocks.flatMap((block) => (block.kind === "hold" ? [block.hold] : [])),
     declines: blocks.flatMap((block) => (block.kind === "decline" ? [block.decline] : [])),
   };
