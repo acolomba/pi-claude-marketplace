@@ -207,7 +207,7 @@ The ten structured kinds through `prune-committed-warning` also permit this fiel
 
 Load and hook origins have only `kind`. Command IDs can repeat across runs. Invocation IDs keep their results separate, including overlapping commands.
 
-A load reports its pending changes as a `cascade` whose `origin.kind` is `load`, and its per-session warnings as a `reconcile-applied-cascade`.
+A load reports its pending changes as a `cascade` whose `origin.kind` is `load`, and its per-session warnings as a `reconcile-applied-cascade`. When a config turns `autoapply` on, the load runs `apply` instead and reports its changes as a `reconcile-applied-cascade` whose `origin.kind` is `load`. Such a load with nothing to change emits nothing.
 
 ### Command origin
 
@@ -251,7 +251,7 @@ Command results or inventory, including an empty `marketplaces` array.
 
 #### reconcile-applied-cascade
 
-The changes `/claude:plugin apply` made, or a load's per-session warnings. `needsReload` is true when a change needs a reload. It carries no `noOp`, advisories, or retained workflows. `/claude:plugin apply` (`origin.commandId` `plugin apply`) reports the changes it made with this kind, so the kind is a command outcome.
+The changes `/claude:plugin apply` or an `autoapply` load made, or a load's per-session warnings. `needsReload` is true when a change needs a reload. It carries no `noOp`, advisories, or retained workflows. `/claude:plugin apply` (`origin.commandId` `plugin apply`) reports the changes it made with this kind, so the kind is a command outcome.
 
 <!-- fields: kind:reconcile-applied-cascade -->
 

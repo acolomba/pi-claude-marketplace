@@ -9,6 +9,8 @@
   - A marketplace that you add to a config by hand shows as `(will add)` until `apply` adds it.
   - In `pending` and a new session, a config that Pi cannot read now shows the read or parse error under its row.
 
+- A new `autoapply` config setting makes each new session and `/reload` run `apply` itself. Any config can turn it on, so read a cloned project's `.pi/claude-plugins.json` before you start `pi` in it.
+
 - A plugin that its marketplace no longer lists no longer blocks `update`, `reinstall`, `uninstall`, `disable`, or `enable` of other plugins in its scope. Pi keeps such a plugin running, so it now reads the plugin's dependencies from its installed copy: the plugin still protects what it needs and still limits which versions of it other commands install. Claude Code stops loading such a plugin instead. The warning at each new session stays, and now says `Plugin "<plugin>" not found in marketplace "<marketplace>"`. A plugin whose installed files are also gone still fails these commands with `{unreadable}`.
 
 - `enable` now fails with `{dependency unsatisfied}` and changes nothing when a dependency of the plugin is not installed, as Claude Code does. The cause says which dependencies to install first. It used to enable the plugin and leave the dependency to the next reload.

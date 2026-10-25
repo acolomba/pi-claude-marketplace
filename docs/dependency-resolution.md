@@ -304,7 +304,7 @@ A refusal installs nothing from that cascade. The command does not add a marketp
 Reconcile: 2 successes
 ```
 
-A load does not install anything. The dependency stays missing until you run `/claude:plugin apply`, and `pending` lists the install.
+A load does not install anything, unless a config turns `autoapply` on. The dependency stays missing until you run `/claude:plugin apply`, and `pending` lists the install. With `autoapply` on, each load runs `apply` itself.
 
 A dependency that is installed but disabled is not enabled by `apply`. The row still tells you to enable it or uninstall the dependent.
 

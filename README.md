@@ -161,7 +161,7 @@ Each scope declares its marketplaces and plugins in two layers: the base layer a
 | `user`    | `~/.pi/agent/claude-plugins.json` |
 | `project` | `<cwd>/.pi/claude-plugins.json`   |
 
-The configs of a scope are the desired state of its marketplaces and plugins. The catalog of a marketplace is the list of plugins and versions that it offers. A new session or `/reload` does not change your installed plugins. It only lists the changes that your configs and the marketplace catalogs need.
+The configs of a scope are the desired state of its marketplaces and plugins. The catalog of a marketplace is the list of plugins and versions that it offers. A new session or `/reload` does not change your installed plugins, unless you turn on [autoapply](#autoapply). It only lists the changes that your configs and the marketplace catalogs need.
 
 To see those changes, run `/claude:plugin pending`. To make them, run `/claude:plugin apply`. Then run `/reload` so that Pi loads the result.
 
@@ -172,6 +172,24 @@ To see those changes, run `/claude:plugin pending`. To make them, run `/claude:p
 ```
 
 Whether Pi applies a declared plugin's components depends on the entry's optional `enabled` key and on the install-time default the plugin author declares. For more information, see [Plugin enablement](docs/plugin-enablement.md).
+
+### Autoapply
+
+To make each new session and `/reload` apply your configs, set the top-level `autoapply` key to `true`:
+
+```json
+{
+  "autoapply": true,
+  "plugins": { "context7-plugin@context7-marketplace": {} }
+}
+```
+
+The default is `false`. When `autoapply` is on, the load runs `/claude:plugin apply` for both scopes before Pi looks for skills and prompts. So the plugins that it installs are ready in the same session. The load can clone repositories from the network, as `apply` does. A failed change shows as a failed row and stays in `pending`. The next load tries it again.
+
+Any config can set `autoapply`. The most specific config that sets it wins, in this order: the project local config, the project base config, the user local config, and the user base config. If a config is not valid, for example because `autoapply` is not `true` or `false`, the load does not apply anything and reports the config.
+
+> [!WARNING]
+> A project's base config is usually in version control. If it sets `autoapply` to `true`, starting `pi` in that project installs its plugins, hooks and MCP servers included, with no prompt. Read `.pi/claude-plugins.json` before you start `pi` in a project that you cloned. Claude Code has no such setting: it does not install a plugin that only a project's settings enable, and you install it with a command.
 
 ### The local config
 

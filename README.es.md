@@ -159,7 +159,7 @@ Cada ámbito declara sus mercados y complementos en dos capas: la capa base y la
 | `user`    | `~/.pi/agent/claude-plugins.json` |
 | `project` | `<cwd>/.pi/claude-plugins.json`   |
 
-Las configuraciones de un ámbito son el estado deseado de sus mercados y complementos. El catálogo de un mercado es la lista de complementos y versiones que ofrece. Una sesión nueva o `/reload` no cambia tus complementos instalados. Solo lista los cambios que necesitan tus configuraciones y los catálogos de los mercados.
+Las configuraciones de un ámbito son el estado deseado de sus mercados y complementos. El catálogo de un mercado es la lista de complementos y versiones que ofrece. Una sesión nueva o `/reload` no cambia tus complementos instalados, salvo que actives la [aplicación automática](#aplicaci%C3%B3n-autom%C3%A1tica). Solo lista los cambios que necesitan tus configuraciones y los catálogos de los mercados.
 
 Para ver esos cambios, ejecuta `/claude:plugin pending`. Para hacerlos, ejecuta `/claude:plugin apply`. Después ejecuta `/reload` para que Pi cargue el resultado.
 
@@ -170,6 +170,24 @@ Para ver esos cambios, ejecuta `/claude:plugin pending`. Para hacerlos, ejecuta 
 ```
 
 Que Pi aplique los componentes de un complemento declarado depende de la clave opcional `enabled` de la entrada y del valor predeterminado de instalación que declara el autor del complemento. Para más información, consulta [Activación de complementos](docs/plugin-enablement.md).
+
+### Aplicación automática
+
+Para que cada sesión nueva y cada `/reload` apliquen tus configuraciones, pon la clave de primer nivel `autoapply` en `true`:
+
+```json
+{
+  "autoapply": true,
+  "plugins": { "context7-plugin@context7-marketplace": {} }
+}
+```
+
+El valor predeterminado es `false`. Cuando `autoapply` está activada, la carga ejecuta `/claude:plugin apply` en los dos ámbitos antes de que Pi busque habilidades y prompts. Así, los complementos que instala están listos en la misma sesión. La carga puede clonar repositorios desde la red, como hace `apply`. Un cambio que falla aparece como una fila fallida y sigue en `pending`. La carga siguiente lo intenta otra vez.
+
+Cualquier configuración puede fijar `autoapply`. Gana la configuración más específica que la fija, en este orden: la configuración local del proyecto, la configuración base del proyecto, la configuración local del usuario y la configuración base del usuario. Si una configuración no es válida, por ejemplo porque `autoapply` no es `true` ni `false`, la carga no aplica nada e informa de esa configuración.
+
+> [!WARNING]
+> La configuración base de un proyecto suele estar en el control de versiones. Si fija `autoapply` en `true`, iniciar `pi` en ese proyecto instala sus complementos, incluidos sus hooks y servidores MCP, sin preguntar. Lee `.pi/claude-plugins.json` antes de iniciar `pi` en un proyecto que clonaste. Claude Code no tiene este ajuste: no instala un complemento que solo activa la configuración de un proyecto, y tú lo instalas con un comando.
 
 ### La configuración local
 
