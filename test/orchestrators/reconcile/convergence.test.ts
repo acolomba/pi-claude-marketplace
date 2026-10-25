@@ -12,7 +12,7 @@ import { test } from "node:test";
 
 import { pluginCloneKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import {
-  installedCopyUnsatisfied,
+  installedCopyReader,
   cascadeDependencies,
   planConvergence,
   planConvergenceCascade,
@@ -1401,110 +1401,42 @@ test("APPLY1-01: a disabled record the caller enables after its move is planned 
   assert.deepStrictEqual(cascadeDependencies(enabled, "ghost@tools"), []);
 });
 
-const ZCORE_UNMET_BEFORE = [
-  { dependent: "widget@tools", dependency: "zcore@tools", kind: "out-of-range", range: "^2.0.0" },
-] as const;
-
-test("APPLY1-01: a path-source copy, or a copy that cannot be read, fails closed on a landed dependency the scope left unmet before the moves", async (t) => {
-  // arrange -- `widget`'s files are the marketplace's; the pinned `other`
-  // copy has no manifest.
-  const fixture = await createFixture(t, "copy-unknown");
-  const state = await stageTools(fixture, CO_SHIPPED);
-  const mp = state.marketplaces["tools"];
-  assert.ok(mp !== undefined);
-  const unreadable = path.join(fixture.locations.pluginClonesDir, "other-copy");
-  await mkdir(unreadable, { recursive: true });
-  const withOther: ExtensionState = {
-    ...state,
-    marketplaces: { tools: { ...mp, plugins: { ...mp.plugins, other: pluginRecord(unreadable) } } },
-  };
-  const input = { state: withOther, locations: fixture.locations };
+test("APPLY1-01: the installed-copy reader reads a pinned copy and leaves a path source to the catalog", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "copy-reader");
+  const pinned = path.join(fixture.locations.pluginClonesDir, "widget-copy");
+  await stagePlugin(pinned, "1.0.0", [{ name: "zcore", version: "^1.0.0" }]);
+  const mp = await stageMarketplace(fixture, "tools", []);
+  const read = installedCopyReader(fixture.locations);
+  const marketplace = { ...mp, plugins: {} };
 
   // act
-  const pathCopy = await installedCopyUnsatisfied(
-    input,
-    { marketplace: "tools", plugin: "widget" },
-    ["zcore@tools"],
-    ZCORE_UNMET_BEFORE,
-  );
-  const notForIt = await installedCopyUnsatisfied(
-    input,
-    { marketplace: "tools", plugin: "widget" },
-    ["zcore@tools"],
-    [],
-  );
-  const unknownCopy = await installedCopyUnsatisfied(
-    input,
-    { marketplace: "tools", plugin: "other" },
-    ["zcore@tools"],
-    [{ ...ZCORE_UNMET_BEFORE[0], dependent: "other@tools" }],
-  );
-  const absent = await installedCopyUnsatisfied(
-    input,
-    { marketplace: "tools", plugin: "ghost" },
-    ["zcore@tools"],
-    ZCORE_UNMET_BEFORE,
-  );
+  const fromPinned = await read(marketplace, pluginRecord(pinned));
+  const fromPath = await read(marketplace, pluginRecord(path.join(mp.marketplaceRoot, "widget")));
 
   // assert
-  assert.deepStrictEqual(pathCopy, {
-    dependent: "widget@tools",
-    dependency: "zcore@tools",
-    kind: "out-of-range",
-  });
-  assert.equal(notForIt, undefined);
-  assert.deepStrictEqual(unknownCopy, {
-    dependent: "other@tools",
-    dependency: "zcore@tools",
-    kind: "out-of-range",
-  });
-  assert.equal(absent, undefined);
+  assert.deepStrictEqual(fromPinned, [{ name: "zcore", marketplace: "tools", version: "^1.0.0" }]);
+  assert.equal(fromPath, undefined);
 });
 
-test("APPLY1-01: a pinned copy is judged by its own declarations", async (t) => {
-  // arrange -- the copy declares zcore ^1.0.0; the scope records zcore at
-  // 2.0.0, then at 1.0.0.
-  const fixture = await createFixture(t, "copy-pinned");
-  const copy = path.join(fixture.locations.pluginClonesDir, "widget-copy");
-  await stagePlugin(copy, "1.0.0", [{ name: "zcore", version: "^1.0.0" }]);
-  const mp = await stageMarketplace(fixture, "tools", []);
-  const stateAt = (zcore: string): ExtensionState =>
-    stateOf({
-      ...mp,
-      plugins: {
-        widget: pluginRecord(copy),
-        zcore: pluginRecord(path.join(mp.marketplaceRoot, "zcore"), { version: zcore }),
-      },
-    });
-  const widget = { marketplace: "tools", plugin: "widget" };
+test("APPLY1-01 / CR-A: a held-down record with a move of its own waits for its move, released or not", async (t) => {
+  // arrange -- `widget` was held down after its own move failed; its catalog
+  // range is met now, so the verdict lifts it, but its move is still pending.
+  const fixture = await createFixture(t, "deferred-own-move");
+  const state = await stageTools(fixture, [
+    {
+      name: "widget",
+      offered: "1.1.0",
+      declares: [{ name: "zcore" }],
+      record: { enabled: false, dependencyDisabled: true },
+    },
+    { name: "zcore", offered: "1.0.0" },
+  ]);
 
   // act
-  const unmet = await installedCopyUnsatisfied(
-    { state: stateAt("2.0.0"), locations: fixture.locations },
-    widget,
-    ["zcore@tools"],
-    [],
-  );
-  const met = await installedCopyUnsatisfied(
-    { state: stateAt("1.0.0"), locations: fixture.locations },
-    widget,
-    ["zcore@tools"],
-    [],
-  );
-  const notLanded = await installedCopyUnsatisfied(
-    { state: stateAt("2.0.0"), locations: fixture.locations },
-    widget,
-    [],
-    [],
-  );
+  const settled = await settle(fixture, state, ["widget"]);
 
   // assert
-  assert.deepStrictEqual(unmet, {
-    dependent: "widget@tools",
-    dependency: "zcore@tools",
-    kind: "out-of-range",
-    range: "^1.0.0",
-  });
-  assert.equal(met, undefined);
-  assert.equal(notLanded, undefined);
+  assert.deepStrictEqual(settled.deferredEnables, [{ ...DEMO_OP, plugin: "widget" }]);
+  assert.deepStrictEqual(settled.preview.pluginsToEnable, []);
 });

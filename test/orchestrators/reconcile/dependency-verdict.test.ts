@@ -6,7 +6,7 @@ import test from "node:test";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   buildScopeSatisfactionVerdict,
-  firstUnsatisfied,
+  judgeFinalScope,
   releasableDependents,
   stillHeld,
   verdictAfterMoves,
@@ -878,30 +878,81 @@ test("APPLY1-01: the verdict after moves measures each moved record at the versi
   assert.deepEqual(unsatisfiedOf(after), []);
 });
 
-test("APPLY1-01: the first unsatisfied declaration of a copy is measured against the scope", () => {
-  // arrange
-  const state = stateOf(marketplaceRecord("mp", { app: {}, lib: { version: "2.0.0" } }));
+test("APPLY1-01: the final judgement reads a held-down record as disabled and holds what declares it", async () => {
+  // arrange: `lib` is disabled with the marker; the load-time verdict would
+  // read it as enabled (LOAD-02), the final judgement does not.
+  const mp = marketplaceRecord("mp", {
+    app: {},
+    lib: { enabled: false, dependencyDisabled: true },
+  });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["lib"] }, lib: {} }),
+  });
+  const options = {
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    loadManifest,
+    reader: ownManifests(),
+  };
 
   // act
-  const unmet = firstUnsatisfied(
-    "app@mp",
-    [{ name: "lib", marketplace: "mp", version: "^1.0.0" }],
-    state,
-  );
-  const met = firstUnsatisfied(
-    "app@mp",
-    [{ name: "lib", marketplace: "mp", version: "^2.0.0" }],
-    state,
-  );
+  const load = await buildScopeSatisfactionVerdict(options);
+  const final = await judgeFinalScope({
+    ...options,
+    installedDeclarations: () => Promise.resolve(undefined),
+  });
 
   // assert
-  assert.deepEqual(unmet, {
-    dependent: "app@mp",
-    dependency: "lib@mp",
-    kind: "out-of-range",
-    range: "^1.0.0",
+  assert.deepStrictEqual(unsatisfiedOf(load), []);
+  assert.deepStrictEqual(unsatisfiedOf(final), [
+    { dependent: "app@mp", dependency: "lib@mp", kind: "disabled" },
+  ]);
+});
+
+test("APPLY1-01 / D-12a: the final judgement adds what an installed copy declares to the catalog's", async () => {
+  // arrange: the catalog declares `lib` with no range; the installed copy of
+  // `app` declares lib ^1.0.0, which lib 2.0.0 does not meet.
+  const mp = marketplaceRecord("mp", { app: {}, lib: { version: "2.0.0" } });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["lib"] }, lib: {} }),
   });
-  assert.equal(met, undefined);
+
+  // act
+  const final = await judgeFinalScope({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    loadManifest,
+    reader: ownManifests(),
+    installedDeclarations: (_marketplace, record) =>
+      Promise.resolve(
+        record.version === "1.0.0"
+          ? [{ name: "lib", marketplace: "mp", version: "^1.0.0" }]
+          : undefined,
+      ),
+  });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(final), [
+    { dependent: "app@mp", dependency: "lib@mp", kind: "out-of-range", range: "^1.0.0" },
+  ]);
+});
+
+test("APPLY1-01 / D-05-07: a final judgement whose walk fails answers the walk's failure", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", { app: {} });
+  const loadManifest = manifestLoader({ [mp.manifestPath]: new Error("EACCES") });
+
+  // act
+  const final = await judgeFinalScope({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    loadManifest,
+    reader: ownManifests(),
+    installedDeclarations: () => Promise.resolve(undefined),
+  });
+
+  // assert
+  assert.equal(final.ok, false);
 });
 
 test("APPLY1-01: a seeded declaration holds its dependent from the start, and the walk holds what declares it", async () => {

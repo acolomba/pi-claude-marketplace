@@ -1456,29 +1456,36 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
           "● mp [project]\n" +
           "  ○ orphan v1.0.0 (uninstalled)\n" +
+          "  ◍ keeper v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "orphan@mp" or uninstall "keeper@mp"\n' +
           "\n" +
-          "Reconcile: 1 success\n" +
+          "Reconcile: 1 warning, 1 success\n" +
           "\n" +
           "/reload to pick up changes",
+        severity: "warning",
       },
       {
         message:
           "● mp [project]\n" +
           "  ● orphan v1.0.0 (installed) {dependency installed}\n" +
+          "  ● keeper v1.0.0 (installed)\n" +
           "\n" +
-          "Reconcile: 1 success\n" +
+          "Reconcile: 2 successes\n" +
           "\n" +
           "/reload to pick up changes",
       },
       APPLY_EMPTY_NOTICE,
     ]);
     // LOAD-03: the removal happened on the FIRST pass -- the reconcile-driven
-    // uninstall does not refuse. MISS-01 / D-02: the next pass finds `keeper`'s
-    // declared dependency missing and installs it, so `keeper` stays up.
+    // uninstall does not refuse. APPLY1-01: no apply leaves `keeper` enabled on
+    // its missing dependency, so the same pass disables it. MISS-01 / D-02: the
+    // next pass installs the dependency and enables `keeper` again.
     assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["mp"]?.plugins ?? {}), ["keeper"]);
-    assert.equal(afterFirst.marketplaces["mp"]?.plugins["keeper"]?.enabled, true);
+    assert.equal(afterFirst.marketplaces["mp"]?.plugins["keeper"]?.enabled, false);
     assert.deepStrictEqual(Object.keys(afterSecond.marketplaces["mp"]?.plugins ?? {}), [
       "keeper",
       "orphan",
@@ -1620,15 +1627,22 @@ describe("applyReconcile", () => {
     });
 
     // assert
+    // APPLY1-01: `keeper` declares the removed `orphan`, so the same pass
+    // disables it; the next pass installs `orphan` back (MISS-01).
     assert.deepStrictEqual(notifications, [
       {
         message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
           "● mp [project]\n" +
           "  ○ orphan v1.0.0 (uninstalled)\n" +
+          "  ◍ keeper v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "orphan@mp" or uninstall "keeper@mp"\n' +
           "\n" +
-          "Reconcile: 1 success\n" +
+          "Reconcile: 1 warning, 1 success\n" +
           "\n" +
           "/reload to pick up changes",
+        severity: "warning",
       },
     ]);
     assert.deepStrictEqual(
@@ -5552,16 +5566,15 @@ describe("applyReconcile", () => {
     });
 
     // assert -- both app and lib reach pluginsToEnable through the D-09-08
-    // record-walk lift (the fresh verdict still holds app down too, since
-    // lib's record is not yet flipped inside the same verdict snapshot), in
-    // state.marketplaces iteration order: app was seeded before lib.
+    // record-walk lift; each has a growth move, so `apply` enables them in
+    // cascade order after their moves (APPLY1-01): lib, then app above it.
     assert.deepStrictEqual(notifications, [
       {
         message:
           "● mp [project]\n" +
           "  ● core v1.0.0 (installed) {dependency installed}\n" +
-          "  ● app v1.0.0 (installed)\n" +
           "  ● lib v1.0.0 (installed)\n" +
+          "  ● app v1.0.0 (installed)\n" +
           "\n" +
           "Reconcile: 3 successes\n" +
           "\n" +
@@ -7549,7 +7562,7 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
-  test("APPLY1-01: a dependency's failed move keeps its dependent where it is and disables it, reported as dependency failed", async (t) => {
+  test("APPLY1-01: a dependency's failed move keeps its dependent where it is and disables it, naming the dependency", async (t) => {
     // arrange
     const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
       t,
@@ -7567,17 +7580,7 @@ describe("applyReconcile catalog convergence", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Some plugin operations have failed.\n" +
-          "\n" +
-          "● mp [project]\n" +
-          "  ⊘ zcore v1.0.0 → v2.0.0 (failed) {permission denied}\n" +
-          "  ⊘ widget v1.0.0 → v1.1.0 (failed) {dependency failed}\n" +
-          "  ◍ widget v1.0.0 (disabled) {dependency failed}\n" +
-          '    cause: "zcore@mp" did not update; run apply again once it can, or uninstall "widget@mp"\n' +
-          "\n" +
-          "Reconcile: 2 failures, 1 warning\n" +
-          "\n" +
-          "/reload to pick up changes",
+          'A plugin operation has failed.\n\n● mp [project]\n  ⊘ zcore v1.0.0 → v2.0.0 (failed) {permission denied}\n  ◍ widget v1.0.0 (disabled) {dependency failed}\n    cause: "zcore@mp" did not update; run apply again once it can, or uninstall "widget@mp"\n\nReconcile: 1 failure, 1 warning\n\n/reload to pick up changes',
         severity: "error",
       },
     ]);
@@ -7700,7 +7703,7 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
-  test("APPLY1-01: held-down plugins that wait on a dependency's failed move stay disabled, reported as dependency failed", async (t) => {
+  test("APPLY1-01: held-down plugins that wait on a dependency's failed move stay disabled, and only the failed move is reported", async (t) => {
     // arrange
     const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
       t,
@@ -7731,14 +7734,7 @@ describe("applyReconcile catalog convergence", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Some plugin operations have failed.\n" +
-          "\n" +
-          "● mp [project]\n" +
-          "  ⊘ core v1.0.0 → v2.0.0 (failed) {permission denied}\n" +
-          "  ⊘ lib (failed) {dependency failed}\n" +
-          "  ⊘ app (failed) {dependency failed}\n" +
-          "\n" +
-          "Reconcile: 3 failures",
+          "A plugin operation has failed.\n\n● mp [project]\n  ⊘ core v1.0.0 → v2.0.0 (failed) {permission denied}\n\nReconcile: 1 failure",
         severity: "error",
       },
     ]);
@@ -7752,7 +7748,52 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
-  test("APPLY1-01 / CR-03: a held-down record whose enable fails after its pin refresh is a failed move", async (t) => {
+  test("APPLY1-01 / CR-B: a held-down dependency whose enable fails after the move it waited on keeps the plugin above it disabled", async (t) => {
+    // arrange -- `lib` needs core ^2.0.0 and cannot be read; `app` needs `lib`.
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-enable-fails",
+      {
+        trees: { app: { skill: "clean" }, lib: { skill: "clean" }, core: { skill: "clean" } },
+        supported: { app: ["skills"], lib: ["skills"], core: ["skills"] },
+        offered: { core: "2.0.0" },
+        dependencies: {
+          app: [{ name: "lib", version: "*" }],
+          lib: [{ name: "core", version: "^2.0.0" }],
+        },
+        records: {
+          app: { enabled: false, dependencyDisabled: true },
+          lib: { enabled: false, dependencyDisabled: true },
+        },
+      },
+    );
+    await declareEnabled(project, cwd, ["app", "lib", "core"]);
+    await unreadableSkill(marketplaceRoot, "lib");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● mp [project]\n  ● core v1.0.0 → v2.0.0 (updated)\n  ⊘ lib (failed) {unreadable}\n\nReconcile: 1 failure, 1 success\n\n/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(
+      [
+        (await recordFor(project, "mp", "app"))?.enabled,
+        (await recordFor(project, "mp", "lib"))?.enabled,
+      ],
+      [false, false],
+    );
+    verifyBoundary();
+  });
+
+  test("APPLY1-01 / CR-03 / WR-C: a held-down record whose enable fails after its pin refresh is a failed move and keeps its version", async (t) => {
     // arrange
     const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
       t,
@@ -7771,19 +7812,12 @@ describe("applyReconcile catalog convergence", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "A plugin operation has failed.\n" +
-          "\n" +
-          "● mp [project]\n" +
-          "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
-          "  ⊘ widget (failed) {unreadable}\n" +
-          "\n" +
-          "Reconcile: 1 failure, 1 success\n" +
-          "\n" +
-          "/reload to pick up changes",
+          "A plugin operation has failed.\n\n● mp [project]\n  ● zcore v1.0.0 → v2.0.0 (updated)\n  ⊘ widget v1.0.0 → v1.1.0 (failed) {unreadable}\n\nReconcile: 1 failure, 1 success\n\n/reload to pick up changes",
         severity: "error",
       },
     ]);
-    assert.equal((await recordFor(project, "mp", "widget"))?.enabled, false);
+    const widget = await recordFor(project, "mp", "widget");
+    assert.deepStrictEqual([widget?.version, widget?.enabled], ["1.0.0", false]);
     verifyBoundary();
   });
 
@@ -7813,20 +7847,7 @@ describe("applyReconcile catalog convergence", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "A plugin operation has failed.\n" +
-          "\n" +
-          "● mp [project]\n" +
-          "  ⊘ zcore v1.0.0 → v2.0.0 (failed) {permission denied}\n" +
-          "  ⊘ widget v1.0.0 (skipped) {dependents constrain}\n" +
-          '    cause: version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "host@mp"\n' +
-          "  ◍ host v1.0.0 (disabled) {dependency unsatisfied}\n" +
-          '    cause: Enable "widget@mp" or uninstall "host@mp"\n' +
-          "  ◍ widget v1.0.0 (disabled) {dependency failed}\n" +
-          '    cause: "zcore@mp" did not update; run apply again once it can, or uninstall "widget@mp"\n' +
-          "\n" +
-          "Reconcile: 1 failure, 3 warnings\n" +
-          "\n" +
-          "/reload to pick up changes",
+          'A plugin operation has failed.\n\n● mp [project]\n  ⊘ zcore v1.0.0 → v2.0.0 (failed) {permission denied}\n  ◍ host v1.0.0 (disabled) {dependency unsatisfied}\n    cause: Enable "widget@mp" or uninstall "host@mp"\n  ◍ widget v1.0.0 (disabled) {dependency failed}\n    cause: "zcore@mp" did not update; run apply again once it can, or uninstall "widget@mp"\n\nReconcile: 1 failure, 2 warnings\n\n/reload to pick up changes',
         severity: "error",
       },
     ]);

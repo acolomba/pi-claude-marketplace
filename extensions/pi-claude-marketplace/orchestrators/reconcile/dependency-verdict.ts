@@ -54,7 +54,7 @@ import {
 } from "../../domain/dependency-range.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { ownValue } from "../../shared/own-key.ts";
-import { buildScopeDeclarationDetail } from "../plugin/dependency-index.ts";
+import { buildScopeDeclarationDetail, readRecordDeclarations } from "../plugin/dependency-index.ts";
 
 import type { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -507,14 +507,53 @@ export function stillHeld(
   return new Set([...released].filter((dependent) => held.has(dependent)));
 }
 
+/** What a record's installed copy declares, or `undefined` when its copy is the catalog's. */
+export type InstalledDeclarationsReader = (
+  marketplace: ExtensionState["marketplaces"][string],
+  record: ExtensionState["marketplaces"][string]["plugins"][string],
+) => Promise<readonly AddressedDependency[] | undefined>;
+
+/** Inputs of the judgement `apply` makes once its cascade has run. */
+export interface FinalScopeOptions extends ScopeSatisfactionOptions {
+  readonly installedDeclarations: InstalledDeclarationsReader;
+}
+
 /**
- * APPLY1-01: the first declaration in `declared` that `state` does not
- * satisfy, measured as the load-time check measures it, or `undefined`.
+ * APPLY1-01: the scope as `apply` leaves it, judged strictly, to a fixed
+ * point. Every enabled record is measured by its catalog declarations and its
+ * installed copy's together (D-12a), against each dependency's recorded
+ * version and enabled state. Unlike the load-time verdict, a record held down
+ * by the marker is disabled here (no LOAD-02 optimism): the pass runs after
+ * every lift `apply` makes. A record that cannot be read ends the judgement
+ * with the walk's failure arm, as the load-time check does (D-05-07).
  */
-export function firstUnsatisfied(
-  dependent: string,
-  declared: readonly AddressedDependency[],
-  state: ExtensionState,
-): UnsatisfiedDeclaration | undefined {
-  return unsatisfiedEntries(dependent, declared, recordedPlugins(state), new Set())[0];
+export async function judgeFinalScope(
+  options: FinalScopeOptions,
+): Promise<ScopeSatisfactionVerdict> {
+  const declarations = new Map<string, readonly AddressedDependency[]>();
+  const recorded = new Map<string, RecordedPlugin>();
+  for (const marketplace of Object.values(options.state.marketplaces)) {
+    for (const [name, record] of Object.entries(marketplace.plugins)) {
+      const key = `${name}@${marketplace.name}`;
+      recorded.set(key, { disabled: isRecordedButDisabled(record), version: record.version });
+      if (isRecordedButDisabled(record)) {
+        continue;
+      }
+
+      // eslint-disable-next-line no-await-in-loop -- the first unreadable record ends the judgement
+      const read = await readRecordDeclarations(options, marketplace, name);
+      if (!read.ok) {
+        return read;
+      }
+
+      // eslint-disable-next-line no-await-in-loop -- one installed-copy read per enabled record
+      const installed = (await options.installedDeclarations(marketplace, record)) ?? [];
+      declarations.set(key, [...read.declared, ...installed]);
+    }
+  }
+
+  return {
+    ok: true,
+    unsatisfied: propagateUnsatisfied(declarations, recorded, options.seeded ?? []),
+  };
 }

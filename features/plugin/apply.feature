@@ -273,14 +273,13 @@ Feature: Plugin apply
       | kind           | reconcile-applied-cascade      |
       | severity       | error                          |
       | needs reload   | false                          |
-      | summary        | Some plugin operations have failed. |
+      | summary        | A plugin operation has failed. |
       | tally label    | Reconcile                      |
-      | tally failures | 2                              |
+      | tally failures | 1                              |
       | tally warnings | 0                              |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id           | name   | status | reasons           | scope   | from  | version | leaks | rollback partial |
-      | tools            | project           | zcore@tools  | zcore  | failed | permission denied | project | 1.0.0 | 2.0.0   |       |                  |
-      | tools            | project           | widget@tools | widget | failed | dependency failed | project | 1.0.0 | 1.1.0   |       |                  |
+      | marketplace name | marketplace scope | id          | name  | status | reasons           | scope   | from  | version | leaks | rollback partial |
+      | tools            | project           | zcore@tools | zcore | failed | permission denied | project | 1.0.0 | 2.0.0   |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id           | version | enabled |
       | widget@tools | 1.0.0   | false   |
@@ -343,8 +342,8 @@ Feature: Plugin apply
       | tally failures | 1                              |
       | tally warnings | 0                              |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id           | name   | status | reasons    | scope   | leaks | rollback partial |
-      | tools            | project           | widget@tools | widget | failed | unreadable | project |       |                  |
+      | marketplace name | marketplace scope | id           | name   | status | reasons    | scope   | from  | version | leaks | rollback partial |
+      | tools            | project           | widget@tools | widget | failed | unreadable | project | 1.0.0 | 1.1.0   |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id           | version | enabled |
       | widget@tools | 1.0.0   | false   |
@@ -367,9 +366,8 @@ Feature: Plugin apply
     Given the unreadable skill file of the published plugin "widget" of the marketplace "tools" can be read again
     When the user runs "/claude:plugin apply --scope project"
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id           | name   | status    | reasons | scope   | from  | to    | version |
-      | tools            | project           | widget@tools | widget | installed |         | project |       |       | 1.0.0   |
-      | tools            | project           | widget@tools | widget | updated   |         | project | 1.0.0 | 1.1.0 |         |
+      | marketplace name | marketplace scope | id           | name   | status  | reasons | scope   | from  | to    |
+      | tools            | project           | widget@tools | widget | updated |         | project | 1.0.0 | 1.1.0 |
     Then the installation record of the project scope holds these plugins:
       | id           | version | enabled |
       | widget@tools | 1.1.0   | true    |
@@ -427,11 +425,10 @@ Feature: Plugin apply
     Given the published plugin "zcore" of the marketplace "tools" has an unreadable skill file
     When the user runs "/claude:plugin apply --scope project"
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id           | name   | status   | reasons              | scope   | from  | version | cause chain                                                                                     | cause truncated | leaks | rollback partial |
-      | tools            | project           | zcore@tools  | zcore  | failed   | permission denied    | project | 1.0.0 | 2.0.0   |                                                                                                 |                 |       |                  |
-      | tools            | project           | widget@tools | widget | skipped  | dependents constrain | project |       | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "host@tools" | false           |       |                  |
-      | tools            | project           | widget@tools | widget | disabled | dependency failed    | project |       | 1.0.0   | "zcore@tools" did not update; run apply again once it can, or uninstall "widget@tools"          | false           |       |                  |
-      | tools            | project           | host@tools   | host   | disabled | dependency unsatisfied | project |     | 1.0.0   | Enable "widget@tools" or uninstall "host@tools"                                                 | false           |       |                  |
+      | marketplace name | marketplace scope | id           | name   | status   | reasons                | scope   | from  | version | cause chain                                                                            | cause truncated | leaks | rollback partial |
+      | tools            | project           | zcore@tools  | zcore  | failed   | permission denied      | project | 1.0.0 | 2.0.0   |                                                                                        |                 |       |                  |
+      | tools            | project           | widget@tools | widget | disabled | dependency failed      | project |       | 1.0.0   | "zcore@tools" did not update; run apply again once it can, or uninstall "widget@tools" | false           |       |                  |
+      | tools            | project           | host@tools   | host   | disabled | dependency unsatisfied | project |       | 1.0.0   | Enable "widget@tools" or uninstall "host@tools"                                        | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id           | version | enabled |
       | host@tools   | 1.0.0   | false   |
@@ -458,7 +455,6 @@ Feature: Plugin apply
       | marketplace name | marketplace scope | id         | name | status   | reasons                        | scope   | from  | to    | version | cause chain                                                                                       | cause truncated | leaks | rollback partial |
       | tools            | project           | core@tools | core | updated  |                                | project | 1.0.0 | 2.0.0 |         |                                                                                                   |                 |       |                  |
       | tools            | project           | lib@tools  | lib  | failed   | permission denied              | project | 1.0.0 |       | 2.0.0   |                                                                                                   |                 |       |                  |
-      | tools            | project           | app@tools  | app  | failed   | dependency failed              | project | 1.0.0 |       | 2.0.0   |                                                                                                   |                 |       |                  |
       | tools            | project           | lib@tools  | lib  | disabled | dependency version unsatisfied | project |       |       | 1.0.0   | The update of "lib@tools" did not install; run apply again once it can, or uninstall "lib@tools" | false           |       |                  |
       | tools            | project           | app@tools  | app  | disabled | dependency failed              | project |       |       | 1.0.0   | "lib@tools" did not update; run apply again once it can, or uninstall "app@tools"                 | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
@@ -485,9 +481,8 @@ Feature: Plugin apply
     Given the user has run "/claude:plugin apply --scope project", which failed
     When the user runs "/claude:plugin apply --scope project"
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status | reasons           | scope   | from  | version | leaks | rollback partial |
-      | tools            | project           | lib@tools | lib  | failed | unreadable        | project |       |         |       |                  |
-      | tools            | project           | app@tools | app  | failed | dependency failed | project | 1.0.0 | 2.0.0   |       |                  |
+      | marketplace name | marketplace scope | id        | name | status | reasons    | scope   | from  | version | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | failed | unreadable | project | 1.0.0 | 2.0.0   |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id         | version | enabled |
       | app@tools  | 1.0.0   | false   |
@@ -519,13 +514,151 @@ Feature: Plugin apply
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id         | name | status | reasons           | scope   | from  | version | leaks | rollback partial |
       | tools            | project           | core@tools | core | failed | permission denied | project | 1.0.0 | 2.0.0   |       |                  |
-      | tools            | project           | lib@tools  | lib  | failed | dependency failed | project |       |         |       |                  |
-      | tools            | project           | app@tools  | app  | failed | dependency failed | project |       |         |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id         | version | enabled |
       | app@tools  | 1.0.0   | false   |
       | core@tools | 1.0.0   | true    |
       | lib@tools  | 1.0.0   | false   |
+
+  Scenario: Apply keeps a plugin disabled when the enable of the dependency a config turns back on fails
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | tools       | app    |         |
+      | tools       | lib    | false   |
+    Given the user has run "/claude:plugin apply --scope project", which warned
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | tools       | app    |         |
+      | tools       | lib    |         |
+    Given the published plugin "lib" of the marketplace "tools" has an unreadable skill file
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind           | reconcile-applied-cascade      |
+      | severity       | error                          |
+      | needs reload   | false                          |
+      | summary        | A plugin operation has failed. |
+      | tally label    | Reconcile                      |
+      | tally failures | 1                              |
+      | tally warnings | 0                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status | reasons    | scope   | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | failed | unreadable | project |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | app@tools | 1.0.0   | false   |
+      | lib@tools | 1.0.0   | false   |
+
+  Scenario: Apply keeps a plugin a config enables disabled while the held-down dependency it needs cannot be enabled
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   | core         |
+      | core | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | tools       | app    | false   |
+      | tools       | lib    |         |
+      | tools       | core   |         |
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   | core@^2.0.0  |
+      | core | 1.0.0   |              |
+    Given the user has run "/claude:plugin apply --scope project", which warned
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | tools       | app    |         |
+      | tools       | lib    |         |
+      | tools       | core   |         |
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   | core@^2.0.0  |
+      | core | 2.0.0   |              |
+    Given the published plugin "lib" of the marketplace "tools" has an unreadable skill file
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status  | reasons    | scope   | from  | to    | leaks | rollback partial |
+      | tools            | project           | core@tools | core | updated |            | project | 1.0.0 | 2.0.0 |       |                  |
+      | tools            | project           | lib@tools  | lib  | failed  | unreadable | project |       |       |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id         | version | enabled |
+      | app@tools  | 1.0.0   | false   |
+      | core@tools | 2.0.0   | true    |
+      | lib@tools  | 1.0.0   | false   |
+
+  Scenario: Apply reports only the failing move once the plugins that wait on it are held down
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies  |
+      | host   | 1.0.0   | widget@^1.0.0 |
+      | widget | 1.0.0   | zcore         |
+      | zcore  | 1.0.0   |               |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install host@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies  |
+      | host   | 1.0.0   | widget@^1.0.0 |
+      | widget | 2.0.0   | zcore@^2.0.0  |
+      | zcore  | 2.0.0   |               |
+    Given the published plugin "zcore" of the marketplace "tools" has an unreadable skill file
+    Given the user has run "/claude:plugin apply --scope project", which failed
+    Given the user has run "/claude:plugin apply --scope project", which failed
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind           | reconcile-applied-cascade      |
+      | severity       | error                          |
+      | needs reload   | false                          |
+      | summary        | A plugin operation has failed. |
+      | tally label    | Reconcile                      |
+      | tally failures | 1                              |
+      | tally warnings | 0                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name  | status | reasons           | scope   | from  | version | leaks | rollback partial |
+      | tools            | project           | zcore@tools | zcore | failed | permission denied | project | 1.0.0 | 2.0.0   |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | host@tools   | 1.0.0   | false   |
+      | widget@tools | 1.0.0   | false   |
+      | zcore@tools  | 1.0.0   | true    |
+
+  Scenario: Apply keeps the version of a held-down plugin whose enable fails after its move
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 1.0.0   |              |
+    Given the user has run "/claude:plugin apply --scope project", which warned
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 2.0.0   |              |
+    Given the published plugin "widget" of the marketplace "tools" has an unreadable skill file
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status  | reasons    | scope   | from  | to    | version | leaks | rollback partial |
+      | tools            | project           | zcore@tools  | zcore  | updated |            | project | 1.0.0 | 2.0.0 |         |       |                  |
+      | tools            | project           | widget@tools | widget | failed  | unreadable | project | 1.0.0 |       | 1.1.0   |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.0.0   | false   |
+      | zcore@tools  | 2.0.0   | true    |
 
   Scenario: Apply moves a chain of three plugins, each needing the next one's new version, in one run
     Given the marketplace "tools" is published as a dir source

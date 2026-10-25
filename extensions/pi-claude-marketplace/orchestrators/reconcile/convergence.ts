@@ -38,14 +38,16 @@ import { resolveListCandidate } from "../plugin/list-candidate-version.ts";
 import { isRecordedCandidate, isSameRevision, resolvePluginVersion } from "../plugin/shared.ts";
 
 import {
-  firstUnsatisfied,
   releasableDependents,
   stillHeld,
   verdictAfterMoves,
   verdictWithout,
 } from "./dependency-verdict.ts";
 
-import type { ScopeSatisfactionVerdict, UnsatisfiedDeclaration } from "./dependency-verdict.ts";
+import type {
+  InstalledDeclarationsReader,
+  ScopeSatisfactionVerdict,
+} from "./dependency-verdict.ts";
 import type { PlannedPluginEnable, ReconcilePlan } from "./types.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
@@ -774,12 +776,20 @@ function isDependencyHeld(state: ExtensionState, op: PlannedPluginEnable): boole
  * judges every enabled plugin again once the moves have run.
  */
 export async function settleMoveCascade(input: MoveCascadeInput): Promise<MoveCascade> {
+  const base = { scope: input.scope, state: input.state, locations: input.locations };
   const settled = await releaseOnLandedMoves(input);
-  const deferredEnables = settled.plan.pluginsToEnable.filter(
-    (op) =>
-      settled.released.has(`${op.plugin}@${op.marketplace}`) && isDependencyHeld(input.state, op),
-  );
-  const moved = new Set((settled.cascade?.plan.moves ?? []).map(moveKey));
+  const lifts = settled.plan.pluginsToEnable.filter((op) => isDependencyHeld(input.state, op));
+  const cascade =
+    settled.cascade ??
+    (lifts.length > 0 ? await planConvergenceCascade({ ...base, plan: settled.plan }) : undefined);
+  const moved = new Set((cascade?.plan.moves ?? []).map(moveKey));
+  // CR-A / CR-B: an enable the release relies on, and a held-down record that
+  // has a move of its own, wait for the cascade: `apply` enables them in
+  // cascade order, a held-down record right after its own move lands.
+  const deferredEnables = settled.plan.pluginsToEnable.filter((op) => {
+    const key = `${op.plugin}@${op.marketplace}`;
+    return settled.released.has(key) || (moved.has(key) && isDependencyHeld(input.state, op));
+  });
   const enabledByMove = new Set(
     deferredEnables.map((op) => `${op.plugin}@${op.marketplace}`).filter((key) => moved.has(key)),
   );
@@ -791,7 +801,7 @@ export async function settleMoveCascade(input: MoveCascadeInput): Promise<MoveCa
   };
   return {
     plan: settled.plan,
-    ...(settled.cascade !== undefined && { cascade: settled.cascade }),
+    ...(cascade !== undefined && { cascade }),
     deferredEnables,
     preview,
   };
@@ -829,7 +839,10 @@ async function releaseOnLandedMoves(
 }
 
 /** Whether `pluginRoot` is a per-commit copy under the scope's plugin clones. */
-async function isPinnedCopy(locations: ScopedLocations, pluginRoot: string): Promise<boolean> {
+export async function isPinnedCopy(
+  locations: ScopedLocations,
+  pluginRoot: string,
+): Promise<boolean> {
   try {
     await assertPathInside(locations.pluginClonesDir, pluginRoot, "installed plugin copy");
     return true;
@@ -839,39 +852,15 @@ async function isPinnedCopy(locations: ScopedLocations, pluginRoot: string): Pro
 }
 
 /**
- * APPLY1-01 / D-13: why the copy `plugin` has installed may not stay enabled
- * once `landed` (the dependencies that moved for it) moved, or `undefined`.
- * `apply` asks it of a dependent whose own move failed after those moves
- * landed. Only a git source keeps a copy of the version it runs (a per-commit
- * copy), and its declarations of the landed dependencies are measured. A path
- * source's files are the marketplace's, which now hold the version that failed
- * to install, and a copy that cannot be read declares nothing known: both fail
- * closed when `before` (what the scope left unmet before the moves) names a
- * landed dependency, which is then the one reported, with no range.
+ * APPLY1-01 / DLS-D1: reads what a record's installed copy declares, for the
+ * judgement `apply` makes after its cascade. Only a git source keeps a copy of
+ * the version it runs (a per-commit copy); a path source's files are the
+ * marketplace's, which the catalog read already covers, so it answers
+ * `undefined`, as does a copy that cannot be read.
  */
-export async function installedCopyUnsatisfied(
-  input: Pick<ConvergenceInput, "state" | "locations">,
-  move: Pick<PlannedMove, "marketplace" | "plugin">,
-  landed: readonly string[],
-  before: readonly UnsatisfiedDeclaration[],
-): Promise<UnsatisfiedDeclaration | undefined> {
-  const dependent = `${move.plugin}@${move.marketplace}`;
-  const mp = ownValue(input.state.marketplaces, move.marketplace);
-  const record = ownValue(mp?.plugins, move.plugin);
-  if (mp === undefined || record === undefined) {
-    return undefined;
-  }
-
-  const declared = (await isPinnedCopy(input.locations, record.resolvedSource))
-    ? await installedCopyDeclarations(input, mp, record)
-    : undefined;
-  if (declared === undefined) {
-    const unmet = before.find((entry) => landed.includes(entry.dependency));
-    return unmet === undefined
-      ? undefined
-      : { dependent, dependency: unmet.dependency, kind: "out-of-range" };
-  }
-
-  const relevant = declared.filter((dep) => landed.includes(`${dep.name}@${dep.marketplace}`));
-  return firstUnsatisfied(dependent, relevant, input.state);
+export function installedCopyReader(locations: ScopedLocations): InstalledDeclarationsReader {
+  return async (mp, record) =>
+    (await isPinnedCopy(locations, record.resolvedSource))
+      ? installedCopyDeclarations({ locations }, mp, record)
+      : undefined;
 }

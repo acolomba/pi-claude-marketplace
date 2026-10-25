@@ -63,3 +63,29 @@ plan judged; failed toggle enables count as dependencies that did not land.
 | IN-02 | the installed-copy check measures only the landed dependencies |
 | IN-03 | not changed: the release loop still runs inside the read-pass lock, but only when a held dependent is releasable |
 | IN-04 | the pass runs in a `finally`, so a GHB-03 throw mid-cascade still judges what landed |
+
+## Second rework (APPLY1-REVIEW-2: 2 Critical, 5 Warning, 4 Info)
+
+The post-cascade pass is now an invariant check over the final state:
+`judgeFinalScope` judges every enabled record by its catalog plus installed
+copy declarations (D-12a) against each dependency's recorded version and
+enabled state, with a marker record read as disabled, to a fixed point.
+
+| Finding | Fix |
+|---|---|
+| CR-A | a held-down record with a move of its own is deferred (move, then enable), released or not; the judgement reads installed copies against every dependency, not only this run's moves; `apply.feature:353` now expects one net `(updated)` row |
+| CR-B | the judgement reads marker records as disabled; a released enable is deferred whether or not it carries the marker; a failed enable-only step propagates to the steps above |
+| WR-A | no narrowing: every enabled record is judged; a disable already refused this apply is not retried |
+| WR-B | one row per plugin: a deferred step that stays disabled reports nothing; a skipped move of an enabled record is `(skipped)`, replaced by its `(disabled)` row; holds only for plugins that end enabled; a toggle enable the judgement undoes reports neither row |
+| WR-C | a failed deferred enable restores the pre-move pin and reports the move's `(failed)` row |
+| WR-D | falls out of the judgement |
+| IN-A | the routing rebuild (`closeScopePass`) and the hold rows also run on the GHB-03 throw path |
+| IN-B | not changed: a failed walk disables nothing (D-05-07 conflict, reported) |
+| IN-C | a move that lands on another version counts as landed; the judgement measures it |
+| IN-D | the narrowing comment is gone with the narrowing |
+
+Changed existing tests: D-05-16/PU-5 and LOAD-03/MISS-01 (keeper is disabled
+the same apply its dependency is removed; the next pass reinstalls it and
+enables keeper); D-09-07, D-09-08 and LOAD-02 (held-down records with a growth
+move are enabled in cascade order; D-09-08's rows are now lib before app).
+The refused-disable and lock-count tests pass unchanged.
