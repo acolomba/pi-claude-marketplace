@@ -4,7 +4,7 @@ last_mapped_at: 2026-10-05
 ---
 # Testing Patterns
 
-**Analysis Date:** 2026-10-05
+**Analysis Date:** 2026-10-25
 
 ## Test Framework
 
@@ -215,4 +215,4 @@ test("concurrent writes serialize cleanly (NFR-1 -- write-file-atomic queue)", a
 
 ---
 
-*Testing analysis: 2026-10-05*
+*Testing analysis: 2026-10-25*

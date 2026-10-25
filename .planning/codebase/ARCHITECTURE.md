@@ -6,7 +6,7 @@ last_mapped_at: 2026-10-05
 
 # Architecture
 
-**Analysis Date:** 2026-10-05
+**Analysis Date:** 2026-10-25
 
 ## System Overview
 
@@ -98,7 +98,7 @@ last_mapped_at: 2026-10-05
 **orchestrators/:**
 - Purpose: own the business logic for install/uninstall/update/reinstall/enable-disable, marketplace lifecycle, bulk import, and reconcile (the load-time preview, `pending`, and `apply`)
 - Location: `extensions/pi-claude-marketplace/orchestrators/`
-- Contains: per-verb owners — the split verbs pair a `<verb>-flow.ts` composition root with extracted leaf modules (`install-flow.ts` + `install-outcome.ts`/`install-cascade.ts`/`install-clone-probe.ts`/`install-declared-enabled.ts`/`install-disable-cascade.ts`; `update-flow.ts` + `update-swap.ts`/`update-preflight.ts`/`update-cascade.ts`/`update-row.ts`; `reinstall-flow.ts` + `reinstall-clone-probe.ts`/`reinstall-record.ts`/`reinstall-replace.ts`/`reinstall-targets.ts`; `list-flow.ts` + `list-candidate-row.ts`/`list-installed-row.ts`/`list-orphan-fold.ts`), while `uninstall.ts`, `info.ts`, `fetch.ts`, and `enable-disable.ts` remain single-file owners; most verbs are paired with a `*.messaging.ts` file holding the notification-message builder; `shared.ts` per subdirectory for cross-verb helpers
+- Contains: per-verb owners — the split verbs pair a `<verb>-flow.ts` composition root with extracted leaf modules (`install-flow.ts` + `install-outcome.ts`/`install-cascade.ts`/`install-clone-probe.ts`/`install-declared-enabled.ts`/`install-disable-cascade.ts`; `update-flow.ts` + `update-swap.ts`/`update-preflight.ts`/`update-cascade.ts`/`update-row.ts`; `reinstall-flow.ts` + `reinstall-record.ts`/`reinstall-targets.ts`, running on the update family's shared runner `materialize-latest.ts`; `list-flow.ts` + `list-candidate-row.ts`/`list-installed-row.ts`/`list-orphan-fold.ts`), while `uninstall.ts`, `info.ts`, `fetch.ts`, and `enable-disable.ts` remain single-file owners; most verbs are paired with a `*.messaging.ts` file holding the notification-message builder; `shared.ts` per subdirectory for cross-verb helpers
 - Depends on: bridges/, domain/, transaction/, persistence/, platform/, shared/
 - Used by: edge/handlers/*, orchestrators/import/ (cascades plugin orchestrator calls), index.ts (`applyReconcile`, `updateSinglePlugin`)
 
@@ -162,7 +162,7 @@ last_mapped_at: 2026-10-05
 A load changes no installation state (APL-D1). It reads, reports, and reloads resources.
 
 1. Pi fires `resources_discover` on every session start/reload; `index.ts` handler first calls `hydrateProjectScopeForCwd` (`bridges/hooks/index.ts`) to populate the per-project hook-routing cache
-2. `loadReconcile` (`orchestrators/reconcile/load.ts`) runs per scope, project first: the shared locked, write-free read pass (`orchestrators/reconcile/read-pass.ts`: the MIG-01 first-run config migration, the legacy state migration, the LOAD-01 dependency verdict, and `orchestrators/reconcile/plan.ts`'s diff of the merged config against the records in `state.json`), then the AMIG-01 MCP move, then the per-session warnings (unreadable declarer, `{not in manifest}`) and the hook routing rebuild. On a mismatch it prints the block `pending` prints, built by `pending.ts::composePendingReport` and ending with the `/claude:plugin apply` trailer; on a match it prints nothing (RECON-05). It installs, uninstalls, enables, disables, and updates nothing
+2. `loadReconcile` (`orchestrators/reconcile/load.ts`) runs per scope, project first: the shared locked, write-free read pass (`orchestrators/reconcile/read-pass.ts`: the MIG-01 first-run config migration, the legacy state migration, the LOAD-01 dependency verdict, and `orchestrators/reconcile/plan.ts`'s diff of the merged config against the records in `state.json`), then the AMIG-01 MCP move, then the per-session warnings (unreadable declarer, `{not in manifest}`) and the hook routing rebuild. On a mismatch it prints the block `pending` prints, built by `pending.ts::composePendingReport` and ending with the `/claude:plugin apply` trailer; on a match it prints nothing (RECON-05). It installs, uninstalls, enables, disables, and updates nothing. Exception (AAP-01..03): when `persistence/config-merge.ts::loadAutoapplyFiles` and `effectiveAutoapply` read `autoapply: true` from the four config files (project local > project base > user local > user base, default off), the load runs the injected `applyReconcile` instead, network included (AAP-D1), with stored credentials only and no Device Flow (`orchestrators/auth-host.ts`); if that apply throws, the load reports `reconcile-aborted` and falls back to the read-only pass
 3. `recomputePluginPath` (`orchestrators/plugin-path.ts`) rebuilds the `PATH`-equivalent routing table for both scopes
 4. `aggregateDiscoveredResources` (`orchestrators/discover.ts`) walks both scope `locationsFor(...)` bundles and returns `{ skillPaths, promptPaths }` to Pi
 
@@ -210,7 +210,7 @@ A load changes no installation state (APL-D1). It reads, reports, and reloads re
 **`/claude:plugin` command:**
 - Location: `extensions/pi-claude-marketplace/edge/router.ts` (`routeClaudePlugin`), wired by `edge/register.ts`
 - Triggers: user-typed slash command in Pi
-- Responsibilities: subcommand dispatch (install/uninstall/update/fetch/reinstall/list/info/pending/apply/prune/browse/help/enable/disable/import/marketplace)
+- Responsibilities: subcommand dispatch (install/uninstall/update/fetch/reinstall/list/info/pending/apply/autoapply/prune/browse/help/enable/disable/import/marketplace). `autoapply` (`edge/handlers/plugin/autoapply.ts` -> `orchestrators/reconcile/autoapply-setting.ts`) shows the effective value and each file's value, or sets `on`/`off` in one config file under the scope's state lock (AAP-04, AAP-D2)
 
 **MCP tools:**
 - Location: `extensions/pi-claude-marketplace/edge/handlers/tools.ts`, registered via `registerClaudeMarketplaceTools` (`edge/register.ts`)
@@ -262,4 +262,4 @@ A load changes no installation state (APL-D1). It reads, reports, and reloads re
 
 ---
 
-*Architecture analysis: 2026-10-05*
+*Architecture analysis: 2026-10-25*

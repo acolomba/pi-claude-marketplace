@@ -4,7 +4,7 @@ last_mapped_at: 2026-10-05
 ---
 # Codebase Concerns
 
-**Analysis Date:** 2026-10-05
+**Analysis Date:** 2026-10-25
 
 ## Tech Debt
 
@@ -64,10 +64,10 @@ last_mapped_at: 2026-10-05
 
 ## Reconciliation Model Limits
 
-**Load-time reconcile is config-to-record, not a deep diff against disk:**
+**`apply` is config-to-record and record-to-catalog, not a deep diff against disk:**
 - Problem: `applyReconcile` (`extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts`) diffs declared config against `state.json` records. It does not re-verify that recorded artifacts exist on disk.
 - Files: `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts`, `orchestrators/reconcile/plan.ts`
-- Impact: an artifact deleted underneath an intact record is not detected or repaired by `/reload`.
+- Impact: an artifact deleted underneath an intact record is not detected or repaired by `/claude:plugin apply` or `/reload`.
 
 ## CI Coverage Gaps
 

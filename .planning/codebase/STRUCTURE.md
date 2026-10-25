@@ -4,7 +4,7 @@ last_mapped_at: 2026-10-05
 ---
 # Codebase Structure
 
-**Analysis Date:** 2026-10-05
+**Analysis Date:** 2026-10-25
 
 ## Directory Layout
 
@@ -53,13 +53,13 @@ pi-claude-marketplace/
 
 **`extensions/pi-claude-marketplace/edge/`:**
 - Purpose: parse `/claude:plugin` subcommand strings and CLI flags, dispatch to exactly one orchestrator
-- Contains: `router.ts`, `register.ts`, `args.ts`/`args-schema.ts`, `flag-catalog.ts`, `skill-aliases.ts`, `types.ts`, `browser/plugin-browser.ts` (pure-UI SelectList browser), `handlers/plugin/*.ts` (bootstrap, browse, enable-disable, fetch, help, import, info, install, list, pending, prune, reinstall, shared, uninstall, update), `handlers/marketplace/*.ts` (add, autoupdate, info, list, remove, shared, update), `handlers/shared.ts`, `handlers/tools.ts`, `completions/*.ts` (data, normalize, provider)
+- Contains: `router.ts`, `register.ts`, `args.ts`/`args-schema.ts`, `flag-catalog.ts`, `skill-aliases.ts`, `types.ts`, `browser/plugin-browser.ts` (pure-UI SelectList browser), `handlers/plugin/*.ts` (apply, autoapply, bootstrap, browse, enable-disable, fetch, help, import, info, install, list, pending, prune, reinstall, shared, uninstall, update), `handlers/marketplace/*.ts` (add, autoupdate, info, list, remove, shared, update), `handlers/shared.ts`, `handlers/tools.ts`, `completions/*.ts` (data, normalize, provider)
 - Key files: `edge/router.ts` (subcommand table), `edge/handlers/tools.ts` (MCP tool registration)
 
 **`extensions/pi-claude-marketplace/orchestrators/`:**
 - Purpose: business logic for every mutating and read-only command
-- Contains: `plugin/*.ts` (49 files; split verbs pair a `<verb>-flow.ts` ledger entry point with leaf modules: `install-flow.ts` + `install-outcome`/`install-cascade`/`install-clone-probe`/`install-declared-enabled`/`install-disable-cascade`; `update-flow.ts` + `update-swap`/`update-preflight`/`update-cascade`/`update-row`/`update-constraint-gate`; `reinstall-flow.ts` + `reinstall-clone-probe`/`reinstall-record`/`reinstall-replace`/`reinstall-targets`; `list-flow.ts` + `list-candidate-row`/`list-installed-row`/`list-orphan-fold`; single-file owners `uninstall.ts`, `info.ts`, `fetch.ts`, `enable-disable.ts`, `prune.ts` + `prune-rollback.ts`, `bootstrap.ts`; git/tag seams `clone-cache`, `clone-gc`, `git-source-probe`, `marketplace-tag-probe`, `dependency-tag-probe`; dependency helpers `dependency-declaration-read`, `dependency-index`; `operations.ts` (binds the real `runPhases` transaction), `plugin-state-classifier`, `discover-names`, `workflows-staging-gc`, `shared.ts`, plus a `*.messaging.ts` sibling per verb), `marketplace/*.ts` (add, remove, update, autoupdate, info, list, shared, plus `*.messaging.ts` siblings), `import/*.ts` (execute, execute.messaging, marketplaces, refs, settings, types, `index.ts` barrel), `reconcile/*.ts` (apply, apply-outcomes, backfill, plan, pending, notify, dependency-verdict, reconcile.messaging, types), top-level `discover.ts`, `edge-deps.ts`, `plugin-path.ts`, `auth-host.ts`, `scope-fanout.ts`, `skill-alias-state.ts`, `types.ts`
-- Key files: `orchestrators/plugin/install-outcome.ts` (inner 7-phase ledger), `install-cascade.ts` and `enable-disable.ts` (cascade ledgers), `orchestrators/reconcile/apply.ts` (drives `resources_discover` self-healing)
+- Contains: `plugin/*.ts` (51 files; split verbs pair a `<verb>-flow.ts` ledger entry point with leaf modules: `install-flow.ts` + `install-outcome`/`install-cascade`/`install-clone-probe`/`install-declared-enabled`/`install-disable-cascade`; `update-flow.ts` + `update-swap`/`update-preflight`/`update-cascade`/`update-row`/`update-constraint-gate`; `reinstall-flow.ts` + `reinstall-record`/`reinstall-targets`; `materialize-latest` (the update/reinstall/converge shared runner); `list-flow.ts` + `list-candidate-row`/`list-installed-row`/`list-orphan-fold`; single-file owners `uninstall.ts`, `info.ts`, `fetch.ts`, `enable-disable.ts`, `prune.ts` + `prune-rollback.ts`, `bootstrap.ts`; git/tag seams `clone-cache`, `clone-gc`, `git-source-probe`, `marketplace-tag-probe`, `dependency-tag-probe`; dependency helpers `dependency-declaration-read`, `dependency-index`; `operations.ts` (binds the real `runPhases` transaction), `plugin-state-classifier`, `discover-names`, `workflows-staging-gc`, `shared.ts`, plus a `*.messaging.ts` sibling per verb), `marketplace/*.ts` (add, remove, update, autoupdate, info, list, shared, plus `*.messaging.ts` siblings), `import/*.ts` (execute, execute.messaging, marketplaces, refs, settings, types, `index.ts` barrel), `reconcile/*.ts` (load, read-pass, apply, apply-outcomes, convergence, autoapply-setting, delisted-plugins, mcp-migration, plan, pending, notify, dependency-verdict, reconcile.messaging, types), top-level `discover.ts`, `edge-deps.ts`, `plugin-path.ts`, `auth-host.ts`, `scope-fanout.ts`, `skill-alias-state.ts`, `types.ts`
+- Key files: `orchestrators/plugin/install-outcome.ts` (inner 7-phase ledger), `install-cascade.ts` and `enable-disable.ts` (cascade ledgers), `orchestrators/reconcile/load.ts` (the read-only `resources_discover` pass, or `apply` when `autoapply` is on), `orchestrators/reconcile/apply.ts` (`/claude:plugin apply`)
 
 **`extensions/pi-claude-marketplace/bridges/`:**
 - Purpose: translate one Claude-plugin component kind into its Pi-native artifact
@@ -84,7 +84,7 @@ pi-claude-marketplace/
 
 **`extensions/pi-claude-marketplace/shared/`:**
 - Purpose: cross-cutting leaf utilities, no upward dependencies
-- Contains: `notification-types.ts`, `notification-grammar.ts` (largest module), `notification-summary.ts`, `notification-dispatch.ts` (sole `ctx.ui.notify` site), `notify-context.ts`, `notify-reasons.ts`, `compare-name-scope.ts`, `redact-absolute-paths.ts`, `path-containment.ts`, `bom.ts`, `regexp.ts`, `errors.ts`, `errors-bridges.ts`, `path-safety.ts`, `atomic-json.ts`, `fs-utils.ts`, `debug-log.ts`, `types.ts`, `vars.ts`, `git-failure-classifiers.ts`, `probe-classifiers.ts`, `extension-version.ts`, `markers.ts`, `session-env.ts`, `completion-cache.ts`, `concerns/` (soft-dep, hooks)
+- Contains: `notification-types.ts`, `notification-grammar.ts` (largest module), `notification-summary.ts`, `notification-dispatch.ts` (sole `ctx.ui.notify` site), `notify-context.ts`, `notify-reasons.ts`, `compare-name-scope.ts`, `redact-absolute-paths.ts`, `path-containment.ts`, `bom.ts`, `regexp.ts`, `errors.ts`, `errors-bridges.ts`, `path-safety.ts`, `atomic-json.ts`, `fs-utils.ts`, `debug-log.ts`, `types.ts`, `vars.ts`, `git-failure-classifiers.ts`, `probe-classifiers.ts`, `markers.ts`, `session-env.ts`, `completion-cache.ts`, `concerns/` (soft-dep, hooks)
 
 ## Key File Locations
 
@@ -161,4 +161,4 @@ pi-claude-marketplace/
 
 ---
 
-*Structure analysis: 2026-10-05*
+*Structure analysis: 2026-10-25*
