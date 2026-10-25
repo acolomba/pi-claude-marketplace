@@ -65,6 +65,15 @@ Given(
   },
 );
 
+// Setup whose every result is a warning, such as an apply that holds a plugin
+// down for its dependency's version.
+Given(
+  "the user has run {string}, which warned",
+  async function (this: ScenarioWorld, command: string) {
+    await runSetup(this, command, "warning");
+  },
+);
+
 When("the user runs {string}", async function (this: ScenarioWorld, command: string) {
   this.recordResults(
     await runCommandPayloads(this.pi, expandTokens(command, this.tokens)),

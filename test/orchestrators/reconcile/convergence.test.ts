@@ -11,7 +11,14 @@ import path from "node:path";
 import { test } from "node:test";
 
 import { pluginCloneKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
-import { planConvergence } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/convergence.ts";
+import {
+  installedCopyUnsatisfied,
+  movedDependencies,
+  planConvergence,
+  planConvergenceCascade,
+  settleMoveCascade,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/convergence.ts";
+import { buildScopeSatisfactionVerdict } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
 import { emptyReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { captureDebugLog } from "../../platform/debug-log-capture.ts";
@@ -22,6 +29,7 @@ import type {
   PlannedHold,
   PlannedMove,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/convergence.ts";
+import type { ScopeSatisfactionVerdict } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
 import type { ReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -1246,4 +1254,243 @@ test("ENBL-08: a disabled record whose supported set grew is not a move", async 
 
   // assert
   assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
+});
+
+/**
+ * The plan a verdict gives in these cases: each held dependent is disabled,
+ * and each record of `lift` the verdict does not hold is enabled, as the
+ * planner lifts a LOAD-02 marker.
+ */
+function planFrom(verdict: ScopeSatisfactionVerdict, lift: readonly string[] = []): ReconcilePlan {
+  const unsatisfied = verdict.ok ? verdict.unsatisfied : [];
+  const held = new Set(unsatisfied.map((entry) => entry.dependent));
+  return planWith({
+    pluginsToEnable: lift
+      .filter((plugin) => !held.has(`${plugin}@tools`))
+      .map((plugin) => ({ ...DEMO_OP, plugin })),
+    pluginsToDependencyDisable: unsatisfied.map((entry) => ({
+      ...DEMO_OP,
+      plugin: entry.dependent.replace("@tools", ""),
+      dependency: entry.dependency,
+      kind: entry.kind,
+    })),
+  });
+}
+
+const CO_SHIPPED: readonly StagedPlugin[] = [
+  { name: "widget", offered: "1.1.0", declares: [{ name: "zcore", version: "^2.0.0" }] },
+  { name: "zcore", offered: "2.0.0" },
+];
+
+async function settle(
+  fixture: Fixture,
+  state: ExtensionState,
+  lift: readonly string[] = [],
+): Promise<Awaited<ReturnType<typeof settleMoveCascade>> & { readonly input: ReconcilePlan }> {
+  const verdict = await buildScopeSatisfactionVerdict({ state, locations: fixture.locations });
+  const input = planFrom(verdict, lift);
+  const settled = await settleMoveCascade({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    plan: input,
+    verdict,
+    replan: (released) => planFrom(released, lift),
+  });
+  return { ...settled, input };
+}
+
+function moveKeys(moves: readonly PlannedMove[] | undefined): readonly string[] {
+  return (moves ?? []).map((move) => `${move.plugin}@${move.marketplace}`);
+}
+
+test("APPLY1-01: a dependent the catalog moves with the newer dependency it needs is released, dependencies first", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "co-shipped");
+  const state = await stageTools(fixture, CO_SHIPPED);
+
+  // act
+  const settled = await settle(fixture, state);
+
+  // assert
+  assert.equal(settled.input.pluginsToDependencyDisable.length, 1);
+  assert.deepStrictEqual(settled.plan, planWith({}));
+  assert.deepStrictEqual(moveKeys(settled.cascade?.plan.moves), ["zcore@tools", "widget@tools"]);
+  assert.deepStrictEqual(settled.deferredEnables, []);
+});
+
+test("APPLY1-01: a released dependent whose own move stays held keeps the caller's plan", async (t) => {
+  // arrange -- `zhost` holds `widget` at ~1.0.0, so `widget` stays and its
+  // installed copy's core ^1.0.0 holds the move its release relied on.
+  const fixture = await createFixture(t, "release-shrinks");
+  const state = await stageTools(fixture, heldDependentChain("widget-installed"));
+
+  // act
+  const settled = await settle(fixture, state);
+
+  // assert
+  assert.deepStrictEqual(settled, {
+    input: settled.input,
+    plan: settled.input,
+    deferredEnables: [],
+  });
+  assert.deepStrictEqual(
+    settled.input.pluginsToDependencyDisable.map((op) => op.plugin),
+    ["widget", "zhost"],
+  );
+});
+
+test("APPLY1-01: a dependent held down by an earlier pass is enabled only after the moves it waits on", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "deferred");
+  const state = await stageTools(fixture, [
+    { ...CO_SHIPPED[0], record: { enabled: false, dependencyDisabled: true } } as StagedPlugin,
+    { name: "zcore", offered: "2.0.0" },
+  ]);
+
+  // act
+  const settled = await settle(fixture, state, ["widget"]);
+
+  // assert
+  assert.deepStrictEqual(moveKeys(settled.cascade?.plan.moves), ["zcore@tools", "widget@tools"]);
+  assert.deepStrictEqual(settled.deferredEnables, [{ ...DEMO_OP, plugin: "widget" }]);
+  assert.deepStrictEqual(settled.plan.pluginsToEnable, [{ ...DEMO_OP, plugin: "widget" }]);
+});
+
+test("APPLY1-01: a held-down dependent that waits on no move is enabled with the toggles", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "lift-no-move");
+  const state = await stageTools(fixture, [
+    {
+      name: "widget",
+      offered: "1.0.0",
+      declares: [{ name: "zcore" }],
+      record: { enabled: false, dependencyDisabled: true },
+    },
+    { name: "zcore", offered: "1.0.0" },
+  ]);
+
+  // act
+  const settled = await settle(fixture, state, ["widget"]);
+
+  // assert
+  assert.deepStrictEqual(moveKeys(settled.cascade?.plan.moves), []);
+  assert.deepStrictEqual(settled.deferredEnables, []);
+  assert.deepStrictEqual(settled.plan.pluginsToEnable, [{ ...DEMO_OP, plugin: "widget" }]);
+});
+
+test("APPLY1-01: a disabled record the caller enables after its move is planned as enabled", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "enable-input");
+  const state = await stageTools(fixture, [
+    { name: "demo", offered: "1.1.0", record: { enabled: false } },
+    { name: "lib", offered: "1.0.0" },
+  ]);
+  const input = { scope: "project" as const, state, locations: fixture.locations };
+
+  // act
+  const none = await planConvergenceCascade({ ...input, enable: new Set() });
+  const enabled = await planConvergenceCascade({ ...input, enable: new Set(["demo@tools"]) });
+
+  // assert
+  assert.deepStrictEqual(none.plan.moves, []);
+  assert.deepStrictEqual(enabled.plan.moves, [demoMove()]);
+  assert.deepStrictEqual(movedDependencies(enabled, "ghost@tools"), []);
+});
+
+test("APPLY1-01: a path-source copy, or a copy that cannot be read, fails closed on the first moved dependency when the moves were for it", async (t) => {
+  // arrange -- `widget`'s files are the marketplace's; the pinned `other`
+  // copy has no manifest.
+  const fixture = await createFixture(t, "copy-unknown");
+  const state = await stageTools(fixture, CO_SHIPPED);
+  const mp = state.marketplaces["tools"];
+  assert.ok(mp !== undefined);
+  const unreadable = path.join(fixture.locations.pluginClonesDir, "other-copy");
+  await mkdir(unreadable, { recursive: true });
+  const withOther: ExtensionState = {
+    ...state,
+    marketplaces: { tools: { ...mp, plugins: { ...mp.plugins, other: pluginRecord(unreadable) } } },
+  };
+  const input = { state: withOther, locations: fixture.locations };
+
+  // act
+  const pathCopy = await installedCopyUnsatisfied(
+    input,
+    { marketplace: "tools", plugin: "widget" },
+    ["zcore@tools"],
+    true,
+  );
+  const notForIt = await installedCopyUnsatisfied(
+    input,
+    { marketplace: "tools", plugin: "widget" },
+    ["zcore@tools"],
+    false,
+  );
+  const unknownCopy = await installedCopyUnsatisfied(
+    input,
+    { marketplace: "tools", plugin: "other" },
+    [],
+    true,
+  );
+  const absent = await installedCopyUnsatisfied(
+    input,
+    { marketplace: "tools", plugin: "ghost" },
+    [],
+    true,
+  );
+
+  // assert
+  assert.deepStrictEqual(pathCopy, {
+    dependent: "widget@tools",
+    dependency: "zcore@tools",
+    kind: "out-of-range",
+  });
+  assert.equal(notForIt, undefined);
+  assert.deepStrictEqual(unknownCopy, {
+    dependent: "other@tools",
+    dependency: "other@tools",
+    kind: "out-of-range",
+  });
+  assert.equal(absent, undefined);
+});
+
+test("APPLY1-01: a pinned copy is judged by its own declarations", async (t) => {
+  // arrange -- the copy declares zcore ^1.0.0; the scope records zcore at
+  // 2.0.0, then at 1.0.0.
+  const fixture = await createFixture(t, "copy-pinned");
+  const copy = path.join(fixture.locations.pluginClonesDir, "widget-copy");
+  await stagePlugin(copy, "1.0.0", [{ name: "zcore", version: "^1.0.0" }]);
+  const mp = await stageMarketplace(fixture, "tools", []);
+  const stateAt = (zcore: string): ExtensionState =>
+    stateOf({
+      ...mp,
+      plugins: {
+        widget: pluginRecord(copy),
+        zcore: pluginRecord(path.join(mp.marketplaceRoot, "zcore"), { version: zcore }),
+      },
+    });
+  const widget = { marketplace: "tools", plugin: "widget" };
+
+  // act
+  const unmet = await installedCopyUnsatisfied(
+    { state: stateAt("2.0.0"), locations: fixture.locations },
+    widget,
+    ["zcore@tools"],
+    false,
+  );
+  const met = await installedCopyUnsatisfied(
+    { state: stateAt("1.0.0"), locations: fixture.locations },
+    widget,
+    ["zcore@tools"],
+    true,
+  );
+
+  // assert
+  assert.deepStrictEqual(unmet, {
+    dependent: "widget@tools",
+    dependency: "zcore@tools",
+    kind: "out-of-range",
+    range: "^1.0.0",
+  });
+  assert.equal(met, undefined);
 });

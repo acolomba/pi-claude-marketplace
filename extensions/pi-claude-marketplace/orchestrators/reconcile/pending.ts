@@ -72,7 +72,7 @@ import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { scanRetainedWorkflowsStaging } from "../plugin/workflows-staging-gc.ts";
 
-import { planConvergence } from "./convergence.ts";
+import { planConvergence, settleMoveCascade } from "./convergence.ts";
 import { buildScopeSatisfactionVerdict, verdictAfterToggles } from "./dependency-verdict.ts";
 import {
   buildReconcilePendingNotification,
@@ -508,19 +508,37 @@ export async function composePendingReport(opts: {
       enable: firstPlan.pluginsToEnable,
       disable: firstPlan.pluginsToDisable,
     });
-    const plan = withPlannedInstallsLanded(
-      verdict === firstVerdict ? firstPlan : planReconcile(view, state, scope, verdict),
-      verdict,
+    const planFrom = (from: ScopeSatisfactionVerdict, planned: ReconcilePlan): ReconcilePlan =>
+      withoutDisabledDependents(
+        withPlannedInstallsLanded(planned, from, state, (released) =>
+          planReconcile(view, state, scope, released),
+        ),
+        state,
+      );
+    // APPLY1-01: the moves `apply` makes as one cascade, so a dependent the
+    // catalog moves together with the newer dependency it needs is listed as
+    // moving, not as held down, as `apply`'s read pass settles it.
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one settle each
+    const settled = await settleMoveCascade({
+      scope,
       state,
-      (released) => planReconcile(view, state, scope, released),
-    );
-    const scopePlan = withoutDisabledDependents(plan, state);
+      locations: loc,
+      plan: planFrom(
+        verdict,
+        verdict === firstVerdict ? firstPlan : planReconcile(view, state, scope, verdict),
+      ),
+      verdict,
+      replan: (released) => planFrom(released, planReconcile(view, state, scope, released)),
+    });
+    const scopePlan = settled.plan;
     plans.push(scopePlan);
 
     // APL-02 / D-10 / D-14: the catalog moves `apply` would make once the plan
     // has run, offline (NFR-5).
-    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one convergence plan each
-    const scoped = await planConvergence({ scope, state, locations: loc, plan: scopePlan });
+    const scoped =
+      settled.cascade?.plan ??
+      // eslint-disable-next-line no-await-in-loop -- at most two scopes, one convergence plan each
+      (await planConvergence({ scope, state, locations: loc, plan: scopePlan }));
     convergence.moves.push(...scoped.moves);
     convergence.holds.push(...scoped.holds);
     convergence.declines.push(...scoped.declines);

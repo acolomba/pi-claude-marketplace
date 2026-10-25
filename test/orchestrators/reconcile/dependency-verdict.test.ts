@@ -6,7 +6,12 @@ import test from "node:test";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   buildScopeSatisfactionVerdict,
+  firstUnsatisfied,
+  releasableDependents,
+  stillHeld,
+  verdictAfterMoves,
   verdictAfterToggles,
+  verdictWithout,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
@@ -740,4 +745,161 @@ test("D-05-07: a verdict whose walk failed is kept, whatever the plan toggles", 
 
   // assert
   assert.equal(toggled, failed);
+});
+
+const FAILED_WALK: ScopeSatisfactionVerdict = {
+  ok: false,
+  declarer: "app@mp",
+  reason: "invalid manifest",
+  cause: new Error("cannot read the dependencies of app@mp"),
+};
+
+test("APPLY1-01: releases a dependent held for an out-of-range dependency or one this verdict holds", () => {
+  // arrange: `app` waits on `lib`'s range, `top` waits on the held `app`.
+  const state = stateOf(marketplaceRecord("mp", { app: {}, lib: {}, top: {} }));
+  const verdict: ScopeSatisfactionVerdict = {
+    ok: true,
+    unsatisfied: [
+      { dependent: "app@mp", dependency: "lib@mp", kind: "out-of-range", range: "^2.0.0" },
+      { dependent: "top@mp", dependency: "app@mp", kind: "disabled" },
+    ],
+  };
+
+  // act
+  const released = releasableDependents(verdict, state);
+
+  // assert
+  assert.deepEqual([...released], ["app@mp", "top@mp"]);
+});
+
+test("APPLY1-01: keeps a dependent held for a missing dependency or one the user disabled", () => {
+  // arrange: `off` is disabled by the user, so no move brings it back.
+  const state = stateOf(marketplaceRecord("mp", { app: {}, off: { enabled: false }, top: {} }));
+  const verdict: ScopeSatisfactionVerdict = {
+    ok: true,
+    unsatisfied: [
+      { dependent: "app@mp", dependency: "vault@mp", kind: "missing" },
+      { dependent: "top@mp", dependency: "off@mp", kind: "disabled" },
+    ],
+  };
+
+  // act
+  const released = releasableDependents(verdict, state);
+
+  // assert
+  assert.deepEqual([...released], []);
+});
+
+test("APPLY1-01: keeps a dependent held when the dependency it names as held is disabled by the user too", () => {
+  // arrange: `off` is held by this verdict AND disabled by the user.
+  const state = stateOf(marketplaceRecord("mp", { off: { enabled: false }, top: {} }));
+  const verdict: ScopeSatisfactionVerdict = {
+    ok: true,
+    unsatisfied: [
+      { dependent: "off@mp", dependency: "lib@mp", kind: "out-of-range", range: "^2.0.0" },
+      { dependent: "top@mp", dependency: "off@mp", kind: "disabled" },
+    ],
+  };
+
+  // act
+  const released = releasableDependents(verdict, state);
+
+  // assert
+  assert.deepEqual([...released], ["off@mp"]);
+});
+
+test("APPLY1-01: a failed walk releases nothing and keeps every released dependent held", () => {
+  // arrange
+  const state = stateOf(marketplaceRecord("mp", { app: {} }));
+  const released = new Set(["app@mp"]);
+
+  // act
+  const releasable = releasableDependents(FAILED_WALK, state);
+  const held = stillHeld(FAILED_WALK, released);
+  const without = verdictWithout(FAILED_WALK, released);
+
+  // assert
+  assert.deepEqual([...releasable], []);
+  assert.deepEqual([...held], ["app@mp"]);
+  assert.equal(without, FAILED_WALK);
+});
+
+test("APPLY1-01: a verdict without the released dependents drops their entries and the holds they caused", () => {
+  // arrange
+  const verdict: ScopeSatisfactionVerdict = {
+    ok: true,
+    unsatisfied: [
+      { dependent: "app@mp", dependency: "lib@mp", kind: "out-of-range", range: "^2.0.0" },
+      { dependent: "top@mp", dependency: "app@mp", kind: "disabled" },
+      { dependent: "solo@mp", dependency: "vault@mp", kind: "missing" },
+    ],
+  };
+
+  // act
+  const without = verdictWithout(verdict, new Set(["app@mp"]));
+  const held = stillHeld(verdict, new Set(["app@mp", "free@mp"]));
+
+  // assert
+  assert.deepEqual(unsatisfiedOf(without), [
+    { dependent: "solo@mp", dependency: "vault@mp", kind: "missing" },
+  ]);
+  assert.deepEqual([...held], ["app@mp"]);
+});
+
+test("APPLY1-01: the verdict after moves measures each moved record at the version it lands on", async () => {
+  // arrange: `app` needs lib ^2.0.0; the move takes `lib` to 2.0.0, and a
+  // move for a record the scope does not hold changes nothing.
+  const mp = marketplaceRecord("mp", { app: {}, lib: {} });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: { dependencies: [{ name: "lib", version: "^2.0.0" }] },
+      lib: {},
+    }),
+  });
+  const options = {
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    loadManifest,
+    reader: ownManifests(),
+  };
+
+  // act
+  const before = await verdictAfterMoves(options, { enable: [], disable: [] }, []);
+  const after = await verdictAfterMoves(options, { enable: [], disable: [] }, [
+    { marketplace: "mp", plugin: "lib", toVersion: "2.0.0" },
+    { marketplace: "mp", plugin: "ghost", toVersion: "9.0.0" },
+    { marketplace: "elsewhere", plugin: "lib", toVersion: "9.0.0" },
+  ]);
+
+  // assert
+  assert.deepEqual(unsatisfiedOf(before), [
+    { dependent: "app@mp", dependency: "lib@mp", kind: "out-of-range", range: "^2.0.0" },
+  ]);
+  assert.deepEqual(unsatisfiedOf(after), []);
+});
+
+test("APPLY1-01: the first unsatisfied declaration of a copy is measured against the scope", () => {
+  // arrange
+  const state = stateOf(marketplaceRecord("mp", { app: {}, lib: { version: "2.0.0" } }));
+
+  // act
+  const unmet = firstUnsatisfied(
+    "app@mp",
+    [{ name: "lib", marketplace: "mp", version: "^1.0.0" }],
+    state,
+  );
+  const met = firstUnsatisfied(
+    "app@mp",
+    [{ name: "lib", marketplace: "mp", version: "^2.0.0" }],
+    state,
+  );
+
+  // assert
+  assert.deepEqual(unmet, {
+    dependent: "app@mp",
+    dependency: "lib@mp",
+    kind: "out-of-range",
+    range: "^1.0.0",
+  });
+  assert.equal(met, undefined);
 });

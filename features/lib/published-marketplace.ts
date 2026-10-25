@@ -386,17 +386,33 @@ export async function publishUnreadableSkillFile(
   published: PublishedMarketplace,
   plugin: string,
 ): Promise<string> {
+  const file = unreadableSkillFile(published, plugin);
+  await writeFile(file, "Unreadable.\n", { mode: 0o000 });
+  return file;
+}
+
+/**
+ * Lets everyone read the file `publishUnreadableSkillFile` left in the plugin
+ * `plugin` again, and returns its path.
+ */
+export async function restoreUnreadableSkillFile(
+  published: PublishedMarketplace,
+  plugin: string,
+): Promise<string> {
+  const file = unreadableSkillFile(published, plugin);
+  await chmod(file, 0o644);
+  return file;
+}
+
+// The skill file of `plugin` that `publishUnreadableSkillFile` writes.
+function unreadableSkillFile(published: PublishedMarketplace, plugin: string): string {
   switch (published.kind) {
     case "dir":
-    case "file": {
-      const file = ownedTarget(
+    case "file":
+      return ownedTarget(
         published,
         path.join(published.root, "plugins", plugin, "skills", `${plugin}-skill`, "notes.md"),
       );
-      await writeFile(file, "Unreadable.\n", { mode: 0o000 });
-      return file;
-    }
-
     case "url":
     case "github":
       throw new Error("a git repository cannot hold a file nobody may read");

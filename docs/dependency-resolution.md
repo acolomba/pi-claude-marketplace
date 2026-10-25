@@ -286,7 +286,12 @@ This disable is a consequence, not a choice you made. So this extension does not
 
 A disable you asked for is never lifted this way. The check lifts only the disable it applied itself.
 
-One case takes two runs of `apply`. A marketplace update can ship a new version of a plugin together with the newer dependency that version needs. The first `apply` disables the plugin and moves the dependency. `pending` then lists the plugin's enable and its update, and the second `apply` makes them. No run leaves the plugin enabled while its dependency is out of range.
+A marketplace update can ship a new version of a plugin together with the newer dependency that version needs. One `apply` moves both, the dependency first, as a fresh install of the plugin would install both. `pending` lists both moves. The plugin is not disabled first, because the moves satisfy it. A plugin held disabled for its dependency's version is enabled after the moves it waits on land, never before.
+
+When a move in such a chain fails, nothing moves past it:
+
+- If the dependency's move fails, the plugin is not moved. Its row says `(failed) {dependency failed}`, and both stay at the versions they had. The next `apply` tries both again.
+- If the dependency moves and the plugin's own move fails, the plugin keeps the copy it has. When that copy's own declarations do not accept the moved dependency, `apply` disables the plugin with the marker, beside the row that names its failure. A path-source plugin's files are the marketplace's, which already hold the version that failed, so its old declarations are unknown. `apply` then disables it only when the dependency moved for it, because the old dependency version did not meet its declared range. A later `apply` enables it again only once its move lands.
 
 One broken dependency reaches every plugin above it in a single `apply`. If `a` needs `b` and `b` needs `c`, then disabling `c` disables both `b` and `a` on the next `apply`, not one of them per run. Enabling `c` again brings both back on the next `apply` too. This holds when you edit a config by hand: an `apply` that disables `c` because a config sets it to `enabled: false` also disables `b` and `a`, and `pending` lists all three first.
 

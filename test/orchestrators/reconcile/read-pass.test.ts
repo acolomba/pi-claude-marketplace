@@ -252,6 +252,72 @@ describe("readPassForScope", () => {
     });
   });
 
+  test("APPLY1-01: a dependent held down for its dependency's version is enabled after the catalog moves that satisfy it", async (t) => {
+    // arrange -- the catalog ships `app` 1.1.0 needing lib ^2.0.0 with `lib`
+    // 2.0.0; `app` sits disabled by an earlier pass, both at 1.0.0.
+    const scope = await createProjectScope(t, "deferred-enable");
+    const manifestPath = path.join(scope.marketplaceRoot, ".claude-plugin", "marketplace.json");
+    await writeUnder(
+      manifestPath,
+      JSON.stringify({
+        name: "mp",
+        plugins: [
+          {
+            name: "app",
+            source: "./plugins/app",
+            version: "1.1.0",
+            dependencies: [{ name: "lib", version: "^2.0.0" }],
+          },
+          { name: "lib", source: "./plugins/lib", version: "2.0.0" },
+        ],
+      }),
+    );
+    for (const manifest of [
+      { name: "app", version: "1.1.0", dependencies: [{ name: "lib", version: "^2.0.0" }] },
+      { name: "lib", version: "2.0.0" },
+    ]) {
+      await writeUnder(
+        path.join(scope.marketplaceRoot, "plugins", manifest.name, ".claude-plugin", "plugin.json"),
+        JSON.stringify(manifest),
+      );
+    }
+
+    const record = (plugin: string, enabled: boolean) => ({
+      version: "1.0.0",
+      resolvedSource: path.join(scope.marketplaceRoot, "plugins", plugin),
+      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+      enabled,
+      ...(!enabled && { dependencyDisabled: true }),
+      provenance: "explicit" as const,
+      installedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const seeded = recordedState(scope);
+    const mp = seeded.marketplaces["mp"];
+    assert.ok(mp !== undefined);
+    await mkdir(scope.project.extensionRoot, { recursive: true });
+    await saveState(scope.project.extensionRoot, {
+      ...seeded,
+      marketplaces: {
+        mp: { ...mp, plugins: { app: record("app", false), lib: record("lib", true) } },
+      },
+    });
+    await writeUnder(
+      scope.project.baseConfigJsonPath,
+      declaring({ mp: scope.marketplaceRoot }, { "app@mp": {}, "lib@mp": {} }),
+    );
+
+    // act
+    const readResult = await readPassForScope(reader, "project", scope.cwd);
+
+    // assert
+    assert.deepStrictEqual(readResult.plan, planOf({}));
+    assert.deepStrictEqual(readResult.deferredEnables, [
+      { scope: "project", plugin: "app", marketplace: "mp" },
+    ]);
+  });
+
   test("MIG-01: a recorded scope with no config gains a base config built from its state before it plans", async (t) => {
     // arrange
     const scope = await createProjectScope(t, "first-run");

@@ -7478,7 +7478,207 @@ async function seedConvergenceScope(
   return { cwd, project, marketplaceRoot };
 }
 
+/**
+ * APPLY1-01: `widget` 1.1.0 needs zcore ^2.0.0 and ships with `zcore` 2.0.0;
+ * both are recorded at 1.0.0. `widget`'s seeded record fields go in `widget`.
+ */
+function coShippedSeed(widget: Omit<RecordSeed, "pluginRoot" | "supported"> = {}) {
+  return {
+    trees: { widget: { skill: "clean" }, zcore: { skill: "clean" } },
+    supported: { widget: ["skills"], zcore: ["skills"] },
+    offered: { widget: "1.1.0", zcore: "2.0.0" },
+    dependencies: { widget: [{ name: "zcore", version: "^2.0.0" }] },
+    records: { widget },
+  } as const;
+}
+
+/** Leaves a file nobody may read in `plugin`'s skill, so its move fails to copy it. */
+async function unreadableSkill(marketplaceRoot: string, plugin: string): Promise<void> {
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    throw new Error("an unreadable file cannot stop root; run this suite as a non-root user");
+  }
+
+  await writeFile(
+    path.join(marketplaceRoot, "plugins", plugin, "skills", "tool", "notes.md"),
+    "x",
+    {
+      mode: 0o000,
+    },
+  );
+}
+
 describe("applyReconcile catalog convergence", () => {
+  test("APPLY1-01: a plugin and the newer dependency it needs move in one apply, the dependency first", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "cascade-co-shipped", coShippedSeed());
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● widget v1.0.0 → v1.1.0 (updated)\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "widget"))?.enabled, true);
+    verifyBoundary();
+  });
+
+  test("APPLY1-01: a dependency's failed move keeps its dependent where it is, reported as dependency failed", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-dependency-fails",
+      coShippedSeed(),
+    );
+    await unreadableSkill(marketplaceRoot, "zcore");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some plugin operations have failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ zcore v1.0.0 → v2.0.0 (failed) {permission denied}\n" +
+          "  ⊘ widget v1.0.0 → v1.1.0 (failed) {dependency failed}\n" +
+          "\n" +
+          "Reconcile: 2 failures",
+        severity: "error",
+      },
+    ]);
+    const widget = await recordFor(project, "mp", "widget");
+    assert.deepStrictEqual([widget?.version, widget?.enabled], ["1.0.0", true]);
+    verifyBoundary();
+  });
+
+  test("APPLY1-01: a dependent whose own move fails after its dependency moved is disabled with the marker", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-dependent-fails",
+      coShippedSeed(),
+    );
+    await unreadableSkill(marketplaceRoot, "widget");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
+          "  ⊘ widget v1.0.0 → v1.1.0 (failed) {permission denied}\n" +
+          "  ◍ widget v1.0.0 (disabled) {dependency version unsatisfied}\n" +
+          '    cause: Update "zcore@mp" or uninstall "widget@mp"\n' +
+          "\n" +
+          "Reconcile: 1 failure, 1 warning, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    const widget = await recordFor(project, "mp", "widget");
+    assert.deepStrictEqual(
+      [widget?.version, widget?.enabled, widget?.dependencyDisabled],
+      ["1.0.0", false, true],
+    );
+    verifyBoundary();
+  });
+
+  test("APPLY1-01: a dependent whose failed move the dependency move was not made for stays enabled", async (t) => {
+    // arrange -- `widget` declares `zcore` with no range, so the old `zcore`
+    // meets it and the move is not made for it.
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(t, "cascade-unrelated", {
+      ...coShippedSeed(),
+      dependencies: { widget: [{ name: "zcore", version: "*" }] },
+    });
+    await unreadableSkill(marketplaceRoot, "widget");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
+          "  ⊘ widget v1.0.0 → v1.1.0 (failed) {permission denied}\n" +
+          "\n" +
+          "Reconcile: 1 failure, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "widget"))?.enabled, true);
+    verifyBoundary();
+  });
+
+  test("APPLY1-01: a dependent held down by an earlier pass is enabled after the move it waits on lands", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(
+      t,
+      "cascade-deferred",
+      coShippedSeed({ enabled: false, dependencyDisabled: true }),
+    );
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: path.join(cwd, "mp-src") } },
+        plugins: { "widget@mp": {}, "zcore@mp": {} },
+      }),
+    );
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● widget v1.1.0 (installed)\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    const widget = await recordFor(project, "mp", "widget");
+    assert.deepStrictEqual([widget?.version, widget?.enabled], ["1.1.0", true]);
+    verifyBoundary();
+  });
+
   test("APL-02 / D-08: a path-source plugin the catalog moved is updated, recorded and reported with the reload trailer", async (t) => {
     // arrange
     const { cwd, project } = await seedConvergenceScope(t, "converge-move", {

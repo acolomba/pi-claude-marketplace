@@ -30,13 +30,23 @@ import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { assertPathInside } from "../../shared/path-safety.ts";
 import { admitResolvedVersion, foldDeclaredConstraint } from "../plugin/constraint-fold.ts";
 import { readInstalledCopyDeclaration } from "../plugin/dependency-declaration-read.ts";
 import { buildScopeDeclarationDetail, readRecordDeclarations } from "../plugin/dependency-index.ts";
 import { resolveListCandidate } from "../plugin/list-candidate-version.ts";
 import { isRecordedCandidate, isSameRevision, resolvePluginVersion } from "../plugin/shared.ts";
 
-import type { ReconcilePlan } from "./types.ts";
+import {
+  firstUnsatisfied,
+  releasableDependents,
+  stillHeld,
+  verdictAfterMoves,
+  verdictWithout,
+} from "./dependency-verdict.ts";
+
+import type { ScopeSatisfactionVerdict, UnsatisfiedDeclaration } from "./dependency-verdict.ts";
+import type { PlannedPluginEnable, ReconcilePlan } from "./types.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
 import type { GitBackedSource } from "../../domain/source.ts";
@@ -57,6 +67,11 @@ export interface ConvergenceInput {
   readonly locations: ScopedLocations;
   /** The scope's reconcile plan; absent when the state already reflects it. */
   readonly plan?: ReconcilePlan;
+  /**
+   * APPLY1-01: disabled records `apply` enables only once their move lands,
+   * planned as if enabled (`plugin@marketplace` keys).
+   */
+  readonly enable?: ReadonlySet<string>;
 }
 
 /** D-10: one catalog move, with the revisions on both sides (UPR-02). */
@@ -120,7 +135,8 @@ type Blocked =
   | { readonly kind: "hold"; readonly hold: PlannedHold }
   | { readonly kind: "decline"; readonly decline: PlannedDecline };
 
-type Declarations = ReadonlyMap<string, readonly AddressedDependency[]>;
+/** What each record declares, by `plugin@marketplace` key. */
+export type Declarations = ReadonlyMap<string, readonly AddressedDependency[]>;
 
 const NO_CONVERGENCE: ConvergencePlan = Object.freeze({ moves: [], holds: [], declines: [] });
 
@@ -412,7 +428,7 @@ async function recordMove(
  * answers `undefined`, and the catalog declarations stand alone.
  */
 async function installedCopyDeclarations(
-  input: ConvergenceInput,
+  input: Pick<ConvergenceInput, "locations">,
   mp: MarketplaceRecord,
   record: PluginRecord,
 ): Promise<readonly AddressedDependency[] | undefined> {
@@ -583,18 +599,100 @@ function settleCandidates(
   };
 }
 
-/**
- * D-10 / D-06: every catalog move in one scope, offline. A scope whose
- * declaration walk cannot be read previews no move, the fail-closed stance
- * `update` takes (D-05-07, D-18-17); the per-session warning names the
- * declarer (REC-05). Disabled records never move (ENBL-08).
- */
-export async function planConvergence(input: ConvergenceInput): Promise<ConvergencePlan> {
+/** The scope as the plan leaves it, with the records `enable` names enabled. */
+function plannedView(input: ConvergenceInput): ExtensionState {
   const view =
     input.plan === undefined ? input.state : stateAsPlanLeavesIt(input.state, input.plan);
+  const enable = input.enable;
+  if (enable === undefined || enable.size === 0) {
+    return view;
+  }
+
+  const marketplaces = Object.fromEntries(
+    Object.entries(view.marketplaces).map(([name, mp]) => [
+      name,
+      {
+        ...mp,
+        plugins: Object.fromEntries(
+          Object.entries(mp.plugins).map(([plugin, record]) => [
+            plugin,
+            enable.has(`${plugin}@${name}`) ? { ...record, enabled: true } : record,
+          ]),
+        ),
+      },
+    ]),
+  );
+  return { ...view, marketplaces };
+}
+
+/**
+ * APPLY1-01: a scope's catalog moves as one cascade. `plan.moves` runs
+ * dependencies first, in the post-order an install cascade installs its
+ * closure in, and `declarations` is what each record declares once the plan
+ * lands, so a caller can tell which moves a record waits on.
+ */
+export interface ConvergenceCascade {
+  readonly plan: ConvergencePlan;
+  readonly declarations: Declarations;
+}
+
+/**
+ * The moves of `plan` that the record `key` declares, in `plan.moves` order.
+ */
+export function movedDependencies(cascade: ConvergenceCascade, key: string): readonly string[] {
+  const moved = new Set(cascade.plan.moves.map((move) => `${move.plugin}@${move.marketplace}`));
+  const declared = new Set(declaredKeys(cascade.declarations, key));
+  return [...moved].filter((dependency) => dependency !== key && declared.has(dependency));
+}
+
+/** The `plugin@marketplace` keys the record `key` declares; none for a record the walk lacks. */
+function declaredKeys(declarations: Declarations, key: string): readonly string[] {
+  return (declarations.get(key) ?? []).map((dep) => `${dep.name}@${dep.marketplace}`);
+}
+
+/**
+ * APPLY1-01: `moves` reordered so each runs after the moves it declares, in
+ * depth-first post-order, ties kept in their marketplace-then-plugin order. A
+ * declaration cycle keeps the order the walk first reaches it in.
+ */
+function dependenciesFirst(
+  moves: readonly PlannedMove[],
+  declarations: Declarations,
+): PlannedMove[] {
+  const byKey = new Map(moves.map((move) => [`${move.plugin}@${move.marketplace}`, move]));
+  const ordered: PlannedMove[] = [];
+  const visited = new Set<string>();
+  const visit = (key: string): void => {
+    const move = byKey.get(key);
+    if (move === undefined || visited.has(key)) {
+      return;
+    }
+
+    visited.add(key);
+    declaredKeys(declarations, key).forEach(visit);
+
+    ordered.push(move);
+  };
+
+  for (const key of byKey.keys()) {
+    visit(key);
+  }
+
+  return ordered;
+}
+
+/**
+ * D-10 / D-06: every catalog move in one scope, offline, as one cascade
+ * (APPLY1-01). A scope whose declaration walk cannot be read previews no
+ * move, the fail-closed stance `update` takes (D-05-07, D-18-17); the
+ * per-session warning names the declarer (REC-05). Disabled records never
+ * move (ENBL-08), except the ones `input.enable` names.
+ */
+export async function planConvergenceCascade(input: ConvergenceInput): Promise<ConvergenceCascade> {
+  const view = plannedView(input);
   const walk = await buildScopeDeclarationDetail({ state: view, locations: input.locations });
   if (!walk.ok) {
-    return NO_CONVERGENCE;
+    return { plan: NO_CONVERGENCE, declarations: new Map() };
   }
 
   const candidates: CandidateMove[] = [];
@@ -617,5 +715,147 @@ export async function planConvergence(input: ConvergenceInput): Promise<Converge
   }
 
   const landed = await withPlannedInstalls(input, view, walk.declarations);
-  return settleCandidates(candidates, landed.declarations, landed.view);
+  const settled = settleCandidates(candidates, landed.declarations, landed.view);
+  return {
+    plan: { ...settled, moves: dependenciesFirst(settled.moves, landed.declarations) },
+    declarations: landed.declarations,
+  };
+}
+
+/** D-10 / D-06: every catalog move in one scope, offline (`planConvergenceCascade`). */
+export async function planConvergence(input: ConvergenceInput): Promise<ConvergencePlan> {
+  return (await planConvergenceCascade(input)).plan;
+}
+
+/** One scope's plan and the verdict it was planned from, for `settleMoveCascade`. */
+export interface MoveCascadeInput extends Omit<ConvergenceInput, "enable"> {
+  readonly plan: ReconcilePlan;
+  readonly verdict: ScopeSatisfactionVerdict;
+  /** Plans the scope again from another verdict, as the caller planned `plan`. */
+  readonly replan: (verdict: ScopeSatisfactionVerdict) => ReconcilePlan;
+}
+
+/**
+ * The plan `apply` runs and `pending` lists, the cascade it moves, and the
+ * enables of records held down for a dependency that only run once the moves
+ * they wait on land. `cascade` is absent when no held dependent could be
+ * released, so the plan is the caller's own.
+ */
+export interface MoveCascade {
+  readonly plan: ReconcilePlan;
+  readonly cascade?: ConvergenceCascade;
+  readonly deferredEnables: readonly PlannedPluginEnable[];
+}
+
+function isDependencyHeld(state: ExtensionState, op: PlannedPluginEnable): boolean {
+  const record = ownValue(ownValue(state.marketplaces, op.marketplace)?.plugins, op.plugin);
+  return record?.dependencyDisabled === true && isRecordedButDisabled(record);
+}
+
+/**
+ * APPLY1-01: an update is an install of a newer version, so a dependent the
+ * catalog moves together with the newer dependency it needs converges in one
+ * `apply`, as a fresh install converges on its closure. A dependent the
+ * verdict holds down for a dependency's version is released when the moves
+ * the plan would make satisfy it, judged by `verdictAfterMoves` over the
+ * moves planned with exactly the released set enabled. A released dependent
+ * still unmet is held again and the moves are planned again; the released set
+ * only shrinks, so the loop ends.
+ *
+ * A released record that is disabled now (its LOAD-02 marker) is enabled only
+ * after the moves it waits on land, so it is never enabled while its range is
+ * unmet (`deferredEnables`).
+ */
+export async function settleMoveCascade(input: MoveCascadeInput): Promise<MoveCascade> {
+  const base = { scope: input.scope, state: input.state, locations: input.locations };
+  const settled = await releaseOnLandedMoves(input);
+  const lifts = settled.plan.pluginsToEnable.filter((op) => isDependencyHeld(input.state, op));
+  if (lifts.length === 0) {
+    return { ...settled, deferredEnables: [] };
+  }
+
+  const cascade =
+    settled.cascade ?? (await planConvergenceCascade({ ...base, plan: settled.plan }));
+  const moved = new Set(cascade.plan.moves.map((move) => `${move.plugin}@${move.marketplace}`));
+  const deferredEnables = lifts.filter((op) => {
+    const key = `${op.plugin}@${op.marketplace}`;
+    return moved.has(key) || movedDependencies(cascade, key).length > 0;
+  });
+  return { plan: settled.plan, cascade, deferredEnables };
+}
+
+/**
+ * The release loop of `settleMoveCascade`: the caller's plan when no held
+ * dependent can be released, or the plan with the largest released set whose
+ * moves satisfy every released dependent, and its cascade.
+ */
+async function releaseOnLandedMoves(
+  input: MoveCascadeInput,
+): Promise<Pick<MoveCascade, "plan" | "cascade">> {
+  const base = { scope: input.scope, state: input.state, locations: input.locations };
+  let released = releasableDependents(input.verdict, input.state);
+  while (released.size > 0) {
+    const plan = input.replan(verdictWithout(input.verdict, released));
+    // eslint-disable-next-line no-await-in-loop -- each round plans the moves the previous round's release allows
+    const cascade = await planConvergenceCascade({ ...base, plan });
+    // eslint-disable-next-line no-await-in-loop -- each round judges the moves it planned
+    const after = await verdictAfterMoves(
+      { state: input.state, locations: input.locations },
+      { enable: plan.pluginsToEnable, disable: plan.pluginsToDisable },
+      cascade.plan.moves,
+    );
+    const held = stillHeld(after, released);
+    if (held.size === 0) {
+      return { plan, cascade };
+    }
+
+    released = new Set([...released].filter((dependent) => !held.has(dependent)));
+  }
+
+  return { plan: input.plan };
+}
+
+/** Whether `pluginRoot` is a per-commit copy under the scope's plugin clones. */
+async function isPinnedCopy(locations: ScopedLocations, pluginRoot: string): Promise<boolean> {
+  try {
+    await assertPathInside(locations.pluginClonesDir, pluginRoot, "installed plugin copy");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * APPLY1-01 / D-13: why the copy `plugin` has installed may not stay enabled
+ * once `movedDependencies` moved, or `undefined` when its own declarations
+ * all hold. `apply` asks it of a dependent whose own move failed after those
+ * moves landed. Only a git source keeps a copy of the version it runs (a
+ * per-commit copy); a path source's files are the marketplace's, which now
+ * hold the version that failed to install, and a copy that cannot be read
+ * declares nothing known. An unknown copy fails closed when `failClosed`
+ * says the moves were made for it (its catalog range was unmet before them):
+ * the first moved dependency is reported out of range, with no range to name.
+ */
+export async function installedCopyUnsatisfied(
+  input: Pick<ConvergenceInput, "state" | "locations">,
+  move: Pick<PlannedMove, "marketplace" | "plugin">,
+  movedDependencies: readonly string[],
+  failClosed: boolean,
+): Promise<UnsatisfiedDeclaration | undefined> {
+  const dependent = `${move.plugin}@${move.marketplace}`;
+  const unknown: UnsatisfiedDeclaration | undefined = failClosed
+    ? { dependent, dependency: movedDependencies[0] ?? dependent, kind: "out-of-range" }
+    : undefined;
+  const mp = ownValue(input.state.marketplaces, move.marketplace);
+  const record = ownValue(mp?.plugins, move.plugin);
+  if (mp === undefined || record === undefined) {
+    return undefined;
+  }
+
+  if (!(await isPinnedCopy(input.locations, record.resolvedSource))) {
+    return unknown;
+  }
+
+  const declared = await installedCopyDeclarations(input, mp, record);
+  return declared === undefined ? unknown : firstUnsatisfied(dependent, declared, input.state);
 }

@@ -219,6 +219,238 @@ Feature: Plugin apply
       | command          | description           |
       | /skill:lib-skill | A skill of lib 1.0.0. |
 
+  Scenario: Apply moves a plugin and the newer dependency it needs, shipped together, in one run
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 2.0.0   |              |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | true                      |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 2                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status  | reasons | scope   | from  | to    |
+      | tools            | project           | zcore@tools  | zcore  | updated |         | project | 1.0.0 | 2.0.0 |
+      | tools            | project           | widget@tools | widget | updated |         | project | 1.0.0 | 1.1.0 |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.1.0   | true    |
+      | zcore@tools  | 2.0.0   | true    |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+
+  Scenario: Apply keeps a plugin and its dependency at their versions when the dependency's move fails, and the next apply does the same
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 2.0.0   |              |
+    Given the published plugin "zcore" of the marketplace "tools" has an unreadable skill file
+    Given the user has run "/claude:plugin apply --scope project", which failed
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind           | reconcile-applied-cascade      |
+      | severity       | error                          |
+      | needs reload   | false                          |
+      | summary        | Some plugin operations have failed. |
+      | tally label    | Reconcile                      |
+      | tally failures | 2                              |
+      | tally warnings | 0                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status | reasons           | scope   | from  | version | leaks | rollback partial |
+      | tools            | project           | zcore@tools  | zcore  | failed | permission denied | project | 1.0.0 | 2.0.0   |       |                  |
+      | tools            | project           | widget@tools | widget | failed | dependency failed | project | 1.0.0 | 1.1.0   |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.0.0   | true    |
+      | zcore@tools  | 1.0.0   | true    |
+
+  Scenario: Apply disables a plugin whose move fails after its dependency moved
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore@^1.0.0 |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 2.0.0   |              |
+    Given the published plugin "widget" of the marketplace "tools" has an unreadable skill file
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind           | reconcile-applied-cascade      |
+      | severity       | error                          |
+      | needs reload   | true                           |
+      | summary        | A plugin operation has failed. |
+      | tally label    | Reconcile                      |
+      | tally failures      | 1                              |
+      | tally warnings      | 1                              |
+      | tally success count | 1                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status   | reasons                        | scope   | from  | to    | version | cause chain                                      | cause truncated | leaks | rollback partial |
+      | tools            | project           | zcore@tools  | zcore  | updated  |                                | project | 1.0.0 | 2.0.0 |         |                                                  |                 |       |                  |
+      | tools            | project           | widget@tools | widget | failed   | permission denied              | project | 1.0.0 |       | 1.1.0   |                                                  |                 |       |                  |
+      | tools            | project           | widget@tools | widget | disabled | dependency version unsatisfied | project |       |       | 1.0.0   | Update "zcore@tools" or uninstall "widget@tools" | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.0.0   | false   |
+      | zcore@tools  | 2.0.0   | true    |
+
+  Scenario: Apply keeps a plugin disabled after its failed move while the move still fails
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore@^1.0.0 |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 2.0.0   |              |
+    Given the published plugin "widget" of the marketplace "tools" has an unreadable skill file
+    Given the user has run "/claude:plugin apply --scope project", which failed
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind           | reconcile-applied-cascade      |
+      | severity       | error                          |
+      | needs reload   | false                          |
+      | summary        | A plugin operation has failed. |
+      | tally label    | Reconcile                      |
+      | tally failures | 1                              |
+      | tally warnings | 0                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status | reasons    | scope   | leaks | rollback partial |
+      | tools            | project           | widget@tools | widget | failed | unreadable | project |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.1.0   | false   |
+      | zcore@tools  | 2.0.0   | true    |
+
+  Scenario: Apply enables a plugin disabled after its failed move once the move lands
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore@^1.0.0 |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 2.0.0   |              |
+    Given the published plugin "widget" of the marketplace "tools" has an unreadable skill file
+    Given the user has run "/claude:plugin apply --scope project", which failed
+    Given the unreadable skill file of the published plugin "widget" of the marketplace "tools" can be read again
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | true                      |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 1                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status    | reasons | scope   | version |
+      | tools            | project           | widget@tools | widget | installed |         | project | 1.1.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.1.0   | true    |
+      | zcore@tools  | 2.0.0   | true    |
+
+  Scenario: Apply enables a plugin held down for its dependency's version once a marketplace update ships that version
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 1.0.0   |              |
+    Given the user has run "/claude:plugin apply --scope project", which warned
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 2.0.0   |              |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | true                      |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 2                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status    | reasons | scope   | from  | to    | version |
+      | tools            | project           | zcore@tools  | zcore  | updated   |         | project | 1.0.0 | 2.0.0 |         |
+      | tools            | project           | widget@tools | widget | installed |         | project |       |       | 1.1.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.1.0   | true    |
+      | zcore@tools  | 2.0.0   | true    |
+
+  Scenario: Apply moves a chain of three plugins, each needing the next one's new version, in one run
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   | core         |
+      | core | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 2.0.0   | lib@^2.0.0   |
+      | lib  | 2.0.0   | core@^2.0.0  |
+      | core | 2.0.0   |              |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | true                      |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 3                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status  | reasons | scope   | from  | to    |
+      | tools            | project           | core@tools | core | updated |         | project | 1.0.0 | 2.0.0 |
+      | tools            | project           | lib@tools  | lib  | updated |         | project | 1.0.0 | 2.0.0 |
+      | tools            | project           | app@tools  | app  | updated |         | project | 1.0.0 | 2.0.0 |
+    Then the installation record of the project scope holds these plugins:
+      | id         | version | enabled |
+      | app@tools  | 2.0.0   | true    |
+      | core@tools | 2.0.0   | true    |
+      | lib@tools  | 2.0.0   | true    |
+
   Scenario: Apply disables a plugin together with the dependency that a config disables by hand, after which pending lists nothing
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

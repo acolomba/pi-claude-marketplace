@@ -436,4 +436,10 @@ export interface ScopeReadResult {
    * record was walked.
    */
   readonly verdict?: ScopeSatisfactionVerdict;
+  /**
+   * APPLY1-01: the enables of records held down for a dependency that wait on
+   * a catalog move; `plan.pluginsToEnable` leaves them out, and `apply` runs
+   * them once the moves they wait on land.
+   */
+  readonly deferredEnables?: readonly PlannedPluginEnable[];
 }

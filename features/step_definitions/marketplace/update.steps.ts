@@ -12,6 +12,7 @@ import {
   invalidateManifest,
   publishConventionalDecoy,
   publishUnreadableSkillFile,
+  restoreUnreadableSkillFile,
   removePublishedSource,
   rewritePublishedManifest,
 } from "../../lib/published-marketplace.ts";
@@ -93,6 +94,14 @@ Given(
   async function (this: ScenarioWorld, plugin: string, name: string) {
     const file = await publishUnreadableSkillFile(this.requirePublished(name), plugin);
     await assert.rejects(readFile(file), { code: "EACCES" });
+  },
+);
+
+Given(
+  "the unreadable skill file of the published plugin {string} of the marketplace {string} can be read again",
+  async function (this: ScenarioWorld, plugin: string, name: string) {
+    const file = await restoreUnreadableSkillFile(this.requirePublished(name), plugin);
+    assert.strictEqual(await readFile(file, "utf8"), "Unreadable.\n");
   },
 );
 

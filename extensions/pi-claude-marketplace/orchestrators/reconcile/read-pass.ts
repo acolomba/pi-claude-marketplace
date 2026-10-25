@@ -37,6 +37,7 @@ import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { classifyReadPassThrow, MigrateConfigSaveError } from "./apply-outcomes.ts";
+import { settleMoveCascade } from "./convergence.ts";
 import { reportDelistedPlugins, reportUnreadableDeclarer } from "./delisted-plugins.ts";
 import { buildScopeSatisfactionVerdict, verdictAfterToggles } from "./dependency-verdict.ts";
 import { migrateLegacyMcpEntries } from "./mcp-migration.ts";
@@ -222,12 +223,39 @@ export async function readPassForScope(
         enable: firstPlan.pluginsToEnable,
         disable: firstPlan.pluginsToDisable,
       });
-      const plan =
+      const toggled =
         verdict === firstVerdict ? firstPlan : planReconcile(outcome.merged, state, scope, verdict);
+      // (6) APPLY1-01: a dependent the catalog moves together with the newer
+      // dependency it needs is not held down; `pending` settles the same way.
+      // The enables that wait on a move run after the convergence, not with
+      // the toggles.
+      const settled = await settleMoveCascade({
+        scope,
+        state,
+        locations: loc,
+        plan: toggled,
+        verdict,
+        replan: (released) => planReconcile(outcome.merged, state, scope, released),
+      });
+      const deferred = new Set(
+        settled.deferredEnables.map((op) => `${op.plugin}@${op.marketplace}`),
+      );
+      const plan = {
+        ...settled.plan,
+        pluginsToEnable: settled.plan.pluginsToEnable.filter(
+          (op) => !deferred.has(`${op.plugin}@${op.marketplace}`),
+        ),
+      };
       // DLS-01: carry the loaded state snapshot out so the closing step can
       // report a recorded plugin its marketplace no longer lists. planReconcile
       // is pure, so the snapshot is the unmutated read-pass state.
-      return { plan, invalidOutcomes: [], state, verdict };
+      return {
+        plan,
+        invalidOutcomes: [],
+        state,
+        verdict,
+        ...(settled.deferredEnables.length > 0 && { deferredEnables: settled.deferredEnables }),
+      };
     },
     { loadState: reader.loadState },
   );

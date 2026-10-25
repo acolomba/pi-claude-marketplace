@@ -127,6 +127,33 @@ Feature: Plugin pending
       | marketplace name | marketplace scope | id        | name | status  | reasons              | scope   | version | cause chain                                                                                    | cause truncated | leaks | rollback partial |
       | tools            | project           | lib@tools | lib  | skipped | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
 
+  Scenario: Pending lists the moves of a plugin and the newer dependency it needs, shipped together, as apply makes them
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 2.0.0   |              |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | needs apply         | true              |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 2                 |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status      | reasons | scope   | from  | to    |
+      | tools            | project           | zcore@tools  | zcore  | will update |         | project | 1.0.0 | 2.0.0 |
+      | tools            | project           | widget@tools | widget | will update |         | project | 1.0.0 | 1.1.0 |
+
   Scenario: Pending lists a move that a plugin the config adds would block as held
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

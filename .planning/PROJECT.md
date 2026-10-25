@@ -633,11 +633,13 @@ its installed copy (DLS-D1); a read-only load and the new `/claude:plugin
 apply` (APL-D1, APL-D2, which amends NFR-2); the `autoapply` setting and
 command (AAP-D1, AAP-D2); and the pinned-sha capability gap (INR-03). The
 startup backfill and `EXTENSION_VERSION` are gone. The audit reads
-`tech_debt` with no blockers; it is an override close (24 phase digests stale
-from post-verification doc edits). APPLY1-01 and APPLYTHROW-01 are carried in
-`BACKLOG.md`.
+`tech_debt` with no blockers; it is an override close (22 archived phase
+reports read stale because later phases changed the code they cover and the
+archive moved their plan paths; see `MILESTONES.md`). APPLY1-01 and
+APPLYTHROW-01, carried in `BACKLOG.md`, were fixed on the branch after the
+close (APPLY1-D1).
 
-**Completed on a branch, unmerged:** milestone `marketplace-features`
+**Merged in PR #271 (2026-10-22), not yet released:** milestone `marketplace-features`
 (2026-10-21, Phases 1-10 with 3.1-3.4 inserted, 82 plans, 183 tasks, 97/97
 requirements; archived to `.planning/milestones/marketplace-features-*`). A
 cucumber suite of 433 scenarios drives every `/claude:plugin marketplace` verb
@@ -1416,6 +1418,7 @@ test.ts` (43 V2 tests, +2 G-21-01 inventory-vs-transition regressions)
 | **AAP-D1 (lifecycle-coverage, Phase 30): an `autoapply` config setting makes a load run `apply`, and any config may turn it on, with no trust gate** — the boolean top-level `autoapply` key of `claude-plugins.json` / `claude-plugins.local.json` (default off) makes a load (session start, `/reload`) run `/claude:plugin apply` for both scopes before resource discovery, cloning on a cache miss (NFR-5 amended: such a load may use the network as `apply` does); the most specific config that sets it wins (project local, project base, user local, user base) and any invalid config keeps the load read-only (user decision 2026-10-24) | Risk the user accepted: cloning a repository whose committed `.pi/claude-plugins.json` sets `autoapply: true` and starting `pi` installs and enables its plugins, hooks and MCP servers included, with no prompt. Claude Code has no equivalent: it does not fetch a plugin that only a project's settings enable ("enabled in project settings but isn't installed here") and the user installs it by command; it installs user and managed-settings plugins in a background pass after start (`code.claude.com/docs/en/plugins/loading.md`, retrieved 2026-10-24). This decision licenses the divergence | ✓ Good |
 | **INR-03 (lifecycle-coverage, user decision 2026-10-24): a pinned sha that no branch or tag reaches fails `{source missing}`** — install, update, and reinstall of a git source pinned to such a commit fail with `{source missing}` instead of fetching the commit by sha | Recorded Pi capability gap: Claude Code runs `git fetch origin <sha>`, but isomorphic-git 1.43.1 fetches only advertised refs over protocol v1, and D-13 keeps the git binary out | ✓ Good |
 | **AAP-D2 (lifecycle-coverage, Phase 30): `/claude:plugin autoapply [on\|off] [--scope user\|project] [--local]` shows and sets the setting** — with no value it shows the effective value, the file that sets it, and each of the four files' values, filtered by `--scope`/`--local`; `on` or `off` writes one file (user base by default) under the scope's state lock and runs nothing | Claude Code 2.1.309 `/effort` shows when typed bare and sets with an argument; `/fast` and `/focus` spell booleans `[on\|off]`. Upstream has no scope flags on slash commands, so `--scope`/`--local` follow `enable`/`disable` | ✓ Good |
+| **APPLY1-D1 (lifecycle-coverage, user decision 2026-10-25, option C): one `apply` moves a plugin and the newer dependency it needs** — the catalog moves run as one cascade, dependencies first; a dependent held for a dependency's version is released when the planned moves satisfy it, and `pending` previews the same cascade; a move that waits on a failed move reports `{dependency failed}`; a dependent whose own move fails after its dependency moved is disabled with the marker when its copy's declarations reject the moved dependency (a path source, whose old declarations are gone, fails closed when the dependency moved for it); an enable that waits on moves runs only after they land. Supersedes D-12b's two-run acceptance | The user's rationale: an update is an install of a newer version after removing the old, and a fresh install converges on its closure in one run. Claude Code 2.1.310 checks each install's recorded `depConstraints` against the dependency's installed version at load (`dependency-version-unsatisfied`), which is the installed-copy judgement the post-move check makes; upstream records those constraints, so it knows them for any source | ✓ Good |
 
 ## Evolution
 

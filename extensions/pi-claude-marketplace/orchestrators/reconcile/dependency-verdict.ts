@@ -53,6 +53,7 @@ import {
   renderDeclaredRanges,
 } from "../../domain/dependency-range.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { buildScopeDeclarationDetail } from "../plugin/dependency-index.ts";
 
 import type { loadMarketplaceManifest } from "../../domain/manifest.ts";
@@ -387,4 +388,123 @@ export async function verdictAfterToggles(
     ...options,
     state: stateAfterToggles(options.state, toggles),
   });
+}
+
+/** The dependents a verdict holds down; every one when the walk failed is the caller's call. */
+function heldDependents(verdict: ScopeSatisfactionVerdict & { readonly ok: true }): Set<string> {
+  return new Set(verdict.unsatisfied.map((entry) => entry.dependent));
+}
+
+/**
+ * APPLY1-01: the held dependents a catalog move could satisfy. Each of their
+ * unsatisfied declarations names a recorded dependency that is out of range,
+ * or one this same verdict holds down. A dependency that is missing, or that
+ * the user or a config disabled, no move can bring back, so its dependents
+ * stay held. An empty set when the walk failed.
+ */
+export function releasableDependents(
+  verdict: ScopeSatisfactionVerdict,
+  state: ExtensionState,
+): ReadonlySet<string> {
+  if (!verdict.ok) {
+    return new Set();
+  }
+
+  const held = heldDependents(verdict);
+  const recorded = recordedPlugins(state);
+  const blocking = new Set(
+    verdict.unsatisfied
+      .filter(
+        (entry) =>
+          entry.kind === "missing" ||
+          (entry.kind === "disabled" &&
+            (!held.has(entry.dependency) || recorded.get(entry.dependency)?.disabled === true)),
+      )
+      .map((entry) => entry.dependent),
+  );
+  return new Set([...held].filter((dependent) => !blocking.has(dependent)));
+}
+
+/**
+ * APPLY1-01: `verdict` with the dependents in `released` no longer held, so a
+ * declaration naming one of them as a held dependency is satisfied too.
+ */
+export function verdictWithout(
+  verdict: ScopeSatisfactionVerdict,
+  released: ReadonlySet<string>,
+): ScopeSatisfactionVerdict {
+  if (!verdict.ok) {
+    return verdict;
+  }
+
+  return {
+    ok: true,
+    unsatisfied: verdict.unsatisfied.filter(
+      (entry) =>
+        !released.has(entry.dependent) &&
+        !(entry.kind === "disabled" && released.has(entry.dependency)),
+    ),
+  };
+}
+
+/** A catalog move as the verdict needs it: the record and the version it lands on. */
+export interface LandedMove {
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly toVersion: string;
+}
+
+/**
+ * APPLY1-01: the verdict once the plan's toggles have run and `moves` have
+ * landed, the way an install cascade judges a dependent against the closure
+ * it installs. Each moved record carries its new version; the walk already
+ * reads every record's catalog declarations (D-05-06).
+ */
+export async function verdictAfterMoves(
+  options: ScopeSatisfactionOptions,
+  toggles: PlannedToggles,
+  moves: readonly LandedMove[],
+): Promise<ScopeSatisfactionVerdict> {
+  const toggled = stateAfterToggles(options.state, toggles);
+  const marketplaces = { ...toggled.marketplaces };
+  for (const move of moves) {
+    const mp = ownValue(marketplaces, move.marketplace);
+    const record = ownValue(mp?.plugins, move.plugin);
+    if (mp !== undefined && record !== undefined) {
+      marketplaces[move.marketplace] = {
+        ...mp,
+        plugins: { ...mp.plugins, [move.plugin]: { ...record, version: move.toVersion } },
+      };
+    }
+  }
+
+  return buildScopeSatisfactionVerdict({ ...options, state: { ...toggled, marketplaces } });
+}
+
+/**
+ * The held dependents of `verdict` that `released` names, or all of
+ * `released` when the walk failed.
+ */
+export function stillHeld(
+  verdict: ScopeSatisfactionVerdict,
+  released: ReadonlySet<string>,
+): ReadonlySet<string> {
+  if (!verdict.ok) {
+    return released;
+  }
+
+  const held = heldDependents(verdict);
+  return new Set([...released].filter((dependent) => held.has(dependent)));
+}
+
+/**
+ * APPLY1-01: the first declaration in `declared` that `state` does not
+ * satisfy, measured as the load-time check measures it, or `undefined`.
+ */
+export function firstUnsatisfied(
+  dependent: string,
+  declared: readonly AddressedDependency[],
+  state: ExtensionState,
+): UnsatisfiedDeclaration | undefined {
+  return unsatisfiedEntries(dependent, declared, recordedPlugins(state), new Set())[0];
 }
