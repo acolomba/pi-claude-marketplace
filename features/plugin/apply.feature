@@ -701,6 +701,52 @@ Feature: Plugin apply
       | core@tools | 1.0.0   | true    |
       | lib@tools  | 1.0.0   | false   |
 
+  Scenario: Apply and pending leave a plugin a config enables alone while the dependency it needs is disabled by a config
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   | core         |
+      | core | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | tools       | app    | false   |
+      | tools       | lib    |         |
+      | tools       | core   |         |
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   | core@^2.0.0  |
+      | core | 1.0.0   |              |
+    Given the user has run "/claude:plugin apply --scope project", which warned
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   | core         |
+      | core | 1.0.0   |              |
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | tools       | app    |         |
+      | tools       | lib    | false   |
+      | tools       | core   |         |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+    Then the installation record of the project scope holds these plugins:
+      | id         | version | enabled |
+      | app@tools  | 1.0.0   | false   |
+      | core@tools | 1.0.0   | true    |
+      | lib@tools  | 1.0.0   | false   |
+
   Scenario: Pending lists the disable of a plugin whose dependency a config drops, as apply makes it
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

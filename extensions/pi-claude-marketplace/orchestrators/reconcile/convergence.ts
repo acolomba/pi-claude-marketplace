@@ -796,12 +796,13 @@ export async function settleMoveCascade(input: MoveCascadeInput): Promise<MoveCa
 /**
  * WR-1 / WR-2: the plan, judged by the rules `apply` judges its result by
  * (`judgeFinalScope`), over the scope as the plan and its moves leave it. A
- * lift of a held-down record that judgement would hold is dropped, so `apply`
- * does not enable and disable it again, and every other enabled record it
+ * planned enable that judgement would hold is dropped, so `apply` does not
+ * enable and disable it again, and every other enabled record it
  * would hold is disabled by the plan, so `pending` lists it. A record that
  * moves is judged by its catalog declarations alone, since its copy is
  * replaced, and a deferred record is the cascade's to judge. A judgement whose
- * walk fails leaves the plan as it was (D-05-07).
+ * walk fails leaves the plan as it was (D-05-07). An enable it drops leaves the
+ * record as it was, so neither `pending` nor `apply` reports a row for it.
  */
 async function judgePlannedScope(
   input: MoveCascadeInput,
@@ -839,9 +840,9 @@ async function judgePlannedScope(
   const held = new Set(holds.map((entry) => entry.dependent));
   const keyOf = (op: { readonly plugin: string; readonly marketplace: string }): string =>
     `${op.plugin}@${op.marketplace}`;
-  const pluginsToEnable = plan.pluginsToEnable.filter(
-    (op) => !(isDependencyHeld(input.state, op) && held.has(keyOf(op))),
-  );
+  // Review 4 WR-1: every enable the judgement would hold is dropped, a config
+  // enable as well as a lift; the record stays as it is, so it gets no row.
+  const pluginsToEnable = plan.pluginsToEnable.filter((op) => !held.has(keyOf(op)));
   const planned = new Set(
     [...plan.pluginsToDisable, ...plan.pluginsToDependencyDisable, ...plan.pluginsToEnable].map(
       keyOf,

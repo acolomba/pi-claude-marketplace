@@ -7830,6 +7830,53 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  test("APPLY1-01 / Review 4 WR-2: a clone cleanup that fails after a held-down step does not end the apply", async (t) => {
+    // arrange -- as the restored-copy case, with a plugin-clones directory
+    // nobody may list, so the deferred cleanup fails.
+    if (typeof process.getuid === "function" && process.getuid() === 0) {
+      throw new Error("a directory mode cannot stop root; run this suite as a non-root user");
+    }
+
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-cleanup-fails",
+      coShippedSeed({ enabled: false, dependencyDisabled: true }),
+    );
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    const copy = path.join(project.pluginClonesDir, "widget-copy");
+    await writeUnder(
+      path.join(copy, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "widget", version: "1.0.0" }),
+    );
+    const seeded = await loadState(project.extensionRoot);
+    const widget = seeded.marketplaces.mp?.plugins.widget;
+    assert.ok(widget !== undefined);
+    widget.resolvedSource = copy;
+    widget.resolvedSha = "a".repeat(40);
+    await saveState(project.extensionRoot, seeded);
+    await unreadableSkill(marketplaceRoot, "widget");
+    await chmod(project.pluginClonesDir, 0o300);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act -- the mode comes back before the case's tree is removed
+    try {
+      await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+    } finally {
+      await chmod(project.pluginClonesDir, 0o755);
+    }
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● mp [project]\n  ● zcore v1.0.0 → v2.0.0 (updated)\n  ⊘ widget v1.0.0 → v1.1.0 (failed) {unreadable}\n\nReconcile: 1 failure, 1 success\n\n/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    verifyBoundary();
+  });
+
   test("APPLY1-01 / CR-03 / WR-C: a held-down record whose enable fails after its pin refresh is a failed move and keeps its version", async (t) => {
     // arrange
     const { cwd, project, marketplaceRoot } = await seedConvergenceScope(

@@ -141,6 +141,7 @@ import type {
   ReconcilePlan,
   ScopeReadResult,
 } from "./types.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
@@ -1369,6 +1370,7 @@ async function runStep(
   }
 
   const move = step.move;
+  const collect = { requested: false };
   // D-10 / D-25: a move whose revision did not change exists because its
   // supported set grew, so the runner re-materializes the recorded revision.
   const rematerialize = !move.revisionChanged;
@@ -1380,7 +1382,7 @@ async function runStep(
     partial: move.partial,
     rematerialize,
     // WR-3: a held-down record's clones are collected once its enable is known.
-    ...(step.enable !== undefined && { cleanupClones: keepClones }),
+    ...(step.enable !== undefined && { cleanupClones: deferCollection(collect) }),
   });
   const enable = step.enable;
   if (!moveLanded(result, enable !== undefined) || enable === undefined) {
@@ -1403,7 +1405,10 @@ async function runStep(
     await restorePin(opts, run.scope, move, run.before);
   }
 
-  await garbageCollectPluginClones(locationsFor(run.scope, opts.cwd));
+  if (collect.requested) {
+    await collectClones(locationsFor(run.scope, opts.cwd));
+  }
+
   if (landed) {
     // A growth-only move keeps the version, so its enable row is the net row.
     run.reports.push({ key: step.key, rows: rematerialize ? enabled : [enabledMoveOutcome(move)] });
@@ -1420,9 +1425,28 @@ async function runStep(
   run.reports.push({ key: step.key, rows: failedMoveRows(move, reasons) });
 }
 
-/** The clone collection a held-down record's move defers to `runStep`. */
-function keepClones(): Promise<void> {
-  return Promise.resolve();
+/**
+ * The clone collection a held-down record's move defers to `runStep`: the
+ * runner asks for it only when the pin's commit moved.
+ */
+function deferCollection(collect: { requested: boolean }): () => Promise<void> {
+  return () => {
+    collect.requested = true;
+    return Promise.resolve();
+  };
+}
+
+/**
+ * D-19-01 / Review 4 WR-2: clone cleanup is hygienic, as the runner's own is
+ * (`update-preflight.ts::refreshDisabledPluginUpdate`): a failure is traced and
+ * a later lifecycle operation retries it.
+ */
+async function collectClones(locations: ScopedLocations): Promise<void> {
+  try {
+    await garbageCollectPluginClones(locations);
+  } catch (err) {
+    hookDebugLog(`apply: clone cleanup failed: ${errorMessage(err)}`, "reconcile");
+  }
 }
 
 const NON_CONTENT_REASONS: ReadonlySet<string> = new Set([

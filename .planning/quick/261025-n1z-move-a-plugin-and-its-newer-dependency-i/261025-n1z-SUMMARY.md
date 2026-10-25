@@ -105,3 +105,14 @@ the disable of a plugin whose dependency a config drops, as apply makes it"
 (P15). Unit: the WR-3 restored copy (`apply.test.ts`), the collector override
 (`update-flow.test.ts`), the planned judgement (`convergence.test.ts`), the
 scheduled install (`dependency-verdict.test.ts`).
+
+## Fourth review (APPLY1-REVIEW-4: 0 Critical, 2 Warning)
+
+| Finding | Fix |
+|---|---|
+| WR-1 | `judgePlannedScope` drops every planned enable the judgement would hold, a config enable as well as a lift; the record stays as it was (no spurious marker), so neither `pending` nor `apply` reports a row for it, as with any record an apply leaves unchanged |
+| WR-2 | the deferred clone cleanup runs only when the runner asked for it (the pin's commit moved) and is hygienic (D-19-01): a failure is traced, and the apply goes on |
+
+Scenario (fails on 5c5bbfe7): "Apply and pending leave a plugin a config
+enables alone while the dependency it needs is disabled by a config" (P16).
+Unit: the cleanup failure path (`apply.test.ts`).

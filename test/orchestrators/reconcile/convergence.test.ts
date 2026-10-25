@@ -1467,7 +1467,7 @@ const LIB_HELD_AND_OFF: readonly StagedPlugin[] = [
   },
 ];
 
-test("APPLY1-01 / WR-1: a lift the final judgement would hold is dropped, and a config enable is left to the plan", async (t) => {
+test("APPLY1-01 / WR-1: a lift and a config enable the final judgement would hold are both dropped", async (t) => {
   // arrange -- `lib` carries the marker, which the load-time verdict reads as
   // enabled, but stays disabled; `app` needs it.
   const fixture = await createFixture(t, "planned-lift");
@@ -1488,7 +1488,7 @@ test("APPLY1-01 / WR-1: a lift the final judgement would hold is dropped, and a 
   // assert
   assert.deepStrictEqual(lifted.plan.pluginsToEnable, []);
   assert.deepStrictEqual(lifted.plan.pluginsToDependencyDisable, []);
-  assert.deepStrictEqual(enabled.plan, enableApp);
+  assert.deepStrictEqual(enabled.plan, planWith({}));
 });
 
 test("APPLY1-01 / WR-2: the plan disables a plugin whose dependency it uninstalls, unless the same apply installs it", async (t) => {
