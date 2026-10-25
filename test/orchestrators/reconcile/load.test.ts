@@ -611,6 +611,41 @@ test("AAP-02 / D-22: an autoapply load hands the apply step its MCP move", async
   verifyBoundary();
 });
 
+test("AAP-03 / NFR-2: an apply step that throws is reported as aborted, then the load prints the pending block", async (t) => {
+  // arrange
+  const scope = await createLoadScope(t, "autoapply-throws");
+  await seedInstalled(scope, scope.project, {}, ["hello"]);
+  await writeUnder(
+    scope.project.baseConfigJsonPath,
+    declaringAutoapply(scope.marketplaceRoot, { "hello@mp": {} }, true),
+  );
+  const before = await scopeFiles(scope.project);
+  const throwingLoad = createLoadReconcile({ loadState }, () =>
+    Promise.reject(new Error("the pass ended")),
+  );
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+
+  // act
+  await throwingLoad({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd: scope.cwd,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache: createCompletionCache(),
+  });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    { message: "reconcile aborted: the pass ended", severity: "error" },
+    {
+      message:
+        "● mp [project]\n  ● hello (will install)\n\nReconcile pending: 1 success" + APPLY_TRAILER,
+    },
+  ]);
+  assert.deepStrictEqual(await scopeFiles(scope.project), before);
+  verifyBoundary();
+});
+
 test("AAP-01 / D-03: a config that turns autoapply on beside an invalid config keeps the load read-only", async (t) => {
   // arrange
   const scope = await createLoadScope(t, "autoapply-invalid");

@@ -1,8 +1,9 @@
 // orchestrators/reconcile/apply.ts
 //
 // RECON-01..05: the reconcile apply orchestrator behind `/claude:plugin
-// apply` (APL-01). A load runs none of it (APL-03 / D-02); the load runs
-// `load.ts`, which shares the read pass.
+// apply` (APL-01). A load runs none of it (APL-03 / D-02) unless a config
+// turns `autoapply` on (AAP-02); otherwise the load runs `load.ts`, which
+// shares the read pass.
 // behavioral-composition-exception: applyReconcile
 //
 // CONTRACT:
@@ -70,8 +71,8 @@
 //     silence and the empty advisory is not sent.
 //
 // D-05 / D-07: the soft-dependency snapshot is the run the `apply` command
-// opens before the pass, so it observes a stable pi-subagents /
-// pi-mcp-adapter status.
+// (or, under autoapply, the load) opens before the pass, so it observes a
+// stable pi-subagents / pi-mcp-adapter status.
 
 import { locationsFor } from "../../persistence/locations.ts";
 import { declaredDependencies } from "../../shared/concerns/soft-dep.ts";

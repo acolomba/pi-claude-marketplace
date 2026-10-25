@@ -145,6 +145,34 @@ Feature: Plugin autoapply
     Then the project scope has no installed plugins
     Then the session offers no skills
 
+  Scenario: A project local config that turns autoapply on overrides a user config that turns it off
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given a config in scope user and layer base, with this text:
+      """
+      { "autoapply": false }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    Given a config in scope project and layer local, with this text:
+      """
+      { "autoapply": true }
+      """
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
+      | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
   Scenario: A config that turns autoapply off keeps a new session read-only
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
@@ -170,11 +198,15 @@ Feature: Plugin autoapply
     Then the project scope has no installed plugins
     Then the session offers no skills
 
-  Scenario: A config whose autoapply is not a boolean is reported as invalid and changes nothing
+  Scenario: A config whose autoapply is not a boolean is reported as invalid and keeps a new session read-only
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
+    Given a config in scope project and layer base, with this text:
+      """
+      { "autoapply": true }
+      """
     Given the marketplace "fixtures" is added to the project scope
     Given a config in scope project and layer base, with these plugins:
       | marketplace | plugin | enabled |

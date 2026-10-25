@@ -822,7 +822,9 @@ describe("applyReconcile", () => {
     const { cwd, project } = await createHermeticScopes(t, "pristine-load");
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
     const { gitOps, clonedUrls } = createOfflineGitOps();
-    const run: NotificationRun = { ...runWithNothingLoaded(), origin: { kind: "load" } };
+    // A load run carries no command state, as `index.ts` opens it.
+    const { commandState: _commandState, ...snapshot } = runWithNothingLoaded();
+    const run: NotificationRun = { ...snapshot, origin: { kind: "load" } };
 
     // act
     await applyReconcile({ ctx, run, cwd, gitOps });

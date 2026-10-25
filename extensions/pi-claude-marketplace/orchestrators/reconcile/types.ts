@@ -333,8 +333,9 @@ export type DependencyDisableStamp = (
 export interface ApplyReconcileOptions {
   readonly ctx: NotificationContext;
   /**
-   * D-05 / D-07: the run the `apply` command opens before the pass. The
-   * reconcile-applied cascade renders from its soft-dependency snapshot.
+   * D-05 / D-07: the run the `apply` command, or an autoapply load (AAP-02),
+   * opens before the pass. The reconcile-applied cascade renders from its
+   * soft-dependency snapshot.
    */
   readonly run: NotificationRun;
   /** Project-scope cwd (ignored for the user scope). */

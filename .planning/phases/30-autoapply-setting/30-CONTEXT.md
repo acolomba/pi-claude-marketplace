@@ -117,6 +117,18 @@ case (BACKLOG APPLY1-01, D-12b of phase 29).
   `reconcile-aborted` row, as it already does for the read-only load (NFR-2);
   `load.ts` adds no catch of its own. Changes the apply could not make stay pending:
   `pending` lists them and the next autoapply load retries them (NFR-3).
+- **D-13 (added at code review, 2026-10-25):** a load never starts the
+  interactive GitHub Device Flow. `auth-host.ts::buildAuthForHost` gives a
+  run that no command opened (an autoapply load) the stored-credential
+  bundle, as the autoupdate cascade gets (D-3-04), so a clone that needs a
+  credential the user has not stored fails its row
+  (`{authentication required}`) instead of holding the load for up to the
+  code's 15-minute lifetime. `/claude:plugin apply` still offers the flow.
+  Upstream's comparable install pass also runs unattended in the background.
+  An apply step that throws (GHB-03) is reported as `reconcile-aborted` by
+  `load.ts` itself, which then runs the read-only pass so the routing table,
+  the warnings and the pending block still come out (amends D-09's "no catch
+  of its own").
 - **D-10:** with phase 29's D-12b, a dependent shipped with the newer
   dependency it needs settles on the second autoapply load. Scenarios do not
   assume one load settles it.

@@ -9,9 +9,13 @@
 // effective value (`config-merge.ts::loadAutoapply`, the most specific config
 // file that sets it) is true, the load runs the injected apply step for both
 // scopes instead of the read-only pass below, and returns. The apply step runs
-// the same read pass, MCP move, warnings and routing rebuild, so nothing below
-// is skipped. A throw from it reaches the caller's NFR-2 boundary in
-// `index.ts`, which reports it as `reconcile-aborted`, as for this pass.
+// the same read pass, MCP move, warnings and routing rebuild, and its report
+// replaces the pending block.
+//
+// AAP-03 / NFR-2: an apply step that throws (GHB-03 ends its pass) is reported
+// as `reconcile-aborted`, and the read-only pass below then runs, so the
+// routing table and the warnings are rebuilt and the pending block lists what
+// the apply step did not make.
 //
 // What still runs, per scope, project first (MSG-GR-3):
 //   - the shared locked read pass (`read-pass.ts`): the MIG-01 first-run
@@ -43,7 +47,7 @@
 
 import { loadAutoapply } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { notifyMcpMigration } from "../../shared/notification-dispatch.ts";
+import { notifyMcpMigration, notifyReconcileAborted } from "../../shared/notification-dispatch.ts";
 
 import { composePendingReport, notifyPendingReport } from "./pending.ts";
 import { closeScopePass, notifyScopeOutcomes, openScopePass } from "./read-pass.ts";
@@ -82,15 +86,19 @@ async function loadReconcileWithReader(
   opts: LoadReconcileOptions,
 ): Promise<void> {
   if (await loadAutoapply(locationsFor("project", opts.cwd), locationsFor("user", opts.cwd))) {
-    await applyReconcile({
-      ctx: opts.ctx,
-      run: opts.run,
-      cwd: opts.cwd,
-      hooksRouting: opts.hooksRouting,
-      completionCache: opts.completionCache,
-      ...(opts.migrateMcpEntries !== undefined && { migrateMcpEntries: opts.migrateMcpEntries }),
-    });
-    return;
+    try {
+      await applyReconcile({
+        ctx: opts.ctx,
+        run: opts.run,
+        cwd: opts.cwd,
+        hooksRouting: opts.hooksRouting,
+        completionCache: opts.completionCache,
+        ...(opts.migrateMcpEntries !== undefined && { migrateMcpEntries: opts.migrateMcpEntries }),
+      });
+      return;
+    } catch (err) {
+      notifyReconcileAborted(opts.ctx, opts.run, err);
+    }
   }
 
   const accumulators: ScopePassAccumulators = {

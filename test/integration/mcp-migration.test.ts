@@ -46,7 +46,9 @@ const COST_LINE =
   "The new names reset what pi-mcp-adapter keeps for each server name: sign in again to servers that use OAuth, and approve project servers again. Until you reload, pi-mcp-adapter can still show the old names.";
 
 async function reload(cwd: string): Promise<NotifyRecord[]> {
-  const { session, notifications } = makeCtx({ kind: "load" });
+  // A command run: a load-origin run is an autoapply load, which keeps the
+  // empty pass silent (AAP-02) where the command reports it.
+  const { session, notifications } = makeCtx();
   await createApplyReconcile({ loadState })({
     ...session,
     cwd,

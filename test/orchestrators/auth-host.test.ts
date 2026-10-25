@@ -713,6 +713,30 @@ describe("buildAuthForHost", () => {
     verify(ctx);
   });
 
+  test("AAP-02 / D-13: returns a stored-credential bundle for a registry host to a load run without notifying", () => {
+    // arrange
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const { commandState: _commandState, ...snapshot } = runWithNothingLoaded();
+
+    // act
+    const auth = buildAuthForHost({
+      host: "github.com",
+      credentialOps: credentials.credentialOps,
+      ctx,
+      run: { ...snapshot, origin: { kind: "load" } },
+    });
+
+    // assert
+    assert.deepStrictEqual(auth, {
+      kind: "stored-credential",
+      credentialOps: credentials.credentialOps,
+      host: "github.com",
+    });
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+    verify(ctx);
+  });
+
   test("forwards a credential hit through the complete GitHub bundle", async () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
