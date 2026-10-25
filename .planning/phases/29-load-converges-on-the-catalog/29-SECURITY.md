@@ -72,7 +72,7 @@ Evidence for every row is in the 2026-10-24 audit (gsd-security-auditor, ASVS L1
 *Severity: critical > high > medium > low — only open threats at or above workflow.security_block_on count toward threats_open*
 *Disposition: mitigate (implementation required) · accept (documented risk) · transfer (third-party)*
 
-**T-29-24 closure options (for the user):** bound the manifest `version` string at parse time (a `VERSION_PATTERN`-style allowlist), or amend T-29-24 to accept the stage-two version under T-29-21, since the same strings already render in the `will update` / `updated` version slots.
+**T-29-24 closure options (for the user):** bound the manifest `version` string at parse time (a `VERSION_PATTERN`-style allowlist), or amend T-29-24 to accept the stage-two version under T-29-21, since the same strings already render in the `will update` / `updated` version slots. Carried by BACKLOG VERSTR-01.
 
 ---
 

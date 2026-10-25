@@ -1,8 +1,8 @@
 ---
 phase: 29-load-converges-on-the-catalog
 verified: 2026-10-25T03:00:00Z
-status: human_needed
-score: 4/5 must-haves verified
+status: passed
+score: 5/5 must-haves verified (1 by override)
 covered_files:
   - .planning/phases/29-load-converges-on-the-catalog/29-01-PLAN.md
   - .planning/phases/29-load-converges-on-the-catalog/29-01-SUMMARY.md
@@ -47,9 +47,14 @@ covered_files:
   - features/plugin/apply.feature
   - features/plugin/pending.feature
   - features/plugin/reconcile.feature
-covered_digest: "v3:sha256:dc4089083036f3b402d1c8aa4c3e366404cf0661c6f03fda63fc01b6fef2ceba"
+covered_digest: "v3:sha256:b70b01d9d40dee5ca80d3c2bac7c526b3c292e9b85c4b8f40b1fa9dfe1a11191"
 behavior_unverified: 0
-overrides_applied: 0
+overrides_applied: 1
+overrides:
+  - must_have: "`apply` makes every change `pending` listed, then `pending` lists nothing"
+    reason: "A dependent shipped together with the newer dependency it needs converges in two applies (CR-01 deferred, D-12b); no state is left unmet; ROADMAP criterion 1, D-08 and D-19 name the exception; the one-run fix is tracked in BACKLOG APPLY1-01"
+    accepted_by: "user"
+    accepted_at: "2026-10-25T12:00:00Z"
 re_verification:
   previous_status: human_needed
   previous_score: 4/4
@@ -58,9 +63,6 @@ re_verification:
   regressions:
     - "The previous report predates review iterations 2 and 3 and the 288f5c6b revert; SC1 now has a known exception (co-shipped dependent and dependency)."
 human_verification:
-  - test: "Sign off (or reject) the two-apply convergence of a dependent that ships together with the newer dependency it needs"
-    expected: "Either record an override or amend ROADMAP criterion 1 and CONTEXT D-08/D-19 to name the exception, or open a follow-up design that settles the case in one apply. See the SC1 row."
-    why_human: "The behavior is observable and breaks the letter of ROADMAP criterion 1 and D-08. Only the owner can decide that a deferred limitation is acceptable; no later phase or backlog item carries it."
   - test: "UAT-02: run /reload in a live Pi with a pending change and read the block"
     expected: "The pending block with the apply trailer stays visible"
     why_human: "Pi erases rows emitted during /reload; known manual-only backlog item, out of scope for this phase."
@@ -70,24 +72,24 @@ human_verification:
 
 **Phase Goal:** Changing installation state is always an explicit command: `apply` reaches the desired state, and a load only reloads resources and reports what is pending.
 **Verified:** 2026-10-25T03:00:00Z
-**Status:** human_needed
+**Status:** passed
 **Re-verification:** Yes. The earlier untracked report predates review iterations 2 and 3 and the revert commit 288f5c6b. It was written fresh against HEAD 70ffab26 (22748a2b plus a docs and comment-only commit).
 
 ## Goal Achievement
 
-The goal holds: a load changes no installation state, and `apply` is the one command that makes the changes. One narrow case breaks the letter of ROADMAP criterion 1 (see SC1): a dependent shipped together with the newer dependency it needs takes two `apply` runs. That case needs a human decision.
+The goal holds: a load changes no installation state, and `apply` is the one command that makes the changes. One narrow case breaks the letter of ROADMAP criterion 1 (see SC1): a dependent shipped together with the newer dependency it needs takes two `apply` runs. The user accepted that case on 2026-10-25; the override in the frontmatter records it.
 
 ### Observable Truths
 
 | # | Truth (ROADMAP criteria) | Status | Evidence |
 |---|---|---|---|
-| SC1 | `apply` makes every change `pending` listed, then `pending` lists nothing; an empty `apply` reports so and writes nothing (APL-01) | ? UNCERTAIN (WARNING, human decision) | Holds in the `apply.feature` scenarios at lines 16-316 ( "Apply makes every change one hand edit of the base config causes, after which pending lists nothing", the config-disable chain, the nothing-to-change case). It does NOT hold for a co-shipped dependent and dependency; see below. |
+| SC1 | `apply` makes every change `pending` listed, then `pending` lists nothing; an empty `apply` reports so and writes nothing (APL-01) | PASSED (override) | Holds in the `apply.feature` scenarios at lines 16-316 ( "Apply makes every change one hand edit of the base config causes, after which pending lists nothing", the config-disable chain, the nothing-to-change case). It does NOT hold for a co-shipped dependent and dependency; see below. |
 | SC2 | After `marketplace update` moves a path-source and a git-source plugin, `apply` installs both; a range-blocked and a consent-needing partial move stay put with warning rows and stay in `pending` (APL-02) | ✓ VERIFIED | `apply.feature` "Apply moves a path-source and a git-source plugin ..." (line 389) and "Apply keeps a range-blocked and a consent-needing move in place ..., and pending still lists them" (line 428) pass. The latter checks the record is unchanged and then runs `pending`. |
 | SC3 | `/reload` after a hand edit of the config changes no state and prints `pending`'s block with the `apply` trailer; `/reload` with nothing pending prints nothing (APL-03) | ✓ VERIFIED | `reconcile.feature` lines 16 and 33 pass ("... installed plugins: none", "session offers no skills", then silent on a match). `load.ts` calls `openScopePass`/`closeScopePass`/`composePendingReport` only; `read-pass.ts` runs `withLockedStateTransaction` with no `tx.save()` (lines 10-11, 140). The AMIG-01 MCP move (D-22) may still write; it changes no installed set. |
 | SC4 | `pending`, help, completions and the docs name `apply` (APL-04) | ✓ VERIFIED | Router entry `edge/router.ts:250` and usage text `:157`; handler `edge/handlers/plugin/apply.ts`; flag catalog `flag-catalog.ts:64,205`; completions test `provider.test.ts:218,515`; trailer `APPLY_HINT_TRAILER` and empty advisory `notification-grammar.ts:908,1201`; `docs/json-output.md` (`needsApply`, `plugin apply`); help feature asserts the usage line; PROJECT.md carries APL-D1 and APL-D2. |
 | SC5 | `npm run check` stays green | ✓ VERIFIED (log, not re-run) | `npm-check-revert.log`: exit 0 at 288f5c6b, 793/793 scenarios, 284 LCOV records. Since then only planning docs changed, plus a two-line comment edit in `convergence.ts` (70ffab26). I re-ran the three cucumber features (37/37) and the six reconcile/edge owner tests (183/183). |
 
-**Score:** 4/5 truths verified (1 uncertain, 0 failed, 0 behavior-unverified)
+**Score:** 5/5 truths verified (1 by override, 0 failed, 0 behavior-unverified)
 
 ### SC1 exception: the co-shipped dependent and dependency (CR-01, deferred)
 
@@ -177,7 +179,7 @@ SKIPPED: the phase declares no `probe-*.sh` scripts.
 | APL-03 | 29-02, 29-08 | load changes no state, prints the pending block | ✓ SATISFIED | SC3. |
 | APL-04 | 29-03, 29-14 | `pending` advises `apply`; help, completions, router, JSON, docs | ✓ SATISFIED | SC4. |
 
-REQUIREMENTS.md still shows APL-01..04 as `Pending` and unchecked; the orchestrator updates it at phase close. No orphaned requirement IDs.
+REQUIREMENTS.md marks APL-01..04 complete (phase close, 2026-10-25). No orphaned requirement IDs.
 
 ### Anti-Patterns Found
 
@@ -186,18 +188,18 @@ No `TBD`, `FIXME` or `XXX` marker in the reconcile directory or the apply handle
 ### Review and Security Status
 
 - 29-REVIEW iteration 3 findings: CR-03 and WR-05 fixed by the revert; WR-01 kept; CR-01 deferred (the SC1 exception); IN-01..IN-09 deferred (preview and doc residue, none breaks a criterion); IN-10 skipped.
-- IN-06 (D-12 union reading): at HEAD 70ffab26 CONTEXT.md records it as D-12a, "user decision 2026-10-25", and the planner comments cite D-12a. `29-REVIEW-DISPOSITION.md` still lists IN-06 as deferred and is stale. If the owner has not in fact confirmed D-12a, that stays open.
+- IN-06 (D-12 union reading): at HEAD 70ffab26 CONTEXT.md records it as D-12a, "user decision 2026-10-25", and the planner comments cite D-12a. The user confirmed D-12a, and `29-REVIEW-DISPOSITION.md` records IN-06 as fixed.
 - 29-SECURITY: `threats_open: 0`; T-29-24 is open below the blocking severity (the raw catalog `version` string in a hold cause).
 - Every SUMMARY carries a `## Threat Flags` section.
 
 ### Human Verification Required
 
-1. **Co-shipped dependent and dependency** (see SC1). Decide: accept as a deferred limitation (record an override or amend criterion 1 and D-08/D-19, add a BACKLOG carrier, add a one-line note to `docs/dependency-resolution.md`), or reject it and plan a follow-up (the reviewer suggests a second verdict pass inside `convergeScope` over moves that actually landed).
+1. ~~**Co-shipped dependent and dependency** (see SC1).~~ Resolved 2026-10-25: the user accepted it. The override is in the frontmatter; ROADMAP criterion 1, CONTEXT D-08 and D-19 name the exception; BACKLOG APPLY1-01 carries the one-run fix; `docs/dependency-resolution.md` notes the two runs. Original item: decide: accept as a deferred limitation (record an override or amend criterion 1 and D-08/D-19, add a BACKLOG carrier, add a one-line note to `docs/dependency-resolution.md`), or reject it and plan a follow-up (the reviewer suggests a second verdict pass inside `convergeScope` over moves that actually landed).
 2. **UAT-02** (manual only, backlog): Pi erases rows emitted during `/reload`.
 
 ### Gaps Summary
 
-No truth failed. One truth, ROADMAP criterion 1, has an observable exception that needs the owner's decision. The earlier "4/4 verified" report no longer applies.
+No truth failed. ROADMAP criterion 1 has one accepted exception (override above). The earlier "4/4 verified" report no longer applies.
 
 ---
 

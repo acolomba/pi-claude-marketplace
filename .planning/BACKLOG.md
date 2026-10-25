@@ -4012,3 +4012,35 @@ Scope when picked up: decide parity (switch to the first-`@` split and retire
 D-76-04) or record D-76-04 as a divergence with an ID. A switch is test-first
 in `test/domain/source.test.ts`, keeps the `#` arm's rule (D-12, D-MF-07),
 and adds a CHANGELOG line, because it changes which sources parse.
+
+## APPLY1-01: a dependent shipped with the newer dependency it needs takes two `apply` runs
+
+Found in the lifecycle-coverage phase 29 code review (2026-10-25, CR-01,
+deferred; D-12b). A marketplace update ships `widget` 1.1.0, which declares
+`zcore@^2.0.0`, together with `zcore` 2.0.0, both recorded at 1.0.0. The
+first `apply` disables `widget` (its catalog range is unmet by the recorded
+`zcore`) and moves `zcore`; `pending` then lists `widget (will enable)` and
+`widget (will update)`, and the second `apply` makes them. No run leaves a
+dependent enabled with its range unmet. The user accepted the two runs at
+the phase close (ROADMAP phase 29 criterion 1, CONTEXT D-08).
+
+A release loop inside the planner (121c6168, reverted in 288f5c6b) reached
+one run but could move a released dependent to a version whose range stays
+unmet, and released it on every pass when the planned move never landed.
+
+Scope when picked up: re-check the ranges inside `convergeScope`
+(`orchestrators/reconcile/apply.ts`) after the moves run, over the moves that
+actually landed, and enable and move the dependents those moves satisfy in
+the same `apply`. `pending` must preview the same result. Test-first with the
+reviewer's probe shapes (co-shipped bump, a marker-held dependent, a move that
+keeps failing). Then drop the exception from `docs/dependency-resolution.md`.
+
+## VERSTR-01: a hold row's cause interpolates the raw catalog `version` string
+
+Lifecycle-coverage phase 29 security audit, T-29-24 (medium, open below the
+blocking threshold). `describeConstraint` in `orchestrators/plugin/constraint-fold.ts`
+puts the catalog `version` string, unbounded manifest text, into the
+`{dependents constrain}` hold cause. It predates the phase. Close it one of
+two ways: bound the manifest `version` string at parse time (a
+`VERSION_PATTERN`-style allowlist), or accept it under T-29-21, since the
+same strings already render in the `will update` / `updated` version slots.

@@ -128,6 +128,10 @@ network refresh is added (D-09, D-27).
   session has not loaded. With nothing to do, it reports so, uses the same
   empty advisory form `pending` uses but in apply's wording, and writes
   nothing. Afterwards `pending` lists nothing except blocked moves (D-12).
+  Amended 2026-10-25 (user): one exception. A dependent shipped together
+  with the newer dependency it needs converges in two applies: the first
+  disables the dependent and moves the dependency, the second enables and
+  moves the dependent (D-12b). The one-run fix is BACKLOG APPLY1-01.
 - **D-09 (autoupdate):** unchanged. No load path runs a marketplace
   autoupdate today (`autoupdate.ts` only flips the config flag), and none is
   added. An explicit `marketplace update` on an autoupdate marketplace keeps
@@ -230,7 +234,8 @@ network refresh is added (D-09, D-27).
 
 ### Scenarios
 - **D-19:** a new `features/plugin/apply.feature` covers APL-01/02:
-  - apply makes every pending change, after which pending is empty;
+  - apply makes every pending change, after which pending is empty (except
+    the two-apply case D-08 names);
   - apply with nothing pending writes nothing;
   - after `marketplace update` moves a path-source and a git-source plugin,
     apply installs both at the catalog version;

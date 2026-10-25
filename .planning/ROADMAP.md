@@ -140,7 +140,7 @@ Step module paths are relative to `features/step_definitions/`.
 - [x] **Phase 26: Git Mirror Access** — Mirror refreshes take the state lock, one copy helper serves all clones, and a cold `info --fetch` contacts the host once
 - [x] **Phase 27: Install and Reconcile Reason Residue** — Dependency ranges read as upstream, pinned-commit failures read cleanly, reconcile and import narrow reasons like install, and marketplace remove ignores disabled holders
 - [x] **Phase 28: Delisted Plugin Dependency Walk** — A plugin its marketplace no longer lists keeps its dependencies from its installed copy, so it no longer blocks the scope's dependency walk
-- [ ] **Phase 29: Apply Command and Read-Only Reload** — A new `apply` makes every pending change and converges plugins on the catalog version; `/reload` only reloads resources and prints what is pending
+- [x] **Phase 29: Apply Command and Read-Only Reload** — A new `apply` makes every pending change and converges plugins on the catalog version; `/reload` only reloads resources and prints what is pending
 
 ## Phase Details
 
@@ -602,13 +602,13 @@ Plans:
 **Files:** `orchestrators/reconcile/*` (`plan.ts`, `apply.ts`, `backfill.ts`, `notify.ts`, `pending.ts`), `index.ts` (`resources_discover`, `session_start`), a new edge handler and router entry for `apply`, help, completions, `docs/output-catalog.md`, `docs/json-output.md`; `features/plugin/pending.feature`, `features/plugin/reconcile*.feature`, a new `features/plugin/apply.feature`.
 **Success Criteria** (what must be TRUE):
 
-1. `apply` makes every change `pending` listed, then `pending` lists nothing; `apply` with nothing pending reports so and writes nothing (APL-01).
+1. `apply` makes every change `pending` listed, then `pending` lists nothing; `apply` with nothing pending reports so and writes nothing (APL-01). Accepted exception (user, 2026-10-25): a dependent shipped together with the newer dependency it needs takes two `apply` runs (D-08, D-12b; BACKLOG APPLY1-01).
 2. After `marketplace update` moves a path-source and a git-source plugin, `apply` installs both at the catalog version; a range-blocked move and a consent-needing partial move stay put with warning rows and remain in `pending` (APL-02).
 3. `/reload` after hand-editing the config changes no state and prints `pending`'s block with the `apply` trailer; `/reload` with nothing pending prints nothing (APL-03).
 4. `pending`, help, completions and the docs name `apply` (APL-04).
 5. `npm run check` stays green.
 
-**Plans:** 14/14 plans executed
+**Plans:** 14/14 plans complete
 
 Plans:
 **Wave 1**
@@ -683,7 +683,7 @@ Plans:
 | 26. Git Mirror Access | 1/1 | Complete    | 2026-10-23 |
 | 27. Install and Reconcile Reason Residue | 1/1 | Complete    | 2026-10-23 |
 | 28. Delisted Plugin Dependency Walk | 1/1 | Complete    | 2026-10-24 |
-| 29. Apply Command and Read-Only Reload | 14/14 | In Progress | - |
+| 29. Apply Command and Read-Only Reload | 14/14 | Complete    | 2026-10-25 |
 
 ## Carried Forward
 

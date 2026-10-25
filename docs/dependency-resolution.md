@@ -286,6 +286,8 @@ This disable is a consequence, not a choice you made. So this extension does not
 
 A disable you asked for is never lifted this way. The check lifts only the disable it applied itself.
 
+One case takes two runs of `apply`. A marketplace update can ship a new version of a plugin together with the newer dependency that version needs. The first `apply` disables the plugin and moves the dependency. `pending` then lists the plugin's enable and its update, and the second `apply` makes them. No run leaves the plugin enabled while its dependency is out of range.
+
 One broken dependency reaches every plugin above it in a single `apply`. If `a` needs `b` and `b` needs `c`, then disabling `c` disables both `b` and `a` on the next `apply`, not one of them per run. Enabling `c` again brings both back on the next `apply` too. This holds when you edit a config by hand: an `apply` that disables `c` because a config sets it to `enabled: false` also disables `b` and `a`, and `pending` lists all three first.
 
 `/claude:plugin apply` also installs a dependency that the scope does not record. If an installed plugin declares a dependency with no install record, `apply` installs it through the same install cascade `install` uses, from the marketplace the declaration names, at a version inside every declaring plugin's range, and records it as installed for a dependency, not by name. The dependent stays enabled, or comes back up, in the same `apply`. `pending` lists the install first as `(will install)`, with no row for the dependent.

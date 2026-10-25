@@ -4,18 +4,18 @@ milestone: lifecycle-coverage
 milestone_name: Plugin Lifecycle Behavioral Tests
 current_phase: 29
 current_phase_name: Apply Command and Read-Only Reload
-status: verifying
-stopped_at: Completed 29-14-PLAN.md
-last_updated: "2026-10-24T23:22:59.738Z"
-last_activity: 2026-10-24
-last_activity_desc: Plan 29-14 complete (APL-D1/APL-D2 recorded; README, CHANGELOG and internal docs name apply)
+status: complete
+stopped_at: Phase 29 complete (verification passed with one accepted override)
+last_updated: "2026-10-25T12:00:00.000Z"
+last_activity: 2026-10-25
+last_activity_desc: Phase 29 complete (APL-01..04; the two-apply co-shipped case accepted, BACKLOG APPLY1-01)
 state_head: 852ad2949e09e78828bb1d180d22388d61d1c0c5
 progress:
   total_phases: 29
-  completed_phases: 28
+  completed_phases: 29
   total_plans: 74
   completed_plans: 74
-  percent: 97
+  percent: 100
 ---
 
 # Project State
@@ -31,12 +31,12 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 29 (Apply Command and Read-Only Reload) — EXECUTING
+Phase: 29 (Apply Command and Read-Only Reload) — COMPLETE
 Plan: 14 of 14
-Status: Phase complete — ready for verification
-Last activity: 2026-10-24 — Plan 29-14 complete (APL-D1/APL-D2 recorded; README, CHANGELOG and internal docs name apply)
+Status: Phase complete — verification passed (one accepted override)
+Last activity: 2026-10-25 — Phase 29 complete: APL-01..04 done; a dependent shipped with the newer dependency it needs takes two `apply` runs (accepted, BACKLOG APPLY1-01); T-29-24 stays open below the blocking threshold (BACKLOG VERSTR-01)
 
-Progress: [█████████░] 97%
+Progress: [██████████] 100%
 
 Phases 2-15 depend only on Phase 1 and may run in parallel once it lands. Each
 owns its own feature files and step modules (the file ownership table in
@@ -187,8 +187,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-24T23:22:34.905Z
-**Stopped at:** Completed 29-14-PLAN.md
+**Last session:** 2026-10-25T12:00:00.000Z
+**Stopped at:** Phase 29 complete; next: milestone audit (`/gsd-audit-milestone`)
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
