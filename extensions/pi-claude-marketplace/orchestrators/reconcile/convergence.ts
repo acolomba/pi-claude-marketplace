@@ -187,8 +187,10 @@ interface LandedScope {
 /**
  * D-12 / D-06: `apply` judges its moves after its installs land, so a plugin
  * the plan installs holds a move with the ranges its catalog copy declares,
- * and `pending` must show that hold. The declarations are read offline, the
- * way the walk reads a recorded plugin's (NFR-5). A planned install in a
+ * and `pending` must show that hold. RESV-01: an install's cascade also
+ * installs each dependency it declares that the scope does not record, so
+ * those members hold moves too. The declarations are read offline, the way
+ * the walk reads a recorded plugin's (NFR-5). A planned install or member in a
  * marketplace the scope does not record yet, or one whose declarations cannot
  * be read, holds nothing here.
  */
@@ -197,19 +199,20 @@ async function withPlannedInstalls(
   view: ExtensionState,
   walked: Declarations,
 ): Promise<LandedScope> {
-  const installs =
+  const queue: { readonly marketplace: string; readonly plugin: string }[] =
     input.plan === undefined
       ? []
       : [...input.plan.pluginsToInstall, ...input.plan.pluginsToDependencyInstall];
   const declarations = new Map(walked);
   const marketplaces = { ...view.marketplaces };
-  for (const op of installs) {
+  for (let op = queue.shift(); op !== undefined; op = queue.shift()) {
     const mp = ownValue(marketplaces, op.marketplace);
-    if (mp === undefined) {
+    // A recorded plugin, or a member already landed, is not installed again.
+    if (mp === undefined || declarations.has(`${op.plugin}@${op.marketplace}`)) {
       continue;
     }
 
-    // eslint-disable-next-line no-await-in-loop -- one offline manifest read per planned install
+    // eslint-disable-next-line no-await-in-loop -- each read names the members the next reads cover
     const read = await readRecordDeclarations(
       { state: view, locations: input.locations },
       mp,
@@ -224,6 +227,7 @@ async function withPlannedInstalls(
       ...mp,
       plugins: { ...mp.plugins, [op.plugin]: PLANNED_INSTALL_RECORD },
     };
+    queue.push(...read.declared.map((dep) => ({ marketplace: dep.marketplace, plugin: dep.name })));
   }
 
   return { view: { ...view, marketplaces }, declarations };

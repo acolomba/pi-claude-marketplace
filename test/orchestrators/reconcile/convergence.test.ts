@@ -793,6 +793,34 @@ for (const { bucket, plan } of [
   });
 }
 
+test("D-12 / RESV-01: a dependency a planned install's cascade brings in holds the move", async (t) => {
+  // arrange -- `top` declares `app` and neither is recorded, so the install
+  // of `top` also installs `app`, whose range holds `lib`.
+  const fixture = await createFixture(t, "planned-cascade");
+  const state = await stageTools(fixture, [
+    { name: "top", offered: "1.0.0", declares: [{ name: "app", version: "^1.0.0" }] },
+    ...APP_HOLDS_LIB,
+  ]);
+  const tools = state.marketplaces["tools"];
+  assert.ok(tools !== undefined);
+  const { app: _app, top: _top, ...plugins } = tools.plugins;
+
+  // act
+  const converged = await planConvergence({
+    scope: "project",
+    state: stateOf({ ...tools, plugins }),
+    locations: fixture.locations,
+    plan: planWith({ pluginsToInstall: [{ ...INSTALL_APP, plugin: "top" }] }),
+  });
+
+  // assert
+  assert.deepStrictEqual(converged, {
+    moves: [],
+    holds: [toolsHold("lib", LIB_OUT_OF_RANGE)],
+    declines: [],
+  });
+});
+
 for (const { title, install } of [
   { title: "its marketplace does not list", install: { ...INSTALL_APP, plugin: "ghost" } },
   {

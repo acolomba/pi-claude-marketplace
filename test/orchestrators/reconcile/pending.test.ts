@@ -1198,6 +1198,45 @@ test("D-12: pending lists a range-held move as update's warning hold row, with n
   verifyBoundary();
 });
 
+test("D-06 / D-23 / RESV-01: pending lists a move that a planned install's cascade member holds as held", async (t) => {
+  // arrange -- the config adds `top`, whose cascade installs the unrecorded
+  // `app`, and `app` declares `lib@^1.0.0`.
+  const { cwd, project } = await createHermeticScopes(t, "cascade-hold");
+  const seed: DependencyScopeSeed = {
+    offered: {
+      top: { version: "1.0.0", dependencies: ["app@^1.0.0"] },
+      app: { version: "1.0.0", dependencies: ["lib@^1.0.0"] },
+      lib: { version: "2.0.0" },
+    },
+    recorded: { lib: { version: "1.0.0" } },
+    declared: [
+      { key: "top@tools", enabled: true },
+      { key: "lib@tools", enabled: true },
+    ],
+  };
+  await stageDependencyScope(cwd, project, seed);
+  await stageOfferedPlugins(project, seed.offered);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await pendingReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project" });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation needs attention.\n\n" +
+        "● tools [project]\n" +
+        "  ● top (will install)\n" +
+        "  ⊘ lib v1.0.0 (skipped) {dependents constrain}\n" +
+        '    cause: version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools"\n' +
+        "\nReconcile pending: 1 warning, 1 success\n\n/claude:plugin apply to make these changes",
+      severity: "warning",
+    },
+  ]);
+  verifyBoundary();
+});
+
 test("D-12 / D-24: pending lists a consent decline with the hint naming update --partial", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "consent-decline");

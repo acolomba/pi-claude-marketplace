@@ -186,6 +186,45 @@ Feature: Plugin pending
       | tools            | project           | app@tools | app  | will install |                      | project |         |                                                                                                |                 |       |                  |
       | tools            | project           | lib@tools | lib  | skipped      | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
 
+  Scenario: Pending lists a move that a dependency of a plugin the config adds would block as held, as apply then holds it
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | top  | 1.0.0   | app          |
+      | app  | 1.0.0   | lib@^1.0.0   |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install lib@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | top  | 1.0.0   | app          |
+      | app  | 1.0.0   | lib@^1.0.0   |
+      | lib  | 2.0.0   |              |
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | tools       | top    |         |
+      | tools       | lib    |         |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade                             |
+      | severity            | warning                             |
+      | needs reload        | false                               |
+      | needs apply         | true                                |
+      | summary             | A plugin operation needs attention. |
+      | tally label         | Reconcile pending                   |
+      | tally failures      | 0                                   |
+      | tally warnings      | 1                                   |
+      | tally success count | 1                                   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status       | reasons              | scope   | version | cause chain                                                                                    | cause truncated | leaks | rollback partial |
+      | tools            | project           | top@tools | top  | will install |                      | project |         |                                                                                                |                 |       |                  |
+      | tools            | project           | lib@tools | lib  | skipped      | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status    | reasons              | scope   | version | cause chain                                                                                    | cause truncated | leaks | rollback partial |
+      | tools            | project           | top@tools | top  | installed |                      | project | 1.0.0   |                                                                                                |                 |       |                  |
+      | tools            | project           | lib@tools | lib  | skipped   | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
+
   Scenario: Pending lists a partial move a clean plugin needs consent for as partially upgradable
     Given the marketplace "fixtures" is added to the project scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
