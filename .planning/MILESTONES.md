@@ -1,5 +1,55 @@
 # Milestones: pi-claude-marketplace
 
+## lifecycle-coverage -- Plugin Lifecycle Behavioral Tests (Completed: 2026-10-25 on `claude/plugin-lifecycle-coverage-b1d431`; not yet pushed, merged or released)
+
+**Phases completed:** 30 phases (1-30), 76 plans; 104/104 requirements
+
+**Delivered:** a cucumber suite drives every `/claude:plugin` plugin lifecycle
+command (`install`, `uninstall`, `enable`, `disable`, `update`, `reinstall`,
+`list`, `info`, `pending`, `fetch`, `prune`, `import`, `bootstrap`, `browse`,
+`help`, `apply`, `autoapply`) through a real headless Pi. The scenarios it
+added found and fixed the parity gaps in reasons, rows and versions. A load
+is now read-only and `/claude:plugin apply` makes the changes. 825 scenarios
+pass.
+
+**Key accomplishments:**
+
+- Plugin lifecycle coverage: shared steps for installation records, data
+  files, a second Pi in another project, and plugins in git repositories on
+  the loopback git host as `github`, `url`, or `git-subdir` sources, pinned or
+  not.
+- One version rule and one runner: `list`, `info`, `install`, `update`,
+  `reinstall` and `apply` derive versions the same way, and `update`,
+  `reinstall` and `apply` move plugins through one runner with per-commit
+  copies under the state lock.
+- Parity of reasons and rows: install, import, reconcile, update and
+  reinstall name the same failure reasons for the same causes (`{source
+  missing}`, `{network error}`, `{not installed}`, ranges joined with `, `),
+  and same-version commit moves show both commits.
+- A read-only load (APL-D1): a session start or `/reload` prints `pending`'s
+  block and changes nothing. `/claude:plugin apply` makes every change,
+  including catalog moves, and the startup backfill and `EXTENSION_VERSION`
+  are gone (NFR-2 amended, APL-D2).
+- `autoapply` (AAP-D1, AAP-D2): a config setting makes a load run `apply`,
+  and `/claude:plugin autoapply [on|off]` shows the effective value per file
+  or sets it.
+- A delisted plugin no longer blocks its scope (DLS-D1): its dependencies are
+  read from its installed copy.
+
+**Closeout:** `override_closeout`. Every phase's VERIFICATION.md says
+`passed`, but `init.manager` reads 24 phases as `stale`: CHANGELOG, docs and
+codebase-map edits made after their verifiers ran changed covered files. The
+combined `npm run check` at `1cfe3bb4` exited 0 (825 scenarios, 286
+direct-coverage records), and the close-out commits after it change no
+source. Known verification overrides: 24 newly acknowledged (stale only), 0
+carried forward. Phase 29 passed with one override, the accepted two-apply
+case (D-12b, BACKLOG APPLY1-01).
+
+**Tech debt carried:** see `milestones/lifecycle-coverage-MILESTONE-AUDIT.md`
+(APPLY1-01, APPLYTHROW-01, phase 29 IN-01..09, T-29-24, UAT-02 manual).
+
+---
+
 ## marketplace-features -- Marketplace Behavioral Tests (Completed: 2026-10-21 on `features/cucumber-behavioral-tests`; PR #271, not yet merged or released)
 
 **Phases completed:** 14 phases (1-10, with 3.1-3.4 inserted), 82 plans, 183 tasks; 97/97 requirements

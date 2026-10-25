@@ -21,7 +21,7 @@ Use these terms in code, messages, docs, and planning (user decisions 2026-10-17
 - **Declaration:** an entry in a layer. **Installation:** the plugin's artifacts and record in a scope.
 - **Effective configuration:** a scope's two layers merged field by field, local winning on conflicts. The same intent may be declared in both layers.
 
-## Current Milestone: lifecycle-coverage -- Plugin Lifecycle Behavioral Tests
+## Previous Milestone: lifecycle-coverage -- Plugin Lifecycle Behavioral Tests (branch: claude/plugin-lifecycle-coverage-b1d431, started 2026-10-22, completed 2026-10-25, not yet pushed, no npm release)
 
 **Goal:** The cucumber suite covers every `/claude:plugin` lifecycle command,
 so a regression in plugin install, enable, update, or any other lifecycle
@@ -621,6 +621,22 @@ Four distinct categories of unsupported Claude hook events. All cause plugin `(u
 
 ## Current State
 
+**Completed on a branch, unpushed:** milestone `lifecycle-coverage`
+(2026-10-25, Phases 1-30, 76 plans, 104/104 requirements; archived to
+`.planning/milestones/lifecycle-coverage-*`). The cucumber suite now drives
+every `/claude:plugin` plugin lifecycle verb through a real headless Pi (825
+scenarios). Product changes it carried: one version rule and one
+update/reinstall runner with per-commit git copies under the state lock;
+failure reasons and rows aligned with Claude Code across install, import,
+reconcile, update, reinstall, uninstall and prune; a delisted plugin read from
+its installed copy (DLS-D1); a read-only load and the new `/claude:plugin
+apply` (APL-D1, APL-D2, which amends NFR-2); the `autoapply` setting and
+command (AAP-D1, AAP-D2); and the pinned-sha capability gap (INR-03). The
+startup backfill and `EXTENSION_VERSION` are gone. The audit reads
+`tech_debt` with no blockers; it is an override close (24 phase digests stale
+from post-verification doc edits). APPLY1-01 and APPLYTHROW-01 are carried in
+`BACKLOG.md`.
+
 **Completed on a branch, unmerged:** milestone `marketplace-features`
 (2026-10-21, Phases 1-10 with 3.1-3.4 inserted, 82 plans, 183 tasks, 97/97
 requirements; archived to `.planning/milestones/marketplace-features-*`). A
@@ -740,14 +756,27 @@ operator decision. Workstream `milestone` (force-install closeout) remains open.
 
 ### Active
 
-No milestone is active; start the next one with `/new-gsd-milestone`. The 97
-marketplace-features requirements are validated and archived in
+No milestone is active; start the next one with `/new-gsd-milestone`. The 104
+lifecycle-coverage requirements are validated and archived in
+[milestones/lifecycle-coverage-REQUIREMENTS.md](milestones/lifecycle-coverage-REQUIREMENTS.md);
+the 97 marketplace-features requirements are validated and archived in
 [milestones/marketplace-features-REQUIREMENTS.md](milestones/marketplace-features-REQUIREMENTS.md);
 the 36 json-output requirements in
 [milestones/json-output-REQUIREMENTS.md](milestones/json-output-REQUIREMENTS.md).
 
 ### Validated
 
+- ✓ Every `/claude:plugin` plugin lifecycle verb (`install`, `uninstall`,
+  `enable`, `disable`, `update`, `reinstall`, `list`, `info`, `pending`,
+  `fetch`, `prune`, `import`, `bootstrap`, `browse`, `help`, `apply`,
+  `autoapply`) has cucumber scenarios against path, github, url and
+  git-subdir sources on the loopback git host, including dependency
+  cascades, `--partial`, user scope, rollback, a held state lock, and failure
+  cleanup. Parity fixes landed test-first in the same phases: one version
+  rule, one update/reinstall runner, aligned failure reasons and rows, a
+  delisted plugin read from its installed copy (DLS-D1), a read-only load
+  with `/claude:plugin apply` (APL-D1/D2), and `autoapply` (AAP-D1/D2) —
+  lifecycle-coverage, 2026-10-22..25 (104 requirements; see the archive).
 - ✓ GitHub sources run end to end against the loopback git host through
   `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`, and no tag is excluded from the
   cucumber profile any more (433 scenarios, 48 `@github`). The five github.com
@@ -1636,3 +1665,5 @@ under `.planning/milestones/json-output-*`. Merge of `features/json` and the
 next milestone remain._
 
 _Last updated: 2026-10-22 at the start of milestone lifecycle-coverage._
+
+_Last updated: 2026-10-25 after the lifecycle-coverage milestone was completed and archived. 104/104 requirements validated; audit `tech_debt` with no blockers; override close. Version bump and PR remain._

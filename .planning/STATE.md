@@ -2,14 +2,12 @@
 gsd_state_version: "1.0"
 milestone: lifecycle-coverage
 milestone_name: Plugin Lifecycle Behavioral Tests
-current_phase: 30
-current_phase_name: Autoapply Setting
-status: complete
-stopped_at: Phase 30 complete (verification passed)
-last_updated: "2026-10-25T14:00:00.000Z"
+status: Awaiting next milestone
+stopped_at: Milestone lifecycle-coverage completed and archived
+last_updated: "2026-10-25T14:17:40.899Z"
 last_activity: 2026-10-25
-last_activity_desc: Phase 30 complete (AAP-01..04; the autoapply setting and the autoapply command; BACKLOG APPLYTHROW-01)
-state_head: 852ad2949e09e78828bb1d180d22388d61d1c0c5
+last_activity_desc: Milestone lifecycle-coverage completed and archived
+state_head: 1abe89af92d7e3551eb9523d2e60725bcabe4380
 progress:
   total_phases: 30
   completed_phases: 30
@@ -31,16 +29,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 30 (Autoapply Setting) — COMPLETE
-Plan: 2 of 2
-Status: Phase complete — verification passed
-Last activity: 2026-10-25 — Phase 30 complete: the `autoapply` config key makes a load run `apply` (AAP-D1, no trust gate), and `/claude:plugin autoapply [on|off]` shows and sets it (AAP-04, AAP-D2); review WR-01 tracked as BACKLOG APPLYTHROW-01
-
-Progress: [██████████] 100%
-
-Phases 2-15 depend only on Phase 1 and may run in parallel once it lands. Each
-owns its own feature files and step modules (the file ownership table in
-ROADMAP.md); Phase 1 owns every shared file under `features/`.
+Phase: Milestone lifecycle-coverage complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-10-25 — Milestone lifecycle-coverage completed and archived
 
 ### mcp-4 closeout
 
@@ -270,19 +262,11 @@ archived milestone artifacts.
 
 ## Operator Next Steps
 
-- marketplace-features is archived under `.planning/milestones/marketplace-features-*`
-  on `features/cucumber-behavioral-tests`; nothing is pushed. Next: offer the
-  version bump, then open the PR (consolidate the un-numbered CHANGELOG
-  bullets into one at PR time).
-- At PR time (D-08): read the behavioral-tests job duration and confirm the
-  loopback git host passes on CI (OpenSSL 3.0.13, Node 24, `git http-backend`);
-  change `parallel` only if the job nears its timeout.
-- Follow-ups recorded at close: BACKLOG SHORTREF-01 (the `@` split parity),
-  WINDOWS #101 (plugin update github 401 line), WINDOWS #102-#109 (cucumber
-  review warnings).
-- Open user choice (json-output Phase 9 D-03): keep the returned
-  `isError: true` that Pi 0.87.1 ignores, or throw a redacted Error so Pi
-  flags the failure.
+- lifecycle-coverage is archived under `.planning/milestones/lifecycle-coverage-*`
+  on `claude/plugin-lifecycle-coverage-b1d431`; nothing is pushed. Next: offer
+  the version bump, then open the PR (squash).
+- Follow-ups recorded at close: BACKLOG APPLY1-01 (one-run convergence for a
+  co-shipped dependent), APPLYTHROW-01 (rows dropped when apply throws).
 - Start the next milestone with /new-gsd-milestone.
 
 ## Performance Metrics
