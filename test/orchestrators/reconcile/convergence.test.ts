@@ -749,6 +749,79 @@ test("D-12: a dependent the plan uninstalls no longer holds the move", async (t)
   });
 });
 
+/** `APP_HOLDS_LIB` with `app` not yet installed, so only a plan can install it. */
+async function stageUninstalledApp(fixture: Fixture): Promise<ExtensionState> {
+  const state = await stageTools(fixture, APP_HOLDS_LIB);
+  const tools = state.marketplaces["tools"];
+  assert.ok(tools !== undefined);
+  const { app: _app, ...plugins } = tools.plugins;
+  return stateOf({ ...tools, plugins });
+}
+
+const INSTALL_APP = { ...DEMO_OP, plugin: "app", configSource: "base" } as const;
+
+for (const { bucket, plan } of [
+  { bucket: "an install", plan: planWith({ pluginsToInstall: [INSTALL_APP] }) },
+  {
+    bucket: "a dependency install",
+    plan: planWith({
+      pluginsToDependencyInstall: [
+        { ...DEMO_OP, plugin: "app", ranges: [], requiredBy: "x@tools", declarers: ["x@tools"] },
+      ],
+    }),
+  },
+]) {
+  test(`D-12 / D-06: a dependent the plan adds through ${bucket} holds the move`, async (t) => {
+    // arrange
+    const fixture = await createFixture(t, "planned-install");
+    const state = await stageUninstalledApp(fixture);
+
+    // act
+    const converged = await planConvergence({
+      scope: "project",
+      state,
+      locations: fixture.locations,
+      plan,
+    });
+
+    // assert
+    assert.deepStrictEqual(converged, {
+      moves: [],
+      holds: [toolsHold("lib", LIB_OUT_OF_RANGE)],
+      declines: [],
+    });
+  });
+}
+
+for (const { title, install } of [
+  { title: "its marketplace does not list", install: { ...INSTALL_APP, plugin: "ghost" } },
+  {
+    title: "lands in a marketplace the scope does not record",
+    install: { ...INSTALL_APP, marketplace: "elsewhere" },
+  },
+]) {
+  test(`D-12: a planned install ${title} holds nothing`, async (t) => {
+    // arrange
+    const fixture = await createFixture(t, "planned-install-unread");
+    const state = await stageUninstalledApp(fixture);
+
+    // act
+    const converged = await planConvergence({
+      scope: "project",
+      state,
+      locations: fixture.locations,
+      plan: planWith({ pluginsToInstall: [install] }),
+    });
+
+    // assert
+    assert.deepStrictEqual(converged, {
+      moves: [demoMove({ plugin: "lib", toVersion: "2.0.0" })],
+      holds: [],
+      declines: [],
+    });
+  });
+}
+
 test("D-12 / UPDT-02: a disabled dependent still holds the move and is marked", async (t) => {
   // arrange
   const fixture = await createFixture(t, "disabled-dependent");

@@ -29,9 +29,10 @@ import { shaVersion } from "../../domain/version.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { ownValue } from "../../shared/own-key.ts";
 import { admitResolvedVersion, foldDeclaredConstraint } from "../plugin/constraint-fold.ts";
 import { readInstalledCopyDeclaration } from "../plugin/dependency-declaration-read.ts";
-import { buildScopeDeclarationDetail } from "../plugin/dependency-index.ts";
+import { buildScopeDeclarationDetail, readRecordDeclarations } from "../plugin/dependency-index.ts";
 import { resolveListCandidate } from "../plugin/list-candidate-version.ts";
 import { isRecordedCandidate, isSameRevision, resolvePluginVersion } from "../plugin/shared.ts";
 
@@ -159,6 +160,73 @@ function stateAsPlanLeavesIt(state: ExtensionState, plan: ReconcilePlan): Extens
       }),
   );
   return { ...state, marketplaces };
+}
+
+/**
+ * A plugin the plan installs, as the planner sees it. The fold reads only
+ * whether a holder is enabled, and it is taken as enabled: whether an install
+ * lands disabled is known only once it runs (DFEN-04).
+ */
+const PLANNED_INSTALL_RECORD: PluginRecord = Object.freeze({
+  version: "",
+  resolvedSource: "",
+  compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+  resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+  enabled: true,
+  provenance: "explicit",
+  installedAt: "",
+  updatedAt: "",
+});
+
+/** The scope once the plan's installs land, and what each record then declares. */
+interface LandedScope {
+  readonly view: ExtensionState;
+  readonly declarations: Declarations;
+}
+
+/**
+ * D-12 / D-06: `apply` judges its moves after its installs land, so a plugin
+ * the plan installs holds a move with the ranges its catalog copy declares,
+ * and `pending` must show that hold. The declarations are read offline, the
+ * way the walk reads a recorded plugin's (NFR-5). A planned install in a
+ * marketplace the scope does not record yet, or one whose declarations cannot
+ * be read, holds nothing here.
+ */
+async function withPlannedInstalls(
+  input: ConvergenceInput,
+  view: ExtensionState,
+  walked: Declarations,
+): Promise<LandedScope> {
+  const installs =
+    input.plan === undefined
+      ? []
+      : [...input.plan.pluginsToInstall, ...input.plan.pluginsToDependencyInstall];
+  const declarations = new Map(walked);
+  const marketplaces = { ...view.marketplaces };
+  for (const op of installs) {
+    const mp = ownValue(marketplaces, op.marketplace);
+    if (mp === undefined) {
+      continue;
+    }
+
+    // eslint-disable-next-line no-await-in-loop -- one offline manifest read per planned install
+    const read = await readRecordDeclarations(
+      { state: view, locations: input.locations },
+      mp,
+      op.plugin,
+    );
+    if (!read.ok) {
+      continue;
+    }
+
+    declarations.set(`${op.plugin}@${op.marketplace}`, read.declared);
+    marketplaces[op.marketplace] = {
+      ...mp,
+      plugins: { ...mp.plugins, [op.plugin]: PLANNED_INSTALL_RECORD },
+    };
+  }
+
+  return { view: { ...view, marketplaces }, declarations };
 }
 
 /**
@@ -544,5 +612,6 @@ export async function planConvergence(input: ConvergenceInput): Promise<Converge
     }
   }
 
-  return settleCandidates(candidates, walk.declarations, view);
+  const landed = await withPlannedInstalls(input, view, walk.declarations);
+  return settleCandidates(candidates, landed.declarations, landed.view);
 }
