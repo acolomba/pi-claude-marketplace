@@ -1058,9 +1058,10 @@ async function applyPlan(
  * pass. Only a scope whose read pass produced a plan gets here: a pristine
  * scope (WR-05) and a scope whose config the read pass rejected (CFG-03) have
  * none. The state is read fresh, so the planner takes no plan: the scope
- * already reflects it. A read that throws moves nothing and adds no row: a
- * state file that turned unreadable after the read pass is the apply steps'
- * to report, and the next `apply`'s read pass stops on it (NFR-3).
+ * already reflects it. A read that throws moves nothing and becomes the
+ * `state.json` row every isolated step reports (WR-01), pushed onto
+ * `failures`, so `apply` never says it has nothing to change while the
+ * scope's moves stay pending (NFR-3).
  *
  * Each move runs through the update runner's converge entry, in the planner's
  * order (D-26). A growth-only move re-materializes the recorded revision
@@ -1073,14 +1074,16 @@ async function convergeScope(
   opts: ApplyReconcileOptions,
   scope: Scope,
   outcomes: PerEntryOutcome[],
+  failures: PerEntryOutcome[],
 ): Promise<void> {
   const locations = locationsFor(scope, opts.cwd);
-  let convergence: ConvergencePlan;
-  try {
+  const planned: { convergence?: ConvergencePlan } = {};
+  await runScopeIsolated(scope, failures, async () => {
     const state = await reader.loadState(locations.extensionRoot);
-    convergence = await planConvergence({ scope, state, locations });
-  } catch (err) {
-    hookDebugLog(`convergeScope: skipped ${scope} scope: ${errorMessage(err)}`, "reconcile");
+    planned.convergence = await planConvergence({ scope, state, locations });
+  });
+  const convergence = planned.convergence;
+  if (convergence === undefined) {
     return;
   }
 
@@ -1104,6 +1107,26 @@ async function convergeScope(
   }
 
   outcomes.push(...blockedMoveOutcomes(convergence));
+}
+
+/** The file, scope and closed-set reason an `invalid-block` row reports. */
+function failureKey(outcome: PerEntryOutcome): string | undefined {
+  return outcome.kind === "invalid-block"
+    ? `${outcome.scope} ${outcome.basename} ${outcome.reason}`
+    : undefined;
+}
+
+/**
+ * WR-01 / NFR-3: the convergence's failure rows that no other step of the
+ * scope already reported. A state file that turned unreadable after the read
+ * pass also fails the closing routing rebuild, and that fault is one row.
+ */
+function unreportedFailures(
+  outcomes: readonly PerEntryOutcome[],
+  failures: readonly PerEntryOutcome[],
+): PerEntryOutcome[] {
+  const reported = new Set(outcomes.map(failureKey));
+  return failures.filter((failure) => !reported.has(failureKey(failure)));
 }
 
 /**
@@ -1176,12 +1199,13 @@ async function applyReconcileWithReader(
       continue;
     }
 
+    const convergeFailures: PerEntryOutcome[] = [];
     if (readResult.plan !== undefined) {
       // eslint-disable-next-line no-await-in-loop -- each scope's apply edits shared hooks routing
       await applyPlan(reader, opts, readResult.plan, outcomes);
       // APL-02 / D-08: converge the scope on its catalog after its plan.
       // eslint-disable-next-line no-await-in-loop -- each scope's moves edit shared hooks routing
-      await convergeScope(reader, opts, scope, outcomes);
+      await convergeScope(reader, opts, scope, outcomes, convergeFailures);
     }
 
     // REC-05 / DLS-01 / DISP-02: after the convergence, so a failed move for
@@ -1189,6 +1213,7 @@ async function applyReconcileWithReader(
     // failure does; the routing rebuild reflects the post-reconcile state.
     // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing
     await closeScopePass(scope, readResult, opts.cwd, opts.hooksRouting, outcomes);
+    outcomes.push(...unreportedFailures(outcomes, convergeFailures));
   }
 
   // AMIG-03 / IL-2 / RECON-04: the one migration notice, then the single

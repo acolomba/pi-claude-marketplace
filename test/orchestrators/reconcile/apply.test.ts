@@ -7483,6 +7483,59 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  test("WR-01 / NFR-3: a state read that fails before the convergence reports a state.json row, never nothing to change", async (t) => {
+    // arrange -- the read pass reads the scope first, the convergence second.
+    const { cwd, project } = await seedConvergenceScope(t, "converge-unreadable", {
+      trees: { demo: { skill: "clean" } },
+      supported: { demo: ["skills"] },
+      offered: { demo: "1.1.0" },
+    });
+    let reads = 0;
+    const applyWithFailingConvergenceRead = createApplyReconcile({
+      async loadState(extensionRoot: string): Promise<ExtensionState> {
+        reads += extensionRoot === project.extensionRoot ? 1 : 0;
+        if (reads === 2) {
+          throw Object.assign(new Error("EACCES: permission denied, open 'state.json'"), {
+            code: "EACCES",
+          });
+        }
+
+        return loadState(extensionRoot);
+      },
+    });
+    const before = await readFile(project.stateJsonPath, "utf8");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    await applyWithFailingConvergenceRead({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps: createOfflineGitOps().gitOps,
+      completionCache: createCompletionCache(),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n" +
+          "\n" +
+          "⊘ state.json [project] (failed) {permission denied}\n" +
+          "  ⊘ state.json (failed) {permission denied}\n" +
+          "    cause: EACCES: permission denied, open 'state.json'\n" +
+          "\n" +
+          "Reconcile: 2 failures",
+        severity: "error",
+      },
+    ]);
+    assert.equal(reads, 2);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), before);
+    verifyBoundary();
+  });
+
   test("D-13: a move that fails to materialize reports its reason and the next move still runs", async (t) => {
     // arrange
     const { cwd, project, marketplaceRoot } = await seedConvergenceScope(t, "converge-failed", {
