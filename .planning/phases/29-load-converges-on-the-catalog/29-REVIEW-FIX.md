@@ -1,10 +1,11 @@
 ---
 phase: 29-load-converges-on-the-catalog
-fixed_at: 2026-10-25T00:41:30Z
+fixed_at: 2026-10-25T01:25:00Z
 review_path: .planning/phases/29-load-converges-on-the-catalog/29-REVIEW.md
-iteration: 1
-findings_in_scope: 5
-fixed: 5
+iteration: 2
+iteration_1_fixed: 5
+findings_in_scope: 2
+fixed: 2
 skipped: 0
 status: all_fixed
 ---
@@ -113,8 +114,94 @@ Merged LCOV: coverage/direct.lcov (284 records)
 npm-check-exit=0
 ```
 
+## Iteration 2
+
+**Fixed at:** 2026-10-25T01:25:00Z
+**Source review:** .planning/phases/29-load-converges-on-the-catalog/29-REVIEW.md (iteration 2, committed 1f77faf4)
+
+The frontmatter counts cover this iteration. Iteration 1's five fixes (3969f4ee, 3a201f2e, 9d33bbc6, 839fc99c, 1c05c710) stay recorded above.
+
+**Summary:**
+
+- Findings in scope: 2 (CR-01, WR-01). IN-01..IN-08 were out of scope (`critical_warning`).
+- Fixed: 2. Both are logic changes, so both are marked "fixed: requires human verification".
+- Skipped: 0
+
+### CR-01: The dependency check runs before the catalog moves
+
+**Status:** fixed: requires human verification
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts`, `extensions/pi-claude-marketplace/orchestrators/reconcile/read-pass.ts`, `extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts`, `test/orchestrators/reconcile/dependency-verdict.test.ts`, `test/orchestrators/reconcile/read-pass.test.ts`, `test/orchestrators/reconcile/pending.test.ts`, `test/orchestrators/reconcile/apply.test.ts`, `features/plugin/apply.feature`, `features/plugin/pending.feature`, `docs/dependency-resolution.md`
+**Commit:** 121c6168
+**Applied fix:**
+
+- A new `planWithSettledVerdict` in `dependency-verdict.ts` is now the one place where the read pass (for `apply` and the load) and `pending` plan a scope. So `pending` and `apply` still share one verdict.
+- It takes the first verdict, then the verdict after the plan's toggles, as before (WR-03 of iteration 1). Then, while a range holds a dependent down, it plans the catalog moves offline (`planConvergence` over the current plan, injected by the caller). It takes the verdict again with each moved record at its `toVersion`, and plans again.
+- **Decision (conservative, please confirm):** a round only releases. An entry whose dependent the previous verdict did not hold is dropped, and the loop stops when a round releases nothing. That guarantees the loop ends, and it cannot oscillate. The cost: a plugin that a planned move takes out of its range is not newly held down in the same pass. The planner's own range check already holds such a move for an enabled dependent, so this case needs a hold the verdict does not see, for example an installed-copy range (DLS-D1). Then the dependent stays enabled with its range unmet, and the next `apply` disables it. That is the D-13 outcome the reviewer accepted.
+- The move plan runs only while the verdict has an out-of-range entry. So a scope without one pays nothing more inside the read-pass lock (WR-08).
+- `verdictAfterToggles` and the new `verdictAfterMoves` became private. Their tests now go through `planWithSettledVerdict`.
+- `docs/dependency-resolution.md` describes the new behavior and its two limits: a move that another range holds, and a move that runs and fails.
+
+Regression tests (each fails on the pre-fix source, which I checked by restoring the HEAD sources temporarily):
+
+- `apply.test.ts` "one apply moves a dependent and the dependency its new range needs, and the next apply has nothing to change". This is PROBE-1: one apply reports `widget v1.0.0 → v1.1.0 (updated)` and `zcore v1.0.0 → v2.0.0 (updated)`, and the second apply reports `Apply: nothing to change.`
+- `pending.test.ts`: two `(will update)` rows and no `(will disable)` row.
+- `read-pass.test.ts`: the plan is empty and the verdict holds nothing.
+- `dependency-verdict.test.ts`: release, partial release, release-only (a moved-out-of-range plugin is not added), no moves, and a walk that fails after the moves.
+- Cucumber: `apply.feature` "Apply moves a plugin and the dependency its new version needs in one pass, after which pending lists nothing", and `pending.feature` "Pending lists a plugin and the dependency its new version needs as two updates".
+
+### WR-01: `pending` previews `(will update)` for a move that a planned install's cascade member holds
+
+**Status:** fixed: requires human verification
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/reconcile/convergence.ts`, `test/orchestrators/reconcile/convergence.test.ts`, `test/orchestrators/reconcile/pending.test.ts`, `features/plugin/pending.feature`, `docs/output-catalog.md`
+**Commit:** a4b7c333
+**Applied fix:**
+
+- **Choice:** include the cascade members that can be read offline, not the "uncertain" marker. `withPlannedInstalls` now walks a queue. It starts with the plan's installs. Each plugin it reads adds its declared dependencies to the queue.
+- A key the scope records, or one already landed, is skipped. This also covers cycles and diamonds.
+- A member in a marketplace the scope records, whose declarations `readRecordDeclarations` can read, is added as a `PLANNED_INSTALL_RECORD` with those declarations. So it holds a move the way `apply`'s fresh read does once the cascade records it.
+- A member that cannot be read holds nothing, as a direct install already did.
+- I did not reuse `domain/dependency-closure.ts`. It needs an install policy and a closure lookup, while this preview only needs to know which plugins land and what they declare. The simple walk reads the same declarations through the same reader.
+- `docs/output-catalog.md` (held-move state) names the cascade members and the offline limit.
+
+Regression tests (each fails on the pre-fix source):
+
+- `convergence.test.ts` "a dependency a planned install's cascade brings in holds the move".
+- `pending.test.ts` "pending lists a move that a planned install's cascade member holds as held". This is PROBE-2's shape: `top (will install)` plus `lib (skipped) {dependents constrain}` required by `app@tools`.
+- Cucumber: `pending.feature` "Pending lists a move that a dependency of a plugin the config adds would block as held, as apply then holds it". It asserts that `pending` and the following `apply` show the same hold.
+
+### Residual gaps (iteration 2, not fixed)
+
+- **CR-01 release-only rule:** see the decision above. In the rare case a released dependent's range is broken by a move that only an installed-copy hold would stop, the dependent is disabled one `apply` later.
+- **CR-01 move order:** in `apply` the moves still run in planner order (marketplace, then plugin). In PROBE-1 the dependent moved before its dependency, and the runner accepted it. A failure of the dependency's move leaves the dependent enabled, possibly already moved, with its range unmet, until the next `apply` disables it (D-13).
+- **WR-01 preview limits:**
+  - An install into a marketplace the same plan adds still holds nothing in the preview.
+  - A cold git-source member is judged by its marketplace entry (D-01-07), and its own manifest can be stricter once cloned (the IN-07 class).
+  - The preview does not apply the cascade's cross-marketplace permission check (`allowCrossMarketplaceDependenciesOn`) or its tag selection (IN-05). A cascade that `apply` refuses installs nothing, so `pending` may show a hold for a move that `apply` then makes. This is the same class as a planned direct install that fails.
+- **Info findings IN-01..IN-08** were out of scope and are untouched. IN-08's `unusable` fail-open in `withPlannedInstalls` now also applies to cascade members.
+
+### Verification (iteration 2)
+
+- **Where the checks ran:** in the main checkout of this worktree, `/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/lc-p29-catalog-1f05b5`, in sequential mode, as the orchestrator's binding executor rules require. No review-fix worktree was created, although `workflow.use_worktrees` is `true`, the same as in iteration 1. The numbers can be reproduced from this checkout.
+- **Per fix:**
+  - The owner tests ran.
+  - `npm run test:coverage:direct` reached 100% for dependency-verdict, read-pass, pending and convergence.
+  - The changed cucumber features ran, and `npm run check:features` passed.
+  - `fallow dupes` and `fallow dead-code` were clean.
+  - The pre-commit hook (`npm run check:commit`) passed on both commits.
+- **Full gate:** one full `npm run check` ran after the last commit, in the background, with its log at `/tmp/claude-1000/-home-acolomba-src-pi-claude-marketplace-22442f56d78caa3a-lc-p29-catalog-1f05b5/b54feb17-c7cb-4f3d-9537-60d3ba8a0e22/scratchpad/npm-check-rf2.log`. **Exit code 0.** The end of the log:
+
+```text
+16 hooks (16 passed)
+795 scenarios (795 passed)
+7701 steps (7701 passed)
+0m 26.392s (3m 8.197s executing your code)
+Merged LCOV: coverage/direct.lcov (284 records)
+npm-check-exit=0
+```
+
 ---
 
-_Fixed: 2026-10-25T00:41:30Z_
+_Fixed (iteration 1): 2026-10-25T00:41:30Z_
+_Fixed (iteration 2): 2026-10-25T01:25:00Z_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 1_
+_Iteration: 2_
