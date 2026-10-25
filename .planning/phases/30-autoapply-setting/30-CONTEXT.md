@@ -101,8 +101,8 @@ case (BACKLOG APPLY1-01, D-12b of phase 29).
   row-stamped fact (RLD-02) and the load-time MCP migration notice already
   carries it. One change: an apply with nothing to change prints nothing at
   load (the `Apply: nothing to change.` advisory is for the command; the
-  load's silence contract RECON-05 / phase 29 D-05 wins). An options flag on
-  the apply step selects this.
+  load's silence contract RECON-05 / phase 29 D-05 wins). The run's origin
+  (`load`) selects this; no new option is needed.
 - **D-08:** `pending`, `list` and `info` do not show the setting. `pending`
   keeps listing what `apply` would do and keeps its apply trailer; with
   autoapply on, the next load does it. No upstream surface shows an
@@ -113,8 +113,9 @@ case (BACKLOG APPLY1-01, D-12b of phase 29).
   `(failed)` rows (RECON-03), a held lock or a corrupt state file is that
   scope's row, and the other scope still runs (WR-01). A throw that escapes
   the apply step (for example GHB-03's `InvalidGitHubBaseUrlError`) is caught
-  in `load.ts` and becomes the `reconcile-aborted` row, as `index.ts` does for
-  the read-only load (NFR-2). Changes the apply could not make stay pending:
+  by the load's existing caller boundary in `index.ts` and becomes the
+  `reconcile-aborted` row, as it already does for the read-only load (NFR-2);
+  `load.ts` adds no catch of its own. Changes the apply could not make stay pending:
   `pending` lists them and the next autoapply load retries them (NFR-3).
 - **D-10:** with phase 29's D-12b, a dependent shipped with the newer
   dependency it needs settles on the second autoapply load. Scenarios do not
@@ -136,7 +137,8 @@ case (BACKLOG APPLY1-01, D-12b of phase 29).
   - a git-source plugin declared with autoapply on is cloned and installed by
     the load;
   - a user-config `autoapply: true` applies a project's declarations; a
-    project local `false` overrides a base `true` (precedence);
+    project local `false` overrides a base `true`, and a project `false`
+    overrides a user `true` (precedence);
   - `autoapply: false` (explicit) keeps the phase 29 read-only load;
   - a non-boolean value reports the invalid config and changes nothing;
   - a failure during the load-time apply (a held state lock, or an
