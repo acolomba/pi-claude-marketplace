@@ -1,8 +1,8 @@
 ---
 phase: 30-autoapply-setting
 verified: 2026-10-25T12:10:00Z
-status: human_needed
-score: 9/11 must-haves verified
+status: passed
+score: 11/11 must-haves verified (re-verified 2026-10-25 after the user resolved the open item)
 covered_files:
   - .planning/phases/30-autoapply-setting/30-01-PLAN.md
   - .planning/phases/30-autoapply-setting/30-01-SUMMARY.md
@@ -32,20 +32,18 @@ covered_files:
 covered_digest: "v3:sha256:8d98330c7ab7e3f8a713641b4284b9884de310b6f0615d44127f1385e776f805"
 behavior_unverified: 0
 overrides_applied: 0
-human_verification:
-  - test: "Decide on plan truth 8: AAP-D1 recorded in AGENTS.md's network policy"
-    expected: "Either accept the deviation (PROJECT.md Constraints and the AAP-D1 decision row carry the NFR-5 amendment; AGENTS.md left alone deliberately) by adding the override below, or edit AGENTS.md"
-    why_human: "PLAN must_haves truth 8 and CONTEXT D-01/D-11 name AGENTS.md; the code base shows AGENTS.md unchanged. The orchestrator reports this as deliberate, which is a user decision, not something the verifier can grant"
 resolved_after_verification:
   - "SC-4: orchestrator's `npm run check` on 521d9f10 exited 0 (output to a log file, exit status read directly)"
   - "Review WR-01 (round 2) is tracked as BACKLOG APPLYTHROW-01"
+  - "Plan truth 8: the user approved the AGENTS.md edit (2026-10-25); AGENTS.md's network policy now names AAP-D1 (commit 46c6fc66)"
+  - "AAP-04 (plan 30-02, added after this report): 15 scenarios in features/plugin/autoapply.feature, owner tests at 100% direct coverage, one code-review round with fixes (30-REVIEW-02.md, 30-REVIEW-FIX.md); full npm run check green on the final head"
 ---
 
 # Phase 30: Autoapply Setting Verification Report
 
 **Phase Goal:** A user who opts in through the plugin configuration gets the desired state on load, with no `apply` or `/reload` to type; everyone else keeps phase 29's read-only load.
 **Verified:** 2026-10-25T12:10:00Z
-**Status:** human_needed
+**Status:** passed (initially human_needed; the one open item, the AGENTS.md network policy, was resolved by the user-approved edit)
 **Re-verification:** No (initial verification)
 
 ## Goal Achievement

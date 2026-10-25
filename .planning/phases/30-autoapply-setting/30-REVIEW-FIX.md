@@ -29,3 +29,18 @@ Also fixed while running `npm run check`: `test/integration/mcp-migration.test.t
 | IN-01 | Info | fixed | The abort notice in `load.ts` is wrapped: a refused notify is debug-logged and the read-only pass still runs. Unit test `AAP-03 / NFR-2: a refused abort notice still lets the read-only pass run`. |
 
 Round 3 was not needed for the fixed items; WR-01 stays open by decision above.
+
+# Command review (30-REVIEW-02.md, one round)
+
+| ID | Severity | Disposition | Fix |
+| --- | --- | --- | --- |
+| CR-01 | Critical | fixed | A set now loads all four configs under the scope lock and writes nothing when any is invalid, so a base write beside an invalid local config no longer creates the base config that would stop the MIG-01 migration. Unit test `AAP-04 / MIG-01: set into an absent base config beside an invalid local config writes nothing`. |
+| WR-01 | Warning | fixed | Same change: a set fails closed without writing when another config is invalid; the unit test that locked in the old write now asserts no file. |
+| WR-02 | Warning | fixed in part | New scenario "Autoapply on writes nothing while another config is invalid ...". The MIG-01-before-write step has no scenario: the suite cannot record plugins without the install writing the base config. A unit test covers it. |
+| WR-03 | Warning | fixed | A state.json that cannot be read is a row named `state.json` with its closed-set reason (`{unparseable}` / `{unreadable}`); a local write reads no state; a failed write is `{unreadable}` instead of `{source missing}`. |
+| IN-01, IN-02, IN-08 | Info | fixed | Comments in `config-io.ts`, the step module and the handler. |
+| IN-03 | Info | fixed | `json-output-docs.test.ts` lists `autoapply-status` among the outcome kinds. |
+| IN-04 | Info | fixed | The `jq -c` example is compact again; the `files` row describes the set form. |
+| IN-05 | Info | kept | The file list is user base first, as the user listed the four files. |
+| IN-06 | Info | kept | Style only. |
+| IN-07 | Info | fixed | Scenario "Autoapply on changes the setting and installs nothing until the next load". |
