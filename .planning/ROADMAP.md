@@ -141,6 +141,7 @@ Step module paths are relative to `features/step_definitions/`.
 - [x] **Phase 27: Install and Reconcile Reason Residue** — Dependency ranges read as upstream, pinned-commit failures read cleanly, reconcile and import narrow reasons like install, and marketplace remove ignores disabled holders
 - [x] **Phase 28: Delisted Plugin Dependency Walk** — A plugin its marketplace no longer lists keeps its dependencies from its installed copy, so it no longer blocks the scope's dependency walk
 - [ ] **Phase 29: Apply Command and Read-Only Reload** — A new `apply` makes every pending change and converges plugins on the catalog version; `/reload` only reloads resources and prints what is pending
+- [ ] **Phase 30: Autoapply Setting** — An `autoapply` setting in the plugin configuration (default off) makes a load run `apply`, so a checked-out or pulled config takes effect without commands
 
 ## Phase Details
 
@@ -608,6 +609,20 @@ Plans:
 4. `pending`, help, completions and the docs name `apply` (APL-04).
 5. `npm run check` stays green.
 
+### Phase 30: Autoapply Setting
+
+**Goal:** A user who opts in through the plugin configuration gets the desired state on load, with no `apply` or `/reload` to type; everyone else keeps phase 29's read-only load.
+**Depends on:** Phase 29
+**Decision:** 2026-10-24 (user): a new `autoapply` setting in the desired-state plugin configuration (`claude-plugins.json` / `claude-plugins.local.json`), default off. Off: a load behaves as phase 29 (prints `pending`'s block and advises `apply`, then `/reload`). On: a load (session start, `/reload`) runs `apply` itself, including clones and network calls on cache miss, so every plugin is available in that session. This covers both a fresh checkout and pulled config or catalog changes. Any configuration file may turn it on, a committed project file included (user decision: no trust gate; record the risk that a cloned repo can install its plugins, hooks included, by running `pi`). Upstream has no equivalent (Claude Code prompts for project plugins); record as a decision ID.
+**Requirements:** AAP-01, AAP-02, AAP-03
+**Files:** `persistence/config-io.ts`, `config-merge.ts` (the setting), `orchestrators/reconcile/*` (load path), `index.ts` (`resources_discover`, `session_start`), `docs/`, `README.md`; `features/plugin/autoapply.feature` (new).
+**Success Criteria** (what must be TRUE):
+
+1. With `autoapply` unset or false, a load after a config change prints `pending`'s block with the `apply` trailer and changes no state, exactly as phase 29 (AAP-01).
+2. With `autoapply: true`, a session start in a project whose config declares uninstalled plugins (path-source and git-source) installs them, reports `apply`'s rows, and their skills are discoverable in that same session without `/reload`; a config or catalog change followed by `/reload` is applied the same way (AAP-02).
+3. A failure during a load-time apply (network down, held state lock, blocked move) never throws out of the load; it reports the failed rows, and what is still pending stays listed (AAP-03, NFR-2).
+4. `npm run check` stays green.
+
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
@@ -641,6 +656,7 @@ Plans:
 | 27. Install and Reconcile Reason Residue | 1/1 | Complete    | 2026-10-23 |
 | 28. Delisted Plugin Dependency Walk | 1/1 | Complete    | 2026-10-24 |
 | 29. Apply Command and Read-Only Reload | 0/TBD | Not started | - |
+| 30. Autoapply Setting | 0/TBD | Not started | - |
 
 ## Carried Forward
 

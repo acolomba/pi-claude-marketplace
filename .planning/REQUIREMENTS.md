@@ -172,6 +172,9 @@ settle which one wins (see PROJECT.md).
 - [ ] **APL-02**: `apply` moves every installed plugin whose recorded version differs from its marketplace's catalog on disk to the catalog version, including making a partially installed plugin whole; it may clone a git target on cache miss (NFR-5, as install and update do); a move a dependent's range blocks, or one that would drop components without consent, stays put with a warning row (`{dependents constrain}`, `partially-upgradable`), and `pending` keeps listing it
 - [ ] **APL-03**: A load (`/reload`, session start) changes no installation state: no install, uninstall, enable, disable, update, reinstall or backfill. When the current state differs from the desired state it prints the same block `pending` prints, with a trailer to run `/claude:plugin apply`; a matching state prints nothing.
 - [ ] **APL-04**: `pending` advises `/claude:plugin apply` instead of `/reload`, and `apply` appears in help, completions, the router, the JSON output and the docs
+- [ ] **AAP-01**: The plugin configuration accepts a boolean `autoapply` setting, default off; when off, a load behaves as APL-03
+- [ ] **AAP-02**: When `autoapply` is on, a load (session start, `/reload`) runs `apply` (APL-01, APL-02), cloning on cache miss, and the plugins it installs are available in that session; any configuration file, including a committed project file, may turn it on
+- [ ] **AAP-03**: A load-time apply never throws out of the load: failures appear as rows, and changes it could not make stay pending
 
 ## Future Requirements
 
@@ -290,10 +293,13 @@ settle which one wins (see PROJECT.md).
 | APL-02 | Phase 29 | Pending |
 | APL-03 | Phase 29 | Pending |
 | APL-04 | Phase 29 | Pending |
+| AAP-01 | Phase 30 | Pending |
+| AAP-02 | Phase 30 | Pending |
+| AAP-03 | Phase 30 | Pending |
 
 **Coverage:**
-- v1 requirements: 100 total
-- Mapped to phases: 100
+- v1 requirements: 103 total
+- Mapped to phases: 103
 - Unmapped: 0
 
 ---
