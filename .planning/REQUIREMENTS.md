@@ -175,6 +175,7 @@ settle which one wins (see PROJECT.md).
 - [x] **AAP-01**: The plugin configuration accepts a boolean `autoapply` setting, default off; when off, a load behaves as APL-03
 - [x] **AAP-02**: When `autoapply` is on, a load (session start, `/reload`) runs `apply` (APL-01, APL-02), cloning on cache miss, and the plugins it installs are available in that session; any configuration file, including a committed project file, may turn it on
 - [x] **AAP-03**: A load-time apply never throws out of the load: failures appear as rows, and changes it could not make stay pending
+- [x] **AAP-04**: `/claude:plugin autoapply [on|off] [--scope user|project] [--local]` shows the effective value, the config file that sets it and each config file's own value (scope and layer filter the listed files), and `on` or `off` writes the value into one config file with the normal scope and layer defaults; an invalid config fails the command closed as the load reports it
 
 ## Future Requirements
 
@@ -296,10 +297,11 @@ settle which one wins (see PROJECT.md).
 | AAP-01 | Phase 30 | Complete |
 | AAP-02 | Phase 30 | Complete |
 | AAP-03 | Phase 30 | Complete |
+| AAP-04 | Phase 30 | Complete |
 
 **Coverage:**
-- v1 requirements: 103 total
-- Mapped to phases: 103
+- v1 requirements: 104 total
+- Mapped to phases: 104
 - Unmapped: 0
 
 ---

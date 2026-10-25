@@ -103,7 +103,7 @@ case (BACKLOG APPLY1-01, D-12b of phase 29).
   load (the `Apply: nothing to change.` advisory is for the command; the
   load's silence contract RECON-05 / phase 29 D-05 wins). The run's origin
   (`load`) selects this; no new option is needed.
-- **D-08:** `pending`, `list` and `info` do not show the setting. `pending`
+- **D-08:** `pending`, `list` and `info` do not show the setting (the user confirmed this on 2026-10-25); the `autoapply` command does (D-14). `pending`
   keeps listing what `apply` would do and keeps its apply trailer; with
   autoapply on, the next load does it. No upstream surface shows an
   equivalent setting.
@@ -132,6 +132,44 @@ case (BACKLOG APPLY1-01, D-12b of phase 29).
 - **D-10:** with phase 29's D-12b, a dependent shipped with the newer
   dependency it needs settles on the second autoapply load. Scenarios do not
   assume one load settles it.
+
+### The `autoapply` command (AAP-04, added 2026-10-25 after the user's review)
+- **D-14 (AAP-D2, user + upstream evidence):** `/claude:plugin autoapply
+  [on|off] [--scope user|project] [--local]`. The bare form shows; `on` or
+  `off` sets. This supersedes D-08's "no command" and the deferred toggle
+  verb. User decisions (2026-10-25, relayed): most specific config wins as
+  D-04 says; show and set both take scope and layer; on show they filter the
+  four files (none given lists all four), and the effective value is always
+  shown; on set they take the normal defaults.
+  - **Upstream evidence** (Claude Code 2.1.309 binary, grepped 2026-10-25):
+    `/effort` typed bare reports `Current effort level: <level> (<detail>)`
+    or `Effort level: auto (currently <level>, set by your organization)`,
+    and with an argument reports `Set effort level to <level>`: one command
+    both shows and sets. `/fast` and `/focus` spell a boolean argument
+    `[on|off]` (`argumentHint:"[on|off]"`) and answer anything else with
+    `Unknown argument "<x>". Use: /fast [on|off]`; `--fast-mode <on|off>` and
+    `ultracode [on|off]` use the same spelling. `/config key=value` sets a
+    setting by key but has no show form, and the old `claude config
+    get|set|list` CLI is gone from this version. So the shape follows
+    `/effort` (bare shows, argument sets), the value spelling follows `/fast`
+    (`on|off`), and the scope and layer flags follow this extension's own
+    `enable`/`disable` (`--scope`, `--local`), since upstream's settings
+    scopes have no slash-command flag. Unlike `/fast`, a bare form does not
+    toggle, because the user asked for it to show.
+  - **Show filters:** `--scope` keeps that scope's two files and `--local`
+    keeps the two local files. No existing verb has a flag that selects the
+    base layer alone (`--local` is a switch, base is its absence), so a show
+    without `--local` lists both layers; a base-only filter is not offered.
+  - **Set:** writes `claude-plugins.json` of the user scope unless `--scope`
+    or `--local` picks another file, as `enable` does. It holds the scope's
+    state lock and runs the MIG-01 first-run migration first, then writes
+    through `config-write-back.ts` (atomic). It never runs `apply` and its
+    report carries no trailer: the next load reads the value. An invalid
+    target is refused with the load's invalid-config block (D-03); a held
+    lock or a failed write is one failed row naming the file.
+  - **Output:** a new raw kind `autoapply-status` (`enabled`, `source`,
+    `files`, `set`), a command outcome at `info`, documented in
+    `docs/json-output.md` and the output catalog.
 
 ### Docs
 - **D-11:** README.md and README.es.md ("Configuration files") gain the

@@ -657,7 +657,7 @@ Plans:
 **Goal:** A user who opts in through the plugin configuration gets the desired state on load, with no `apply` or `/reload` to type; everyone else keeps phase 29's read-only load.
 **Depends on:** Phase 29
 **Decision:** 2026-10-24 (user): a new `autoapply` setting in the desired-state plugin configuration (`claude-plugins.json` / `claude-plugins.local.json`), default off. Off: a load behaves as phase 29 (prints `pending`'s block and advises `apply`, then `/reload`). On: a load (session start, `/reload`) runs `apply` itself, including clones and network calls on cache miss, so every plugin is available in that session. This covers both a fresh checkout and pulled config or catalog changes. Any configuration file may turn it on, a committed project file included (user decision: no trust gate; record the risk that a cloned repo can install its plugins, hooks included, by running `pi`). Upstream has no equivalent (Claude Code prompts for project plugins); record as a decision ID.
-**Requirements:** AAP-01, AAP-02, AAP-03
+**Requirements:** AAP-01, AAP-02, AAP-03, AAP-04
 **Files:** `persistence/config-io.ts`, `config-merge.ts` (the setting), `orchestrators/reconcile/*` (load path), `index.ts` (`resources_discover`, `session_start`), `docs/`, `README.md`; `features/plugin/autoapply.feature` (new).
 **Success Criteria** (what must be TRUE):
 
@@ -665,11 +665,13 @@ Plans:
 2. With `autoapply: true`, a session start in a project whose config declares uninstalled plugins (path-source and git-source) installs them, reports `apply`'s rows, and their skills are discoverable in that same session without `/reload`; a config or catalog change followed by `/reload` is applied the same way (AAP-02).
 3. A failure during a load-time apply (network down, held state lock, blocked move) never throws out of the load; it reports the failed rows, and what is still pending stays listed (AAP-03, NFR-2).
 4. `npm run check` stays green.
+5. `/claude:plugin autoapply` with no value shows the effective value, the config file that sets it (or the default) and each config file's own value, filtered by `--scope` and `--local`; `autoapply on|off` writes one config file with the normal scope and layer defaults and shows the effective value it leaves; an invalid config fails the command closed with the load's invalid-config block (AAP-04).
 
-**Plans:** 1/1 plans complete
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 30-01-PLAN.md — the `autoapply` key and precedence, the load branch to `apply`, `features/plugin/autoapply.feature`, docs
+- [x] 30-02-PLAN.md — the `/claude:plugin autoapply [on|off]` command (AAP-04)
 
 ## Progress
 
@@ -704,7 +706,7 @@ Plans:
 | 27. Install and Reconcile Reason Residue | 1/1 | Complete    | 2026-10-23 |
 | 28. Delisted Plugin Dependency Walk | 1/1 | Complete    | 2026-10-24 |
 | 29. Apply Command and Read-Only Reload | 14/14 | Complete    | 2026-10-25 |
-| 30. Autoapply Setting | 1/1 | Verified (human_needed: AGENTS.md network policy) | 2026-10-25 |
+| 30. Autoapply Setting | 2/2 | Complete | 2026-10-25 |
 
 ## Carried Forward
 
