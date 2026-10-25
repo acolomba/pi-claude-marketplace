@@ -1,12 +1,12 @@
 ---
 milestone: lifecycle-coverage
-audited: 2026-10-24T00:00:00Z
+audited: 2026-10-25T00:00:00Z
 status: tech_debt
 scores:
-  requirements: 95/95
-  phases: 27/27
-  integration: 6/6
-  flows: 6/6
+  requirements: 104/104
+  phases: 30/30
+  integration: 8/8
+  flows: 8/8
 gaps:
   requirements: []
   integration: []
@@ -15,13 +15,18 @@ nyquist:
   compliant_phases: []
   partial_phases: []
   not_validated_phases: ["01"]
-  missing_phases: ["02-27"]
+  missing_phases: ["02-30"]
   overall: missing
-open_decisions:
-  - "WR-06 (phase 18): a plugin the marketplace no longer lists fails every update/reinstall in its scope as {unreadable}; it should not be treated as corruption"
-  - "WR-05 (phase 18): a load-time reinstall that a dependent's range blocks retries silently on every load"
+open_decisions: []
+resolved_decisions:
+  - "WR-06 (phase 18): resolved by phase 28, DLS-D1 (user, 2026-10-24). A delisted plugin's dependencies are read from its installed copy, so it no longer makes the scope's dependency walk unreadable."
+  - "WR-05 (phase 18): resolved by phase 29, APL-D1 and D-12 (user, 2026-10-24). A load changes no installation state, so the silent load-time retry is gone; a range-blocked move is a `(skipped) {dependents constrain}` row in `apply` and `pending`."
 decisions:
   - "INR-03 (user, 2026-10-24): a pinned sha that no branch or tag reaches fails {source missing}. Recorded Pi capability gap: isomorphic-git 1.43.1 fetches only advertised refs over protocol v1, so it cannot do Claude Code's `git fetch origin <sha>`; D-13 keeps the git binary out."
+  - "APL-D1 / APL-D2 (user, 2026-10-24): a load is read-only and prints `pending`'s block; `/claude:plugin apply` makes the changes; NFR-2 amended to 'apply, then /reload'."
+  - "D-12a / D-12b (user, 2026-10-25): a dependent that stays put is judged by its catalog plus installed-copy declarations; a co-shipped dependent and its newer dependency converge in two applies (accepted)."
+  - "AAP-D1 (user, 2026-10-25): any config file, a committed repo file included, may turn `autoapply` on; with it on a load runs `apply`, network included (AGENTS.md NFR-5 clause)."
+  - "AAP-D2 (2026-10-25): `/claude:plugin autoapply [on|off] [--scope user|project] [--local]`; bare shows. Modeled on Claude Code `/effort` (show/set) and `/fast` `[on|off]`."
 tech_debt:
   - area: cross-phase (integration check)
     items:
@@ -49,20 +54,31 @@ tech_debt:
       - "WR-06: fetch/info --fetch read the result row after releasing the lock (display only)"
       - "IN-03: the lock is held across network fetch and GitHub sign-in"
       - "Dead code: createDelegatingRemovalOps (test fake), CheckoutOptions.force"
+  - area: 29 load converges on the catalog
+    items:
+      - "CR-01 (accepted, D-12b): a co-shipped dependent and its newer dependency take two `apply` runs; one-run fix in BACKLOG APPLY1-01"
+      - "IN-01..IN-05, IN-07..IN-09 deferred (29-REVIEW-DISPOSITION.md): preview/doc residue, none breaks a criterion"
+      - "T-29-24 (medium, open, pre-existing): a hold row's cause can carry the raw catalog version string from marketplace.json"
+      - "UAT-02 (manual only): Pi erases rows emitted during /reload; read the pending block by hand in a live Pi"
+  - area: 30 autoapply setting
+    items:
+      - "APPLYTHROW-01 (BACKLOG): an apply pass that throws partway drops the rows it already collected (load-time and `/claude:plugin apply`)"
+      - "No base-only filter: `--local` is a switch, so no verb selects the base layer alone"
+      - "D-13 (stored credentials only at load, no Device Flow) and the migration before a base-file set are covered by unit tests, not cucumber scenarios"
   - area: docs
     items:
-      - ".planning/codebase/* is stale: lists deleted reinstall-replace/reinstall-clone-probe, omits materialize-latest.ts, out-of-date write-file-atomic exemptions, 46 fallow markers where the tree has 41"
+      - "RESOLVED at close: .planning/codebase/* refreshed 2026-10-25 (apply, autoapply, read-only load, deleted modules, marker count)"
 ---
 
 # Milestone audit: lifecycle-coverage
 
-**Status:** tech debt, no blockers. Every requirement is satisfied, every phase passed verification, and the integration check found no broken wiring.
+**Status:** tech debt, no blockers. Every requirement is satisfied, every phase passed verification, and the integration check found no broken wiring. Updated 2026-10-25 for phases 28-30.
 
 ## Evidence
 
-- `npm run check` on the combined tree (after phases 25 and 26 merged) exited 0: 758/758 cucumber scenarios, unit and integration tests, 280 direct-coverage records, lint, fallow.
-- All 27 phases have a `*-VERIFICATION.md` with `status: passed`.
-- 3-source cross-check: all 95 traceability rows are `Complete` and checked, each appears in its phase's VERIFICATION.md, and each is listed in a SUMMARY `requirements-completed` field. UNI-03 is listed in no plan; its phase 4 VERIFICATION marks it satisfied by the Phase 1 seed scenarios (CONTEXT D-02).
+- `npm run check` on the combined tree at `1cfe3bb4` (after phases 28, 29 and 30 merged) exited 0: 825/825 cucumber scenarios, unit and integration tests, 286 direct-coverage records, lint, fallow.
+- All 30 phases have a `*-VERIFICATION.md` with `status: passed`. Phase 29 passed with one override (the accepted two-apply case, D-12b). Phase 28's truth 5 ("`npm run check` stays green") was left to the orchestrator; the combined runs above close it.
+- 3-source cross-check: all 104 traceability rows are `Complete` and checked, each appears in its phase's VERIFICATION.md, and each is listed in a SUMMARY `requirements-completed` field. UNI-03 is listed in no plan; its phase 4 VERIFICATION marks it satisfied by the Phase 1 seed scenarios (CONTEXT D-02).
 
 ## Integration check
 
@@ -76,11 +92,13 @@ The checker read the code across the seams phases touched in parallel and confir
 | `will uninstall` rows carry versions in prune, pending, reconcile | PRN-02 (phase 23) | wired |
 | Import plans through reconcile's desired-state planner | IMP-05 | wired |
 | State lock in every mutating command and fetch / info --fetch | FLR-*, GIT-03 | wired |
+| Read-only load and `apply` share one read pass and one convergence planner; `pending` previews what `apply` makes | APL-01..04, DLS-01 | wired |
+| `autoapply` effective value read once per load; on, the load runs the injected `applyReconcile`, stored credentials only; the command shows and sets the four files under the state lock | AAP-01..04 | wired |
 
 ## Open decisions
 
-The three items under `open_decisions` are product questions put to the user. None blocks the milestone: each describes current behavior that fails clean.
+The user answered every open decision. WR-06 and WR-05 are resolved (see `resolved_decisions`), and INR-03, APL-D1/D2, D-12a/b and AAP-D1/D2 are recorded under `decisions`.
 
 ## Nyquist
 
-The validate-phase hook is active (`workflow.nyquist_validation: true`), but no phase ran it. Phase 1 has a draft `01-VALIDATION.md` (NOT-VALIDATED); phases 2-27 have none (MISSING). Discovery only: each phase's behavior is pinned by its cucumber scenarios and the green combined `npm run check`. Run `/gsd-validate-phase <N>` to reconcile if wanted.
+The validate-phase hook is active (`workflow.nyquist_validation: true`), but no phase ran it. Phase 1 has a draft `01-VALIDATION.md` (NOT-VALIDATED); phases 2-30 have none (MISSING). Discovery only: each phase's behavior is pinned by its cucumber scenarios and the green combined `npm run check`. Run `/gsd-validate-phase <N>` to reconcile if wanted.
