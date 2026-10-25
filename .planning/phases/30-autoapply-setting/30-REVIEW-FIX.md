@@ -20,3 +20,12 @@ status: all_fixed
 | IN-04 | Info | fixed | README.md / README.es.md say a user config cannot turn off a project's `autoapply` and that the project local config can; they also say a load never asks you to sign in. |
 
 Also fixed while running `npm run check`: `test/integration/mcp-migration.test.ts` drove the apply step with a load-origin run and expected the `Apply: nothing to change.` advisory, which an autoapply load no longer sends. The helper now opens a command run.
+
+# Round 2
+
+| ID | Severity | Disposition | Fix |
+| --- | --- | --- | --- |
+| WR-01 | Warning | accepted, open | An apply step that throws mid-pass (GHB-03, an invalid `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`) discards the rows it collected, and a one-time MCP migration notice that committed before the throw is not shown again. `/claude:plugin apply` loses the same rows on the same throw today, so the load matches the command. Reporting the collected rows before rethrowing changes the command's GHB-03 output too, so it is left for a follow-up and reported to the user. |
+| IN-01 | Info | fixed | The abort notice in `load.ts` is wrapped: a refused notify is debug-logged and the read-only pass still runs. Unit test `AAP-03 / NFR-2: a refused abort notice still lets the read-only pass run`. |
+
+Round 3 was not needed for the fixed items; WR-01 stays open by decision above.

@@ -47,6 +47,8 @@
 
 import { loadAutoapply } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
+import { hookDebugLog } from "../../shared/debug-log.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import { notifyMcpMigration, notifyReconcileAborted } from "../../shared/notification-dispatch.ts";
 
 import { composePendingReport, notifyPendingReport } from "./pending.ts";
@@ -97,7 +99,12 @@ async function loadReconcileWithReader(
       });
       return;
     } catch (err) {
-      notifyReconcileAborted(opts.ctx, opts.run, err);
+      // A failed notify must not skip the read-only pass and its routing rebuild.
+      try {
+        notifyReconcileAborted(opts.ctx, opts.run, err);
+      } catch (notifyErr) {
+        hookDebugLog(`reconcile-abort notify failed: ${errorMessage(notifyErr)}`, "env");
+      }
     }
   }
 

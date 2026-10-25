@@ -646,6 +646,43 @@ test("AAP-03 / NFR-2: an apply step that throws is reported as aborted, then the
   verifyBoundary();
 });
 
+test("AAP-03 / NFR-2: a refused abort notice still lets the read-only pass run", async (t) => {
+  // arrange
+  const scope = await createLoadScope(t, "autoapply-abort-refused");
+  await seedInstalled(scope, scope.project, {}, ["hello"]);
+  await writeUnder(
+    scope.project.baseConfigJsonPath,
+    declaringAutoapply(scope.marketplaceRoot, {}, true),
+  );
+  const before = await scopeFiles(scope.project);
+  const throwingLoad = createLoadReconcile({ loadState }, () =>
+    Promise.reject(new Error("the pass ended")),
+  );
+  const attempted: string[] = [];
+  const ctx = {
+    mode: "tui",
+    ui: {
+      notify: (message: string): never => {
+        attempted.push(message);
+        throw new Error("host notification refused");
+      },
+    },
+  } as unknown as LoadReconcileOptions["ctx"];
+
+  // act
+  await throwingLoad({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd: scope.cwd,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache: createCompletionCache(),
+  });
+
+  // assert
+  assert.deepStrictEqual(attempted, ["reconcile aborted: the pass ended"]);
+  assert.deepStrictEqual(await scopeFiles(scope.project), before);
+});
+
 test("AAP-01 / D-03: a config that turns autoapply on beside an invalid config keeps the load read-only", async (t) => {
   // arrange
   const scope = await createLoadScope(t, "autoapply-invalid");
