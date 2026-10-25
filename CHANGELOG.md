@@ -2,32 +2,21 @@
 
 ## [Unreleased]
 
-- A new session or `/reload` now only lists the changes that your configs and marketplaces need, and the new `/claude:plugin apply` makes them.
+- A new session now lists pending plugin changes, the new `/claude:plugin apply` makes them, and several plugin commands behave more like Claude Code.
 
-  - `apply` makes every change that `pending` lists. It also moves plugins to the version their marketplace offers and adds components that Pi can now load. Run `/reload` after it.
-  - `pending` and a new session show a move that a dependent's version range blocks as `(skipped) {dependents constrain}`, and a move that needs `--partial` as `(partially-upgradable)`.
-  - A marketplace that you add to a config by hand shows as `(will add)` until `apply` adds it.
-  - In `pending` and a new session, a config that Pi cannot read now shows the read or parse error under its row.
-
-- A new `autoapply` config setting makes each new session and `/reload` run `apply` itself. Any config can turn it on, so read a cloned project's `.pi/claude-plugins.json` before you start `pi` in it.
-
-  - `/claude:plugin autoapply on` or `off` sets it, in the user base config unless you add `--scope` or `--local`.
-  - `/claude:plugin autoapply` shows the value in effect, the config that sets it, and each config's own value.
-
-- A plugin that its marketplace no longer lists no longer blocks `update`, `reinstall`, `uninstall`, `disable`, or `enable` of other plugins in its scope. Pi keeps such a plugin running, so it now reads the plugin's dependencies from its installed copy: the plugin still protects what it needs and still limits which versions of it other commands install. Claude Code stops loading such a plugin instead. The warning at each new session stays, and now says `Plugin "<plugin>" not found in marketplace "<marketplace>"`. A plugin whose installed files are also gone still fails these commands with `{unreadable}`.
-
-- `enable` now fails with `{dependency unsatisfied}` and changes nothing when a dependency of the plugin is not installed, as Claude Code does. The cause says which dependencies to install first. It used to enable the plugin and leave the dependency to the next reload.
-
-- Plugins from git sources now reach the git host less often, and an install the host refuses says why.
-
-  - A command that clones a plugin's unpinned git source for the first time clones it once. It used to fetch the repository again right after the clone.
-  - An install fails as `{source missing}` when the git host answers 404, `{network error}` for another refusal, and `{network unreachable}` when the connection drops. It used to show no reason.
+  - A new session or `/reload` lists the changes your configs and marketplaces need. `apply` makes them and moves plugins to the version their marketplace offers. Run `/reload` after it.
+  - `pending` shows a move that a dependent's version range blocks as `(skipped) {dependents constrain}`, and a move that needs `--partial` as `(partially-upgradable)`.
+  - A marketplace that you add to a config by hand shows as `(will add)`, and a config that Pi cannot read shows its error under its row.
+  - The new `autoapply` setting makes each new session run `apply`. Any config can turn it on, so read a cloned project's `.pi/claude-plugins.json` before you start `pi` in it.
+  - `/claude:plugin autoapply` shows the value in effect and each config's own value. `on` or `off` sets it in the user base config, unless you add `--scope` or `--local`.
+  - A plugin that its marketplace no longer lists no longer blocks commands on other plugins in its scope. Pi reads its dependencies from its installed copy.
+  - `enable` fails with `{dependency unsatisfied}` and changes nothing when a dependency of the plugin is not installed.
+  - The first clone of an unpinned git source no longer fetches again. An install that the git host refuses fails as `{source missing}`, `{network error}`, or `{network unreachable}`.
+  - When `apply` installs a plugin, its `(installed)` row shows the version, as `install` does.
 
 - Internal: a new worktree session now runs `scripts/init.sh` once when it starts, also in the Claude desktop app. (#273)
 
 - Internal: the test suite moves from `tests/` to `test/`, and the duplication check now fails on every repeated block of code. (#272)
-
-- When `/claude:plugin apply` installs a plugin that you added to a config by hand, its `(installed)` row now shows the version, as `install` does.
 
 - Adding a git marketplace now takes a `#ref` on the `owner/repo` shorthand, and a failed add, update, or fetch reports its git failure more clearly.
 
