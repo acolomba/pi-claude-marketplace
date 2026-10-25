@@ -38,7 +38,7 @@ import { withLockedStateTransaction } from "../../transaction/with-state-guard.t
 
 import { classifyReadPassThrow, MigrateConfigSaveError } from "./apply-outcomes.ts";
 import { reportDelistedPlugins, reportUnreadableDeclarer } from "./delisted-plugins.ts";
-import { buildScopeSatisfactionVerdict } from "./dependency-verdict.ts";
+import { buildScopeSatisfactionVerdict, verdictAfterToggles } from "./dependency-verdict.ts";
 import { migrateLegacyMcpEntries } from "./mcp-migration.ts";
 import { buildReconcileAppliedCascade } from "./notify.ts";
 import { planReconcile } from "./plan.ts";
@@ -210,11 +210,20 @@ export async function readPassForScope(
       // skips its whole reconcile pass. A scope recording no plugins pays
       // nothing: `buildScopeDeclarationDetail` reads a manifest per record and
       // there are none.
-      const verdict = await buildScopeSatisfactionVerdict({ state, locations: loc });
+      const firstVerdict = await buildScopeSatisfactionVerdict({ state, locations: loc });
 
       // (5) Plan against the merged config + current state + the verdict.
-      // Pure -- no I/O.
-      const plan = planReconcile(outcome.merged, state, scope, verdict);
+      // Pure -- no I/O. D-08 / D-21: when the plan enables or disables a
+      // record, the verdict is taken again over the scope as those toggles
+      // leave it, so a dependent of a record the config disables is held down
+      // in the same apply, and `pending` (which plans the same way) lists it.
+      const firstPlan = planReconcile(outcome.merged, state, scope, firstVerdict);
+      const verdict = await verdictAfterToggles({ state, locations: loc }, firstVerdict, {
+        enable: firstPlan.pluginsToEnable,
+        disable: firstPlan.pluginsToDisable,
+      });
+      const plan =
+        verdict === firstVerdict ? firstPlan : planReconcile(outcome.merged, state, scope, verdict);
       // DLS-01: carry the loaded state snapshot out so the closing step can
       // report a recorded plugin its marketplace no longer lists. planReconcile
       // is pure, so the snapshot is the unmutated read-pass state.

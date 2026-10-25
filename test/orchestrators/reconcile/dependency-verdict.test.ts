@@ -4,7 +4,10 @@ import path from "node:path";
 import test from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { buildScopeSatisfactionVerdict } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
+import {
+  buildScopeSatisfactionVerdict,
+  verdictAfterToggles,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 import type { MarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
@@ -662,4 +665,79 @@ test("returns identical results for two walks over one snapshot", async () => {
     { dependent: "app@mp", dependency: "helper@mp", kind: "disabled" },
   ]);
   assert.deepStrictEqual(unsatisfiedOf(second), unsatisfiedOf(first));
+});
+
+/** `app` declares `vault`; `vault` is recorded with `seed`, and `kit` declares nothing. */
+function toggledScope(vault: RecordSeed): {
+  readonly options: Parameters<typeof verdictAfterToggles>[0];
+} {
+  const mp = marketplaceRecord("mp", { app: {}, kit: {}, vault });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["vault"] }, kit: {}, vault: {} }),
+  });
+  return {
+    options: { state: stateOf(mp), locations: LOCATIONS, reader: ownManifests(), loadManifest },
+  };
+}
+
+const VAULT = { marketplace: "mp", plugin: "vault" } as const;
+const KIT = { marketplace: "mp", plugin: "kit" } as const;
+
+test("D-08 / D-21: a record the plan disables is a disabled dependency of its dependents", async () => {
+  // arrange -- the check's marker on a record the config now disables reads as the user's choice
+  const { options } = toggledScope({ dependencyDisabled: true });
+  const verdict = await buildScopeSatisfactionVerdict(options);
+
+  // act
+  const toggled = await verdictAfterToggles(options, verdict, { enable: [KIT], disable: [VAULT] });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(verdict), []);
+  assert.deepStrictEqual(unsatisfiedOf(toggled), [
+    { dependent: "app@mp", dependency: "vault@mp", kind: "disabled" },
+  ]);
+});
+
+test("D-08 / D-21: a record the plan enables satisfies its dependents again", async () => {
+  // arrange
+  const { options } = toggledScope({ enabled: false });
+  const verdict = await buildScopeSatisfactionVerdict(options);
+
+  // act
+  const toggled = await verdictAfterToggles(options, verdict, { enable: [VAULT], disable: [] });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(verdict), [
+    { dependent: "app@mp", dependency: "vault@mp", kind: "disabled" },
+  ]);
+  assert.deepStrictEqual(unsatisfiedOf(toggled), []);
+});
+
+test("D-08: a plan that toggles nothing keeps the verdict it was planned with", async () => {
+  // arrange
+  const { options } = toggledScope({ enabled: false });
+  const verdict = await buildScopeSatisfactionVerdict(options);
+
+  // act
+  const toggled = await verdictAfterToggles(options, verdict, { enable: [], disable: [] });
+
+  // assert
+  assert.equal(toggled, verdict);
+});
+
+test("D-05-07: a verdict whose walk failed is kept, whatever the plan toggles", async () => {
+  // arrange
+  const { options } = toggledScope({});
+  const failed: ScopeSatisfactionVerdict = {
+    ok: false,
+    declarer: "app@mp",
+    reason: "invalid manifest",
+    cause: new Error("cannot read the dependencies of app@mp"),
+  };
+
+  // act
+  const toggled = await verdictAfterToggles(options, failed, { enable: [], disable: [VAULT] });
+
+  // assert
+  assert.equal(toggled, failed);
 });

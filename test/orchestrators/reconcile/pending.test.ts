@@ -973,6 +973,33 @@ const dependencyRows = [
       "● core (will enable)",
     ]),
   },
+  {
+    condition: "a dependency the config disables",
+    seed: {
+      offered: { app: { version: "1.0.0", dependencies: ["vault"] }, vault: { version: "1.0.0" } },
+      recorded: { app: { version: "1.0.0" }, vault: { version: "1.0.0" } },
+      declared: [
+        { key: "app@tools", enabled: true },
+        { key: "vault@tools", enabled: false },
+      ],
+    },
+    expected: pendingList(["◍ vault (will disable)", "◍ app (will disable)"]),
+  },
+  {
+    condition: "a dependency the config enables again under a dependent the check holds down",
+    seed: {
+      offered: { app: { version: "1.0.0", dependencies: ["vault"] }, vault: { version: "1.0.0" } },
+      recorded: {
+        app: { version: "1.0.0", enabled: false, dependencyDisabled: true },
+        vault: { version: "1.0.0", enabled: false },
+      },
+      declared: [
+        { key: "app@tools", enabled: true },
+        { key: "vault@tools", enabled: true },
+      ],
+    },
+    expected: pendingList(["● app (will enable)", "● vault (will enable)"]),
+  },
 ] satisfies readonly {
   readonly condition: string;
   readonly seed: DependencyScopeSeed;

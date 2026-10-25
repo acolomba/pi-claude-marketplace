@@ -73,7 +73,7 @@ import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { scanRetainedWorkflowsStaging } from "../plugin/workflows-staging-gc.ts";
 
 import { planConvergence } from "./convergence.ts";
-import { buildScopeSatisfactionVerdict } from "./dependency-verdict.ts";
+import { buildScopeSatisfactionVerdict, verdictAfterToggles } from "./dependency-verdict.ts";
 import {
   buildReconcilePendingNotification,
   isReconcilePlanListEmpty,
@@ -494,14 +494,22 @@ export async function composePendingReport(opts: {
     // would undo. The walk reads cached manifests and installed copies only
     // (NFR-5) and takes no lock, so a concurrent apply is never blocked.
     // eslint-disable-next-line no-await-in-loop -- at most two scopes, one declaration walk each
-    const verdict = await buildScopeSatisfactionVerdict({ state, locations: loc });
+    const firstVerdict = await buildScopeSatisfactionVerdict({ state, locations: loc });
 
     // MIG-01 pre-migration window (DIFF-01): plan against what the next
     // load's reconcile would actually see (the apply path migrates first),
     // not against an absent-as-empty merged view -- see mergedViewForPlanning.
     const view = mergedViewForPlanning(outcome, state);
+    // D-08 / D-21: the verdict over the scope as the plan's toggles leave it,
+    // as `apply`'s read pass takes it.
+    const firstPlan = planReconcile(view, state, scope, firstVerdict);
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one second walk each
+    const verdict = await verdictAfterToggles({ state, locations: loc }, firstVerdict, {
+      enable: firstPlan.pluginsToEnable,
+      disable: firstPlan.pluginsToDisable,
+    });
     const plan = withPlannedInstallsLanded(
-      planReconcile(view, state, scope, verdict),
+      verdict === firstVerdict ? firstPlan : planReconcile(view, state, scope, verdict),
       verdict,
       state,
       (released) => planReconcile(view, state, scope, released),

@@ -189,6 +189,69 @@ describe("readPassForScope", () => {
     assert.equal((await stat(scope.project.stateJsonPath)).mtimeMs, stateMtime);
   });
 
+  test("D-08 / D-21: a config that disables a dependency also plans the disable of its dependent", async (t) => {
+    // arrange -- `app` declares `vault`, and the config now disables `vault`.
+    const scope = await createProjectScope(t, "disabled-dependency");
+    const manifestPath = path.join(scope.marketplaceRoot, ".claude-plugin", "marketplace.json");
+    await writeUnder(
+      manifestPath,
+      JSON.stringify({
+        name: "mp",
+        plugins: [
+          { name: "app", source: "./plugins/app", dependencies: ["vault"] },
+          { name: "vault", source: "./plugins/vault" },
+        ],
+      }),
+    );
+    const record = (plugin: string) => ({
+      version: "1.0.0",
+      resolvedSource: path.join(scope.marketplaceRoot, "plugins", plugin),
+      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+      enabled: true,
+      provenance: "explicit" as const,
+      installedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const seeded = recordedState(scope);
+    const mp = seeded.marketplaces["mp"];
+    assert.ok(mp !== undefined);
+    const state: ExtensionState = {
+      ...seeded,
+      marketplaces: { mp: { ...mp, plugins: { app: record("app"), vault: record("vault") } } },
+    };
+    await mkdir(scope.project.extensionRoot, { recursive: true });
+    await saveState(scope.project.extensionRoot, state);
+    await writeUnder(
+      scope.project.baseConfigJsonPath,
+      declaring({ mp: scope.marketplaceRoot }, { "app@mp": {}, "vault@mp": { enabled: false } }),
+    );
+
+    // act
+    const readResult = await readPassForScope(reader, "project", scope.cwd);
+
+    // assert
+    assert.deepStrictEqual(
+      readResult.plan,
+      planOf({
+        pluginsToDisable: [{ scope: "project", plugin: "vault", marketplace: "mp" }],
+        pluginsToDependencyDisable: [
+          {
+            scope: "project",
+            plugin: "app",
+            marketplace: "mp",
+            dependency: "vault@mp",
+            kind: "disabled",
+          },
+        ],
+      }),
+    );
+    assert.deepStrictEqual(readResult.verdict, {
+      ok: true,
+      unsatisfied: [{ dependent: "app@mp", dependency: "vault@mp", kind: "disabled" }],
+    });
+  });
+
   test("MIG-01: a recorded scope with no config gains a base config built from its state before it plans", async (t) => {
     // arrange
     const scope = await createProjectScope(t, "first-run");

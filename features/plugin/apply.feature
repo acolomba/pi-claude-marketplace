@@ -194,6 +194,38 @@ Feature: Plugin apply
       | command          | description           |
       | /skill:lib-skill | A skill of lib 1.0.0. |
 
+  Scenario: Apply disables a plugin together with the dependency that a config disables by hand, after which pending lists nothing
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | tools       | app    |         |
+      | tools       | lib    | false   |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade           |
+      | severity            | warning                             |
+      | needs reload        | true                                |
+      | summary             | A plugin operation needs attention. |
+      | tally label         | Reconcile                           |
+      | tally failures      | 0                                   |
+      | tally warnings      | 1                                   |
+      | tally success count | 1                                   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status   | reasons                | scope   | version | cause chain                                 | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | disabled |                        | project | 1.0.0   |                                             |                 |       |                  |
+      | tools            | project           | app@tools | app  | disabled | dependency unsatisfied | project | 1.0.0   | Enable "lib@tools" or uninstall "app@tools" | false           |       |                  |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+
   Scenario: Apply reports a hand-declared plugin pi supports only in part with the reason install gives
     Given the published plugin "demo" of the marketplace "fixtures" has an output style
     Given the marketplace "fixtures" is added to the project scope

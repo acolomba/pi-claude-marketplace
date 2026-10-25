@@ -4555,6 +4555,88 @@ describe("applyReconcile", () => {
     second.verifyBoundary();
   });
 
+  test("D-08 / D-21: one apply disables a dependent along with the dependency the config disables", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "dependency-config-disabled");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {}, "secrets-vault@mp": { enabled: false } },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+            "secrets-vault": pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "secrets-vault"),
+            }),
+          },
+        }),
+      },
+    });
+    const first = createNotificationBoundary(1);
+    const second = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({
+      ctx: first.ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+    });
+    const replanned = await replanFromDisk(project);
+    await applyReconcile({
+      ctx: second.ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(first.notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ◍ secrets-vault v1.0.0 (disabled)\n" +
+          "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Enable "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
+          "\n" +
+          "Reconcile: 1 warning, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "warning",
+      },
+    ]);
+    assert.deepStrictEqual(replanned, emptyReconcilePlan("project"));
+    assert.deepStrictEqual(second.notifications, [APPLY_EMPTY_NOTICE]);
+    assert.equal((await recordFor(project, "mp", "deploy-kit"))?.dependencyDisabled, true);
+    first.verifyBoundary();
+    second.verifyBoundary();
+  });
+
   test("LOAD-02: one pass propagates a broken dependency the full depth of a chain", async (t) => {
     // arrange -- alfa declares bravo, bravo declares the absent charlie. A
     // single non-repeating pass would need two reloads to reach alfa.
