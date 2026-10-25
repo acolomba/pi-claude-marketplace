@@ -192,3 +192,46 @@ export async function loadMergedScopeConfig(loc: ScopedLocations): Promise<Scope
 
   return { merged, base, local };
 }
+
+/**
+ * AAP-02 / D-04: the effective `autoapply` value of a load. `results` lists
+ * config files most specific first; the first one that sets the key decides,
+ * as Claude Code resolves a settings key (local over project over user), and
+ * none setting it means off.
+ *
+ * D-03: any invalid file answers off, whatever the others say. The value of a
+ * file that cannot be read is unknown, so the load stays read-only and its
+ * pending block reports the file.
+ */
+function resolveAutoapply(results: readonly ConfigLoadResult[]): boolean {
+  if (results.some((result) => result.status === "invalid")) {
+    return false;
+  }
+
+  for (const result of results) {
+    if (result.status === "valid" && result.config.autoapply !== undefined) {
+      return result.config.autoapply;
+    }
+  }
+
+  return false;
+}
+
+/**
+ * AAP-02 / D-04: reads the four config files of a load, project local, project
+ * base, user local, then user base, and resolves their `autoapply` value.
+ */
+export async function loadAutoapply(
+  project: ScopedLocations,
+  user: ScopedLocations,
+): Promise<boolean> {
+  const results = await Promise.all(
+    [
+      project.localConfigJsonPath,
+      project.baseConfigJsonPath,
+      user.localConfigJsonPath,
+      user.baseConfigJsonPath,
+    ].map((filePath) => loadConfig(filePath)),
+  );
+  return resolveAutoapply(results);
+}

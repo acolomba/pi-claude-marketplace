@@ -102,6 +102,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Notification } from "../../edge/notification-boundary.ts";
 import type { TestContext } from "node:test";
 
@@ -811,6 +812,23 @@ describe("applyReconcile", () => {
 
     // assert
     assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
+    assert.deepStrictEqual(await retryTree(project.scopeRoot), []);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("AAP-02 / D-07: an autoapply load with nothing to change prints nothing", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "pristine-load");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    const run: NotificationRun = { ...runWithNothingLoaded(), origin: { kind: "load" } };
+
+    // act
+    await applyReconcile({ ctx, run, cwd, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, []);
     assert.deepStrictEqual(await retryTree(project.scopeRoot), []);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();

@@ -21,7 +21,7 @@ import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const applyReconcile = createApplyReconcile({ loadState });
-const loadReconcile = createLoadReconcile({ loadState });
+const loadReconcile = createLoadReconcile({ loadState }, applyReconcile);
 const installPlugin = createInstallOperation(
   createHooksRouting(createHooksRuntime(), { readHooksJson }),
   createCompletionCache(),
@@ -470,6 +470,7 @@ test("WCONV-01 / WCONV-02: a load leaves a record whose kind was invisible alone
         run: runWithNothingLoaded(),
         cwd,
         hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        completionCache: createCompletionCache(),
       });
 
       // assert -- APL-03 / D-04: the load only previews the growth move; it

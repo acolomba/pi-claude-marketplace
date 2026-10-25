@@ -6,10 +6,12 @@ import { describe, test } from "node:test";
 
 import {
   findLayerMarketplaceGaps,
+  loadAutoapply,
   loadMergedScopeConfig,
   mergeScopeConfigs,
 } from "../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import type {
@@ -762,6 +764,93 @@ describe("findLayerMarketplaceGaps", () => {
 
       // assert
       assert.deepStrictEqual(gaps, expectedGaps);
+    });
+  }
+});
+
+/** One config file of an autoapply case: missing, unparseable, without the key, or with it. */
+type AutoapplyFile = "absent" | "invalid" | "unset" | boolean;
+
+/** Writes `file` at `filePath`, or nothing for an absent one. */
+async function writeAutoapplyFile(filePath: string, file: AutoapplyFile): Promise<void> {
+  if (file === "absent") {
+    return;
+  }
+
+  await mkdir(path.dirname(filePath), { recursive: true });
+  const bytes = { invalid: "{", unset: "{}" };
+  await writeFile(
+    filePath,
+    typeof file === "boolean" ? JSON.stringify({ autoapply: file }) : bytes[file],
+  );
+}
+
+// Each case lists the project local, project base, user local, and user base files.
+const autoapplyCases: readonly {
+  readonly name: string;
+  readonly files: readonly [AutoapplyFile, AutoapplyFile, AutoapplyFile, AutoapplyFile];
+  readonly expected: boolean;
+}[] = [
+  {
+    name: "is off when no file exists",
+    files: ["absent", "absent", "absent", "absent"],
+    expected: false,
+  },
+  {
+    name: "is off when no file sets it",
+    files: ["unset", "absent", "unset", "absent"],
+    expected: false,
+  },
+  {
+    name: "takes the user base config when it alone sets it",
+    files: ["absent", "unset", "absent", true],
+    expected: true,
+  },
+  {
+    name: "lets the project base config's false override the user configs' true",
+    files: ["absent", false, true, true],
+    expected: false,
+  },
+  {
+    name: "lets the project local config's true override every other false",
+    files: [true, false, false, false],
+    expected: true,
+  },
+  {
+    name: "lets the user local config's true override the user base config's false",
+    files: ["absent", "absent", true, false],
+    expected: true,
+  },
+  {
+    name: "D-03: is off when a less specific file is invalid",
+    files: [true, "absent", "absent", "invalid"],
+    expected: false,
+  },
+  {
+    name: "D-03: is off when a more specific file is invalid",
+    files: ["invalid", "absent", true, "absent"],
+    expected: false,
+  },
+];
+
+describe("loadAutoapply", () => {
+  for (const { name, files, expected } of autoapplyCases) {
+    test(`AAP-02 / D-04: ${name}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticEnvironment(t, "config-merge-autoapply-");
+      const project = locationsFor("project", cwd);
+      const user = locationsFor("user", cwd);
+      const [projectLocal, projectBase, userLocal, userBase] = files;
+      await writeAutoapplyFile(project.localConfigJsonPath, projectLocal);
+      await writeAutoapplyFile(project.baseConfigJsonPath, projectBase);
+      await writeAutoapplyFile(user.localConfigJsonPath, userLocal);
+      await writeAutoapplyFile(user.baseConfigJsonPath, userBase);
+
+      // act
+      const autoapply = await loadAutoapply(project, user);
+
+      // assert
+      assert.equal(autoapply, expected);
     });
   }
 });

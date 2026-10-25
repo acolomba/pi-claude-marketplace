@@ -5,6 +5,14 @@
 // uninstalls, enables, disables or backfills. `/claude:plugin apply` makes
 // those changes (APL-01).
 //
+// AAP-02 / AAP-D1: the one exception is the `autoapply` setting. When the
+// effective value (`config-merge.ts::loadAutoapply`, the most specific config
+// file that sets it) is true, the load runs the injected apply step for both
+// scopes instead of the read-only pass below, and returns. The apply step runs
+// the same read pass, MCP move, warnings and routing rebuild, so nothing below
+// is skipped. A throw from it reaches the caller's NFR-2 boundary in
+// `index.ts`, which reports it as `reconcile-aborted`, as for this pass.
+//
 // What still runs, per scope, project first (MSG-GR-3):
 //   - the shared locked read pass (`read-pass.ts`): the MIG-01 first-run
 //     config migration, the legacy state migration inside `loadState`, the
@@ -29,8 +37,12 @@
 // with nothing to report is silent (RECON-05).
 //
 // NFR-5: this module is outside `NETWORK_SEAMS` in eslint.config.js. It names
-// no git surface, and it calls no operation that clones.
+// no git surface. Its read-only pass calls no operation that clones; only the
+// injected apply step, run when autoapply is on, may reach the network
+// (AAP-D1).
 
+import { loadAutoapply } from "../../persistence/config-merge.ts";
+import { locationsFor } from "../../persistence/locations.ts";
 import { notifyMcpMigration } from "../../shared/notification-dispatch.ts";
 
 import { composePendingReport, notifyPendingReport } from "./pending.ts";
@@ -38,8 +50,9 @@ import { closeScopePass, notifyScopeOutcomes, openScopePass } from "./read-pass.
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ReconcileStateReader, ScopePassAccumulators } from "./read-pass.ts";
-import type { McpMigrationStep } from "./types.ts";
+import type { ApplyReconcileOptions, McpMigrationStep } from "./types.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
+import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { InstallHooksRouting } from "../plugin/install-disable-cascade.ts";
@@ -52,6 +65,8 @@ export interface LoadReconcileOptions {
   readonly cwd: string;
   /** Lifecycle-owned route effects shared with registered hook callbacks. */
   readonly hooksRouting: InstallHooksRouting;
+  /** AAP-02: the completion cache an autoapply load hands the apply step. */
+  readonly completionCache: CompletionCache;
   /**
    * AMIG-01 injection seam for the MCP move. Production callers (index.ts)
    * omit it and `mcp-migration.ts::migrateLegacyMcpEntries` applies.
@@ -63,8 +78,21 @@ const SCOPES: readonly Scope[] = ["project", "user"];
 
 async function loadReconcileWithReader(
   reader: ReconcileStateReader,
+  applyReconcile: (opts: ApplyReconcileOptions) => Promise<void>,
   opts: LoadReconcileOptions,
 ): Promise<void> {
+  if (await loadAutoapply(locationsFor("project", opts.cwd), locationsFor("user", opts.cwd))) {
+    await applyReconcile({
+      ctx: opts.ctx,
+      run: opts.run,
+      cwd: opts.cwd,
+      hooksRouting: opts.hooksRouting,
+      completionCache: opts.completionCache,
+      ...(opts.migrateMcpEntries !== undefined && { migrateMcpEntries: opts.migrateMcpEntries }),
+    });
+    return;
+  }
+
   const accumulators: ScopePassAccumulators = {
     outcomes: [],
     migration: { rows: [], notices: [] },
@@ -103,15 +131,17 @@ async function loadReconcileWithReader(
 }
 
 /**
- * Creates the load's reconcile step with one required selected-state reader.
- * The single production composition lives in the extension entry point, which
- * binds `loadState` once per extension load and hands the step to its
+ * Creates the load's reconcile step with one required selected-state reader
+ * and the apply step an autoapply load runs (AAP-02). The single production
+ * composition lives in the extension entry point, which binds `loadState` and
+ * its apply operation once per extension load and hands the step to its
  * `resources_discover` handler.
  */
 export function createLoadReconcile(
   reader: ReconcileStateReader,
+  applyReconcile: (opts: ApplyReconcileOptions) => Promise<void>,
 ): (opts: LoadReconcileOptions) => Promise<void> {
   return async function loadReconcile(opts: LoadReconcileOptions): Promise<void> {
-    await loadReconcileWithReader(reader, opts);
+    await loadReconcileWithReader(reader, applyReconcile, opts);
   };
 }

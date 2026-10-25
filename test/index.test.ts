@@ -1274,7 +1274,8 @@ test("constructs one runtime, completion cache and reconcile operation per exten
   const updateConstructions =
     source.match(/createPluginUpdateOperations\(hooksRouting, completionCache\)/g) ?? [];
   const reconcileConstructions = source.match(/createApplyReconcile\(\{ loadState \}\)/g) ?? [];
-  const loadConstructions = source.match(/createLoadReconcile\(\{ loadState \}\)/g) ?? [];
+  const loadConstructions =
+    source.match(/createLoadReconcile\(\{ loadState \}, applyReconcile\)/g) ?? [];
 
   // act
   const hydrationConstruction = source.match(
@@ -1294,7 +1295,7 @@ test("constructs one runtime, completion cache and reconcile operation per exten
     "createHooksHydration(hooksRuntime, { loadState, readHooksJson })",
   ]);
   assert.deepStrictEqual(reconcileConstructions, ["createApplyReconcile({ loadState })"]);
-  assert.deepStrictEqual(loadConstructions, ["createLoadReconcile({ loadState })"]);
+  assert.deepStrictEqual(loadConstructions, ["createLoadReconcile({ loadState }, applyReconcile)"]);
 });
 
 test("APL-03: the discover handler hands the load reconcile the event's cwd and no reason", async () => {
@@ -1307,8 +1308,9 @@ test("APL-03: the discover handler hands the load reconcile the event's cwd and 
 
   // act
   const loadCalls =
-    source.match(/loadReconcile\(\{\s*ctx,\s*run,\s*cwd:\s*event\.cwd,\s*hooksRouting,?\s*\}\)/g) ??
-    [];
+    source.match(
+      /loadReconcile\(\{\s*ctx,\s*run,\s*cwd:\s*event\.cwd,\s*hooksRouting,\s*completionCache,?\s*\}\)/g,
+    ) ?? [];
 
   // assert
   assert.equal(loadCalls.length, 1);
@@ -1339,6 +1341,85 @@ test("APL-03 / D-05 / D-21: a reload event lists the missing dependency's instal
   const after = await loadState(extensionRoot);
   assert.equal(after.marketplaces["mp"]?.plugins["helper"], undefined);
   assert.deepStrictEqual(after, before);
+  verifyBoundary();
+});
+
+/** AAP-02: turn autoapply on in the project base config that a seed wrote. */
+async function turnAutoapplyOn(cwd: string): Promise<void> {
+  const configPath = path.join(cwd, ".pi", "claude-plugins.json");
+  const config = JSON.parse(await readFile(configPath, "utf8")) as object;
+  await writeFile(configPath, JSON.stringify({ ...config, autoapply: true }), "utf8");
+}
+
+test("AAP-02 / D-06: an autoapply reload installs the missing dependency and the same discover returns its skill", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "autoapply-reload");
+  await seedEnabledPluginWithMissingDependency(scope.cwd);
+  const skillSource = path.join(scope.cwd, "mp-src", "plugins", "helper", "skills", "assist");
+  await mkdir(skillSource, { recursive: true });
+  await writeFile(
+    path.join(skillSource, "SKILL.md"),
+    "---\nname: assist\ndescription: Assists.\n---\n# assist\n",
+    "utf8",
+  );
+  await turnAutoapplyOn(scope.cwd);
+  const extensionRoot = path.join(scope.cwd, ".pi", "pi-claude-marketplace");
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
+    1,
+    PROBES_PER_DISCOVER,
+  );
+
+  // act
+  const discovered = await discover(discoverEvent(scope.cwd, "reload"), ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [project]\n  ● helper v1.0.0 (installed) {dependency installed}\n\n" +
+        "Reconcile: 1 success\n\n/reload to pick up changes",
+    },
+  ]);
+  const after = await loadState(extensionRoot);
+  assert.equal(after.marketplaces["mp"]?.plugins["helper"]?.enabled, true);
+  assert.deepStrictEqual(discovered, {
+    skillPaths: [path.join(extensionRoot, "resources", "skills", "helper-assist")],
+    promptPaths: [],
+  });
+  verifyBoundary();
+});
+
+test("AAP-03 / NFR-2: an autoapply load whose apply throws reports the abort and still discovers resources", async (t) => {
+  // arrange
+  const scope = await createHermeticScope(t, "autoapply-throw");
+  const previousBase = process.env.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL;
+  t.after(() => {
+    restoreEnv("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", previousBase);
+  });
+  process.env.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL = "not a url";
+  await mkdir(path.join(scope.cwd, ".pi"), { recursive: true });
+  await writeFile(
+    path.join(scope.cwd, ".pi", "claude-plugins.json"),
+    JSON.stringify({ marketplaces: { tools: { source: "acme/tools" } }, autoapply: true }),
+    "utf8",
+  );
+  const promptPath = await seedPrompt(scope.cwd, "kept.md");
+  const { discover, ctx, notifications, verifyBoundary } = await loadExtension(
+    1,
+    PROBES_PER_DISCOVER,
+  );
+
+  // act
+  const discovered = await discover(discoverEvent(scope.cwd, "startup"), ctx);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message: "reconcile aborted: PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is not a valid URL.",
+      severity: "error",
+    },
+  ]);
+  assert.deepStrictEqual(discovered, { skillPaths: [], promptPaths: [promptPath] });
   verifyBoundary();
 });
 

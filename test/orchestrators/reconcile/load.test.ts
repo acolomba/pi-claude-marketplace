@@ -29,27 +29,39 @@ import {
   loadState,
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
 import type { LoadReconcileOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/load.ts";
-import type { McpMigrationStep } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
+import type {
+  ApplyReconcileOptions,
+  McpMigrationStep,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { TestContext } from "node:test";
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
 
-const loadReconcile = createLoadReconcile({ loadState });
+/** AAP-02: the apply step of a load whose configs leave autoapply off. */
+function applyNeverRuns(): Promise<void> {
+  return Promise.reject(new Error("a load with autoapply off ran the apply step"));
+}
+
+const loadReconcile = createLoadReconcile({ loadState }, applyNeverRuns);
 
 /** One load over the case's tree with a fresh routing owner. */
-function load(opts: Omit<LoadReconcileOptions, "hooksRouting" | "run">): Promise<void> {
+function load(
+  opts: Omit<LoadReconcileOptions, "hooksRouting" | "run" | "completionCache">,
+): Promise<void> {
   return loadReconcile({
     ...opts,
     run: runWithNothingLoaded(),
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache: createCompletionCache(),
   });
 }
 
@@ -510,5 +522,136 @@ test("IL-2: the migration notice, the pending block and the warnings go out in t
       "Reconcile: 1 warning",
     ],
   );
+  verifyBoundary();
+});
+
+/** AAP-02: a load step whose apply step records each call and changes nothing. */
+function recordingLoad(): {
+  readonly loadReconcile: (opts: LoadReconcileOptions) => Promise<void>;
+  readonly applied: ApplyReconcileOptions[];
+} {
+  const applied: ApplyReconcileOptions[] = [];
+  return {
+    loadReconcile: createLoadReconcile({ loadState }, (opts) => {
+      applied.push(opts);
+      return Promise.resolve();
+    }),
+    applied,
+  };
+}
+
+/** The bytes of a base config declaring `mp`, the given plugins and an `autoapply` value. */
+function declaringAutoapply(
+  source: string,
+  plugins: Readonly<Record<string, object>>,
+  autoapply: unknown,
+): string {
+  return JSON.stringify({ schemaVersion: 1, marketplaces: { mp: { source } }, plugins, autoapply });
+}
+
+test("AAP-02 / D-05: a project config that turns autoapply on hands the load to the apply step and prints nothing itself", async (t) => {
+  // arrange
+  const scope = await createLoadScope(t, "autoapply-on");
+  await seedInstalled(scope, scope.project, {}, ["hello"]);
+  await writeUnder(
+    scope.project.baseConfigJsonPath,
+    declaringAutoapply(scope.marketplaceRoot, { "hello@mp": {} }, true),
+  );
+  const before = await scopeFiles(scope.project);
+  const { loadReconcile: autoLoad, applied } = recordingLoad();
+  const run = runWithNothingLoaded();
+  const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
+  const completionCache = createCompletionCache();
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+
+  // act
+  await autoLoad({ ctx, run, cwd: scope.cwd, hooksRouting, completionCache });
+
+  // assert
+  assert.equal(applied.length, 1);
+  const [handed] = applied;
+  assert.deepStrictEqual(Object.keys(handed ?? {}).sort(), [
+    "completionCache",
+    "ctx",
+    "cwd",
+    "hooksRouting",
+    "run",
+  ]);
+  assert.equal(handed?.ctx, ctx);
+  assert.equal(handed?.run, run);
+  assert.equal(handed?.cwd, scope.cwd);
+  assert.equal(handed?.hooksRouting, hooksRouting);
+  assert.equal(handed?.completionCache, completionCache);
+  assert.deepStrictEqual(notifications, []);
+  assert.deepStrictEqual(await scopeFiles(scope.project), before);
+  verifyBoundary();
+});
+
+test("AAP-02 / D-22: an autoapply load hands the apply step its MCP move", async (t) => {
+  // arrange
+  const scope = await createLoadScope(t, "autoapply-mcp");
+  await writeUnder(scope.user.baseConfigJsonPath, JSON.stringify({ autoapply: true }));
+  const migrateMcpEntries: McpMigrationStep = () => Promise.resolve();
+  const { loadReconcile: autoLoad, applied } = recordingLoad();
+  const { ctx, verifyBoundary } = createNotificationBoundary(0);
+
+  // act
+  await autoLoad({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd: scope.cwd,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache: createCompletionCache(),
+    migrateMcpEntries,
+  });
+
+  // assert
+  assert.equal(applied.length, 1);
+  assert.equal(applied[0]?.migrateMcpEntries, migrateMcpEntries);
+  verifyBoundary();
+});
+
+test("AAP-01 / D-03: a config that turns autoapply on beside an invalid config keeps the load read-only", async (t) => {
+  // arrange
+  const scope = await createLoadScope(t, "autoapply-invalid");
+  await seedInstalled(scope, scope.project, {}, ["hello"]);
+  await writeUnder(
+    scope.project.baseConfigJsonPath,
+    declaringAutoapply(scope.marketplaceRoot, { "hello@mp": {} }, true),
+  );
+  await writeUnder(scope.user.baseConfigJsonPath, JSON.stringify({ autoapply: "yes" }));
+  const before = await scopeFiles(scope.project);
+  const { loadReconcile: autoLoad, applied } = recordingLoad();
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await autoLoad({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd: scope.cwd,
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache: createCompletionCache(),
+  });
+
+  // assert
+  assert.deepStrictEqual(applied, []);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some operations have failed.\n" +
+        "\n" +
+        "⊘ claude-plugins.json [user] (failed) {invalid manifest}\n" +
+        "  ⊘ claude-plugins.json (failed) {invalid manifest}\n" +
+        "    cause: schema validation failed: /autoapply: must be boolean\n" +
+        "\n" +
+        "● mp [project]\n" +
+        "  ● hello (will install)\n" +
+        "\n" +
+        "Reconcile pending: 2 failures, 1 success" +
+        APPLY_TRAILER,
+      severity: "error",
+    },
+  ]);
+  assert.deepStrictEqual(await scopeFiles(scope.project), before);
   verifyBoundary();
 });

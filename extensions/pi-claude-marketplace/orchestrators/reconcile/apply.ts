@@ -65,7 +65,9 @@
 //     RECON-04). A pass that accumulated no outcome and no invalid-config row
 //     reports `Apply: nothing to change.` through the `reconcile-pending-empty`
 //     advisory and writes nothing (APL-01 / D-08). The load-time silence
-//     contract for an unchanged tree belongs to `load.ts` (D-05).
+//     contract for an unchanged tree belongs to `load.ts` (D-05); when an
+//     autoapply load runs this pass (AAP-02), its `load` run keeps that
+//     silence and the empty advisory is not sent.
 //
 // D-05 / D-07: the soft-dependency snapshot is the run the `apply` command
 // opens before the pass, so it observes a stable pi-subagents /
@@ -1220,7 +1222,12 @@ async function applyReconcileWithReader(
   // cascade through RECONCILE_APPLIED_CONTEXT. An empty-and-clean pass sends
   // the apply-empty advisory instead (APL-01 / D-08).
   if (!notifyScopePasses(opts.ctx, opts.run, accumulators)) {
-    notify(opts.ctx, opts.run, { kind: "reconcile-pending-empty", command: "apply" });
+    // AAP-02 / D-07: an autoapply load with nothing to change keeps the load's
+    // silence (RECON-05); the advisory answers the command.
+    if (opts.run.origin.kind !== "load") {
+      notify(opts.ctx, opts.run, { kind: "reconcile-pending-empty", command: "apply" });
+    }
+
     return;
   }
 

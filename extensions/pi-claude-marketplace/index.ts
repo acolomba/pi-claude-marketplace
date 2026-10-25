@@ -83,10 +83,12 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // per extension load, both bound to the production state reader.
   // `/claude:plugin apply` (APL-01) drives the apply operation; the
   // `resources_discover` handler below drives the load step, which changes no
-  // installation state (APL-03 / D-02). Constructing them here keeps each
-  // binding at extension lifetime rather than rebuilding it on every event.
+  // installation state (APL-03 / D-02) unless the configs turn `autoapply` on,
+  // when it runs the same apply operation before resource discovery (AAP-02).
+  // Constructing them here keeps each binding at extension lifetime rather
+  // than rebuilding it on every event.
   const applyReconcile = createApplyReconcile({ loadState });
-  const loadReconcile = createLoadReconcile({ loadState });
+  const loadReconcile = createLoadReconcile({ loadState }, applyReconcile);
 
   // DISP-01 / DISP-02 / D-59-02 / D-59-03: register the hooks bridge at
   // factory time. The bridge's signature requires a `cwd`, which does not
@@ -124,7 +126,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
 
     requireNotificationMode(ctx.mode);
     try {
-      await loadReconcile({ ctx, run, cwd: event.cwd, hooksRouting });
+      await loadReconcile({ ctx, run, cwd: event.cwd, hooksRouting, completionCache });
     } catch (err) {
       try {
         notifyReconcileAborted(ctx, run, err);
