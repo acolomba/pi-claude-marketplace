@@ -11,6 +11,7 @@ import {
   type BatchedConfigPatch,
   deleteMarketplaceConfigEntryWithCascade,
   deletePluginConfigEntry,
+  writeAutoapplyConfig,
   writeBatchedConfigEntries,
   writeMarketplaceConfigEntry,
   writePluginConfigEntry,
@@ -142,6 +143,34 @@ describe("writeMarketplaceConfigEntry", () => {
     assert.ok(readError instanceof Error);
     assert.ok("code" in readError);
     assert.strictEqual(readError.code, "ENOENT");
+  });
+});
+
+describe("writeAutoapplyConfig", () => {
+  test("AAP-04: sets autoapply and keeps every other member, unknown keys included", async (t) => {
+    // arrange
+    const scopeRoot = await mkdtemp(path.join(os.tmpdir(), "config-write-back-autoapply-"));
+    t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+    const filePath = path.join(scopeRoot, "claude-plugins.local.json");
+    const current = JSON.parse(
+      '{"plugins":{"reviewer@tools":{}},"autoapply":true,"future":1}',
+    ) as ScopeConfig;
+    const expectedBytes = `{
+  "plugins": {
+    "reviewer@tools": {}
+  },
+  "autoapply": false,
+  "future": 1,
+  "schemaVersion": 1
+}
+`;
+
+    // act
+    await writeAutoapplyConfig(current, filePath, scopeRoot, false);
+    const configBytes = await readFile(filePath, "utf8");
+
+    // assert
+    assert.strictEqual(configBytes, expectedBytes);
   });
 });
 

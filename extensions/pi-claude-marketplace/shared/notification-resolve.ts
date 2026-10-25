@@ -616,6 +616,7 @@ export function resolveNotAddedReason(message: MarketplaceNotAddedMessage): Reas
 export const RAW_SURFACE_SEVERITY = {
   "usage-error": "error",
   "usage-info": "info",
+  "autoapply-status": "info",
   diagnostic: "warning",
   "device-flow-prompt": "info",
   "mcp-config-notices": "warning",
@@ -697,6 +698,7 @@ export function resolveRawSurface(surface: RawSurface): ResolvedRawSurface {
     case "mcp-migration":
       return resolveMcpMigration(surface);
     case "usage-info":
+    case "autoapply-status":
     case "device-flow-prompt":
     case "async-rewake-summary":
     case "stop-override-cap":

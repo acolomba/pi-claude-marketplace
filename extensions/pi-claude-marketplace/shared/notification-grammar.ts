@@ -15,6 +15,9 @@ import type {
   RowHint,
 } from "./notification-resolve.ts";
 import type {
+  AutoapplyConfigFile,
+  AutoapplyFileValue,
+  AutoapplyStatusSurface,
   MarketplaceDetails,
   MarketplaceInfoCascadeMessage,
   MarketplaceInfoMessage,
@@ -1277,6 +1280,40 @@ export function formatEnvelopeArguments(envelope: ResolvedEnvelope, body: string
     : [`${envelope.summary}\n\n${folded}`, envelope.severity];
 }
 
+function autoapplyValueToken(value: boolean | undefined): string {
+  if (value === undefined) {
+    return "not set";
+  }
+
+  return value ? "on" : "off";
+}
+
+function autoapplyFileLabel(file: AutoapplyConfigFile): string {
+  return `${file.file} [${file.scope}]`;
+}
+
+function autoapplyFileLine(file: AutoapplyFileValue): string {
+  return `${autoapplyFileLabel(file)}: ${autoapplyValueToken(file.value)}`;
+}
+
+/**
+ * AAP-04 / AAP-D2: the `autoapply` show and set text. A set names its write
+ * first, as Claude Code's `Set effort level to ...`; then the effective value
+ * and the file that set it, or `(default)`; then each listed file's own value.
+ */
+function composeAutoapplyStatusText(surface: AutoapplyStatusSurface): string {
+  const effective =
+    surface.source === undefined
+      ? `Autoapply: ${autoapplyValueToken(surface.enabled)} (default)`
+      : `Autoapply: ${autoapplyValueToken(surface.enabled)} (${autoapplyFileLabel(surface.source)})`;
+  const body = [effective, surface.files.map((file) => autoapplyFileLine(file)).join("\n")].join(
+    "\n\n",
+  );
+  return surface.set === undefined
+    ? body
+    : `Set autoapply to ${autoapplyValueToken(surface.set.value)} in ${autoapplyFileLabel(surface.set)}.\n\n${body}`;
+}
+
 /**
  * D-15: formats one resolved raw surface as its notify arguments. Every raw kind
  * passes its severity explicitly, read from `RAW_SURFACE_SEVERITY` (PMOD-01) or,
@@ -1297,6 +1334,8 @@ export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments |
       ];
     case "usage-info":
       return [surface.usage, RAW_SURFACE_SEVERITY[surface.kind]];
+    case "autoapply-status":
+      return [composeAutoapplyStatusText(surface), RAW_SURFACE_SEVERITY[surface.kind]];
     case "diagnostic":
       return surface.lines.length === 0
         ? undefined

@@ -40,6 +40,7 @@ import {
 } from "./config-io.ts";
 
 import type { ScopedLocations } from "./locations.ts";
+import type { Scope } from "../shared/types.ts";
 
 /**
  * A merged entry carries the underlying entry value plus its provenance.
@@ -193,45 +194,59 @@ export async function loadMergedScopeConfig(loc: ScopedLocations): Promise<Scope
   return { merged, base, local };
 }
 
+/** AAP-04: one config file that can set `autoapply`, with its load result. */
+export interface AutoapplyFile {
+  readonly scope: Scope;
+  readonly layer: "base" | "local";
+  readonly filePath: string;
+  readonly result: ConfigLoadResult;
+}
+
+/** AAP-02 / AAP-04: the effective `autoapply` value and the file that set it. */
+export type EffectiveAutoapply =
+  | { readonly status: "invalid" }
+  | { readonly status: "valid"; readonly enabled: boolean; readonly source?: AutoapplyFile };
+
 /**
- * AAP-02 / D-04: the effective `autoapply` value of a load. `results` lists
- * config files most specific first; the first one that sets the key decides,
- * as Claude Code resolves a settings key (local over project over user), and
- * none setting it means off.
- *
- * D-03: any invalid file answers off, whatever the others say. The value of a
- * file that cannot be read is unknown, so the load stays read-only and its
- * pending block reports the file.
+ * AAP-02 / D-04: reads the four config files that can set `autoapply`, most
+ * specific first: project local, project base, user local, user base.
  */
-function resolveAutoapply(results: readonly ConfigLoadResult[]): boolean {
-  if (results.some((result) => result.status === "invalid")) {
-    return false;
-  }
-
-  for (const result of results) {
-    if (result.status === "valid" && result.config.autoapply !== undefined) {
-      return result.config.autoapply;
-    }
-  }
-
-  return false;
+export async function loadAutoapplyFiles(
+  project: ScopedLocations,
+  user: ScopedLocations,
+): Promise<readonly AutoapplyFile[]> {
+  const files = [
+    { scope: project.scope, layer: "local", filePath: project.localConfigJsonPath },
+    { scope: project.scope, layer: "base", filePath: project.baseConfigJsonPath },
+    { scope: user.scope, layer: "local", filePath: user.localConfigJsonPath },
+    { scope: user.scope, layer: "base", filePath: user.baseConfigJsonPath },
+  ] as const;
+  return Promise.all(
+    files.map(async (file) => ({ ...file, result: await loadConfig(file.filePath) })),
+  );
 }
 
 /**
- * AAP-02 / D-04: reads the four config files of a load, project local, project
- * base, user local, then user base, and resolves their `autoapply` value.
+ * AAP-02 / D-04: the effective `autoapply` value of `files`, listed most
+ * specific first. The first file that sets the key decides, as Claude Code
+ * resolves a settings key (local over project over user), and none setting it
+ * means off.
+ *
+ * D-03: any invalid file makes the answer `invalid`, which a load reads as
+ * off. The value of a file that cannot be read is unknown, so the load stays
+ * read-only and reports the file.
  */
-export async function loadAutoapply(
-  project: ScopedLocations,
-  user: ScopedLocations,
-): Promise<boolean> {
-  const results = await Promise.all(
-    [
-      project.localConfigJsonPath,
-      project.baseConfigJsonPath,
-      user.localConfigJsonPath,
-      user.baseConfigJsonPath,
-    ].map((filePath) => loadConfig(filePath)),
+export function effectiveAutoapply(files: readonly AutoapplyFile[]): EffectiveAutoapply {
+  if (files.some((file) => file.result.status === "invalid")) {
+    return { status: "invalid" };
+  }
+
+  const source = files.find(
+    (file) => file.result.status === "valid" && file.result.config.autoapply !== undefined,
   );
-  return resolveAutoapply(results);
+  if (source?.result.status !== "valid") {
+    return { status: "valid", enabled: false };
+  }
+
+  return { status: "valid", enabled: source.result.config.autoapply === true, source };
 }

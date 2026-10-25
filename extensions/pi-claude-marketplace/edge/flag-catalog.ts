@@ -62,6 +62,7 @@ export type CatalogVerb =
   | "disable"
   | "pending"
   | "apply"
+  | "autoapply"
   | "import"
   | "bootstrap"
   | "browse"
@@ -203,6 +204,15 @@ const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
   disable: [WRITE_TARGET_FLAG_ENTRY],
   pending: [],
   apply: [],
+  // AAP-04: `--local` picks the local config to write, or lists only it.
+  autoapply: [
+    {
+      name: "--local",
+      description: "Set or show the local config (claude-plugins.local.json), not the base config",
+      parse: true,
+      complete: true,
+    },
+  ],
   import: [],
   bootstrap: [],
   // The three documentation/navigation verbs take no flags at all, not even

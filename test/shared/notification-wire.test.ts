@@ -296,8 +296,8 @@ test("APL-04 / D-14: rejects needsApply on a reconcile-applied payload", () => {
   assert.strictEqual(valid, false);
 });
 
-const DEVICE_FLOW_PROMPT_MEMBER = NOTIFICATION_PAYLOAD_SCHEMA.anyOf[13];
-const ASYNC_REWAKE_SUMMARY_MEMBER = NOTIFICATION_PAYLOAD_SCHEMA.anyOf[14];
+const DEVICE_FLOW_PROMPT_MEMBER = NOTIFICATION_PAYLOAD_SCHEMA.anyOf[14];
+const ASYNC_REWAKE_SUMMARY_MEMBER = NOTIFICATION_PAYLOAD_SCHEMA.anyOf[15];
 
 for (const origin of [
   { kind: "command", commandId: "plugin list", invocationId: "run-a" },

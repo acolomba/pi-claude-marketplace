@@ -192,6 +192,50 @@ async function seedResolver(t: TestContext, label: string): Promise<SeededResolv
 }
 
 // ---------------------------------------------------------------------------
+// AAP-04: the value `autoapply` sets.
+// ---------------------------------------------------------------------------
+
+for (const { prefix, expected } of [
+  {
+    prefix: "autoapply ",
+    expected: [
+      { label: "on", value: "autoapply on " },
+      { label: "off", value: "autoapply off " },
+    ],
+  },
+  { prefix: "autoapply of", expected: [{ label: "off", value: "autoapply off " }] },
+  {
+    prefix: "autoapply --local o",
+    expected: [
+      { label: "on", value: "autoapply --local on " },
+      { label: "off", value: "autoapply --local off " },
+    ],
+  },
+]) {
+  test(`AAP-04 offers on and off after "${prefix}"`, async (t) => {
+    // arrange
+    const { completionCache, resolver } = await seedResolver(t, "autoapply-value");
+
+    // act
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
+
+    // assert
+    assert.deepStrictEqual(suggestions, expected);
+  });
+}
+
+test("AAP-04 offers nothing after the autoapply value", async (t) => {
+  // arrange
+  const { completionCache, resolver } = await seedResolver(t, "autoapply-done");
+
+  // act
+  const suggestions = await getArgumentCompletions("autoapply on ", resolver, completionCache);
+
+  // assert
+  assert.strictEqual(suggestions, null);
+});
+
+// ---------------------------------------------------------------------------
 // TC-1: the top-level subcommand vocabulary.
 // ---------------------------------------------------------------------------
 
@@ -216,6 +260,7 @@ test("TC-1 offers the whole top-level vocabulary at an empty prefix, in declarat
     { label: "info", value: "info " },
     { label: "pending", value: "pending " },
     { label: "apply", value: "apply " },
+    { label: "autoapply", value: "autoapply " },
     { label: "enable", value: "enable " },
     { label: "disable", value: "disable " },
     { label: "import", value: "import " },

@@ -627,6 +627,43 @@ const USAGE_INFO_PAYLOAD = Type.Object(
   { additionalProperties: false },
 );
 
+const AUTOAPPLY_CONFIG_FILE_FIELDS = {
+  scope: SCOPE,
+  file: Type.Union([
+    Type.Literal("claude-plugins.json"),
+    Type.Literal("claude-plugins.local.json"),
+  ]),
+};
+
+/**
+ * AAP-04: the effective `autoapply` value, the file that set it (absent for the
+ * default), each listed file's own value (absent when not set), and the write
+ * a set form made.
+ */
+const AUTOAPPLY_STATUS_PAYLOAD = Type.Object(
+  {
+    ...RAW_ENVELOPE_FIELDS,
+    kind: Type.Literal("autoapply-status"),
+    enabled: Type.Boolean(),
+    source: Type.Optional(
+      Type.Object(AUTOAPPLY_CONFIG_FILE_FIELDS, { additionalProperties: false }),
+    ),
+    files: Type.Array(
+      Type.Object(
+        { ...AUTOAPPLY_CONFIG_FILE_FIELDS, value: Type.Optional(Type.Boolean()) },
+        { additionalProperties: false },
+      ),
+    ),
+    set: Type.Optional(
+      Type.Object(
+        { ...AUTOAPPLY_CONFIG_FILE_FIELDS, value: Type.Boolean() },
+        { additionalProperties: false },
+      ),
+    ),
+  },
+  { additionalProperties: false },
+);
+
 const DIAGNOSTIC_PAYLOAD = Type.Object(
   {
     ...RAW_ENVELOPE_FIELDS,
@@ -830,6 +867,7 @@ export const NOTIFICATION_PAYLOAD_SCHEMA = Type.Union([
   PRUNE_COMMITTED_WARNING_PAYLOAD,
   USAGE_ERROR_PAYLOAD,
   USAGE_INFO_PAYLOAD,
+  AUTOAPPLY_STATUS_PAYLOAD,
   DIAGNOSTIC_PAYLOAD,
   DEVICE_FLOW_PROMPT_PAYLOAD,
   ASYNC_REWAKE_SUMMARY_PAYLOAD,

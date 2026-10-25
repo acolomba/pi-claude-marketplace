@@ -56,6 +56,7 @@ import { makeMarketplaceListHandler } from "./handlers/marketplace/list.ts";
 import { makeRemoveHandler } from "./handlers/marketplace/remove.ts";
 import { makeMarketplaceUpdateHandler } from "./handlers/marketplace/update.ts";
 import { makeApplyHandler } from "./handlers/plugin/apply.ts";
+import { makeAutoapplyHandler } from "./handlers/plugin/autoapply.ts";
 import { makeBootstrapHandler } from "./handlers/plugin/bootstrap.ts";
 import { makeBrowseHandler } from "./handlers/plugin/browse.ts";
 import { makeEnableDisableHandler } from "./handlers/plugin/enable-disable.ts";
@@ -129,6 +130,7 @@ export function registerClaudePluginCommand(
     pluginInfo,
     pending: makePendingHandler(),
     pluginApply: makeApplyHandler(deps, hooksRouting),
+    autoapply: makeAutoapplyHandler(),
     enable,
     disable,
     import: makeImportHandler(deps, hooksRouting),

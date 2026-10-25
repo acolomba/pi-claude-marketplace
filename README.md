@@ -175,7 +175,13 @@ Whether Pi applies a declared plugin's components depends on the entry's optiona
 
 ### Autoapply
 
-To make each new session and `/reload` apply your configs, set the top-level `autoapply` key to `true`:
+To make each new session and `/reload` apply your configs, turn on `autoapply`:
+
+```text
+/claude:plugin autoapply on
+```
+
+This sets the top-level `autoapply` key of a config to `true`. Like `enable`, it writes the user base config unless you add `--scope project` or `--local`. `/claude:plugin autoapply off` sets the key to `false`. Run `/claude:plugin autoapply` with no value to see the value in effect, the config that sets it, and each config's own value. With `--scope` or `--local`, it lists only those configs. A set does not run `apply`: the next load reads the new value. You can also edit the key by hand:
 
 ```json
 {

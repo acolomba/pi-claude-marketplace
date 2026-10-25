@@ -200,6 +200,23 @@ function wireRawSurface(
       return { ...envelope, kind: surface.kind, message: surface.message, usage: surface.usage };
     case "usage-info":
       return { ...envelope, kind: surface.kind, usage: surface.usage };
+    case "autoapply-status":
+      return {
+        ...envelope,
+        kind: surface.kind,
+        enabled: surface.enabled,
+        ...(surface.source !== undefined && {
+          source: { scope: surface.source.scope, file: surface.source.file },
+        }),
+        files: surface.files.map((file) => ({
+          scope: file.scope,
+          file: file.file,
+          ...(file.value !== undefined && { value: file.value }),
+        })),
+        ...(surface.set !== undefined && {
+          set: { scope: surface.set.scope, file: surface.set.file, value: surface.set.value },
+        }),
+      };
     case "diagnostic":
       return { ...envelope, kind: surface.kind, header: surface.header, lines: [...surface.lines] };
     case "device-flow-prompt":

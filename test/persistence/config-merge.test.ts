@@ -6,7 +6,8 @@ import { describe, test } from "node:test";
 
 import {
   findLayerMarketplaceGaps,
-  loadAutoapply,
+  effectiveAutoapply,
+  loadAutoapplyFiles,
   loadMergedScopeConfig,
   mergeScopeConfigs,
 } from "../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
@@ -17,6 +18,7 @@ import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persist
 import type {
   LayerMarketplaceGap,
   MergedConfig,
+  EffectiveAutoapply,
   ScopeLoadOutcome,
 } from "../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -769,10 +771,10 @@ describe("findLayerMarketplaceGaps", () => {
 });
 
 /** One config file of an autoapply case: missing, unparseable, without the key, or with it. */
-type AutoapplyFile = "absent" | "invalid" | "unset" | boolean;
+type AutoapplyFixture = "absent" | "invalid" | "unset" | boolean;
 
 /** Writes `file` at `filePath`, or nothing for an absent one. */
-async function writeAutoapplyFile(filePath: string, file: AutoapplyFile): Promise<void> {
+async function writeAutoapplyFile(filePath: string, file: AutoapplyFixture): Promise<void> {
   if (file === "absent") {
     return;
   }
@@ -785,55 +787,67 @@ async function writeAutoapplyFile(filePath: string, file: AutoapplyFile): Promis
   );
 }
 
+/** The effective value as `invalid`, or `on`/`off` and the scope and layer that set it. */
+function describeEffective(effective: EffectiveAutoapply): string {
+  if (effective.status === "invalid") {
+    return "invalid";
+  }
+
+  const value = effective.enabled ? "on" : "off";
+  return effective.source === undefined
+    ? value
+    : `${value} from ${effective.source.scope} ${effective.source.layer}`;
+}
+
 // Each case lists the project local, project base, user local, and user base files.
 const autoapplyCases: readonly {
   readonly name: string;
-  readonly files: readonly [AutoapplyFile, AutoapplyFile, AutoapplyFile, AutoapplyFile];
-  readonly expected: boolean;
+  readonly files: readonly [AutoapplyFixture, AutoapplyFixture, AutoapplyFixture, AutoapplyFixture];
+  readonly expected: string;
 }[] = [
   {
     name: "is off when no file exists",
     files: ["absent", "absent", "absent", "absent"],
-    expected: false,
+    expected: "off",
   },
   {
     name: "is off when no file sets it",
     files: ["unset", "absent", "unset", "absent"],
-    expected: false,
+    expected: "off",
   },
   {
     name: "takes the user base config when it alone sets it",
     files: ["absent", "unset", "absent", true],
-    expected: true,
+    expected: "on from user base",
   },
   {
     name: "lets the project base config's false override the user configs' true",
     files: ["absent", false, true, true],
-    expected: false,
+    expected: "off from project base",
   },
   {
     name: "lets the project local config's true override every other false",
     files: [true, false, false, false],
-    expected: true,
+    expected: "on from project local",
   },
   {
     name: "lets the user local config's true override the user base config's false",
     files: ["absent", "absent", true, false],
-    expected: true,
+    expected: "on from user local",
   },
   {
-    name: "D-03: is off when a less specific file is invalid",
+    name: "D-03: is invalid when a less specific file is invalid",
     files: [true, "absent", "absent", "invalid"],
-    expected: false,
+    expected: "invalid",
   },
   {
-    name: "D-03: is off when a more specific file is invalid",
+    name: "D-03: is invalid when a more specific file is invalid",
     files: ["invalid", "absent", true, "absent"],
-    expected: false,
+    expected: "invalid",
   },
 ];
 
-describe("loadAutoapply", () => {
+describe("effectiveAutoapply", () => {
   for (const { name, files, expected } of autoapplyCases) {
     test(`AAP-02 / D-04: ${name}`, async (t) => {
       // arrange
@@ -847,10 +861,50 @@ describe("loadAutoapply", () => {
       await writeAutoapplyFile(user.baseConfigJsonPath, userBase);
 
       // act
-      const autoapply = await loadAutoapply(project, user);
+      const effective = effectiveAutoapply(await loadAutoapplyFiles(project, user));
 
       // assert
-      assert.equal(autoapply, expected);
+      assert.equal(describeEffective(effective), expected);
     });
   }
+});
+
+describe("loadAutoapplyFiles", () => {
+  test("AAP-04: lists the four config files most specific first", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "config-merge-autoapply-files-");
+    const project = locationsFor("project", cwd);
+    const user = locationsFor("user", cwd);
+
+    // act
+    const files = await loadAutoapplyFiles(project, user);
+
+    // assert
+    assert.deepStrictEqual(files, [
+      {
+        scope: "project",
+        layer: "local",
+        filePath: project.localConfigJsonPath,
+        result: { status: "absent" },
+      },
+      {
+        scope: "project",
+        layer: "base",
+        filePath: project.baseConfigJsonPath,
+        result: { status: "absent" },
+      },
+      {
+        scope: "user",
+        layer: "local",
+        filePath: user.localConfigJsonPath,
+        result: { status: "absent" },
+      },
+      {
+        scope: "user",
+        layer: "base",
+        filePath: user.baseConfigJsonPath,
+        result: { status: "absent" },
+      },
+    ]);
+  });
 });

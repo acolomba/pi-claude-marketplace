@@ -345,9 +345,26 @@ export async function getArgumentCompletions(
     );
   }
 
-  // No completion makes sense at this cursor position -- Pi-tui contract
-  // requires `null` here, NOT `[]` (the latter would suppress the file-
-  // completion fallback when irrelevant; null lets Pi-tui try other
-  // providers).
-  return null;
+  // Branch 6 (AAP-04): the value `autoapply` sets, else no completion.
+  return autoapplyValueCompletions(positionals, current, headPrefix);
+}
+
+/**
+ * AAP-04: `on` and `off` after `autoapply`. Anywhere else no completion makes
+ * sense -- Pi-tui contract requires `null` there, NOT `[]` (the latter would
+ * suppress the file-completion fallback when irrelevant; null lets Pi-tui try
+ * other providers).
+ */
+function autoapplyValueCompletions(
+  positionals: readonly string[],
+  current: string,
+  headPrefix: string,
+): AutocompleteItem[] | null {
+  if (positionals[0] !== "autoapply" || positionals.length !== 1) {
+    return null;
+  }
+
+  return ["on", "off"]
+    .filter((value) => value.startsWith(current))
+    .map((label) => ({ label, value: `${headPrefix}${label} ` }));
 }

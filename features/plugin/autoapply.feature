@@ -56,7 +56,7 @@ Feature: Plugin autoapply
       | marketplace name | marketplace scope | id       | name | status    | reasons | scope   | version |
       | gits             | project           | ghp@gits | ghp  | installed |         | project | 1.0.0   |
     Then the git host receives these requests:
-      | method | path                                       | status |
+      | method | path                                            | status |
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
     Then the session offers these skills:
@@ -296,3 +296,217 @@ Feature: Plugin autoapply
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.1.0. |
+
+  Scenario: Autoapply with no config that sets it shows the default and every config file
+    When the user runs "/claude:plugin autoapply"
+    Then the result has these fields:
+      | kind         | autoapply-status                                                                                                                                                                                            |
+      | severity     | info                                                                                                                                                                                                        |
+      | needs reload | false                                                                                                                                                                                                       |
+      | enabled      | false                                                                                                                                                                                                       |
+      | files        | [{"scope":"user","file":"claude-plugins.json"},{"scope":"user","file":"claude-plugins.local.json"},{"scope":"project","file":"claude-plugins.json"},{"scope":"project","file":"claude-plugins.local.json"}] |
+
+  Scenario Outline: Autoapply shows the value of the most specific config that sets it
+    Given a config in scope user and layer base, with this text:
+      """
+      { "autoapply": true }
+      """
+    Given a config in scope <scope> and layer <layer>, with this text:
+      """
+      { "autoapply": <value> }
+      """
+    When the user runs "/claude:plugin autoapply"
+    Then the result has these fields:
+      | kind         | autoapply-status |
+      | severity     | info             |
+      | needs reload | false            |
+      | enabled      | <enabled>        |
+      | source scope | <scope>          |
+      | source file  | <file>           |
+      | files        | <files>          |
+
+    Examples:
+      | scope   | layer | value | enabled | file                      | files                                                                                                                                                                                                                                  |
+      | user    | local | false | false   | claude-plugins.local.json | [{"scope":"user","file":"claude-plugins.json","value":true},{"scope":"user","file":"claude-plugins.local.json","value":false},{"scope":"project","file":"claude-plugins.json"},{"scope":"project","file":"claude-plugins.local.json"}] |
+      | project | base  | false | false   | claude-plugins.json       | [{"scope":"user","file":"claude-plugins.json","value":true},{"scope":"user","file":"claude-plugins.local.json"},{"scope":"project","file":"claude-plugins.json","value":false},{"scope":"project","file":"claude-plugins.local.json"}] |
+      | project | local | true  | true    | claude-plugins.local.json | [{"scope":"user","file":"claude-plugins.json","value":true},{"scope":"user","file":"claude-plugins.local.json"},{"scope":"project","file":"claude-plugins.json"},{"scope":"project","file":"claude-plugins.local.json","value":true}]  |
+
+  Scenario Outline: Autoapply with a scope or layer filter lists only those config files and still shows the effective value
+    Given a config in scope user and layer local, with this text:
+      """
+      { "autoapply": true }
+      """
+    Given a config in scope project and layer base, with this text:
+      """
+      { "autoapply": false }
+      """
+    When the user runs "/claude:plugin autoapply <filter>"
+    Then the result has these fields:
+      | kind         | autoapply-status    |
+      | severity     | info                |
+      | needs reload | false               |
+      | enabled      | false               |
+      | source scope | project             |
+      | source file  | claude-plugins.json |
+      | files        | <files>             |
+
+    Examples:
+      | filter                  | files                                                                                                                     |
+      | --scope user            | [{"scope":"user","file":"claude-plugins.json"},{"scope":"user","file":"claude-plugins.local.json","value":true}]          |
+      | --scope project         | [{"scope":"project","file":"claude-plugins.json","value":false},{"scope":"project","file":"claude-plugins.local.json"}]   |
+      | --local                 | [{"scope":"user","file":"claude-plugins.local.json","value":true},{"scope":"project","file":"claude-plugins.local.json"}] |
+      | --scope project --local | [{"scope":"project","file":"claude-plugins.local.json"}]                                                                  |
+
+  Scenario: Autoapply with an invalid config reports the config as the load does and shows no value
+    Given a config in scope project and layer base, with this text:
+      """
+      { "autoapply": true }
+      """
+    Given a config in scope user and layer local, with this text:
+      """
+      { "autoapply": "yes" }
+      """
+    When the user runs "/claude:plugin autoapply"
+    Then the result has these fields:
+      | kind           | cascade                      |
+      | severity       | error                        |
+      | needs reload   | false                        |
+      | summary        | Some operations have failed. |
+      | tally label    | Reconcile pending            |
+      | tally failures | 2                            |
+      | tally warnings | 0                            |
+    Then the result lists these plugins:
+      | marketplace name          | marketplace scope | marketplace status | marketplace reasons | id                                                  | name                      | status | reasons          | scope | cause chain                                           | cause truncated | leaks | rollback partial |
+      | claude-plugins.local.json | user              | failed             | invalid manifest    | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | user  | schema validation failed: /autoapply: must be boolean | false           |       |                  |
+
+  Scenario: Autoapply on with no scope or layer writes the user base config
+    When the user runs "/claude:plugin autoapply on"
+    Then the result has these fields:
+      | kind         | autoapply-status                                             |
+      | severity     | info                                                         |
+      | needs reload | false                                                        |
+      | enabled      | true                                                         |
+      | source scope | user                                                         |
+      | source file  | claude-plugins.json                                          |
+      | files        | [{"scope":"user","file":"claude-plugins.json","value":true}] |
+      | set scope    | user                                                         |
+      | set file     | claude-plugins.json                                          |
+      | set value    | true                                                         |
+    Then the "claude-plugins.json" file of the user scope sets autoapply to on and holds nothing else
+
+  Scenario Outline: Autoapply on or off writes the config of the chosen scope and layer
+    When the user runs "/claude:plugin autoapply <setting> <flags>"
+    Then the result has these fields:
+      | kind         | autoapply-status                                      |
+      | severity     | info                                                  |
+      | needs reload | false                                                 |
+      | enabled      | <value>                                               |
+      | source scope | <scope>                                               |
+      | source file  | <file>                                                |
+      | files        | [{"scope":"<scope>","file":"<file>","value":<value>}] |
+      | set scope    | <scope>                                               |
+      | set file     | <file>                                                |
+      | set value    | <value>                                               |
+    Then the "<file>" file of the <scope> scope sets autoapply to <setting> and holds nothing else
+
+    Examples:
+      | setting | flags                   | scope   | file                      | value |
+      | off     | --local                 | user    | claude-plugins.local.json | false |
+      | on      | --scope project         | project | claude-plugins.json       | true  |
+      | on      | --scope project --local | project | claude-plugins.local.json | true  |
+
+  Scenario: Autoapply off in the project config turns off the autoapply that a user config turns on
+    Given a config in scope user and layer base, with this text:
+      """
+      { "autoapply": true }
+      """
+    When the user runs "/claude:plugin autoapply off --scope project"
+    Then the result has these fields:
+      | kind         | autoapply-status                                                 |
+      | severity     | info                                                             |
+      | needs reload | false                                                            |
+      | enabled      | false                                                            |
+      | source scope | project                                                          |
+      | source file  | claude-plugins.json                                              |
+      | files        | [{"scope":"project","file":"claude-plugins.json","value":false}] |
+      | set scope    | project                                                          |
+      | set file     | claude-plugins.json                                              |
+      | set value    | false                                                            |
+
+  Scenario: Autoapply on in a config that a more specific config overrides shows the value still in effect
+    Given a config in scope project and layer base, with this text:
+      """
+      { "autoapply": false }
+      """
+    When the user runs "/claude:plugin autoapply on"
+    Then the result has these fields:
+      | kind         | autoapply-status                                             |
+      | severity     | info                                                         |
+      | needs reload | false                                                        |
+      | enabled      | false                                                        |
+      | source scope | project                                                      |
+      | source file  | claude-plugins.json                                          |
+      | files        | [{"scope":"user","file":"claude-plugins.json","value":true}] |
+      | set scope    | user                                                         |
+      | set file     | claude-plugins.json                                          |
+      | set value    | true                                                         |
+
+  Scenario: Autoapply on keeps the plugins the config it writes declares
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    When the user runs "/claude:plugin autoapply on --scope project"
+    Then the result has these fields:
+      | kind         | autoapply-status                                                |
+      | severity     | info                                                            |
+      | needs reload | false                                                           |
+      | enabled      | true                                                            |
+      | source scope | project                                                         |
+      | source file  | claude-plugins.json                                             |
+      | files        | [{"scope":"project","file":"claude-plugins.json","value":true}] |
+      | set scope    | project                                                         |
+      | set file     | claude-plugins.json                                             |
+      | set value    | true                                                            |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+
+  Scenario: Autoapply refuses to write a config that is not valid and reports it as the load does
+    Given a config in scope user and layer base, with this text:
+      """
+      { "autoapply": 1 }
+      """
+    When the user runs "/claude:plugin autoapply on"
+    Then the result has these fields:
+      | kind           | cascade                      |
+      | severity       | error                        |
+      | needs reload   | false                        |
+      | summary        | Some operations have failed. |
+      | tally label    | Reconcile pending            |
+      | tally failures | 2                            |
+      | tally warnings | 0                            |
+    Then the result lists these plugins:
+      | marketplace name    | marketplace scope | marketplace status | marketplace reasons | id                                      | name                | status | reasons          | scope | cause chain                                           | cause truncated | leaks | rollback partial |
+      | claude-plugins.json | user              | failed             | invalid manifest    | claude-plugins.json@claude-plugins.json | claude-plugins.json | failed | invalid manifest | user  | schema validation failed: /autoapply: must be boolean | false           |       |                  |
+    Then the "claude-plugins.json" file of the user scope holds this text:
+      """
+      { "autoapply": 1 }
+      """
+
+  Scenario Outline: Autoapply rejects an argument other than on or off
+    When the user runs "/claude:plugin autoapply <arguments>"
+    Then the result has these fields:
+      | kind         | usage-error                                                                 |
+      | severity     | error                                                                       |
+      | needs reload | false                                                                       |
+      | message      | <message>                                                                   |
+      | usage        | Usage: /claude:plugin autoapply [on\|off] [--scope user\|project] [--local] |
+
+    Examples:
+      | arguments | message                  |
+      | true      | Unknown argument "true". |
+      | on off    | Too many arguments.      |
+      | --bogus   | Unknown flag: "--bogus". |

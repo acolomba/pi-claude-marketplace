@@ -25,6 +25,7 @@ import { test } from "node:test";
 
 import {
   composePendingReport,
+  notifyInvalidConfigs,
   pendingReconcile,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -139,6 +140,34 @@ function stateBytes(
     2,
   );
 }
+
+test("AAP-04 / D-03: sends invalid configs as the failed blocks pending prints, project scope first", () => {
+  // arrange
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  notifyInvalidConfigs(ctx, runWithNothingLoaded(), [
+    { scope: "user", filePath: "/home/u/.pi/agent/claude-plugins.json", error: "bad user" },
+    { scope: "project", filePath: "/work/.pi/claude-plugins.json", error: "bad /work/x.json" },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some operations have failed.\n\n" +
+        "⊘ claude-plugins.json [project] (failed) {invalid manifest}\n" +
+        "  ⊘ claude-plugins.json (failed) {invalid manifest}\n" +
+        "    cause: bad x.json\n\n" +
+        "⊘ claude-plugins.json [user] (failed) {invalid manifest}\n" +
+        "  ⊘ claude-plugins.json (failed) {invalid manifest}\n" +
+        "    cause: bad user\n\n" +
+        "Reconcile pending: 4 failures",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
 
 test("DIFF-01: reports the zero-action advisory when neither scope has pending work", async (t) => {
   // arrange

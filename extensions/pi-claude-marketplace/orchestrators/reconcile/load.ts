@@ -6,7 +6,7 @@
 // those changes (APL-01).
 //
 // AAP-02 / AAP-D1: the one exception is the `autoapply` setting. When the
-// effective value (`config-merge.ts::loadAutoapply`, the most specific config
+// effective value (`config-merge.ts::effectiveAutoapply`, the most specific config
 // file that sets it) is true, the load runs the injected apply step for both
 // scopes instead of the read-only pass below, and returns. The apply step runs
 // the same read pass, MCP move, warnings and routing rebuild, and its report
@@ -45,7 +45,7 @@
 // injected apply step, run when autoapply is on, may reach the network
 // (AAP-D1).
 
-import { loadAutoapply } from "../../persistence/config-merge.ts";
+import { effectiveAutoapply, loadAutoapplyFiles } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -87,7 +87,10 @@ async function loadReconcileWithReader(
   applyReconcile: (opts: ApplyReconcileOptions) => Promise<void>,
   opts: LoadReconcileOptions,
 ): Promise<void> {
-  if (await loadAutoapply(locationsFor("project", opts.cwd), locationsFor("user", opts.cwd))) {
+  const autoapply = effectiveAutoapply(
+    await loadAutoapplyFiles(locationsFor("project", opts.cwd), locationsFor("user", opts.cwd)),
+  );
+  if (autoapply.status === "valid" && autoapply.enabled) {
     try {
       await applyReconcile({
         ctx: opts.ctx,

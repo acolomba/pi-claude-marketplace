@@ -1964,6 +1964,21 @@ const RAW_SURFACE_ROWS: {
     surface: { kind: "usage-info", usage: "Usage: /claude:plugin help [marketplace]" },
     expectedArguments: ["Usage: /claude:plugin help [marketplace]", "info"],
   },
+  "autoapply-status": {
+    surface: {
+      kind: "autoapply-status",
+      enabled: true,
+      source: { scope: "project", file: "claude-plugins.local.json" },
+      files: [{ scope: "project", file: "claude-plugins.local.json", value: true }],
+      set: { scope: "project", file: "claude-plugins.local.json", value: true },
+    },
+    expectedArguments: [
+      "Set autoapply to on in claude-plugins.local.json [project].\n\n" +
+        "Autoapply: on (claude-plugins.local.json [project])\n\n" +
+        "claude-plugins.local.json [project]: on",
+      "info",
+    ],
+  },
   diagnostic: {
     surface: { kind: "diagnostic", header: "Warnings", lines: ["first", "second"] },
     expectedArguments: ["Warnings\n\nfirst\nsecond", "warning"],
@@ -2033,6 +2048,28 @@ for (const [kind, { surface, expectedArguments }] of Object.entries(RAW_SURFACE_
     assert.deepStrictEqual(notifyArguments, expectedArguments);
   });
 }
+
+test("AAP-04: formatRawSurface shows the default autoapply and every listed file's own value", () => {
+  // act
+  const notifyArguments = formatRawSurface({
+    kind: "autoapply-status",
+    enabled: false,
+    files: [
+      { scope: "user", file: "claude-plugins.json" },
+      { scope: "user", file: "claude-plugins.local.json", value: false },
+      { scope: "project", file: "claude-plugins.json", value: true },
+    ],
+  });
+
+  // assert
+  assert.deepStrictEqual(notifyArguments, [
+    "Autoapply: off (default)\n\n" +
+      "claude-plugins.json [user]: not set\n" +
+      "claude-plugins.local.json [user]: off\n" +
+      "claude-plugins.json [project]: on",
+    "info",
+  ]);
+});
 
 // RAWS-01 / D-06: nonempty usage joins the message with one blank line.
 // Usage kinds have no no-op. RAWS-02 / D-05: a diagnostic keeps its lines

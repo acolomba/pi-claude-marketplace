@@ -626,6 +626,21 @@ export function notifyPendingReport(
   });
 }
 
+/**
+ * AAP-04 / D-03: sends the failed block of each invalid config the way the
+ * load and `pending` print it, so `autoapply` fails closed with the same rows.
+ */
+export function notifyInvalidConfigs(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  invalid: readonly { readonly scope: Scope; readonly filePath: string; readonly error: string }[],
+): void {
+  const blocks = invalid
+    .map((config) => buildInvalidConfigBlock(config.scope, config.filePath, config.error))
+    .sort((a, b) => compareByNameThenScope(a, b));
+  notifyWithContext(ctx, run, PENDING_CONTEXT, blocks, undefined, "plural");
+}
+
 export async function pendingReconcile(opts: PendingReconcileOptions): Promise<void> {
   // Project-first per MSG-GR-3 when both scopes are searched; otherwise the
   // explicit scope only.

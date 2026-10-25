@@ -35,7 +35,7 @@ jq -c -e -s --arg invocation "$invocation_id" '
     | ["cascade", "marketplace-info", "plugin-info", "marketplace-info-cascade",
        "plugin-info-cascade", "marketplace-not-added", "reconcile-pending-empty",
        "reconcile-applied-cascade", "prune-empty", "prune-committed-warning",
-       "usage-error", "usage-info", "internal-error"] | index($kind) != null;
+       "usage-error", "usage-info", "autoapply-status", "internal-error"] | index($kind) != null;
   [.[] | select(.type == "entry_appended")
    | .entry | select(.type == "custom" and .customType == "claude-plugin")
    | .data | select(.origin.kind == "command" and .origin.invocationId == $invocation)]
@@ -56,7 +56,7 @@ A valid empty inventory prints this array and exits successfully:
 For an installed plugin named `review` in marketplace `tools`, the extracted rows can look like this:
 
 ```json
-[{"status":"installed","name":"review","id":"review@tools","reasons":[]}]
+[{ "status": "installed", "name": "review", "id": "review@tools", "reasons": [] }]
 ```
 
 An absent command produces an error instead of an empty array. A command outcome without a `cascade` fails with `No plugin inventory received`. Row extraction does not decide whether the entire command succeeded. Keep the captured file for the severity and exit-policy examples, then remove it with `rm "$input_file"`.
@@ -82,7 +82,7 @@ command_entries=$(jq -c -s --arg invocation "$invocation_id" '
     | ["cascade", "marketplace-info", "plugin-info", "marketplace-info-cascade",
        "plugin-info-cascade", "marketplace-not-added", "reconcile-pending-empty",
        "reconcile-applied-cascade", "prune-empty", "prune-committed-warning",
-       "usage-error", "usage-info", "internal-error"] | index($kind) != null;
+       "usage-error", "usage-info", "autoapply-status", "internal-error"] | index($kind) != null;
   [.[] | select(.type == "entry_appended")
    | .entry | select(.type == "custom" and .customType == "claude-plugin")
    | .data | select(.origin.kind == "command" and .origin.invocationId == $invocation)]
@@ -420,6 +420,23 @@ Explicitly requested command help.
 | Field path | Type   | Presence | Meaning     |
 | ---------- | ------ | -------- | ----------- |
 | `usage`    | string | required | Usage help. |
+
+<!-- /fields -->
+
+#### autoapply-status
+
+What `/claude:plugin autoapply` shows: the effective `autoapply` value, the config file that sets it, and each listed config file's own value. A set (`autoapply on` or `autoapply off`) also names the file it wrote. Severity is always `info`, and `needsReload` is always `false`.
+
+<!-- fields: kind:autoapply-status -->
+
+<!-- use: common-fields -->
+
+| Field path | Type                                            | Presence | Meaning                                                                                                   |
+| ---------- | ----------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
+| `enabled`  | boolean                                         | required | Effective value. A load runs `/claude:plugin apply` when it is `true`.                                    |
+| `source`   | [Autoapply config file](#autoapply-config-file) | optional | Most specific config file that sets the value. Absent when no file sets it and the default, off, applies. |
+| `files`    | [Autoapply file value](#autoapply-file-value)[] | required | Config files the scope and layer filter keeps, user base first, project local last.                       |
+| `set`      | [Autoapply write](#autoapply-write)             | optional | The value a set wrote and the file it wrote it to. Absent for the show form.                              |
 
 <!-- /fields -->
 
@@ -773,6 +790,41 @@ The plain branch has `event` and an optional `matcher`. The lenient branch adds 
 | `key`         | string          | conditional | Required for `collision`. Server key that another config source already defines.                                                     |
 | `source`      | string          | conditional | Required for `collision`. That config source, as a scope file or a home-relative path.                                               |
 | `file`        | string          | conditional | Required for `file-unreadable` (`mcp.json` or `mcp-adapter.json`) and `unfinished` (`mcp.json` or `project-scope mcp-adapter.json`). |
+
+<!-- /fields -->
+
+### Autoapply config file
+
+<!-- fields: autoapply-config-file -->
+
+| Field path | Type   | Presence | Meaning                                                              |
+| ---------- | ------ | -------- | -------------------------------------------------------------------- |
+| `scope`    | Scope  | required | Scope of the config file.                                            |
+| `file`     | string | required | `claude-plugins.json` (base) or `claude-plugins.local.json` (local). |
+
+<!-- /fields -->
+
+### Autoapply file value
+
+<!-- fields: autoapply-file-value -->
+
+| Field path | Type    | Presence | Meaning                                                                 |
+| ---------- | ------- | -------- | ----------------------------------------------------------------------- |
+| `scope`    | Scope   | required | Scope of the config file.                                               |
+| `file`     | string  | required | `claude-plugins.json` (base) or `claude-plugins.local.json` (local).    |
+| `value`    | boolean | optional | The file's own `autoapply` value. Absent when the file does not set it. |
+
+<!-- /fields -->
+
+### Autoapply write
+
+<!-- fields: autoapply-write -->
+
+| Field path | Type    | Presence | Meaning                                                              |
+| ---------- | ------- | -------- | -------------------------------------------------------------------- |
+| `scope`    | Scope   | required | Scope of the config file the set wrote.                              |
+| `file`     | string  | required | `claude-plugins.json` (base) or `claude-plugins.local.json` (local). |
+| `value`    | boolean | required | The value the set wrote.                                             |
 
 <!-- /fields -->
 

@@ -65,6 +65,7 @@ const EXPECTED_CATALOG_VERBS = [
   "disable",
   "pending",
   "apply",
+  "autoapply",
   "import",
   "bootstrap",
   "browse",

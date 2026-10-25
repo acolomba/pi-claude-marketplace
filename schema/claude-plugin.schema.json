@@ -1993,6 +1993,99 @@
     },
     {
       "type": "object",
+      "required": [
+        "schemaVersion",
+        "origin",
+        "severity",
+        "needsReload",
+        "kind",
+        "enabled",
+        "files"
+      ],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "autoapply-status" },
+        "enabled": { "type": "boolean" },
+        "source": {
+          "type": "object",
+          "required": ["scope", "file"],
+          "properties": {
+            "scope": { "enum": ["user", "project"] },
+            "file": {
+              "anyOf": [
+                { "type": "string", "const": "claude-plugins.json" },
+                { "type": "string", "const": "claude-plugins.local.json" }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["scope", "file"],
+            "properties": {
+              "scope": { "enum": ["user", "project"] },
+              "file": {
+                "anyOf": [
+                  { "type": "string", "const": "claude-plugins.json" },
+                  { "type": "string", "const": "claude-plugins.local.json" }
+                ]
+              },
+              "value": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "set": {
+          "type": "object",
+          "required": ["scope", "file", "value"],
+          "properties": {
+            "scope": { "enum": ["user", "project"] },
+            "file": {
+              "anyOf": [
+                { "type": "string", "const": "claude-plugins.json" },
+                { "type": "string", "const": "claude-plugins.local.json" }
+              ]
+            },
+            "value": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
       "required": ["schemaVersion", "origin", "severity", "needsReload", "kind", "header", "lines"],
       "properties": {
         "schemaVersion": { "type": "number", "const": 1 },

@@ -32,6 +32,7 @@ import { resolveCommandError } from "../../../extensions/pi-claude-marketplace/s
 import {
   notify,
   notifyAsyncRewakeSummary,
+  notifyAutoapplyStatus,
   notifyCommandError,
   notifyDeviceFlowPrompt,
   notifyDiagnostic,
@@ -156,6 +157,11 @@ function catalogOrigin(example: CatalogExample): NotificationOrigin {
 const RAW_ORIGINS: Readonly<Record<RawSurface["kind"], NotificationOrigin>> = {
   "usage-error": { kind: "command", commandId: "plugin install", invocationId: "raw-usage-error" },
   "usage-info": { kind: "command", commandId: "plugin list", invocationId: "raw-usage-info" },
+  "autoapply-status": {
+    kind: "command",
+    commandId: "plugin autoapply",
+    invocationId: "raw-autoapply-status",
+  },
   diagnostic: { kind: "command", commandId: "plugin import", invocationId: "raw-diagnostic" },
   "device-flow-prompt": {
     kind: "command",
@@ -191,6 +197,15 @@ const RAW_SAMPLES: { readonly [K in RawSurface["kind"]]: Extract<RawSurface, { k
     usage: "Usage: /claude:plugin install <plugin>@<marketplace>",
   },
   "usage-info": { kind: "usage-info", usage: "Usage: /claude:plugin list [--scope <scope>]" },
+  "autoapply-status": {
+    kind: "autoapply-status",
+    enabled: true,
+    source: { scope: "project", file: "claude-plugins.json" },
+    files: [
+      { scope: "user", file: "claude-plugins.json" },
+      { scope: "project", file: "claude-plugins.json", value: true },
+    ],
+  },
   diagnostic: {
     kind: "diagnostic",
     header: "import: 1 warning",
@@ -290,6 +305,9 @@ function emitRawSample(ctx: NotificationContext, run: NotificationRun, surface: 
       return;
     case "usage-info":
       notifyUsageInfo(ctx, run, surface.usage);
+      return;
+    case "autoapply-status":
+      notifyAutoapplyStatus(ctx, run, surface);
       return;
     case "diagnostic":
       notifyDiagnostic(ctx, run, surface.header, surface.lines);
@@ -459,7 +477,7 @@ function realPayloads(): {
   }));
 }
 
-test("WIRE-02: the retained inventory and separate command error cover all 21 kinds", () => {
+test("WIRE-02: the retained inventory and separate command error cover all 22 kinds", () => {
   // arrange
   const error = resolveCommandError(new Error("operation failed"), false);
   const origin = {
@@ -474,6 +492,7 @@ test("WIRE-02: the retained inventory and separate command error cover all 21 ki
   // assert
   assert.deepStrictEqual([...new Set(payloads.map(({ kind }) => kind))].sort(), [
     "async-rewake-summary",
+    "autoapply-status",
     "cascade",
     "device-flow-prompt",
     "diagnostic",
@@ -495,7 +514,7 @@ test("WIRE-02: the retained inventory and separate command error cover all 21 ki
     "usage-error",
     "usage-info",
   ]);
-  assert.strictEqual(PRESENTED.length, 329);
+  assert.strictEqual(PRESENTED.length, 330);
 
   for (const payload of payloads) {
     assert.ok(PAYLOAD_VALIDATOR.Check(payload));

@@ -2414,6 +2414,32 @@ const RAW_CASES: {
       usage: "usage: install",
     },
   },
+  "autoapply-status": {
+    surface: {
+      kind: "autoapply-status",
+      enabled: false,
+      source: { scope: "user", file: "claude-plugins.json" },
+      files: [
+        { scope: "user", file: "claude-plugins.json", value: false },
+        { scope: "user", file: "claude-plugins.local.json" },
+      ],
+      set: { scope: "user", file: "claude-plugins.json", value: false },
+    },
+    expected: {
+      schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+      kind: "autoapply-status",
+      severity: "info",
+      needsReload: false,
+      enabled: false,
+      source: { scope: "user", file: "claude-plugins.json" },
+      files: [
+        { scope: "user", file: "claude-plugins.json", value: false },
+        { scope: "user", file: "claude-plugins.local.json" },
+      ],
+      set: { scope: "user", file: "claude-plugins.json", value: false },
+    },
+  },
   diagnostic: {
     surface: { kind: "diagnostic", header: "2 warnings", lines: ["one", "two"] },
     expected: {
@@ -2539,6 +2565,29 @@ for (const [kind, { surface, expected }] of Object.entries(RAW_CASES)) {
     assert.deepStrictEqual(payload, expectedPayload);
   });
 }
+
+test("AAP-04: converts a default autoapply status without a source or a set", () => {
+  // act
+  const payload = toWirePayload(
+    {
+      kind: "autoapply-status",
+      enabled: false,
+      files: [{ scope: "project", file: "claude-plugins.json" }],
+    },
+    { kind: "command", commandId: "plugin autoapply", invocationId: "test-run" },
+  );
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin autoapply", invocationId: "test-run" },
+    kind: "autoapply-status",
+    severity: "info",
+    needsReload: false,
+    enabled: false,
+    files: [{ scope: "project", file: "claude-plugins.json" }],
+  });
+});
 
 test("AFILE-04: converts every MCP config notice kind field by field", () => {
   // arrange

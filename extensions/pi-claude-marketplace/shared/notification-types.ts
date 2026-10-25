@@ -1626,6 +1626,31 @@ export interface UsageInfoSurface {
   readonly usage: string;
 }
 
+/** AAP-04: a config file that can set `autoapply`, named by scope and basename. */
+export interface AutoapplyConfigFile {
+  readonly scope: Scope;
+  readonly file: "claude-plugins.json" | "claude-plugins.local.json";
+}
+
+/** AAP-04: one config file's own `autoapply` value; no `value` means not set. */
+export interface AutoapplyFileValue extends AutoapplyConfigFile {
+  readonly value?: boolean;
+}
+
+/**
+ * AAP-04 / AAP-D2: what `/claude:plugin autoapply` shows. `enabled` and
+ * `source` are the effective value and the file that set it (no `source`
+ * means the default, off); `files` are the files the command lists; `set` is
+ * the write a set form made.
+ */
+export interface AutoapplyStatusSurface {
+  readonly kind: "autoapply-status";
+  readonly enabled: boolean;
+  readonly source?: AutoapplyConfigFile;
+  readonly files: readonly AutoapplyFileValue[];
+  readonly set?: AutoapplyConfigFile & { readonly value: boolean };
+}
+
 /**
  * RAWS-02 / D-05: an out-of-band warning block. The producer composes the
  * header and redacts the lines; the text strategy joins them. The kind belongs
@@ -1688,6 +1713,7 @@ export interface DeviceFlowPromptSurface extends DeviceFlowPrompt {
 export type RawSurface =
   | UsageErrorSurface
   | UsageInfoSurface
+  | AutoapplyStatusSurface
   | DiagnosticSurface
   | DeviceFlowPromptSurface
   | McpConfigNoticesSurface

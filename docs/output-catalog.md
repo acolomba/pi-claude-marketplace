@@ -5043,6 +5043,43 @@ AUTH-03 contract: the user is shown a one-time code (`user_code`) AND a verifica
 
 Triggers: `marketplace add <owner>/<private-repo>` (first access; Phase 35 Plan 35-01) and -- rarely -- `marketplace update <name>` when the stored credential has been evicted from the OS keychain (Phase 35 Plan 35-02). The post-Phase-35-01 happy path on `marketplace update` is silent reuse (AUTH-02): the stored token in the keychain hits on `credentialOps.fill`, no Device Flow runs, no notification fires.
 
+### Autoapply status (AAP-04 / AAP-D2)
+
+`/claude:plugin autoapply [on|off] [--scope user|project] [--local]` emits the `autoapply-status` kind. The bare form shows the effective value with the most specific config file that sets it, or `(default)` when none does, then the own value of each config file the filter keeps, user base first and project local last. With no filter it lists all four. `--scope` keeps that scope's two files and `--local` keeps the local files; no flag selects the base layer alone, so a show without `--local` lists both layers. Severity `info`; no reload-hint.
+
+<!-- catalog-state: autoapply-show -->
+
+```text
+Autoapply: on (claude-plugins.local.json [project])
+
+claude-plugins.json [user]: on
+claude-plugins.local.json [user]: off
+claude-plugins.json [project]: not set
+claude-plugins.local.json [project]: on
+```
+
+<!-- catalog-state: autoapply-show-default -->
+
+```text
+Autoapply: off (default)
+
+claude-plugins.local.json [project]: not set
+```
+
+`on` or `off` writes the value into one config file, the user base config unless `--scope` or `--local` picks another, as `enable` and `disable` do. The set names the write first, then shows that file and the effective value, which a more specific file can keep different. A set never runs `apply` and suggests nothing: the next load reads the new value.
+
+<!-- catalog-state: autoapply-set -->
+
+```text
+Set autoapply to on in claude-plugins.json [user].
+
+Autoapply: off (claude-plugins.json [project])
+
+claude-plugins.json [user]: on
+```
+
+An invalid config fails the command closed (D-03): it emits the failed `{invalid manifest}` block the load and `pending` print for that config (see `/claude:plugin pending`), shows no value, and a set writes nothing into an invalid target. A set that cannot take the scope's state lock, or cannot write the file, emits one failed row named by the file, such as `{lock held}`. The byte forms are locked by `test/shared/notification-grammar.test.ts` and `test/orchestrators/reconcile/autoapply-setting.test.ts`.
+
 ### Stop hook override cap reached (STOP-07 / D-88-01)
 
 <!-- catalog-state: stop-override-cap -->

@@ -42,6 +42,7 @@ import type {
   CommandRunState,
 } from "./notification-run.ts";
 import type {
+  AutoapplyStatusSurface,
   CascadeNotificationMessage,
   DeviceFlowPrompt,
   HookSurface,
@@ -84,6 +85,7 @@ function isRawOutcome(presentation: ResolvedRawSurface | CommandErrorPresentatio
   switch (presentation.kind) {
     case "usage-error":
     case "usage-info":
+    case "autoapply-status":
     case "internal-error":
       return true;
     case "diagnostic":
@@ -291,6 +293,15 @@ export function notifyUsageInfo(
   usage: string,
 ): void {
   emitPresentation(ctx, run, resolveRawSurface({ kind: "usage-info", usage }));
+}
+
+/** AAP-04: sends what `/claude:plugin autoapply` shows, or what its set form wrote. */
+export function notifyAutoapplyStatus(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  surface: AutoapplyStatusSurface,
+): void {
+  emitPresentation(ctx, run, resolveRawSurface(surface));
 }
 
 /**

@@ -145,7 +145,7 @@ type PiRegistrar = Omit<ExtensionAPI, "registerTool"> & {
 };
 
 const EXPECTED_TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|enable|disable|import|browse|marketplace|help> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|marketplace|help> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
@@ -157,6 +157,7 @@ const EXPECTED_TOP_LEVEL_USAGE =
   "  info <plugin>@<marketplace> [--scope user|project]\n" +
   "  pending [--scope user|project]\n" +
   "  apply [--scope user|project]\n" +
+  "  autoapply [on|off] [--scope user|project] [--local]\n" +
   "  enable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  import [--scope user|project]\n" +
@@ -3215,6 +3216,11 @@ const COMMAND_ARGUMENT_CASES = [
     verb: "apply",
     operand: "",
     usage: "apply [--scope user|project]",
+  },
+  {
+    verb: "autoapply",
+    operand: "on",
+    usage: "autoapply [on|off] [--scope user|project] [--local]",
   },
   {
     verb: "enable",

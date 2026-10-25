@@ -102,6 +102,7 @@ const EXPECTED_CATALOG_VERBS = [
   "disable",
   "pending",
   "apply",
+  "autoapply",
   "import",
   "bootstrap",
   "browse",
@@ -176,6 +177,7 @@ const HANDLER_ACCEPTED_PARSE_SETS: Record<CatalogVerb, readonly string[]> = {
   disable: ["--local"],
   pending: [],
   apply: [],
+  autoapply: ["--local"],
   import: [],
   bootstrap: [],
   // The documentation/navigation verbs parse no flag of their own, and
@@ -258,6 +260,7 @@ const TOP_LEVEL_USAGE_FLAGS: Record<
   disable: { documented: ["--local"], omitted: [] },
   pending: { documented: [], omitted: [] },
   apply: { documented: [], omitted: [] },
+  autoapply: { documented: ["--local"], omitted: [] },
   import: { documented: [], omitted: [] },
   bootstrap: { documented: [], omitted: [] },
   browse: { documented: [], omitted: [] },

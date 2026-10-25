@@ -135,6 +135,19 @@ export async function writePluginConfigEntry(
 }
 
 /**
+ * AAP-04: write the top-level `autoapply` value. Every other member, and any
+ * unknown forward-compat key, is preserved (D-09).
+ */
+export async function writeAutoapplyConfig(
+  current: ScopeConfig,
+  targetConfigPath: string,
+  scopeRoot: string,
+  autoapply: boolean,
+): Promise<void> {
+  await saveConfig(targetConfigPath, { ...current, schemaVersion: 1, autoapply }, scopeRoot);
+}
+
+/**
  * Delete one plugin entry. Preserves all other plugin entries and the
  * marketplaces map untouched.
  */

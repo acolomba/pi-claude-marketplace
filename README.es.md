@@ -173,7 +173,13 @@ Que Pi aplique los componentes de un complemento declarado depende de la clave o
 
 ### Aplicación automática
 
-Para que cada sesión nueva y cada `/reload` apliquen tus configuraciones, pon la clave de primer nivel `autoapply` en `true`:
+Para que cada sesión nueva y cada `/reload` apliquen tus configuraciones, activa `autoapply`:
+
+```text
+/claude:plugin autoapply on
+```
+
+Esto pone la clave de primer nivel `autoapply` de una configuración en `true`. Como `enable`, escribe la configuración base del usuario salvo que añadas `--scope project` o `--local`. `/claude:plugin autoapply off` pone la clave en `false`. Ejecuta `/claude:plugin autoapply` sin valor para ver el valor en vigor, la configuración que lo fija y el valor propio de cada configuración. Con `--scope` o `--local`, solo lista esas configuraciones. Fijar el valor no ejecuta `apply`: la carga siguiente lee el valor nuevo. También puedes editar la clave a mano:
 
 ```json
 {

@@ -22,6 +22,7 @@ import {
   notifyReconcileAborted,
   notifyStopHookOverrideCap,
   notifyUsageError,
+  notifyAutoapplyStatus,
   notifyUsageInfo,
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { CENTRAL_ROW_POLICY } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
@@ -7492,6 +7493,24 @@ test("usage info dispatch preserves usage message at info severity", (t) => {
   // assert
   assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
     "Usage: /claude:plugin ...",
+    "info",
+  ]);
+});
+
+test("AAP-04: autoapply status dispatch renders the effective value at info severity", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyAutoapplyStatus(ctx, runWithNothingLoaded(), {
+    kind: "autoapply-status",
+    enabled: false,
+    files: [{ scope: "user", file: "claude-plugins.json" }],
+  });
+
+  // assert
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "Autoapply: off (default)\n\nclaude-plugins.json [user]: not set",
     "info",
   ]);
 });
