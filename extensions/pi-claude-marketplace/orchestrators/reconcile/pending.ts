@@ -530,15 +530,15 @@ export async function composePendingReport(opts: {
       verdict,
       replan: (released) => planFrom(released, planReconcile(view, state, scope, released)),
     });
-    const scopePlan = settled.plan;
-    plans.push(scopePlan);
-
     // APL-02 / D-10 / D-14: the catalog moves `apply` would make once the plan
     // has run, offline (NFR-5).
     const scoped =
       settled.cascade?.plan ??
       // eslint-disable-next-line no-await-in-loop -- at most two scopes, one convergence plan each
-      (await planConvergence({ scope, state, locations: loc, plan: scopePlan }));
+      (await planConvergence({ scope, state, locations: loc, plan: settled.plan }));
+    // WR-02: a held-down record `apply` moves and then enables lists one row.
+    const scopePlan = settled.preview;
+    plans.push(scopePlan);
     convergence.moves.push(...scoped.moves);
     convergence.holds.push(...scoped.holds);
     convergence.declines.push(...scoped.declines);

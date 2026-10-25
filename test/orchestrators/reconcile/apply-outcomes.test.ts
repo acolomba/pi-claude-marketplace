@@ -7,6 +7,7 @@ import {
   classifyOrchestratorThrow,
   installFailureReasonFields,
   classifyReadPassThrow,
+  cascadeDisabledOutcome,
   dependencyDisabledOutcome,
   MigrateConfigSaveError,
   sourceMismatchOutcomeSubject,
@@ -1011,6 +1012,59 @@ describe("classifyReadPassThrow", () => {
 
     // assert
     assert.strictEqual(reason, "unreadable");
+  });
+});
+
+describe("cascadeDisabledOutcome", () => {
+  const held = {
+    scope: "project",
+    marketplace: "tools",
+    plugin: "widget",
+    dependency: "zcore@tools",
+    kind: "out-of-range",
+  } as const;
+
+  test("APPLY1-01 / WR-03: a plugin whose own move failed is told its update did not install", () => {
+    // act
+    const outcome = cascadeDisabledOutcome(held, "1.0.0", "own-move");
+
+    // assert
+    assert.deepStrictEqual(
+      { ...outcome, cause: outcome.cause.message },
+      {
+        kind: "plugin-dependency-disabled",
+        scope: "project",
+        marketplace: "tools",
+        plugin: "widget",
+        version: "1.0.0",
+        reasons: ["dependency version unsatisfied"],
+        cause:
+          'The update of "widget@tools" did not install; run apply again once it can, or uninstall "widget@tools"',
+      },
+    );
+  });
+
+  test("APPLY1-01 / WR-03: a plugin whose dependency's move failed names that dependency", () => {
+    // act
+    const outcome = cascadeDisabledOutcome(
+      { ...held, kind: "disabled" },
+      undefined,
+      "dependency-failed",
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      { ...outcome, cause: outcome.cause.message },
+      {
+        kind: "plugin-dependency-disabled",
+        scope: "project",
+        marketplace: "tools",
+        plugin: "widget",
+        reasons: ["dependency failed"],
+        cause:
+          '"zcore@tools" did not update; run apply again once it can, or uninstall "widget@tools"',
+      },
+    );
   });
 });
 

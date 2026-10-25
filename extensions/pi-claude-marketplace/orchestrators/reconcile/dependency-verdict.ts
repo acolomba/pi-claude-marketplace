@@ -71,6 +71,11 @@ export interface ScopeSatisfactionOptions {
   readonly reader?: DependencyDeclarationReader;
   /** Manifest-load seam; production omits it and reads the memoized cache. */
   readonly loadManifest?: typeof loadMarketplaceManifest;
+  /**
+   * APPLY1-01: declarations already known to be unsatisfied, whose dependents
+   * start the walk held, so their own dependents are held too.
+   */
+  readonly seeded?: readonly UnsatisfiedDeclaration[];
 }
 
 /**
@@ -284,10 +289,11 @@ function unsatisfiedEntries(
 function propagateUnsatisfied(
   declarations: ReadonlyMap<string, readonly AddressedDependency[]>,
   recorded: ReadonlyMap<string, RecordedPlugin>,
+  seeded: readonly UnsatisfiedDeclaration[],
 ): readonly UnsatisfiedDeclaration[] {
   const declarers = [...declarations];
-  const held = new Set<string>();
-  const unsatisfied: UnsatisfiedDeclaration[] = [];
+  const held = new Set(seeded.map((entry) => entry.dependent));
+  const unsatisfied: UnsatisfiedDeclaration[] = [...seeded];
   while (held.size < declarers.length) {
     const batch = declarers
       .filter(([declarer]) => !held.has(declarer))
@@ -324,7 +330,11 @@ export async function buildScopeSatisfactionVerdict(
 
   return {
     ok: true,
-    unsatisfied: propagateUnsatisfied(detail.declarations, recordedPlugins(options.state)),
+    unsatisfied: propagateUnsatisfied(
+      detail.declarations,
+      recordedPlugins(options.state),
+      options.seeded ?? [],
+    ),
   };
 }
 

@@ -10,6 +10,7 @@ import {
   buildReconcileAppliedCascade,
   buildReconcilePendingNotification,
   convergedMoveOutcomes,
+  enabledMoveOutcome,
   isReconcilePlanListEmpty,
   planListNeedsApply,
   recordedVersionEntries,
@@ -1971,6 +1972,32 @@ describe("blockedMoveOutcomes", () => {
 
     // assert
     assert.deepStrictEqual(outcomes, []);
+  });
+});
+
+describe("enabledMoveOutcome", () => {
+  test("APPLY1-01 / WR-02: a held-down record moved and enabled reports the move's updated row", () => {
+    // act
+    const outcome = enabledMoveOutcome({ ...DEMO_MOVE, grew: true });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "plugin-converged",
+      scope: "project",
+      marketplace: "mp",
+      plugin: "demo",
+      row: {
+        status: "updated",
+        name: "demo",
+        scope: "project",
+        from: DEMO_MOVE.fromVersion,
+        to: DEMO_MOVE.toVersion,
+        dependencies: [],
+        reasons: ["components now supported"],
+        severity: "info",
+        needsReload: true,
+      },
+    });
   });
 });
 

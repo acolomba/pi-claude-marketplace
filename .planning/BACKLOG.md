@@ -4015,17 +4015,16 @@ and adds a CHANGELOG line, because it changes which sources parse.
 
 ## APPLY1-01: a dependent shipped with the newer dependency it needs takes two `apply` runs
 
-**Resolved 2026-10-25** (decision APPLY1-D1, user option C): the catalog moves
-run as one cascade, dependencies first, as an install cascade installs its
-closure. `settleMoveCascade` (`orchestrators/reconcile/convergence.ts`)
-releases a dependent held for a dependency's version when the moves planned
-with it enabled satisfy it, so `pending` and `apply` agree; a move that waits
-on a failed move reports `{dependency failed}`; a dependent whose own move
-fails after its dependency moved is disabled with the marker when its copy's
-declarations reject the moved dependency (a path source fails closed when the
-dependency moved for it), and an
-enable that waits on moves runs only after they land. Scenarios in
-`features/plugin/apply.feature` and `features/plugin/pending.feature`.
+**Resolved 2026-10-25** (decision APPLY1-D1, user option C; reworked after the
+second review, APPLY1-REVIEW): the catalog moves run as one cascade,
+dependencies first, as an install cascade installs its closure.
+`settleMoveCascade` (`orchestrators/reconcile/convergence.ts`) releases a
+dependent held for a dependency's version when the planned moves satisfy it,
+so `pending` and `apply` agree. `apply` runs each released held-down record's
+enable right after its own move, skips a step whose dependency did not land
+(`{dependency failed}`), and then one pass judges every enabled plugin against
+what landed (the LOAD-01 verdict, transitive) and disables each unmet one.
+Scenarios in `features/plugin/apply.feature` and `features/plugin/pending.feature`.
 
 Found in the lifecycle-coverage phase 29 code review (2026-10-25, CR-01,
 deferred; D-12b). A marketplace update ships `widget` 1.1.0, which declares

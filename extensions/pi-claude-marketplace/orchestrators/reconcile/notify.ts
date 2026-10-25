@@ -72,6 +72,7 @@ import {
   type PluginNotificationMessage,
   type PluginPartiallyInstalledMessage,
   type PluginPartiallyUpgradableMessage,
+  type PluginUpdatedMessage,
   type PluginUpdateSkippedMessage,
   type Reason,
   type ReconcileAppliedCascadeMessage,
@@ -85,6 +86,7 @@ import {
   revisionCommits,
   revisionVersionSlot,
   updatedRowFromOutcome,
+  withCommits,
 } from "../plugin/update-row.ts";
 
 import { carriedMcpConfigNotices, sourceMismatchOutcomeSubject } from "./apply-outcomes.ts";
@@ -468,6 +470,25 @@ export function convergedMoveOutcomes(
         },
       ];
   }
+}
+
+/**
+ * APPLY1-01: the net row of a held-down record `apply` moved and then enabled
+ * in one cascade: the move's `(updated)` row, as `pending` lists it.
+ */
+export function enabledMoveOutcome(move: PlannedMove): PluginConvergedOutcome {
+  const row: PluginUpdatedMessage = {
+    status: "updated",
+    name: move.plugin,
+    scope: move.scope,
+    from: move.fromVersion,
+    to: move.toVersion,
+    ...withCommits(revisionCommits(move)),
+    dependencies: [],
+    severity: "info",
+    needsReload: true,
+  };
+  return convergedOutcome(move, withGrowthMarker(move, row));
 }
 
 /**

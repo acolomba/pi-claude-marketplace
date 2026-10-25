@@ -35,3 +35,31 @@ disabled shows two rows: its failed move and the `(disabled)` row.
 ## Threat Flags
 
 None -- no security-relevant surface outside the plan's `<threat_model>` was introduced.
+
+## Rework after the second review (APPLY1-REVIEW, 4 Critical, 5 Warning, 4 Info)
+
+The review showed the post-move check covered one shape only. Structural fix:
+releases decide only what `apply` attempts; one pass after the cascade
+(`disableUnmetAfterCascade`) judges every enabled plugin against what landed
+with the LOAD-01 verdict, transitively, and disables each unmet one with a
+remedy naming the failed move. It acts only on holds the cascade can change
+(new holds, or holds a move could meet), so a missing dependency stays
+MISS-01's to install. Each released held-down record's enable runs right
+after its own pin refresh; a move counts as landed only at the version the
+plan judged; failed toggle enables count as dependencies that did not land.
+
+| Finding | Fix |
+|---|---|
+| CR-01 | post-cascade pass disables a released dependent whose dependency did not land, whatever happened to its own move |
+| CR-02 | the pass uses the transitive verdict (seeded with failed dependents), so a disable reaches every plugin above it |
+| CR-03 | a held-down record's enable runs right after its pin refresh, in cascade order; a failed enable is a failed step and its dependents are skipped |
+| CR-04 | deferral covers every released held-down record; enable-only steps take their place in the cascade by the declaration closure, and failures propagate step by step |
+| WR-01 | `moveReached` requires the planned version; the pass catches any release cascade B no longer satisfies |
+| WR-02 | net `(updated)` row for a moved-and-enabled record; `pending` lists one `(will update)` row (`MoveCascade.preview`) |
+| WR-03 | own-move and dependency-failed remedies (`cascadeDisabledOutcome`); the fail-closed arm names the dependency the scope left unmet before the moves |
+| WR-04 | only released lifts are deferred; a lift the current state satisfies runs with the toggles |
+| WR-05 | the two scenarios that encoded CR-01/CR-03 are corrected; probe scenarios added (fail on a777b12f) |
+| IN-01 | not changed: the enable path classifies the same EACCES as `{unreadable}` |
+| IN-02 | the installed-copy check measures only the landed dependencies |
+| IN-03 | not changed: the release loop still runs inside the read-pass lock, but only when a held dependent is releasable |
+| IN-04 | the pass runs in a `finally`, so a GHB-03 throw mid-cascade still judges what landed |

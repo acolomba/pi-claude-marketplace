@@ -13,7 +13,7 @@ import { test } from "node:test";
 import { pluginCloneKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import {
   installedCopyUnsatisfied,
-  movedDependencies,
+  cascadeDependencies,
   planConvergence,
   planConvergenceCascade,
   settleMoveCascade,
@@ -1333,6 +1333,7 @@ test("APPLY1-01: a released dependent whose own move stays held keeps the caller
     input: settled.input,
     plan: settled.input,
     deferredEnables: [],
+    preview: settled.input,
   });
   assert.deepStrictEqual(
     settled.input.pluginsToDependencyDisable.map((op) => op.plugin),
@@ -1355,6 +1356,7 @@ test("APPLY1-01: a dependent held down by an earlier pass is enabled only after 
   assert.deepStrictEqual(moveKeys(settled.cascade?.plan.moves), ["zcore@tools", "widget@tools"]);
   assert.deepStrictEqual(settled.deferredEnables, [{ ...DEMO_OP, plugin: "widget" }]);
   assert.deepStrictEqual(settled.plan.pluginsToEnable, [{ ...DEMO_OP, plugin: "widget" }]);
+  assert.deepStrictEqual(settled.preview.pluginsToEnable, []);
 });
 
 test("APPLY1-01: a held-down dependent that waits on no move is enabled with the toggles", async (t) => {
@@ -1377,6 +1379,7 @@ test("APPLY1-01: a held-down dependent that waits on no move is enabled with the
   assert.deepStrictEqual(moveKeys(settled.cascade?.plan.moves), []);
   assert.deepStrictEqual(settled.deferredEnables, []);
   assert.deepStrictEqual(settled.plan.pluginsToEnable, [{ ...DEMO_OP, plugin: "widget" }]);
+  assert.deepStrictEqual(settled.preview, settled.plan);
 });
 
 test("APPLY1-01: a disabled record the caller enables after its move is planned as enabled", async (t) => {
@@ -1395,10 +1398,14 @@ test("APPLY1-01: a disabled record the caller enables after its move is planned 
   // assert
   assert.deepStrictEqual(none.plan.moves, []);
   assert.deepStrictEqual(enabled.plan.moves, [demoMove()]);
-  assert.deepStrictEqual(movedDependencies(enabled, "ghost@tools"), []);
+  assert.deepStrictEqual(cascadeDependencies(enabled, "ghost@tools"), []);
 });
 
-test("APPLY1-01: a path-source copy, or a copy that cannot be read, fails closed on the first moved dependency when the moves were for it", async (t) => {
+const ZCORE_UNMET_BEFORE = [
+  { dependent: "widget@tools", dependency: "zcore@tools", kind: "out-of-range", range: "^2.0.0" },
+] as const;
+
+test("APPLY1-01: a path-source copy, or a copy that cannot be read, fails closed on a landed dependency the scope left unmet before the moves", async (t) => {
   // arrange -- `widget`'s files are the marketplace's; the pinned `other`
   // copy has no manifest.
   const fixture = await createFixture(t, "copy-unknown");
@@ -1418,25 +1425,25 @@ test("APPLY1-01: a path-source copy, or a copy that cannot be read, fails closed
     input,
     { marketplace: "tools", plugin: "widget" },
     ["zcore@tools"],
-    true,
+    ZCORE_UNMET_BEFORE,
   );
   const notForIt = await installedCopyUnsatisfied(
     input,
     { marketplace: "tools", plugin: "widget" },
     ["zcore@tools"],
-    false,
+    [],
   );
   const unknownCopy = await installedCopyUnsatisfied(
     input,
     { marketplace: "tools", plugin: "other" },
-    [],
-    true,
+    ["zcore@tools"],
+    [{ ...ZCORE_UNMET_BEFORE[0], dependent: "other@tools" }],
   );
   const absent = await installedCopyUnsatisfied(
     input,
     { marketplace: "tools", plugin: "ghost" },
-    [],
-    true,
+    ["zcore@tools"],
+    ZCORE_UNMET_BEFORE,
   );
 
   // assert
@@ -1448,7 +1455,7 @@ test("APPLY1-01: a path-source copy, or a copy that cannot be read, fails closed
   assert.equal(notForIt, undefined);
   assert.deepStrictEqual(unknownCopy, {
     dependent: "other@tools",
-    dependency: "other@tools",
+    dependency: "zcore@tools",
     kind: "out-of-range",
   });
   assert.equal(absent, undefined);
@@ -1476,13 +1483,19 @@ test("APPLY1-01: a pinned copy is judged by its own declarations", async (t) => 
     { state: stateAt("2.0.0"), locations: fixture.locations },
     widget,
     ["zcore@tools"],
-    false,
+    [],
   );
   const met = await installedCopyUnsatisfied(
     { state: stateAt("1.0.0"), locations: fixture.locations },
     widget,
     ["zcore@tools"],
-    true,
+    [],
+  );
+  const notLanded = await installedCopyUnsatisfied(
+    { state: stateAt("2.0.0"), locations: fixture.locations },
+    widget,
+    [],
+    [],
   );
 
   // assert
@@ -1493,4 +1506,5 @@ test("APPLY1-01: a pinned copy is judged by its own declarations", async (t) => 
     range: "^1.0.0",
   });
   assert.equal(met, undefined);
+  assert.equal(notLanded, undefined);
 });

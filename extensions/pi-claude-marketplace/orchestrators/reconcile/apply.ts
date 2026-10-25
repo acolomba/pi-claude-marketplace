@@ -101,18 +101,20 @@ import { UninstallRefusedError } from "../plugin/uninstall.ts";
 
 import {
   carriedMcpConfigNotices,
+  cascadeDisabledOutcome,
   classifyOrchestratorThrow,
   installFailureReasonFields,
   dependencyDisabledOutcome,
   sourceMismatchOutcomes,
 } from "./apply-outcomes.ts";
 import {
+  cascadeDependencies,
+  dependenciesFirst,
   installedCopyUnsatisfied,
-  movedDependencies,
   planConvergenceCascade,
 } from "./convergence.ts";
-import { buildScopeSatisfactionVerdict } from "./dependency-verdict.ts";
-import { blockedMoveOutcomes, convergedMoveOutcomes } from "./notify.ts";
+import { buildScopeSatisfactionVerdict, releasableDependents } from "./dependency-verdict.ts";
+import { blockedMoveOutcomes, convergedMoveOutcomes, enabledMoveOutcome } from "./notify.ts";
 import {
   closeScopePass,
   notifyScopePasses,
@@ -121,9 +123,9 @@ import {
   runScopeIsolated,
 } from "./read-pass.ts";
 
-import type { PerEntryOutcome } from "./apply-outcomes.ts";
+import type { PerEntryOutcome, PluginDependencyDisabledOutcome } from "./apply-outcomes.ts";
 import type { ConvergenceCascade, PlannedMove } from "./convergence.ts";
-import type { ScopeSatisfactionVerdict } from "./dependency-verdict.ts";
+import type { ScopeSatisfactionVerdict, UnsatisfiedDeclaration } from "./dependency-verdict.ts";
 import type { ReconcileStateReader, ScopePassAccumulators } from "./read-pass.ts";
 import type {
   ApplyReconcileOptions,
@@ -133,6 +135,7 @@ import type {
   ReconcilePlan,
   ScopeReadResult,
 } from "./types.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
@@ -933,6 +936,10 @@ async function applyDependencyDisables(
   scope: Scope,
   ops: readonly PlannedDependencyDisable[],
   outcomes: PerEntryOutcome[],
+  disabledOutcome: (
+    op: PlannedDependencyDisable,
+    version: string | undefined,
+  ) => PluginDependencyDisabledOutcome = dependencyDisabledOutcome,
 ): Promise<void> {
   const setPluginEnabled = createEnableOperation(opts.hooksRouting);
   const transitioned: PlannedDependencyDisable[] = [];
@@ -952,7 +959,7 @@ async function applyDependencyDisables(
     if (result.status === "disabled") {
       transitioned.push(op);
       outcomes.push({
-        ...dependencyDisabledOutcome(op, result.version),
+        ...disabledOutcome(op, result.version),
         ...carriedMcpConfigNotices(result),
       });
     } else if (result.status === "failed") {
@@ -1090,13 +1097,12 @@ async function applyPlan(
  * `failures`, so `apply` never says it has nothing to change while the
  * scope's moves stay pending (NFR-3).
  *
- * APPLY1-01: the moves run as one cascade, dependencies first (D-26). A move
- * that waits on a failed move is not made and reports `{dependency failed}`.
- * The enables that wait on moves (`deferred`) run once those moves land. A
- * growth-only move re-materializes the recorded revision (D-10, D-25). The
- * runner answers every failure as a `failed` outcome, so one failed move never
- * stops an independent one (D-13); an `InvalidGitHubBaseUrlError` still ends
- * the pass (GHB-03).
+ * APPLY1-01: the moves run as one cascade, dependencies first (D-26), with
+ * each held-down record's enable in its place (`runCascade`). Whatever lands,
+ * one pass then judges every enabled plugin against the scope as the cascade
+ * left it (`disableUnmetAfterCascade`), so no `apply` leaves an enabled
+ * plugin with an unmet range; that pass also runs when the cascade ends on an
+ * `InvalidGitHubBaseUrlError` (GHB-03), which still ends the pass.
  */
 async function convergeScope(
   reader: ReconcileStateReader,
@@ -1107,129 +1113,148 @@ async function convergeScope(
   failures: PerEntryOutcome[],
 ): Promise<void> {
   const locations = locationsFor(scope, opts.cwd);
-  const enable = new Set(deferred.map(pluginKey));
-  const planned: { cascade?: ConvergenceCascade; heldBefore?: ReadonlySet<string> } = {};
+  const planned: { cascade?: ConvergenceCascade; before?: HoldsBefore } = {};
   await runScopeIsolated(scope, failures, async () => {
     const state = await reader.loadState(locations.extensionRoot);
+    const enable = new Set(deferred.map(pluginKey));
     planned.cascade = await planConvergenceCascade({ scope, state, locations, enable });
-    // The dependents whose catalog range the scope does not meet before the
-    // moves: the moves are made for them.
-    planned.heldBefore = heldDependentsOf(
-      await buildScopeSatisfactionVerdict({ state, locations }),
-    );
+    const verdict = await buildScopeSatisfactionVerdict({ state, locations });
+    planned.before = {
+      unsatisfied: verdict.ok ? verdict.unsatisfied : [],
+      movable: releasableDependents(verdict, state),
+    };
   });
-  const { cascade, heldBefore = new Set<string>() } = planned;
-  if (cascade === undefined) {
+  const { cascade, before } = planned;
+  if (cascade === undefined || before === undefined) {
     return;
   }
 
-  const failed = await runCascadeMoves(opts, scope, cascade, enable, outcomes);
-  const waiting = (key: string): boolean =>
-    failed.all.has(key) || movedDependencies(cascade, key).some((dep) => failed.all.has(dep));
-  await applyPluginToggles(
-    opts,
-    deferred.filter((op) => !waiting(pluginKey(op))),
-    outcomes,
-    ENABLE_AXES,
-  );
-  outcomes.push(...blockedMoveOutcomes(cascade.plan));
-  await runScopeIsolated(scope, outcomes, () =>
-    disableUnmetAfterFailedMoves(reader, opts, scope, cascade, {
-      failedOwn: failed.own,
-      heldBefore,
-      outcomes,
-    }),
-  );
+  // An enable the toggle step could not make is a dependency that did not land.
+  const failed: FailedSteps = { all: new Set(failedEnables(outcomes, scope)), own: new Set() };
+  try {
+    await runCascade(opts, scope, cascade, deferred, failed, outcomes);
+    outcomes.push(...blockedMoveOutcomes(cascade.plan));
+  } finally {
+    await runScopeIsolated(scope, outcomes, () =>
+      disableUnmetAfterCascade(reader, opts, scope, { cascade, before, failed, outcomes }),
+    );
+  }
 }
 
-function heldDependentsOf(verdict: ScopeSatisfactionVerdict): ReadonlySet<string> {
-  return new Set(verdict.ok ? verdict.unsatisfied.map((entry) => entry.dependent) : []);
+function failedEnables(outcomes: readonly PerEntryOutcome[], scope: Scope): readonly string[] {
+  return outcomes.flatMap((outcome) =>
+    outcome.kind === "plugin-enable-failed" && outcome.scope === scope ? [pluginKey(outcome)] : [],
+  );
 }
 
 function pluginKey(op: { readonly plugin: string; readonly marketplace: string }): string {
   return `${op.plugin}@${op.marketplace}`;
 }
 
-/** The moves of a cascade that did not land: every one, and the ones that failed on their own. */
-interface FailedMoves {
-  readonly all: ReadonlySet<string>;
-  readonly own: ReadonlySet<string>;
+/**
+ * The verdict before the cascade, and the dependents it holds only for ranges
+ * a catalog move could meet: the holds the cascade can change.
+ */
+interface HoldsBefore {
+  readonly unsatisfied: readonly UnsatisfiedDeclaration[];
+  readonly movable: ReadonlySet<string>;
 }
 
+/** The cascade steps that did not land: every one, and the ones that failed on their own. */
+interface FailedSteps {
+  readonly all: Set<string>;
+  readonly own: Set<string>;
+}
+
+/** One cascade step: a catalog move, a held-down record's enable, or both. */
+type CascadeStep =
+  | { readonly key: string; readonly move: PlannedMove; readonly enable?: PlannedPluginEnable }
+  | { readonly key: string; readonly move?: undefined; readonly enable: PlannedPluginEnable };
+
 /**
- * Whether a move landed. A record `apply` enables only after its move (the
- * LOAD-02 marker) is disabled while it moves, so the runner refreshes its pin
- * and answers `{already disabled}`: that move landed too.
+ * WR-01: whether a move reached the version the plan judged. A held-down
+ * record's move only refreshes its pin and answers `{already disabled}`; its
+ * enable decides whether it landed.
  */
-function moveLanded(result: PluginUpdateOutcome, deferred: boolean): boolean {
+function moveReached(result: PluginUpdateOutcome, move: PlannedMove, deferred: boolean): boolean {
   if (result.partition === "skipped") {
     return deferred && result.reasons.includes("already disabled");
   }
 
-  return result.partition !== "failed";
+  return result.partition !== "failed" && result.toVersion === move.toVersion;
 }
 
 /**
- * APPLY1-01: runs the cascade's moves in order and reports each. A move that
- * waits on one that did not land is not made: its row is `(failed)` with
- * `{dependency failed}`, as an install cascade reports a member whose
- * dependency failed. Returns the moves that did not land.
+ * APPLY1-01: the cascade's steps in order, dependencies first: each move, and
+ * each held-down record's enable, which follows its own move (CR-03) or, with
+ * no move of its own, the moves it waits on.
  */
-async function runCascadeMoves(
+function cascadeSteps(
+  cascade: ConvergenceCascade,
+  deferred: readonly PlannedPluginEnable[],
+): readonly CascadeStep[] {
+  const enables = new Map(deferred.map((op) => [pluginKey(op), op]));
+  const moved = cascade.plan.moves.map((move): CascadeStep => {
+    const enable = enables.get(pluginKey(move));
+    return { key: pluginKey(move), move, ...(enable !== undefined && { enable }) };
+  });
+  const movedKeys = new Set(moved.map((step) => step.key));
+  const alone = deferred
+    .filter((op) => !movedKeys.has(pluginKey(op)))
+    .map((op): CascadeStep => ({ key: pluginKey(op), enable: op }));
+  return dependenciesFirst([...moved, ...alone], (step) => step.key, cascade.declarations);
+}
+
+/**
+ * APPLY1-01: runs the cascade's steps in order and reports each. A step that
+ * declares one that did not land is not run: a move reports `(failed)` with
+ * `{dependency failed}`, as an install cascade reports a member whose
+ * dependency failed, and an enable reports the same reason.
+ */
+async function runCascade(
   opts: ApplyReconcileOptions,
   scope: Scope,
   cascade: ConvergenceCascade,
-  deferred: ReadonlySet<string>,
+  deferred: readonly PlannedPluginEnable[],
+  failed: FailedSteps,
   outcomes: PerEntryOutcome[],
-): Promise<FailedMoves> {
+): Promise<void> {
   const convergePlugin = createConvergeOperation(opts.hooksRouting, opts.completionCache);
-  const all = new Set<string>();
-  const own = new Set<string>();
-  for (const move of cascade.plan.moves) {
-    const key = pluginKey(move);
-    if (movedDependencies(cascade, key).some((dep) => all.has(dep))) {
-      all.add(key);
-      outcomes.push(...dependencyFailedMoveOutcomes(move));
+  for (const step of cascadeSteps(cascade, deferred)) {
+    if (dependsOnAny(cascade, step.key, failed.all)) {
+      failed.all.add(step.key);
+      outcomes.push(...dependencyFailedOutcomes(step));
       continue;
     }
 
-    // D-10 / D-25: a move whose revision did not change exists because its
-    // supported set grew, so the runner re-materializes the recorded revision.
-    const rematerialize = !move.revisionChanged;
-    // eslint-disable-next-line no-await-in-loop -- each move locks the scope (retries: 0)
-    const result = await convergePlugin({
-      plugin: move.plugin,
-      marketplace: move.marketplace,
-      scope,
-      cwd: opts.cwd,
-      partial: move.partial,
-      rematerialize,
-    });
-    const landed = moveLanded(result, deferred.has(key));
+    // eslint-disable-next-line no-await-in-loop -- each step locks the scope (retries: 0)
+    const landed = await runStep(opts, scope, convergePlugin, step, outcomes);
     if (!landed) {
-      all.add(key);
-      own.add(key);
-    }
-
-    // A deferred record's pin refresh that landed reports nothing: its enable
-    // row follows.
-    if (!(landed && deferred.has(key))) {
-      outcomes.push(
-        ...(rematerialize ? grownMoveOutcomes(move, result) : convergedMoveOutcomes(move, result)),
-      );
+      failed.all.add(step.key);
+      failed.own.add(step.key);
     }
   }
-
-  return { all, own };
 }
 
-/** The `(failed) {dependency failed}` row of a move whose dependency did not land. */
-function dependencyFailedMoveOutcomes(move: PlannedMove): PerEntryOutcome[] {
-  return convergedMoveOutcomes(move, {
+function dependsOnAny(
+  cascade: ConvergenceCascade,
+  key: string,
+  keys: ReadonlySet<string>,
+): boolean {
+  return cascadeDependencies(cascade, key).some((dependency) => keys.has(dependency));
+}
+
+/** The `{dependency failed}` row of a step whose dependency did not land. */
+function dependencyFailedOutcomes(step: CascadeStep): PerEntryOutcome[] {
+  if (step.move === undefined) {
+    return [{ ...step.enable, kind: "plugin-enable-failed", reason: "dependency failed" }];
+  }
+
+  return convergedMoveOutcomes(step.move, {
     partition: "failed",
-    name: move.plugin,
-    fromVersion: move.fromVersion,
-    toVersion: move.toVersion,
+    name: step.move.plugin,
+    fromVersion: step.move.fromVersion,
+    toVersion: step.move.toVersion,
     notes: [],
     reasons: ["dependency failed"],
     declaresAgents: false,
@@ -1239,49 +1264,150 @@ function dependencyFailedMoveOutcomes(move: PlannedMove): PerEntryOutcome[] {
 }
 
 /**
- * APPLY1-01 / D-13: a dependent whose own move failed after a dependency it
- * waits on moved keeps the copy it has, so the copy's own declarations decide
- * whether it may stay enabled. One the moved scope no longer satisfies is
- * disabled with the LOAD-01 marker, so a later `apply` enables it only once
- * its move lands.
+ * Runs one step and reports it; answers whether it landed. A held-down
+ * record's move refreshes its pin and its enable then materializes the new
+ * version, so a failed enable is a failed move, and a landed one reports the
+ * net `(updated)` row (WR-02).
  */
-async function disableUnmetAfterFailedMoves(
+async function runStep(
+  opts: ApplyReconcileOptions,
+  scope: Scope,
+  convergePlugin: ReturnType<typeof createConvergeOperation>,
+  step: CascadeStep,
+  outcomes: PerEntryOutcome[],
+): Promise<boolean> {
+  if (step.move === undefined) {
+    return enableStep(opts, step.enable, outcomes);
+  }
+
+  const move = step.move;
+  // D-10 / D-25: a move whose revision did not change exists because its
+  // supported set grew, so the runner re-materializes the recorded revision.
+  const rematerialize = !move.revisionChanged;
+  const result = await convergePlugin({
+    plugin: move.plugin,
+    marketplace: move.marketplace,
+    scope,
+    cwd: opts.cwd,
+    partial: move.partial,
+    rematerialize,
+  });
+  const enable = step.enable;
+  const reached = moveReached(result, move, enable !== undefined);
+  if (!reached || enable === undefined) {
+    outcomes.push(
+      ...(rematerialize ? grownMoveOutcomes(move, result) : convergedMoveOutcomes(move, result)),
+    );
+    return reached;
+  }
+
+  const enabled: PerEntryOutcome[] = [];
+  const landed = await enableStep(opts, enable, enabled);
+  outcomes.push(...(landed ? [enabledMoveOutcome(move)] : enabled));
+  return landed;
+}
+
+/** Enables one held-down record and reports a failure; answers whether it landed. */
+async function enableStep(
+  opts: ApplyReconcileOptions,
+  op: PlannedPluginEnable,
+  outcomes: PerEntryOutcome[],
+): Promise<boolean> {
+  const before = outcomes.length;
+  await applyPluginToggles(opts, [op], outcomes, ENABLE_AXES);
+  return outcomes.slice(before).every((outcome) => outcome.kind === "plugin-enabled");
+}
+
+/**
+ * APPLY1-01 / LOAD-01: the one pass that keeps the invariant. Once the
+ * cascade has run, every enabled plugin of the scope is judged against the
+ * state it left, transitively, as the load-time check judges it: a disable
+ * reaches every plugin above it. A dependent whose own move failed after the
+ * dependencies it waits on landed is judged by the copy it kept
+ * (`installedCopyUnsatisfied`). Each plugin the pass holds is disabled with
+ * the marker, and its remedy names the move that failed: its own, or a
+ * dependency's (`{dependency failed}`).
+ */
+async function disableUnmetAfterCascade(
   reader: ReconcileStateReader,
   opts: ApplyReconcileOptions,
   scope: Scope,
-  cascade: ConvergenceCascade,
-  moves: {
-    readonly failedOwn: ReadonlySet<string>;
-    readonly heldBefore: ReadonlySet<string>;
+  ran: {
+    readonly cascade: ConvergenceCascade;
+    readonly before: HoldsBefore;
+    readonly failed: FailedSteps;
     readonly outcomes: PerEntryOutcome[];
   },
 ): Promise<void> {
-  const { failedOwn, heldBefore, outcomes } = moves;
-  const dependents = cascade.plan.moves.filter(
-    (move) =>
-      failedOwn.has(pluginKey(move)) && movedDependencies(cascade, pluginKey(move)).length > 0,
-  );
-  if (dependents.length === 0) {
+  const { cascade, before, failed, outcomes } = ran;
+  if (cascade.plan.moves.length === 0 && failed.all.size === 0) {
     return;
   }
 
   const locations = locationsFor(scope, opts.cwd);
   const state = await reader.loadState(locations.extensionRoot);
-  const ops: PlannedDependencyDisable[] = [];
-  for (const move of dependents) {
+  const seeded: UnsatisfiedDeclaration[] = [];
+  for (const move of cascade.plan.moves.filter((m) => failed.own.has(pluginKey(m)))) {
+    const key = pluginKey(move);
+    const landed = cascadeDependencies(cascade, key).filter(
+      (dependency) => movedKey(cascade, dependency) && !failed.all.has(dependency),
+    );
     // eslint-disable-next-line no-await-in-loop -- one installed-copy read per failed dependent
     const unmet = await installedCopyUnsatisfied(
       { state, locations },
       move,
-      movedDependencies(cascade, pluginKey(move)),
-      heldBefore.has(pluginKey(move)),
+      landed,
+      before.unsatisfied.filter((entry) => entry.dependent === key),
     );
-    if (unmet !== undefined) {
-      ops.push({ ...unmet, scope, marketplace: move.marketplace, plugin: move.plugin });
+    seeded.push(...(unmet === undefined ? [] : [unmet]));
+  }
+
+  const after = await buildScopeSatisfactionVerdict({ state, locations, seeded });
+  const heldBefore = new Set(before.unsatisfied.map((entry) => entry.dependent));
+  // A hold that predates the cascade for a reason no move meets, such as a
+  // missing dependency the next pass installs (MISS-01), is not the cascade's.
+  const ops = enabledHolds(after, state, scope).filter((op) => {
+    const key = pluginKey(op);
+    return !heldBefore.has(key) || before.movable.has(key);
+  });
+  await applyDependencyDisables(opts, scope, ops, outcomes, (op, version) => {
+    const key = pluginKey(op);
+    if (failed.own.has(key)) {
+      return cascadeDisabledOutcome(op, version, "own-move");
+    }
+
+    return failed.all.has(op.dependency)
+      ? cascadeDisabledOutcome(op, version, "dependency-failed")
+      : dependencyDisabledOutcome(op, version);
+  });
+}
+
+/** Whether `key` is a move of the cascade. */
+function movedKey(cascade: ConvergenceCascade, key: string): boolean {
+  return cascade.plan.moves.some((move) => pluginKey(move) === key);
+}
+
+/** The first unsatisfied declaration of every enabled plugin `verdict` holds. */
+function enabledHolds(
+  verdict: ScopeSatisfactionVerdict,
+  state: ExtensionState,
+  scope: Scope,
+): PlannedDependencyDisable[] {
+  if (!verdict.ok) {
+    return [];
+  }
+
+  const ops: PlannedDependencyDisable[] = [];
+  for (const mp of Object.values(state.marketplaces)) {
+    for (const [plugin, record] of Object.entries(mp.plugins)) {
+      const held = verdict.unsatisfied.find((entry) => entry.dependent === `${plugin}@${mp.name}`);
+      if (record.enabled && held !== undefined) {
+        ops.push({ ...held, scope, plugin, marketplace: mp.name });
+      }
     }
   }
 
-  await applyDependencyDisables(opts, scope, ops, outcomes);
+  return ops;
 }
 
 /** The file, scope and closed-set reason an `invalid-block` row reports. */

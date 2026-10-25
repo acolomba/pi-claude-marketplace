@@ -7507,6 +7507,21 @@ async function unreadableSkill(marketplaceRoot: string, plugin: string): Promise
   );
 }
 
+/** Declares each plugin of `mp` enabled in the project's base config. */
+async function declareEnabled(
+  project: ScopedLocations,
+  cwd: string,
+  plugins: readonly string[],
+): Promise<void> {
+  await writeUnder(
+    project.baseConfigJsonPath,
+    configBytes({
+      marketplaces: { mp: { source: path.join(cwd, "mp-src") } },
+      plugins: Object.fromEntries(plugins.map((plugin) => [`${plugin}@mp`, {}])),
+    }),
+  );
+}
+
 describe("applyReconcile catalog convergence", () => {
   test("APPLY1-01: a plugin and the newer dependency it needs move in one apply, the dependency first", async (t) => {
     // arrange
@@ -7534,7 +7549,7 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
-  test("APPLY1-01: a dependency's failed move keeps its dependent where it is, reported as dependency failed", async (t) => {
+  test("APPLY1-01: a dependency's failed move keeps its dependent where it is and disables it, reported as dependency failed", async (t) => {
     // arrange
     const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
       t,
@@ -7557,13 +7572,17 @@ describe("applyReconcile catalog convergence", () => {
           "● mp [project]\n" +
           "  ⊘ zcore v1.0.0 → v2.0.0 (failed) {permission denied}\n" +
           "  ⊘ widget v1.0.0 → v1.1.0 (failed) {dependency failed}\n" +
+          "  ◍ widget v1.0.0 (disabled) {dependency failed}\n" +
+          '    cause: "zcore@mp" did not update; run apply again once it can, or uninstall "widget@mp"\n' +
           "\n" +
-          "Reconcile: 2 failures",
+          "Reconcile: 2 failures, 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "error",
       },
     ]);
     const widget = await recordFor(project, "mp", "widget");
-    assert.deepStrictEqual([widget?.version, widget?.enabled], ["1.0.0", true]);
+    assert.deepStrictEqual([widget?.version, widget?.enabled], ["1.0.0", false]);
     verifyBoundary();
   });
 
@@ -7591,7 +7610,7 @@ describe("applyReconcile catalog convergence", () => {
           "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
           "  ⊘ widget v1.0.0 → v1.1.0 (failed) {permission denied}\n" +
           "  ◍ widget v1.0.0 (disabled) {dependency version unsatisfied}\n" +
-          '    cause: Update "zcore@mp" or uninstall "widget@mp"\n' +
+          '    cause: The update of "widget@mp" did not install; run apply again once it can, or uninstall "widget@mp"\n' +
           "\n" +
           "Reconcile: 1 failure, 1 warning, 1 success\n" +
           "\n" +
@@ -7641,6 +7660,186 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  test("APPLY1-01: held-down plugins that wait on a dependency's move are enabled in cascade order once it lands", async (t) => {
+    // arrange -- `lib` needs core ^2.0.0, `app` needs `lib`; both sit held down
+    // and neither moves itself.
+    const { cwd, project } = await seedConvergenceScope(t, "cascade-enable-only", {
+      trees: { app: { skill: "clean" }, lib: { skill: "clean" }, core: { skill: "clean" } },
+      supported: { app: ["skills"], lib: ["skills"], core: ["skills"] },
+      offered: { core: "2.0.0" },
+      dependencies: {
+        app: [{ name: "lib", version: "*" }],
+        lib: [{ name: "core", version: "^2.0.0" }],
+      },
+      records: {
+        app: { enabled: false, dependencyDisabled: true },
+        lib: { enabled: false, dependencyDisabled: true },
+      },
+    });
+    await declareEnabled(project, cwd, ["app", "lib", "core"]);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● core v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● lib v1.0.0 (installed)\n" +
+          "  ● app v1.0.0 (installed)\n" +
+          "\n" +
+          "Reconcile: 3 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    verifyBoundary();
+  });
+
+  test("APPLY1-01: held-down plugins that wait on a dependency's failed move stay disabled, reported as dependency failed", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-enable-blocked",
+      {
+        trees: { app: { skill: "clean" }, lib: { skill: "clean" }, core: { skill: "clean" } },
+        supported: { app: ["skills"], lib: ["skills"], core: ["skills"] },
+        offered: { core: "2.0.0" },
+        dependencies: {
+          app: [{ name: "lib", version: "*" }],
+          lib: [{ name: "core", version: "^2.0.0" }],
+        },
+        records: {
+          app: { enabled: false, dependencyDisabled: true },
+          lib: { enabled: false, dependencyDisabled: true },
+        },
+      },
+    );
+    await declareEnabled(project, cwd, ["app", "lib", "core"]);
+    await unreadableSkill(marketplaceRoot, "core");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some plugin operations have failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ core v1.0.0 → v2.0.0 (failed) {permission denied}\n" +
+          "  ⊘ lib (failed) {dependency failed}\n" +
+          "  ⊘ app (failed) {dependency failed}\n" +
+          "\n" +
+          "Reconcile: 3 failures",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(
+      [
+        (await recordFor(project, "mp", "app"))?.enabled,
+        (await recordFor(project, "mp", "lib"))?.enabled,
+      ],
+      [false, false],
+    );
+    verifyBoundary();
+  });
+
+  test("APPLY1-01 / CR-03: a held-down record whose enable fails after its pin refresh is a failed move", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-deferred-fails",
+      coShippedSeed({ enabled: false, dependencyDisabled: true }),
+    );
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    await unreadableSkill(marketplaceRoot, "widget");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
+          "  ⊘ widget (failed) {unreadable}\n" +
+          "\n" +
+          "Reconcile: 1 failure, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "widget"))?.enabled, false);
+    verifyBoundary();
+  });
+
+  test("APPLY1-01 / CR-01: a dependent whose own move is held is disabled with its dependents when the dependency fails", async (t) => {
+    // arrange -- `host` holds `widget` at ^1.0.0; `widget` 2.0.0 needs zcore ^2.0.0.
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-held-dependent",
+      {
+        trees: { host: { skill: "clean" }, widget: { skill: "clean" }, zcore: { skill: "clean" } },
+        supported: { host: ["skills"], widget: ["skills"], zcore: ["skills"] },
+        offered: { widget: "2.0.0", zcore: "2.0.0" },
+        dependencies: {
+          host: [{ name: "widget", version: "^1.0.0" }],
+          widget: [{ name: "zcore", version: "^2.0.0" }],
+        },
+      },
+    );
+    await unreadableSkill(marketplaceRoot, "zcore");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ zcore v1.0.0 → v2.0.0 (failed) {permission denied}\n" +
+          "  ⊘ widget v1.0.0 (skipped) {dependents constrain}\n" +
+          '    cause: version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "host@mp"\n' +
+          "  ◍ host v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Enable "widget@mp" or uninstall "host@mp"\n' +
+          "  ◍ widget v1.0.0 (disabled) {dependency failed}\n" +
+          '    cause: "zcore@mp" did not update; run apply again once it can, or uninstall "widget@mp"\n' +
+          "\n" +
+          "Reconcile: 1 failure, 3 warnings\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(
+      [
+        (await recordFor(project, "mp", "host"))?.enabled,
+        (await recordFor(project, "mp", "widget"))?.enabled,
+      ],
+      [false, false],
+    );
+    verifyBoundary();
+  });
+
   test("APPLY1-01: a dependent held down by an earlier pass is enabled after the move it waits on lands", async (t) => {
     // arrange
     const { cwd, project } = await seedConvergenceScope(
@@ -7667,7 +7866,7 @@ describe("applyReconcile catalog convergence", () => {
         message:
           "● mp [project]\n" +
           "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
-          "  ● widget v1.1.0 (installed)\n" +
+          "  ● widget v1.0.0 → v1.1.0 (updated)\n" +
           "\n" +
           "Reconcile: 2 successes\n" +
           "\n" +

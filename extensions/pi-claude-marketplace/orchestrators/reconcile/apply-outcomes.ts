@@ -464,6 +464,37 @@ export function dependencyDisabledOutcome(
   };
 }
 
+/**
+ * APPLY1-01: the disable `apply` makes after its catalog cascade, when a move
+ * that did not land leaves a plugin's range unmet. The remedy names the move
+ * that failed: the plugin's own (`own-move`), or the dependency's, which also
+ * takes `{dependency failed}` (`dependency-failed`). A move that landed and
+ * still leaves the range unmet is an ordinary LOAD-01 disable.
+ */
+export function cascadeDisabledOutcome(
+  held: Parameters<typeof dependencyDisabledOutcome>[0],
+  version: string | undefined,
+  failed: "own-move" | "dependency-failed",
+): PluginDependencyDisabledOutcome {
+  const dependent = remedyParty(`${held.plugin}@${held.marketplace}`, "this plugin");
+  const dependency = remedyParty(held.dependency, "the declared dependency");
+  return {
+    ...dependencyDisabledOutcome(held, version),
+    ...(failed === "own-move"
+      ? {
+          cause: new Error(
+            `The update of ${dependent} did not install; run apply again once it can, or uninstall ${dependent}`,
+          ),
+        }
+      : {
+          reasons: ["dependency failed"],
+          cause: new Error(
+            `${dependency} did not update; run apply again once it can, or uninstall ${dependent}`,
+          ),
+        }),
+  };
+}
+
 /** Plugin disable failure outcome. */
 export interface PluginDisableFailedOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-disable-failed";

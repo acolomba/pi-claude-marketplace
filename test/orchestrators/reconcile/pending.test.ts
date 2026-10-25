@@ -1107,6 +1107,24 @@ const catalogMoveRows = [
     expected: pendingList(["● demo (will enable)", "● demo v1.0.0 → v1.1.0 (will update)"]),
   },
   {
+    condition: "a plugin the catalog ships with the newer dependency it needs (APPLY1-01)",
+    seed: {
+      offered: {
+        widget: { version: "1.1.0", dependencies: ["zcore@^2.0.0"] },
+        zcore: { version: "2.0.0" },
+      },
+      recorded: { widget: { version: "1.0.0" }, zcore: { version: "1.0.0" } },
+      declared: [
+        { key: "widget@tools", enabled: true },
+        { key: "zcore@tools", enabled: true },
+      ],
+    },
+    expected: pendingList([
+      "● zcore v1.0.0 → v2.0.0 (will update)",
+      "● widget v1.0.0 → v1.1.0 (will update)",
+    ]),
+  },
+  {
     condition: "a recorded plugin at the catalog version",
     seed: {
       offered: { demo: { version: "1.0.0" } },

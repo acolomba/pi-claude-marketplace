@@ -636,13 +636,9 @@ export interface ConvergenceCascade {
   readonly declarations: Declarations;
 }
 
-/**
- * The moves of `plan` that the record `key` declares, in `plan.moves` order.
- */
-export function movedDependencies(cascade: ConvergenceCascade, key: string): readonly string[] {
-  const moved = new Set(cascade.plan.moves.map((move) => `${move.plugin}@${move.marketplace}`));
-  const declared = new Set(declaredKeys(cascade.declarations, key));
-  return [...moved].filter((dependency) => dependency !== key && declared.has(dependency));
+/** The `plugin@marketplace` keys the record `key` declares once the plan lands. */
+export function cascadeDependencies(cascade: ConvergenceCascade, key: string): readonly string[] {
+  return declaredKeys(cascade.declarations, key);
 }
 
 /** The `plugin@marketplace` keys the record `key` declares; none for a record the walk lacks. */
@@ -651,27 +647,27 @@ function declaredKeys(declarations: Declarations, key: string): readonly string[
 }
 
 /**
- * APPLY1-01: `moves` reordered so each runs after the moves it declares, in
- * depth-first post-order, ties kept in their marketplace-then-plugin order. A
- * declaration cycle keeps the order the walk first reaches it in.
+ * APPLY1-01: `items` reordered so each comes after the items it declares, in
+ * depth-first post-order, ties kept in their given order. A declaration cycle
+ * keeps the order the walk first reaches it in.
  */
-function dependenciesFirst(
-  moves: readonly PlannedMove[],
+export function dependenciesFirst<T>(
+  items: readonly T[],
+  keyOf: (item: T) => string,
   declarations: Declarations,
-): PlannedMove[] {
-  const byKey = new Map(moves.map((move) => [`${move.plugin}@${move.marketplace}`, move]));
-  const ordered: PlannedMove[] = [];
+): T[] {
+  const byKey = new Map(items.map((item) => [keyOf(item), item]));
+  const ordered: T[] = [];
   const visited = new Set<string>();
   const visit = (key: string): void => {
-    const move = byKey.get(key);
-    if (move === undefined || visited.has(key)) {
+    const item = byKey.get(key);
+    if (item === undefined || visited.has(key)) {
       return;
     }
 
     visited.add(key);
     declaredKeys(declarations, key).forEach(visit);
-
-    ordered.push(move);
+    ordered.push(item);
   };
 
   for (const key of byKey.keys()) {
@@ -679,6 +675,10 @@ function dependenciesFirst(
   }
 
   return ordered;
+}
+
+function moveKey(move: PlannedMove): string {
+  return `${move.plugin}@${move.marketplace}`;
 }
 
 /**
@@ -717,7 +717,7 @@ export async function planConvergenceCascade(input: ConvergenceInput): Promise<C
   const landed = await withPlannedInstalls(input, view, walk.declarations);
   const settled = settleCandidates(candidates, landed.declarations, landed.view);
   return {
-    plan: { ...settled, moves: dependenciesFirst(settled.moves, landed.declarations) },
+    plan: { ...settled, moves: dependenciesFirst(settled.moves, moveKey, landed.declarations) },
     declarations: landed.declarations,
   };
 }
@@ -737,14 +737,20 @@ export interface MoveCascadeInput extends Omit<ConvergenceInput, "enable"> {
 
 /**
  * The plan `apply` runs and `pending` lists, the cascade it moves, and the
- * enables of records held down for a dependency that only run once the moves
- * they wait on land. `cascade` is absent when no held dependent could be
+ * enables of released records held down for a dependency, which `apply` runs
+ * in cascade order. `cascade` is absent when no held dependent could be
  * released, so the plan is the caller's own.
  */
 export interface MoveCascade {
   readonly plan: ReconcilePlan;
   readonly cascade?: ConvergenceCascade;
   readonly deferredEnables: readonly PlannedPluginEnable[];
+  /**
+   * WR-02: `plan` as `pending` lists it. A deferred record that moves is
+   * enabled by its move and reports one `(updated)` row, so its enable is not
+   * listed beside its `(will update)` row.
+   */
+  readonly preview: ReconcilePlan;
 }
 
 function isDependencyHeld(state: ExtensionState, op: PlannedPluginEnable): boolean {
@@ -762,36 +768,43 @@ function isDependencyHeld(state: ExtensionState, op: PlannedPluginEnable): boole
  * still unmet is held again and the moves are planned again; the released set
  * only shrinks, so the loop ends.
  *
- * A released record that is disabled now (its LOAD-02 marker) is enabled only
- * after the moves it waits on land, so it is never enabled while its range is
- * unmet (`deferredEnables`).
+ * A released record that is disabled now (its LOAD-02 marker) is enabled by
+ * `apply` in cascade order, after the moves it waits on and its own move land
+ * (`deferredEnables`). The release only decides what `apply` attempts: `apply`
+ * judges every enabled plugin again once the moves have run.
  */
 export async function settleMoveCascade(input: MoveCascadeInput): Promise<MoveCascade> {
-  const base = { scope: input.scope, state: input.state, locations: input.locations };
   const settled = await releaseOnLandedMoves(input);
-  const lifts = settled.plan.pluginsToEnable.filter((op) => isDependencyHeld(input.state, op));
-  if (lifts.length === 0) {
-    return { ...settled, deferredEnables: [] };
-  }
-
-  const cascade =
-    settled.cascade ?? (await planConvergenceCascade({ ...base, plan: settled.plan }));
-  const moved = new Set(cascade.plan.moves.map((move) => `${move.plugin}@${move.marketplace}`));
-  const deferredEnables = lifts.filter((op) => {
-    const key = `${op.plugin}@${op.marketplace}`;
-    return moved.has(key) || movedDependencies(cascade, key).length > 0;
-  });
-  return { plan: settled.plan, cascade, deferredEnables };
+  const deferredEnables = settled.plan.pluginsToEnable.filter(
+    (op) =>
+      settled.released.has(`${op.plugin}@${op.marketplace}`) && isDependencyHeld(input.state, op),
+  );
+  const moved = new Set((settled.cascade?.plan.moves ?? []).map(moveKey));
+  const enabledByMove = new Set(
+    deferredEnables.map((op) => `${op.plugin}@${op.marketplace}`).filter((key) => moved.has(key)),
+  );
+  const preview = {
+    ...settled.plan,
+    pluginsToEnable: settled.plan.pluginsToEnable.filter(
+      (op) => !enabledByMove.has(`${op.plugin}@${op.marketplace}`),
+    ),
+  };
+  return {
+    plan: settled.plan,
+    ...(settled.cascade !== undefined && { cascade: settled.cascade }),
+    deferredEnables,
+    preview,
+  };
 }
 
 /**
  * The release loop of `settleMoveCascade`: the caller's plan when no held
  * dependent can be released, or the plan with the largest released set whose
- * moves satisfy every released dependent, and its cascade.
+ * moves satisfy every released dependent, its cascade and that set.
  */
 async function releaseOnLandedMoves(
   input: MoveCascadeInput,
-): Promise<Pick<MoveCascade, "plan" | "cascade">> {
+): Promise<Pick<MoveCascade, "plan" | "cascade"> & { readonly released: ReadonlySet<string> }> {
   const base = { scope: input.scope, state: input.state, locations: input.locations };
   let released = releasableDependents(input.verdict, input.state);
   while (released.size > 0) {
@@ -806,13 +819,13 @@ async function releaseOnLandedMoves(
     );
     const held = stillHeld(after, released);
     if (held.size === 0) {
-      return { plan, cascade };
+      return { plan, cascade, released };
     }
 
     released = new Set([...released].filter((dependent) => !held.has(dependent)));
   }
 
-  return { plan: input.plan };
+  return { plan: input.plan, released };
 }
 
 /** Whether `pluginRoot` is a per-commit copy under the scope's plugin clones. */
@@ -827,35 +840,38 @@ async function isPinnedCopy(locations: ScopedLocations, pluginRoot: string): Pro
 
 /**
  * APPLY1-01 / D-13: why the copy `plugin` has installed may not stay enabled
- * once `movedDependencies` moved, or `undefined` when its own declarations
- * all hold. `apply` asks it of a dependent whose own move failed after those
- * moves landed. Only a git source keeps a copy of the version it runs (a
- * per-commit copy); a path source's files are the marketplace's, which now
- * hold the version that failed to install, and a copy that cannot be read
- * declares nothing known. An unknown copy fails closed when `failClosed`
- * says the moves were made for it (its catalog range was unmet before them):
- * the first moved dependency is reported out of range, with no range to name.
+ * once `landed` (the dependencies that moved for it) moved, or `undefined`.
+ * `apply` asks it of a dependent whose own move failed after those moves
+ * landed. Only a git source keeps a copy of the version it runs (a per-commit
+ * copy), and its declarations of the landed dependencies are measured. A path
+ * source's files are the marketplace's, which now hold the version that failed
+ * to install, and a copy that cannot be read declares nothing known: both fail
+ * closed when `before` (what the scope left unmet before the moves) names a
+ * landed dependency, which is then the one reported, with no range.
  */
 export async function installedCopyUnsatisfied(
   input: Pick<ConvergenceInput, "state" | "locations">,
   move: Pick<PlannedMove, "marketplace" | "plugin">,
-  movedDependencies: readonly string[],
-  failClosed: boolean,
+  landed: readonly string[],
+  before: readonly UnsatisfiedDeclaration[],
 ): Promise<UnsatisfiedDeclaration | undefined> {
   const dependent = `${move.plugin}@${move.marketplace}`;
-  const unknown: UnsatisfiedDeclaration | undefined = failClosed
-    ? { dependent, dependency: movedDependencies[0] ?? dependent, kind: "out-of-range" }
-    : undefined;
   const mp = ownValue(input.state.marketplaces, move.marketplace);
   const record = ownValue(mp?.plugins, move.plugin);
   if (mp === undefined || record === undefined) {
     return undefined;
   }
 
-  if (!(await isPinnedCopy(input.locations, record.resolvedSource))) {
-    return unknown;
+  const declared = (await isPinnedCopy(input.locations, record.resolvedSource))
+    ? await installedCopyDeclarations(input, mp, record)
+    : undefined;
+  if (declared === undefined) {
+    const unmet = before.find((entry) => landed.includes(entry.dependency));
+    return unmet === undefined
+      ? undefined
+      : { dependent, dependency: unmet.dependency, kind: "out-of-range" };
   }
 
-  const declared = await installedCopyDeclarations(input, mp, record);
-  return declared === undefined ? unknown : firstUnsatisfied(dependent, declared, input.state);
+  const relevant = declared.filter((dep) => landed.includes(`${dep.name}@${dep.marketplace}`));
+  return firstUnsatisfied(dependent, relevant, input.state);
 }

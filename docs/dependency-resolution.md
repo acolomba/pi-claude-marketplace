@@ -286,12 +286,14 @@ This disable is a consequence, not a choice you made. So this extension does not
 
 A disable you asked for is never lifted this way. The check lifts only the disable it applied itself.
 
-A marketplace update can ship a new version of a plugin together with the newer dependency that version needs. One `apply` moves both, the dependency first, as a fresh install of the plugin would install both. `pending` lists both moves. The plugin is not disabled first, because the moves satisfy it. A plugin held disabled for its dependency's version is enabled after the moves it waits on land, never before.
+A marketplace update can ship a new version of a plugin together with the newer dependency that version needs. One `apply` moves both, the dependency first, as a fresh install of the plugin would install both. `pending` lists both moves. The plugin is not disabled first, because the moves satisfy it. A plugin held disabled for its dependency's version moves and is enabled right after the moves it waits on land; `pending` lists that as one `(will update)` row, and `apply` reports one `(updated)` row. If its enable fails, that counts as a failed move.
 
-When a move in such a chain fails, nothing moves past it:
+When a move in such a chain fails, nothing that waits on it moves:
 
-- If the dependency's move fails, the plugin is not moved. Its row says `(failed) {dependency failed}`, and both stay at the versions they had. The next `apply` tries both again.
-- If the dependency moves and the plugin's own move fails, the plugin keeps the copy it has. When that copy's own declarations do not accept the moved dependency, `apply` disables the plugin with the marker, beside the row that names its failure. A path-source plugin's files are the marketplace's, which already hold the version that failed, so its old declarations are unknown. `apply` then disables it only when the dependency moved for it, because the old dependency version did not meet its declared range. A later `apply` enables it again only once its move lands.
+- A move whose dependency did not land is not made. Its row says `(failed) {dependency failed}`, and the plugin keeps the version it had. The next `apply` tries again.
+- A plugin whose own move fails after its dependency moved keeps that dependency moved. Only a git source keeps a copy of the version it runs, and that copy's own declarations decide whether the plugin may stay enabled. A path-source plugin's files are the marketplace's, which already hold the version that failed, so its old declarations are unknown: `apply` disables it when the dependency moved for it, because the old dependency version did not meet its declared range.
+
+Whatever lands, `apply` then judges every enabled plugin against what the moves left, as the load-time check does, and disables each one whose range is unmet, together with every plugin above it. The row names the move that failed: the plugin's own, or `{dependency failed}` with the dependency's name. A later `apply` enables such a plugin again only once the move it needs lands.
 
 One broken dependency reaches every plugin above it in a single `apply`. If `a` needs `b` and `b` needs `c`, then disabling `c` disables both `b` and `a` on the next `apply`, not one of them per run. Enabling `c` again brings both back on the next `apply` too. This holds when you edit a config by hand: an `apply` that disables `c` because a config sets it to `enabled: false` also disables `b` and `a`, and `pending` lists all three first.
 

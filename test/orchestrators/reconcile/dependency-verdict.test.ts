@@ -903,3 +903,27 @@ test("APPLY1-01: the first unsatisfied declaration of a copy is measured against
   });
   assert.equal(met, undefined);
 });
+
+test("APPLY1-01: a seeded declaration holds its dependent from the start, and the walk holds what declares it", async () => {
+  // arrange: `host` declares `app`; the seed holds `app`.
+  const mp = marketplaceRecord("mp", { app: {}, host: {} });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: {}, host: { dependencies: ["app"] } }),
+  });
+  const seed = { dependent: "app@mp", dependency: "lib@mp", kind: "out-of-range" } as const;
+
+  // act
+  const verdict = await buildScopeSatisfactionVerdict({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    loadManifest,
+    reader: ownManifests(),
+    seeded: [seed],
+  });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(verdict), [
+    seed,
+    { dependent: "host@mp", dependency: "app@mp", kind: "disabled" },
+  ]);
+});

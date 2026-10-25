@@ -259,7 +259,10 @@ function knownVersion(version: string | undefined): string | undefined {
 }
 
 // NREG-01: an arrow without commits keeps the key absent, not `undefined`.
-function withCommits(commits: VersionCommits | undefined): { readonly commits?: VersionCommits } {
+/** The `commits` field a row carries, absent when its arrow stays plain. */
+export function withCommits(commits: VersionCommits | undefined): {
+  readonly commits?: VersionCommits;
+} {
   return commits === undefined ? {} : { commits };
 }
 
