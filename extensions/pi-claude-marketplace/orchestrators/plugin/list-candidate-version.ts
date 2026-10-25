@@ -27,6 +27,8 @@ export type ListCandidate =
       readonly resolved: ResolvedPlugin;
       /** VER-01 / VER-02: the declared version of the tree, which replaces the entry's. */
       readonly version?: string;
+      /** GIT-01: the commit of a materialized git tree; list rows ignore it. */
+      readonly resolvedSha?: string;
     };
 
 type GitPluginSource = Parameters<ReturnType<typeof makePresenceProbe>>[0];
@@ -78,5 +80,5 @@ export async function resolveListCandidate(
   const version =
     (await resolveDeclaredPluginVersion(manifestEntry, presence.pluginRoot)) ??
     shaVersion(presence.resolvedSha);
-  return { kind: "resolved", resolved, version };
+  return { kind: "resolved", resolved, version, resolvedSha: presence.resolvedSha };
 }

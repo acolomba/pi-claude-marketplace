@@ -533,6 +533,14 @@ Feature: Marketplace update
       | plugin components resolved     | true        |
       | plugin components skills       | demo-skill  |
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id         | name | status      | reasons | scope   | from  | to     |
+      | tools            | project           | demo@tools | demo | will update |         | project | 1.0.0 | 1.10.0 |
+      | tools            | project           | demo@tools | demo | will update |         | project | 1.0.0 | 1.10.0 |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -877,6 +885,14 @@ Feature: Marketplace update
       | tools            | <scope>           | true                           | alpha@tools | alpha | installed  |         | <scope> | 1.10.0  |
       | tools            | <scope>           | true                           | zeta@tools  | zeta  | upgradable |         | <scope> | 1.0.0   |
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id         | name | status      | reasons | scope   | from  | to     |
+      | tools            | <scope>           | zeta@tools | zeta | will update |         | <scope> | 1.0.0 | 1.10.0 |
+      | tools            | <scope>           | zeta@tools | zeta | will update |         | <scope> | 1.0.0 | 1.10.0 |
     Then the session offers these skills:
       | command            | description              |
       | /skill:alpha-skill | A skill of alpha 1.10.0. |

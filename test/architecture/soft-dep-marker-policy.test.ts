@@ -242,6 +242,9 @@ const MARKER_POLICY_TABLE = [
       "will uninstall": { markers: false, contentReasons: false },
       "will enable": { markers: false, contentReasons: false },
       "will disable": { markers: false, contentReasons: false },
+      "will update": { markers: false, contentReasons: true },
+      skipped: { markers: false, contentReasons: true },
+      "partially-upgradable": { markers: false, contentReasons: true },
       failed: { markers: false, contentReasons: true },
     },
   },
@@ -253,6 +256,9 @@ const MARKER_POLICY_TABLE = [
       uninstalled: { markers: false, contentReasons: false },
       disabled: { markers: false, contentReasons: true },
       failed: { markers: false, contentReasons: true },
+      updated: { markers: true, contentReasons: true },
+      skipped: { markers: false, contentReasons: true },
+      "partially-upgradable": { markers: false, contentReasons: true },
     },
   },
   {
@@ -277,6 +283,7 @@ const MARKER_POLICY_TABLE = [
       "will uninstall": { markers: false, contentReasons: true },
       "will enable": { markers: false, contentReasons: false },
       "will disable": { markers: false, contentReasons: false },
+      "will update": { markers: false, contentReasons: true },
     },
   },
 ] satisfies readonly {

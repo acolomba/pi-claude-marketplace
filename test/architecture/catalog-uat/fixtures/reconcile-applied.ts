@@ -702,5 +702,133 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
         ],
       },
     },
+
+    // D-08 / D-26: `apply` moved a recorded plugin to the version its catalog
+    // offers, through the update runner, and the session has not loaded it.
+    "apply-updated": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "updated",
+                name: "demo",
+                scope: "project",
+                from: "1.0.0",
+                to: "1.1.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-12: a move a dependent's range does not admit stays put with the row
+    // `pending` lists for it.
+    "apply-update-held": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "skipped",
+                name: "lib",
+                version: "1.0.0",
+                reasons: ["dependents constrain"],
+                cause: new Error(
+                  'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"',
+                ),
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-12 / D-24: a clean record whose catalog candidate would drop components
+    // stays put with the decline row `pending` lists, and its consent hint.
+    "apply-update-partial-consent": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "partially-upgradable",
+                name: "demo",
+                version: "1.0.0",
+                reasons: ["unsupported component"],
+                catalogHint: true,
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-13: a move that failed to materialize names its closed-set reason and
+    // the move it attempted; the next move still ran.
+    "apply-update-failed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "alpha",
+                version: "1.1.0",
+                from: "1.0.0",
+                reasons: ["permission denied"],
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "updated",
+                name: "beta",
+                scope: "project",
+                from: "1.0.0",
+                to: "1.1.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
   },
 };

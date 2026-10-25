@@ -56,7 +56,8 @@ export function notifyWithContext<
   {
     advisories,
     retainedWorkflows,
-  }: Pick<CascadeNotificationMessage, "advisories" | "retainedWorkflows"> = {},
+    needsApply,
+  }: Pick<CascadeNotificationMessage, "advisories" | "retainedWorkflows" | "needsApply"> = {},
 ): void {
   // WR-01 seam: the rows are `Msg`-narrowed at the call site (a status the
   // row-policy map omits is a compile error there); the cascade envelope consumes
@@ -83,6 +84,7 @@ export function notifyWithContext<
     cardinality,
     ...(advisories !== undefined && { advisories }),
     ...(retainedWorkflows !== undefined && { retainedWorkflows }),
+    ...(needsApply === true && { needsApply: true }),
   };
 
   emitContextCascade(ctx, run, message, context.rowPolicies);

@@ -324,6 +324,9 @@ export type StatusToken =
   | "will uninstall"
   | "will enable"
   | "will disable"
+  | "will update"
+  | "will add"
+  | "will remove"
   | "disabled"
   | "partially-installed"
   | "partially-upgradable"
@@ -349,6 +352,7 @@ export type PluginStatus =
   | "will uninstall"
   | "will enable"
   | "will disable"
+  | "will update"
   | "disabled"
   | "partially-installed"
   | "partially-upgradable"
@@ -366,7 +370,9 @@ export type MarketplaceStatus =
   | "failed"
   | "autoupdate enabled"
   | "autoupdate disabled"
-  | "skipped";
+  | "skipped"
+  | "will add"
+  | "will remove";
 
 /** Marketplace details shown by list and info messages. */
 export interface MarketplaceDetails {
@@ -599,6 +605,13 @@ export interface PluginPartiallyUpgradableMessage extends MessageBase {
   readonly scope?: Scope;
   readonly description?: string;
   readonly partialHint?: boolean;
+  /**
+   * D-24: the catalog decline's hint, set only by the convergence planner's
+   * row in `pending`, the load and `apply`. It names the per-plugin `update
+   * --partial` command, because the command that holds the row takes no
+   * `--partial`. A producer never sets both this and `partialHint`.
+   */
+  readonly catalogHint?: boolean;
 }
 
 /** Failed plugin row. */
@@ -708,6 +721,22 @@ export interface PluginWillDisableMessage extends MessageBase {
   readonly scope?: Scope;
 }
 
+/**
+ * D-14: the pending-tense catalog move -- a recorded plugin whose catalog
+ * candidate differs from its record (D-10). It renders with the `updated`
+ * row's `v<from> → v<to>` arrow; a growth-only move has equal versions
+ * (D-18-11), and `commits` follows the `updated` row's rule (UPR-02).
+ */
+export interface PluginWillUpdateMessage extends MessageBase {
+  readonly status: "will update";
+  readonly name: string;
+  readonly from: string;
+  readonly to: string;
+  readonly commits?: VersionCommits;
+  readonly scope?: Scope;
+  readonly reasons?: readonly ContentReason[];
+}
+
 /** Complete discriminated union of plugin notification rows. */
 export type PluginNotificationMessage =
   | PluginInstalledMessage
@@ -728,6 +757,7 @@ export type PluginNotificationMessage =
   | PluginWillUninstallMessage
   | PluginWillEnableMessage
   | PluginWillDisableMessage
+  | PluginWillUpdateMessage
   | PluginDisabledMessage
   | PluginPartiallyInstalledMessage
   | PluginPartiallyUpgradableMessage;
@@ -756,6 +786,7 @@ const SCOPE_BEARING_LIST_STATUS: Record<PluginNotificationMessage["status"], boo
   "will uninstall": false,
   "will enable": false,
   "will disable": false,
+  "will update": false,
 };
 
 /** Narrows a plugin row to the list variants that permit an explicit scope. */
@@ -786,17 +817,82 @@ export function pluginScopeOrFallback(
 }
 
 /**
+ * D-14: the pending-tense plugin statuses, as a TOTAL map over the status
+ * union. A switch that names all twenty statuses exceeds the cyclomatic
+ * ceiling, so the exhaustive switches over the union split at this partition:
+ * a new status is a compile error here until it is placed, and then a compile
+ * error in the half of each split switch it joins.
+ */
+const PENDING_PLUGIN_STATUS = {
+  "will install": true,
+  "will uninstall": true,
+  "will enable": true,
+  "will disable": true,
+  "will update": true,
+  installed: false,
+  updated: false,
+  reinstalled: false,
+  uninstalled: false,
+  available: false,
+  unavailable: false,
+  upgradable: false,
+  failed: false,
+  skipped: false,
+  "manual recovery": false,
+  disabled: false,
+  "partially-installed": false,
+  "partially-upgradable": false,
+  "partially-available": false,
+  remote: false,
+} as const satisfies Record<PluginNotificationMessage["status"], boolean>;
+
+/** The statuses the map above marks pending, read back off that map. */
+export type PendingPluginStatus = {
+  [K in PluginNotificationMessage["status"]]: (typeof PENDING_PLUGIN_STATUS)[K] extends true
+    ? K
+    : never;
+}[PluginNotificationMessage["status"]];
+
+/** Narrows a plugin row to the pending-tense variants. */
+export function isPendingPluginRow<R extends { readonly status: PluginStatus }>(
+  row: R,
+): row is Extract<R, { readonly status: PendingPluginStatus }> {
+  return PENDING_PLUGIN_STATUS[row.status];
+}
+
+/**
  * Read `row.version` off a plugin notification row. D-15-04: every list-surface
- * variant carries the same optional `version?` slot, so every arm returns the
- * same field and the switch computes nothing.
+ * variant carries the same optional `version?` slot, so most arms return the
+ * same field.
  *
- * D-116-14: the switch stays anyway, and must not be collapsed into a single
- * expression. Its job is the missing-arm gate -- `noImplicitReturns` makes the
- * end of this function reachable the moment a list-surface status goes unnamed,
- * so a status added to the row union is a compile error here rather than a row
- * that silently loses its version.
+ * D-116-14: the switches stay anyway, and must not be collapsed into a single
+ * expression. Their job is the missing-arm gate -- `noImplicitReturns` makes the
+ * end of a half reachable the moment a status goes unnamed, so a status added
+ * to the row union is a compile error here rather than a row that silently
+ * loses its version.
  */
 export function pluginVersion(row: PluginNotificationMessage): string | undefined {
+  return isPendingPluginRow(row) ? pendingRowVersion(row) : settledRowVersion(row);
+}
+
+function pendingRowVersion(
+  row: Extract<PluginNotificationMessage, { readonly status: PendingPluginStatus }>,
+): string | undefined {
+  switch (row.status) {
+    case "will uninstall":
+      return row.version;
+    case "will update":
+      return row.to;
+    case "will install":
+    case "will enable":
+    case "will disable":
+      return undefined;
+  }
+}
+
+function settledRowVersion(
+  row: Exclude<PluginNotificationMessage, { readonly status: PendingPluginStatus }>,
+): string | undefined {
   switch (row.status) {
     case "installed":
     case "reinstalled":
@@ -811,14 +907,10 @@ export function pluginVersion(row: PluginNotificationMessage): string | undefine
     case "partially-upgradable":
     case "failed":
     case "skipped":
-    case "will uninstall":
       return row.version;
     case "updated":
       return row.to;
     case "manual recovery":
-    case "will install":
-    case "will enable":
-    case "will disable":
       return undefined;
   }
 }
@@ -868,6 +960,22 @@ export interface MpSkipped extends MpCommon {
   readonly reasons?: readonly ContentReason[];
 }
 
+/**
+ * D-20: pending-tense header for a marketplace a config declares and the scope
+ * has not added, which `apply` will add.
+ */
+export interface MpWillAdd extends MpCommon {
+  readonly status: "will add";
+}
+
+/**
+ * D-20: pending-tense header for a recorded marketplace no config declares,
+ * which `apply` will remove together with its plugins.
+ */
+export interface MpWillRemove extends MpCommon {
+  readonly status: "will remove";
+}
+
 /** Statusless marketplace inventory row. */
 export interface MpList extends MpCommon {
   readonly status?: undefined;
@@ -883,6 +991,8 @@ export type MarketplaceNotificationMessage =
   | MpAutoupdateEnabled
   | MpAutoupdateDisabled
   | MpSkipped
+  | MpWillAdd
+  | MpWillRemove
   | MpList;
 
 /**
@@ -933,6 +1043,11 @@ export interface CascadeNotificationMessage {
    */
   readonly advisories?: readonly string[];
   readonly retainedWorkflows?: readonly RetainedWorkflowStaging[];
+  /**
+   * APL-04 / D-14: set only by the `pending` composer, when its list holds a
+   * change `/claude:plugin apply` would make. It selects the apply trailer.
+   */
+  readonly needsApply?: true;
 }
 
 /** Marketplace information message. */
@@ -1110,6 +1225,12 @@ export interface PluginInfoCascadeMessage {
 /** Empty reconcile-pending advisory. */
 export interface ReconcilePendingEmptyMessage {
   readonly kind: "reconcile-pending-empty";
+  /**
+   * D-08 / D-14: the command that found nothing to change. The text strategy
+   * reads it to pick the wording; the JSON payload does not carry it, because
+   * `origin.commandId` already names the command.
+   */
+  readonly command: "pending" | "apply";
   /**
    * WR-06: the same free-text advisory body lines the cascade arm declares, on
    * the same terms -- caller-ordered, rendered verbatim, no token, no row. The

@@ -29,8 +29,10 @@ import type {
   PluginPartiallyInstalledMessage,
   PluginReinstalledMessage,
   PluginUpdatedMessage,
+  PluginWillUpdateMessage,
   PruneEmptyMessage,
   Reason,
+  ReconcilePendingEmptyMessage,
   Severity,
   VersionCommits,
 } from "./notification-types.ts";
@@ -230,6 +232,12 @@ export function renderMpHeader(mp: ResolvedMarketplace): string {
         : `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (skipped) ${reasonsBrace}`;
     }
 
+    case "will add":
+      // D-20: pending-tense marketplace header. Names only the marketplace
+      // and scope, never its declared source, and carries no reasons.
+      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (will add)`;
+    case "will remove":
+      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (will remove)`;
     case undefined: {
       // List-surface case. mp.details is OPTIONAL and INDEPENDENT of mp.status.
       // Guard explicitly with an early return for SUB-BRANCH A
@@ -435,6 +443,7 @@ const PLUGIN_ROW_LAYOUT = {
   "will uninstall": { icon: ICON_AVAILABLE, scope: true, version: "single" },
   "will enable": { icon: ICON_INSTALLED, scope: true, version: "none" },
   "will disable": { icon: ICON_DISABLED, scope: true, version: "none" },
+  "will update": { icon: ICON_INSTALLED, scope: true, version: "arrow" },
   disabled: { icon: ICON_DISABLED, scope: true, version: "single" },
 } as const satisfies Record<PluginNotificationMessage["status"], PluginRowLayout>;
 
@@ -462,8 +471,8 @@ function renderVersionSlot(row: ResolvedRow, mode: PluginRowLayout["version"]): 
     case "single":
       return renderVersion("version" in row ? row.version : undefined);
     case "arrow": {
-      // Only the updated layout selects the from/to version slot.
-      const updated = row as ResolvedRow<PluginUpdatedMessage>;
+      // Only the updated and will-update layouts select the from/to version slot.
+      const updated = row as ResolvedRow<PluginUpdatedMessage | PluginWillUpdateMessage>;
       return composeVersionArrow(updated.from, updated.to, updated.commits);
     }
 
@@ -518,6 +527,19 @@ const PARTIAL_UPDATE_HINT_TRAILER =
 const STALE_GATE_UPDATE_HINT_TRAILER = "Run update --partial on this plugin, then enable it again.";
 
 /**
+ * D-24: the catalog decline's hint trailer, rendered below the
+ * partially-upgradable row `pending`, the load and `apply` give a catalog move
+ * that would drop components without consent. DISTINCT from
+ * `PARTIAL_UPDATE_HINT_TRAILER` because the command that holds the row is
+ * `apply` or `pending`, which take no `--partial`: the remedy names the
+ * per-plugin `update` consent command instead. Interpolates no plugin /
+ * marketplace identifier (T-73-01) and is locked byte-for-byte in
+ * docs/output-catalog.md and docs/messaging-style-guide.md.
+ */
+const CATALOG_PARTIAL_UPDATE_HINT_TRAILER =
+  "Run update --partial on this plugin to update it with the supported components.";
+
+/**
  * OUT-04 / D-102-10: the enable-hint trailer literal, rendered below an
  * install-disabled `(disabled)` row. The install materialized nothing the user
  * can reach, so the row alone leaves them with a fact and no next step; this
@@ -535,6 +557,7 @@ const ENABLE_HINT_TRAILER = "Run enable on this plugin to use its components.";
 const ROW_HINT_TRAILERS = {
   "partial-install": PARTIAL_INSTALL_HINT_TRAILER,
   "partial-update": PARTIAL_UPDATE_HINT_TRAILER,
+  "catalog-partial-update": CATALOG_PARTIAL_UPDATE_HINT_TRAILER,
   "stale-gate-update": STALE_GATE_UPDATE_HINT_TRAILER,
   enable: ENABLE_HINT_TRAILER,
 } as const satisfies Record<RowHint, string>;
@@ -872,12 +895,20 @@ export function renderMarketplaceNotAdded(
 }
 
 /**
- * DIFF-01: the `reconcile-pending-empty` body line. The bytes are locked to the
- * `empty-steady-state` state in `docs/output-catalog.md`. The caller folds the
- * message's advisories after it.
+ * DIFF-01 / D-08 / D-14: the `reconcile-pending-empty` body line. The bytes are
+ * locked to the `empty-steady-state` state of the pending section and the
+ * `nothing-to-change` state of the apply section in `docs/output-catalog.md`.
+ * The caller folds the message's advisories after it.
  */
-export function renderReconcilePendingEmpty(): string {
-  return "Pending: next reload will apply 0 actions.";
+export function renderReconcilePendingEmpty(
+  command: ReconcilePendingEmptyMessage["command"],
+): string {
+  switch (command) {
+    case "pending":
+      return "Pending: /claude:plugin apply has nothing to change.";
+    case "apply":
+      return "Apply: nothing to change.";
+  }
 }
 
 /** The `prune-empty` body: the scope held no orphaned dependency installs. */
@@ -1033,6 +1064,7 @@ const DESCRIPTION_BEARING_STATUS = {
   "will uninstall": false,
   "will enable": false,
   "will disable": false,
+  "will update": false,
 } as const satisfies Record<PluginNotificationMessage["status"], boolean>;
 
 /**
@@ -1143,6 +1175,8 @@ function pushCauseLine(
 //
 //   [/reload to pick up changes]  <-- iff the envelope needsReload
 //
+//   [/claude:plugin apply to make these changes]  <-- iff the envelope needsApply
+//
 // Joins / separators:
 //   - Plugin row prefix:                "  " (2 spaces)
 //   - Cause-chain trailer prefix:       "    " (4 spaces)
@@ -1159,6 +1193,12 @@ function pushCauseLine(
 
 /** Reload-hint trailer literal. */
 const RELOAD_HINT_TRAILER = "/reload to pick up changes";
+
+/**
+ * APL-04 / D-05: the trailer of a `pending` block that holds a change. It is a
+ * fixed literal that names no plugin, marketplace, or path (T-73-01).
+ */
+const APPLY_HINT_TRAILER = "/claude:plugin apply to make these changes";
 
 /**
  * UGRM-01 / UGRM-02 never-silent no-op headline for a bulk `update` that
@@ -1212,12 +1252,12 @@ export type NotifyArguments = readonly [text: string] | readonly [text: string, 
 
 /**
  * Formats one resolved envelope around a rendered body. It folds `body`, then
- * the no-op headline or the tally sentence, then the reload trailer, dropping
- * each absent segment and joining the rest with one blank line. A warning or
- * error envelope then prepends its summary line as its own block (GRAM-01):
- * one blank line, never a single `\n`, which would glue the host `Error:` /
- * `Warning:` label onto the first detail row. An info envelope carries no
- * summary line.
+ * the no-op headline or the tally sentence, then the reload trailer, then the
+ * apply trailer, dropping each absent segment and joining the rest with one
+ * blank line. A warning or error envelope then prepends its summary line as its
+ * own block (GRAM-01): one blank line, never a single `\n`, which would glue the
+ * host `Error:` / `Warning:` label onto the first detail row. An info envelope
+ * carries no summary line.
  *
  * D-15: an info envelope yields one argument, the text alone. A warning or
  * error envelope yields two, the text and its severity.
@@ -1227,6 +1267,7 @@ export function formatEnvelopeArguments(envelope: ResolvedEnvelope, body: string
     body,
     envelope.noOp ? UPDATE_NO_OP_HEADLINE : tallySentence(envelope.tally),
     envelope.needsReload ? RELOAD_HINT_TRAILER : "",
+    envelope.needsApply ? APPLY_HINT_TRAILER : "",
   ]
     .filter((segment) => segment !== "")
     .join("\n\n");

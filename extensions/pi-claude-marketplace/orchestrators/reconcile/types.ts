@@ -54,7 +54,7 @@
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
 import type { ScopeSatisfactionVerdict, UnsatisfiedKind } from "./dependency-verdict.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
-import type { NotificationContext, ResourcesDiscoverEvent } from "../../platform/pi-api.ts";
+import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice, McpMigrationRow } from "../../shared/notification-types.ts";
@@ -88,9 +88,8 @@ export interface PlannedMarketplaceRemove {
   /**
    * Recorded plugin names under this marketplace
    * (`state.marketplaces[mp].plugins` keys). The PENDING projection
-   * synthesizes one `will uninstall` child row per name under a bare list-arm
-   * header: de-registration is immediate, only the plugin-uninstall cascade is
-   * reload-deferred (WILL-03 / D-65.1-03). These are deliberately NOT routed
+   * synthesizes one `will uninstall` child row per name under the
+   * marketplace's `will remove` header (D-20). These are deliberately NOT routed
    * through `pluginsToUninstall` -- the apply path cascades them internally, so
    * enumerating them there would double-bill (see `buildUninstallBucket`).
    */
@@ -314,9 +313,7 @@ export function emptyReconcilePlan(scope: Scope): ReconcilePlan {
 }
 
 // ───────────────────────────────────────────────────────────────────────────
-// Both moved from apply.ts when the backfill pass became its own module: two
-// files in this folder now name them, so leaving them in one of those files
-// would have made the other import back into it (FLOW-09).
+// The `/claude:plugin apply` options and the step seams its tests inject.
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
@@ -336,8 +333,8 @@ export type DependencyDisableStamp = (
 export interface ApplyReconcileOptions {
   readonly ctx: NotificationContext;
   /**
-   * D-05 / D-07: the load pass's run, opened once per `resources_discover`.
-   * The reconcile-applied cascade renders from its soft-dependency snapshot.
+   * D-05 / D-07: the run the `apply` command opens before the pass. The
+   * reconcile-applied cascade renders from its soft-dependency snapshot.
    */
   readonly run: NotificationRun;
   /** Project-scope cwd (ignored for the user scope). */
@@ -392,15 +389,6 @@ export interface ApplyReconcileOptions {
    * `applyReconcile`.
    */
   readonly migrateMcpEntries?: McpMigrationStep;
-  /**
-   * D-09-13: the host's `resources_discover` reason. Only `"reload"` runs the
-   * dependency-install step (`apply.ts::applyDependencyInstalls`) and its
-   * D-09-07 re-plan; an omitted value keeps the safer startup posture every
-   * caller that does not opt in already has -- the bucket still plans (the
-   * planner is reason-blind), but nothing installs and the scope stays
-   * offline.
-   */
-  readonly reason?: ResourcesDiscoverEvent["reason"];
 }
 
 /**
@@ -415,7 +403,6 @@ export interface McpMigrationInput {
   readonly scope: Scope;
   readonly cwd: string;
   readonly plan: ReconcilePlan | undefined;
-  readonly reason?: ResourcesDiscoverEvent["reason"] | undefined;
   readonly rows: McpMigrationRow[];
   readonly notices: McpConfigNotice[];
 }
@@ -434,22 +421,11 @@ export interface ScopeReadResult {
   /** CFG-03 + state-load failure rows surfaced from the read pass. */
   readonly invalidOutcomes: readonly PerEntryOutcome[];
   /**
-   * BFILL-02: the read-pass state snapshot, carried out so the load-time
-   * backfill gate can read its persisted `lastReconciledExtensionVersion`
-   * stamp + scan every plugin the scope records (WCONV-01). Undefined for a
-   * pristine scope (no state.json) -- backfill MUST NOT create state.json there
-   * (WR-05).
+   * DLS-01: the read-pass state snapshot, carried out so the closing step can
+   * report a recorded plugin its marketplace no longer lists. Undefined for a
+   * pristine scope (no state.json) and for a CFG-03 abort.
    */
   readonly state?: ExtensionState;
-  /**
-   * WR-01: whether state.json existed ON DISK at read time. A config-present /
-   * state.json-absent scope loads DEFAULT_STATE inside the read pass (so
-   * `state` is defined) even though no state.json exists; the backfill stamp
-   * must NOT bring an unsolicited state.json into existence purely to record
-   * the version when there is nothing to promote (WR-05). False for the
-   * pristine arm (no `state` carried anyway).
-   */
-  readonly stateExisted: boolean;
   /**
    * LOAD-01: the satisfaction verdict computed inside the locked read pass,
    * over the same snapshot the planner saw. Carried out so the apply pass can

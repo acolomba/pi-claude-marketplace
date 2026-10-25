@@ -36,6 +36,7 @@ const UPDATE_POLICY = {
   refreshSource: true,
   skipSameRevision: true,
   overwrite: false,
+  searchReleaseTags: true,
 } satisfies MaterializationPolicy;
 
 function recordedPlugin(version: string, pluginRoot: string): PluginRecord {
@@ -186,6 +187,7 @@ test("REI-01: a policy that does not skip the recorded revision restores its del
     refreshSource: false,
     skipSameRevision: false,
     overwrite: true,
+    searchReleaseTags: true,
   } satisfies MaterializationPolicy;
 
   // act

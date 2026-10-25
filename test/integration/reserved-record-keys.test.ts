@@ -105,6 +105,7 @@ function registeredCommand(cwd: string): (args: string) => Promise<NotifyRecord[
       mcpStatus: noStatusSnapshot(),
       gitOps: createGitOpsFake({ boundary: "memory" }).gitOps,
       beginPluginUpdateRun: pluginUpdates.beginPluginUpdateRun,
+      applyReconcile: createApplyReconcile({ loadState }),
     },
     hooksRouting,
     pluginUpdates.updatePlugins,
@@ -240,13 +241,12 @@ for (const { marketplace, plugins, plugin } of [
         cwd,
         completionCache: createCompletionCache(),
         hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
-        reason: "reload",
       });
 
       // assert
       assert.deepStrictEqual(notifications, [
         {
-          message: `● ${marketplace} [project] (added)\n  ● ${plugin} v1.0.0 (installed)\n\nReconcile: 2 successes`,
+          message: `● ${marketplace} [project] (added)\n  ● ${plugin} v1.0.0 (installed)\n\nReconcile: 2 successes\n\n/reload to pick up changes`,
         },
       ]);
       assert.deepStrictEqual(await recordedPlugins(cwd, marketplace), [[plugin, "1.0.0", true]]);

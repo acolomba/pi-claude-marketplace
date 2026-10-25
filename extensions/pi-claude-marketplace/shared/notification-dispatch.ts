@@ -75,9 +75,8 @@ function isStructuredOutcome(presentation: NotificationPresentation): boolean {
     case "reconcile-pending-empty":
     case "prune-empty":
     case "prune-committed-warning":
-      return true;
     case "reconcile-applied-cascade":
-      return false;
+      return true;
   }
 }
 
@@ -532,7 +531,7 @@ function formatPresentationBody(presentation: NotificationPresentation): string 
       return renderMarketplaceNotAdded(presentation.message, presentation.reason);
     case "reconcile-pending-empty":
       return foldAdvisories(
-        renderReconcilePendingEmpty(),
+        renderReconcilePendingEmpty(presentation.message.command),
         presentation.message.advisories,
         presentation.message.retainedWorkflows,
       );

@@ -2,14 +2,17 @@ import { piWithAllLoaded, piWithBothLoaded } from "../mock-pi.ts";
 
 import type { FixtureMap } from "../fixture-types.ts";
 
-/** Catalog fixtures for the plugin pending command surface. */
+/**
+ * Catalog fixtures for the plugin pending command surface. APL-04 / D-14: each
+ * state with a `will ...` row sets `needsApply`, as the pending composer does.
+ */
 export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
   "/claude:plugin pending": {
     "empty-steady-state": {
       pi: piWithBothLoaded(),
       // Dedicated standalone variant; the renderer hard-codes the advisory
       // body line so the byte form cannot drift from the catalog state.
-      message: { kind: "reconcile-pending-empty" },
+      message: { kind: "reconcile-pending-empty", command: "pending" },
     },
     // WR-06: the retained workflow staging advisory on the standalone arm. The
     // line carries the tree's directory NAME and its envelope count and
@@ -19,19 +22,21 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
       pi: piWithAllLoaded(),
       message: {
         kind: "reconcile-pending-empty",
+        command: "pending",
         retainedWorkflows: [{ name: "9f1c4d2a-3b7e", envelopeCount: 2 }],
       },
     },
-    // WILL-01 / D-65.1-02: marketplace add is immediate (no `will add` token);
-    // the child install is the reload-deferred work, rendered under a bare
-    // list-arm header (no marketplace status).
+    // D-20: `apply` adds the declared marketplace, so its header carries the
+    // pending-tense `will add` status above the child install.
     "mp-add-plugin-install": {
       pi: piWithBothLoaded(),
       message: {
+        needsApply: true,
         marketplaces: [
           {
             name: "new-mp",
             scope: "user",
+            status: "will add",
             plugins: [{ status: "will install", name: "new-plugin" }],
           },
         ],
@@ -40,14 +45,16 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
     // FSTAT-06 / D-66-04: a pending child install whose no-network candidate
     // resolves `partially-available` carries the `partial` modifier, rendering
     // `(will partially install)` in place of `(will install)`. A render modifier,
-    // not a new token; no `will partially update` analog exists (D-66-05).
+    // not a new token; a catalog move is its own `will update` token (D-14).
     "mp-add-plugin-partial-install": {
       pi: piWithBothLoaded(),
       message: {
+        needsApply: true,
         marketplaces: [
           {
             name: "new-mp",
             scope: "user",
+            status: "will add",
             plugins: [{ status: "will install", name: "degraded-plugin", partial: true }],
           },
         ],
@@ -56,6 +63,7 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
     "plugin-pending-uninstall": {
       pi: piWithBothLoaded(),
       message: {
+        needsApply: true,
         marketplaces: [
           {
             name: "mp",
@@ -69,6 +77,7 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
     "plugin-pending-uninstall-retained-workflow-staging": {
       pi: piWithAllLoaded(),
       message: {
+        needsApply: true,
         marketplaces: [
           {
             name: "mp",
@@ -79,25 +88,33 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
         retainedWorkflows: [{ name: "9f1c4d2a-3b7e", envelopeCount: 2 }],
       },
     },
-    // WILL-03 / D-65.1-03: removing a marketplace that still has installed
-    // plugins is reload-deferred ONLY for its plugin-uninstall cascade --
-    // de-registration itself is immediate (no `will remove` marketplace token).
-    // The pending preview renders the bare list-arm header (no marketplace
-    // status) plus one `(will uninstall)` row per recorded plugin, byte-identical
-    // to the surviving `plugin-pending-uninstall` form above.
+    // D-20: `apply` removes a recorded marketplace no config declares, so its
+    // header carries `will remove` above one `(will uninstall)` row per
+    // recorded plugin.
     "marketplace-remove-with-installed-plugins": {
       pi: piWithBothLoaded(),
       message: {
+        needsApply: true,
         marketplaces: [
           {
             name: "old-mp",
             scope: "user",
+            status: "will remove",
             plugins: [
               { status: "will uninstall", name: "p1", version: "1.0.0" },
               { status: "will uninstall", name: "p2", version: "2.3.0" },
             ],
           },
         ],
+      },
+    },
+    // D-20: the remove itself is a listed change, so a marketplace with no
+    // recorded plugin still shows its header.
+    "marketplace-remove-no-plugins": {
+      pi: piWithBothLoaded(),
+      message: {
+        needsApply: true,
+        marketplaces: [{ name: "old-mp", scope: "user", status: "will remove", plugins: [] }],
       },
     },
     "enable-disable-transitions": {
@@ -107,6 +124,7 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
       // land against an exercised path.
       pi: piWithBothLoaded(),
       message: {
+        needsApply: true,
         marketplaces: [
           {
             name: "mp",
@@ -114,6 +132,124 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
             plugins: [
               { status: "will enable", name: "to-enable" },
               { status: "will disable", name: "to-disable" },
+            ],
+          },
+        ],
+      },
+    },
+    // APL-02 / D-10 / D-14: a recorded plugin whose catalog candidate differs
+    // from its record is a move `apply` makes, previewed with the updated row's
+    // version arrow.
+    "plugin-pending-update": {
+      pi: piWithBothLoaded(),
+      message: {
+        needsApply: true,
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [{ status: "will update", name: "demo", from: "1.0.0", to: "1.1.0" }],
+          },
+        ],
+      },
+    },
+    // UPR-02: a move at the same version to a new commit names both commits.
+    "plugin-pending-update-same-version-commits": {
+      pi: piWithBothLoaded(),
+      message: {
+        needsApply: true,
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "will update",
+                name: "demo",
+                from: "1.0.0",
+                to: "1.0.0",
+                commits: {
+                  from: "a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0",
+                  to: "2222333344445555666677778888999900001111",
+                },
+              },
+            ],
+          },
+        ],
+      },
+    },
+    // D-10 / WCONV-03: a strictly grown supported set is a move at the same
+    // version, marked as a backfilled row is.
+    "plugin-pending-update-growth": {
+      pi: piWithBothLoaded(),
+      message: {
+        needsApply: true,
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "will update",
+                name: "hello",
+                from: "1.0.0",
+                to: "1.0.0",
+                reasons: ["components now supported"],
+              },
+            ],
+          },
+        ],
+      },
+    },
+    // D-12 / D-23: a catalog move a dependent's range does not admit stays put
+    // with update's range-hold row. No tag is listed, so the catalog version
+    // alone is judged. A held move changes nothing, so it asks for no apply.
+    "plugin-pending-update-held": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "skipped",
+                severity: "warning",
+                needsReload: false,
+                name: "lib",
+                version: "1.0.0",
+                reasons: ["dependents constrain"],
+                cause: new Error(
+                  'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"',
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+    // D-12 / D-24: a clean record whose catalog candidate would drop components
+    // stays put with update's decline row; the hint names the per-plugin
+    // consent command, because `apply` and `pending` take no `--partial`.
+    "plugin-pending-update-partial-consent": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "partially-upgradable",
+                severity: "warning",
+                needsReload: false,
+                name: "demo",
+                version: "1.0.0",
+                reasons: ["unsupported component"],
+                catalogHint: true,
+              },
             ],
           },
         ],
@@ -140,6 +276,8 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
       // CFG-03: the marketplace `name` is the file BASENAME
       // (never the absolute path -- T-53-02-02 information-disclosure
       // mitigation). The orchestrator passes path.basename(filePath).
+      // I5: one failed child named by the basename carries the redacted
+      // parse detail, the only row that can carry a cause.
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
       message: {
@@ -151,7 +289,18 @@ export const PLUGIN_PENDING_FIXTURES: FixtureMap = {
             severity: "error",
             needsReload: false,
             reasons: ["invalid manifest"],
-            plugins: [],
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "claude-plugins.json",
+                reasons: ["invalid manifest"],
+                cause: new Error(
+                  "JSON parse failed: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+                ),
+              },
+            ],
           },
         ],
       },

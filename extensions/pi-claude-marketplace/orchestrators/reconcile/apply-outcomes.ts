@@ -10,6 +10,7 @@
 // The variants split on { entity-kind, success | failed }:
 //   - marketplace: add / remove
 //   - plugin:      install / uninstall / enable / disable
+//   - plugin:      converged (a catalog move, held move or declined move)
 //   - planner-only:    source-mismatch (report-only)
 //   - planner-only:    invalid-block (CFG-03 from the read pass)
 //   - planner-only:    layer-marketplace-gap (LAYER-06 from the read pass)
@@ -46,6 +47,8 @@ import {
 } from "./reconcile.messaging.ts";
 
 import type { UnsatisfiedKind } from "./dependency-verdict.ts";
+import type { ReconcileAppliedMsg } from "./reconcile.messaging.ts";
+import type { ReconcilePlan } from "./types.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -156,26 +159,25 @@ export interface PluginInstalledOutcome
 }
 
 /**
- * Plugin re-materialized in place by load-time backfill (BFILL-01). A recorded
- * plugin -- any recorded plugin, not only a partially-installed one (WCONV-01) --
- * is re-resolved offline (NFR-5) and its now-fuller
- * supported set is materialized via the reinstall primitive; this outcome folds
- * the promotion into the single applied cascade (D-68-04 / RECON-04). `version`
+ * Plugin re-materialized in place by `apply`'s growth move (BFILL-01, D-08,
+ * D-10). A recorded plugin -- any enabled one, not only a partially-installed
+ * one (WCONV-01) -- whose supported set grew is re-materialized at its recorded
+ * revision through the update runner (D-25, D-26); this outcome folds the
+ * promotion into the single applied cascade (D-68-04 / RECON-04). `version`
  * mirrors the unchanged recorded version (a promotion is NOT an upgrade);
  * `dependencies` drives the soft-dep markers like the install arm. The required
  * `installable` is the RE-RESOLVED installability: `true` selects the
  * `(installed)` row (unsupported set now empty -> fully promoted), `false`
  * selects the `(partially-installed)` row (partial re-materialize, still degraded).
  *
- * WR-04: the backfill runs the same class of ledger the install and enable arms
- * run, so it INHERITS the same two ledger-degradation signals rather than
- * declaring a narrower vocabulary of its own. Without them, a backfill of a
+ * WR-04: the growth move runs the same class of ledger the install and enable
+ * arms run, so it INHERITS the same two ledger-degradation signals rather than
+ * declaring a narrower vocabulary of its own. Without them, a promotion of a
  * plugin whose `hooks.json` declares `rewakeMessage` without `asyncRewake: true`
- * -- or whose skill frontmatter is unparseable -- rendered a clean row naming
- * neither fact, which is the contradiction the shared shape exists to prevent.
- * The dropped-kind list is NOT inherited: this arm carries the re-resolved
- * `unsupported` kind list below, which is that same fact read off the backfill's
- * own offline resolution.
+ * -- or whose skill frontmatter is unparseable -- would render a clean row
+ * naming neither fact, which is the contradiction the shared shape exists to
+ * prevent. The dropped-kind list is NOT inherited: this arm carries the
+ * `unsupported` kind list below, read off the runner's partial-degrade result.
  */
 export interface PluginBackfilledOutcome
   extends PluginOutcomeBase, Pick<EnableDegradationSignals, "orphanRewake" | "degradedKinds"> {
@@ -485,6 +487,20 @@ export interface PluginDeclarerUnreadableOutcome extends PluginOutcomeBase {
 }
 
 /**
+ * D-08 / D-12 / D-13: one catalog move's row in `apply`'s report -- `(updated)`
+ * for a realized move, the `(skipped) {dependents constrain}` and
+ * `(partially-upgradable)` warning rows for a blocked one, and `(failed)` with
+ * its closed-set reason for a move that failed to materialize. The row is
+ * composed where the move's verdict is read (`notify.ts`), so the blocked rows
+ * share their bytes with the rows `pending` lists; the projection pushes it
+ * as is.
+ */
+export interface PluginConvergedOutcome extends PluginOutcomeBase {
+  readonly kind: "plugin-converged";
+  readonly row: ReconcileAppliedMsg;
+}
+
+/**
  * Source-mismatch outcome from `planReconcile`. Report-only: apply.ts does
  * NOT drive an orchestrator for these; the planner surfaces them on the
  * cascade as a `(failed) {source mismatch}` mp row with an optional plugin
@@ -533,6 +549,51 @@ export type SourceMismatchOutcome =
  */
 export function sourceMismatchOutcomeSubject(outcome: SourceMismatchOutcome): string {
   return outcome.cause === "malformed-plugin-key" ? outcome.rawKey : outcome.marketplace;
+}
+
+/**
+ * Source-mismatch and dangling-reference rows from the planner are NOT
+ * actionable at apply time -- they surface as `(failed) {source mismatch}`
+ * marketplace rows (with an optional plugin child for dangling references).
+ * Routing them through the same per-entry outcome accumulator keeps the
+ * projection a single seam. Each planner cause lifts its renderable fields
+ * onto the matching `SourceMismatchOutcome` arm; the renderer derives the
+ * subject through `sourceMismatchOutcomeSubject`.
+ */
+export function sourceMismatchOutcomes(plan: ReconcilePlan): PerEntryOutcome[] {
+  return plan.sourceMismatches.map((m): SourceMismatchOutcome => {
+    switch (m.cause) {
+      case "source-mismatch":
+        return {
+          kind: "source-mismatch",
+          cause: "source-mismatch",
+          scope: m.scope,
+          marketplace: m.marketplace,
+        };
+      case "unknown-stored":
+        return {
+          kind: "source-mismatch",
+          cause: "unknown-stored",
+          scope: m.scope,
+          marketplace: m.marketplace,
+        };
+      case "dangling-reference":
+        return {
+          kind: "source-mismatch",
+          cause: "dangling-reference",
+          scope: m.scope,
+          marketplace: m.marketplace,
+          plugin: m.plugin,
+        };
+      case "malformed-plugin-key":
+        return {
+          kind: "source-mismatch",
+          cause: "malformed-plugin-key",
+          scope: m.scope,
+          rawKey: m.rawKey,
+        };
+    }
+  });
 }
 
 /**
@@ -604,15 +665,16 @@ export type PerEntryOutcome =
   | PluginDependencyDisabledOutcome
   | PluginDisableFailedOutcome
   | PluginDeclarerUnreadableOutcome
+  | PluginConvergedOutcome
   | SourceMismatchOutcome
   | InvalidBlockOutcome
   | LayerMarketplaceGapOutcome;
 
 // ───────────────────────────────────────────────────────────────────────────
 // Throw classification and the install-outcome dependency derivation, moved
-// from apply.ts. Both the apply pass and the backfill pass narrow the same
-// throws into the same closed set, so the classifiers sit beside the outcome
-// shapes they feed rather than inside one of their two callers (FLOW-09).
+// from apply.ts. The apply pass and the read pass narrow throws into the same
+// closed set, so the classifiers sit beside the outcome shapes they feed
+// rather than inside one of their callers (FLOW-09).
 // ───────────────────────────────────────────────────────────────────────────
 
 /**

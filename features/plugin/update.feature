@@ -125,6 +125,14 @@ Feature: Plugin update
       | id            |
       | demo@fixtures |
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | will update |         | project | 1.0.0 | 1.1.0 |
+      | fixtures         | project           | demo@fixtures | demo | will update |         | project | 1.0.0 | 1.1.0 |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -156,6 +164,14 @@ Feature: Plugin update
       | id            |
       | demo@fixtures |
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | will update |         | project | 1.0.0 | 1.1.0 |
+      | fixtures         | project           | demo@fixtures | demo | will update |         | project | 1.0.0 | 1.1.0 |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -376,6 +392,14 @@ Feature: Plugin update
       | demo@fixtures | 1.0.0   | true    |
       | lib@tools     | 1.0.0   | true    |
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | summary                             | tally label       | tally failures | tally warnings |
+      | cascade | warning  | false        | A plugin operation needs attention. | Reconcile pending | 0              | 1              |
+      | cascade | warning  | false        | A plugin operation needs attention. | Reconcile pending | 0              | 1              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id        | name | status  | reasons              | scope   | version | cause chain                                                                                    | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | skipped | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
+      | tools            | project           | lib@tools | lib  | skipped | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
     Then the session offers these skills:
       | command           | description            |
       | /skill:app-skill  | A skill of app 1.0.0.  |
@@ -400,6 +424,14 @@ Feature: Plugin update
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | summary                             | tally label       | tally failures | tally warnings |
+      | cascade | warning  | false        | A plugin operation needs attention. | Reconcile pending | 0              | 1              |
+      | cascade | warning  | false        | A plugin operation needs attention. | Reconcile pending | 0              | 1              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status               | reasons               | hint                   | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | partially-upgradable | unsupported component | catalog-partial-update | project | 1.0.0   |
+      | fixtures         | project           | demo@fixtures | demo | partially-upgradable | unsupported component | catalog-partial-update | project | 1.0.0   |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |

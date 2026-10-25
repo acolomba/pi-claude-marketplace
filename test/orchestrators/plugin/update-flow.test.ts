@@ -12298,6 +12298,7 @@ test("owns plugin update flow composition", () => {
   assert.strictEqual(typeof operations.updatePlugins, "function");
   assert.strictEqual(typeof operations.beginPluginUpdateRun, "function");
   assert.strictEqual(typeof operations.beginPluginUpdateRun(), "function");
+  assert.strictEqual(typeof operations.convergePlugin, "function");
 });
 
 test("UPR-04: routes a not-installed preflight failure through the flow owner", async () => {
@@ -13112,5 +13113,415 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later marketplace sync st
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
+  });
+});
+
+// ─── D-26: the converge entry `apply` drives ────────────────────────────────
+
+function convergeOperations(stateTransaction?: Parameters<typeof createPluginUpdateOperations>[2]) {
+  return createPluginUpdateOperations(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+    stateTransaction,
+  );
+}
+
+test("D-26: convergePlugin moves a path-source plugin to the catalog version in the target's cwd", async () => {
+  await withHermeticHome(async () => {
+    // arrange -- the process cwd is not the project, so only the target's own
+    // `cwd` can locate the project scope.
+    const cwd = await createCaseDir("update-converge-move-");
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      assert.notStrictEqual(process.cwd(), cwd);
+
+      // act
+      const outcome = await convergeOperations().convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: false,
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "updated",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+      });
+      const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+      assert.strictEqual(record?.version, "1.1.0");
+      assert.ok(await pathExists(path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md")));
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-26: convergePlugin answers a move at the recorded revision as unchanged and writes nothing", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-converge-same-");
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const before = await readFile(locations.stateJsonPath, "utf8");
+
+      // act
+      const outcome = await convergeOperations().convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: false,
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "unchanged",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+      });
+      assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), before);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-10 / D-25: convergePlugin with rematerialize re-materializes the recorded revision", async () => {
+  await withHermeticHome(async () => {
+    // arrange -- the catalog offers the recorded version, and a skill the
+    // record names is missing on disk.
+    const cwd = await createCaseDir("update-converge-rematerialize-");
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const skillFile = path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md");
+      await rm(path.join(locations.skillsTargetDir, "hello-tool"), {
+        recursive: true,
+        force: true,
+      });
+
+      // act
+      const outcome = await convergeOperations().convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "updated",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+      });
+      assert.ok(await pathExists(skillFile));
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const { partial, expected } of [
+  { partial: false, expected: "declined" },
+  { partial: true, expected: "moved partially" },
+] as const) {
+  test(`D-26 / WCONV-01: a partially available candidate is ${expected} when the target's partial is ${String(partial)}`, async () => {
+    await withHermeticHome(async () => {
+      // arrange
+      const cwd = await createCaseDir("update-converge-partial-");
+      try {
+        const marketplaceRoot = path.join(cwd, "mp-src");
+        await seedPathMarketplace({
+          cwd,
+          marketplaceRoot,
+          marketplaceName: "mp",
+          manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+          installedVersions: { hello: "1.0.0" },
+        });
+        await writeFile(
+          path.join(marketplaceRoot, "plugins", "hello", ".lsp.json"),
+          JSON.stringify({ servers: { ts: { command: "tsserver" } } }),
+        );
+
+        // act
+        const outcome = await convergeOperations().convergePlugin({
+          plugin: "hello",
+          marketplace: "mp",
+          scope: "project",
+          cwd,
+          partial,
+          rematerialize: false,
+        });
+
+        // assert
+        if (partial) {
+          assert.strictEqual(outcome.partition, "updated");
+          assert.deepStrictEqual(
+            outcome.partition === "updated" ? outcome.partialDegrade : undefined,
+            { kinds: ["lspServers"], newlyDegraded: true },
+          );
+        } else {
+          assert.deepStrictEqual(outcome, {
+            partition: "skipped",
+            name: "hello",
+            fromVersion: "1.0.0",
+            notes: ['Plugin "hello" is no longer installable: contains lspServers'],
+            reasons: ["lsp"],
+            partialUpgradable: true,
+            declaresAgents: false,
+            declaresMcp: false,
+            declaresWorkflows: false,
+          });
+        }
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+for (const { rematerialize, offered } of [
+  { rematerialize: false, offered: "2.0.0" },
+  { rematerialize: true, offered: "1.0.0" },
+] as const) {
+  test(`D-26 / T-29-29 / T-29-35: convergePlugin keeps an agent file a user edited and fails the move when rematerialize is ${String(rematerialize)}`, async () => {
+    await withHermeticHome(async () => {
+      // arrange
+      const cwd = await createCaseDir("update-converge-edited-agent-");
+      try {
+        const locations = locationsFor("project", cwd);
+        const marketplaceRoot = path.join(cwd, "mp-src");
+        await seedPathMarketplace({
+          cwd,
+          marketplaceRoot,
+          marketplaceName: "mp",
+          manifestPlugins: { hello: { version: offered, hasSkill: false, hasAgent: true } },
+          installedVersions: { hello: "1.0.0" },
+        });
+        const target = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
+        const editedBytes = "---\nname: bot\n---\nEdited by hand.\n";
+        await mkdir(locations.agentsDir, { recursive: true });
+        await writeFile(target, editedBytes);
+        await writeFile(
+          locations.agentsIndexPath,
+          JSON.stringify({
+            schemaVersion: 1,
+            agents: [
+              {
+                plugin: "hello",
+                marketplace: "mp",
+                sourceAgent: "bot",
+                generatedName: "pi-claude-marketplace-hello-bot",
+                sourcePath: path.join(marketplaceRoot, "plugins", "hello", "agents", "bot.md"),
+                targetPath: target,
+                sourceHash: "a".repeat(64),
+                droppedFields: [],
+                droppedTools: [],
+                warnings: [],
+              },
+            ],
+          }),
+        );
+        const state = await loadState(locations.extensionRoot);
+        const record = state.marketplaces.mp?.plugins.hello;
+        assert.ok(record !== undefined);
+        record.resources = {
+          ...record.resources,
+          skills: [],
+          agents: ["pi-claude-marketplace-hello-bot"],
+        };
+        await saveState(locations.extensionRoot, state);
+        const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+
+        // act
+        const outcome = await convergeOperations().convergePlugin({
+          plugin: "hello",
+          marketplace: "mp",
+          scope: "project",
+          cwd,
+          partial: false,
+          rematerialize,
+        });
+
+        // assert
+        assert.strictEqual(outcome.partition, "failed");
+        assert.strictEqual(await readFile(target, "utf8"), editedBytes);
+        assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("D-26 / PUP-9: a throw inside convergePlugin becomes a failed outcome naming the attempted move", async () => {
+  await withHermeticHome(async () => {
+    // arrange -- the swap's intent mark is the first save, after the candidate.
+    const cwd = await createCaseDir("update-converge-throw-");
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const denied = Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+      const operations = convergeOperations({
+        loadState,
+        saveState: () => Promise.reject(denied),
+      });
+
+      // act
+      const outcome = await operations.convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: false,
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "failed",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        notes: ["EACCES: permission denied\n\ncause: EACCES: permission denied"],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        reasons: ["permission denied"],
+      });
+      const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+      assert.strictEqual(record?.version, "1.0.0");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-13: a source file convergePlugin cannot read fails the move as permission denied", async () => {
+  await withHermeticHome(async () => {
+    // arrange -- the commands bridge names the file and carries the EACCES as
+    // its cause.
+    const cwd = await createCaseDir("update-converge-unreadable-");
+    try {
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot,
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true, hasCommand: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      if (typeof process.getuid === "function" && process.getuid() === 0) {
+        throw new Error("an unreadable file cannot deny root; run this suite as a non-root user");
+      }
+
+      const unreadable = path.join(marketplaceRoot, "plugins", "hello", "commands", "deploy.md");
+      await chmod(unreadable, 0o000);
+
+      // act
+      const outcome = await convergeOperations().convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: false,
+      });
+
+      // assert
+      assert.strictEqual(outcome.partition, "failed");
+      assert.deepStrictEqual(outcome.reasons, ["permission denied"]);
+    } finally {
+      // An unreadable file still unlinks, so the tree removal needs no restore.
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GHB-03: convergePlugin rethrows an invalid base", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-converge-invalid-base-");
+    t.after(() => rm(cwd, { recursive: true, force: true }));
+    await seedGitUpdateMarketplace({
+      cwd,
+      cloneUrl: "https://github.com/org/repo",
+      entrySource: { source: "github", repo: "org/repo" },
+      recordedSha: SHA_OLD,
+      versionTag: "9.9.9",
+    });
+    setGitHubBaseUrl(t, "http://mirror.example");
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        convergeOperations().convergePlugin({
+          plugin: "gp",
+          marketplace: "mp",
+          scope: "project",
+          cwd,
+          partial: false,
+          rematerialize: false,
+        }),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
   });
 });

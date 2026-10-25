@@ -16,6 +16,7 @@ import {
 import { pluginCloneKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
+  createConvergeOperation,
   createDependencyInstallOperation,
   createEnableOperation,
   createInstallOperation,
@@ -40,6 +41,7 @@ import type { EnableDisableHooksRouting } from "../../../extensions/pi-claude-ma
 import type { InstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts";
 import type { ReinstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import type { UninstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
+import type { UpdateHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-cascade.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   ExtensionContext,
@@ -652,6 +654,30 @@ test("constructs the reinstall operation without using its owners or starting as
   verify(completionCache);
 });
 
+test("constructs the converge operation without using its owners or starting asynchronous work", (t) => {
+  // arrange
+  const hooksRouting = mock<UpdateHooksRouting>({ exactParams: true, name: "hooks routing" });
+  const completionCache = mock<CompletionCache>({ exactParams: true, name: "completion cache" });
+  const startedResourceTypes: string[] = [];
+  const resources = createHook({
+    init: (_asyncId, type) => {
+      startedResourceTypes.push(type);
+    },
+  });
+  t.after(() => resources.disable());
+
+  // act
+  resources.enable();
+  const convergePlugin = createConvergeOperation(hooksRouting, completionCache);
+  resources.disable();
+
+  // assert
+  assert.strictEqual(typeof convergePlugin, "function");
+  assert.deepStrictEqual(startedResourceTypes, []);
+  verify(hooksRouting);
+  verify(completionCache);
+});
+
 /**
  * Install the seeded hooks-declaring plugin through the composed install
  * operation and hand back the live lifecycle owners the enable and uninstall
@@ -890,6 +916,56 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
   const bucket = runtime.getRoutingBucket("PreToolUse");
   assert.equal(bucket.length, 1);
   assert.equal(bucket[0]?.pluginId, "p1");
+  assert.equal(bucket[0]?.handlerDecl["command"], "echo goodbye");
+});
+
+test("D-26: convergePlugin moves the plugin to the catalog version in place and re-routes it", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 0, 1) });
+  const { cwd, runtime, hooksRouting, locations } = await installHooksDeclaringPlugin(
+    t,
+    "converge-operation-",
+  );
+  const convergePlugin = createConvergeOperation(hooksRouting, createCompletionCache());
+  const pluginRoot = path.join(cwd, "mp-src", "plugins", "p1");
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "p1", version: "0.0.2" }),
+  );
+  await writeFile(
+    path.join(pluginRoot, "hooks", "hooks.json"),
+    JSON.stringify({
+      PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo goodbye" }] }],
+    }),
+  );
+
+  // act
+  const outcome = await convergePlugin({
+    plugin: "p1",
+    marketplace: "mp",
+    scope: "project",
+    cwd,
+    partial: false,
+    rematerialize: false,
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "updated",
+    name: "p1",
+    fromVersion: "0.0.1",
+    toVersion: "0.0.2",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+  });
+  const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["p1"];
+  assert.strictEqual(record?.version, "0.0.2");
+  const bucket = runtime.getRoutingBucket("PreToolUse");
+  assert.equal(bucket.length, 1);
   assert.equal(bucket[0]?.handlerDecl["command"], "echo goodbye");
 });
 

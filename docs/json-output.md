@@ -34,8 +34,8 @@ jq -c -e -s --arg invocation "$invocation_id" '
     .kind as $kind
     | ["cascade", "marketplace-info", "plugin-info", "marketplace-info-cascade",
        "plugin-info-cascade", "marketplace-not-added", "reconcile-pending-empty",
-       "prune-empty", "prune-committed-warning", "usage-error", "usage-info",
-       "internal-error"] | index($kind) != null;
+       "reconcile-applied-cascade", "prune-empty", "prune-committed-warning",
+       "usage-error", "usage-info", "internal-error"] | index($kind) != null;
   [.[] | select(.type == "entry_appended")
    | .entry | select(.type == "custom" and .customType == "claude-plugin")
    | .data | select(.origin.kind == "command" and .origin.invocationId == $invocation)]
@@ -81,8 +81,8 @@ command_entries=$(jq -c -s --arg invocation "$invocation_id" '
     .kind as $kind
     | ["cascade", "marketplace-info", "plugin-info", "marketplace-info-cascade",
        "plugin-info-cascade", "marketplace-not-added", "reconcile-pending-empty",
-       "prune-empty", "prune-committed-warning", "usage-error", "usage-info",
-       "internal-error"] | index($kind) != null;
+       "reconcile-applied-cascade", "prune-empty", "prune-committed-warning",
+       "usage-error", "usage-info", "internal-error"] | index($kind) != null;
   [.[] | select(.type == "entry_appended")
    | .entry | select(.type == "custom" and .customType == "claude-plugin")
    | .data | select(.origin.kind == "command" and .origin.invocationId == $invocation)]
@@ -98,7 +98,7 @@ command_entries=$(jq -c -s --arg invocation "$invocation_id" '
 ' "$input_file") || exit $?
 ```
 
-An outcome reports a command result. The twelve kinds in `outcome` above match the extension's command-outcome classifier. An empty `cascade` counts as an outcome. `diagnostic`, `device-flow-prompt`, and lifecycle-only kinds do not. Silence, unrelated events, or only prompts and diagnostics fail with exactly `No command outcome received`.
+An outcome reports a command result. The thirteen kinds in `outcome` above match the extension's command-outcome classifier. An empty `cascade` counts as an outcome. `diagnostic`, `device-flow-prompt`, and lifecycle-only kinds do not. Silence, unrelated events, or only prompts and diagnostics fail with exactly `No command outcome received`.
 
 Unknown kinds remain in the selected data but cannot establish an outcome. Additional fields are preserved. An unfamiliar severity, a nonboolean `needsReload`, or an unsupported schema version fails with `Unsupported command envelope`. These checks cover the fields used here. They do not replace validation of the full payload against the schema.
 
@@ -207,6 +207,8 @@ The ten structured kinds through `prune-committed-warning` also permit this fiel
 
 Load and hook origins have only `kind`. Command IDs can repeat across runs. Invocation IDs keep their results separate, including overlapping commands.
 
+A load reports its pending changes as a `cascade` whose `origin.kind` is `load`, and its per-session warnings as a `reconcile-applied-cascade`.
+
 ### Command origin
 
 `internal-error` uses the command branch of [Origin](#origin). Both identifiers are required.
@@ -236,19 +238,20 @@ Command results or inventory, including an empty `marketplaces` array.
 
 <!-- use: structured-summary -->
 
-| Field path          | Type                                      | Presence | Meaning                                     |
-| ------------------- | ----------------------------------------- | -------- | ------------------------------------------- |
-| `marketplaces`      | [Marketplace block](#marketplace-block)[] | required | Marketplace and plugin rows in model order. |
-| `tally`             | [Tally](#tally)                           | optional | Counts for a plural result.                 |
-| `noOp`              | boolean `true`                            | optional | The command reports no work.                |
-| `advisories`        | string[]                                  | optional | Advisory lines in caller order.             |
-| `retainedWorkflows` | [Retained workflow](#retained-workflow)[] | optional | Workflow staging retained for recovery.     |
+| Field path          | Type                                      | Presence | Meaning                                                         |
+| ------------------- | ----------------------------------------- | -------- | --------------------------------------------------------------- |
+| `marketplaces`      | [Marketplace block](#marketplace-block)[] | required | Marketplace and plugin rows in model order.                     |
+| `tally`             | [Tally](#tally)                           | optional | Counts for a plural result.                                     |
+| `noOp`              | boolean `true`                            | optional | The command reports no work.                                    |
+| `needsApply`        | boolean `true`                            | optional | `pending` lists changes that `/claude:plugin apply` would make. |
+| `advisories`        | string[]                                  | optional | Advisory lines in caller order.                                 |
+| `retainedWorkflows` | [Retained workflow](#retained-workflow)[] | optional | Workflow staging retained for recovery.                         |
 
 <!-- /fields -->
 
 #### reconcile-applied-cascade
 
-Applied load-time reconciliation. It carries no `noOp`, advisories, or retained workflows.
+The changes `/claude:plugin apply` made, or a load's per-session warnings. `needsReload` is true when a change needs a reload. It carries no `noOp`, advisories, or retained workflows. `/claude:plugin apply` (`origin.commandId` `plugin apply`) reports the changes it made with this kind, so the kind is a command outcome.
 
 <!-- fields: kind:reconcile-applied-cascade -->
 
@@ -343,7 +346,7 @@ A requested marketplace is absent from the selected scope.
 
 #### reconcile-pending-empty
 
-No pending reconciliation changes, with any retained staging information.
+No pending reconciliation changes. `pending` and `apply` both report it; `origin.commandId` names which. A `pending` report can carry retained staging information.
 
 <!-- fields: kind:reconcile-pending-empty -->
 
@@ -580,8 +583,8 @@ An unexpected command failure or a final outcome when ordinary delivery failed. 
 | `id`              | string                              | required | Qualified address, `<name>@<marketplace>`. A dependency row named by its `<plugin>@<marketplace>` key keeps that key. When a failed `marketplace add` has a child row, the row names the source after redaction, and its id is that name alone. |
 | `reasons`         | Reason[]                            | required | Resolved reasons, including soft-dependency markers. Empty means no reasons.                                                                                                                                                                    |
 | `version`         | string                              | optional | Plugin version. On a reinstalled, partially installed, or failed row that carries `from`, the version it moved to; an updated row carries `to` instead.                                                                                         |
-| `from`            | string                              | optional | Version before the move, on an update row, or on a reinstalled, partially installed, or failed row whose revision moved.                                                                                                                        |
-| `to`              | string                              | optional | Version after an update.                                                                                                                                                                                                                        |
+| `from`            | string                              | optional | Version before the move, on an update row or a pending catalog move, or on a reinstalled, partially installed, or failed row whose revision moved.                                                                                              |
+| `to`              | string                              | optional | Version after an update, or the version a pending catalog move reaches.                                                                                                                                                                         |
 | `fromCommit`      | string                              | optional | Full commit before a move whose version did not change. Present exactly when the text form shows the short commits.                                                                                                                             |
 | `toCommit`        | string                              | optional | Full commit after a move whose version did not change. Present exactly when the text form shows the short commits.                                                                                                                              |
 | `scope`           | Scope                               | optional | Plugin installation scope.                                                                                                                                                                                                                      |
@@ -836,13 +839,13 @@ All counts are nonnegative integers. The failure and warning counts are always p
 
 These are native wire values, including spaces and hyphens. They are not the labels produced by the text renderer. `Scope` is `user` or `project`.
 
-`PluginStatus`: `installed`, `updated`, `reinstalled`, `uninstalled`, `available`, `unavailable`, `upgradable`, `failed`, `skipped`, `manual recovery`, `will install`, `will uninstall`, `will enable`, `will disable`, `disabled`, `partially-installed`, `partially-upgradable`, `partially-available`, `remote`.
+`PluginStatus`: `installed`, `updated`, `reinstalled`, `uninstalled`, `available`, `unavailable`, `upgradable`, `failed`, `skipped`, `manual recovery`, `will install`, `will uninstall`, `will enable`, `will disable`, `will update`, `disabled`, `partially-installed`, `partially-upgradable`, `partially-available`, `remote`.
 
 `PluginInfoStatus`: `installed`, `available`, `remote`, `unavailable`, `partially-available`, `failed`, `partially-installed`, `disabled`.
 
-`MarketplaceStatus`: `added`, `removed`, `updated`, `failed`, `autoupdate enabled`, `autoupdate disabled`, `skipped`.
+`MarketplaceStatus`: `added`, `removed`, `updated`, `failed`, `autoupdate enabled`, `autoupdate disabled`, `skipped`, `will add`, `will remove`.
 
-`RowHint`: `partial-install`, `partial-update`, `stale-gate-update`, `enable`.
+`RowHint`: `partial-install`, `partial-update`, `catalog-partial-update`, `stale-gate-update`, `enable`.
 
 `Reason`: `up-to-date`, `not found`, `already installed`, `not installed`, `not in manifest`, `invalid manifest`, `no longer installable`, `unsupported source`, `unsupported component`, `unsupported hooks`, `lsp`, `requires pi-subagents`, `requires pi-mcp-adapter`, `rollback partial`, `unreadable`, `unparseable`, `unreadable manifest`, `source mismatch`, `plugins remain`, `concurrently uninstalled`, `concurrently updated`, `stale clone`, `duplicate name`, `lock held`, `already autoupdate`, `already no autoupdate`, `already enabled`, `already disabled`, `permission denied`, `source missing`, `network unreachable`, `marketplace not added`, `marketplace not added to user scope`, `marketplace not added to project scope`, `orphan rewake`, `authentication required`, `dangling reference`, `malformed mcp`, `malformed skill`, `malformed command`, `installs disabled`, `marketplace in user scope`, `marketplace in project scope`, `data kept`, `no matching version`, `version conflict`, `constraint too complex`, `invalid version constraint`, `dependency marketplace not added`, `dependency cycle`, `dependency failed`, `dependency promoted`, `dependency pruned`, `dependency unsatisfied`, `dependency version unsatisfied`, `dependents unsatisfied`, `dependency current copy`, `dependency enabled`, `dependents remain`, `dependency installed`, `dependents constrain`, `cross-marketplace`, `stale workflow command`, `requires pi-dynamic-workflows`, `components now supported`, `unsupported mcp`, `marketplace in local layer only`, `marketplace in base layer only`, `plugin in local layer only`, `plugin in base layer only`, `already installed in base layer`, `already installed in local layer`, `still installed in base layer`, `still installed in local layer`, `disabled in local layer`, `enabled in local layer`, `network error`.
 

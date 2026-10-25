@@ -5,11 +5,15 @@ import {
   type PluginFailedMessage,
   type PluginInstalledMessage,
   type PluginPartiallyInstalledMessage,
+  type PluginPartiallyUpgradableMessage,
   type PluginUninstalledMessage,
+  type PluginUpdatedMessage,
+  type PluginUpdateSkippedMessage,
   type PluginWillDisableMessage,
   type PluginWillEnableMessage,
   type PluginWillInstallMessage,
   type PluginWillUninstallMessage,
+  type PluginWillUpdateMessage,
 } from "../../shared/notification-types.ts";
 
 import type { LayerMarketplaceGap } from "../../persistence/config-merge.ts";
@@ -23,17 +27,31 @@ import type { Scope } from "../../shared/types.ts";
 /**
  * The plugin-row statuses the pending diff emits. The pending-tense rows carry
  * no `reasons` (they are pre-transition), and only `will uninstall` carries the
- * recorded version (PRN-02); the `failed`
+ * recorded version (PRN-02); `will update` carries the catalog move's
+ * `from → to` (D-14). The `failed`
  * row (source-mismatch dangling reference) carries its `reasons` via the shared
- * row grammar.
+ * row grammar. The two blocked moves (D-12) carry update's rows: `skipped` is
+ * a move a dependent's range holds, with its cause line, and
+ * `partially-upgradable` is a move that would drop components without consent.
  */
-type PendingStatus = "will install" | "will uninstall" | "will enable" | "will disable" | "failed";
+type PendingStatus =
+  | "will install"
+  | "will uninstall"
+  | "will enable"
+  | "will disable"
+  | "will update"
+  | "skipped"
+  | "partially-upgradable"
+  | "failed";
 
 export type PendingMsg =
   | PluginWillInstallMessage
   | PluginWillUninstallMessage
   | PluginWillEnableMessage
   | PluginWillDisableMessage
+  | PluginWillUpdateMessage
+  | PluginUpdateSkippedMessage
+  | PluginPartiallyUpgradableMessage
   | PluginFailedMessage;
 
 /**
@@ -48,6 +66,9 @@ export const PENDING_CONTEXT = {
     "will uninstall": { markers: false, contentReasons: false },
     "will enable": { markers: false, contentReasons: false },
     "will disable": { markers: false, contentReasons: false },
+    "will update": { markers: false, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    "partially-upgradable": { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
   },
 } as const satisfies CommandContext<PendingStatus>;
@@ -57,26 +78,42 @@ export const PENDING_CONTEXT = {
 // ---------------------------------------------------------------------------
 
 /**
- * The plugin-row statuses the load-time applied cascade emits. A successful
+ * The plugin-row statuses `apply`'s applied cascade emits. A successful
  * enable re-materializes via install, so it surfaces as `installed`
  * (RECON-04); there is no separate `enabled` row status.
  *
- * BFILL-01 / D-68-04: `partially-installed` widens this reconcile-local closed set
- * so a load-time backfill that only PARTIALLY re-materializes a plugin (its
+ * BFILL-01 / D-68-04 / D-08: `partially-installed` widens this reconcile-local
+ * closed set so a growth move that only PARTIALLY re-materializes a plugin (its
  * re-resolved unsupported set is still non-empty) surfaces as a
- * `(partially-installed)` row. A FULLY promoted backfill reuses the `installed`
+ * `(partially-installed)` row. A FULLY promoted plugin reuses the `installed`
  * row. The `partially-installed` literal already exists in the global
  * `PLUGIN_STATUSES` set; only this narrow applied set widens here.
+ *
+ * D-08 / D-12: `apply`'s catalog convergence adds update's rows. A realized
+ * move is `updated` (or `partially-installed` when a record already installed
+ * partial drops a kind), a move a dependent's range holds is `skipped` with
+ * its cause line, and a move that would drop components without consent is
+ * `partially-upgradable` -- the same two blocked rows `pending` lists.
  */
 type ReconcileAppliedStatus =
-  "installed" | "uninstalled" | "disabled" | "failed" | "partially-installed";
+  | "installed"
+  | "uninstalled"
+  | "disabled"
+  | "failed"
+  | "partially-installed"
+  | "updated"
+  | "skipped"
+  | "partially-upgradable";
 
 export type ReconcileAppliedMsg =
   | PluginInstalledMessage
   | PluginUninstalledMessage
   | PluginDisabledMessage
   | PluginFailedMessage
-  | PluginPartiallyInstalledMessage;
+  | PluginPartiallyInstalledMessage
+  | PluginUpdatedMessage
+  | PluginUpdateSkippedMessage
+  | PluginPartiallyUpgradableMessage;
 
 /**
  * LOAD-01: the brace of the load-time dependency-disable row, owned here beside
@@ -112,6 +149,9 @@ export const RECONCILE_APPLIED_CONTEXT = {
     uninstalled: { markers: false, contentReasons: false },
     disabled: { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
+    updated: { markers: true, contentReasons: true },
+    skipped: { markers: false, contentReasons: true },
+    "partially-upgradable": { markers: false, contentReasons: true },
   },
 } as const satisfies CommandContext<ReconcileAppliedStatus>;
 

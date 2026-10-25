@@ -109,6 +109,14 @@ Feature: Plugin fetch
       | plugin | https://github.com/acme/ghp.git |                  |
       | plugin | https://github.com/acme/ghp.git | {ghp revision 1} |
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | from  | to    |
+      | gits             | project           | ghp@gits | ghp  | will update |         | project | 1.0.0 | 2.0.0 |
+      | gits             | project           | ghp@gits | ghp  | will update |         | project | 1.0.0 | 2.0.0 |
     Then the session offers these skills:
       | command          | description           |
       | /skill:ghp-skill | A skill of ghp 1.0.0. |

@@ -140,7 +140,7 @@ Step module paths are relative to `features/step_definitions/`.
 - [x] **Phase 26: Git Mirror Access** — Mirror refreshes take the state lock, one copy helper serves all clones, and a cold `info --fetch` contacts the host once
 - [x] **Phase 27: Install and Reconcile Reason Residue** — Dependency ranges read as upstream, pinned-commit failures read cleanly, reconcile and import narrow reasons like install, and marketplace remove ignores disabled holders
 - [x] **Phase 28: Delisted Plugin Dependency Walk** — A plugin its marketplace no longer lists keeps its dependencies from its installed copy, so it no longer blocks the scope's dependency walk
-- [ ] **Phase 29: Apply Command and Read-Only Reload** — A new `apply` makes every pending change and converges plugins on the catalog version; `/reload` only reloads resources and prints what is pending
+- [x] **Phase 29: Apply Command and Read-Only Reload** — A new `apply` makes every pending change and converges plugins on the catalog version; `/reload` only reloads resources and prints what is pending
 - [ ] **Phase 30: Autoapply Setting** — An `autoapply` setting in the plugin configuration (default off) makes a load run `apply`, so a checked-out or pulled config takes effect without commands
 
 ## Phase Details
@@ -603,11 +603,54 @@ Plans:
 **Files:** `orchestrators/reconcile/*` (`plan.ts`, `apply.ts`, `backfill.ts`, `notify.ts`, `pending.ts`), `index.ts` (`resources_discover`, `session_start`), a new edge handler and router entry for `apply`, help, completions, `docs/output-catalog.md`, `docs/json-output.md`; `features/plugin/pending.feature`, `features/plugin/reconcile*.feature`, a new `features/plugin/apply.feature`.
 **Success Criteria** (what must be TRUE):
 
-1. `apply` makes every change `pending` listed, then `pending` lists nothing; `apply` with nothing pending reports so and writes nothing (APL-01).
+1. `apply` makes every change `pending` listed, then `pending` lists nothing; `apply` with nothing pending reports so and writes nothing (APL-01). Accepted exception (user, 2026-10-25): a dependent shipped together with the newer dependency it needs takes two `apply` runs (D-08, D-12b; BACKLOG APPLY1-01).
 2. After `marketplace update` moves a path-source and a git-source plugin, `apply` installs both at the catalog version; a range-blocked move and a consent-needing partial move stay put with warning rows and remain in `pending` (APL-02).
 3. `/reload` after hand-editing the config changes no state and prints `pending`'s block with the `apply` trailer; `/reload` with nothing pending prints nothing (APL-03).
 4. `pending`, help, completions and the docs name `apply` (APL-04).
 5. `npm run check` stays green.
+
+**Plans:** 14/14 plans complete
+
+Plans:
+**Wave 1**
+- [x] 29-01-PLAN.md — Tracer: the `/claude:plugin apply` verb (handler, router, register, flag catalog, help, completions, JSON outcome)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 29-02-PLAN.md — A load changes no installation state: `load.ts` and the shared `read-pass.ts`; the reload scenarios move to `apply`
+- [x] 29-03-PLAN.md — `pending` ends with the `/claude:plugin apply` trailer and carries `needsApply`
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 29-04-PLAN.md — An empty `apply` reports `Apply: nothing to change.`; the empty pending advisory names `apply`; the catalog's `apply` section
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 29-05-PLAN.md — `apply` ends with the reload trailer and installs missing dependencies on every run
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 29-06-PLAN.md — `pending` lists marketplace adds and removes as `(will add)` / `(will remove)` (D-20)
+
+**Wave 6** *(blocked on Wave 5 completion)*
+- [x] 29-07-PLAN.md — `pending` lists the LOAD-01 dependency disables and missing-dependency installs (D-21)
+
+**Wave 7** *(blocked on Wave 6 completion)*
+- [x] 29-08-PLAN.md — A load prints `pending`'s block on a mismatch and nothing on a match
+
+**Wave 8** *(blocked on Wave 7 completion)*
+- [x] 29-09-PLAN.md — `(will update)` and the offline convergence planner for path-source catalog moves
+
+**Wave 9** *(blocked on Wave 8 completion)*
+- [x] 29-10-PLAN.md — Range holds and consent declines in `pending` and the load; the network-free constraint fold
+
+**Wave 10** *(blocked on Wave 9 completion)*
+- [x] 29-11-PLAN.md — Git-source and supported-set growth moves in the preview
+
+**Wave 11** *(blocked on Wave 10 completion)*
+- [x] 29-12-PLAN.md — `apply` converges plugins on the catalog through a new runner entry and keeps blocked moves
+
+**Wave 12** *(blocked on Wave 11 completion)*
+- [x] 29-13-PLAN.md — `apply` makes partial plugins whole; the backfill and the extension-version stamp retire
+
+**Wave 13** *(blocked on Wave 12 completion)*
+- [x] 29-14-PLAN.md — APL-D1 and APL-D2 decision records, README, CHANGELOG and internal docs
 
 ### Phase 30: Autoapply Setting
 
@@ -655,7 +698,7 @@ Plans:
 | 26. Git Mirror Access | 1/1 | Complete    | 2026-10-23 |
 | 27. Install and Reconcile Reason Residue | 1/1 | Complete    | 2026-10-23 |
 | 28. Delisted Plugin Dependency Walk | 1/1 | Complete    | 2026-10-24 |
-| 29. Apply Command and Read-Only Reload | 0/TBD | Not started | - |
+| 29. Apply Command and Read-Only Reload | 14/14 | Complete    | 2026-10-25 |
 | 30. Autoapply Setting | 0/TBD | Not started | - |
 
 ## Carried Forward

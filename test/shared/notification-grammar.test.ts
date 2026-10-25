@@ -148,6 +148,8 @@ for (const { status, extra, expected } of [
     extra: { reasons: ["already no autoupdate"] },
     expected: "● official [user] <no autoupdate> {already no autoupdate}",
   },
+  { status: "will add", extra: {}, expected: "● official [user] (will add)" },
+  { status: "will remove", extra: {}, expected: "● official [user] (will remove)" },
   { status: undefined, extra: {}, expected: "● official [user]" },
   {
     status: undefined,
@@ -322,6 +324,17 @@ const ROW_CASES = [
   {
     plugin: { status: "will disable", name: "alpha", scope: "user", reasons: [] },
     expected: "◍ alpha (will disable)",
+  },
+  {
+    plugin: {
+      status: "will update",
+      name: "demo",
+      scope: "user",
+      from: "1.0.0",
+      to: "1.1.0",
+      reasons: [],
+    },
+    expected: "● demo v1.0.0 → v1.1.0 (will update)",
   },
   {
     plugin: {
@@ -528,6 +541,19 @@ for (const { plugin, expectedLines } of [
       "  ● alpha (partially-upgradable) {lsp}",
       "    summary",
       "    Re-run with --partial to update with the supported components.",
+    ],
+  },
+  {
+    plugin: {
+      status: "partially-upgradable",
+      name: "alpha",
+      reasons: ["unsupported component"],
+      version: "1.0.0",
+      hint: "catalog-partial-update",
+    },
+    expectedLines: [
+      "  ● alpha v1.0.0 (partially-upgradable) {unsupported component}",
+      "    Run update --partial on this plugin to update it with the supported components.",
     ],
   },
   {
@@ -1090,13 +1116,18 @@ for (const { message, reason, expected } of [
   });
 }
 
-test("renders the reconcile-pending-empty body line", () => {
-  // act
-  const rendered = renderReconcilePendingEmpty();
+for (const { command, expected } of [
+  { command: "pending", expected: "Pending: /claude:plugin apply has nothing to change." },
+  { command: "apply", expected: "Apply: nothing to change." },
+] as const) {
+  test(`D-08 / D-14: renders the reconcile-pending-empty body line for ${command}`, () => {
+    // act
+    const rendered = renderReconcilePendingEmpty(command);
 
-  // assert
-  assert.equal(rendered, "Pending: next reload will apply 0 actions.");
-});
+    // assert
+    assert.equal(rendered, expected);
+  });
+}
 
 for (const { scope, expected } of [
   {
@@ -1707,7 +1738,7 @@ test("formatEnvelopeArguments returns an info body byte for byte as its only arg
 
   // act
   const notifyArguments = formatEnvelopeArguments(
-    { severity: "info", needsReload: false, noOp: false },
+    { severity: "info", needsReload: false, needsApply: false, noOp: false },
     body,
   );
 
@@ -1722,6 +1753,7 @@ for (const severity of ["warning", "error"] as const) {
       severity,
       summary: "A plugin operation has failed.",
       needsReload: false,
+      needsApply: false,
       noOp: false,
     };
 
@@ -1745,6 +1777,7 @@ for (const { name, envelope, expectedText } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin update", failures: 1, warnings: 1, success: { count: 1 } },
     },
@@ -1755,6 +1788,7 @@ for (const { name, envelope, expectedText } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin import", failures: 2, warnings: 3, success: { count: 4 } },
     },
@@ -1765,6 +1799,7 @@ for (const { name, envelope, expectedText } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin list", failures: 0, warnings: 0, success: { count: 0 } },
     },
@@ -1775,6 +1810,7 @@ for (const { name, envelope, expectedText } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: {
         label: "Plugin update",
@@ -1790,6 +1826,7 @@ for (const { name, envelope, expectedText } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin install", failures: 1, warnings: 0 },
     },
@@ -1815,6 +1852,7 @@ for (const { name, envelope, body, expectedArguments } of [
     envelope: {
       severity: "info",
       needsReload: true,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin install", failures: 0, warnings: 0, success: { count: 1 } },
     },
@@ -1823,21 +1861,43 @@ for (const { name, envelope, body, expectedArguments } of [
   },
   {
     name: "leaves one blank line between the body and the trailer without a tally",
-    envelope: { severity: "info", needsReload: true, noOp: false },
+    envelope: { severity: "info", needsReload: true, needsApply: false, noOp: false },
     body: "body",
     expectedArguments: ["body\n\n/reload to pick up changes"],
   },
   {
     name: "puts the no-op headline in the tally slot",
-    envelope: { severity: "info", needsReload: false, noOp: true },
+    envelope: { severity: "info", needsReload: false, needsApply: false, noOp: true },
     body: "body",
     expectedArguments: ["body\n\nPlugin update: nothing to update"],
   },
   {
     name: "renders the no-op headline alone over an empty body",
-    envelope: { severity: "info", needsReload: false, noOp: true },
+    envelope: { severity: "info", needsReload: false, needsApply: false, noOp: true },
     body: "",
     expectedArguments: ["Plugin update: nothing to update"],
+  },
+  {
+    name: "APL-04 / D-14: puts the apply trailer last, one blank line below the tally",
+    envelope: {
+      severity: "info",
+      needsReload: false,
+      needsApply: true,
+      noOp: false,
+      tally: { label: "Reconcile pending", failures: 0, warnings: 0, success: { count: 1 } },
+    },
+    body: "body",
+    expectedArguments: [
+      "body\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
+    ],
+  },
+  {
+    name: "APL-04 / D-14: puts the reload trailer before the apply trailer",
+    envelope: { severity: "info", needsReload: true, needsApply: true, noOp: false },
+    body: "body",
+    expectedArguments: [
+      "body\n\n/reload to pick up changes\n\n/claude:plugin apply to make these changes",
+    ],
   },
   {
     name: "prepends the summary over the folded body",
@@ -1845,6 +1905,7 @@ for (const { name, envelope, body, expectedArguments } of [
       severity: "error",
       summary: "A plugin operation has failed.",
       needsReload: true,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin install", failures: 1, warnings: 0 },
     },

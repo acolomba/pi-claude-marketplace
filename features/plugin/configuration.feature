@@ -83,9 +83,9 @@ Feature: Plugin configuration
       | fixtures    | demo   |         |
     When the user starts a new pi session
     Then the session reports these results:
-      | kind                      | severity | needs reload | summary                        | tally label | tally failures | tally warnings |
-      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
-      | reconcile-applied-cascade | error    | false        | A plugin operation has failed. | Reconcile   | 1              | 0              |
+      | kind    | severity | needs reload | summary                        | tally label       | tally failures | tally warnings |
+      | cascade | error    | false        | A plugin operation has failed. | Reconcile pending | 1              | 0              |
+      | cascade | error    | false        | A plugin operation has failed. | Reconcile pending | 1              | 0              |
     Then the results list these marketplaces and plugins:
       | marketplace name          | marketplace scope | id                                                  | name                      | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                                                             | cause truncated | leaks | rollback partial |
       | claude-plugins.local.json | project           | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | The local config (claude-plugins.local.json) declares demo@fixtures, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config. | false           |       |                  |

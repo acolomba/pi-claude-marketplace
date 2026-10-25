@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+- A new session or `/reload` now only lists the changes that your configs and marketplaces need, and the new `/claude:plugin apply` makes them.
+
+  - `apply` makes every change that `pending` lists. It also moves plugins to the version their marketplace offers and adds components that Pi can now load. Run `/reload` after it.
+  - `pending` and a new session show a move that a dependent's version range blocks as `(skipped) {dependents constrain}`, and a move that needs `--partial` as `(partially-upgradable)`.
+  - A marketplace that you add to a config by hand shows as `(will add)` until `apply` adds it.
+  - In `pending` and a new session, a config that Pi cannot read now shows the read or parse error under its row.
+
 - A plugin that its marketplace no longer lists no longer blocks `update`, `reinstall`, `uninstall`, `disable`, or `enable` of other plugins in its scope. Pi keeps such a plugin running, so it now reads the plugin's dependencies from its installed copy: the plugin still protects what it needs and still limits which versions of it other commands install. Claude Code stops loading such a plugin instead. The warning at each new session stays, and now says `Plugin "<plugin>" not found in marketplace "<marketplace>"`. A plugin whose installed files are also gone still fails these commands with `{unreadable}`.
 
 - `enable` now fails with `{dependency unsatisfied}` and changes nothing when a dependency of the plugin is not installed, as Claude Code does. The cause says which dependencies to install first. It used to enable the plugin and leave the dependency to the next reload.
@@ -15,7 +22,7 @@
 
 - Internal: the test suite moves from `tests/` to `test/`, and the duplication check now fails on every repeated block of code. (#272)
 
-- When a reload installs a plugin that you added to a config by hand, its `(installed)` row now shows the version, as `install` does.
+- When `/claude:plugin apply` installs a plugin that you added to a config by hand, its `(installed)` row now shows the version, as `install` does.
 
 - Adding a git marketplace now takes a `#ref` on the `owner/repo` shorthand, and a failed add, update, or fetch reports its git failure more clearly.
 

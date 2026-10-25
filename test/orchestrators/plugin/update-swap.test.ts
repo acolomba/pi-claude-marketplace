@@ -39,6 +39,7 @@ const UPDATE_POLICY = {
   refreshSource: true,
   skipSameRevision: true,
   overwrite: false,
+  searchReleaseTags: true,
 } satisfies MaterializationPolicy;
 
 // D-18-04: a caller names its verb's policy; omitting it does not compile.
@@ -369,7 +370,12 @@ test("ST-9: a same-revision swap prepared before another swap's intent mark fail
     installedVersions: { hello: "1.0.0" },
   });
   const args = cascadeSwapArgs(cwd);
-  const policy = { refreshSource: false, skipSameRevision: false, overwrite: true } as const;
+  const policy = {
+    refreshSource: false,
+    skipSameRevision: false,
+    overwrite: true,
+    searchReleaseTags: true,
+  } as const;
   const first = await preparePluginUpdate({ ...args, policy });
   const second = await preparePluginUpdate({ ...args, policy });
   assert.ok(!("partition" in first));
@@ -493,6 +499,7 @@ test("D-18-15: an overwrite policy commits over a previous agent file a user edi
     refreshSource: false,
     skipSameRevision: false,
     overwrite: true,
+    searchReleaseTags: true,
   });
 
   // assert

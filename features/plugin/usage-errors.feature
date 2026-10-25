@@ -93,6 +93,7 @@ Feature: Plugin usage errors
       | ls tools --bogus               | --bogus     | Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--remote] [--scope user\|project] |
       | info notes@tools --bogus       | --bogus     | Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user\|project]                                                   |
       | pending --bogus                | --bogus     | Usage: /claude:plugin pending [--scope user\|project]                                                                                 |
+      | apply --bogus                  | --bogus     | Usage: /claude:plugin apply [--scope user\|project]                                                                                   |
       | enable notes@tools --bogus     | --bogus     | Usage: /claude:plugin enable <plugin>@<marketplace> [--scope user\|project] [--local]                                                 |
       | disable notes@tools --bogus    | --bogus     | Usage: /claude:plugin disable <plugin>@<marketplace> [--scope user\|project] [--local]                                                |
       | import --bogus                 | --bogus     | Usage: /claude:plugin import [--scope user\|project]                                                                                  |
@@ -103,6 +104,7 @@ Feature: Plugin usage errors
       | info notes@tools --local       | --local     | Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user\|project]                                                   |
       | list tools --local             | --local     | Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--remote] [--scope user\|project] |
       | pending --local                | --local     | Usage: /claude:plugin pending [--scope user\|project]                                                                                 |
+      | apply --local                  | --local     | Usage: /claude:plugin apply [--scope user\|project]                                                                                   |
       | import --local                 | --local     | Usage: /claude:plugin import [--scope user\|project]                                                                                  |
       | enable notes@tools --keep-data | --keep-data | Usage: /claude:plugin enable <plugin>@<marketplace> [--scope user\|project] [--local]                                                 |
       | install notes@tools --dry-run  | --dry-run   | Usage: /claude:plugin install <plugin>@<marketplace> [--scope user\|project] [--map-model] [--partial] [--local]                      |
@@ -113,6 +115,7 @@ Feature: Plugin usage errors
       | import extra --bogus           | --bogus     | Usage: /claude:plugin import [--scope user\|project]                                                                                  |
       | browse extra --bogus           | --bogus     | Usage: /claude:plugin browse                                                                                                          |
       | pending extra --bogus          | --bogus     | Usage: /claude:plugin pending [--scope user\|project]                                                                                 |
+      | apply extra --bogus            | --bogus     | Usage: /claude:plugin apply [--scope user\|project]                                                                                   |
       | help marketplace extra --bogus | --bogus     | Usage: /claude:plugin help [marketplace]                                                                                              |
 
   Scenario Outline: A plugin subcommand rejects more arguments than it takes
@@ -137,6 +140,7 @@ Feature: Plugin usage errors
       | ls tools extra                 | Too many arguments.                          | Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--remote] [--scope user\|project] |
       | info notes@tools extra         | Too many arguments.                          | Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user\|project]                                                   |
       | pending extra                  | Too many arguments.                          | Usage: /claude:plugin pending [--scope user\|project]                                                                                 |
+      | apply extra                    | Too many arguments.                          | Usage: /claude:plugin apply [--scope user\|project]                                                                                   |
       | enable notes@tools extra       | Too many arguments.                          | Usage: /claude:plugin enable <plugin>@<marketplace> [--scope user\|project] [--local]                                                 |
       | disable notes@tools extra      | Too many arguments.                          | Usage: /claude:plugin disable <plugin>@<marketplace> [--scope user\|project] [--local]                                                |
       | import extra                   | import does not accept positional arguments. | Usage: /claude:plugin import [--scope user\|project]                                                                                  |
@@ -174,6 +178,7 @@ Feature: Plugin usage errors
       | info --scope bad notes@tools       | bad     | Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user\|project]                                                   |
       | info notes@tools --scope bad       | bad     | Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user\|project]                                                   |
       | pending --scope bad                | bad     | Usage: /claude:plugin pending [--scope user\|project]                                                                                 |
+      | apply --scope bad                  | bad     | Usage: /claude:plugin apply [--scope user\|project]                                                                                   |
       | enable --scope bad notes@tools     | bad     | Usage: /claude:plugin enable <plugin>@<marketplace> [--scope user\|project] [--local]                                                 |
       | enable notes@tools --scope bad     | bad     | Usage: /claude:plugin enable <plugin>@<marketplace> [--scope user\|project] [--local]                                                 |
       | disable --scope bad notes@tools    | bad     | Usage: /claude:plugin disable <plugin>@<marketplace> [--scope user\|project] [--local]                                                |
@@ -203,6 +208,7 @@ Feature: Plugin usage errors
       | ls tools --scope              | Usage: /claude:plugin list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--remote] [--scope user\|project] |
       | info notes@tools --scope      | Usage: /claude:plugin info <plugin>@<marketplace> [--fetch] [--scope user\|project]                                                   |
       | pending --scope               | Usage: /claude:plugin pending [--scope user\|project]                                                                                 |
+      | apply --scope                 | Usage: /claude:plugin apply [--scope user\|project]                                                                                   |
       | enable notes@tools --scope    | Usage: /claude:plugin enable <plugin>@<marketplace> [--scope user\|project] [--local]                                                 |
       | disable notes@tools --scope   | Usage: /claude:plugin disable <plugin>@<marketplace> [--scope user\|project] [--local]                                                |
       | import --scope                | Usage: /claude:plugin import [--scope user\|project]                                                                                  |

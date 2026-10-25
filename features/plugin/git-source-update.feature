@@ -153,6 +153,103 @@ Feature: Plugin git source update
     Then the git host receives no request
     Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
 
+  Scenario: Pending previews the revision a fetched git-source plugin now offers without a request
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 2.0.0   |      |
+    Given the user has run "/claude:plugin fetch ghp@gits --scope project"
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | needs apply         | true              |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 1                 |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | from  | to    |
+      | gits             | project           | ghp@gits | ghp  | will update |         | project | 1.0.0 | 2.0.0 |
+    Then the git host receives no request
+
+  Scenario: Pending previews a git-source plugin whose catalog pins a commit it has not cloned without a request
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | true   |
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 2.0.0   |      |
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | true   |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | needs apply         | true              |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 1                 |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status      | reasons | scope   | from  | to               |
+      | gits             | project           | ghp@gits | ghp  | will update |         | project | 1.0.0 | {ghp revision 2} |
+    Then the git host receives no request
+
+  Scenario: Apply clones the new pinned commit of a git-source plugin it has not cached
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | true   |
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 2.0.0   |      |
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | true   |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | true                      |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 1                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name | status  | reasons | scope   | from  | to    |
+      | gits             | project           | ghp@gits | ghp  | updated |         | project | 1.0.0 | 2.0.0 |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+    Then the project scope holds these git clones:
+      | clone  | origin                          | revision         |
+      | plugin | https://github.com/acme/ghp.git | {ghp revision 2} |
+    Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
+
   Scenario Outline: An unpinned git-source plugin fails <verb> as lock held while another process holds the state lock
     Given the git repository "ghp" holds these plugins:
       | name | version | path |

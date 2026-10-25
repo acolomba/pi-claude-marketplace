@@ -3,6 +3,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
+import { pluginCloneKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { resolveListCandidate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/list-candidate-version.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -158,7 +159,7 @@ test("VER-01: a warm git tree takes the version its plugin.json declares over th
   // arrange
   const environment = await candidateEnvironment(testContext);
   const canonicalUrl = "https://example.com/warm-plugin";
-  const { mirrorDirectory } = await seedWarmMirror(environment.locations, canonicalUrl, {
+  const { mirrorDirectory, head } = await seedWarmMirror(environment.locations, canonicalUrl, {
     name: "warm-plugin",
     version: "2.0.0",
   });
@@ -180,6 +181,7 @@ test("VER-01: a warm git tree takes the version its plugin.json declares over th
     kind: "resolved",
     resolved: installableVerdict("warm-plugin", mirrorDirectory),
     version: "2.0.0",
+    resolvedSha: head,
   });
 });
 
@@ -187,7 +189,7 @@ test("VER-01: a warm git tree whose plugin.json declares no version takes the en
   // arrange
   const environment = await candidateEnvironment(testContext);
   const canonicalUrl = "https://example.com/warm-plugin";
-  const { mirrorDirectory } = await seedWarmMirror(environment.locations, canonicalUrl, {
+  const { mirrorDirectory, head } = await seedWarmMirror(environment.locations, canonicalUrl, {
     name: "warm-plugin",
   });
   const entry: ManifestPluginEntry = {
@@ -208,6 +210,7 @@ test("VER-01: a warm git tree whose plugin.json declares no version takes the en
     kind: "resolved",
     resolved: installableVerdict("warm-plugin", mirrorDirectory),
     version: "1.0.0",
+    resolvedSha: head,
   });
 });
 
@@ -232,6 +235,37 @@ test("VER-01: a warm git tree that declares no version anywhere takes its commit
     kind: "resolved",
     resolved: installableVerdict("warm-plugin", mirrorDirectory),
     version: `sha-${head.slice(0, 12)}`,
+    resolvedSha: head,
+  });
+});
+
+test("GIT-01: a pinned git source whose commit copy is cached carries that commit", async (testContext) => {
+  // arrange
+  const environment = await candidateEnvironment(testContext);
+  const canonicalUrl = "https://example.com/pinned-plugin";
+  const pinnedSha = "c".repeat(40);
+  const copyDirectory = await environment.locations.pluginCloneDir(
+    pluginCloneKey(canonicalUrl, pinnedSha),
+  );
+  await writePluginManifest(copyDirectory, { name: "pinned-plugin", version: "3.0.0" });
+  const entry: ManifestPluginEntry = {
+    name: "pinned-plugin",
+    source: { source: "url", url: canonicalUrl, sha: pinnedSha },
+  };
+
+  // act
+  const candidate = await resolveListCandidate(
+    entry,
+    { marketplaceRoot: environment.marketplaceRoot, marketplaceName: MARKETPLACE_NAME },
+    environment.locations,
+  );
+
+  // assert
+  assert.deepStrictEqual(candidate, {
+    kind: "resolved",
+    resolved: installableVerdict("pinned-plugin", copyDirectory),
+    version: "3.0.0",
+    resolvedSha: pinnedSha,
   });
 });
 

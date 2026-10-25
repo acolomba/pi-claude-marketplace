@@ -104,7 +104,10 @@ import {
   readHooksJson,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { makeReinstallHandler as makeReinstallHandlerWithOperation } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts";
-import { createNodeReinstallPlugins } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
+import {
+  createNodeReinstallPlugins,
+  createReinstallPlugin,
+} from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
@@ -121,8 +124,10 @@ import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/
 function makeReinstallHandler(): ReturnType<typeof makeReinstallHandlerWithOperation> {
   return makeReinstallHandlerWithOperation(
     createNodeReinstallPlugins(
-      createHooksRouting(createHooksRuntime(), { readHooksJson }),
-      createCompletionCache(),
+      createReinstallPlugin(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+      ),
     ),
   );
 }
@@ -413,8 +418,10 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
     reads: 1,
   });
   const reinstallPlugins = createNodeReinstallPlugins(
-    createHooksRouting(createHooksRuntime(), { readHooksJson }),
-    createCompletionCache(),
+    createReinstallPlugin(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      createCompletionCache(),
+    ),
   );
   const reinstallPluginsSpy = t.mock.fn(reinstallPlugins);
 

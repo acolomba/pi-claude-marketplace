@@ -57,7 +57,7 @@ import type {
   ScopeConfig,
 } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -1291,6 +1291,44 @@ export async function resolvePluginVersion(
   }
 
   return computeHashVersion(installable.pluginRoot);
+}
+
+/**
+ * D-16-09: whether an update candidate is the revision the record holds. A
+ * source that moved to a new commit is a new revision even when its declared
+ * version did not change, because the stored sha is the revision; a switch
+ * between a git and a `path` source adds or drops the sha, so it is a new
+ * revision too. Only when neither side has a sha does the version alone
+ * decide.
+ *
+ * This is the disabled branch's rule (D-99-05a). The enabled branch also
+ * compares the plugin root, through `isRecordedCandidate`.
+ */
+export function isSameRevision(
+  record: PluginInstallRecord,
+  toVersion: string,
+  resolvedSha: string | undefined,
+): boolean {
+  return toVersion === record.version && resolvedSha === record.resolvedSha;
+}
+
+/**
+ * D-18-11: whether an enabled record already holds the candidate. A record made
+ * before per-commit copies names the mutable mirror as its root, so the copy at
+ * the same commit is a new revision and the swap re-anchors the record onto it.
+ */
+export function isRecordedCandidate(
+  record: PluginInstallRecord,
+  candidate: {
+    readonly toVersion: string;
+    readonly resolvedSha: string | undefined;
+    readonly pluginRoot: string;
+  },
+): boolean {
+  return (
+    isSameRevision(record, candidate.toVersion, candidate.resolvedSha) &&
+    candidate.pluginRoot === record.resolvedSource
+  );
 }
 
 function compareNames(a: string, b: string): number {

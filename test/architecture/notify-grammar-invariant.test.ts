@@ -309,6 +309,19 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
       ],
     },
   },
+  {
+    label: "D-14 / will update plugin row",
+    run: runWithAllLoaded(),
+    message: {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [{ status: "will update", name: "p", from: "1.0.0", to: "1.1.0" }],
+        },
+      ],
+    },
+  },
 ];
 
 // Subject-first row grammar for DIFF-02 will-* rows: glyph + name + optional
@@ -320,11 +333,11 @@ const WILL_VARIANT_FIXTURES: readonly GrammarFixture[] = [
 // when present, ALWAYS follows the subject -- never precedes it.
 // FSTAT-06 / D-66-04: the `will install` token also admits the `will partially
 // install` form when the planned install would degrade (resolves
-// `partially-available`). It is a render modifier, not a new closed-set token;
-// there is deliberately no `will partially update` analog (the reconcile plan
-// has no update bucket -- D-66-05).
+// `partially-available`). It is a render modifier, not a new closed-set token.
+// D-14 (superseding D-66-05): the `will update` token carries the catalog
+// move's `v<from> → v<to>` arrow between the subject and the status token.
 const WILL_TOKEN_RE =
-  /^(?:[●○⊘◍]) [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: \(will (?:install|partially install|uninstall|enable|disable)\))?$/;
+  /^(?:[●○⊘◍]) [A-Za-z0-9_-]+(?: \[(?:user|project)\])?(?: v[A-Za-z0-9.#_-]+ → v[A-Za-z0-9.#_-]+)?(?: \(will (?:install|partially install|uninstall|enable|disable|update)\))?$/;
 
 // D-54-01 / ENBL-04: subject-first row grammar for the new
 // `(disabled)` inventory token. Each row matches
@@ -519,12 +532,13 @@ for (const fixture of DISABLED_VARIANT_FIXTURES) {
 
 // ---------------------------------------------------------------------------
 // RECON-04: subject-first row grammar for the
-// `reconcile-applied-cascade` standalone variant. Carries realized
-// transition tokens (`added` / `installed` / `uninstalled` / `disabled` /
-// `failed`) which would otherwise trigger the `/reload to pick up changes`
-// trailer on the cascade arm; the StandaloneKind dispatch path returns
-// `shouldEmitReloadHint = false` so the trailer NEVER appears.
+// `reconcile-applied-cascade` standalone variant, `/claude:plugin apply`'s
+// report. It carries realized transition tokens (`added` / `installed` /
+// `uninstalled` / `disabled` / `failed`), and D-08: like the cascade arm, a
+// row stamped `needsReload` ends the report with `/reload to pick up changes`.
 // ---------------------------------------------------------------------------
+
+const RELOAD_TRAILER_BLOCK = "\n\n/reload to pick up changes";
 
 const RECONCILE_APPLIED_FIXTURES: readonly GrammarFixture[] = [
   {
@@ -611,15 +625,13 @@ const RECONCILE_APPLIED_FIXTURES: readonly GrammarFixture[] = [
 ];
 
 for (const fixture of RECONCILE_APPLIED_FIXTURES) {
-  test(`RECON-04: reconcile-applied-cascade NEVER emits \`/reload to pick up changes\` even on cascades with realized transition tokens: ${fixture.label}`, (t) => {
+  test(`D-08: reconcile-applied-cascade ends with \`/reload to pick up changes\` when a row realized a transition: ${fixture.label}`, (t) => {
     const args = emitOnce(t, fixture);
     const emitted = args[0];
 
-    // RECON-04: the trailer is structurally excluded -- the
-    // reconcile already ran ON /reload, so the trailer would be a lie.
     assert.ok(
-      !emitted.includes("/reload to pick up changes"),
-      `${fixture.label}: reconcile-applied-cascade MUST NOT emit the reload-hint trailer`,
+      emitted.endsWith(RELOAD_TRAILER_BLOCK),
+      `${fixture.label}: reconcile-applied-cascade MUST end with the reload-hint trailer`,
     );
   });
 }
@@ -636,7 +648,7 @@ const ROW_ICONS_AT_START = ["●", "○", "⊘", "◍"];
 for (const fixture of RECONCILE_APPLIED_FIXTURES) {
   test(`RECON-04: a reconcile-applied-cascade row renders subject-first \`<glyph> <name> [<scope>] (<token>)\` with the status token AFTER the subject: ${fixture.label}`, (t) => {
     const args = emitOnce(t, fixture);
-    const emitted = args[0];
+    const emitted = args[0].slice(0, -RELOAD_TRAILER_BLOCK.length);
 
     // Drop the summary line (if present) -- the cascade body starts AFTER the
     // first `\n\n` separator at error/warning severity.

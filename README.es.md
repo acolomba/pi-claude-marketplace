@@ -159,7 +159,15 @@ Cada ámbito declara sus mercados y complementos en dos capas: la capa base y la
 | `user`    | `~/.pi/agent/claude-plugins.json` |
 | `project` | `<cwd>/.pi/claude-plugins.json`   |
 
-Las configuraciones de un ámbito son el registro definitivo de sus mercados y complementos instalados. Pi aplica su contenido al cargar la extensión (`/reload`).
+Las configuraciones de un ámbito son el estado deseado de sus mercados y complementos. El catálogo de un mercado es la lista de complementos y versiones que ofrece. Una sesión nueva o `/reload` no cambia tus complementos instalados. Solo lista los cambios que necesitan tus configuraciones y los catálogos de los mercados.
+
+Para ver esos cambios, ejecuta `/claude:plugin pending`. Para hacerlos, ejecuta `/claude:plugin apply`. Después ejecuta `/reload` para que Pi cargue el resultado.
+
+```text
+/claude:plugin pending
+/claude:plugin apply
+/reload
+```
 
 Que Pi aplique los componentes de un complemento declarado depende de la clave opcional `enabled` de la entrada y del valor predeterminado de instalación que declara el autor del complemento. Para más información, consulta [Activación de complementos](docs/plugin-enablement.md).
 
@@ -192,7 +200,7 @@ Las configuraciones de ámbito de usuario se encuentran en tu directorio de inic
 
 ## Referencia de comandos
 
-Esta extensión replica el comando `/plugin` de Claude Code. Usa `/claude:plugin` en Pi para operaciones de mercado y complementos. Después de instalar, desinstalar, actualizar o reinstalar complementos, ejecuta `/reload`. Así, Pi detecta los recursos modificados.
+Esta extensión replica el comando `/plugin` de Claude Code. Usa `/claude:plugin` en Pi para operaciones de mercado y complementos. Después de instalar, desinstalar, actualizar o reinstalar complementos, ejecuta `/reload`. Así, Pi detecta los recursos modificados. Si editas una configuración a mano, ejecuta `/claude:plugin apply` antes de `/reload`.
 
 ### Mercado
 

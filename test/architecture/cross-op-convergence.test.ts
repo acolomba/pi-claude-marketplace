@@ -52,7 +52,10 @@ import {
   createUninstallOperation,
   getPluginInfo,
 } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
-import { createNodeReinstallPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
+import {
+  createNodeReinstallPlugins,
+  createReinstallPlugin,
+} from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createGitOpsFake } from "../platform/git-ops-fake.ts";
@@ -87,8 +90,10 @@ function createUpdatePlugins() {
 
 function createReinstallPlugins() {
   return createNodeReinstallPlugins(
-    createHooksRouting(createHooksRuntime(), { readHooksJson }),
-    createCompletionCache(),
+    createReinstallPlugin(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      createCompletionCache(),
+    ),
   );
 }
 

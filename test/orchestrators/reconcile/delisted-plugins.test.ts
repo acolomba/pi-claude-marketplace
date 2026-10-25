@@ -2,16 +2,17 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import { describe, test } from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
-  hasSuppressingRow,
   reportDelistedPlugins,
+  reportUnreadableDeclarer,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/delisted-plugins.ts";
 
 import type { MarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
+import type { ScopeReadResult } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
@@ -86,144 +87,254 @@ function delistedRow(marketplace: string, plugin: string): PerEntryOutcome {
   };
 }
 
-test("REC-05 / DLS-01: every enabled record its loaded manifest does not list gets a not-in-manifest warning", async () => {
-  // arrange
-  const tools = marketplaceRecord("tools", ["app", "lib", "paused"], ["paused"]);
-  const kit = marketplaceRecord("kit", ["gone"]);
-  const outcomes: PerEntryOutcome[] = [];
+describe("reportDelistedPlugins", () => {
+  test("REC-05 / DLS-01: every enabled record its loaded manifest does not list gets a not-in-manifest warning", async () => {
+    // arrange
+    const tools = marketplaceRecord("tools", ["app", "lib", "paused"], ["paused"]);
+    const kit = marketplaceRecord("kit", ["gone"]);
+    const outcomes: PerEntryOutcome[] = [];
 
-  // act
-  await reportDelistedPlugins(
-    "project",
-    stateOf(tools, kit),
-    outcomes,
-    manifestLoader({
-      [tools.manifestPath]: manifestListing("tools", ["lib"]),
-      [kit.manifestPath]: manifestListing("kit", []),
-    }),
-  );
+    // act
+    await reportDelistedPlugins(
+      "project",
+      stateOf(tools, kit),
+      outcomes,
+      manifestLoader({
+        [tools.manifestPath]: manifestListing("tools", ["lib"]),
+        [kit.manifestPath]: manifestListing("kit", []),
+      }),
+    );
 
-  // assert
-  assert.deepStrictEqual(outcomes, [delistedRow("tools", "app"), delistedRow("kit", "gone")]);
+    // assert
+    assert.deepStrictEqual(outcomes, [delistedRow("tools", "app"), delistedRow("kit", "gone")]);
+  });
+
+  test("REC-05: a marketplace whose manifest fails to load reports nothing", async () => {
+    // arrange
+    const tools = marketplaceRecord("tools", ["app"]);
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await reportDelistedPlugins("project", stateOf(tools), outcomes, manifestLoader({}));
+
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+  });
+
+  test("RECON-04: a plugin this pass already reported gets no delisted row", async () => {
+    // arrange
+    const tools = marketplaceRecord("tools", ["app", "lib"]);
+    const unreadable: PerEntryOutcome = {
+      kind: "plugin-declarer-unreadable",
+      scope: "project",
+      marketplace: "tools",
+      plugin: "app",
+      reason: "not in manifest",
+      cause: new Error("cannot read the dependencies of app@tools"),
+    };
+    const outcomes: PerEntryOutcome[] = [unreadable];
+
+    // act
+    await reportDelistedPlugins(
+      "project",
+      stateOf(tools),
+      outcomes,
+      manifestLoader({ [tools.manifestPath]: manifestListing("tools", []) }),
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, [unreadable, delistedRow("tools", "lib")]);
+  });
+
+  test("D-08: a delisted plugin this pass disabled gets no delisted row", async () => {
+    // arrange
+    const tools = marketplaceRecord("tools", ["app", "lib", "kit"]);
+    const disabled: PerEntryOutcome = {
+      kind: "plugin-disabled",
+      scope: "project",
+      marketplace: "tools",
+      plugin: "app",
+    };
+    const held: PerEntryOutcome = {
+      kind: "plugin-dependency-disabled",
+      scope: "project",
+      marketplace: "tools",
+      plugin: "lib",
+      reasons: ["dependency unsatisfied"],
+      cause: new Error('Install "base@tools" first, or uninstall "lib@tools"'),
+    };
+    const outcomes: PerEntryOutcome[] = [disabled, held];
+
+    // act
+    await reportDelistedPlugins(
+      "project",
+      stateOf(tools),
+      outcomes,
+      manifestLoader({ [tools.manifestPath]: manifestListing("tools", []) }),
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, [disabled, held, delistedRow("tools", "kit")]);
+  });
+
+  test("REC-05: a pristine scope with no state reports nothing", async () => {
+    // arrange
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await reportDelistedPlugins("project", undefined, outcomes, manifestLoader({}));
+
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+  });
+
+  test("REC-05: the production manifest load reads the marketplace manifest off disk", async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "delisted-plugins-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const tools: MarketplaceRecord = {
+      ...marketplaceRecord("tools", ["app"]),
+      manifestPath: path.join(root, ".claude-plugin", "marketplace.json"),
+      marketplaceRoot: root,
+    };
+    await mkdir(path.dirname(tools.manifestPath), { recursive: true });
+    await writeFile(
+      tools.manifestPath,
+      JSON.stringify({ name: "tools", owner: { name: "t" }, plugins: [] }),
+    );
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    await reportDelistedPlugins("project", stateOf(tools), outcomes);
+
+    // assert
+    assert.deepStrictEqual(outcomes, [delistedRow("tools", "app")]);
+  });
 });
 
-test("REC-05: a marketplace whose manifest fails to load reports nothing", async () => {
-  // arrange
-  const tools = marketplaceRecord("tools", ["app"]);
-  const outcomes: PerEntryOutcome[] = [];
-
-  // act
-  await reportDelistedPlugins("project", stateOf(tools), outcomes, manifestLoader({}));
-
-  // assert
-  assert.deepStrictEqual(outcomes, []);
-});
-
-test("RECON-04: a plugin this pass already reported gets no delisted row", async () => {
-  // arrange
-  const tools = marketplaceRecord("tools", ["app", "lib"]);
-  const unreadable: PerEntryOutcome = {
-    kind: "plugin-declarer-unreadable",
-    scope: "project",
-    marketplace: "tools",
-    plugin: "app",
-    reason: "not in manifest",
-    cause: new Error("cannot read the dependencies of app@tools"),
+/** A read pass whose LOAD-01 walk could not read `declarer`'s declarations. */
+function unreadableDeclarerRead(declarer: string): ScopeReadResult {
+  return {
+    plan: undefined,
+    invalidOutcomes: [],
+    verdict: {
+      ok: false,
+      declarer,
+      reason: "unreadable manifest",
+      cause: new Error(`cannot read the dependencies of ${declarer}`),
+    },
   };
-  const outcomes: PerEntryOutcome[] = [unreadable];
+}
 
-  // act
-  await reportDelistedPlugins(
-    "project",
-    stateOf(tools),
-    outcomes,
-    manifestLoader({ [tools.manifestPath]: manifestListing("tools", []) }),
-  );
+describe("reportUnreadableDeclarer", () => {
+  test("REC-05: a satisfied verdict reports nothing", () => {
+    // arrange
+    const outcomes: PerEntryOutcome[] = [];
 
-  // assert
-  assert.deepStrictEqual(outcomes, [unreadable, delistedRow("tools", "lib")]);
-});
+    // act
+    reportUnreadableDeclarer(
+      "project",
+      {
+        plan: undefined,
+        invalidOutcomes: [],
+        verdict: { ok: true, unsatisfied: [] },
+      },
+      outcomes,
+    );
 
-test("D-08: a delisted plugin this pass disabled gets no delisted row", async () => {
-  // arrange
-  const tools = marketplaceRecord("tools", ["app", "lib", "kit"]);
-  const disabled: PerEntryOutcome = {
-    kind: "plugin-disabled",
-    scope: "project",
-    marketplace: "tools",
-    plugin: "app",
-  };
-  const held: PerEntryOutcome = {
-    kind: "plugin-dependency-disabled",
-    scope: "project",
-    marketplace: "tools",
-    plugin: "lib",
-    reasons: ["dependency unsatisfied"],
-    cause: new Error('Install "base@tools" first, or uninstall "lib@tools"'),
-  };
-  const outcomes: PerEntryOutcome[] = [disabled, held];
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+  });
 
-  // act
-  await reportDelistedPlugins(
-    "project",
-    stateOf(tools),
-    outcomes,
-    manifestLoader({ [tools.manifestPath]: manifestListing("tools", []) }),
-  );
+  test("REC-05: a read pass that walked no record reports nothing", () => {
+    // arrange
+    const outcomes: PerEntryOutcome[] = [];
 
-  // assert
-  assert.deepStrictEqual(outcomes, [disabled, held, delistedRow("tools", "kit")]);
-  assert.equal(hasSuppressingRow(outcomes, "project", "tools", "app"), false);
-});
+    // act
+    reportUnreadableDeclarer("project", { plan: undefined, invalidOutcomes: [] }, outcomes);
 
-test("REC-05: a pristine scope with no state reports nothing", async () => {
-  // arrange
-  const outcomes: PerEntryOutcome[] = [];
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+  });
 
-  // act
-  await reportDelistedPlugins("project", undefined, outcomes, manifestLoader({}));
+  test("D-05-07: names the declarer split on its last @ with the walk's reason and cause", () => {
+    // arrange
+    const outcomes: PerEntryOutcome[] = [
+      { kind: "plugin-enabled", scope: "project", marketplace: "tools", plugin: "app@v2" },
+    ];
 
-  // assert
-  assert.deepStrictEqual(outcomes, []);
-});
+    // act
+    reportUnreadableDeclarer("project", unreadableDeclarerRead("app@v2@tools"), outcomes);
 
-test("RECON-04: only a suppressing row for the same scope, marketplace, and plugin counts", () => {
-  // arrange
-  const outcomes: PerEntryOutcome[] = [
-    { kind: "plugin-enabled", scope: "project", marketplace: "tools", plugin: "app" },
-    { kind: "plugin-uninstalled", scope: "user", marketplace: "tools", plugin: "app" },
-    { kind: "plugin-uninstalled", scope: "project", marketplace: "kit", plugin: "app" },
-    { kind: "plugin-uninstalled", scope: "project", marketplace: "tools", plugin: "lib" },
-    { kind: "mp-added", scope: "project", marketplace: "tools" },
-  ];
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      { kind: "plugin-enabled", scope: "project", marketplace: "tools", plugin: "app@v2" },
+      {
+        kind: "plugin-declarer-unreadable",
+        scope: "project",
+        marketplace: "tools",
+        plugin: "app@v2",
+        reason: "unreadable manifest",
+        cause: new Error("cannot read the dependencies of app@v2@tools"),
+      },
+    ]);
+  });
 
-  // act
-  const suppressed = hasSuppressingRow(outcomes, "project", "tools", "app");
+  test("RECON-04: a declarer this pass already reported as failed gets no second row", () => {
+    // arrange
+    const failed: PerEntryOutcome = {
+      kind: "plugin-install-failed",
+      scope: "project",
+      marketplace: "tools",
+      plugin: "app",
+      reason: "source missing",
+    };
+    const outcomes: PerEntryOutcome[] = [failed];
 
-  // assert
-  assert.equal(suppressed, false);
-  assert.equal(hasSuppressingRow(outcomes, "project", "tools", "lib"), true);
-});
+    // act
+    reportUnreadableDeclarer("project", unreadableDeclarerRead("app@tools"), outcomes);
 
-test("REC-05: the production manifest load reads the marketplace manifest off disk", async (t) => {
-  // arrange
-  const root = await mkdtemp(path.join(tmpdir(), "delisted-plugins-"));
-  t.after(() => rm(root, { recursive: true, force: true }));
-  const tools: MarketplaceRecord = {
-    ...marketplaceRecord("tools", ["app"]),
-    manifestPath: path.join(root, ".claude-plugin", "marketplace.json"),
-    marketplaceRoot: root,
-  };
-  await mkdir(path.dirname(tools.manifestPath), { recursive: true });
-  await writeFile(
-    tools.manifestPath,
-    JSON.stringify({ name: "tools", owner: { name: "t" }, plugins: [] }),
-  );
-  const outcomes: PerEntryOutcome[] = [];
+    // assert
+    assert.deepStrictEqual(outcomes, [failed]);
+  });
 
-  // act
-  await reportDelistedPlugins("project", stateOf(tools), outcomes);
+  for (const { name, other } of [
+    {
+      name: "another scope",
+      other: { kind: "plugin-uninstalled", scope: "user", marketplace: "tools", plugin: "app" },
+    },
+    {
+      name: "another marketplace",
+      other: { kind: "plugin-uninstalled", scope: "project", marketplace: "kit", plugin: "app" },
+    },
+    {
+      name: "another plugin",
+      other: { kind: "plugin-uninstalled", scope: "project", marketplace: "tools", plugin: "lib" },
+    },
+    {
+      name: "a marketplace row",
+      other: { kind: "mp-added", scope: "project", marketplace: "tools" },
+    },
+  ] as const satisfies readonly { readonly name: string; readonly other: PerEntryOutcome }[]) {
+    test(`RECON-04: a suppressing row for ${name} leaves the warning in place`, () => {
+      // arrange
+      const outcomes: PerEntryOutcome[] = [other];
 
-  // assert
-  assert.deepStrictEqual(outcomes, [delistedRow("tools", "app")]);
+      // act
+      reportUnreadableDeclarer("project", unreadableDeclarerRead("app@tools"), outcomes);
+
+      // assert
+      assert.deepStrictEqual(outcomes, [
+        other,
+        {
+          kind: "plugin-declarer-unreadable",
+          scope: "project",
+          marketplace: "tools",
+          plugin: "app",
+          reason: "unreadable manifest",
+          cause: new Error("cannot read the dependencies of app@tools"),
+        },
+      ]);
+    });
+  }
 });

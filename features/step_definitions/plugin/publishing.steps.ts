@@ -26,7 +26,11 @@ import {
   readRepositoryPlugins,
 } from "../../lib/git-plugin.ts";
 import { runGit } from "../../lib/hermetic-git.ts";
-import { publishOutputStyle, rewritePublishedManifest } from "../../lib/published-marketplace.ts";
+import {
+  publishOutputStyle,
+  removePublishedOutputStyle,
+  rewritePublishedManifest,
+} from "../../lib/published-marketplace.ts";
 
 import type { GitPluginRepository, RepositoryPlugin } from "../../lib/git-plugin.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
@@ -91,5 +95,13 @@ Given(
   async function (this: ScenarioWorld, plugin: string, name: string) {
     const file = await publishOutputStyle(this.requirePublished(name), plugin);
     assert.strictEqual((await stat(file)).isFile(), true, `${file} is not a file`);
+  },
+);
+
+Given(
+  "the published plugin {string} of the marketplace {string} no longer has an output style",
+  async function (this: ScenarioWorld, plugin: string, name: string) {
+    const directory = await removePublishedOutputStyle(this.requirePublished(name), plugin);
+    await assert.rejects(stat(directory), { code: "ENOENT" }, `${directory} still exists`);
   },
 );

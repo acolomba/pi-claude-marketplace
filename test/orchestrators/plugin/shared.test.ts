@@ -19,6 +19,8 @@ import {
   emitMarketplaceNotAddedSignal,
   degradationFromEnable,
   enableRowDependencies,
+  isRecordedCandidate,
+  isSameRevision,
   keepLocalLayerTargets,
   loadTargetLayers,
   localOnlyMarketplaceRefusal,
@@ -2698,6 +2700,103 @@ describe("resolvePluginVersion", () => {
       // assert
       assert.equal(version, "1.0.0");
     });
+  });
+});
+
+describe("isSameRevision", () => {
+  const cases: readonly {
+    readonly title: string;
+    readonly recordSha?: string;
+    readonly toVersion: string;
+    readonly resolvedSha?: string;
+    readonly expected: boolean;
+  }[] = [
+    {
+      title: "D-16-09: the same version with no sha on either side is the same revision",
+      toVersion: "1.2.3",
+      expected: true,
+    },
+    {
+      title: "D-16-09: a different version is a new revision",
+      toVersion: "1.3.0",
+      expected: false,
+    },
+    {
+      title: "D-16-09: the same version at a moved commit is a new revision",
+      recordSha: "a".repeat(40),
+      toVersion: "1.2.3",
+      resolvedSha: "b".repeat(40),
+      expected: false,
+    },
+    {
+      title: "D-16-09: a sha on one side only is a new revision",
+      toVersion: "1.2.3",
+      resolvedSha: "b".repeat(40),
+      expected: false,
+    },
+  ];
+
+  for (const { title, recordSha, toVersion, resolvedSha, expected } of cases) {
+    test(title, () => {
+      // arrange
+      const record = {
+        ...makePluginRecord({}),
+        ...(recordSha !== undefined && { resolvedSha: recordSha }),
+      };
+
+      // act
+      const same = isSameRevision(record, toVersion, resolvedSha);
+
+      // assert
+      assert.equal(same, expected);
+    });
+  }
+});
+
+describe("isRecordedCandidate", () => {
+  test("D-18-11: the recorded version at the recorded root is the recorded candidate", () => {
+    // arrange
+    const record = makePluginRecord({});
+
+    // act
+    const recorded = isRecordedCandidate(record, {
+      toVersion: "1.2.3",
+      resolvedSha: undefined,
+      pluginRoot: "/source/alpha",
+    });
+
+    // assert
+    assert.equal(recorded, true);
+  });
+
+  test("D-18-11: the recorded version at another root is a new revision", () => {
+    // arrange
+    const record = makePluginRecord({});
+
+    // act
+    const recorded = isRecordedCandidate(record, {
+      toVersion: "1.2.3",
+      resolvedSha: undefined,
+      pluginRoot: "/source/alpha-copy",
+    });
+
+    // assert
+    assert.equal(recorded, false);
+  });
+
+  test("D-18-11: another version at the recorded root is a new revision", () => {
+    // arrange
+    const record = makePluginRecord({});
+
+    // act
+    const recorded = isRecordedCandidate(record, {
+      toVersion: "2.0.0",
+      resolvedSha: undefined,
+      pluginRoot: "/source/alpha",
+    });
+
+    // assert
+    assert.equal(recorded, false);
   });
 });
 

@@ -140,6 +140,9 @@ const STATUS_TOKEN_ENROLLMENT: Record<StatusToken, true> = {
   "will uninstall": true,
   "will enable": true,
   "will disable": true,
+  "will update": true,
+  "will add": true,
+  "will remove": true,
   disabled: true,
   "partially-installed": true,
   "partially-upgradable": true,
@@ -162,6 +165,7 @@ const PLUGIN_STATUS_ENROLLMENT: Record<PluginStatus, true> = {
   "will uninstall": true,
   "will enable": true,
   "will disable": true,
+  "will update": true,
   disabled: true,
   "partially-installed": true,
   "partially-upgradable": true,
@@ -177,6 +181,8 @@ const MARKETPLACE_STATUS_ENROLLMENT: Record<MarketplaceStatus, true> = {
   "autoupdate enabled": true,
   "autoupdate disabled": true,
   skipped: true,
+  "will add": true,
+  "will remove": true,
 };
 
 const MCP_SERVER_STATUS_ENROLLMENT: Record<McpServerStatus, true> = {
@@ -227,39 +233,43 @@ test("OUT-08: Reason is the closed 78-entry reason set", () => {
   assert.strictEqual(memberCount, 78);
 });
 
-test("SNM-02: StatusToken is the closed 24-entry token set", () => {
+test("SNM-02: StatusToken is the closed 27-entry token set", () => {
   // FSTAT-02 / FSTAT-04 / D-66-05: `partially-installed` and `partially-upgradable`
   // are derived realized tokens. `will partially install` is a render modifier on
   // `will install`, not a token.
   // USTAT-02 / D-64-01: `partially-available` is the not-installed render token.
   // RSTA-01 / D-80-06: `remote` is the not-installed git-source token.
+  // D-20: `will add` and `will remove` are the pending-tense marketplace tokens.
+  // D-14: `will update` is the pending-tense catalog move.
   // act
   const memberCount = Object.keys(STATUS_TOKEN_ENROLLMENT).length;
 
   // assert
-  assert.strictEqual(memberCount, 24);
+  assert.strictEqual(memberCount, 27);
 });
 
-test("SNM-02: PluginStatus is the closed 19-entry plugin-status set", () => {
+test("SNM-02: PluginStatus is the closed 20-entry plugin-status set", () => {
   // FSTAT-02 / FSTAT-04 / D-66-05: `partially-installed` and `partially-upgradable`
   // belong to the set.
   // USTAT-02 / D-64-01: `partially-available` belongs to both token sets because
   // `PluginInfoRowBase.status` derives via `Extract<PluginStatus, "partially-available">`.
   // RSTA-01 / D-80-06: `remote` belongs to `PluginStatus` because the info surface
   // renders `(remote)` via `Extract<PluginStatus, "remote">`.
+  // D-14: `will update` is the pending-tense catalog move.
   // act
   const memberCount = Object.keys(PLUGIN_STATUS_ENROLLMENT).length;
 
   // assert
-  assert.strictEqual(memberCount, 19);
+  assert.strictEqual(memberCount, 20);
 });
 
-test("SNM-02: MarketplaceStatus is the closed 7-entry marketplace-status set", () => {
+test("SNM-02: MarketplaceStatus is the closed 9-entry marketplace-status set", () => {
+  // D-20: `will add` and `will remove` preview the marketplace changes `apply` makes.
   // act
   const memberCount = Object.keys(MARKETPLACE_STATUS_ENROLLMENT).length;
 
   // assert
-  assert.strictEqual(memberCount, 7);
+  assert.strictEqual(memberCount, 9);
 });
 
 test("ASTAT-02: McpServerStatus is the closed 10-entry MCP server status set", () => {

@@ -27,7 +27,10 @@ import {
   createReinstallOperation,
   createUninstallOperation,
 } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
-import { createNodeReinstallPlugins } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
+import {
+  createNodeReinstallPlugins,
+  createReinstallPlugin,
+} from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -101,7 +104,9 @@ function operations(): {
     uninstall: createUninstallOperation(hooksRouting, completionCache),
     setPluginEnabled: createEnableOperation(hooksRouting),
     updatePlugins: createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
-    reinstallPlugins: createNodeReinstallPlugins(hooksRouting, completionCache),
+    reinstallPlugins: createNodeReinstallPlugins(
+      createReinstallPlugin(hooksRouting, completionCache),
+    ),
     reinstallPlugin: createReinstallOperation(hooksRouting, completionCache),
   };
 }

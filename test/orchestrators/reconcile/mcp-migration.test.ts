@@ -191,12 +191,8 @@ async function writeLegacy(
   return bytes;
 }
 
-function migrationInput(
-  cwd: string,
-  plan?: ReconcilePlan,
-  reason?: McpMigrationInput["reason"],
-): McpMigrationInput {
-  return { scope: "project", cwd, plan, reason, rows: [], notices: [] };
+function migrationInput(cwd: string, plan?: ReconcilePlan): McpMigrationInput {
+  return { scope: "project", cwd, plan, rows: [], notices: [] };
 }
 
 /** The project plan with `buckets` set; every other bucket is empty. */
@@ -1148,32 +1144,21 @@ describe("migrateLegacyMcpEntries", () => {
     assert.strictEqual(await readFile(scope.locations.mcpJsonPath, "utf8"), legacyBytes);
   });
 
-  for (const { owner, plan, reason, rows } of [
+  for (const { owner, plan, rows } of [
     {
       owner: "an owner the plan installs",
       plan: planWith({ pluginsToInstall: [{ ...HELLO_PLANNED, configSource: "local" }] }),
-      reason: undefined,
       rows: [],
     },
     {
-      owner: "an owner the reload's dependency install installs",
+      // D-22: a planned dependency install skips its owner at load and at apply alike.
+      owner: "an owner the plan installs as a missing dependency",
       plan: planWith({
         pluginsToDependencyInstall: [
           { ...HELLO_PLANNED, ranges: [], requiredBy: "app@mp", declarers: ["app@mp"] },
         ],
       }),
-      reason: "reload",
       rows: [],
-    },
-    {
-      owner: "an owner the dependency install plans at startup",
-      plan: planWith({
-        pluginsToDependencyInstall: [
-          { ...HELLO_PLANNED, ranges: [], requiredBy: "app@mp", declarers: ["app@mp"] },
-        ],
-      }),
-      reason: "startup",
-      rows: [helloRow("unowned")],
     },
     {
       owner: "an owner while the plan installs another plugin",
@@ -1183,7 +1168,6 @@ describe("migrateLegacyMcpEntries", () => {
           { ...HELLO_PLANNED, marketplace: "other", configSource: "base" },
         ],
       }),
-      reason: "reload",
       rows: [helloRow("unowned")],
     },
   ] as const) {
@@ -1192,7 +1176,7 @@ describe("migrateLegacyMcpEntries", () => {
       const scope = await createProjectScope(t, "unowned-plan");
       const legacyBytes = await seedNotMovable(scope, { records: {} });
       const log: string[] = [];
-      const input = migrationInput(scope.cwd, plan, reason);
+      const input = migrationInput(scope.cwd, plan);
 
       // act
       await migrateLegacyMcpEntries(input, recordingOperations(log));
@@ -1231,7 +1215,7 @@ describe("migrateLegacyMcpEntries", () => {
       const scope = await createProjectScope(t, "planned-skip");
       const legacyBytes = await seedNotMovable(scope, { enabled });
       const log: string[] = [];
-      const input = migrationInput(scope.cwd, plan, "reload");
+      const input = migrationInput(scope.cwd, plan);
 
       // act
       await migrateLegacyMcpEntries(input, recordingOperations(log));
@@ -1255,7 +1239,7 @@ describe("migrateLegacyMcpEntries", () => {
       marketplacesToRemove: [{ scope: "project", marketplace: "other", plugins: ["hello"] }],
     });
     const log: string[] = [];
-    const input = migrationInput(scope.cwd, plan, "reload");
+    const input = migrationInput(scope.cwd, plan);
 
     // act
     await migrateLegacyMcpEntries(input, recordingOperations(log));

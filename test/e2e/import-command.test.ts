@@ -131,6 +131,9 @@ function registerImportCommand(cwd: string, gitOps: GitOps) {
           constraint: undefined,
           declaresWorkflows: false,
         }),
+      applyReconcile: (): Promise<void> => {
+        throw new Error("import must not run a reconcile apply");
+      },
     },
     hooksRouting,
     createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,

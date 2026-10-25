@@ -50,6 +50,7 @@ const PLUGIN_STATUSES = {
   "will uninstall": true,
   "will enable": true,
   "will disable": true,
+  "will update": true,
   disabled: true,
   "partially-installed": true,
   "partially-upgradable": true,
@@ -77,6 +78,8 @@ const MARKETPLACE_STATUSES = {
   "autoupdate enabled": true,
   "autoupdate disabled": true,
   skipped: true,
+  "will add": true,
+  "will remove": true,
 } as const satisfies Record<MarketplaceStatus, true>;
 
 const REASONS = {
@@ -174,6 +177,7 @@ const SCOPES = {
 const ROW_HINTS = {
   "partial-install": true,
   "partial-update": true,
+  "catalog-partial-update": true,
   "stale-gate-update": true,
   enable: true,
 } as const satisfies Record<RowHint, true>;
@@ -378,6 +382,7 @@ export const CASCADE_PAYLOAD_SCHEMA = Type.Object(
     kind: Type.Literal("cascade"),
     tally: Type.Optional(TALLY),
     noOp: Type.Optional(Type.Literal(true)),
+    needsApply: Type.Optional(Type.Literal(true)),
     marketplaces: Type.Array(MARKETPLACE_BLOCK),
     advisories: Type.Optional(Type.Array(Type.String())),
     retainedWorkflows: Type.Optional(Type.Array(RETAINED_WORKFLOW)),

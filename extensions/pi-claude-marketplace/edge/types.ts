@@ -18,6 +18,7 @@ import type {
   ImportClaudeSettingsOptions,
 } from "../orchestrators/import/index.ts";
 import type { GitOps } from "../orchestrators/marketplace/shared.ts";
+import type { ApplyReconcileOptions } from "../orchestrators/reconcile/types.ts";
 import type { PluginUpdateFn } from "../orchestrators/types.ts";
 import type { McpStatusReader } from "../platform/mcp-status.ts";
 import type { CompletionCache } from "../shared/completion-cache.ts";
@@ -37,6 +38,8 @@ export interface EdgeDeps {
    * bounded by the run rather than by this binding's lifetime.
    */
   readonly beginPluginUpdateRun: () => PluginUpdateFn;
+  /** APL-01: the reconcile apply step that `/claude:plugin apply` runs. */
+  readonly applyReconcile: (opts: ApplyReconcileOptions) => Promise<void>;
   readonly importClaudeSettings?: (
     opts: ImportClaudeSettingsOptions,
   ) => Promise<ClaudeImportExecutionResult>;

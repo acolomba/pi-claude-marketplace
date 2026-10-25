@@ -37,6 +37,7 @@
 import { randomUUID } from "node:crypto";
 
 import { makeLocationsResolver } from "../orchestrators/edge-deps.ts";
+import { createReinstallOperation } from "../orchestrators/plugin/operations.ts";
 import { createNodeReinstallPlugins } from "../orchestrators/plugin/reinstall-flow.ts";
 import { hookDebugLog } from "../shared/debug-log.ts";
 import { errorMessage } from "../shared/errors.ts";
@@ -54,6 +55,7 @@ import { makeMarketplaceInfoHandler } from "./handlers/marketplace/info.ts";
 import { makeMarketplaceListHandler } from "./handlers/marketplace/list.ts";
 import { makeRemoveHandler } from "./handlers/marketplace/remove.ts";
 import { makeMarketplaceUpdateHandler } from "./handlers/marketplace/update.ts";
+import { makeApplyHandler } from "./handlers/plugin/apply.ts";
 import { makeBootstrapHandler } from "./handlers/plugin/bootstrap.ts";
 import { makeBrowseHandler } from "./handlers/plugin/browse.ts";
 import { makeEnableDisableHandler } from "./handlers/plugin/enable-disable.ts";
@@ -103,7 +105,9 @@ export function registerClaudePluginCommand(
 ): void {
   const createInvocationId = options.createInvocationId ?? randomUUID;
   const createRecoveryId = options.createRecoveryId ?? randomUUID;
-  const reinstallPlugins = createNodeReinstallPlugins(hooksRouting, deps.completionCache);
+  const reinstallPlugins = createNodeReinstallPlugins(
+    createReinstallOperation(hooksRouting, deps.completionCache),
+  );
   const install = makeInstallHandler(hooksRouting, deps.completionCache);
   const uninstall = makeUninstallHandler(hooksRouting, deps.completionCache);
   const prune = makePruneHandler(hooksRouting, deps.completionCache);
@@ -124,6 +128,7 @@ export function registerClaudePluginCommand(
     list,
     pluginInfo,
     pending: makePendingHandler(),
+    pluginApply: makeApplyHandler(deps, hooksRouting),
     enable,
     disable,
     import: makeImportHandler(deps, hooksRouting),

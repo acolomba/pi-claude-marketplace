@@ -58,6 +58,7 @@
           "additionalProperties": false
         },
         "noOp": { "type": "boolean", "const": true },
+        "needsApply": { "type": "boolean", "const": true },
         "marketplaces": {
           "type": "array",
           "items": {
@@ -88,6 +89,7 @@
                         "will uninstall",
                         "will enable",
                         "will disable",
+                        "will update",
                         "disabled",
                         "partially-installed",
                         "partially-upgradable",
@@ -191,7 +193,13 @@
                     "description": { "type": "string" },
                     "partial": { "type": "boolean" },
                     "hint": {
-                      "enum": ["partial-install", "partial-update", "stale-gate-update", "enable"]
+                      "enum": [
+                        "partial-install",
+                        "partial-update",
+                        "catalog-partial-update",
+                        "stale-gate-update",
+                        "enable"
+                      ]
                     },
                     "cause": {
                       "type": "object",
@@ -235,7 +243,9 @@
                   "failed",
                   "autoupdate enabled",
                   "autoupdate disabled",
-                  "skipped"
+                  "skipped",
+                  "will add",
+                  "will remove"
                 ]
               },
               "details": {
@@ -436,6 +446,7 @@
                         "will uninstall",
                         "will enable",
                         "will disable",
+                        "will update",
                         "disabled",
                         "partially-installed",
                         "partially-upgradable",
@@ -539,7 +550,13 @@
                     "description": { "type": "string" },
                     "partial": { "type": "boolean" },
                     "hint": {
-                      "enum": ["partial-install", "partial-update", "stale-gate-update", "enable"]
+                      "enum": [
+                        "partial-install",
+                        "partial-update",
+                        "catalog-partial-update",
+                        "stale-gate-update",
+                        "enable"
+                      ]
                     },
                     "cause": {
                       "type": "object",
@@ -583,7 +600,9 @@
                   "failed",
                   "autoupdate enabled",
                   "autoupdate disabled",
-                  "skipped"
+                  "skipped",
+                  "will add",
+                  "will remove"
                 ]
               },
               "details": {

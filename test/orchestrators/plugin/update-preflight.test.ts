@@ -47,6 +47,7 @@ const UPDATE_POLICY = {
   refreshSource: true,
   skipSameRevision: true,
   overwrite: false,
+  searchReleaseTags: true,
 } satisfies MaterializationPolicy;
 
 // D-18-04: a caller names its verb's policy; omitting it does not compile.
@@ -56,6 +57,15 @@ const REINSTALL_POLICY = {
   refreshSource: false,
   skipSameRevision: false,
   overwrite: true,
+  searchReleaseTags: true,
+} satisfies MaterializationPolicy;
+
+/** `apply`'s catalog-move knobs on the shared runner (D-26, D-23). */
+const CONVERGE_POLICY = {
+  refreshSource: false,
+  skipSameRevision: true,
+  overwrite: false,
+  searchReleaseTags: false,
 } satisfies MaterializationPolicy;
 
 function pluginRecord(version: string, enabled = true): PluginRecord {
@@ -1289,6 +1299,114 @@ test("D-18-04: a policy that does not skip the recorded revision prepares it", a
     constraint: undefined,
   });
   assert.strictEqual(prepared.installable.pluginRoot, seed.pluginRoot);
+});
+
+/**
+ * Adds an installed `alpha` whose marketplace entry and own manifest both
+ * declare `hello` at `range`, so the constraint gate has a holder to fold.
+ */
+async function seedRangeDependent(
+  seed: Awaited<ReturnType<typeof seedUpdate>>,
+  range: string,
+): Promise<void> {
+  const manifestPath = path.join(seed.cwd, "marketplace", ".claude-plugin", "marketplace.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+    plugins: Record<string, unknown>[];
+  };
+  const alphaRoot = path.join(seed.cwd, "marketplace", "plugins", "alpha");
+  await mkdir(path.join(alphaRoot, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(alphaRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({
+      name: "alpha",
+      version: "1.0.0",
+      dependencies: [{ name: "hello", version: range }],
+    }),
+  );
+  manifest.plugins.push({
+    name: "alpha",
+    source: "./plugins/alpha",
+    version: "1.0.0",
+    dependencies: [{ name: "hello", version: range }],
+  });
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  const state = await loadState(seed.locations.extensionRoot);
+  const mp = state.marketplaces[seed.marketplaceName]!;
+  await saveState(seed.locations.extensionRoot, {
+    ...state,
+    marketplaces: {
+      [seed.marketplaceName]: {
+        ...mp,
+        plugins: {
+          ...mp.plugins,
+          alpha: { ...pluginRecord("1.0.0"), resolvedSource: alphaRoot },
+        },
+      },
+    },
+  });
+}
+
+test("D-23: update's policy lets a dependent's range fall back to the marketplace's current copy", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  await seedRangeDependent(seed, ">=1.0.0");
+
+  // act
+  const prepared = await prepare(seed);
+
+  // assert -- the marketplace has no release tag to list, so the range
+  // fell back to the current copy, which is the fact the tag search leaves.
+  assert.ok(!("partition" in prepared));
+  assert.deepStrictEqual(prepared.constraint, {
+    disclosure: 'constrained to the combined range (>=1.0.0) -- required by "alpha@mp"',
+    fellBackToCurrentCopy: true,
+  });
+});
+
+test("D-23: a policy that lists no tag judges the range against the catalog version", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  await seedRangeDependent(seed, ">=1.0.0");
+
+  // act
+  const prepared = await prepare(seed, { policy: CONVERGE_POLICY });
+
+  // assert -- no tag search ran, so nothing fell back: the catalog's 2.0.0
+  // is the candidate the range admitted.
+  assert.ok(!("partition" in prepared));
+  assert.strictEqual(prepared.toVersion, "2.0.0");
+  assert.deepStrictEqual(prepared.constraint, {
+    disclosure: 'constrained to the combined range (>=1.0.0) -- required by "alpha@mp"',
+    fellBackToCurrentCopy: false,
+  });
+});
+
+test("D-12 / D-23: a policy that lists no tag holds a catalog version the range does not admit", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  await seedRangeDependent(seed, "^1.0.0");
+  const before = await readFile(seed.locations.stateJsonPath, "utf8");
+
+  // act
+  const outcome = await prepare(seed, { policy: CONVERGE_POLICY });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "skipped",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: [
+      'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "alpha@mp"',
+    ],
+    reasons: ["dependents constrain"],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
+  assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), before);
 });
 
 test("D-18-11: an enabled record at the same version under another root is prepared", async (t) => {

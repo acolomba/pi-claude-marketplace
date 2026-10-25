@@ -7,10 +7,11 @@
 // and this walk does filesystem reads. The planner consumes the verdict as an
 // already-computed argument, the same way it consumes the marketplace diff.
 //
-// It takes NO lock. Its only caller runs inside the reconcile read pass's
-// existing `withLockedStateTransaction` closure over the same snapshot, and
+// It takes NO lock. The reconcile read pass calls it inside its existing
+// `withLockedStateTransaction` closure over the same snapshot, and
 // `proper-lockfile` is configured with no retries and is not re-entrant, so a
-// second guard here would self-deadlock into a lock-held row.
+// second guard here would self-deadlock into a lock-held row. `pending` calls
+// it on its own unlocked, read-only snapshot (D-21).
 //
 // D-06-05: the walk runs to a fixpoint. A record this pass decides to hold
 // down is itself an unsatisfied dependency for whoever declares it, so the
@@ -324,4 +325,66 @@ export async function buildScopeSatisfactionVerdict(
     ok: true,
     unsatisfied: propagateUnsatisfied(detail.declarations, recordedPlugins(options.state)),
   };
+}
+
+/** A record a plan enables or disables. */
+export interface ToggledRecord {
+  readonly marketplace: string;
+  readonly plugin: string;
+}
+
+/** The records a plan enables and disables. */
+export interface PlannedToggles {
+  readonly enable: readonly ToggledRecord[];
+  readonly disable: readonly ToggledRecord[];
+}
+
+/** The scope with every planned toggle applied to its record. */
+function stateAfterToggles(state: ExtensionState, toggles: PlannedToggles): ExtensionState {
+  const keyOf = (op: ToggledRecord): string => `${op.plugin}@${op.marketplace}`;
+  const enabled = new Set(toggles.enable.map(keyOf));
+  const disabled = new Set(toggles.disable.map(keyOf));
+  const marketplaces = Object.fromEntries(
+    Object.entries(state.marketplaces).map(([name, mp]) => [
+      name,
+      {
+        ...mp,
+        plugins: Object.fromEntries(
+          Object.entries(mp.plugins).map(([plugin, record]) => {
+            const key = `${plugin}@${name}`;
+            if (disabled.has(key)) {
+              return [plugin, { ...record, enabled: false, dependencyDisabled: false }];
+            }
+
+            return [plugin, enabled.has(key) ? { ...record, enabled: true } : record];
+          }),
+        ),
+      },
+    ]),
+  );
+  return { ...state, marketplaces };
+}
+
+/**
+ * D-08 / D-21: the verdict once the plan's own enables and disables have run.
+ * A record the config disables is a disabled dependency of every record that
+ * declares it, and a record the config enables satisfies them again. So
+ * `apply` holds those dependents down, or lifts them, in the same pass, and
+ * `pending` lists that change. The disable is the user's own choice, so it
+ * carries no marker (LOAD-02). Answers `verdict` itself when the plan toggles
+ * nothing or the first walk failed (D-05-07).
+ */
+export async function verdictAfterToggles(
+  options: ScopeSatisfactionOptions,
+  verdict: ScopeSatisfactionVerdict,
+  toggles: PlannedToggles,
+): Promise<ScopeSatisfactionVerdict> {
+  if (!verdict.ok || toggles.enable.length + toggles.disable.length === 0) {
+    return verdict;
+  }
+
+  return buildScopeSatisfactionVerdict({
+    ...options,
+    state: stateAfterToggles(options.state, toggles),
+  });
 }

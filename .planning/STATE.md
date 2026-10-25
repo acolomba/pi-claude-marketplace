@@ -2,19 +2,20 @@
 gsd_state_version: "1.0"
 milestone: lifecycle-coverage
 milestone_name: Plugin Lifecycle Behavioral Tests
-current_phase: 15
-status: completed
-stopped_at: Phase 15 complete — all phases complete
-last_updated: "2026-10-24T21:55:41.290Z"
-last_activity: 2026-10-23
-last_activity_desc: Phase 15 complete
-state_head: 9a64ba09989f5d1f8a049af469432d6b1e702fd9
+current_phase: 29
+current_phase_name: Apply Command and Read-Only Reload
+status: complete
+stopped_at: Phase 29 complete (verification passed with one accepted override)
+last_updated: "2026-10-25T12:00:00.000Z"
+last_activity: 2026-10-25
+last_activity_desc: Phase 29 complete (APL-01..04; the two-apply co-shipped case accepted, BACKLOG APPLY1-01)
+state_head: 852ad2949e09e78828bb1d180d22388d61d1c0c5
 progress:
-  total_phases: 15
-  completed_phases: 15
-  total_plans: 33
-  completed_plans: 33
-  percent: 100
+  total_phases: 30
+  completed_phases: 29
+  total_plans: 74
+  completed_plans: 74
+  percent: 97
 ---
 
 # Project State
@@ -26,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-10-22 at the lifecycle-coverage start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 1 — Suite Foundation
+**Current focus:** Phase 29 — Apply Command and Read-Only Reload
 
 ## Current Position
 
-Phase: 15
-Plan: Not started
-Status: All phases complete
-Last activity: 2026-10-23 — Phase 15 complete
+Phase: 29 (Apply Command and Read-Only Reload) — COMPLETE
+Plan: 14 of 14
+Status: Phase complete — verification passed (one accepted override)
+Last activity: 2026-10-25 — Phase 29 complete: APL-01..04 done; a dependent shipped with the newer dependency it needs takes two `apply` runs (accepted, BACKLOG APPLY1-01); T-29-24 stays open below the blocking threshold (BACKLOG VERSTR-01)
 
 Progress: [██████████] 100%
 
@@ -183,12 +184,11 @@ hit the same wall; convert it rather than re-disclosing it.
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
 | 1 | Run init.sh in new worktrees: SessionStart guard keyed on node_modules/.init-done (7f4c2178) | 2026-10-24 | 7f4c2178 | — | — |
-| 2 | Require a cucumber scenario for user-visible behavior (AGENTS.md, cucumber skill trigger) | 2026-10-24 | 9a64ba09 | — | — |
 
 ## Session Continuity
 
-**Last session:** 2026-10-23T04:38:10.148Z
-**Stopped at:** Phase 15 complete — all phases complete
+**Last session:** 2026-10-25T12:00:00.000Z
+**Stopped at:** Phase 29 complete; next: milestone audit (`/gsd-audit-milestone`)
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -394,6 +394,20 @@ archived milestone artifacts.
 | Phase 01 P08 | 10 min | 2 tasks | 8 files |
 | Phase 01 P09 | 12 min | 2 tasks | 6 files |
 | Phase 01 P10 | 10 min | 3 tasks | 10 files |
+| Phase 29 P01 | 28 min | 2 tasks | 27 files |
+| Phase 29 P02 | 46 min | 2 tasks | 17 files |
+| Phase 29 P03 | 27 min | 2 tasks | 24 files |
+| Phase 29 P04 | 29 min | 2 tasks | 27 files |
+| Phase 29 P05 | 40 min | 2 tasks | 24 files |
+| Phase 29 P06 | 24 min | 2 tasks | 24 files |
+| Phase 29 P07 | 19 min | 2 tasks | 7 files |
+| Phase 29 P08 | 27 min | 2 tasks | 15 files |
+| Phase 29 P09 | 52 min | 3 tasks | 41 files |
+| Phase 29 P10 | 54 min | 3 tasks | 31 files |
+| Phase 29 P11 | 27 min | 2 tasks | 14 files |
+| Phase 29 P12 | 70 min | 3 tasks | 34 files |
+| Phase 29 P13 | 48 min | 3 tasks | 44 files |
+| Phase 29 P14 | 20 min | 2 tasks | 9 files |
 
 ## Decisions
 
@@ -570,6 +584,29 @@ archived milestone artifacts.
 - [Phase 01]: 01-09: pending never reads the source of a marketplace it would add, so the writer's token expansion is carried to a Phase 11 reconcile seed (WINDOWS #110)
 - [Phase 01]: 01-10: The plugin form of {git repository} resolves through gitRepositoryServing, which fails when no recorded repository or more than one holds the plugin
 - [Phase 01]: 01-10: Git clones are stated by origin URL and revision token, never by their directory key; the clone reader fails on a stray plugin-clones entry or a checkout with no origin
+- [Phase 29]: The apply handler member is SubcommandHandlers.pluginApply, not apply: strong-mock reserves apply/call/bind on every mock
+- [Phase 29]: pending and apply share the withScopeOnlyArgs prelude in edge/handlers/plugin/shared.ts; spelling-only top-level verbs route through TOP_LEVEL_VERB_ROUTES in edge/router.ts
+- [Phase 29]: apply and the load share openScopePass / closeScopePass / notifyScopePasses in orchestrators/reconcile/read-pass.ts; readPassFailureOutcome, migrateScopeIsolated and rebuildScopeRoutingTableIsolated stay module-private
+- [Phase 29]: The load passes no reason to the MCP move, so it skips only the owners the plan installs, uninstalls or disables; MISS-01 dependency installs run nowhere until the reason gate goes
+- [Phase 29]: The pending apply trailer is the fixed literal /claude:plugin apply to make these changes, folded after the reload trailer; isReconcilePlanListEmpty is !planListNeedsApply plus no source mismatch
+- [Phase 29]: A new optional cascade wire field needs its docs/json-output.md row in the same commit as the schema change, because the hook's json-output-docs gate fails otherwise
+- [Phase 29]: An empty apply reports Apply: nothing to change. through the reconcile-pending-empty kind with a required text-only command member; the JSON payload omits it and origin.commandId names the command
+- [Phase 29]: The apply-empty advisory is sent in applyReconcileWithReader, not in the shared notifyScopePasses, so the load stays silent on an empty pass (D-05)
+- [Phase 29]: Every apply report with a realized row ends with the reload trailer: shouldEmitReloadHint reads reconcile-applied-cascade rows through rowsNeedReload, the cascade's RLD-02 OR-reduce (D-08)
+- [Phase 29]: The reason option is gone from ApplyReconcileOptions, McpMigrationInput and ScopePassInput; every apply installs missing declared dependencies and the MCP move skips planned dependency installs (D-02, D-22)
+- [Phase 29]: Pending previews marketplace adds and removes as (will add) / (will remove) headers stamped severity info and needsReload false; each counts as one tally success and toward needsApply, and a remove with no plugin still shows its header (D-20)
+- [Phase 29]: pending previews the LOAD-01 dependency disable and the MISS-01 install apply makes: it computes the satisfaction verdict, mirrors apply's D-09-07 re-plan so a dependent a planned dependency install satisfies shows no disable, and drops a disable of an already-disabled record (D-21)
+- [Phase 29]: The load prints pending's block through the shared composePendingReport / notifyPendingReport on a mismatch, with the apply trailer and no reload hint, and nothing on a match; an invalid config, layer gap or source mismatch is reported only in that block, while per-session warnings and read-pass throws keep their reconcile-applied-cascade payload (D-05, D-06, D-18)
+- [Phase 29]: planConvergence (reconcile/convergence.ts) previews each enabled, listed, path-source record whose catalog candidate on disk is a new revision as a (will update) row in pending and the load's block; it plans against the scope as apply's plan leaves it, fails closed on an unreadable declaration walk, and moves stay beside ReconcilePlan, counted for emptiness and needsApply (APL-02, D-10, D-14)
+- [Phase 29]: With 20 plugin statuses a full switch exceeds fallow's cyclomatic 20, so status switches split at the new isPendingPluginRow partition into two exhaustive halves or become total Record maps (D-15)
+- [Phase 29]: Blocked catalog moves (D-12): planConvergence holds a move a dependent's range does not admit, judged by the network-free constraint-fold.ts on the catalog version alone (D-23), and declines a clean record's partial move; both run to a fixed point that gives a blocked plugin its installed-copy declarations, and pending and the load list update's (skipped) {dependents constrain} and (partially-upgradable) rows at warning, never counted for needsApply
+- [Phase 29]: The catalog decline's hint is the new RowHint catalog-partial-update, set by PluginPartiallyUpgradableMessage.catalogHint, with the frozen trailer 'Run update --partial on this plugin to update it with the supported components.' because apply and pending take no --partial (D-24)
+- [Phase 29]: Git-source and growth catalog moves (D-10, D-11): planConvergence previews a git-source record from the clone cache offline, a cached tree by version and commit (root not compared, GIT-01) and a target with no cached tree only when the catalog pins another commit or declares another version; the BFILL-01 growth test runs on every pass, so a strictly grown supported set is a move (growth-only at the same version, row marked {components now supported}), still subject to the range hold and consent decline
+- [Phase 29]: supportedSetGrew moved to convergence.ts as an export; backfill.ts imports it until the backfill is removed
+- [Phase 29]: apply moves catalog plugins through PluginUpdateOperations.convergePlugin (the update runner, refreshSource off, skipSameRevision on, overwrite off, searchReleaseTags off), never reinstall; a failed move shows the planned move and its closed-set reason
+- [Phase 29]: The cascade failure classifier reads the errno a BridgeStagingError carries on its cause, so an unreadable plugin source is permission denied (also in the autoupdate cascade)
+- [Phase 29]: apply runs growth-only moves through convergePlugin with rematerialize (skipSameRevision off, overwrite off) and reports them with the plugin-backfilled row; the load-time backfill, its stamp gate and EXTENSION_VERSION are deleted, lastReconciledExtensionVersion stays readable and nothing writes it (D-10, D-13, D-25)
+- [Phase 29]: README.md's dependents sentence says apply reinstalls an uninstalled dependency a dependent still declares and disables the dependents only if that install fails; the APL-D1 and APL-D2 rows record the read-only load and the NFR-2 amendment
 
 ### mcp-4 decisions
 

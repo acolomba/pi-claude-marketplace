@@ -10,6 +10,7 @@ import {
   dependencyDisabledOutcome,
   MigrateConfigSaveError,
   sourceMismatchOutcomeSubject,
+  sourceMismatchOutcomes,
   type InvalidBlockOutcome,
   type LayerMarketplaceGapOutcome,
   type MpAddedOutcome,
@@ -20,6 +21,7 @@ import {
   type OutcomeBase,
   type PerEntryOutcome,
   type PluginBackfilledOutcome,
+  type PluginConvergedOutcome,
   type PluginDeclarerUnreadableOutcome,
   type PluginDependencyDisabledOutcome,
   type PluginDisabledOutcome,
@@ -43,6 +45,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { UninstallPluginOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
+import type { ReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 
 void ({ scope: "project", marketplace: "official" } satisfies OutcomeBase);
 void ({ scope: "user", marketplace: "official", plugin: "formatter" } satisfies PluginOutcomeBase);
@@ -232,7 +235,37 @@ void ({
   basename: "claude-plugins.local.json",
   cause: new Error("the local layer declares alpha@mp without its marketplace"),
 } satisfies LayerMarketplaceGapOutcome);
+void ({
+  kind: "plugin-converged",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  row: {
+    status: "updated",
+    name: "formatter",
+    from: "1.0.0",
+    to: "1.1.0",
+    dependencies: [],
+    severity: "info",
+    needsReload: true,
+  },
+} satisfies PluginConvergedOutcome);
 void ({ kind: "mp-added", scope: "user", marketplace: "official" } satisfies PerEntryOutcome);
+void ({
+  kind: "plugin-converged",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  // @ts-expect-error a catalog move's outcome carries the row composed for it
+} satisfies PluginConvergedOutcome);
+void ({
+  kind: "plugin-converged",
+  scope: "project",
+  marketplace: "official",
+  plugin: "formatter",
+  // @ts-expect-error an applied report's row cannot use a pending status
+  row: { status: "will update", name: "formatter", from: "1.0.0", to: "1.1.0" },
+} satisfies PluginConvergedOutcome);
 void ({
   kind: "plugin-uninstalled",
   scope: "project",
@@ -537,6 +570,63 @@ describe("sourceMismatchOutcomeSubject", () => {
 
     // assert
     assert.strictEqual(outcomeSubject, "legacy");
+  });
+});
+
+describe("sourceMismatchOutcomes", () => {
+  test("lifts each planner cause onto its outcome arm with only the fields that arm renders", () => {
+    // arrange
+    const plan = {
+      scope: "project",
+      marketplacesToAdd: [],
+      marketplacesToRemove: [],
+      pluginsToInstall: [],
+      pluginsToUninstall: [],
+      pluginsToEnable: [],
+      pluginsToDisable: [],
+      pluginsToDependencyDisable: [],
+      pluginsToDependencyInstall: [],
+      sourceMismatches: [
+        {
+          scope: "project",
+          cause: "source-mismatch",
+          marketplace: "official",
+          declaredSource: "acme/tools",
+          recordedSource: "./tools",
+        },
+        {
+          scope: "project",
+          cause: "unknown-stored",
+          marketplace: "legacy",
+          declaredSource: "acme/legacy",
+          recordedSource: "[object Object]",
+        },
+        { scope: "project", cause: "dangling-reference", marketplace: "missing", plugin: "lint" },
+        { scope: "project", cause: "malformed-plugin-key", rawKey: "nokey" },
+      ],
+    } satisfies ReconcilePlan;
+
+    // act
+    const outcomes = sourceMismatchOutcomes(plan);
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "source-mismatch",
+        cause: "source-mismatch",
+        scope: "project",
+        marketplace: "official",
+      },
+      { kind: "source-mismatch", cause: "unknown-stored", scope: "project", marketplace: "legacy" },
+      {
+        kind: "source-mismatch",
+        cause: "dangling-reference",
+        scope: "project",
+        marketplace: "missing",
+        plugin: "lint",
+      },
+      { kind: "source-mismatch", cause: "malformed-plugin-key", scope: "project", rawKey: "nokey" },
+    ]);
   });
 });
 

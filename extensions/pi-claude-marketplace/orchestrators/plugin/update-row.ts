@@ -208,7 +208,7 @@ export function updatedRowFromOutcome(
  *  - equal `sha-` versions come from one commit prefix, and different ones
  *    already differ in the version, so a `sha-` row never names a second sha.
  */
-function revisionCommits(move: RevisionMove): VersionCommits | undefined {
+export function revisionCommits(move: RevisionMove): VersionCommits | undefined {
   const { fromVersion, toVersion, fromCommit, toCommit } = move;
   if (
     fromVersion !== toVersion ||

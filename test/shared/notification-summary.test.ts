@@ -278,9 +278,8 @@ for (const message of [
     ],
   },
   { kind: "marketplace-not-added", name: "missing" },
-  { kind: "reconcile-pending-empty" },
+  { kind: "reconcile-pending-empty", command: "apply" },
   { kind: "prune-empty", scope: "user" },
-  { kind: "reconcile-applied-cascade", marketplaces: [] },
 ] satisfies readonly NotificationMessage[]) {
   test(`${message.kind} is standalone and suppresses reload`, () => {
     // act & assert
@@ -311,6 +310,59 @@ test("a cascade is not standalone, so its row stamps drive the reload", () => {
 
   // act & assert
   assert.equal(shouldEmitReloadHint(message), true);
+});
+
+test("D-08: an apply report with a realized row requests reload", () => {
+  // arrange
+  const message = {
+    kind: "reconcile-applied-cascade",
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        plugins: [
+          {
+            status: "installed",
+            name: "alpha",
+            dependencies: [],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
+      },
+    ],
+  } satisfies NotificationMessage;
+
+  // act & assert
+  assert.equal(shouldEmitReloadHint(message), true);
+});
+
+test("D-08: an apply report whose rows only failed or warned requests no reload", () => {
+  // arrange
+  const message = {
+    kind: "reconcile-applied-cascade",
+    marketplaces: [
+      {
+        name: "official",
+        scope: "user",
+        status: "skipped",
+        severity: "warning",
+        needsReload: false,
+        plugins: [
+          {
+            name: "alpha",
+            status: "failed",
+            reasons: ["not found"],
+            severity: "error",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+  } satisfies NotificationMessage;
+
+  // act & assert
+  assert.equal(shouldEmitReloadHint(message), false);
 });
 
 test("a committed prune warning remains standalone and requests reload", () => {
@@ -595,7 +647,7 @@ test("update no-op fold preserves empty and non-empty bodies", (t) => {
   ]);
 });
 
-test("reconcile applied fold suppresses reload while preserving severity and tally", (t) => {
+test("a reconcile applied fold over a failed row carries no reload and keeps severity and tally", (t) => {
   // arrange
   const ctx = createContext(t);
   const message = {
@@ -612,7 +664,7 @@ test("reconcile applied fold suppresses reload while preserving severity and tal
             status: "failed",
             reasons: ["not found"],
             severity: "error",
-            needsReload: true,
+            needsReload: false,
           },
         ],
       },
