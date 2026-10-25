@@ -1,7 +1,7 @@
 Feature: Plugin autoapply
 
   A config that turns autoapply on makes a new session apply the configs and
-  marketplaces itself, so a checked-out project needs no apply command. The
+  marketplaces itself, and /claude:plugin autoapply shows and sets it. The
   scenarios run the real extension in a headless Pi with local marketplaces
   and a loopback https git host.
 
@@ -510,3 +510,52 @@ Feature: Plugin autoapply
       | true      | Unknown argument "true". |
       | on off    | Too many arguments.      |
       | --bogus   | Unknown flag: "--bogus". |
+
+  Scenario: Autoapply on writes nothing while another config is invalid and reports that config as the load does
+    Given a config in scope project and layer local, with this text:
+      """
+      { "autoapply": "yes" }
+      """
+    When the user runs "/claude:plugin autoapply on --scope project"
+    Then the result has these fields:
+      | kind           | cascade                      |
+      | severity       | error                        |
+      | needs reload   | false                        |
+      | summary        | Some operations have failed. |
+      | tally label    | Reconcile pending            |
+      | tally failures | 2                            |
+      | tally warnings | 0                            |
+    Then the result lists these plugins:
+      | marketplace name          | marketplace scope | marketplace status | marketplace reasons | id                                                  | name                      | status | reasons          | scope   | cause chain                                           | cause truncated | leaks | rollback partial |
+      | claude-plugins.local.json | project           | failed             | invalid manifest    | claude-plugins.local.json@claude-plugins.local.json | claude-plugins.local.json | failed | invalid manifest | project | schema validation failed: /autoapply: must be boolean | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope does not exist
+
+  Scenario: Autoapply on changes the setting and installs nothing until the next load
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the project scope
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+    When the user runs "/claude:plugin autoapply on --scope project"
+    Then the result has these fields:
+      | kind         | autoapply-status                                                |
+      | severity     | info                                                            |
+      | needs reload | false                                                           |
+      | enabled      | true                                                            |
+      | source scope | project                                                         |
+      | source file  | claude-plugins.json                                             |
+      | files        | [{"scope":"project","file":"claude-plugins.json","value":true}] |
+      | set scope    | project                                                         |
+      | set file     | claude-plugins.json                                             |
+      | set value    | true                                                            |
+    Then the project scope has no installed plugins
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | tally label | tally failures | tally warnings | tally success count |
+      | reconcile-applied-cascade | info     | true         | Reconcile   | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |

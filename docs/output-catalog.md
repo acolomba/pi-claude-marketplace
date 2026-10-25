@@ -5078,7 +5078,7 @@ Autoapply: off (claude-plugins.json [project])
 claude-plugins.json [user]: on
 ```
 
-An invalid config fails the command closed (D-03): it emits the failed `{invalid manifest}` block the load and `pending` print for that config (see `/claude:plugin pending`), shows no value, and a set writes nothing into an invalid target. A set that cannot take the scope's state lock, or cannot write the file, emits one failed row named by the file, such as `{lock held}`. The byte forms are locked by `test/shared/notification-grammar.test.ts` and `test/orchestrators/reconcile/autoapply-setting.test.ts`.
+An invalid config fails the command closed (D-03): it emits the failed `{invalid manifest}` block the load and `pending` print for that config (see `/claude:plugin pending`), shows no value, and a set then writes nothing, whichever config is invalid. A set that cannot take the scope's state lock, or cannot write the file, emits one failed row named by the file, such as `{lock held}`. The byte forms are locked by `test/shared/notification-grammar.test.ts` and `test/orchestrators/reconcile/autoapply-setting.test.ts`.
 
 ### Stop hook override cap reached (STOP-07 / D-88-01)
 

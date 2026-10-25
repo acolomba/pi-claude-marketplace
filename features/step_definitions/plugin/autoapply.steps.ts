@@ -15,8 +15,8 @@ const AUTOAPPLY_FILES: ReadonlySet<string> = new Set([
   "claude-plugins.local.json",
 ]);
 
-// The whole file is compared apart from its `autoapply` member, so a write
-// that dropped or changed another member fails here.
+// The whole file is compared, so a write that dropped, added or changed a
+// member fails here.
 Then(
   "the {string} file of the {word} scope sets autoapply to {word} and holds nothing else",
   async function (this: ScenarioWorld, fileName: string, scope: string, value: string) {

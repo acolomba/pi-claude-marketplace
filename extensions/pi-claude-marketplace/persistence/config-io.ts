@@ -63,7 +63,7 @@ const PLUGIN_CONFIG_ENTRY_SCHEMA = Type.Object({
  *   - `marketplaces` / `plugins`: both Optional Records (D-05); absent is
  *     legal (means "no declarations"), distinct from present-but-empty.
  *   - `autoapply`: Optional boolean (AAP-01); absent means off. A load reads
- *     it through `config-merge.ts::loadAutoapply`, never from one file alone,
+ *     it through `config-merge.ts::effectiveAutoapply`, never from one file alone,
  *     and a non-boolean value fails validation like any other bad field.
  *
  * D-09 (lenient): typebox's default for `Type.Object` accepts unknown extra

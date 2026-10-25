@@ -443,6 +443,7 @@ for (const kind of [
   "prune-committed-warning",
   "usage-error",
   "usage-info",
+  "autoapply-status",
   "internal-error",
 ]) {
   test(`the preparation recognizes the ${kind} outcome kind`, async (t) => {

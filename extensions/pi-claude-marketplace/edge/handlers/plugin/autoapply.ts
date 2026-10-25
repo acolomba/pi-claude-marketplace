@@ -9,7 +9,7 @@
 // filters, and `on` or `off` sets, with `--scope` and `--local` choosing the
 // file as `enable` does (user scope, base layer by default). Any other
 // argument is `Unknown argument`, two are `Too many arguments`, and any other
-// flag is an unknown flag.
+// `--` flag is an unknown flag.
 
 import { setAutoapply, showAutoapply } from "../../../orchestrators/reconcile/autoapply-setting.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";

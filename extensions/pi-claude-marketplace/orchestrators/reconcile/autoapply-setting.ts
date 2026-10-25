@@ -11,32 +11,37 @@
 // load reads the new value.
 //
 // D-03: any invalid config fails the command closed with the failed block the
-// load and `pending` print for it (`pending.ts::notifyInvalidConfigs`). A set
-// refuses to write an invalid target file.
+// load and `pending` print for it (`pending.ts::notifyInvalidConfigs`), and a
+// set then writes nothing.
 //
-// The write holds the scope's state lock, as every other config write does,
-// and runs the MIG-01 first-run migration first: a base config written with
-// only `autoapply` would otherwise stop the migration from capturing the
-// scope's recorded plugins. A lock held by another process, or a failed write,
-// becomes one failed row naming the file.
+// The write holds the scope's state lock, as every other config write does.
+// A base write runs the MIG-01 first-run migration first: a base config written
+// with only `autoapply` would otherwise stop the migration from capturing the
+// scope's recorded plugins. A local write reads no state. A held lock or a
+// failed write is one failed row named by the target file; a state.json that
+// cannot be read is one row named `state.json`.
 //
 // NFR-5: offline. It names no git surface.
+
+import { mkdir } from "node:fs/promises";
 
 import { loadConfig } from "../../persistence/config-io.ts";
 import { effectiveAutoapply, loadAutoapplyFiles } from "../../persistence/config-merge.ts";
 import { writeAutoapplyConfig } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
+import { loadState } from "../../persistence/state-io.ts";
 import { errorMessage, StateLockHeldError } from "../../shared/errors.ts";
 import { notify, notifyAutoapplyStatus } from "../../shared/notification-dispatch.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
-import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
+import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 
 import { notifyInvalidConfigs } from "./pending.ts";
 
-import type { ConfigLoadResult } from "../../persistence/config-io.ts";
 import type { AutoapplyFile } from "../../persistence/config-merge.ts";
+import type { ScopedLocations } from "../../persistence/locations.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type {
@@ -121,23 +126,28 @@ export async function showAutoapply(opts: AutoapplySettingOptions): Promise<void
   }
 }
 
-/** A failed set as one failed row naming the file it could not write. */
-function notifyWriteFailure(
+/** The closed-set reason of a set that threw: a held lock, or a failed write. */
+function writeFailureReason(err: unknown): "lock held" | "unreadable" {
+  return err instanceof StateLockHeldError ? "lock held" : "unreadable";
+}
+
+/** A failed set as one failed row named by the file that stopped it. */
+function notifySetFailure(
   opts: AutoapplySettingOptions,
-  target: AutoapplyConfigFile,
+  subject: { readonly scope: Scope; readonly name: string },
+  reason: ReturnType<typeof writeFailureReason> | ReturnType<typeof narrowProbeError>,
   err: unknown,
 ): void {
-  const reason = err instanceof StateLockHeldError ? "lock held" : narrowProbeError(err);
   notify(opts.ctx, opts.run, {
     marketplaces: [
       {
-        name: target.file,
-        scope: target.scope,
+        name: subject.name,
+        scope: subject.scope,
         plugins: [
           {
             status: "failed",
             severity: "error",
-            name: target.file,
+            name: subject.name,
             reasons: [reason],
             cause: new Error(redactAbsolutePaths(errorMessage(err))),
           },
@@ -147,34 +157,50 @@ function notifyWriteFailure(
   });
 }
 
+type WriteOutcome =
+  | { readonly kind: "written" }
+  | { readonly kind: "invalid"; readonly files: readonly AutoapplyFile[] }
+  | { readonly kind: "state-unreadable"; readonly error: unknown };
+
 /**
- * Writes `enabled` into `filePath` under the scope's lock. Returns the
- * target's load result when it is invalid and nothing was written.
+ * Writes `enabled` into `filePath` under the scope's lock. D-03: when any of
+ * the four configs is invalid it writes nothing. A base write runs the MIG-01
+ * migration first, which needs the scope's state; a local write reads none.
  */
 async function writeUnderLock(
-  scope: Scope,
   cwd: string,
+  loc: ScopedLocations,
   filePath: string,
   enabled: boolean,
-): Promise<ConfigLoadResult | undefined> {
-  const loc = locationsFor(scope, cwd);
-  return withLockedStateTransaction(loc, async (tx) => {
+): Promise<WriteOutcome> {
+  await mkdir(loc.extensionRoot, { recursive: true });
+  return withExistingScopeLock(loc, async (): Promise<WriteOutcome> => {
+    const files = await loadFiles(cwd);
+    if (effectiveAutoapply(files).status === "invalid") {
+      return { kind: "invalid", files };
+    }
+
     if (filePath === loc.baseConfigJsonPath) {
-      await migrateFirstRunConfig(loc, tx.state);
+      let state: ExtensionState;
+      try {
+        state = await loadState(loc.extensionRoot);
+      } catch (error) {
+        return { kind: "state-unreadable", error };
+      }
+
+      // Every config is valid, so the migration writes the base config from
+      // the recorded state when it is absent, or leaves it as it is.
+      await migrateFirstRunConfig(loc, state);
     }
 
     const current = await loadConfig(filePath);
-    if (current.status === "invalid") {
-      return current;
-    }
-
     await writeAutoapplyConfig(
       current.status === "valid" ? current.config : {},
       filePath,
       loc.scopeRoot,
       enabled,
     );
-    return undefined;
+    return { kind: "written" };
   });
 }
 
@@ -190,24 +216,24 @@ export async function setAutoapply(
     file: opts.local === true ? "claude-plugins.local.json" : "claude-plugins.json",
   };
 
-  let refused: ConfigLoadResult | undefined;
+  let outcome: WriteOutcome;
   try {
-    refused = await writeUnderLock(scope, opts.cwd, filePath, opts.enabled);
+    outcome = await writeUnderLock(opts.cwd, loc, filePath, opts.enabled);
   } catch (err) {
-    notifyWriteFailure(opts, target, err);
+    notifySetFailure(opts, { scope, name: target.file }, writeFailureReason(err), err);
     return;
   }
 
-  if (refused?.status === "invalid") {
-    notifyInvalidConfigs(opts.ctx, opts.run, [{ scope, filePath, error: refused.error }]);
+  if (outcome.kind === "state-unreadable") {
+    const { error } = outcome;
+    // `loadState` wraps a JSON parse failure, so its cause carries the class.
+    const cause: unknown = Reflect.get(Object(error), "cause") ?? error;
+    notifySetFailure(opts, { scope, name: "state.json" }, narrowProbeError(cause), error);
     return;
   }
 
-  const status = statusOrReport(
-    opts,
-    await loadFiles(opts.cwd),
-    (file) => file.filePath === filePath,
-  );
+  const files = outcome.kind === "invalid" ? outcome.files : await loadFiles(opts.cwd);
+  const status = statusOrReport(opts, files, (file) => file.filePath === filePath);
   if (status !== undefined) {
     notifyAutoapplyStatus(opts.ctx, opts.run, {
       ...status,

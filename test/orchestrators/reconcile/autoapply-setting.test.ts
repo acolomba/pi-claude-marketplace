@@ -270,7 +270,7 @@ test("AAP-04 / D-03: set refuses to write an invalid target config and reports i
   verifyBoundary();
 });
 
-test("AAP-04 / D-03: set writes a valid target, then reports another invalid config instead of a value", async (t) => {
+test("AAP-04 / D-03: set writes nothing when another config is invalid and reports that config", async (t) => {
   // arrange
   const tree = await createTree(t, "set-other-invalid");
   await writeUnder(tree.user.baseConfigJsonPath, JSON.stringify({ autoapply: "yes" }));
@@ -287,10 +287,106 @@ test("AAP-04 / D-03: set writes a valid target, then reports another invalid con
 
   // assert
   assert.deepStrictEqual(notifications, [{ message: INVALID_USER_BASE, severity: "error" }]);
-  assert.deepStrictEqual(JSON.parse(await readFile(tree.project.baseConfigJsonPath, "utf8")), {
-    schemaVersion: 1,
-    autoapply: true,
+  await assert.rejects(readFile(tree.project.baseConfigJsonPath, "utf8"), { code: "ENOENT" });
+  verifyBoundary();
+});
+
+test("AAP-04 / MIG-01: set into an absent base config beside an invalid local config writes nothing, so the migration can still run", async (t) => {
+  // arrange
+  const tree = await createTree(t, "set-local-invalid");
+  await writeUnder(tree.project.localConfigJsonPath, "{");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await setAutoapply({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd: tree.cwd,
+    scope: "project",
+    enabled: true,
   });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some operations have failed.\n\n" +
+        "⊘ claude-plugins.local.json [project] (failed) {invalid manifest}\n" +
+        "  ⊘ claude-plugins.local.json (failed) {invalid manifest}\n" +
+        "    cause: JSON parse failed: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n\n" +
+        "Reconcile pending: 2 failures",
+      severity: "error",
+    },
+  ]);
+  await assert.rejects(readFile(tree.project.baseConfigJsonPath, "utf8"), { code: "ENOENT" });
+  verifyBoundary();
+});
+
+for (const { name, bytes, reason, cause } of [
+  {
+    name: "not valid JSON",
+    bytes: "{",
+    reason: "unparseable",
+    cause:
+      "state.json at state.json is not valid JSON: Expected property name or '}' in JSON at position 1 (line 1 column 2)",
+  },
+  {
+    name: "of an unsupported schema version",
+    bytes: '{"schemaVersion":99,"marketplaces":{}}',
+    reason: "unreadable",
+    cause: "state.json at state.json has an unsupported schema version",
+  },
+]) {
+  test(`AAP-04: set into the base config of a scope whose state.json is ${name} fails on state.json and writes nothing`, async (t) => {
+    // arrange
+    const tree = await createTree(t, "set-state-unreadable");
+    await writeUnder(tree.user.stateJsonPath, bytes);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    await setAutoapply({ ctx, run: runWithNothingLoaded(), cwd: tree.cwd, enabled: true });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● state.json [user]\n" +
+          `  ⊘ state.json (failed) {${reason}}\n` +
+          `    cause: ${cause}`,
+        severity: "error",
+      },
+    ]);
+    await assert.rejects(readFile(tree.user.baseConfigJsonPath, "utf8"), { code: "ENOENT" });
+    verifyBoundary();
+  });
+}
+
+test("AAP-04: set into a local config reads no state, so an unreadable state.json does not stop it", async (t) => {
+  // arrange
+  const tree = await createTree(t, "set-local-no-state");
+  await writeUnder(tree.user.stateJsonPath, "{");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await setAutoapply({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd: tree.cwd,
+    local: true,
+    enabled: true,
+  });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Set autoapply to on in claude-plugins.local.json [user].\n\n" +
+        "Autoapply: on (claude-plugins.local.json [user])\n\n" +
+        "claude-plugins.local.json [user]: on",
+      severity: "info",
+    },
+  ]);
   verifyBoundary();
 });
 
@@ -349,7 +445,7 @@ test("AAP-04: set whose scope root cannot be created fails with its closed-set r
       message:
         "A plugin operation has failed.\n\n" +
         "● claude-plugins.json [project]\n" +
-        "  ⊘ claude-plugins.json (failed) {source missing}\n" +
+        "  ⊘ claude-plugins.json (failed) {unreadable}\n" +
         `    cause: ${refusal}`,
       severity: "error",
     },

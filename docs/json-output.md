@@ -56,7 +56,7 @@ A valid empty inventory prints this array and exits successfully:
 For an installed plugin named `review` in marketplace `tools`, the extracted rows can look like this:
 
 ```json
-[{ "status": "installed", "name": "review", "id": "review@tools", "reasons": [] }]
+[{"status":"installed","name":"review","id":"review@tools","reasons":[]}]
 ```
 
 An absent command produces an error instead of an empty array. A command outcome without a `cascade` fails with `No plugin inventory received`. Row extraction does not decide whether the entire command succeeded. Keep the captured file for the severity and exit-policy examples, then remove it with `rm "$input_file"`.
@@ -431,12 +431,12 @@ What `/claude:plugin autoapply` shows: the effective `autoapply` value, the conf
 
 <!-- use: common-fields -->
 
-| Field path | Type                                            | Presence | Meaning                                                                                                   |
-| ---------- | ----------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
-| `enabled`  | boolean                                         | required | Effective value. A load runs `/claude:plugin apply` when it is `true`.                                    |
-| `source`   | [Autoapply config file](#autoapply-config-file) | optional | Most specific config file that sets the value. Absent when no file sets it and the default, off, applies. |
-| `files`    | [Autoapply file value](#autoapply-file-value)[] | required | Config files the scope and layer filter keeps, user base first, project local last.                       |
-| `set`      | [Autoapply write](#autoapply-write)             | optional | The value a set wrote and the file it wrote it to. Absent for the show form.                              |
+| Field path | Type                                            | Presence | Meaning                                                                                                               |
+| ---------- | ----------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------- |
+| `enabled`  | boolean                                         | required | Effective value. A load runs `/claude:plugin apply` when it is `true`.                                                |
+| `source`   | [Autoapply config file](#autoapply-config-file) | optional | Most specific config file that sets the value. Absent when no file sets it and the default, off, applies.             |
+| `files`    | [Autoapply file value](#autoapply-file-value)[] | required | Show: the config files the scope and layer filter keeps, user base first, project local last. Set: the file it wrote. |
+| `set`      | [Autoapply write](#autoapply-write)             | optional | The value a set wrote and the file it wrote it to. Absent for the show form.                                          |
 
 <!-- /fields -->
 
