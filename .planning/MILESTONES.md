@@ -37,12 +37,25 @@ pass.
   read from its installed copy.
 
 **Closeout:** `override_closeout`. Every phase's VERIFICATION.md says
-`passed`, but `init.manager` reads 24 phases as `stale`: CHANGELOG, docs and
-codebase-map edits made after their verifiers ran changed covered files. The
+`passed`, but 22 of the 30 archived reports read `stale` under
+`verification.status` (measured 2026-10-25). Two causes, both outside the
+close-out's doc edits:
+
+- Later phases of this milestone changed source, feature and test files that
+  earlier reports cover, as planned. Phases 16, 18 and 25 cover files a later
+  phase deleted (`reinstall-clone-probe.ts`, `reconcile/backfill.ts`), and the
+  backfill criteria of 18 and 25 are superseded by APL-D1. Only phase 30's
+  drift was docs-only (the combined CHANGELOG entry and the `already added`
+  reason) until the APPLYTHROW-01 fix changed `reconcile/apply.ts`.
+- `milestone.complete` moved the phase folders to
+  `milestones/lifecycle-coverage-phases/` without updating `covered_files`, so
+  every report that lists a plan or summary under `.planning/phases/` fails
+  its digest closed.
+
+The tooling's route for a stale report is a verifier re-run; none was run. The
 combined `npm run check` at `1cfe3bb4` exited 0 (825 scenarios, 286
-direct-coverage records), and the close-out commits after it change no
-source. Known verification overrides: 24 newly acknowledged (stale only), 0
-carried forward. Phase 29 passed with one override, the accepted two-apply
+direct-coverage records). Known verification overrides: 22 newly acknowledged
+(stale only, causes above), 0 carried forward. Phase 29 passed with one override, the accepted two-apply
 case (D-12b, BACKLOG APPLY1-01).
 
 **Tech debt carried:** see `milestones/lifecycle-coverage-MILESTONE-AUDIT.md`
