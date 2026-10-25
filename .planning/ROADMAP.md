@@ -141,7 +141,7 @@ Step module paths are relative to `features/step_definitions/`.
 - [x] **Phase 27: Install and Reconcile Reason Residue** — Dependency ranges read as upstream, pinned-commit failures read cleanly, reconcile and import narrow reasons like install, and marketplace remove ignores disabled holders
 - [x] **Phase 28: Delisted Plugin Dependency Walk** — A plugin its marketplace no longer lists keeps its dependencies from its installed copy, so it no longer blocks the scope's dependency walk
 - [x] **Phase 29: Apply Command and Read-Only Reload** — A new `apply` makes every pending change and converges plugins on the catalog version; `/reload` only reloads resources and prints what is pending
-- [ ] **Phase 30: Autoapply Setting** — An `autoapply` setting in the plugin configuration (default off) makes a load run `apply`, so a checked-out or pulled config takes effect without commands
+- [x] **Phase 30: Autoapply Setting** — An `autoapply` setting in the plugin configuration (default off) makes a load run `apply`, so a checked-out or pulled config takes effect without commands
 
 ## Phase Details
 
@@ -666,6 +666,11 @@ Plans:
 3. A failure during a load-time apply (network down, held state lock, blocked move) never throws out of the load; it reports the failed rows, and what is still pending stays listed (AAP-03, NFR-2).
 4. `npm run check` stays green.
 
+**Plans:** 1/1 plans complete
+
+Plans:
+- [x] 30-01-PLAN.md — the `autoapply` key and precedence, the load branch to `apply`, `features/plugin/autoapply.feature`, docs
+
 ## Progress
 
 | Phase | Plans Complete | Status | Completed |
@@ -699,7 +704,7 @@ Plans:
 | 27. Install and Reconcile Reason Residue | 1/1 | Complete    | 2026-10-23 |
 | 28. Delisted Plugin Dependency Walk | 1/1 | Complete    | 2026-10-24 |
 | 29. Apply Command and Read-Only Reload | 14/14 | Complete    | 2026-10-25 |
-| 30. Autoapply Setting | 0/TBD | Not started | - |
+| 30. Autoapply Setting | 1/1 | Verified (human_needed: AGENTS.md network policy) | 2026-10-25 |
 
 ## Carried Forward
 

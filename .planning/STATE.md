@@ -2,19 +2,19 @@
 gsd_state_version: "1.0"
 milestone: lifecycle-coverage
 milestone_name: Plugin Lifecycle Behavioral Tests
-current_phase: 29
-current_phase_name: Apply Command and Read-Only Reload
-status: complete
-stopped_at: Phase 29 complete (verification passed with one accepted override)
-last_updated: "2026-10-25T12:00:00.000Z"
+current_phase: 30
+current_phase_name: Autoapply Setting
+status: verifying
+stopped_at: Phase 30 verified human_needed (AGENTS.md network policy decision)
+last_updated: "2026-10-25T14:00:00.000Z"
 last_activity: 2026-10-25
-last_activity_desc: Phase 29 complete (APL-01..04; the two-apply co-shipped case accepted, BACKLOG APPLY1-01)
+last_activity_desc: Phase 30 executed and verified human_needed (AAP-01..03 done; AGENTS.md network policy left to the user; BACKLOG APPLYTHROW-01)
 state_head: 852ad2949e09e78828bb1d180d22388d61d1c0c5
 progress:
   total_phases: 30
   completed_phases: 29
-  total_plans: 74
-  completed_plans: 74
+  total_plans: 75
+  completed_plans: 75
   percent: 97
 ---
 
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-10-22 at the lifecycle-coverage start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 29 — Apply Command and Read-Only Reload
+**Current focus:** Phase 30 — Autoapply Setting
 
 ## Current Position
 
-Phase: 29 (Apply Command and Read-Only Reload) — COMPLETE
-Plan: 14 of 14
-Status: Phase complete — verification passed (one accepted override)
-Last activity: 2026-10-25 — Phase 29 complete: APL-01..04 done; a dependent shipped with the newer dependency it needs takes two `apply` runs (accepted, BACKLOG APPLY1-01); T-29-24 stays open below the blocking threshold (BACKLOG VERSTR-01)
+Phase: 30 (Autoapply Setting) — VERIFIED, human_needed
+Plan: 1 of 1
+Status: Verification human_needed — one open item: whether AGENTS.md network policy records AAP-D1 (PROJECT.md does)
+Last activity: 2026-10-25 — Phase 30: the `autoapply` config key makes a load run `apply` (AAP-D1, no trust gate); `npm run check` green; review WR-01 tracked as BACKLOG APPLYTHROW-01
 
 Progress: [██████████] 100%
 

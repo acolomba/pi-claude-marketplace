@@ -4044,3 +4044,16 @@ puts the catalog `version` string, unbounded manifest text, into the
 two ways: bound the manifest `version` string at parse time (a
 `VERSION_PATTERN`-style allowlist), or accept it under T-29-21, since the
 same strings already render in the `will update` / `updated` version slots.
+
+## APPLYTHROW-01: an apply pass that throws drops the rows it already collected
+
+Found by the phase 30 code review (round 2, WR-01), accepted open. When the
+apply step throws mid-pass (GHB-03: an invalid
+`PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`), `applyReconcileWithReader` discards
+the outcomes it collected, so installs and enables that committed before the
+throw get no row and no `/reload` trailer. Under autoapply, a one-time MCP
+migration notice that committed before the throw is also lost, because the
+read-only rerun finds nothing left to move. `/claude:plugin apply` behaves the
+same today. Fix: report the collected scope passes (`notifyScopePasses`)
+before rethrowing, and test an install plus an MCP move that commit before the
+throw.
