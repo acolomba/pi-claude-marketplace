@@ -7483,6 +7483,44 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  test("D-08 / D-12 / D-19: one apply moves a dependent and the dependency its new range needs, and the next apply has nothing to change", async (t) => {
+    // arrange -- the catalog ships `widget` 1.1.0, which needs `zcore@^2.0.0`,
+    // together with `zcore` 2.0.0. The recorded `zcore` 1.0.0 is out of range,
+    // and the planned `zcore` move satisfies it.
+    const { cwd, project } = await seedConvergenceScope(t, "converge-bump-together", {
+      trees: { widget: { skill: "clean" }, zcore: { skill: "clean" } },
+      supported: { widget: ["skills"], zcore: ["skills"] },
+      offered: { widget: "1.1.0", zcore: "2.0.0" },
+      dependencies: { widget: [{ name: "zcore", version: "^2.0.0" }] },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● widget v1.0.0 → v1.1.0 (updated)\n" +
+          "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+      APPLY_EMPTY_NOTICE,
+    ]);
+    const widget = await recordFor(project, "mp", "widget");
+    assert.equal(widget?.version, "1.1.0");
+    assert.equal(widget?.enabled, true);
+    assert.equal((await recordFor(project, "mp", "zcore"))?.version, "2.0.0");
+    verifyBoundary();
+  });
+
   test("WR-01 / NFR-3: a state read that fails before the convergence reports a state.json row, never nothing to change", async (t) => {
     // arrange -- the read pass reads the scope first, the convergence second.
     const { cwd, project } = await seedConvergenceScope(t, "converge-unreadable", {

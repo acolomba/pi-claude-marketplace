@@ -128,6 +128,31 @@ function declaring(
   });
 }
 
+/** Seeds `mp` recording each of `plugins` enabled at 1.0.0, rooted at `plugins/<name>`. */
+async function seedRecords(scope: ProjectScope, plugins: readonly string[]): Promise<void> {
+  const record = (plugin: string) => ({
+    version: "1.0.0",
+    resolvedSource: path.join(scope.marketplaceRoot, "plugins", plugin),
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    enabled: true,
+    provenance: "explicit" as const,
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  });
+  const seeded = recordedState(scope);
+  const mp = seeded.marketplaces["mp"];
+  assert.ok(mp !== undefined);
+  const state: ExtensionState = {
+    ...seeded,
+    marketplaces: {
+      mp: { ...mp, plugins: Object.fromEntries(plugins.map((plugin) => [plugin, record(plugin)])) },
+    },
+  };
+  await mkdir(scope.project.extensionRoot, { recursive: true });
+  await saveState(scope.project.extensionRoot, state);
+}
+
 function planOf(fields: Partial<Omit<ReconcilePlan, "scope">>): ReconcilePlan {
   return {
     scope: "project",
@@ -203,25 +228,7 @@ describe("readPassForScope", () => {
         ],
       }),
     );
-    const record = (plugin: string) => ({
-      version: "1.0.0",
-      resolvedSource: path.join(scope.marketplaceRoot, "plugins", plugin),
-      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
-      enabled: true,
-      provenance: "explicit" as const,
-      installedAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:00.000Z",
-    });
-    const seeded = recordedState(scope);
-    const mp = seeded.marketplaces["mp"];
-    assert.ok(mp !== undefined);
-    const state: ExtensionState = {
-      ...seeded,
-      marketplaces: { mp: { ...mp, plugins: { app: record("app"), vault: record("vault") } } },
-    };
-    await mkdir(scope.project.extensionRoot, { recursive: true });
-    await saveState(scope.project.extensionRoot, state);
+    await seedRecords(scope, ["app", "vault"]);
     await writeUnder(
       scope.project.baseConfigJsonPath,
       declaring({ mp: scope.marketplaceRoot }, { "app@mp": {}, "vault@mp": { enabled: false } }),
@@ -250,6 +257,43 @@ describe("readPassForScope", () => {
       ok: true,
       unsatisfied: [{ dependent: "app@mp", dependency: "vault@mp", kind: "disabled" }],
     });
+  });
+
+  test("D-12 / D-19: a dependent whose range the planned move of its dependency satisfies is not disabled", async (t) => {
+    // arrange -- `app` needs `vault@^2.0.0`; `vault` is recorded at 1.0.0 and
+    // the catalog offers 2.0.0.
+    const scope = await createProjectScope(t, "moving-dependency");
+    const dependencies = [{ name: "vault", version: "^2.0.0" }];
+    await writeUnder(
+      path.join(scope.marketplaceRoot, ".claude-plugin", "marketplace.json"),
+      JSON.stringify({
+        name: "mp",
+        plugins: [
+          { name: "app", source: "./plugins/app", version: "1.0.0", dependencies },
+          { name: "vault", source: "./plugins/vault", version: "2.0.0" },
+        ],
+      }),
+    );
+    await writeUnder(
+      path.join(scope.marketplaceRoot, "plugins", "app", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "app", version: "1.0.0", dependencies }),
+    );
+    await writeUnder(
+      path.join(scope.marketplaceRoot, "plugins", "vault", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "vault", version: "2.0.0" }),
+    );
+    await seedRecords(scope, ["app", "vault"]);
+    await writeUnder(
+      scope.project.baseConfigJsonPath,
+      declaring({ mp: scope.marketplaceRoot }, { "app@mp": {}, "vault@mp": {} }),
+    );
+
+    // act
+    const readResult = await readPassForScope(reader, "project", scope.cwd);
+
+    // assert
+    assert.deepStrictEqual(readResult.plan, planOf({}));
+    assert.deepStrictEqual(readResult.verdict, { ok: true, unsatisfied: [] });
   });
 
   test("MIG-01: a recorded scope with no config gains a base config built from its state before it plans", async (t) => {
