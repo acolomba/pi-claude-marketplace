@@ -62,7 +62,7 @@ behavior plainly contradicts an established pi-claude-marketplace principle
 (the recorded divergences such as SC-1, D-MF-04, and the layer model) and the
 precedent of other commands does not settle which one wins.
 
-## Previous Milestone: marketplace-features -- Marketplace Behavioral Tests (branch: features/cucumber-behavioral-tests, started 2026-10-15, completed 2026-10-21, PR #271, not yet merged, no npm release)
+## Previous Milestone: marketplace-features -- Marketplace Behavioral Tests (branch: features/cucumber-behavioral-tests, started 2026-10-15, completed 2026-10-21, PR #271, merged 2026-10-22, no npm release)
 
 **Goal:** A cucumber suite drives every `/claude:plugin marketplace` lifecycle
 command through a real headless Pi, against local stand-ins for every source
