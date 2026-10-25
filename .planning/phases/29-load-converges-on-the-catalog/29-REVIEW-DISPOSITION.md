@@ -5,55 +5,55 @@ titles: json
 findings:
   - id: CR-03
     severity: critical
-    disposition: open
+    disposition: fixed
     title: "The release is judged on moves planned with the released plugins disabled, so `apply` can move a dependent into a broken state that no later pass reports"
   - id: WR-05
     severity: warning
-    disposition: open
+    disposition: fixed
     title: "A planned move that never lands releases its dependent on every pass, so the dependent is never disabled"
   - id: IN-01
     severity: info
-    disposition: open
+    disposition: deferred
     title: "A cold git target compares the entry version with a record version that took the `plugin.json` version first (carried; now worse)"
   - id: IN-02
     severity: info
-    disposition: open
+    disposition: deferred
     title: "Stale comments and docs still describe load-time behavior (carried)"
   - id: IN-03
     severity: info
-    disposition: open
+    disposition: deferred
     title: "The \"nothing to change\" scenario does not prove that `apply` writes nothing (carried)"
   - id: IN-04
     severity: info
-    disposition: open
+    disposition: deferred
     title: "The load builds the pending report before it sends the migration notice and warnings (carried)"
   - id: IN-05
     severity: info
-    disposition: open
+    disposition: deferred
     title: "`apply`'s install cascades can still list tags, which `pending` cannot preview (carried)"
   - id: IN-06
     severity: info
-    disposition: open
+    disposition: deferred
     title: "The union rule reads D-12 in a new way, and CONTEXT.md does not record it (carried)"
   - id: IN-07
     severity: info
-    disposition: open
+    disposition: deferred
     title: "A cold git dependent that moves earlier in the same `apply` can still hold a later move the planner admitted (carried; now worse)"
   - id: IN-08
     severity: info
-    disposition: open
+    disposition: deferred
     title: "Two small gaps that make the cause line or the result disagree (carried)"
   - id: IN-09
     severity: info
-    disposition: open
+    disposition: deferred
     title: "A cascade that `apply` always refuses now holds a move in `pending` that `apply` makes"
   - id: IN-10
     severity: info
-    disposition: open
+    disposition: skipped
     title: "A scope with a standing range hold pays a full move plan inside the state lock on every load and `apply`"
   - id: CR-01
     severity: critical
-    disposition: fixed
+    disposition: deferred
     title: "The planner and the runner judge ranges from different declarations"
   - id: WR-01
     severity: warning
@@ -71,7 +71,7 @@ findings:
     severity: warning
     disposition: fixed
     title: "`convergeScope` hides its own failures"
-open: 12
+open: 0
 total: 17
 recorded: 2026-10-25T01:45:35.111Z
 ---
@@ -80,19 +80,19 @@ recorded: 2026-10-25T01:45:35.111Z
 
 | Finding | Severity | Disposition | Source |
 |---------|----------|-------------|--------|
-| CR-03 | critical | open | - |
-| WR-05 | warning | open | - |
-| IN-01 | info | open | - |
-| IN-02 | info | open | - |
-| IN-03 | info | open | - |
-| IN-04 | info | open | - |
-| IN-05 | info | open | - |
-| IN-06 | info | open | - |
-| IN-07 | info | open | - |
-| IN-08 | info | open | - |
-| IN-09 | info | open | - |
-| IN-10 | info | open | - |
-| CR-01 | critical | fixed | 29-REVIEW-FIX.md (not in the current review) |
+| CR-03 | critical | fixed | 29-REVIEW-FIX.md iteration 3: reverted 121c6168 (288f5c6b) |
+| WR-05 | warning | fixed | 29-REVIEW-FIX.md iteration 3: reverted 121c6168 (288f5c6b) |
+| IN-01 | info | deferred | Info, outside fix scope critical_warning; listed as a follow-up in the phase report |
+| IN-02 | info | deferred | Info, outside fix scope critical_warning; listed as a follow-up in the phase report |
+| IN-03 | info | deferred | Info, outside fix scope critical_warning; listed as a follow-up in the phase report |
+| IN-04 | info | deferred | Info, outside fix scope critical_warning; listed as a follow-up in the phase report |
+| IN-05 | info | deferred | Info, outside fix scope critical_warning; listed as a follow-up in the phase report |
+| IN-06 | info | deferred | Needs the user to confirm the D-12 catalog-plus-installed reading; raised in the phase report |
+| IN-07 | info | deferred | Info, outside fix scope critical_warning; listed as a follow-up in the phase report |
+| IN-08 | info | deferred | Info, outside fix scope critical_warning; listed as a follow-up in the phase report |
+| IN-09 | info | deferred | Info, outside fix scope critical_warning; listed as a follow-up in the phase report |
+| IN-10 | info | skipped | Described the reverted release loop; no longer applies after 288f5c6b |
+| CR-01 | critical | deferred | Iteration-2 CR-01 reopened by the 288f5c6b revert: a co-shipped dependent and its newer dependency converge in two applies; needs a follow-up design (29-REVIEW-FIX.md iteration 3) |
 | WR-01 | warning | fixed | 29-REVIEW-FIX.md (not in the current review) |
 | WR-02 | warning | fixed | 29-REVIEW-FIX.md (not in the current review) |
 | WR-03 | warning | fixed | 29-REVIEW-FIX.md (not in the current review) |

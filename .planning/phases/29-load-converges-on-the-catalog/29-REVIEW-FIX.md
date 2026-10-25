@@ -2,8 +2,10 @@
 phase: 29-load-converges-on-the-catalog
 fixed_at: 2026-10-25T01:25:00Z
 review_path: .planning/phases/29-load-converges-on-the-catalog/29-REVIEW.md
-iteration: 2
+iteration: 3
 iteration_1_fixed: 5
+iteration_2_fixed: 2
+iteration_2_reverted: 1
 findings_in_scope: 2
 fixed: 2
 skipped: 0
@@ -205,3 +207,26 @@ _Fixed (iteration 1): 2026-10-25T00:41:30Z_
 _Fixed (iteration 2): 2026-10-25T01:25:00Z_
 _Fixer: Claude (gsd-code-fixer)_
 _Iteration: 2_
+
+## Iteration 3
+
+**Source review:** 29-REVIEW.md, iteration 3 (scope `1f77faf4..a4b7c333`). It found CR-03 (blocker) and WR-05 (warning), both regressions from the iteration-2 CR-01 fix (121c6168), plus IN-09 and IN-10. The `--auto` loop is capped at 3 iterations, so this iteration made no new fix. It reverted the commit that caused both regressions instead.
+
+### CR-03 and WR-05: fixed by reverting 121c6168 (288f5c6b)
+
+Two critical findings in a row on the same seam point to a structural cause: the release loop judges a held-down dependent against catalog moves planned while that dependent is disabled, and it trusts a planned move that may never land. Patching it again would need a fourth review. The revert restores the pre-fix behavior, which the reviewer's probes show is safe: the dependency check holds a dependent down until its dependency has actually moved, and the next `apply` re-enables it.
+
+Probe results on the reverted tree (`scratchpad/probe/apply-probe3.test.ts`) match the `1f77faf4` tree for PROBE-3, PROBE-4, PROBE-6 and PROBE-7: no dependent is left enabled with its range unmet, and PROBE-7's dependent stays disabled while its dependency's move keeps failing.
+
+**Effect on iteration-2 CR-01:** it is reopened as a known limitation, deferred. When a marketplace ships a dependent together with the newer dependency it needs, the first `apply` disables the dependent and moves the dependency, and the second `apply` re-enables and moves the dependent. Each step is reported, and `pending` lists what remains. This does not meet D-08/D-19's "one apply" goal for that case, so it needs a follow-up design that judges the release on moves that have actually landed (for example, a second verdict pass inside `convergeScope` after the moves run).
+
+**WR-01 (a4b7c333) is kept.** It does not depend on the reverted commit; the revert applied without conflicts.
+
+### Residual (iteration 3, not fixed)
+
+- IN-09: with a dependency cycle in a planned install's cascade, `pending` shows a hold that `apply` does not make, because `apply` refuses the cascade. From a4b7c333; Info.
+- IN-10 no longer applies: it described the reverted loop's cost inside the state lock.
+
+### Verification (iteration 3)
+
+`npm run check` at 288f5c6b: exit 0 (793 of 793 cucumber scenarios, 7674 steps; direct coverage merged, 284 records). Log: `scratchpad/npm-check-revert.log`.
