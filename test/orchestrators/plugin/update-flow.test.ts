@@ -13174,6 +13174,50 @@ test("D-26: convergePlugin moves a path-source plugin to the catalog version in 
   });
 });
 
+test("APPLY1-01 / WR-3: convergePlugin collects clones through the target's collector when it names one", async () => {
+  await withHermeticHome(async () => {
+    // arrange -- the record names a commit the path-source candidate drops, so
+    // the move asks for a clone collection.
+    const cwd = await createCaseDir("update-converge-collector-");
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const seeded = await loadState(locations.extensionRoot);
+      const hello = seeded.marketplaces.mp?.plugins.hello;
+      assert.ok(hello !== undefined);
+      hello.resolvedSha = "a".repeat(40);
+      hello.enabled = false;
+      await saveState(locations.extensionRoot, seeded);
+      const collected: string[] = [];
+
+      // act
+      await convergeOperations().convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: false,
+        cleanupClones: (target) => {
+          collected.push(target.pluginClonesDir);
+          return Promise.resolve();
+        },
+      });
+
+      // assert
+      assert.deepStrictEqual(collected, [locations.pluginClonesDir]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("D-26: convergePlugin answers a move at the recorded revision as unchanged and writes nothing", async () => {
   await withHermeticHome(async () => {
     // arrange

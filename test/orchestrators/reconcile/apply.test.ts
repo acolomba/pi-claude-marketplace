@@ -7793,6 +7793,43 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  test("APPLY1-01 / WR-3: a held-down record whose enable fails keeps the copy its restored pin names", async (t) => {
+    // arrange -- `widget` runs a per-commit copy under the plugin clones; its
+    // pin refresh moves it to the marketplace's files, and its enable fails.
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-restored-copy",
+      coShippedSeed({ enabled: false, dependencyDisabled: true }),
+    );
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    const copy = path.join(project.pluginClonesDir, "widget-copy");
+    await writeUnder(
+      path.join(copy, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "widget", version: "1.0.0" }),
+    );
+    const seeded = await loadState(project.extensionRoot);
+    const widget = seeded.marketplaces.mp?.plugins.widget;
+    assert.ok(widget !== undefined);
+    widget.resolvedSource = copy;
+    widget.resolvedSha = "a".repeat(40);
+    await saveState(project.extensionRoot, seeded);
+    await unreadableSkill(marketplaceRoot, "widget");
+    const { ctx, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    const restored = await recordFor(project, "mp", "widget");
+    assert.deepStrictEqual(
+      [restored?.version, restored?.resolvedSource, restored?.resolvedSha, restored?.enabled],
+      ["1.0.0", copy, "a".repeat(40), false],
+    );
+    assert.equal(await pathExists(copy), true);
+    verifyBoundary();
+  });
+
   test("APPLY1-01 / CR-03 / WR-C: a held-down record whose enable fails after its pin refresh is a failed move and keeps its version", async (t) => {
     // arrange
     const { cwd, project, marketplaceRoot } = await seedConvergenceScope(

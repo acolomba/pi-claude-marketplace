@@ -660,6 +660,76 @@ Feature: Plugin apply
       | widget@tools | 1.0.0   | false   |
       | zcore@tools  | 2.0.0   | true    |
 
+  Scenario: Apply and pending leave a held-down plugin alone while the dependency it needs is disabled by a config
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   | core         |
+      | core | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   | core@^2.0.0  |
+      | core | 1.0.0   |              |
+    Given the user has run "/claude:plugin apply --scope project", which warned
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   | core         |
+      | core | 1.0.0   |              |
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | tools       | app    |         |
+      | tools       | lib    | false   |
+      | tools       | core   |         |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+    Then the installation record of the project scope holds these plugins:
+      | id         | version | enabled |
+      | app@tools  | 1.0.0   | false   |
+      | core@tools | 1.0.0   | true    |
+      | lib@tools  | 1.0.0   | false   |
+
+  Scenario: Pending lists the disable of a plugin whose dependency a config drops, as apply makes it
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | keeper | 1.0.0   | orphan       |
+      | orphan | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | tools       | keeper |         |
+      | tools       | orphan |         |
+    Given the user has run "/claude:plugin apply --scope project"
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | tools       | keeper |         |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name   | status         | reasons | scope   | version |
+      | tools            | project           | orphan@tools  | orphan | will uninstall |         | project | 1.0.0   |
+      | tools            | project           | keeper@tools  | keeper | will disable   |         | project |         |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name   | status      | reasons                | scope   | version | cause chain                                        | cause truncated | leaks | rollback partial |
+      | tools            | project           | orphan@tools  | orphan | uninstalled |                        | project | 1.0.0   |                                                    |                 |       |                  |
+      | tools            | project           | keeper@tools  | keeper | disabled    | dependency unsatisfied | project | 1.0.0   | Install "orphan@tools" or uninstall "keeper@tools" | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | keeper@tools | 1.0.0   | false   |
+
   Scenario: Apply moves a chain of three plugins, each needing the next one's new version, in one run
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

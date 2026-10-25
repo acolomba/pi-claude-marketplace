@@ -89,6 +89,7 @@ import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absol
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { MarketplaceRemoveFailureError, removeMarketplace } from "../marketplace/remove.ts";
+import { garbageCollectPluginClones } from "../plugin/clone-gc.ts";
 import {
   createConvergeOperation,
   createDependencyInstallOperation,
@@ -1378,6 +1379,8 @@ async function runStep(
     cwd: opts.cwd,
     partial: move.partial,
     rematerialize,
+    // WR-3: a held-down record's clones are collected once its enable is known.
+    ...(step.enable !== undefined && { cleanupClones: keepClones }),
   });
   const enable = step.enable;
   if (!moveLanded(result, enable !== undefined) || enable === undefined) {
@@ -1395,13 +1398,18 @@ async function runStep(
   }
 
   const enabled: PerEntryOutcome[] = [];
-  if (await enableStep(opts, enable, enabled)) {
+  const landed = await enableStep(opts, enable, enabled);
+  if (!landed) {
+    await restorePin(opts, run.scope, move, run.before);
+  }
+
+  await garbageCollectPluginClones(locationsFor(run.scope, opts.cwd));
+  if (landed) {
     // A growth-only move keeps the version, so its enable row is the net row.
     run.reports.push({ key: step.key, rows: rematerialize ? enabled : [enabledMoveOutcome(move)] });
     return;
   }
 
-  await restorePin(opts, run.scope, move, run.before);
   const reasons = enabled
     .filter(
       (outcome): outcome is PluginEnableFailedOutcome => outcome.kind === "plugin-enable-failed",
@@ -1410,6 +1418,11 @@ async function runStep(
     .filter(isContentReason);
   run.failed.all.add(step.key);
   run.reports.push({ key: step.key, rows: failedMoveRows(move, reasons) });
+}
+
+/** The clone collection a held-down record's move defers to `runStep`. */
+function keepClones(): Promise<void> {
+  return Promise.resolve();
 }
 
 const NON_CONTENT_REASONS: ReadonlySet<string> = new Set([

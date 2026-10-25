@@ -1440,3 +1440,119 @@ test("APPLY1-01 / CR-A: a held-down record with a move of its own waits for its 
   assert.deepStrictEqual(settled.deferredEnables, [{ ...DEMO_OP, plugin: "widget" }]);
   assert.deepStrictEqual(settled.preview.pluginsToEnable, []);
 });
+
+/** `settleMoveCascade` over `plan`, with the scope's own verdict. */
+async function settleWith(
+  fixture: Fixture,
+  state: ExtensionState,
+  plan: ReconcilePlan,
+): Promise<Awaited<ReturnType<typeof settleMoveCascade>>> {
+  const verdict = await buildScopeSatisfactionVerdict({ state, locations: fixture.locations });
+  return settleMoveCascade({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    plan,
+    verdict,
+    replan: () => plan,
+  });
+}
+
+const LIB_HELD_AND_OFF: readonly StagedPlugin[] = [
+  { name: "app", offered: "1.0.0", declares: [{ name: "lib" }], record: { enabled: false } },
+  {
+    name: "lib",
+    offered: "1.0.0",
+    record: { enabled: false, dependencyDisabled: true },
+  },
+];
+
+test("APPLY1-01 / WR-1: a lift the final judgement would hold is dropped, and a config enable is left to the plan", async (t) => {
+  // arrange -- `lib` carries the marker, which the load-time verdict reads as
+  // enabled, but stays disabled; `app` needs it.
+  const fixture = await createFixture(t, "planned-lift");
+  const marker = await stageTools(fixture, [
+    {
+      ...LIB_HELD_AND_OFF[0],
+      record: { enabled: false, dependencyDisabled: true },
+    } as StagedPlugin,
+    LIB_HELD_AND_OFF[1]!,
+  ]);
+  const config = await stageTools(await createFixture(t, "planned-config"), LIB_HELD_AND_OFF);
+  const enableApp = planWith({ pluginsToEnable: [{ ...DEMO_OP, plugin: "app" }] });
+
+  // act
+  const lifted = await settleWith(fixture, marker, enableApp);
+  const enabled = await settleWith(fixture, config, enableApp);
+
+  // assert
+  assert.deepStrictEqual(lifted.plan.pluginsToEnable, []);
+  assert.deepStrictEqual(lifted.plan.pluginsToDependencyDisable, []);
+  assert.deepStrictEqual(enabled.plan, enableApp);
+});
+
+test("APPLY1-01 / WR-2: the plan disables a plugin whose dependency it uninstalls, unless the same apply installs it", async (t) => {
+  // arrange -- `keeper` declares `orphan`.
+  const fixture = await createFixture(t, "planned-uninstall");
+  const state = await stageTools(fixture, [
+    { name: "keeper", offered: "1.0.0", declares: [{ name: "orphan" }] },
+    { name: "orphan", offered: "1.0.0" },
+  ]);
+  const uninstall = planWith({
+    pluginsToUninstall: [{ ...DEMO_OP, plugin: "orphan" }],
+  });
+  const reinstall = planWith({
+    pluginsToUninstall: [{ ...DEMO_OP, plugin: "orphan" }],
+    pluginsToDependencyInstall: [
+      {
+        ...DEMO_OP,
+        plugin: "orphan",
+        requiredBy: "keeper@tools",
+        declarers: ["keeper@tools"],
+        ranges: [],
+      },
+    ],
+  });
+
+  // act
+  const removed = await settleWith(fixture, state, uninstall);
+  const scheduled = await settleWith(fixture, state, reinstall);
+
+  // assert
+  assert.deepStrictEqual(removed.plan.pluginsToDependencyDisable, [
+    {
+      ...DEMO_OP,
+      plugin: "keeper",
+      dependent: "keeper@tools",
+      dependency: "orphan@tools",
+      kind: "missing",
+    },
+  ]);
+  assert.deepStrictEqual(scheduled.plan.pluginsToDependencyDisable, []);
+});
+
+test("APPLY1-01 / D-05-07: a planned judgement whose walk fails leaves the plan as it was", async (t) => {
+  // arrange -- `stray` is recorded but its marketplace does not list it.
+  const fixture = await createFixture(t, "planned-unreadable");
+  const state = await stageTools(fixture, [{ name: "keeper", offered: "1.0.0" }]);
+  const mp = state.marketplaces["tools"];
+  assert.ok(mp !== undefined);
+  const withStray: ExtensionState = {
+    ...state,
+    marketplaces: {
+      tools: {
+        ...mp,
+        plugins: { ...mp.plugins, stray: pluginRecord(path.join(mp.marketplaceRoot, "stray")) },
+      },
+    },
+  };
+  const uninstall = planWith({
+    pluginsToUninstall: [{ ...DEMO_OP, plugin: "keeper" }],
+  });
+
+  // act
+  const settled = await settleWith(fixture, withStray, uninstall);
+
+  // assert
+  assert.deepStrictEqual(settled.plan, uninstall);
+});

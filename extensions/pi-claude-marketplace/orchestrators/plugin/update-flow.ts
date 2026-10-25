@@ -696,7 +696,7 @@ function convergePluginWith(
     // D-26 / WCONV-01: only a record already installed partial admits a
     // partial candidate; a clean record's consent guard declines it.
     partial: target.partial,
-    cleanupClones: garbageCollectPluginClones,
+    cleanupClones: target.cleanupClones ?? garbageCollectPluginClones,
   });
 }
 

@@ -38,6 +38,8 @@ import { resolveListCandidate } from "../plugin/list-candidate-version.ts";
 import { isRecordedCandidate, isSameRevision, resolvePluginVersion } from "../plugin/shared.ts";
 
 import {
+  judgeFinalScope,
+  mapRecords,
   releasableDependents,
   stillHeld,
   verdictAfterMoves,
@@ -610,21 +612,9 @@ function plannedView(input: ConvergenceInput): ExtensionState {
     return view;
   }
 
-  const marketplaces = Object.fromEntries(
-    Object.entries(view.marketplaces).map(([name, mp]) => [
-      name,
-      {
-        ...mp,
-        plugins: Object.fromEntries(
-          Object.entries(mp.plugins).map(([plugin, record]) => [
-            plugin,
-            enable.has(`${plugin}@${name}`) ? { ...record, enabled: true } : record,
-          ]),
-        ),
-      },
-    ]),
+  return mapRecords(view, (key, record) =>
+    enable.has(key) ? { ...record, enabled: true } : record,
   );
-  return { ...view, marketplaces };
 }
 
 /**
@@ -782,7 +772,8 @@ export async function settleMoveCascade(input: MoveCascadeInput): Promise<MoveCa
   const cascade =
     settled.cascade ??
     (lifts.length > 0 ? await planConvergenceCascade({ ...base, plan: settled.plan }) : undefined);
-  const moved = new Set((cascade?.plan.moves ?? []).map(moveKey));
+  const moves = cascade?.plan.moves ?? [];
+  const moved = new Set(moves.map(moveKey));
   // CR-A / CR-B: an enable the release relies on, and a held-down record that
   // has a move of its own, wait for the cascade: `apply` enables them in
   // cascade order, a held-down record right after its own move lands.
@@ -790,20 +781,85 @@ export async function settleMoveCascade(input: MoveCascadeInput): Promise<MoveCa
     const key = `${op.plugin}@${op.marketplace}`;
     return settled.released.has(key) || (moved.has(key) && isDependencyHeld(input.state, op));
   });
-  const enabledByMove = new Set(
-    deferredEnables.map((op) => `${op.plugin}@${op.marketplace}`).filter((key) => moved.has(key)),
-  );
+  const deferred = new Set(deferredEnables.map((op) => `${op.plugin}@${op.marketplace}`));
+  const plan = await judgePlannedScope(input, settled.plan, { moves, deferred });
   const preview = {
-    ...settled.plan,
-    pluginsToEnable: settled.plan.pluginsToEnable.filter(
-      (op) => !enabledByMove.has(`${op.plugin}@${op.marketplace}`),
-    ),
+    ...plan,
+    pluginsToEnable: plan.pluginsToEnable.filter((op) => {
+      const key = `${op.plugin}@${op.marketplace}`;
+      return !(deferred.has(key) && moved.has(key));
+    }),
   };
+  return { plan, ...(cascade !== undefined && { cascade }), deferredEnables, preview };
+}
+
+/**
+ * WR-1 / WR-2: the plan, judged by the rules `apply` judges its result by
+ * (`judgeFinalScope`), over the scope as the plan and its moves leave it. A
+ * lift of a held-down record that judgement would hold is dropped, so `apply`
+ * does not enable and disable it again, and every other enabled record it
+ * would hold is disabled by the plan, so `pending` lists it. A record that
+ * moves is judged by its catalog declarations alone, since its copy is
+ * replaced, and a deferred record is the cascade's to judge. A judgement whose
+ * walk fails leaves the plan as it was (D-05-07).
+ */
+async function judgePlannedScope(
+  input: MoveCascadeInput,
+  plan: ReconcilePlan,
+  cascade: { readonly moves: readonly PlannedMove[]; readonly deferred: ReadonlySet<string> },
+): Promise<ReconcilePlan> {
+  const toVersion = new Map(cascade.moves.map((move) => [moveKey(move), move.toVersion]));
+  const movedRecords = new Set<PluginRecord>();
+  const landedView = mapRecords(stateAsPlanLeavesIt(input.state, plan), (key, record) => {
+    const version = toVersion.get(key);
+    if (version === undefined) {
+      return record;
+    }
+
+    const landed = { ...record, version };
+    movedRecords.add(landed);
+    return landed;
+  });
+  const marketplaces = landedView.marketplaces;
+  const readCopy = installedCopyReader(input.locations);
+  const verdict = await judgeFinalScope({
+    state: landedView,
+    locations: input.locations,
+    installedDeclarations: (mp, record) =>
+      movedRecords.has(record) ? Promise.resolve(undefined) : readCopy(mp, record),
+    scheduled: new Set(
+      [...plan.pluginsToInstall, ...plan.pluginsToDependencyInstall].map(
+        (op) => `${op.plugin}@${op.marketplace}`,
+      ),
+    ),
+  });
+  const holds = (verdict.ok ? verdict.unsatisfied : []).filter(
+    (entry) => !cascade.deferred.has(entry.dependent),
+  );
+  const held = new Set(holds.map((entry) => entry.dependent));
+  const keyOf = (op: { readonly plugin: string; readonly marketplace: string }): string =>
+    `${op.plugin}@${op.marketplace}`;
+  const pluginsToEnable = plan.pluginsToEnable.filter(
+    (op) => !(isDependencyHeld(input.state, op) && held.has(keyOf(op))),
+  );
+  const planned = new Set(
+    [...plan.pluginsToDisable, ...plan.pluginsToDependencyDisable, ...plan.pluginsToEnable].map(
+      keyOf,
+    ),
+  );
+  const disables = Object.values(marketplaces).flatMap((mp) =>
+    Object.entries(mp.plugins).flatMap(([plugin, record]) => {
+      const key = `${plugin}@${mp.name}`;
+      const entry = holds.find((candidate) => candidate.dependent === key);
+      return record.enabled && entry !== undefined && !planned.has(key)
+        ? [{ ...entry, scope: input.scope, plugin, marketplace: mp.name }]
+        : [];
+    }),
+  );
   return {
-    plan: settled.plan,
-    ...(cascade !== undefined && { cascade }),
-    deferredEnables,
-    preview,
+    ...plan,
+    pluginsToEnable,
+    pluginsToDependencyDisable: [...plan.pluginsToDependencyDisable, ...disables],
   };
 }
 

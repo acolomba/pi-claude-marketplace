@@ -9,6 +9,7 @@
 
 import { type ContentReason } from "../shared/notification-types.ts";
 
+import type { ScopedLocations } from "../persistence/locations.ts";
 import type { CleanupFailure } from "../shared/errors.ts";
 import type { McpConfigNotice } from "../shared/notification-types.ts";
 import type { DegradeKind } from "../shared/notify-reasons.ts";
@@ -595,6 +596,13 @@ export interface PluginConvergeTarget {
    * whose supported component set grew gets the components it lacked.
    */
   readonly rematerialize: boolean;
+  /**
+   * APPLY1-01 / WR-3: what the runner calls to collect clones once a pin
+   * moves. `apply` defers the collection for a held-down record until its
+   * enable is known, so a failed enable can restore the pin's copy; the
+   * runner's own collector applies when absent.
+   */
+  readonly cleanupClones?: (locations: ScopedLocations) => Promise<unknown>;
 }
 
 /**

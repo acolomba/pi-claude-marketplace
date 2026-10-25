@@ -5,7 +5,7 @@
 - A new session now lists pending plugin changes, the new `/claude:plugin apply` makes them, and several plugin commands behave more like Claude Code.
 
   - A new session or `/reload` lists the changes your configs and marketplaces need. `apply` makes them and moves plugins to the version their marketplace offers. Run `/reload` after it.
-  - When a marketplace ships a plugin together with the newer dependency it needs, one `apply` moves both, the dependency first.
+  - When a marketplace ships a plugin together with the newer dependency it needs, one `apply` moves both, the dependency first. No `apply` leaves a plugin enabled while a dependency it needs is missing, disabled, or out of range, and `pending` lists each such disable first.
   - `pending` shows a move that a dependent's version range blocks as `(skipped) {dependents constrain}`, and a move that needs `--partial` as `(partially-upgradable)`.
   - A marketplace that you add to a config by hand shows as `(will add)`, and a config that Pi cannot read shows its error under its row.
   - The new `autoapply` setting makes each new session run `apply`. Any config can turn it on, so read a cloned project's `.pi/claude-plugins.json` before you start `pi` in it.

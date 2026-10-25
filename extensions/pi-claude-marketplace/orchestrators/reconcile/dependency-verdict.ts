@@ -244,10 +244,15 @@ function unsatisfiedEntries(
   declared: readonly AddressedDependency[],
   recorded: ReadonlyMap<string, RecordedPlugin>,
   held: ReadonlySet<string>,
+  scheduled: ReadonlySet<string> = new Set(),
 ): readonly UnsatisfiedDeclaration[] {
   const entries: UnsatisfiedDeclaration[] = [];
   for (const [key, ranges] of constraintsByKey(declared)) {
     const record = recorded.get(key);
+    if (record === undefined && scheduled.has(key)) {
+      continue;
+    }
+
     if (record === undefined) {
       entries.push({
         dependent,
@@ -290,6 +295,7 @@ function propagateUnsatisfied(
   declarations: ReadonlyMap<string, readonly AddressedDependency[]>,
   recorded: ReadonlyMap<string, RecordedPlugin>,
   seeded: readonly UnsatisfiedDeclaration[],
+  scheduled?: ReadonlySet<string>,
 ): readonly UnsatisfiedDeclaration[] {
   const declarers = [...declarations];
   const held = new Set(seeded.map((entry) => entry.dependent));
@@ -299,7 +305,7 @@ function propagateUnsatisfied(
       .filter(([declarer]) => !held.has(declarer))
       .map(([declarer, declared]) => ({
         declarer,
-        entries: unsatisfiedEntries(declarer, declared, recorded, held),
+        entries: unsatisfiedEntries(declarer, declared, recorded, held, scheduled),
       }))
       .filter((candidate) => candidate.entries.length > 0)
       .sort((left, right) => left.declarer.localeCompare(right.declarer));
@@ -350,30 +356,43 @@ export interface PlannedToggles {
   readonly disable: readonly ToggledRecord[];
 }
 
-/** The scope with every planned toggle applied to its record. */
-function stateAfterToggles(state: ExtensionState, toggles: PlannedToggles): ExtensionState {
-  const keyOf = (op: ToggledRecord): string => `${op.plugin}@${op.marketplace}`;
-  const enabled = new Set(toggles.enable.map(keyOf));
-  const disabled = new Set(toggles.disable.map(keyOf));
+/** One record of a scope's state document. */
+export type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
+
+/** `state` with each record replaced by what `map` answers for its `plugin@marketplace` key. */
+export function mapRecords(
+  state: ExtensionState,
+  map: (key: string, record: PluginRecord) => PluginRecord,
+): ExtensionState {
   const marketplaces = Object.fromEntries(
     Object.entries(state.marketplaces).map(([name, mp]) => [
       name,
       {
         ...mp,
         plugins: Object.fromEntries(
-          Object.entries(mp.plugins).map(([plugin, record]) => {
-            const key = `${plugin}@${name}`;
-            if (disabled.has(key)) {
-              return [plugin, { ...record, enabled: false, dependencyDisabled: false }];
-            }
-
-            return [plugin, enabled.has(key) ? { ...record, enabled: true } : record];
-          }),
+          Object.entries(mp.plugins).map(([plugin, record]) => [
+            plugin,
+            map(`${plugin}@${name}`, record),
+          ]),
         ),
       },
     ]),
   );
   return { ...state, marketplaces };
+}
+
+/** The scope with every planned toggle applied to its record. */
+function stateAfterToggles(state: ExtensionState, toggles: PlannedToggles): ExtensionState {
+  const keyOf = (op: ToggledRecord): string => `${op.plugin}@${op.marketplace}`;
+  const enabled = new Set(toggles.enable.map(keyOf));
+  const disabled = new Set(toggles.disable.map(keyOf));
+  return mapRecords(state, (key, record) => {
+    if (disabled.has(key)) {
+      return { ...record, enabled: false, dependencyDisabled: false };
+    }
+
+    return enabled.has(key) ? { ...record, enabled: true } : record;
+  });
 }
 
 /**
@@ -516,6 +535,11 @@ export type InstalledDeclarationsReader = (
 /** Inputs of the judgement `apply` makes once its cascade has run. */
 export interface FinalScopeOptions extends ScopeSatisfactionOptions {
   readonly installedDeclarations: InstalledDeclarationsReader;
+  /**
+   * D-21 / MISS-01: plugins the same `apply` installs, which a declaration
+   * naming them counts as met.
+   */
+  readonly scheduled?: ReadonlySet<string>;
 }
 
 /**
@@ -554,6 +578,11 @@ export async function judgeFinalScope(
 
   return {
     ok: true,
-    unsatisfied: propagateUnsatisfied(declarations, recorded, options.seeded ?? []),
+    unsatisfied: propagateUnsatisfied(
+      declarations,
+      recorded,
+      options.seeded ?? [],
+      options.scheduled,
+    ),
   };
 }

@@ -89,3 +89,19 @@ the same apply its dependency is removed; the next pass reinstalls it and
 enables keeper); D-09-07, D-09-08 and LOAD-02 (held-down records with a growth
 move are enabled in cascade order; D-09-08's rows are now lib before app).
 The refused-disable and lock-count tests pass unchanged.
+
+## Third review (APPLY1-REVIEW-3: 0 Critical, 3 Warning, 5 Info)
+
+| Finding | Fix |
+|---|---|
+| WR-1 | `settleMoveCascade` judges the plan with `judgeFinalScope` over the scope as the plan and its moves leave it: a lift that judgement would hold is dropped, so `pending`, the lift and the post-cascade judgement agree, and a no-op apply writes nothing |
+| WR-2 | the same judgement plans the disable of every other plugin it would hold (`keeper` when `orphan` is uninstalled), so `pending` lists it; a dependency the same apply installs counts as there (`scheduled`) |
+| WR-3 | `PluginConvergeTarget.cleanupClones`: a held-down record's move defers its clone collection; `apply` collects after the enable outcome, after a failed enable restores the pin, so the restored copy survives |
+| IN-1..IN-5 | no code change (IN-1, IN-2 documented; IN-3, IN-4 confirmations; IN-5 by the new scenarios) |
+
+Scenarios (fail on 5f3ce82a): "Apply and pending leave a held-down plugin alone
+while the dependency it needs is disabled by a config" (P14) and "Pending lists
+the disable of a plugin whose dependency a config drops, as apply makes it"
+(P15). Unit: the WR-3 restored copy (`apply.test.ts`), the collector override
+(`update-flow.test.ts`), the planned judgement (`convergence.test.ts`), the
+scheduled install (`dependency-verdict.test.ts`).

@@ -978,3 +978,28 @@ test("APPLY1-01: a seeded declaration holds its dependent from the start, and th
     { dependent: "host@mp", dependency: "app@mp", kind: "disabled" },
   ]);
 });
+
+test("APPLY1-01 / D-21: the final judgement counts a dependency the same apply installs as met", async () => {
+  // arrange: `app` declares `vault`, which the scope does not record.
+  const mp = marketplaceRecord("mp", { app: {} });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["vault"] } }),
+  });
+  const options = {
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    loadManifest,
+    reader: ownManifests(),
+    installedDeclarations: () => Promise.resolve(undefined),
+  };
+
+  // act
+  const unscheduled = await judgeFinalScope(options);
+  const scheduled = await judgeFinalScope({ ...options, scheduled: new Set(["vault@mp"]) });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(unscheduled), [
+    { dependent: "app@mp", dependency: "vault@mp", kind: "missing" },
+  ]);
+  assert.deepStrictEqual(unsatisfiedOf(scheduled), []);
+});
