@@ -1184,8 +1184,40 @@ async function applyReconcileWithReader(
     outcomes: [],
     migration: { rows: [], notices: [] },
   };
-  const outcomes = accumulators.outcomes;
 
+  try {
+    await applyScopes(reader, opts, scopes, accumulators);
+  } catch (err) {
+    // APPLYTHROW-01: a GHB-03 throw ends the pass after earlier steps have
+    // committed, so their rows, the migration notice, and the `/reload` hint
+    // go out before the throw reaches the caller.
+    reportScopePasses(opts, accumulators);
+    throw err;
+  }
+
+  // AMIG-03 / IL-2 / RECON-04: the one migration notice, then the single
+  // cascade through RECONCILE_APPLIED_CONTEXT. An empty-and-clean pass sends
+  // the apply-empty advisory instead (APL-01 / D-08).
+  if (!reportScopePasses(opts, accumulators)) {
+    // AAP-02 / D-07: an autoapply load with nothing to change keeps the load's
+    // silence (RECON-05); the advisory answers the command.
+    if (opts.run.origin.kind !== "load") {
+      notify(opts.ctx, opts.run, { kind: "reconcile-pending-empty", command: "apply" });
+    }
+  }
+}
+
+/**
+ * Runs each scope's read pass, plan, convergence, and close in turn,
+ * project first, collecting rows into `accumulators`.
+ */
+async function applyScopes(
+  reader: ReconcileStateReader,
+  opts: ApplyReconcileOptions,
+  scopes: readonly Scope[],
+  accumulators: ScopePassAccumulators,
+): Promise<void> {
+  const outcomes = accumulators.outcomes;
   for (const scope of scopes) {
     // WR-01 / AMIG-01 / CFG-03: a read-pass throw or an invalid config stops
     // this scope with its rows and never the sibling scope; the MCP move runs
@@ -1218,19 +1250,22 @@ async function applyReconcileWithReader(
     await closeScopePass(scope, readResult, opts.cwd, opts.hooksRouting, outcomes);
     outcomes.push(...unreportedFailures(outcomes, convergeFailures));
   }
+}
 
-  // AMIG-03 / IL-2 / RECON-04: the one migration notice, then the single
-  // cascade through RECONCILE_APPLIED_CONTEXT. An empty-and-clean pass sends
-  // the apply-empty advisory instead (APL-01 / D-08).
+/**
+ * Sends the migration notice and the cascade, then the post-cascade warnings
+ * and MCP config notices. Returns whether the cascade was sent; with no
+ * cascade it sends no warning or notice either.
+ */
+function reportScopePasses(
+  opts: ApplyReconcileOptions,
+  accumulators: ScopePassAccumulators,
+): boolean {
   if (!notifyScopePasses(opts.ctx, opts.run, accumulators)) {
-    // AAP-02 / D-07: an autoapply load with nothing to change keeps the load's
-    // silence (RECON-05); the advisory answers the command.
-    if (opts.run.origin.kind !== "load") {
-      notify(opts.ctx, opts.run, { kind: "reconcile-pending-empty", command: "apply" });
-    }
-
-    return;
+    return false;
   }
+
+  const outcomes = accumulators.outcomes;
 
   // S2 / PR #51: post-cascade hygiene warnings. The cascade carries plugin
   // transition rows (installed/uninstalled/failed) under IL-2's single-
@@ -1251,6 +1286,7 @@ async function applyReconcileWithReader(
   // shown after the cascade rows they explain. The empty-pass return above
   // sends none, since a pass with no outcome carries no notice.
   surfaceMcpConfigNotices(opts, outcomes);
+  return true;
 }
 
 /**

@@ -143,8 +143,10 @@ export function marketplaceRowRecords(
 
 /**
  * Returns the plugin row records of every result, in order. An MCP config
- * notice has no rows: its notices are envelope fields. Any other result
- * without marketplace blocks fails, so no row goes unseen.
+ * notice has no rows: its notices are envelope fields. A result with no row
+ * array at all, such as an `internal-error` after a cascade, has no row to
+ * miss either. Any other result without marketplace blocks fails, so no row
+ * goes unseen.
  */
 export function resultsRowRecords(
   results: readonly NotificationPayload[],
@@ -152,6 +154,10 @@ export function resultsRowRecords(
 ): Array<Map<string, string>> {
   return results.flatMap((result) => {
     if (result.kind === "mcp-config-notices") {
+      return [];
+    }
+
+    if (!hasMarketplaceBlocks(result) && !Object.keys(result).some((key) => ROW_FIELDS.has(key))) {
       return [];
     }
 

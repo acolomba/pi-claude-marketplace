@@ -1,10 +1,11 @@
 /**
  * @fileoverview Steps about the https git host that serves the repositories
  * of git marketplaces and git plugins: arming one repository to fail or to
- * require a credential, letting it serve again, the credential a user stores
- * for the host, and the requests the host receives. A step names a repository
- * through the `git repository` parameter type, by the marketplace or the
- * plugin it serves. Every arm is released with its scenario (HOST-03).
+ * require a credential, letting it serve again, the GitHub base address pi
+ * runs with, the credential a user stores for the host, and the requests the
+ * host receives. A step names a repository through the `git repository`
+ * parameter type, by the marketplace or the plugin it serves. Every arm is
+ * released with its scenario (HOST-03).
  */
 
 import assert from "node:assert/strict";
@@ -100,6 +101,15 @@ Given(
       true,
       `the git host has not armed the repository ${owner}/${directory}.git`,
     );
+  },
+);
+
+// GHB-03: a value pi refuses fails every command that reaches GitHub. The
+// variable is read when Pi starts, so the scenario gets a Pi of its own.
+Given(
+  "pi runs with the github base address {string}",
+  async function (this: ScenarioWorld, value: string): Promise<void> {
+    await this.usePiWithGitHubBaseUrl(value);
   },
 );
 

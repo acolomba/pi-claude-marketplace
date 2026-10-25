@@ -80,7 +80,10 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { StateLockHeldError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  InvalidGitHubBaseUrlError,
+  StateLockHeldError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
@@ -1145,6 +1148,126 @@ describe("applyReconcile", () => {
       "pi-claude-marketplace/state.json",
     ]);
     assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("APPLYTHROW-01: an invalid GitHub base address stops the pass after a removal and an MCP move, and both are reported before the throw", async (t) => {
+    // arrange: the removal of `mp` runs before the add of `remote-mp`, whose
+    // clone fails on the variable, so the pass throws after the removal and
+    // the MCP move have committed.
+    const { cwd, project } = await createHermeticScopes(t, "apply-throw");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean" },
+    });
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({ marketplaces: { "remote-mp": { source: "acme/remote" } } }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            hello: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "hello") }),
+          },
+        }),
+      },
+    });
+    const migrateMcpEntries: McpMigrationStep = async (input) => {
+      input.rows.push({
+        kind: "moved",
+        scope: input.scope,
+        plugin: "hello",
+        marketplace: "mp",
+        from: "srv",
+        to: "plugin_hello_srv_",
+      });
+      await Promise.resolve();
+    };
+
+    const invalid = new InvalidGitHubBaseUrlError(
+      "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+      "scheme",
+    );
+    const { gitOps } = createRemoteGitOps({
+      allowedRemoteUrls: ["https://github.com/acme/remote.git"],
+      cloneError: invalid,
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+
+    // act
+    const pass = applyReconcile({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+      migrateMcpEntries,
+    });
+
+    // assert
+    await assert.rejects(pass, (err: unknown) => err === invalid);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Plugin MCP servers moved from mcp.json to mcp-adapter.json.\n" +
+          "\n" +
+          "Moved to mcp-adapter.json:\n" +
+          "  srv -> plugin_hello_srv_ (hello) [project]\n" +
+          "The new names reset what pi-mcp-adapter keeps for each server name: sign in again to servers that use OAuth, and approve project servers again. Until you reload, pi-mcp-adapter can still show the old names.\n" +
+          "/reload to pick up changes",
+        severity: "info",
+      },
+      {
+        message:
+          "● mp [project] (removed)\n" +
+          "  ○ hello (uninstalled)\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual((await loadState(project.extensionRoot)).marketplaces, {});
+    verifyBoundary();
+  });
+
+  test("APPLYTHROW-01: a pass that throws before any step commits reports nothing and sends no apply-empty advisory", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "apply-throw-empty");
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({ marketplaces: { "remote-mp": { source: "acme/remote" } } }),
+    );
+    await seedState(project, { schemaVersion: 3, marketplaces: {} });
+    const invalid = new InvalidGitHubBaseUrlError(
+      "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+      "scheme",
+    );
+    const { gitOps } = createRemoteGitOps({
+      allowedRemoteUrls: ["https://github.com/acme/remote.git"],
+      cloneError: invalid,
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+
+    // act
+    const pass = applyReconcile({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+    });
+
+    // assert
+    await assert.rejects(pass, (err: unknown) => err === invalid);
+    assert.deepStrictEqual(notifications, []);
     verifyBoundary();
   });
 

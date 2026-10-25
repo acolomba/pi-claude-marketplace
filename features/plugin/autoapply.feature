@@ -268,6 +268,44 @@ Feature: Plugin autoapply
       | marketplace name | marketplace scope | id       | name | status       | reasons | scope   |
       | gits             | project           | ghp@gits | ghp  | will install |         | project |
 
+  Scenario: An autoapply session that an invalid GitHub base address stops reports the install it made before stopping
+    Given pi runs with the github base address "http://example.invalid"
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "fixtures" is published as a dir source
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given a config in scope project and layer base, with this text:
+      """
+      { "autoapply": true }
+      """
+    Given the marketplace "fixtures" is added to the project scope
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+      | fixtures    | ghp    |         |
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | needs apply | cause message                                                     | tally label       | tally failures | tally warnings | tally success count |
+      | reconcile-applied-cascade | info     | true         |             |                                                                   | Reconcile         | 0              | 0              | 1                   |
+      | reconcile-aborted         | error    | false        |             | PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme. |                   |                |                |                     |
+      | cascade                   | info     | false        | true        |                                                                   | Reconcile pending | 0              | 0              | 1                   |
+      | reconcile-aborted         | error    | false        |             | PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme. |                   |                |                |                     |
+      | cascade                   | info     | false        | true        |                                                                   | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status       | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed    |         | project | 1.0.0   |
+      | fixtures         | project           | ghp@fixtures  | ghp  | will install |         | project |         |
+      | fixtures         | project           | ghp@fixtures  | ghp  | will install |         | project |         |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+
   Scenario: An autoapply session moves an installed plugin to the version a marketplace update brought
     Given the marketplace "fixtures" is published as a dir source
     Given the marketplace "fixtures" offers these plugins:

@@ -71,10 +71,17 @@ export class ScenarioWorld extends World {
   private readonly published = new Map<string, PublishedMarketplace>();
   private readonly gitRepositories = new Map<string, GitPluginRepository>();
   private readonly releases: Array<() => Promise<void> | void> = [];
+  // A Pi this scenario started with an environment of its own; while set it
+  // takes the place of the run's Pi.
+  private scenarioPi: PiProcess | undefined = undefined;
 
-  /** The run's Pi, which the `Before()` hook has reset for this scenario. */
+  /**
+   * The Pi the steps talk to: the one this scenario started with
+   * `usePiWithGitHubBaseUrl()`, or else the run's Pi, which the `Before()`
+   * hook has reset for this scenario.
+   */
   get pi(): PiProcess {
-    return currentRun().pi;
+    return this.scenarioPi ?? currentRun().pi;
   }
 
   /** The directory the marketplace steps write local marketplaces into. */
@@ -328,6 +335,24 @@ export class ScenarioWorld extends World {
     const report = await readSession(pi);
     await pi.stop();
     return report;
+  }
+
+  /**
+   * Starts a second Pi with the run's sandbox and git environment, except that
+   * the GitHub base override is `value`, and makes it the Pi the steps talk
+   * to for the rest of the scenario. The run's Pi reads that variable once,
+   * at start, so a scenario that needs another value needs a process of its
+   * own. The run's Pi stays idle meanwhile, and the scenario's Pi stops with
+   * the scenario.
+   */
+  async usePiWithGitHubBaseUrl(value: string): Promise<void> {
+    const run = currentRun();
+    const pi = await PiProcess.start(run.sandbox, {
+      ...run.piEnvironment,
+      PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: value,
+    });
+    this.onRelease(() => pi.stop());
+    this.scenarioPi = pi;
   }
 
   /** Registers `release` to run when the scenario ends, before anything registered earlier. */

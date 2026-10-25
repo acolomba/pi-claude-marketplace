@@ -4047,6 +4047,8 @@ same strings already render in the `will update` / `updated` version slots.
 
 ## APPLYTHROW-01: an apply pass that throws drops the rows it already collected
 
+**Resolved 2026-10-25** (quick task 261025-j40): `applyReconcileWithReader` now reports the collected scope passes, the post-commit warnings, and the MCP config notices before it rethrows. Scenarios: "Apply that an invalid GitHub base address stops reports the install it made before stopping" (`features/plugin/apply.feature`) and "An autoapply session that an invalid GitHub base address stops reports the install it made before stopping" (`features/plugin/autoapply.feature`); the MCP move is covered by a unit test.
+
 Found by the phase 30 code review (round 2, WR-01), accepted open. When the
 apply step throws mid-pass (GHB-03: an invalid
 `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`), `applyReconcileWithReader` discards

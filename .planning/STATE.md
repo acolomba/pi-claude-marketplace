@@ -176,6 +176,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | # | Description | Date | Commit | Status | Directory |
 | --- | --- | --- | --- | --- | --- |
 | 1 | Run init.sh in new worktrees: SessionStart guard keyed on node_modules/.init-done (7f4c2178) | 2026-10-24 | 7f4c2178 | — | — |
+| 2 | APPLYTHROW-01: report the changes an apply made before it failed | 2026-10-25 | pending | complete | [261025-j40](./quick/261025-j40-report-the-changes-an-apply-made-before-/) |
 
 ## Session Continuity
 

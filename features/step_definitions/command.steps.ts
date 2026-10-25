@@ -120,10 +120,11 @@ Then("the command reports these results:", function (this: ScenarioWorld, table:
 });
 
 // D-02: the marketplace and plugin rows of every result, in emission order.
-// Every result must have marketplace blocks, so no row goes unseen, or be an
-// MCP config notice, which has no rows: its notices are envelope fields, which
-// `the command reports these results:` compares. A scenario that leaves a
-// notice to this step alone fails when it ends.
+// Every result must have marketplace blocks, so no row goes unseen, or carry
+// no row array at all: an MCP config notice, whose notices are envelope
+// fields, or a kind such as `internal-error`. `the command reports these
+// results:` compares those whole. A scenario that leaves a notice to this
+// step alone fails when it ends.
 Then(
   "the results list these marketplaces and plugins:",
   function (this: ScenarioWorld, table: DataTable) {

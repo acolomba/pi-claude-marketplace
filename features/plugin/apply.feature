@@ -164,6 +164,31 @@ Feature: Plugin apply
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
+  Scenario: Apply that an invalid GitHub base address stops reports the install it made before stopping
+    Given pi runs with the github base address "http://example.invalid"
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "fixtures" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "fixtures" is added to the project scope
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | fixtures    | demo   |         |
+      | fixtures    | ghp    |         |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the command reports these results:
+      | kind                      | severity | needs reload | summary                      | cause chain                                                       | cause truncated | tally label | tally failures | tally warnings | tally success count |
+      | reconcile-applied-cascade | info     | true         |                              |                                                                   |                 | Reconcile   | 0              | 0              | 1                   |
+      | internal-error            | error    | true         | Command failed unexpectedly. | PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme. | false           |             |                |                |                     |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+
   Scenario: Apply disables a plugin that an update left needing a newer version of its dependency
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
