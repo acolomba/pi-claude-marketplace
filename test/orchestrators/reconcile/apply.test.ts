@@ -7350,6 +7350,57 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  test("D-12 / D-06: a held dependent's stricter catalog copy holds the move on every apply, and the dependent stays enabled", async (t) => {
+    // arrange -- `zzhost` holds `widget`, whose installed copy declares `zcore`
+    // with no range while its catalog copy declares `zcore@^1.0.0`. Moving
+    // `zcore` would leave the load-time check reading `widget`'s catalog copy
+    // as broken, so the move stays held.
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(t, "converge-held-copy", {
+      trees: { widget: { skill: "clean" }, zcore: { skill: "clean" }, zzhost: { skill: "clean" } },
+      supported: { widget: ["skills"], zcore: ["skills"], zzhost: ["skills"] },
+      offered: { widget: "1.1.0", zcore: "2.0.0" },
+      dependencies: {
+        widget: [{ name: "zcore", version: "^1.0.0" }],
+        zzhost: [{ name: "widget", version: "~1.0.0" }],
+      },
+    });
+    const installedCopy = path.join(marketplaceRoot, "plugins", "widget-installed");
+    await writeUnder(
+      path.join(installedCopy, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "widget", version: "1.0.0", dependencies: ["zcore"] }),
+    );
+    const seeded = await loadState(project.extensionRoot);
+    const widget = seeded.marketplaces.mp?.plugins.widget;
+    assert.ok(widget !== undefined);
+    widget.resolvedSource = installedCopy;
+    await saveState(project.extensionRoot, seeded);
+    const before = await readFile(project.stateJsonPath, "utf8");
+    const held = {
+      message:
+        "Some plugin operations need attention.\n" +
+        "\n" +
+        "● mp [project]\n" +
+        "  ⊘ widget v1.0.0 (skipped) {dependents constrain}\n" +
+        '    cause: version 1.1.0 falls outside what the combined range admits (~1.0.0) -- required by "zzhost@mp"\n' +
+        "  ⊘ zcore v1.0.0 (skipped) {dependents constrain}\n" +
+        '    cause: version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "widget@mp"\n' +
+        "\n" +
+        "Reconcile: 2 warnings",
+      severity: "warning",
+    };
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [held, held]);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), before);
+    verifyBoundary();
+  });
+
   test("D-13: a move that fails to materialize reports its reason and the next move still runs", async (t) => {
     // arrange
     const { cwd, project, marketplaceRoot } = await seedConvergenceScope(t, "converge-failed", {

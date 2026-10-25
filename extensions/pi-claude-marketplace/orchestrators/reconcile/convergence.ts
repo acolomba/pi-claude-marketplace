@@ -7,7 +7,10 @@
 // D-12 / D-23: a move a dependent's declared range does not admit is held, not
 // moved. The range is judged against the catalog version alone, through the
 // network-free `constraint-fold.ts`; no release tag is listed here. A clean
-// record whose candidate would drop components is declined (WCONV-01).
+// record whose candidate would drop components is declined (WCONV-01). Every
+// record keeps the catalog declarations that `apply`'s runner and the
+// load-time dependency check read, so the plan never admits a move either of
+// them would hold.
 //
 // D-11: a git source is previewed from what is on disk. A cached tree is
 // compared by version and commit; a target with no cached tree is a move only
@@ -332,9 +335,9 @@ async function recordMove(
 }
 
 /**
- * DLS-D1: what the record's installed copy declares, the declarations a move
- * that stays put keeps. A copy that cannot be read answers `undefined`, and
- * the catalog declarations stand.
+ * DLS-D1: what the record's installed copy declares, which a move that stays
+ * put adds to its catalog declarations (D-12). A copy that cannot be read
+ * answers `undefined`, and the catalog declarations stand alone.
  */
 async function installedCopyDeclarations(
   input: ConvergenceInput,
@@ -423,10 +426,25 @@ function blockOf(
 }
 
 /**
+ * Whether `known` already says what `dep` says: it names the same plugin with
+ * the same range, or `dep` names no range and `known` names the plugin.
+ */
+function alreadyDeclared(known: readonly AddressedDependency[], dep: AddressedDependency): boolean {
+  return known.some(
+    (entry) =>
+      entry.name === dep.name &&
+      entry.marketplace === dep.marketplace &&
+      (dep.version === undefined || entry.version === dep.version),
+  );
+}
+
+/**
  * One round of the fixed point: blocks every candidate the current
- * declarations block and gives it its installed-copy declarations, because a
- * plugin that stays put keeps running the copy it has. Returns whether a
- * block was added.
+ * declarations block and adds its installed-copy declarations to its catalog
+ * ones. A plugin that stays put keeps running the copy it has, and every other
+ * check of the scope (the load-time dependency check, `apply`'s runner) reads
+ * its catalog copy (D-05-06), so a range either copy names constrains a move.
+ * Returns whether a block was added.
  */
 function blockRound(
   candidates: readonly CandidateMove[],
@@ -442,8 +460,10 @@ function blockRound(
     }
 
     blocked.set(candidate.key, block);
-    if (candidate.installed !== undefined) {
-      declarations.set(candidate.key, candidate.installed);
+    const catalog = declarations.get(candidate.key);
+    if (candidate.installed !== undefined && catalog !== undefined) {
+      const extra = candidate.installed.filter((dep) => !alreadyDeclared(catalog, dep));
+      declarations.set(candidate.key, [...catalog, ...extra]);
     }
 
     added = true;
@@ -454,9 +474,9 @@ function blockRound(
 
 /**
  * D-12: judges every candidate against the scope as the plan leaves it, to a
- * fixed point. A dependent that moves is judged by its catalog declarations
- * and one that stays put by its installed copy (DLS-D1). Blocks only grow and
- * the candidates arrive sorted, so the answer does not depend on input order.
+ * fixed point. A dependent that moves is judged by its catalog declarations,
+ * and one that stays put by its catalog and installed-copy declarations
+ * together (DLS-D1). Blocks only grow, because a block only adds ranges.
  */
 function settleCandidates(
   candidates: readonly CandidateMove[],

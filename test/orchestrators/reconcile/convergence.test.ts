@@ -776,7 +776,8 @@ test("D-12 / UPDT-02: a disabled dependent still holds the move and is marked", 
 /**
  * `widget` moves to 1.1.0, whose catalog copy admits `core` 2.0.0, but
  * `zhost` holds `widget` at its installed copy, which declares `core@^1.0.0`.
- * `core` sorts first, so only a second round can hold it.
+ * `core` sorts first, so only a second round can hold it, and both copies'
+ * ranges then judge it.
  */
 function heldDependentChain(installedDir: string): readonly StagedPlugin[] {
   return [
@@ -802,7 +803,7 @@ const WIDGET_HOLD = toolsHold(
   'version 1.1.0 falls outside what the combined range admits (~1.0.0) -- required by "zhost@tools"',
 );
 
-test("D-12 / DLS-D1: a held dependent is judged by its installed copy, to a fixed point", async (t) => {
+test("D-12 / DLS-D1: a held dependent is judged by its catalog and installed copies together, to a fixed point", async (t) => {
   // arrange
   const fixture = await createFixture(t, "fixed-point");
   const state = await stageTools(fixture, heldDependentChain("widget-installed"));
@@ -816,9 +817,45 @@ test("D-12 / DLS-D1: a held dependent is judged by its installed copy, to a fixe
     holds: [
       toolsHold(
         "core",
-        'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "widget@tools"',
+        'the declared ranges admit no version in common (^2.0.0, ^1.0.0) -- required by "widget@tools", "widget@tools"',
       ),
       WIDGET_HOLD,
+    ],
+    declines: [],
+  });
+});
+
+test("D-12 / D-05-06: a held dependent whose catalog copy is stricter than its installed copy still holds the move", async (t) => {
+  // arrange -- the runner and the load-time check read `widget`'s catalog
+  // copy, which admits no `zcore` 2.0.0, so moving `zcore` would break it.
+  // `zcore` sorts after `widget`, so it is judged once `widget` is held.
+  const fixture = await createFixture(t, "catalog-stricter");
+  const state = await stageTools(fixture, [
+    { name: "zcore", offered: "2.0.0" },
+    {
+      name: "widget",
+      offered: "1.1.0",
+      declares: [{ name: "zcore", version: "^1.0.0" }],
+      installed: { dir: "widget-installed", declares: [{ name: "zcore" }] },
+    },
+    { name: "zzhost", offered: "1.0.0", declares: [{ name: "widget", version: "~1.0.0" }] },
+  ]);
+
+  // act
+  const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    moves: [],
+    holds: [
+      toolsHold(
+        "widget",
+        'version 1.1.0 falls outside what the combined range admits (~1.0.0) -- required by "zzhost@tools"',
+      ),
+      toolsHold(
+        "zcore",
+        'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "widget@tools"',
+      ),
     ],
     declines: [],
   });
