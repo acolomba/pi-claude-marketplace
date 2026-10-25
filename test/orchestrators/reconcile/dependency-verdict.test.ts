@@ -6,17 +6,14 @@ import test from "node:test";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   buildScopeSatisfactionVerdict,
-  planWithSettledVerdict,
+  verdictAfterToggles,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 import type { MarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
 import type { DependencyDeclarationReader } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-declaration-read.ts";
 import type {
-  MovedRecord,
-  ScopeSatisfactionOptions,
   ScopeSatisfactionVerdict,
-  TogglingPlan,
   UnsatisfiedDeclaration,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -670,56 +667,17 @@ test("returns identical results for two walks over one snapshot", async () => {
   assert.deepStrictEqual(unsatisfiedOf(second), unsatisfiedOf(first));
 });
 
-/** A plan that remembers the verdict it was planned with. */
-interface FakePlan extends TogglingPlan {
-  readonly verdict: ScopeSatisfactionVerdict;
-}
-
-/**
- * Plans the given toggles from every verdict, and moves what `rounds` names
- * for each successive round. `replanned` and `planned` record the calls.
- */
-function fakePlanning(
-  seed: {
-    readonly enable?: TogglingPlan["pluginsToEnable"];
-    readonly disable?: TogglingPlan["pluginsToDisable"];
-    readonly rounds?: readonly (readonly MovedRecord[])[];
-  } = {},
-): {
-  readonly planning: Parameters<typeof planWithSettledVerdict<FakePlan>>[1];
-  readonly replanned: ScopeSatisfactionVerdict[];
-  readonly planned: FakePlan[];
-} {
-  const replanned: ScopeSatisfactionVerdict[] = [];
-  const planned: FakePlan[] = [];
-  return {
-    replanned,
-    planned,
-    planning: {
-      replan: (verdict) => {
-        replanned.push(verdict);
-        return {
-          pluginsToEnable: seed.enable ?? [],
-          pluginsToDisable: seed.disable ?? [],
-          verdict,
-        };
-      },
-      planMoves: (plan) => {
-        const moves = seed.rounds?.[planned.length] ?? [];
-        planned.push(plan);
-        return Promise.resolve(moves);
-      },
-    },
-  };
-}
-
 /** `app` declares `vault`; `vault` is recorded with `seed`, and `kit` declares nothing. */
-function toggledScope(vault: RecordSeed): ScopeSatisfactionOptions {
+function toggledScope(vault: RecordSeed): {
+  readonly options: Parameters<typeof verdictAfterToggles>[0];
+} {
   const mp = marketplaceRecord("mp", { app: {}, kit: {}, vault });
   const loadManifest = manifestLoader({
     [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["vault"] }, kit: {}, vault: {} }),
   });
-  return { state: stateOf(mp), locations: LOCATIONS, reader: ownManifests(), loadManifest };
+  return {
+    options: { state: stateOf(mp), locations: LOCATIONS, reader: ownManifests(), loadManifest },
+  };
 }
 
 const VAULT = { marketplace: "mp", plugin: "vault" } as const;
@@ -727,190 +685,59 @@ const KIT = { marketplace: "mp", plugin: "kit" } as const;
 
 test("D-08 / D-21: a record the plan disables is a disabled dependency of its dependents", async () => {
   // arrange -- the check's marker on a record the config now disables reads as the user's choice
-  const options = toggledScope({ dependencyDisabled: true });
-  const { planning, replanned, planned } = fakePlanning({ enable: [KIT], disable: [VAULT] });
+  const { options } = toggledScope({ dependencyDisabled: true });
+  const verdict = await buildScopeSatisfactionVerdict(options);
 
   // act
-  const settled = await planWithSettledVerdict(options, planning);
+  const toggled = await verdictAfterToggles(options, verdict, { enable: [KIT], disable: [VAULT] });
 
   // assert
-  assert.deepStrictEqual(replanned.map(unsatisfiedOf), [
-    [],
-    [{ dependent: "app@mp", dependency: "vault@mp", kind: "disabled" }],
+  assert.deepStrictEqual(unsatisfiedOf(verdict), []);
+  assert.deepStrictEqual(unsatisfiedOf(toggled), [
+    { dependent: "app@mp", dependency: "vault@mp", kind: "disabled" },
   ]);
-  assert.equal(settled.verdict, replanned[1]);
-  assert.equal(settled.plan.verdict, settled.verdict);
-  assert.deepStrictEqual(planned, []);
 });
 
 test("D-08 / D-21: a record the plan enables satisfies its dependents again", async () => {
   // arrange
-  const options = toggledScope({ enabled: false });
-  const { planning, replanned } = fakePlanning({ enable: [VAULT] });
+  const { options } = toggledScope({ enabled: false });
+  const verdict = await buildScopeSatisfactionVerdict(options);
 
   // act
-  const settled = await planWithSettledVerdict(options, planning);
+  const toggled = await verdictAfterToggles(options, verdict, { enable: [VAULT], disable: [] });
 
   // assert
-  assert.deepStrictEqual(replanned.map(unsatisfiedOf), [
-    [{ dependent: "app@mp", dependency: "vault@mp", kind: "disabled" }],
-    [],
+  assert.deepStrictEqual(unsatisfiedOf(verdict), [
+    { dependent: "app@mp", dependency: "vault@mp", kind: "disabled" },
   ]);
-  assert.equal(settled.verdict, replanned[1]);
+  assert.deepStrictEqual(unsatisfiedOf(toggled), []);
 });
 
-test("D-08: a plan that toggles nothing keeps the verdict and plan it was planned with", async () => {
+test("D-08: a plan that toggles nothing keeps the verdict it was planned with", async () => {
   // arrange
-  const options = toggledScope({ enabled: false });
-  const { planning, replanned } = fakePlanning();
+  const { options } = toggledScope({ enabled: false });
+  const verdict = await buildScopeSatisfactionVerdict(options);
 
   // act
-  const settled = await planWithSettledVerdict(options, planning);
+  const toggled = await verdictAfterToggles(options, verdict, { enable: [], disable: [] });
 
   // assert
-  assert.equal(replanned.length, 1);
-  assert.equal(settled.verdict, replanned[0]);
-  assert.equal(settled.plan.verdict, settled.verdict);
+  assert.equal(toggled, verdict);
 });
 
-/**
- * `app` declares `vault@^2.0.0` and `lib@^2.0.0`, `kit` declares `app` with no
- * range, `tool` declares `lib@^1.0.0`, and every record is at 1.0.0. The
- * manifest seam answers `failAfter` walks and then throws.
- */
-function rangedScope(failAfter = Number.POSITIVE_INFINITY): ScopeSatisfactionOptions {
-  const mp = marketplaceRecord("mp", { app: {}, kit: {}, lib: {}, tool: {}, vault: {} });
-  const manifest = manifestOf("mp", {
-    app: {
-      dependencies: [
-        { name: "vault", version: "^2.0.0" },
-        { name: "lib", version: "^2.0.0" },
-      ],
-    },
-    kit: { dependencies: ["app"] },
-    lib: {},
-    tool: { dependencies: [{ name: "lib", version: "^1.0.0" }] },
-    vault: {},
-  });
-  const records = Object.keys(mp.plugins).length;
-  let loads = 0;
-  return {
-    state: stateOf(mp),
-    locations: LOCATIONS,
-    reader: ownManifests(),
-    loadManifest: (manifestPath) => {
-      assert.equal(manifestPath, mp.manifestPath);
-      const failed = Math.floor(loads / records) >= failAfter;
-      loads += 1;
-      return failed
-        ? Promise.reject(new Error("EACCES: permission denied"))
-        : Promise.resolve(manifest);
-    },
+test("D-05-07: a verdict whose walk failed is kept, whatever the plan toggles", async () => {
+  // arrange
+  const { options } = toggledScope({});
+  const failed: ScopeSatisfactionVerdict = {
+    ok: false,
+    declarer: "app@mp",
+    reason: "invalid manifest",
+    cause: new Error("cannot read the dependencies of app@mp"),
   };
-}
-
-const APP_OUT_OF_RANGE: readonly UnsatisfiedDeclaration[] = [
-  { dependent: "app@mp", dependency: "vault@mp", kind: "out-of-range", range: "^2.0.0" },
-  { dependent: "app@mp", dependency: "lib@mp", kind: "out-of-range", range: "^2.0.0" },
-  { dependent: "kit@mp", dependency: "app@mp", kind: "disabled" },
-];
-
-function moved(plugin: string, toVersion: string): MovedRecord {
-  return { marketplace: "mp", plugin, toVersion };
-}
-
-test("D-05-07: a walk that fails is kept, whatever the plan toggles, and plans no move", async () => {
-  // arrange
-  const options = rangedScope(0);
-  const { planning, replanned, planned } = fakePlanning({ disable: [VAULT] });
 
   // act
-  const settled = await planWithSettledVerdict(options, planning);
+  const toggled = await verdictAfterToggles(options, failed, { enable: [], disable: [VAULT] });
 
   // assert
-  assert.equal(settled.verdict.ok, false);
-  assert.equal(replanned.length, 1);
-  assert.deepStrictEqual(planned, []);
-});
-
-test("D-12 / D-19: a planned move of each dependency into its range releases the dependent and its own dependents", async () => {
-  // arrange
-  const options = rangedScope();
-  const { planning, replanned, planned } = fakePlanning({
-    rounds: [[moved("vault", "2.0.0"), moved("lib", "2.0.0")]],
-  });
-
-  // act
-  const settled = await planWithSettledVerdict(options, planning);
-
-  // assert
-  assert.deepStrictEqual(
-    planned.map((plan) => unsatisfiedOf(plan.verdict)),
-    [APP_OUT_OF_RANGE],
-  );
-  assert.deepStrictEqual(unsatisfiedOf(settled.verdict), []);
-  assert.equal(settled.plan.verdict, settled.verdict);
-  assert.equal(replanned.length, 2);
-});
-
-test("D-12: a move only releases, so a plugin it takes out of range is not held down", async () => {
-  // arrange -- the move of `lib` to 2.0.0 leaves `tool`'s `^1.0.0` unmet
-  const options = rangedScope();
-  const { planning } = fakePlanning({
-    rounds: [[moved("vault", "2.0.0"), moved("lib", "2.0.0")]],
-  });
-
-  // act
-  const settled = await planWithSettledVerdict(options, planning);
-
-  // assert
-  assert.equal(
-    unsatisfiedOf(settled.verdict).some((entry) => entry.dependent === "tool@mp"),
-    false,
-  );
-});
-
-test("D-12: the plan settles when a round releases nothing, with only the ranges still unmet", async () => {
-  // arrange
-  const options = rangedScope();
-  const { planning, planned } = fakePlanning({ rounds: [[moved("vault", "2.0.0")]] });
-
-  // act
-  const settled = await planWithSettledVerdict(options, planning);
-
-  // assert
-  assert.deepStrictEqual(unsatisfiedOf(settled.verdict), [
-    { dependent: "app@mp", dependency: "lib@mp", kind: "out-of-range", range: "^2.0.0" },
-    { dependent: "kit@mp", dependency: "app@mp", kind: "disabled" },
-  ]);
-  assert.equal(settled.plan.verdict, settled.verdict);
-  assert.equal(planned.length, 1);
-});
-
-test("D-12: the plan settles on the first verdict when no move is planned", async () => {
-  // arrange
-  const options = rangedScope();
-  const { planning, replanned, planned } = fakePlanning();
-
-  // act
-  const settled = await planWithSettledVerdict(options, planning);
-
-  // assert
-  assert.deepStrictEqual(unsatisfiedOf(settled.verdict), APP_OUT_OF_RANGE);
-  assert.equal(settled.verdict, replanned[0]);
-  assert.equal(planned.length, 1);
-});
-
-test("D-05-07: a walk that fails once the moves land settles the plan on the failure", async () => {
-  // arrange
-  const options = rangedScope(1);
-  const { planning, planned } = fakePlanning({ rounds: [[moved("vault", "2.0.0")]] });
-
-  // act
-  const settled = await planWithSettledVerdict(options, planning);
-
-  // assert
-  assert.equal(settled.verdict.ok, false);
-  assert.equal(settled.plan.verdict, settled.verdict);
-  assert.equal(planned.length, 1);
+  assert.equal(toggled, failed);
 });

@@ -37,9 +37,8 @@ import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { classifyReadPassThrow, MigrateConfigSaveError } from "./apply-outcomes.ts";
-import { planConvergence } from "./convergence.ts";
 import { reportDelistedPlugins, reportUnreadableDeclarer } from "./delisted-plugins.ts";
-import { planWithSettledVerdict } from "./dependency-verdict.ts";
+import { buildScopeSatisfactionVerdict, verdictAfterToggles } from "./dependency-verdict.ts";
 import { migrateLegacyMcpEntries } from "./mcp-migration.ts";
 import { buildReconcileAppliedCascade } from "./notify.ts";
 import { planReconcile } from "./plan.ts";
@@ -211,23 +210,20 @@ export async function readPassForScope(
       // skips its whole reconcile pass. A scope recording no plugins pays
       // nothing: `buildScopeDeclarationDetail` reads a manifest per record and
       // there are none.
-      //
+      const firstVerdict = await buildScopeSatisfactionVerdict({ state, locations: loc });
+
       // (5) Plan against the merged config + current state + the verdict.
-      // planReconcile is pure -- no I/O. D-08 / D-12 / D-21: the verdict is
-      // taken again over the scope as the plan's toggles and its catalog moves
+      // Pure -- no I/O. D-08 / D-21: when the plan enables or disables a
+      // record, the verdict is taken again over the scope as those toggles
       // leave it, so a dependent of a record the config disables is held down
-      // in the same apply, a dependent whose range a moving dependency
-      // satisfies is not, and `pending` (which plans the same way) lists the
-      // same rows. The offline move plan runs only while a range holds a
-      // dependent down, so a scope with none pays nothing more here.
-      const { plan, verdict } = await planWithSettledVerdict(
-        { state, locations: loc },
-        {
-          replan: (next) => planReconcile(outcome.merged, state, scope, next),
-          planMoves: async (planned) =>
-            (await planConvergence({ scope, state, locations: loc, plan: planned })).moves,
-        },
-      );
+      // in the same apply, and `pending` (which plans the same way) lists it.
+      const firstPlan = planReconcile(outcome.merged, state, scope, firstVerdict);
+      const verdict = await verdictAfterToggles({ state, locations: loc }, firstVerdict, {
+        enable: firstPlan.pluginsToEnable,
+        disable: firstPlan.pluginsToDisable,
+      });
+      const plan =
+        verdict === firstVerdict ? firstPlan : planReconcile(outcome.merged, state, scope, verdict);
       // DLS-01: carry the loaded state snapshot out so the closing step can
       // report a recorded plugin its marketplace no longer lists. planReconcile
       // is pure, so the snapshot is the unmutated read-pass state.

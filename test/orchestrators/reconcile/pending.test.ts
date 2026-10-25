@@ -1078,24 +1078,6 @@ const catalogMoveRows = [
     expected: pendingList(["● demo (will enable)", "● demo v1.0.0 → v1.1.0 (will update)"]),
   },
   {
-    condition: "a dependent the catalog moved together with the dependency its new range needs",
-    seed: {
-      offered: {
-        app: { version: "2.0.0", dependencies: ["lib@^2.0.0"] },
-        lib: { version: "2.0.0" },
-      },
-      recorded: { app: { version: "1.0.0" }, lib: { version: "1.0.0" } },
-      declared: [
-        { key: "app@tools", enabled: true },
-        { key: "lib@tools", enabled: true },
-      ],
-    },
-    expected: pendingList([
-      "● app v1.0.0 → v2.0.0 (will update)",
-      "● lib v1.0.0 → v2.0.0 (will update)",
-    ]),
-  },
-  {
     condition: "a recorded plugin at the catalog version",
     seed: {
       offered: { demo: { version: "1.0.0" } },

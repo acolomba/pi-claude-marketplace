@@ -340,41 +340,6 @@ Feature: Plugin apply
       | severity     | info                    |
       | needs reload | false                   |
 
-  Scenario: Apply moves a plugin and the dependency its new version needs in one pass, after which pending lists nothing
-    Given the marketplace "tools" is published as a dir source
-    Given the marketplace "tools" offers these plugins with dependencies:
-      | name | version | dependencies |
-      | app  | 1.0.0   | lib          |
-      | lib  | 1.0.0   |              |
-    Given the marketplace "tools" is added to the project scope
-    Given the user has run "/claude:plugin install app@tools --scope project"
-    Given the marketplace "tools" offers these plugins with dependencies:
-      | name | version | dependencies |
-      | app  | 2.0.0   | lib@^2.0.0   |
-      | lib  | 2.0.0   |              |
-    When the user runs "/claude:plugin apply --scope project"
-    Then the result has these fields:
-      | kind                | reconcile-applied-cascade |
-      | severity            | info                      |
-      | needs reload        | true                      |
-      | tally label         | Reconcile                 |
-      | tally failures      | 0                         |
-      | tally warnings      | 0                         |
-      | tally success count | 2                         |
-    Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name | status  | reasons | scope   | from  | to    |
-      | tools            | project           | app@tools | app  | updated |         | project | 1.0.0 | 2.0.0 |
-      | tools            | project           | lib@tools | lib  | updated |         | project | 1.0.0 | 2.0.0 |
-    Then the installation record of the project scope holds these plugins:
-      | id        | version | enabled |
-      | app@tools | 2.0.0   | true    |
-      | lib@tools | 2.0.0   | true    |
-    When the user runs "/claude:plugin pending --scope project"
-    Then the result has these fields:
-      | kind         | reconcile-pending-empty |
-      | severity     | info                    |
-      | needs reload | false                   |
-
   Scenario: Apply makes a partially installed plugin whole when its new version needs no unsupported component
     Given the published plugin "demo" of the marketplace "fixtures" has an output style
     Given the marketplace "fixtures" is added to the project scope

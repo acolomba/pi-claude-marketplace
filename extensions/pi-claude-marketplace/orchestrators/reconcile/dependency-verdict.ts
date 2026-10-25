@@ -334,33 +334,9 @@ export interface ToggledRecord {
 }
 
 /** The records a plan enables and disables. */
-interface PlannedToggles {
+export interface PlannedToggles {
   readonly enable: readonly ToggledRecord[];
   readonly disable: readonly ToggledRecord[];
-}
-
-type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
-
-/** The scope with every record replaced by what `change` makes of it. */
-function withRecords(
-  state: ExtensionState,
-  change: (key: string, record: PluginRecord) => PluginRecord,
-): ExtensionState {
-  const marketplaces = Object.fromEntries(
-    Object.entries(state.marketplaces).map(([name, mp]) => [
-      name,
-      {
-        ...mp,
-        plugins: Object.fromEntries(
-          Object.entries(mp.plugins).map(([plugin, record]) => [
-            plugin,
-            change(`${plugin}@${name}`, record),
-          ]),
-        ),
-      },
-    ]),
-  );
-  return { ...state, marketplaces };
 }
 
 /** The scope with every planned toggle applied to its record. */
@@ -368,13 +344,25 @@ function stateAfterToggles(state: ExtensionState, toggles: PlannedToggles): Exte
   const keyOf = (op: ToggledRecord): string => `${op.plugin}@${op.marketplace}`;
   const enabled = new Set(toggles.enable.map(keyOf));
   const disabled = new Set(toggles.disable.map(keyOf));
-  return withRecords(state, (key, record) => {
-    if (disabled.has(key)) {
-      return { ...record, enabled: false, dependencyDisabled: false };
-    }
+  const marketplaces = Object.fromEntries(
+    Object.entries(state.marketplaces).map(([name, mp]) => [
+      name,
+      {
+        ...mp,
+        plugins: Object.fromEntries(
+          Object.entries(mp.plugins).map(([plugin, record]) => {
+            const key = `${plugin}@${name}`;
+            if (disabled.has(key)) {
+              return [plugin, { ...record, enabled: false, dependencyDisabled: false }];
+            }
 
-    return enabled.has(key) ? { ...record, enabled: true } : record;
-  });
+            return [plugin, enabled.has(key) ? { ...record, enabled: true } : record];
+          }),
+        ),
+      },
+    ]),
+  );
+  return { ...state, marketplaces };
 }
 
 /**
@@ -386,7 +374,7 @@ function stateAfterToggles(state: ExtensionState, toggles: PlannedToggles): Exte
  * carries no marker (LOAD-02). Answers `verdict` itself when the plan toggles
  * nothing or the first walk failed (D-05-07).
  */
-async function verdictAfterToggles(
+export async function verdictAfterToggles(
   options: ScopeSatisfactionOptions,
   verdict: ScopeSatisfactionVerdict,
   toggles: PlannedToggles,
@@ -399,119 +387,4 @@ async function verdictAfterToggles(
     ...options,
     state: stateAfterToggles(options.state, toggles),
   });
-}
-
-/** A record a planned catalog move leaves at a new version. */
-export interface MovedRecord extends ToggledRecord {
-  readonly toVersion: string;
-}
-
-/** The scope with every moved record at the version its move leaves it at. */
-function stateAfterMoves(state: ExtensionState, moves: readonly MovedRecord[]): ExtensionState {
-  const moved = new Map(
-    moves.map((move) => [`${move.plugin}@${move.marketplace}`, move.toVersion]),
-  );
-  return withRecords(state, (key, record) => ({
-    ...record,
-    version: moved.get(key) ?? record.version,
-  }));
-}
-
-/**
- * D-12 / D-19: the verdict once the plan's toggles and its catalog moves have
- * both run, so a range that a planned move of the dependency satisfies holds
- * nothing down. It only releases: an entry whose dependent `verdict` does not
- * hold stays out, so the planner's fixed point always ends. Answers `verdict`
- * itself when nothing moves, and the failure arm when the walk now fails
- * (D-05-07).
- */
-async function verdictAfterMoves(
-  options: ScopeSatisfactionOptions,
-  verdict: ScopeSatisfactionVerdict,
-  toggles: PlannedToggles,
-  moves: readonly MovedRecord[],
-): Promise<ScopeSatisfactionVerdict> {
-  if (moves.length === 0) {
-    return verdict;
-  }
-
-  const moved = await buildScopeSatisfactionVerdict({
-    ...options,
-    state: stateAfterMoves(stateAfterToggles(options.state, toggles), moves),
-  });
-  if (!moved.ok) {
-    return moved;
-  }
-
-  const held = heldDependents(verdict);
-  return { ok: true, unsatisfied: moved.unsatisfied.filter((entry) => held.has(entry.dependent)) };
-}
-
-/** The plan buckets the verdict is taken again over. */
-export interface TogglingPlan {
-  readonly pluginsToEnable: readonly ToggledRecord[];
-  readonly pluginsToDisable: readonly ToggledRecord[];
-}
-
-/** How one scope is planned from a verdict, and which catalog moves a plan leads to. */
-export interface ScopePlanning<P extends TogglingPlan> {
-  readonly replan: (verdict: ScopeSatisfactionVerdict) => P;
-  readonly planMoves: (plan: P) => Promise<readonly MovedRecord[]>;
-}
-
-/** A scope's plan and the verdict it was planned with. */
-export interface SettledPlan<P> {
-  readonly verdict: ScopeSatisfactionVerdict;
-  readonly plan: P;
-}
-
-function heldDependents(verdict: ScopeSatisfactionVerdict): ReadonlySet<string> {
-  return new Set(verdict.ok ? verdict.unsatisfied.map((entry) => entry.dependent) : []);
-}
-
-function holdsOnRange(verdict: ScopeSatisfactionVerdict): boolean {
-  return verdict.ok && verdict.unsatisfied.some((entry) => entry.kind === "out-of-range");
-}
-
-function togglesOf(plan: TogglingPlan): PlannedToggles {
-  return { enable: plan.pluginsToEnable, disable: plan.pluginsToDisable };
-}
-
-/**
- * D-08 / D-12 / D-21: plans one scope with the verdict judged against the
- * scope as `apply` leaves it. The verdict is taken over the plan's toggles
- * first (`verdictAfterToggles`), then, while a range holds a dependent down,
- * again with the plan's catalog moves landed. A dependent whose range a moving
- * dependency satisfies is then not disabled, so its own move runs in the same
- * `apply`. Each round releases at least one dependent or stops, so the loop
- * ends. `apply`'s read pass and `pending` both plan here, so they agree.
- */
-export async function planWithSettledVerdict<P extends TogglingPlan>(
-  options: ScopeSatisfactionOptions,
-  planning: ScopePlanning<P>,
-): Promise<SettledPlan<P>> {
-  const first = await buildScopeSatisfactionVerdict(options);
-  const firstPlan = planning.replan(first);
-  const toggled = await verdictAfterToggles(options, first, togglesOf(firstPlan));
-  let settled: SettledPlan<P> = {
-    verdict: toggled,
-    plan: toggled === first ? firstPlan : planning.replan(toggled),
-  };
-  while (holdsOnRange(settled.verdict)) {
-    // eslint-disable-next-line no-await-in-loop -- each round plans over the previous round's plan
-    const moves = await planning.planMoves(settled.plan);
-    // eslint-disable-next-line no-await-in-loop -- each round plans over the previous round's plan
-    const next = await verdictAfterMoves(options, settled.verdict, togglesOf(settled.plan), moves);
-    if (next === settled.verdict) {
-      break;
-    }
-
-    const released = heldDependents(next).size < heldDependents(settled.verdict).size;
-    settled = { verdict: next, plan: planning.replan(next) };
-    if (!released) {
-      break;
-    }
-  }
-
-  return settled;
 }
