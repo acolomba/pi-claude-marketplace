@@ -174,6 +174,24 @@ network refresh is added (D-09, D-27).
   stays is judged by its recorded or installed-copy declarations (DLS-D1).
   The algorithm (ordering or fixed point) is the planner's call. It must be
   deterministic and shared by `apply`, `pending` and the load.
+- **D-12a (amends D-12, user decision 2026-10-25):** a dependent that stays
+  put is judged by its catalog declarations plus its installed copy's, not
+  by the installed copy alone. A range that either copy names holds the move.
+  Reason: the load-time dependency check, `update`'s gate and `apply`'s runner
+  all read a listed plugin's catalog copy (D-05-06), so judging by the
+  installed copy alone let `pending` list a move that `apply` then held, or
+  let `apply` make a move the next load's dependency check rejected.
+- **D-12b (user decision 2026-10-25, superseded the same day):** the user
+  accepted a release-only rule, where one `apply` may lift a dependency hold
+  on a dependent whose dependency the plan moves into range but never adds a
+  hold, so a missed hold takes effect on the next `apply`. The code that
+  carried it (121c6168) was reverted in 288f5c6b before the decision arrived,
+  because its third review showed real failures beyond the accepted cost: a
+  released dependent could move to a version whose range stays unmet with no
+  later pass reporting it, and a planned move that never lands released the
+  dependent on every pass. As shipped, a dependent and the newer dependency
+  it needs, shipped together, converge in two applies. One-apply convergence
+  for that case is deferred.
 - **D-13:** a move that fails at materialization (EACCES, a bridge failure)
   gets the `(failed)` row with its closed-set reason. `apply` is safe to
   retry (NFR-3). The extension-version stamp (`lastReconciledExtensionVersion`)

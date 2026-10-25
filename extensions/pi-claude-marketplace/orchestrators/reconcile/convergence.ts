@@ -408,7 +408,7 @@ async function recordMove(
 
 /**
  * DLS-D1: what the record's installed copy declares, which a move that stays
- * put adds to its catalog declarations (D-12). A copy that cannot be read
+ * put adds to its catalog declarations (D-12a). A copy that cannot be read
  * answers `undefined`, and the catalog declarations stand alone.
  */
 async function installedCopyDeclarations(
@@ -511,7 +511,7 @@ function alreadyDeclared(known: readonly AddressedDependency[], dep: AddressedDe
 }
 
 /**
- * D-12: what each record declares while the candidates in `blocked` stay put.
+ * D-12a: what each record declares while the candidates in `blocked` stay put.
  * A plugin that stays put keeps running the copy it has, and every other
  * check of the scope (the load-time dependency check, `apply`'s runner) reads
  * its catalog copy (D-05-06), so a staying record keeps its catalog
