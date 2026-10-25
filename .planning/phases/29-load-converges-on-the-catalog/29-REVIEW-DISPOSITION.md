@@ -33,7 +33,7 @@ findings:
     title: "`apply`'s install cascades can still list tags, which `pending` cannot preview (carried)"
   - id: IN-06
     severity: info
-    disposition: deferred
+    disposition: fixed
     title: "The union rule reads D-12 in a new way, and CONTEXT.md does not record it (carried)"
   - id: IN-07
     severity: info
@@ -87,7 +87,7 @@ recorded: 2026-10-25T01:45:35.111Z
 | IN-03 | info | deferred | Info, outside fix scope critical_warning; listed as a follow-up in the phase report |
 | IN-04 | info | deferred | Info, outside fix scope critical_warning; listed as a follow-up in the phase report |
 | IN-05 | info | deferred | Info, outside fix scope critical_warning; listed as a follow-up in the phase report |
-| IN-06 | info | deferred | Needs the user to confirm the D-12 catalog-plus-installed reading; raised in the phase report |
+| IN-06 | info | fixed | Resolved by user decision D-12a (29-CONTEXT.md, 70ffab26) |
 | IN-07 | info | deferred | Info, outside fix scope critical_warning; listed as a follow-up in the phase report |
 | IN-08 | info | deferred | Info, outside fix scope critical_warning; listed as a follow-up in the phase report |
 | IN-09 | info | deferred | Info, outside fix scope critical_warning; listed as a follow-up in the phase report |
