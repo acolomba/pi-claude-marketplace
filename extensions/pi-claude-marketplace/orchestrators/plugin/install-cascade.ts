@@ -174,14 +174,14 @@ export type CascadeTagProbe = typeof probeDependencyTags;
 export type CascadeMarketplaceTagProbe = typeof probeMarketplaceTags;
 
 /** The per-URL tag listing memo one cascade run threads through every query. */
-type CascadeTagMemo = NonNullable<DependencyTagProbeOptions["tagMemo"]>;
+export type CascadeTagMemo = NonNullable<DependencyTagProbeOptions["tagMemo"]>;
 
 /**
  * The per-marketplace-root tag listing memo one cascade run threads through
  * every path-source member's local probe, so several members constrained
  * against the SAME marketplace clone list it once (WR-02).
  */
-type CascadeMarketplaceTagMemo = NonNullable<MarketplaceTagProbeOptions["tagMemo"]>;
+export type CascadeMarketplaceTagMemo = NonNullable<MarketplaceTagProbeOptions["tagMemo"]>;
 
 /**
  * Resolves the marketplace record a member's source is read from.
@@ -330,8 +330,11 @@ export interface OutOfRangeMember {
 
 /** Every member decided, in the walk's post order, or the first failure one produced. */
 type MemberConstraintResolution =
-  | { readonly ok: true; readonly members: readonly CascadePhaseMember[] }
-  | { readonly ok: true; readonly outOfRange: readonly OutOfRangeMember[] }
+  | {
+      readonly ok: true;
+      readonly members: readonly CascadePhaseMember[];
+      readonly outOfRange: readonly OutOfRangeMember[];
+    }
   | { readonly ok: false; readonly failure: CascadeConstraintFailure };
 
 /** Inputs of one cascade run's constraint resolution. */
@@ -504,6 +507,17 @@ export interface InstallCascadeOptions {
    * `dependencies-installed`.
    */
   readonly rootRecorded?: true;
+  /**
+   * UPD-DEP-D1: resolve the closure and materialize nothing; the result is
+   * `planned`, which a dependency plan reads without a write.
+   */
+  readonly planOnly?: true;
+  /**
+   * D-10-18: one operation's tag listing memos, so the plan and the cascade
+   * that executes it list a source once. Absent, each run allocates its own.
+   */
+  readonly tagMemo?: CascadeTagMemo;
+  readonly marketplaceTagMemo?: CascadeMarketplaceTagMemo;
   readonly knownMarketplaces: ReadonlySet<string>;
   /**
    * The caller's failure capture, threaded to every member's ledger so a
@@ -553,9 +567,15 @@ export type InstallCascadeResult =
       readonly mcpConfigNotices: readonly McpConfigNotice[];
     }
   | {
-      /** UPD-DEP-D1: nothing materialized; these members must move first. */
-      readonly kind: "dependencies-out-of-range";
-      readonly members: readonly OutOfRangeMember[];
+      /**
+       * UPD-DEP-D1: nothing materialized. `outOfRange` must move first, and
+       * `freshMembers` (the root aside) would install. A `planOnly` run always
+       * ends here; a `moveOutOfRange` run ends here when `outOfRange` is not
+       * empty.
+       */
+      readonly kind: "planned";
+      readonly freshMembers: readonly ResolvedCascadeMember[];
+      readonly outOfRange: readonly OutOfRangeMember[];
     }
   | { readonly kind: "marketplace-absent" }
   | {
@@ -1015,9 +1035,7 @@ async function resolveMemberConstraints(
 
   // UPD-DEP-D1: every other member resolved, so the moves are all that stand
   // between the closure and its install; nothing is materialized yet.
-  return recorded.outOfRange.length > 0
-    ? { ok: true, outOfRange: recorded.outOfRange }
-    : { ok: true, members };
+  return { ok: true, members, outOfRange: recorded.outOfRange };
 }
 
 /**
@@ -1351,8 +1369,9 @@ export async function runInstallCascade(
     alreadyInstalled: closure.alreadyInstalled,
     ledgerOptionsFor: options.ledgerOptionsFor,
     tagProbe: options.tagProbe ?? probeDependencyTags,
-    tagMemo: new Map<string, readonly RemoteTag[]>(),
-    marketplaceTagMemo: new Map<string, readonly ReleaseTagCandidate[]>(),
+    tagMemo: options.tagMemo ?? new Map<string, readonly RemoteTag[]>(),
+    marketplaceTagMemo:
+      options.marketplaceTagMemo ?? new Map<string, readonly ReleaseTagCandidate[]>(),
     ...(options.rootRanges !== undefined && { rootRanges: options.rootRanges }),
     ...(options.moveOutOfRange !== undefined && { moveOutOfRange: options.moveOutOfRange }),
     ...(options.marketplaceTagProbe !== undefined && {
@@ -1366,8 +1385,14 @@ export async function runInstallCascade(
     return { kind: "constraint-failed", failure: constraints.failure };
   }
 
-  if ("outOfRange" in constraints) {
-    return { kind: "dependencies-out-of-range", members: constraints.outOfRange };
+  if (options.planOnly === true || constraints.outOfRange.length > 0) {
+    return {
+      kind: "planned",
+      freshMembers: constraints.members.flatMap((entry) =>
+        entry.kind === "install" && entry.member.key !== options.rootKey ? [entry.member] : [],
+      ),
+      outOfRange: constraints.outOfRange,
+    };
   }
 
   const seam = options.seam ?? REAL_INSTALL_CASCADE_SEAM;

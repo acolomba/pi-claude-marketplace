@@ -46,6 +46,11 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
+import {
+  isUpdatePreflightOutcome,
+  preparePluginUpdate,
+  UPDATE_MATERIALIZATION,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -99,6 +104,7 @@ import type {
   InstallLedgerOptions,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import type { MarketplaceTagProbeOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
+import type { PreparedPluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type { CascadeThreePhaseArgs } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -18000,6 +18006,8 @@ interface CatalogPlugin {
   readonly version: string;
   readonly dependencies?: readonly string[];
   readonly mcp?: true;
+  /** D-64-06: kinds pi does not support, which make the plugin partially available. */
+  readonly experimental?: object;
 }
 
 /** Writes the path marketplace `mp` under `marketplaceRoot` offering `plugins`. */
@@ -18017,6 +18025,7 @@ async function publishCatalog(
         name,
         version: plugin.version,
         ...(plugin.dependencies !== undefined && { dependencies: plugin.dependencies }),
+        ...(plugin.experimental !== undefined && { experimental: plugin.experimental }),
       }),
     );
     await writeFile(path.join(pluginRoot, "skills", "tool", "SKILL.md"), "---\nname: tool\n---\n");
@@ -18088,6 +18097,20 @@ async function recordedVersions(cwd: string): Promise<Record<string, [string, bo
       [record.version, record.enabled],
     ]),
   );
+}
+
+/** The candidate `update` would land for `plugin@mp`, as the update runner hands it to the settle. */
+async function preparedUpdate(cwd: string, plugin: string): Promise<PreparedPluginUpdate> {
+  const prepared = await preparePluginUpdate({
+    plugin,
+    marketplace: "mp",
+    scope: "project",
+    locations: locationsFor("project", cwd),
+    policy: UPDATE_MATERIALIZATION,
+    cleanupClones: () => Promise.resolve(),
+  });
+  assert.ok(!isUpdatePreflightOutcome(prepared), "the update has a candidate");
+  return prepared;
 }
 
 /** Holds the project scope's state lock until the returned release runs. */
@@ -18251,6 +18274,133 @@ for (const orchestrated of [false, true]) {
   });
 }
 
+test("UPD-DEP-D1: installing refuses a plugin pi supports only in part before its dependency moves", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({ lib: { version: "1.2.0" } });
+    await installed(owner, cwd, "lib");
+    await publishCatalog(marketplaceRoot, {
+      app: { version: "1.0.0", dependencies: ["lib@^2.0.0"], experimental: { themes: "./t" } },
+      lib: { version: "2.0.0" },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    const outcome = await owner.installPlugin({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "app",
+    });
+
+    // assert
+    assert.strictEqual(outcome.status, "failed");
+    assert.deepStrictEqual(
+      notifications.map((notification) => notification.message.split("\n").slice(0, 4)),
+      [
+        [
+          "A plugin operation has failed.",
+          "",
+          "● mp [project]",
+          "  ⊖ app (partially-available) {unsupported component}",
+        ],
+      ],
+    );
+    assert.deepStrictEqual(await recordedVersions(cwd), { lib: ["1.2.0", true] });
+  });
+});
+
+test("UPD-DEP-D1: installing moves a dependency whose new version installs a dependency of its own", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({ aaa: { version: "1.0.0" } });
+    await installed(owner, cwd, "aaa");
+    await publishCatalog(marketplaceRoot, {
+      app: { version: "1.0.0", dependencies: ["aaa@^2.0.0"] },
+      aaa: { version: "2.0.0", dependencies: ["zzz"] },
+      zzz: { version: "1.0.0" },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    const outcome = await owner.installPlugin({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "app",
+      pinVersionOverride: "1.0.0",
+    });
+
+    // assert
+    assert.strictEqual(outcome.status, "installed");
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [project]",
+          "  ● aaa@mp v1.0.0 → v2.0.0 (updated) {dependency current copy}",
+          '    cause: constrained to the combined range (^2.0.0) -- required by "app@mp"',
+          "  ● app v1.0.0 (installed)",
+          "  ● zzz@mp v1.0.0 (installed)",
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      },
+    ]);
+    assert.deepStrictEqual(await recordedVersions(cwd), {
+      aaa: ["2.0.0", true],
+      app: ["1.0.0", true],
+      zzz: ["1.0.0", true],
+    });
+  });
+});
+
+for (const orchestrated of [false, true]) {
+  test(`UPD-DEP-D1: a ${orchestrated ? "orchestrated" : "standalone"} install that fails after its dependency moved reports the move`, async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({ lib: { version: "1.2.0" } });
+      await installed(owner, cwd, "lib");
+      await publishCatalog(marketplaceRoot, {
+        app: { version: "1.0.0", dependencies: ["lib@^2.0.0"] },
+        lib: { version: "2.0.0" },
+      });
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.skillsTargetDir, { recursive: true });
+      await writeFile(path.join(locations.skillsTargetDir, "app-tool"), "not a skill");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await owner.installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "app",
+        ...(orchestrated && { notifications: { mode: "orchestrated" } }),
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        outcome.status === "failed" &&
+          outcome.movedDependencies?.map((entry) => [entry.key, entry.row.status]),
+        [["lib@mp", "updated"]],
+      );
+      assert.deepStrictEqual(
+        notifications.map((notification) =>
+          notification.message.includes("lib@mp v1.2.0 → v2.0.0 (updated)"),
+        ),
+        orchestrated ? [] : [true],
+      );
+      assert.deepStrictEqual(await recordedVersions(cwd), { lib: ["2.0.0", true] });
+    });
+  });
+}
+
 describe("createUpdateDependencyResolver", () => {
   test("installs a dependency the new version needs and reports its row", async () => {
     await withHermeticHome(async (owner) => {
@@ -18273,7 +18423,11 @@ describe("createUpdateDependencyResolver", () => {
       );
 
       // act
-      const settlement = await settle(updateArgs(owner, cwd, "widget"), { ctx, run });
+      const settlement = await settle(
+        updateArgs(owner, cwd, "widget"),
+        await preparedUpdate(cwd, "widget"),
+        { ctx, run },
+      );
 
       // assert
       assert.deepStrictEqual(settlement, {
@@ -18325,6 +18479,7 @@ describe("createUpdateDependencyResolver", () => {
       // act
       const settlement = await settle(
         { ...updateArgs(owner, cwd, "widget"), constraintTagMemo: new Map() },
+        await preparedUpdate(cwd, "widget"),
         { ctx, run },
       );
 
@@ -18360,7 +18515,11 @@ describe("createUpdateDependencyResolver", () => {
       );
 
       // act
-      const settlement = await settle(updateArgs(owner, cwd, "widget"), { ctx, run });
+      const settlement = await settle(
+        updateArgs(owner, cwd, "widget"),
+        await preparedUpdate(cwd, "widget"),
+        { ctx, run },
+      );
 
       // assert
       assert.deepStrictEqual(
@@ -18391,7 +18550,11 @@ describe("createUpdateDependencyResolver", () => {
       );
 
       // act
-      const settlement = await settle(updateArgs(owner, cwd, "widget"), { ctx, run });
+      const settlement = await settle(
+        updateArgs(owner, cwd, "widget"),
+        await preparedUpdate(cwd, "widget"),
+        { ctx, run },
+      );
 
       // assert
       assert.strictEqual(settlement.kind, "refused");
@@ -18423,16 +18586,17 @@ describe("createUpdateDependencyResolver", () => {
       );
 
       // act
-      const settlement = await settle(updateArgs(owner, cwd, "widget"), { ctx, run });
+      const settlement = await settle(
+        updateArgs(owner, cwd, "widget"),
+        await preparedUpdate(cwd, "widget"),
+        { ctx, run },
+      );
 
       // assert
       assert.strictEqual(settlement.kind, "refused");
       assert.deepStrictEqual(
         settlement.rows.map((row) => [row.status, row.name]),
-        [
-          ["failed", "zcore@mp"],
-          ["failed", "widget@mp"],
-        ],
+        [["failed", "widget@mp"]],
       );
       assert.deepStrictEqual(await recordedVersions(cwd), {
         widget: ["1.0.0", true],
@@ -18444,8 +18608,9 @@ describe("createUpdateDependencyResolver", () => {
   test("rethrows a failure no dependency caused", async () => {
     await withHermeticHome(async (owner) => {
       // arrange
-      const { cwd } = await seedCatalogScope({ widget: { version: "1.0.0" } });
+      const { cwd, marketplaceRoot } = await seedCatalogScope({ widget: { version: "1.0.0" } });
       await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, { widget: { version: "1.1.0" } });
       const held = await lockScope(cwd);
       const { ctx, run } = makeCtx();
       const settle = createUpdateDependencyResolver(
@@ -18454,9 +18619,11 @@ describe("createUpdateDependencyResolver", () => {
         owner.completionCache,
       );
 
+      const prepared = await preparedUpdate(cwd, "widget");
+
       // act & assert
       await assert.rejects(
-        () => settle(updateArgs(owner, cwd, "widget"), { ctx, run }),
+        () => settle(updateArgs(owner, cwd, "widget"), prepared, { ctx, run }),
         StateLockHeldError,
       );
       await held();
@@ -18487,9 +18654,11 @@ describe("createUpdateDependencyResolver", () => {
         owner.completionCache,
       );
 
+      const prepared = await preparedUpdate(cwd, "widget");
+
       // act & assert
       await assert.rejects(
-        () => settle(updateArgs(owner, cwd, "widget"), { ctx, run }),
+        () => settle(updateArgs(owner, cwd, "widget"), prepared, { ctx, run }),
         (error: unknown) => {
           assert.ok(error instanceof Error);
           assert.strictEqual(
@@ -18537,6 +18706,7 @@ describe("createUpdateDependencyResolver", () => {
           deviceFlowHttp: deviceFlow.http,
           authMemo: new Map(),
         },
+        await preparedUpdate(cwd, "widget"),
         { ctx, run },
       );
 

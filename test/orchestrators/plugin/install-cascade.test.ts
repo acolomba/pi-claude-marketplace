@@ -3765,8 +3765,9 @@ test("UPD-DEP-D1 / RESV-05: with moveOutOfRange, a recorded dependency outside i
 
   // assert
   assert.deepStrictEqual(cascade, {
-    kind: "dependencies-out-of-range",
-    members: [
+    kind: "planned",
+    freshMembers: [],
+    outOfRange: [
       {
         key: `bar@${MARKETPLACE}`,
         name: "bar",
@@ -3912,4 +3913,62 @@ test("UPD-DEP-D1: a recorded root materializes only its closure and reports its 
   );
   assert.deepStrictEqual(state.marketplaces[MARKETPLACE]?.plugins.foo, recordedRoot);
   assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar?.version, "0.0.1");
+});
+
+test("UPD-DEP-D1: a planOnly run resolves the closure, materializes nothing, and lists the members it would install", async (t) => {
+  // arrange: `foo` is recorded and now declares `baz` at `^1.0.0`, a git
+  // source a release tag pins; the operation shares its tag memo.
+  const environment = await createHermeticEnvironment(t, "install-cascade-plan-only-");
+  const state = await seedMarketplace(environment.cwd, ["baz", "foo"], {
+    preinstalled: ["foo"],
+    gitSourced: ["baz"],
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const before = await twoScopeFootprint(environment.cwd, state);
+  const seen: DependencyTagProbeOptions[] = [];
+  const tagMemo = new Map<string, readonly RemoteTag[]>();
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "baz", version: "^1.0.0" }],
+      [`baz@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set([`foo@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    rootRecorded: true,
+    planOnly: true,
+    tagMemo,
+    marketplaceTagMemo: new Map(),
+    tagProbe: tagProbeAnswering(
+      { kind: "pinned", tag: "baz--v1.3.0", oid: PINNED_OID, version: "1.3.0" },
+      seen,
+    ),
+  });
+
+  // assert
+  assert.deepStrictEqual(cascade, {
+    kind: "planned",
+    freshMembers: [
+      {
+        key: `baz@${MARKETPLACE}`,
+        name: "baz",
+        marketplace: MARKETPLACE,
+        requiredBy: `foo@${MARKETPLACE}`,
+        ranges: ["^1.0.0"],
+        pin: { oid: PINNED_OID, version: "1.3.0" },
+      },
+    ],
+    outOfRange: [],
+  });
+  assert.deepStrictEqual(
+    seen.map((query) => query.tagMemo === tagMemo),
+    [true],
+  );
+  assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
 });

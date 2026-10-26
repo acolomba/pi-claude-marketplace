@@ -306,6 +306,25 @@ export async function readDependencyDeclaration(
   return toClosureLookupResult(parseDeclaredDependencies(declared));
 }
 
+/**
+ * UPD-DEP-D1: what a version an update resolved declares, read from the tree
+ * the update lands -- a release tag's copy when a range chose one -- in the
+ * D-01-32 order: the tree's own manifest, else the marketplace entry. The
+ * catalog read reads the marketplace's head, which can be another version.
+ */
+export async function readCandidateDeclaration(options: {
+  /** The resolved candidate's plugin root. */
+  readonly pluginRoot: string;
+  readonly entry: ManifestPluginEntry;
+  /** Filesystem seam; production omits it and reads real disk. */
+  readonly reader?: DependencyDeclarationReader;
+}): Promise<DeclarationLookupResult> {
+  const reader = options.reader ?? REAL_DEPENDENCY_DECLARATION_READER;
+  const own = await readOwnManifest(reader, options.pluginRoot);
+  const declared = own.kind === "readable" ? own.dependencies : options.entry.dependencies;
+  return toClosureLookupResult(parseDeclaredDependencies(declared));
+}
+
 /** Inputs of one read of an installed copy its marketplace no longer lists. */
 export interface InstalledCopyDeclarationReadOptions {
   /** The record's `resolvedSource`: the plugin root its install materialized. */

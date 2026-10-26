@@ -7562,6 +7562,94 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  test("UPD-DEP-D1: a config install that moves its out-of-range dependency first reports the move as pending lists it", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(
+      t,
+      "install-moves-dependency",
+      coShippedSeed(),
+    );
+    const state = await loadState(project.extensionRoot);
+    const mp = state.marketplaces.mp;
+    assert.ok(mp !== undefined);
+    const { widget: _widget, ...recorded } = mp.plugins;
+    mp.plugins = recorded;
+    await saveState(project.extensionRoot, state);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
+          '    cause: constrained to the combined range (^2.0.0) -- required by "widget@mp"\n' +
+          "  ● widget v1.1.0 (installed)\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual(
+      [
+        (await recordFor(project, "mp", "zcore"))?.version,
+        (await recordFor(project, "mp", "widget"))?.version,
+      ],
+      ["2.0.0", "1.1.0"],
+    );
+    verifyBoundary();
+  });
+
+  test("UPD-DEP-D1: a config install whose dependency's move fails reports the failed move and installs nothing", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "install-move-fails",
+      coShippedSeed(),
+    );
+    const state = await loadState(project.extensionRoot);
+    const mp = state.marketplaces.mp;
+    assert.ok(mp !== undefined);
+    const { widget: _widget, ...recorded } = mp.plugins;
+    mp.plugins = recorded;
+    await saveState(project.extensionRoot, state);
+    await unreadableSkill(marketplaceRoot, "zcore");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some plugin operations have failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ widget (failed) {dependency failed}\n" +
+          '    cause: Dependency "zcore@mp" did not move into ^2.0.0.\n' +
+          "  ⊘ zcore v1.0.0 → v2.0.0 (failed) {permission denied}\n" +
+          "\n" +
+          "Reconcile: 2 failures",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(
+      [
+        (await recordFor(project, "mp", "zcore"))?.version,
+        await recordFor(project, "mp", "widget"),
+      ],
+      ["1.0.0", undefined],
+    );
+    verifyBoundary();
+  });
+
   test("APPLY1-01: a dependency's failed move keeps its dependent where it is and disables it, naming the dependency", async (t) => {
     // arrange
     const { cwd, project, marketplaceRoot } = await seedConvergenceScope(

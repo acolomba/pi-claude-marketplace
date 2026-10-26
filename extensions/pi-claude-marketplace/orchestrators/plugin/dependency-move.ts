@@ -1,48 +1,56 @@
 // orchestrators/plugin/dependency-move.ts
 //
 // UPD-DEP-D1 / RESV-05: moves a recorded dependency into the range a plugin
-// being installed or updated asks for, through `update`'s own path. The move
+// being installed or updated asks for, through `update`'s own path. A move
 // runs the update preflight with the requesting plugin's ranges folded in
 // place of its record's declarations, so the dependency's other dependents
 // still hold it (`{dependents constrain}`), and it takes the highest version
 // the combined range admits: a release tag when one satisfies it (D-03-03),
 // else the catalog version.
 //
-// Every move is judged before the first one runs, writing nothing, so a
-// dependency that cannot move refuses the whole operation and leaves the
-// scope as it was. The moves then run dependencies first, each its own
-// update; a move that fails stops the rest, and the moves already made stay,
-// each a complete update.
+// `judgeDependencyMove` decides one move and writes nothing; the dependency
+// plan (`dependency-plan.ts`) judges every move of an operation before any
+// runs. `runDependencyMoves` then makes the moves, each its own update, and
+// skips a dependency an earlier move's own closure already brought into
+// range. A move that fails stops the rest; the moves already made stay, each
+// a complete update, and the result lists them.
+//
+// Never called while the scope's state lock is held: the preflight takes it
+// itself for an unpinned git source, and the lock is not re-entrant.
 //
 // Not a plugin ledger and names no git surface: the preflight and the shared
 // runner reach git through their own seams.
 
+import { recordedVersionSatisfies } from "../../domain/dependency-range.ts";
+import { loadState } from "../../persistence/state-io.ts";
+import { errorMessage } from "../../shared/errors.ts";
 import { companionSeverity } from "../../shared/notify-reasons.ts";
+import { ownValue } from "../../shared/own-key.ts";
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
 import { materializeLatestVersion } from "./materialize-latest.ts";
-import {
-  isUpdatePreflightOutcome,
-  preparePluginUpdate,
-  UPDATE_MATERIALIZATION,
-} from "./update-preflight.ts";
+import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-preflight.ts";
 import { updatedRowFromOutcome } from "./update-row.ts";
 
 import type { OutOfRangeMember } from "./install-cascade.ts";
+import type {
+  MaterializationPolicy,
+  PreparedPluginUpdate,
+  PreparePluginUpdateOptions,
+} from "./update-preflight.ts";
 import type {
   CascadeThreePhaseArgs,
   UpdateDependencySettler,
   UpdateRunOutcome,
 } from "./update-swap.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
-import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { SoftDepStatus } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { UpdateDependencyRow } from "../types.ts";
+import type { MovedDependency, UpdateDependencyRow } from "../types.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
 
 /** The collaborators every dependency move of one operation shares. */
@@ -53,12 +61,24 @@ export interface DependencyMoveContext {
   readonly hooksRouting: UpdateHooksRouting;
   readonly completionCache: CompletionCache;
   readonly env: ClaudeEnv;
+  /**
+   * The operation's materialization knobs: `install` reads a present mirror
+   * offline (NFR-5), `update` refreshes it, and `apply` lists no tag (D-23).
+   */
+  readonly policy: MaterializationPolicy;
+  /** The command's `--partial` and `--map-model`, cascade-wide as on an install. */
+  readonly partial?: boolean;
+  readonly mapModel?: boolean;
+  /** The command's context, so a move authenticates as the command does. */
+  readonly notification?: PreparePluginUpdateOptions["notification"];
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
   /** D-10-18: one memo pair per operation, so the judge and the move list a source once. */
   readonly constraintTagMemo: NonNullable<CascadeThreePhaseArgs["constraintTagMemo"]>;
-  readonly constraintMarketplaceTagMemo: Map<string, readonly ReleaseTagCandidate[]>;
+  readonly constraintMarketplaceTagMemo: NonNullable<
+    CascadeThreePhaseArgs["constraintMarketplaceTagMemo"]
+  >;
   /** Settles the moved dependency's own new closure, as any update does. */
   readonly settleDependencies?: UpdateDependencySettler;
   readonly stateTransaction?: LockedStateTransactionDeps;
@@ -80,17 +100,17 @@ export function freshDependencyMoveMemos(): DependencyMoveMemos {
   return { constraintTagMemo, constraintMarketplaceTagMemo };
 }
 
-/** Every move can be made, or the first one that cannot and why. */
+/** One move's verdict: the candidate it would land, or why it cannot move. */
 export type DependencyMoveJudgement =
-  | { readonly ok: true }
-  | { readonly ok: false; readonly member: OutOfRangeMember; readonly cause: string };
+  | { readonly ok: true; readonly prepared: PreparedPluginUpdate }
+  | { readonly ok: false; readonly cause: string };
 
-/** The moves all landed, or the one that failed; `rows` lists every move attempted. */
+/** The moves all landed, or the one that did not; `moved` lists every row reported. */
 export type DependencyMoveResult =
-  | { readonly ok: true; readonly rows: readonly UpdateDependencyRow[] }
+  | { readonly ok: true; readonly moved: readonly MovedDependency[] }
   | {
       readonly ok: false;
-      readonly rows: readonly UpdateDependencyRow[];
+      readonly moved: readonly MovedDependency[];
       readonly member: OutOfRangeMember;
     };
 
@@ -109,6 +129,9 @@ function moveArgs(context: DependencyMoveContext, member: OutOfRangeMember): Cas
     constraintTagMemo: context.constraintTagMemo,
     constraintMarketplaceTagMemo: context.constraintMarketplaceTagMemo,
     requester: { key: member.requiredBy, ranges: member.ranges },
+    ...(context.partial !== undefined && { partial: context.partial }),
+    ...(context.mapModel !== undefined && { mapModel: context.mapModel }),
+    ...(context.notification !== undefined && { preflightNotification: context.notification }),
     ...(context.credentialOps !== undefined && { credentialOps: context.credentialOps }),
     ...(context.deviceFlowHttp !== undefined && { deviceFlowHttp: context.deviceFlowHttp }),
     ...(context.authMemo !== undefined && { authMemo: context.authMemo }),
@@ -120,9 +143,9 @@ function moveArgs(context: DependencyMoveContext, member: OutOfRangeMember): Cas
 }
 
 /**
- * Why a preflight verdict leaves the dependency where it is: a held move's
- * notes say which range holds it, and any other verdict's say what the
- * preflight found, as an update's row would.
+ * Why a verdict leaves the dependency where it is: a held move's notes say
+ * which range holds it, and any other verdict's say what the preflight found,
+ * as an update's row would.
  */
 function refusalCause(
   verdict: Exclude<UpdateRunOutcome, { readonly partition: "updated" }>,
@@ -135,37 +158,40 @@ function refusalCause(
 }
 
 /**
- * Judges every move before any runs: each runs the update preflight, which
- * writes nothing under `judgeOnly`, and the first that cannot move is the
- * refusal.
+ * Judges one move with the update preflight under `judgeOnly`, which writes
+ * no state: the candidate it would land, or why it cannot move. A git source
+ * clones on a cache miss, as the move would.
  */
-export async function judgeDependencyMoves(
-  members: readonly OutOfRangeMember[],
+export async function judgeDependencyMove(
+  member: OutOfRangeMember,
   context: DependencyMoveContext,
 ): Promise<DependencyMoveJudgement> {
-  for (const member of members) {
-    // eslint-disable-next-line no-await-in-loop -- the first refusal ends the judgement
+  const args = moveArgs(context, member);
+  try {
     const prepared = await preparePluginUpdate({
-      ...moveArgs(context, member),
-      policy: UPDATE_MATERIALIZATION,
+      ...args,
+      policy: context.policy,
       judgeOnly: true,
+      ...(context.notification !== undefined && { notification: context.notification }),
     });
-    if (isUpdatePreflightOutcome(prepared)) {
-      return { ok: false, member, cause: refusalCause(prepared) };
-    }
+    return isUpdatePreflightOutcome(prepared)
+      ? { ok: false, cause: refusalCause(prepared) }
+      : { ok: true, prepared };
+  } catch (err) {
+    return { ok: false, cause: errorMessage(err) };
   }
-
-  return { ok: true };
 }
 
 /**
- * Whether a move landed. A disabled record's move refreshes its pin and stays
- * disabled (D-05), so its preflight reports it skipped as already disabled;
- * the cascade then enables it at the new version.
+ * Whether a move landed. `unchanged` passed the same range check, so the
+ * recorded revision is already the candidate. A disabled record's move
+ * refreshes its pin and stays disabled (D-05), so its preflight reports it
+ * skipped as already disabled; the cascade then enables it at the new version.
  */
 function moveLanded(outcome: UpdateRunOutcome): boolean {
   return (
     outcome.partition === "updated" ||
+    outcome.partition === "unchanged" ||
     (outcome.partition === "skipped" && outcome.reasons.includes("already disabled"))
   );
 }
@@ -174,14 +200,15 @@ function moveLanded(outcome: UpdateRunOutcome): boolean {
 async function runMove(
   context: DependencyMoveContext,
   member: OutOfRangeMember,
+  recordedVersion: string,
 ): Promise<UpdateRunOutcome> {
   try {
-    return await materializeLatestVersion(moveArgs(context, member), UPDATE_MATERIALIZATION);
+    return await materializeLatestVersion(moveArgs(context, member), context.policy);
   } catch (err) {
     return {
       partition: "failed",
       name: member.name,
-      fromVersion: member.recordedVersion,
+      fromVersion: recordedVersion,
       notes: [],
       reasons: [],
       cause: err as Error,
@@ -201,6 +228,7 @@ function moveRow(
   context: DependencyMoveContext,
   member: OutOfRangeMember,
   outcome: UpdateRunOutcome,
+  recordedVersion: string,
 ): UpdateDependencyRow | undefined {
   if (outcome.partition === "updated") {
     const row = updatedRowFromOutcome(outcome, context.scope, {
@@ -210,42 +238,82 @@ function moveRow(
     return { ...row, name: member.key };
   }
 
-  if (moveLanded(outcome)) {
+  if (outcome.partition === "unchanged" || moveLanded(outcome)) {
     return undefined;
   }
 
   const thrown = outcome.partition === "failed" ? outcome.cause : undefined;
-  const cause = thrown ?? new Error(refusalCause(outcome));
   return {
     status: "failed",
     name: member.key,
-    version: member.recordedVersion,
-    reasons: outcome.partition === "unchanged" ? [] : outcome.reasons,
-    cause,
+    version: recordedVersion,
+    reasons: outcome.reasons,
+    cause: thrown ?? new Error(refusalCause(outcome)),
     severity: "error",
   };
 }
 
 /**
- * Makes the judged moves, dependencies first. A move that does not land stops
- * the rest; the moves already made stay.
+ * The version the scope records for `member` now, and whether it already
+ * satisfies the member's range: an earlier move's own closure may have moved
+ * it (CR-02).
+ */
+async function recordedNow(
+  context: DependencyMoveContext,
+  member: OutOfRangeMember,
+): Promise<{ readonly version: string; readonly inRange: boolean }> {
+  const state = await loadState(context.locations.extensionRoot);
+  const record = ownValue(ownValue(state.marketplaces, member.marketplace)?.plugins, member.name);
+  const version = record?.version ?? member.recordedVersion;
+  return {
+    version,
+    inRange: member.ranges.every((range) => recordedVersionSatisfies(version, range)),
+  };
+}
+
+/** A nested closure's row, which names its dependency by `<plugin>@<marketplace>`. */
+function movedFromRow(row: UpdateDependencyRow): MovedDependency {
+  const at = row.name.lastIndexOf("@");
+  return {
+    key: row.name,
+    name: row.name.slice(0, at),
+    marketplace: row.name.slice(at + 1),
+    row,
+  };
+}
+
+function moved(member: OutOfRangeMember, row: UpdateDependencyRow): MovedDependency {
+  return { key: member.key, name: member.name, marketplace: member.marketplace, row };
+}
+
+/**
+ * Makes the judged moves in order, each its own update. A dependency already
+ * in range is skipped. The moved dependency's own new closure reports beside
+ * it. A move that does not land stops the rest.
  */
 export async function runDependencyMoves(
   members: readonly OutOfRangeMember[],
   context: DependencyMoveContext,
 ): Promise<DependencyMoveResult> {
-  const rows: UpdateDependencyRow[] = [];
+  const done: MovedDependency[] = [];
   for (const member of members) {
-    // eslint-disable-next-line no-await-in-loop -- each move locks the scope (retries: 0), dependencies first
-    const outcome = await runMove(context, member);
-    const row = moveRow(context, member, outcome);
-    // The moved dependency's own new closure reports beside it.
-    rows.push(...(row === undefined ? [] : [row]), ...(outcome.dependencyRows ?? []));
+    // eslint-disable-next-line no-await-in-loop -- each move reads what the previous one landed
+    const now = await recordedNow(context, member);
+    if (now.inRange) {
+      continue;
+    }
 
+    // eslint-disable-next-line no-await-in-loop -- each move locks the scope (retries: 0), dependencies first
+    const outcome = await runMove(context, member, now.version);
+    const row = moveRow(context, member, outcome, now.version);
+    done.push(
+      ...(row === undefined ? [] : [moved(member, row)]),
+      ...(outcome.dependencyRows ?? []).map(movedFromRow),
+    );
     if (!moveLanded(outcome)) {
-      return { ok: false, rows, member };
+      return { ok: false, moved: done, member };
     }
   }
 
-  return { ok: true, rows };
+  return { ok: true, moved: done };
 }

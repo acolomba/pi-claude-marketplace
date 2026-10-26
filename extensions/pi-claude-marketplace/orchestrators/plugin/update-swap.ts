@@ -167,8 +167,14 @@ export type UpdateDependencySettlement =
       readonly cause: Error;
     };
 
-/** UPD-DEP-D1: settles the closure of the version `args` moves its plugin to. */
-export type UpdateDependencySettler = (args: ThreePhaseArgs) => Promise<UpdateDependencySettlement>;
+/**
+ * UPD-DEP-D1: settles the closure of `prepared`, the version `args` moves its
+ * plugin to, so the closure read is the candidate's and not the catalog head's.
+ */
+export type UpdateDependencySettler = (
+  args: ThreePhaseArgs,
+  prepared: PreparedPluginUpdate,
+) => Promise<UpdateDependencySettlement>;
 
 /**
  * UPD-DEP-D1: the settler an update operation is bound to, before the
@@ -177,6 +183,7 @@ export type UpdateDependencySettler = (args: ThreePhaseArgs) => Promise<UpdateDe
  */
 export type UpdateDependencyResolver = (
   args: ThreePhaseArgs,
+  prepared: PreparedPluginUpdate,
   notification: { readonly ctx: NotificationContext; readonly run: NotificationRun },
 ) => Promise<UpdateDependencySettlement>;
 
@@ -221,6 +228,13 @@ export interface ThreePhaseArgsBase {
   readonly onCandidate?: (move: RevisionMove) => void;
   /** UPR-03: the installed version, reported before any candidate; see `onCandidate`. */
   readonly onRecord?: NonNullable<PreparePluginUpdateOptions["onRecord"]>;
+  /**
+   * UPD-DEP-D1: the command's context for a cascade-mode run's credential
+   * prompts. A dependency move runs in cascade mode, so its rows return to the
+   * command; on an interactive command it still authenticates as the command
+   * does (Device Flow included).
+   */
+  readonly preflightNotification?: PreparePluginUpdateOptions["notification"];
   /** UPD-DEP-D1: the plugin a dependency move is made for (`PreparePluginUpdateOptions`). */
   readonly requester?: NonNullable<PreparePluginUpdateOptions["requester"]>;
   /**

@@ -12,6 +12,7 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import {
   installedPluginOutcome,
   ledgerDegradationSignals,
+  previewInstall,
   runInstallLedger,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -24,6 +25,7 @@ import {
   McpServerKeyCollisionError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
+  CrossPluginConflictError,
   InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
   PluginShapeError,
@@ -2431,4 +2433,89 @@ test("D-07-06: a pinned path-source install whose callback does not materialize 
     return true;
   });
   assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
+});
+
+test("UPD-DEP-D1: previewInstall admits an installable plugin and writes nothing", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["tool"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const stateBefore = structuredClone(seeded.state);
+  const bytesBefore = await readFile(locations.stateJsonPath, "utf8");
+
+  // act
+  await previewInstall(seeded.state, locations, projectInstallOptions(environment.cwd));
+
+  // assert
+  assert.deepStrictEqual(seeded.state, stateBefore);
+  assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), bytesBefore);
+  await assert.rejects(readdir(locations.skillsTargetDir), { code: "ENOENT" });
+});
+
+test("UPD-DEP-D1: previewInstall throws what the gate throws for a plugin pi supports only in part", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-partial-");
+  const seeded = await seedPlugin(environment.cwd, {
+    pluginJson: { experimental: { themes: "./themes" } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act & assert
+  await assert.rejects(
+    previewInstall(seeded.state, locations, projectInstallOptions(environment.cwd)),
+    (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError);
+      assert.equal(error.shape.kind, "not-installable");
+      return true;
+    },
+  );
+});
+
+test("UPD-DEP-D1: previewInstall reads a marketplace only the user scope records without adding it", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-user-");
+  const seeded = await seedPlugin(environment.cwd, {
+    marketplaceScope: "user",
+    pluginJson: { experimental: { themes: "./themes" } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act & assert
+  await assert.rejects(
+    previewInstall(seeded.state, locations, projectInstallOptions(environment.cwd)),
+    PluginShapeError,
+  );
+  assert.deepStrictEqual(seeded.state, { marketplaces: {}, schemaVersion: 2 });
+});
+
+test("UPD-DEP-D1: previewInstall leaves a marketplace neither scope records to the ledger", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-absent-");
+  const locations = locationsFor("project", environment.cwd);
+  const state: ExtensionState = { marketplaces: {}, schemaVersion: 2 };
+
+  // act
+  await previewInstall(state, locations, projectInstallOptions(environment.cwd));
+
+  // assert
+  assert.deepStrictEqual(state, { marketplaces: {}, schemaVersion: 2 });
+});
+
+test("UPD-DEP-D1: previewInstall throws the PI-6 conflict with a name another plugin owns", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-conflict-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["tool"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const installedState = structuredClone(seeded.state);
+  await runInstallLedger(installedState, locations, projectInstallOptions(environment.cwd));
+  const marketplace = installedState.marketplaces.marketplace;
+  const record = marketplace?.plugins.empty;
+  assert.ok(marketplace !== undefined && record !== undefined);
+  marketplace.plugins = { other: record };
+
+  // act & assert
+  await assert.rejects(
+    previewInstall(installedState, locations, projectInstallOptions(environment.cwd)),
+    CrossPluginConflictError,
+  );
 });

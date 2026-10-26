@@ -6,6 +6,7 @@ import path from "node:path";
 import test, { type TestContext } from "node:test";
 
 import {
+  readCandidateDeclaration,
   readDependencyDeclaration,
   readInstalledCopyDeclaration,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-declaration-read.ts";
@@ -562,4 +563,53 @@ test("DLS-01: the production reader reads an installed copy off real disk", asyn
 
   // assert
   assert.deepStrictEqual(read, dependsOn("beta"));
+});
+
+test("UPD-DEP-D1: a resolved candidate's own manifest answers over its marketplace entry", async () => {
+  // arrange
+  const reader = buildReader({
+    files: { [WRAPPED]: JSON.stringify({ dependencies: ["candidate@mp"] }) },
+  });
+
+  // act
+  const read = await readCandidateDeclaration({
+    pluginRoot: PLUGIN_ROOT,
+    entry: entryWith("./alpha", ["head@mp"]),
+    reader,
+  });
+
+  // assert
+  assert.deepStrictEqual(read, dependsOn("candidate"));
+});
+
+test("UPD-DEP-D1: a resolved candidate with no manifest is answered by its marketplace entry", async () => {
+  // arrange
+  const reader = buildReader({});
+
+  // act
+  const read = await readCandidateDeclaration({
+    pluginRoot: PLUGIN_ROOT,
+    entry: entryWith("./alpha", ["head@mp"]),
+    reader,
+  });
+
+  // assert
+  assert.deepStrictEqual(read, dependsOn("head"));
+  assert.deepStrictEqual(reader.opened, [WRAPPED, BARE]);
+});
+
+test("UPD-DEP-D1: the production reader reads a candidate's manifest off real disk", async (testContext) => {
+  // arrange
+  const root = await freshRoot(testContext, "dependency-declaration-read-candidate-");
+  await mkdir(path.join(root, ".claude-plugin"), { recursive: true });
+  await writeFile(
+    path.join(root, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "alpha", dependencies: ["disk@mp"] }),
+  );
+
+  // act
+  const read = await readCandidateDeclaration({ pluginRoot: root, entry: entryWith("./alpha") });
+
+  // assert
+  assert.deepStrictEqual(read, dependsOn("disk"));
 });

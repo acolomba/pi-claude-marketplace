@@ -11,7 +11,7 @@ import {
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
   freshDependencyMoveMemos,
-  judgeDependencyMoves,
+  judgeDependencyMove,
   runDependencyMoves,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -27,11 +27,19 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { DependencyMoveContext } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts";
 import type { OutOfRangeMember } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts";
+import type { MaterializationPolicy } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type { UpdateDependencyRow } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { TestContext } from "node:test";
 
 type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
+
+const UPDATE_POLICY = {
+  refreshSource: true,
+  skipSameRevision: true,
+  overwrite: false,
+  searchReleaseTags: true,
+} satisfies MaterializationPolicy;
 
 function recordedPlugin(version: string, pluginRoot: string, enabled = true): PluginRecord {
   return {
@@ -105,6 +113,7 @@ async function seedDependency(
       completionCache: createCompletionCache(),
       env: {},
       softDeps: runWithNothingLoaded().softDeps,
+      policy: UPDATE_POLICY,
       ...freshDependencyMoveMemos(),
     },
   };
@@ -138,32 +147,40 @@ describe("freshDependencyMoveMemos", () => {
   });
 });
 
-describe("judgeDependencyMoves", () => {
-  test("admits a move whose catalog version satisfies the requester's range and writes nothing", async (t) => {
+describe("judgeDependencyMove", () => {
+  test("admits a move with the candidate it lands and writes nothing", async (t) => {
     // arrange
-    const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
+    const { context, pluginRoot } = await seedDependency(t, {
+      recorded: "1.0.0",
+      offered: "2.0.0",
+    });
     const stateBefore = await readFile(context.locations.stateJsonPath, "utf8");
 
     // act
-    const judgement = await judgeDependencyMoves([outOfRange()], context);
+    const judgement = await judgeDependencyMove(outOfRange(), context);
 
     // assert
-    assert.deepStrictEqual(judgement, { ok: true });
+    assert.deepStrictEqual(
+      judgement.ok && [
+        judgement.prepared.fromVersion,
+        judgement.prepared.toVersion,
+        judgement.prepared.installable.pluginRoot,
+      ],
+      ["1.0.0", "2.0.0", pluginRoot],
+    );
     assert.strictEqual(await readFile(context.locations.stateJsonPath, "utf8"), stateBefore);
   });
 
   test("refuses a move whose catalog version falls outside the requester's range", async (t) => {
     // arrange
     const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "1.5.0" });
-    const member = outOfRange();
 
     // act
-    const judgement = await judgeDependencyMoves([member], context);
+    const judgement = await judgeDependencyMove(outOfRange(), context);
 
     // assert
     assert.deepStrictEqual(judgement, {
       ok: false,
-      member,
       cause:
         'version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "widget@mp"',
     });
@@ -172,15 +189,13 @@ describe("judgeDependencyMoves", () => {
   test("refuses a dependency already at the newest version it can move to", async (t) => {
     // arrange
     const { context } = await seedDependency(t, { recorded: "2.0.0", offered: "2.0.0" });
-    const member = outOfRange({ recordedVersion: "2.0.0" });
 
     // act
-    const judgement = await judgeDependencyMoves([member], context);
+    const judgement = await judgeDependencyMove(outOfRange({ recordedVersion: "2.0.0" }), context);
 
     // assert
     assert.deepStrictEqual(judgement, {
       ok: false,
-      member,
       cause: "version 2.0.0 is the newest version it can move to",
     });
   });
@@ -188,13 +203,63 @@ describe("judgeDependencyMoves", () => {
   test("refuses a dependency the scope does not record with what the update found", async (t) => {
     // arrange
     const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
-    const member = outOfRange({ key: "absent@mp", name: "absent" });
 
     // act
-    const judgement = await judgeDependencyMoves([member], context);
+    const judgement = await judgeDependencyMove(
+      outOfRange({ key: "absent@mp", name: "absent" }),
+      context,
+    );
 
     // assert
-    assert.deepStrictEqual(judgement, { ok: false, member, cause: "not installed" });
+    assert.deepStrictEqual(judgement, { ok: false, cause: "not installed" });
+  });
+
+  test("refuses a move whose preflight throws with the error's message", async (t) => {
+    // arrange
+    const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
+    await writeFile(context.locations.stateJsonPath, "{");
+
+    // act
+    const judgement = await judgeDependencyMove(outOfRange(), context);
+
+    // assert
+    assert.strictEqual(judgement.ok, false);
+  });
+
+  test("judges with the operation's flags and the command's context", async (t) => {
+    // arrange
+    const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
+    const notified: string[] = [];
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+
+    // act
+    const judgement = await judgeDependencyMove(outOfRange(), {
+      ...context,
+      partial: true,
+      mapModel: true,
+      notification: {
+        ctx: { mode: "tui", ui: { notify: (message) => notified.push(message) } },
+        run: runWithNothingLoaded(),
+      },
+      credentialOps: credentials.credentialOps,
+      deviceFlowHttp: createDeviceFlowFake({
+        boundary: "memory",
+        network: "disabled",
+        deviceCode: {
+          device_code: "device-1",
+          user_code: "USER-1",
+          verification_uri: "https://example.invalid/device",
+          expires_in: 900,
+          interval: 5,
+        },
+      }).http,
+      authMemo: new Map(),
+    });
+
+    // assert
+    assert.strictEqual(judgement.ok, true);
+    assert.deepStrictEqual(notified, []);
+    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
   });
 });
 
@@ -213,18 +278,25 @@ describe("runDependencyMoves", () => {
     // assert
     assert.deepStrictEqual(result, {
       ok: true,
-      rows: [
+      moved: [
         {
-          status: "updated",
-          name: "zcore@mp",
-          scope: "project",
-          from: "1.0.0",
-          to: "2.0.0",
-          dependencies: [],
-          reasons: ["dependency current copy"],
-          cause: new Error('constrained to the combined range (^2.0.0) -- required by "widget@mp"'),
-          severity: "info",
-          needsReload: true,
+          key: "zcore@mp",
+          name: "zcore",
+          marketplace: "mp",
+          row: {
+            status: "updated",
+            name: "zcore@mp",
+            scope: "project",
+            from: "1.0.0",
+            to: "2.0.0",
+            dependencies: [],
+            reasons: ["dependency current copy"],
+            cause: new Error(
+              'constrained to the combined range (^2.0.0) -- required by "widget@mp"',
+            ),
+            severity: "info",
+            needsReload: true,
+          },
         },
       ],
     });
@@ -233,6 +305,19 @@ describe("runDependencyMoves", () => {
       ...recordedPlugin("2.0.0", pluginRoot),
       updatedAt: "2026-01-02T00:00:00.000Z",
     });
+  });
+
+  test("skips a dependency an earlier move already brought into range", async (t) => {
+    // arrange
+    const { context } = await seedDependency(t, { recorded: "2.0.0", offered: "2.0.0" });
+    const stateBefore = await readFile(context.locations.stateJsonPath, "utf8");
+
+    // act
+    const result = await runDependencyMoves([outOfRange({ recordedVersion: "1.0.0" })], context);
+
+    // assert
+    assert.deepStrictEqual(result, { ok: true, moved: [] });
+    assert.strictEqual(await readFile(context.locations.stateJsonPath, "utf8"), stateBefore);
   });
 
   test("moves a disabled dependency's pin and reports no row for it", async (t) => {
@@ -247,7 +332,7 @@ describe("runDependencyMoves", () => {
     const result = await runDependencyMoves([outOfRange()], context);
 
     // assert
-    assert.deepStrictEqual(result, { ok: true, rows: [] });
+    assert.deepStrictEqual(result, { ok: true, moved: [] });
     const state = await loadState(context.locations.extensionRoot);
     assert.deepStrictEqual(
       [
@@ -270,25 +355,30 @@ describe("runDependencyMoves", () => {
     assert.deepStrictEqual(result, {
       ok: false,
       member,
-      rows: [
+      moved: [
         {
-          status: "failed",
-          name: "zcore@mp",
-          version: "1.0.0",
-          reasons: ["dependents constrain"],
-          cause: new Error(
-            'version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "widget@mp"',
-          ),
-          severity: "error",
+          key: "zcore@mp",
+          name: "zcore",
+          marketplace: "mp",
+          row: {
+            status: "failed",
+            name: "zcore@mp",
+            version: "1.0.0",
+            reasons: ["dependents constrain"],
+            cause: new Error(
+              'version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "widget@mp"',
+            ),
+            severity: "error",
+          },
         },
       ],
     });
   });
 
-  test("reports a dependency already at its newest version as a failed move", async (t) => {
+  test("reports a dependency the scope no longer records as a failed move at the version the plan read", async (t) => {
     // arrange
-    const { context } = await seedDependency(t, { recorded: "2.0.0", offered: "2.0.0" });
-    const member = outOfRange({ recordedVersion: "2.0.0" });
+    const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
+    const member = outOfRange({ key: "absent@mp", name: "absent", recordedVersion: "1.1.0" });
 
     // act
     const result = await runDependencyMoves([member], context);
@@ -297,14 +387,19 @@ describe("runDependencyMoves", () => {
     assert.deepStrictEqual(result, {
       ok: false,
       member,
-      rows: [
+      moved: [
         {
-          status: "failed",
-          name: "zcore@mp",
-          version: "2.0.0",
-          reasons: [],
-          cause: new Error("version 2.0.0 is the newest version it can move to"),
-          severity: "error",
+          key: "absent@mp",
+          name: "absent",
+          marketplace: "mp",
+          row: {
+            status: "failed",
+            name: "absent@mp",
+            version: "1.1.0",
+            reasons: ["not installed"],
+            cause: new Error("not installed"),
+            severity: "error",
+          },
         },
       ],
     });
@@ -326,38 +421,31 @@ describe("runDependencyMoves", () => {
     assert.deepStrictEqual(result, {
       ok: false,
       member,
-      rows: [
+      moved: [
         {
-          status: "failed",
-          name: "zcore@mp",
-          version: "1.0.0",
-          reasons: [],
-          cause: diskFull,
-          severity: "error",
+          key: "zcore@mp",
+          name: "zcore",
+          marketplace: "mp",
+          row: {
+            status: "failed",
+            name: "zcore@mp",
+            version: "1.0.0",
+            reasons: [],
+            cause: diskFull,
+            severity: "error",
+          },
         },
       ],
     });
   });
 
-  test("threads the operation's collaborators into each move and reports the moved dependency's own closure", async (t) => {
+  test("reports the moved dependency's own closure beside its row", async (t) => {
     // arrange
     t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
     const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
-    const credentials = createCredentialOpsFake({ boundary: "memory" });
-    const deviceFlow = createDeviceFlowFake({
-      boundary: "memory",
-      network: "disabled",
-      deviceCode: {
-        device_code: "device-1",
-        user_code: "USER-1",
-        verification_uri: "https://example.invalid/device",
-        expires_in: 900,
-        interval: 5,
-      },
-    });
     const nested = {
       status: "installed",
-      name: "base@mp",
+      name: "base@other",
       dependencies: [],
       version: "1.0.0",
       severity: "info",
@@ -368,25 +456,20 @@ describe("runDependencyMoves", () => {
     // act
     const result = await runDependencyMoves([outOfRange()], {
       ...context,
-      credentialOps: credentials.credentialOps,
-      deviceFlowHttp: deviceFlow.http,
-      authMemo: new Map(),
-      settleDependencies: (args) => {
-        settledFor.push(`${args.plugin}@${args.marketplace}`);
+      settleDependencies: (args, prepared) => {
+        settledFor.push(`${args.plugin}@${args.marketplace} ${prepared.toVersion}`);
         return Promise.resolve({ kind: "settled", rows: [nested] });
       },
     });
 
     // assert
     assert.deepStrictEqual(
-      result.rows.map((row) => [row.status, row.name]),
+      result.moved.map((entry) => [entry.key, entry.name, entry.marketplace, entry.row.status]),
       [
-        ["updated", "zcore@mp"],
-        ["installed", "base@mp"],
+        ["zcore@mp", "zcore", "mp", "updated"],
+        ["base@other", "base", "other", "installed"],
       ],
     );
-    assert.deepStrictEqual(settledFor, ["zcore@mp"]);
-    assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
-    assert.deepStrictEqual(deviceFlow.calls, { requestCode: [], pollToken: [] });
+    assert.deepStrictEqual(settledFor, ["zcore@mp 2.0.0"]);
   });
 });

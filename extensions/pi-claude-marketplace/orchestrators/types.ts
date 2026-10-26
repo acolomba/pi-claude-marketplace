@@ -315,6 +315,14 @@ export interface PluginUpdateBase {
   readonly dependencyRows?: readonly UpdateDependencyRow[];
 }
 
+/** UPD-DEP-D1: a dependency a move changed, with the row that reports it. */
+export interface MovedDependency {
+  readonly key: string;
+  readonly name: string;
+  readonly marketplace: string;
+  readonly row: UpdateDependencyRow;
+}
+
 /**
  * UPD-DEP-D1: a row for a dependency an update or install changed for the
  * plugin it named: installed or enabled, moved, or the one that refused it.
@@ -745,6 +753,13 @@ export type InstallPluginOutcome =
        * COMPAT-01 key-set pin is undisturbed.
        */
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
+      /**
+       * UPD-DEP-D1: the recorded dependencies the install moved into range
+       * first, and their own closures' rows, each a complete update. An
+       * orchestrated caller reports them (`apply` folds them into its rows).
+       * Omitted when nothing moved (NREG-01).
+       */
+      readonly movedDependencies?: readonly MovedDependency[];
     } & Omit<LedgerDegradationSignals, "stagedAgents" | "stagedMcpServers" | "stagedWorkflows">)
   | {
       /**
@@ -770,4 +785,11 @@ export type InstallPluginOutcome =
        * are none (NREG-01).
        */
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
+      /**
+       * UPD-DEP-D1: the recorded dependencies the install moved into range
+       * first, and their own closures' rows, each a complete update. An
+       * orchestrated caller reports them (`apply` folds them into its rows).
+       * Omitted when nothing moved (NREG-01).
+       */
+      readonly movedDependencies?: readonly MovedDependency[];
     };

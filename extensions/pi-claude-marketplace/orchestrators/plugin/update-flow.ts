@@ -219,7 +219,7 @@ function makeSyncCloneOnce(
 type UpdateBindings = Pick<ThreePhaseArgsBase, "hooksRouting" | "completionCache" | "env">;
 
 /** The command's notification context, which a dependency install reports through. */
-export type UpdateNotification = Parameters<UpdateDependencyResolver>[1];
+export type UpdateNotification = Parameters<UpdateDependencyResolver>[2];
 
 /**
  * Build the per-target `runThreePhaseUpdate` argument bag for the DIRECT
@@ -1357,7 +1357,11 @@ export function createPluginUpdateOperations(
     resolveDependencies === undefined || notification === undefined
       ? run
       : (args) =>
-          run({ ...args, settleDependencies: (moved) => resolveDependencies(moved, notification) });
+          run({
+            ...args,
+            settleDependencies: (moved, prepared) =>
+              resolveDependencies(moved, prepared, notification),
+          });
   const updatePlugins: UpdatePluginsFn = (options) =>
     updatePluginsWith(
       options,

@@ -6,12 +6,19 @@
 // ledgers, so neither may import the other; this leaf is not a ledger and
 // names no git surface.
 
+import { loadState } from "../../persistence/state-io.ts";
+import { composeErrorWithCauseChain, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
+
 import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-preflight.ts";
 import { preflightMove, swapPluginUpdate } from "./update-swap.ts";
 
-import type { MaterializationPolicy } from "./update-preflight.ts";
+import type {
+  MaterializationPolicy,
+  PreparedPluginUpdate,
+  PreparePluginUpdateOptions,
+} from "./update-preflight.ts";
 import type { ThreePhaseArgs, ThreePhaseArgsBase, UpdateRunOutcome } from "./update-swap.ts";
-import type { RevisionMove } from "../types.ts";
+import type { RevisionMove, UpdateDependencyRow } from "../types.ts";
 
 /**
  * UPR-03: what one target's runner reported, so a thrown failure can name the
@@ -60,7 +67,7 @@ export async function materializeLatestVersion(
   const preflight = await preparePluginUpdate({
     ...args,
     policy,
-    ...(!args.cascade && { notification: { ctx: args.ctx, run: args.run } }),
+    ...preflightNotification(args),
   });
   if (isUpdatePreflightOutcome(preflight)) {
     return preflight;
@@ -74,7 +81,7 @@ export async function materializeLatestVersion(
   // out-of-range ones moved, dependencies first. A disabled record never gets
   // here: its preflight refreshes its pin, and enabling it runs the same
   // cascade (EDEP-03).
-  const settled = await args.settleDependencies?.(args);
+  const settled = await args.settleDependencies?.(args, preflight);
   if (settled?.kind === "refused") {
     // UPR-03: a refused update names the installed version it kept.
     return {
@@ -90,8 +97,58 @@ export async function materializeLatestVersion(
     };
   }
 
-  const outcome = await swapPluginUpdate(args, preflight, policy);
-  return settled === undefined || settled.rows.length === 0
-    ? outcome
-    : { ...outcome, dependencyRows: settled.rows };
+  if (settled === undefined || settled.rows.length === 0) {
+    return swapPluginUpdate(args, preflight, policy);
+  }
+
+  return swapAfterSettle(args, preflight, policy, settled.rows);
+}
+
+/** The command's context for the preflight's prompts, when it has one. */
+function preflightNotification(
+  args: ThreePhaseArgs,
+): Pick<PreparePluginUpdateOptions, "notification"> {
+  if (!args.cascade) {
+    return { notification: { ctx: args.ctx, run: args.run } };
+  }
+
+  return args.preflightNotification === undefined
+    ? {}
+    : { notification: args.preflightNotification };
+}
+
+/**
+ * UPD-DEP-D1 / WR-02, WR-03: the swap after a settle that changed the scope.
+ * The PI-6 name check reads the scope as the settle left it. The settle's
+ * changes are complete installs, enables and moves, and they stay when the
+ * swap then fails; the failed row lists them, so the report names every
+ * change the update made.
+ */
+async function swapAfterSettle(
+  args: ThreePhaseArgs,
+  preflight: PreparedPluginUpdate,
+  policy: MaterializationPolicy,
+  rows: readonly UpdateDependencyRow[],
+): Promise<UpdateRunOutcome> {
+  const settledState = await loadState(args.locations.extensionRoot);
+  try {
+    return {
+      ...(await swapPluginUpdate(args, { ...preflight, state: settledState }, policy)),
+      dependencyRows: rows,
+    };
+  } catch (err) {
+    rethrowInvalidGitHubBaseUrl(err);
+    return {
+      partition: "failed",
+      name: args.plugin,
+      fromVersion: preflight.fromVersion,
+      notes: [composeErrorWithCauseChain(err)],
+      reasons: [],
+      cause: err as Error,
+      dependencyRows: rows,
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    };
+  }
 }

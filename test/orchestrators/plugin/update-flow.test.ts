@@ -13589,8 +13589,13 @@ test("UPD-DEP-D1: a named update settles the new version's dependencies in the c
         createCompletionCache(),
         undefined,
         {},
-        (args, notification) => {
-          settled.push([args.plugin, notification.ctx === ctx, notification.run === run]);
+        (args, prepared, notification) => {
+          settled.push([
+            args.plugin,
+            prepared.toVersion,
+            notification.ctx === ctx,
+            notification.run === run,
+          ]);
           return Promise.resolve({
             kind: "settled",
             rows: [
@@ -13623,7 +13628,7 @@ test("UPD-DEP-D1: a named update settles the new version's dependencies in the c
             "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n  ● zcore@mp v1.0.0 (installed)\n\n/reload to pick up changes",
         },
       ]);
-      assert.deepStrictEqual(settled, [["hello", true, true]]);
+      assert.deepStrictEqual(settled, [["hello", "1.0.1", true, true]]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

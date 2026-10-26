@@ -127,6 +127,7 @@ import {
 
 import type {
   PerEntryOutcome,
+  PluginConvergedOutcome,
   PluginDependencyDisabledOutcome,
   PluginEnableFailedOutcome,
 } from "./apply-outcomes.ts";
@@ -146,7 +147,7 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
-import type { PluginUpdateOutcome } from "../types.ts";
+import type { MovedDependency, PluginUpdateOutcome } from "../types.ts";
 
 /**
  * Apply one plan's marketplacesToRemove bucket. NO outer lock around the
@@ -455,6 +456,32 @@ function redactedDependencyCascadeError(error: DependencyCascadeError): Dependen
 }
 
 /**
+ * UPD-DEP-D1 / CR-05: the dependency moves an install made, as `apply` rows
+ * under each dependency's own marketplace and by its bare name, as a catalog
+ * move's row reads; the range the move was made for stays on its cause line.
+ * A move that did not land is left to the catalog step, which tries it again
+ * and reports it with its closed-set reason (T-55-02-02).
+ */
+function movedDependencyOutcomes(
+  scope: Scope,
+  moved: readonly MovedDependency[],
+): PluginConvergedOutcome[] {
+  return moved.flatMap((entry) =>
+    entry.row.status === "failed"
+      ? []
+      : [
+          {
+            kind: "plugin-converged",
+            scope,
+            marketplace: entry.marketplace,
+            plugin: entry.name,
+            row: { ...entry.row, name: entry.name },
+          },
+        ],
+  );
+}
+
+/**
  * RECON-03 note: unlike the removal and uninstall loops, this one carries NO
  * per-entry try/catch. `installPlugin` documents that it never re-throws: its
  * whole body sits inside one try whose catch returns a typed failed outcome in
@@ -499,6 +526,9 @@ async function applyPluginInstalls(
       // `exactOptionalPropertyTypes` rejects an explicit `undefined`.
       ...(op.configSource === "local" && { local: true }),
     });
+    // UPD-DEP-D1: the dependencies the install moved into range first report
+    // as the catalog moves they are, so `apply` lists every change it made.
+    outcomes.push(...movedDependencyOutcomes(op.scope, result.movedDependencies ?? []));
 
     if (result.status === "installed" && result.landedDisabled === true) {
       // DFEN-04: the install ran whole and then unstaged, because the

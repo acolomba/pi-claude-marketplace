@@ -764,6 +764,47 @@ async function preflightInstallResolve(
 }
 
 /**
+ * UPD-DEP-D1: whether the ledger would install one plugin, decided with no
+ * write: the PI-15 / PI-3 / PI-4 preflight behind the same installability
+ * gate, then the PI-6 name check. It runs over a copy of `state`, and a
+ * marketplace only the user scope records is read from the user record rather
+ * than added (D-MF-04), so a refused plan adds nothing. A git source clones on
+ * a cache miss, as the install it previews would. Throws what the ledger
+ * would throw; a marketplace neither scope records resolves quietly, since
+ * the ledger reports it.
+ */
+export async function previewInstall(
+  state: ExtensionState,
+  locations: ScopedLocations,
+  opts: InstallLedgerOptions,
+): Promise<void> {
+  const preview = structuredClone(state);
+  if (ownValue(preview.marketplaces, opts.marketplace) === undefined) {
+    const source = await resolveInstallMarketplaceSource({
+      targetScope: opts.scope,
+      cwd: opts.cwd,
+      marketplace: opts.marketplace,
+      targetState: state,
+    });
+    if (source !== undefined) {
+      setOwn(preview.marketplaces, opts.marketplace, source.sourceRecord);
+    }
+  }
+
+  const preflight = await preflightInstallResolve(preview, locations, opts);
+  if (preflight.kind === "marketplace-absent") {
+    return;
+  }
+
+  const generatedNames = await discoverGeneratedNames(opts.plugin, preflight.installable);
+  assertNoCrossPluginConflicts(
+    opts.scope,
+    generatedNames,
+    removePluginRecord(preview, opts.marketplace, opts.plugin),
+  );
+}
+
+/**
  * Default transaction seam for the guard-free ledger body.
  *
  * Named at module scope rather than written as an inline parameter default, so

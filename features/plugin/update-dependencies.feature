@@ -126,6 +126,13 @@ Feature: Plugin update dependencies
       | id           | version | enabled |
       | widget@tools | 1.0.0   | true    |
       | zcore@tools  | 1.0.0   | true    |
+    Then the project scope stages these skills and prompts:
+      | kind  | name         |
+      | skill | widget-skill |
+      | skill | zcore-skill  |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id           |
+      | widget@tools |
 
   Scenario: Autoupdating a marketplace installs the dependency a plugin's new version needs
     Given the marketplace "tools" is published as a dir source
@@ -149,6 +156,73 @@ Feature: Plugin update dependencies
       | marketplace name | marketplace scope | marketplace status | id           | name        | status    | reasons | scope   | version | from  | to    |
       | tools            | project           | updated            | widget@tools | widget      | updated   |         | project |         | 1.0.0 | 1.1.0 |
       | tools            | project           | updated            | zcore@tools  | zcore@tools | installed |         | project | 1.0.0   |       |       |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.1.0   | true    |
+      | zcore@tools  | 1.0.0   | true    |
+
+  Scenario: Updating a plugin whose new version needs a newer version of a git-source dependency moves the dependency first
+    Given the git repository "lib" holds these plugins:
+      | name | version | path |
+      | lib  | 1.0.0   |      |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | lib  | url         | lib        | false  |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the git repository "lib" holds these plugins:
+      | name | version | path |
+      | lib  | 2.0.0   |      |
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.1.0   | lib@^2.0.0   |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | lib  | url         | lib        | false  |
+    When the user runs "/claude:plugin update app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status  | reasons | scope   | from  | to    | cause chain                                                           | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | updated |         | project | 1.0.0 | 1.1.0 |                                                                       |                 |       |                  |
+      | tools            | project           | lib@tools | lib@tools | updated |         | project | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@tools" | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | app@tools | 1.1.0   | true    |
+      | lib@tools | 2.0.0   | true    |
+
+  Scenario: Updating every plugin installs the dependency a plugin's new version needs
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   |              |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    When the user runs "/claude:plugin update --scope project"
+    Then the result has these fields:
+      | kind                | cascade       |
+      | severity            | info          |
+      | needs reload        | true          |
+      | tally label         | Plugin update |
+      | tally failures      | 0             |
+      | tally warnings      | 0             |
+      | tally success count | 1             |
+      | tally success verb  | updated       |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name        | status    | reasons | scope   | version | from  | to    |
+      | tools            | project           | widget@tools | widget      | updated   |         | project |         | 1.0.0 | 1.1.0 |
+      | tools            | project           | zcore@tools  | zcore@tools | installed |         | project | 1.0.0   |       |       |
     Then the installation record of the project scope holds these plugins:
       | id           | version | enabled |
       | widget@tools | 1.1.0   | true    |
