@@ -982,7 +982,9 @@ test("CMP-3 / LAYER-07: a project install adds the user-scope marketplace to the
       authMemo,
     },
   ]);
-  assert.deepStrictEqual(addedMarketplaces, [{ marketplace: "marketplace", cloneDir }]);
+  assert.deepStrictEqual(addedMarketplaces, [
+    { marketplace: "marketplace", rawSource: "./marketplace", cloneDir },
+  ]);
   assert.equal(
     seeded.state.marketplaces.marketplace?.marketplaceRoot,
     projectRecord.marketplaceRoot,
@@ -1035,7 +1037,9 @@ test("CMP-3 / LAYER-07: an add that records another marketplace name fails befor
     );
     return true;
   });
-  assert.deepStrictEqual(addedMarketplaces, [{ marketplace: "renamed", cloneDir }]);
+  assert.deepStrictEqual(addedMarketplaces, [
+    { marketplace: "renamed", rawSource: "./marketplace", cloneDir },
+  ]);
   assert.deepStrictEqual(Object.keys(seeded.state.marketplaces), ["renamed"]);
   assert.equal(transaction.runPhases.mock.callCount(), 0);
 });

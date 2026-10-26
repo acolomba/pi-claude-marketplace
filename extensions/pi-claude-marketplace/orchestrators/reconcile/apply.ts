@@ -511,6 +511,9 @@ async function applyPluginInstalls(
       marketplace: op.marketplace,
       plugin: op.plugin,
       notifications: { mode: "orchestrated" },
+      // UPD-DEP-D1 / MISS-01: apply's missing-dependency step installs what a
+      // moved dependency's new version needs, as `pending` previews it.
+      dependencyInstallsFollow: true,
       // DFEN-04 / D-102-04: unconditional on this path. A user who hand-adds
       // a bare `"p@mp": {}` entry has declared WHICH plugin, not WHETHER it
       // is enabled -- which is the gap the plugin's own `defaultEnabled`

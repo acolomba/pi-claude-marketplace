@@ -367,6 +367,44 @@ Feature: Plugin import
       | id            |
       | demo@fixtures |
 
+  Scenario: Importing a plugin whose installed dependency moves to a version that needs a new dependency installs that dependency too
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | aaa  | 1.0.0   |              |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install aaa@fixtures --scope user"
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | aaa@^2.0.0   |
+      | aaa  | 2.0.0   | fff          |
+      | fff  | 1.0.0   |              |
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "app@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id           | name | version | status    | reasons | scope |
+      | fixtures         | user              | skipped            | already added       | app@fixtures | app  | 1.0.0   | installed |         | user  |
+    Then the installation record of the user scope holds these plugins:
+      | id           | version | enabled |
+      | aaa@fixtures | 2.0.0   | true    |
+      | app@fixtures | 1.0.0   | true    |
+      | fff@fixtures | 1.0.0   | true    |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command          | description           |
+      | /skill:aaa-skill | A skill of aaa 2.0.0. |
+      | /skill:app-skill | A skill of app 1.0.0. |
+      | /skill:fff-skill | A skill of fff 1.0.0. |
+
   Scenario: Importing a plugin the scope holds disabled enables it instead of reinstalling it
     Given the marketplace "fixtures" offers these plugins:
       | name | version |

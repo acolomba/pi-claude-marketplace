@@ -9,20 +9,27 @@
 //      the moves and materializes nothing.
 //   2. With the lock released, the plan judges the whole operation
 //      (`dependency-plan.ts`). A refusal changes nothing; the clones the plan
-//      materialized for unrecorded revisions are collected.
-//   3. The moves run, each its own update. One that fails refuses the
-//      settle; the moves already made stay, and the rows list them.
+//      created are removed, and clones that were there before stay.
+//   3. The moves run in the plan's order, each its own update landing the
+//      version the plan chose. One that fails refuses the settle; the moves
+//      already made stay, the rows list them, and the clones the plan created
+//      that no record uses are removed.
 //   4. The cascade runs again under the lock, with every dependency in range.
 //
 // The cascade, the plan and the moves are ports install's flow binds, so this
 // module holds only the order.
 
+import { renderDeclaredRanges } from "../../domain/dependency-range.ts";
 import { DependencyCascadeError } from "../../shared/errors.ts";
 
 import type { DependencyMoveResult } from "./dependency-move.ts";
-import type { DependencyPlan } from "./dependency-plan.ts";
+import type {
+  DependencyMoveRequest,
+  DependencyPlan,
+  PlannedDependencyMove,
+} from "./dependency-plan.ts";
 import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
-import type { OutOfRangeMember, ResolvedCascadeMember } from "./install-cascade.ts";
+import type { CascadePlan } from "./install-cascade.ts";
 import type { UpdateDependencySettlement } from "./update-swap.ts";
 import type { UpdateDependencyRow } from "../types.ts";
 
@@ -32,13 +39,7 @@ export type SettleCascadeRun =
   | { readonly kind: "refused"; readonly subject: CascadeFailureSubject };
 
 /** The first run's arms: it may also plan moves. */
-export type SettleFirstRun =
-  | SettleCascadeRun
-  | {
-      readonly kind: "planned";
-      readonly freshMembers: readonly ResolvedCascadeMember[];
-      readonly outOfRange: readonly OutOfRangeMember[];
-    };
+export type SettleFirstRun = SettleCascadeRun | CascadePlan;
 
 /** The operations a settle composes. */
 export interface DependencySettlePorts {
@@ -46,29 +47,32 @@ export interface DependencySettlePorts {
   readonly firstRun: () => Promise<SettleFirstRun>;
   /** The locked cascade once every dependency is in range. */
   readonly secondRun: () => Promise<SettleCascadeRun>;
-  readonly plan: (
-    planned: Extract<SettleFirstRun, { readonly kind: "planned" }>,
-  ) => Promise<DependencyPlan>;
-  readonly runMoves: (members: readonly OutOfRangeMember[]) => Promise<DependencyMoveResult>;
+  readonly plan: (planned: CascadePlan) => Promise<DependencyPlan>;
+  readonly runMoves: (moves: readonly PlannedDependencyMove[]) => Promise<DependencyMoveResult>;
   /** The failing dependency's row, and the error that names it. */
   readonly refusal: (subject: CascadeFailureSubject) => {
     readonly rows: readonly UpdateDependencyRow[];
     readonly cause: Error;
   };
-  /** Collects the clones a refused plan materialized for unrecorded revisions. */
-  readonly collectClones: () => Promise<unknown>;
+  /**
+   * Removes the clones the plan created that no record uses; a clone that was
+   * there before the plan stays. Never throws: a failure is cleanup the next
+   * lifecycle operation retries.
+   */
+  readonly collectClones: () => Promise<void>;
 }
 
 /** The error a dependency move that did not land reports. */
-export function failedMoveError(member: OutOfRangeMember): DependencyCascadeError {
+export function failedMoveError(request: DependencyMoveRequest): DependencyCascadeError {
+  const ranges = request.requesters.flatMap((requester) => requester.ranges);
   return new DependencyCascadeError(
-    `Dependency "${member.key}" did not move into ${member.range}.`,
-    member.key,
+    `Dependency "${request.key}" did not move into ${renderDeclaredRanges(ranges)}.`,
+    request.key,
   );
 }
 
 function refused(
-  ports: DependencySettlePorts,
+  ports: Pick<DependencySettlePorts, "refusal">,
   subject: CascadeFailureSubject,
   moved: readonly UpdateDependencyRow[],
 ): UpdateDependencySettlement {
@@ -95,14 +99,26 @@ export async function settleDependencies(
     return refused(ports, plan.subject, []);
   }
 
-  const moves = await ports.runMoves(first.outOfRange);
+  const moves = await ports.runMoves(plan.moves);
   const moved = moves.moved.map((entry) => entry.row);
   if (!moves.ok) {
-    return { kind: "refused", rows: moved, cause: failedMoveError(moves.member) };
+    await ports.collectClones();
+    return { kind: "refused", rows: moved, cause: failedMoveError(moves.request) };
   }
 
-  const second = await ports.secondRun();
-  return second.kind === "installed"
-    ? { kind: "settled", rows: [...moved, ...second.rows] }
-    : refused(ports, second.subject, moved);
+  const second = await settleWithoutMoves(ports);
+  return { ...second, rows: [...moved, ...second.rows] };
+}
+
+/**
+ * UPD-DEP-D1: the settle of a planned move, and the last step of every
+ * settle: one locked run of the closure cascade, which moves nothing.
+ */
+export async function settleWithoutMoves(
+  ports: Pick<DependencySettlePorts, "refusal" | "secondRun">,
+): Promise<UpdateDependencySettlement> {
+  const run = await ports.secondRun();
+  return run.kind === "installed"
+    ? { kind: "settled", rows: run.rows }
+    : refused(ports, run.subject, []);
 }

@@ -26,7 +26,10 @@ import { createHermeticEnvironment } from "../../platform/hermetic-environment.t
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { DependencyMoveContext } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts";
-import type { OutOfRangeMember } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts";
+import type {
+  DependencyMoveRequest,
+  PlannedDependencyMove,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts";
 import type { MaterializationPolicy } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type { UpdateDependencyRow } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -119,17 +122,22 @@ async function seedDependency(
   };
 }
 
-function outOfRange(overrides: Partial<OutOfRangeMember> = {}): OutOfRangeMember {
+function request(overrides: Partial<DependencyMoveRequest> = {}): DependencyMoveRequest {
   return {
     key: "zcore@mp",
     name: "zcore",
     marketplace: "mp",
-    requiredBy: "widget@mp",
-    ranges: ["^2.0.0"],
-    range: "^2.0.0",
     recordedVersion: "1.0.0",
+    requesters: [{ key: "widget@mp", ranges: ["^2.0.0"] }],
     ...overrides,
   };
+}
+
+function move(
+  version: string,
+  overrides: Partial<DependencyMoveRequest> = {},
+): PlannedDependencyMove {
+  return { request: request(overrides), version };
 }
 
 describe("freshDependencyMoveMemos", () => {
@@ -157,7 +165,7 @@ describe("judgeDependencyMove", () => {
     const stateBefore = await readFile(context.locations.stateJsonPath, "utf8");
 
     // act
-    const judgement = await judgeDependencyMove(outOfRange(), context);
+    const judgement = await judgeDependencyMove(request(), context);
 
     // assert
     assert.deepStrictEqual(
@@ -176,7 +184,7 @@ describe("judgeDependencyMove", () => {
     const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "1.5.0" });
 
     // act
-    const judgement = await judgeDependencyMove(outOfRange(), context);
+    const judgement = await judgeDependencyMove(request(), context);
 
     // assert
     assert.deepStrictEqual(judgement, {
@@ -186,12 +194,34 @@ describe("judgeDependencyMove", () => {
     });
   });
 
+  test("refuses a move whose new version's names another plugin already owns", async (t) => {
+    // arrange
+    const { context, pluginRoot } = await seedDependency(t, {
+      recorded: "1.0.0",
+      offered: "2.0.0",
+    });
+    const state = await loadState(context.locations.extensionRoot);
+    const mp = state.marketplaces.mp;
+    assert.ok(mp !== undefined);
+    mp.plugins.other = recordedPlugin("1.0.0", pluginRoot);
+    await saveState(context.locations.extensionRoot, state);
+
+    // act
+    const judgement = await judgeDependencyMove(request(), context);
+
+    // assert
+    assert.deepStrictEqual(judgement, {
+      ok: false,
+      cause: 'Cross-plugin name conflict:\n  - skill "zcore-tool" already owned by plugin "other"',
+    });
+  });
+
   test("refuses a dependency already at the newest version it can move to", async (t) => {
     // arrange
     const { context } = await seedDependency(t, { recorded: "2.0.0", offered: "2.0.0" });
 
     // act
-    const judgement = await judgeDependencyMove(outOfRange({ recordedVersion: "2.0.0" }), context);
+    const judgement = await judgeDependencyMove(request({ recordedVersion: "2.0.0" }), context);
 
     // assert
     assert.deepStrictEqual(judgement, {
@@ -206,7 +236,7 @@ describe("judgeDependencyMove", () => {
 
     // act
     const judgement = await judgeDependencyMove(
-      outOfRange({ key: "absent@mp", name: "absent" }),
+      request({ key: "absent@mp", name: "absent" }),
       context,
     );
 
@@ -220,7 +250,7 @@ describe("judgeDependencyMove", () => {
     await writeFile(context.locations.stateJsonPath, "{");
 
     // act
-    const judgement = await judgeDependencyMove(outOfRange(), context);
+    const judgement = await judgeDependencyMove(request(), context);
 
     // assert
     assert.strictEqual(judgement.ok, false);
@@ -233,7 +263,7 @@ describe("judgeDependencyMove", () => {
     const credentials = createCredentialOpsFake({ boundary: "memory" });
 
     // act
-    const judgement = await judgeDependencyMove(outOfRange(), {
+    const judgement = await judgeDependencyMove(request(), {
       ...context,
       partial: true,
       mapModel: true,
@@ -273,7 +303,7 @@ describe("runDependencyMoves", () => {
     });
 
     // act
-    const result = await runDependencyMoves([outOfRange()], context);
+    const result = await runDependencyMoves([move("2.0.0")], context);
 
     // assert
     assert.deepStrictEqual(result, {
@@ -307,16 +337,35 @@ describe("runDependencyMoves", () => {
     });
   });
 
-  test("skips a dependency an earlier move already brought into range", async (t) => {
+  test("fails a move whose candidate is not the version the plan chose and keeps the record", async (t) => {
     // arrange
-    const { context } = await seedDependency(t, { recorded: "2.0.0", offered: "2.0.0" });
+    const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
     const stateBefore = await readFile(context.locations.stateJsonPath, "utf8");
+    const planned = move("2.1.0");
 
     // act
-    const result = await runDependencyMoves([outOfRange({ recordedVersion: "1.0.0" })], context);
+    const result = await runDependencyMoves([planned], context);
 
     // assert
-    assert.deepStrictEqual(result, { ok: true, moved: [] });
+    assert.deepStrictEqual(result, {
+      ok: false,
+      request: planned.request,
+      moved: [
+        {
+          key: "zcore@mp",
+          name: "zcore",
+          marketplace: "mp",
+          row: {
+            status: "failed",
+            name: "zcore@mp",
+            version: "1.0.0",
+            reasons: [],
+            cause: new Error("version 2.0.0 is not version 2.1.0, which the dependency plan chose"),
+            severity: "error",
+          },
+        },
+      ],
+    });
     assert.strictEqual(await readFile(context.locations.stateJsonPath, "utf8"), stateBefore);
   });
 
@@ -329,7 +378,7 @@ describe("runDependencyMoves", () => {
     });
 
     // act
-    const result = await runDependencyMoves([outOfRange()], context);
+    const result = await runDependencyMoves([move("2.0.0")], context);
 
     // assert
     assert.deepStrictEqual(result, { ok: true, moved: [] });
@@ -346,15 +395,15 @@ describe("runDependencyMoves", () => {
   test("stops at a move that does not land and reports it failed with what the update found", async (t) => {
     // arrange
     const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "1.5.0" });
-    const member = outOfRange();
+    const planned = move("1.5.0");
 
     // act
-    const result = await runDependencyMoves([member, outOfRange({ key: "next@mp" })], context);
+    const result = await runDependencyMoves([planned, move("2.0.0", { key: "next@mp" })], context);
 
     // assert
     assert.deepStrictEqual(result, {
       ok: false,
-      member,
+      request: planned.request,
       moved: [
         {
           key: "zcore@mp",
@@ -378,15 +427,15 @@ describe("runDependencyMoves", () => {
   test("reports a dependency the scope no longer records as a failed move at the version the plan read", async (t) => {
     // arrange
     const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
-    const member = outOfRange({ key: "absent@mp", name: "absent", recordedVersion: "1.1.0" });
+    const planned = move("2.0.0", { key: "absent@mp", name: "absent", recordedVersion: "1.1.0" });
 
     // act
-    const result = await runDependencyMoves([member], context);
+    const result = await runDependencyMoves([planned], context);
 
     // assert
     assert.deepStrictEqual(result, {
       ok: false,
-      member,
+      request: planned.request,
       moved: [
         {
           key: "absent@mp",
@@ -409,10 +458,10 @@ describe("runDependencyMoves", () => {
     // arrange
     const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
     const diskFull = new Error("disk full");
-    const member = outOfRange();
+    const planned = move("2.0.0");
 
     // act
-    const result = await runDependencyMoves([member], {
+    const result = await runDependencyMoves([planned], {
       ...context,
       stateTransaction: { saveState: () => Promise.reject(diskFull) },
     });
@@ -420,7 +469,7 @@ describe("runDependencyMoves", () => {
     // assert
     assert.deepStrictEqual(result, {
       ok: false,
-      member,
+      request: planned.request,
       moved: [
         {
           key: "zcore@mp",
@@ -454,7 +503,7 @@ describe("runDependencyMoves", () => {
     const settledFor: string[] = [];
 
     // act
-    const result = await runDependencyMoves([outOfRange()], {
+    const result = await runDependencyMoves([move("2.0.0")], {
       ...context,
       settleDependencies: (args, prepared) => {
         settledFor.push(`${args.plugin}@${args.marketplace} ${prepared.toVersion}`);

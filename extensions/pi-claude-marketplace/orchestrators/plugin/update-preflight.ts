@@ -214,10 +214,16 @@ export interface PreparePluginUpdateOptions {
    */
   readonly onRecord?: (fromVersion: string) => void;
   /**
-   * UPD-DEP-D1: the plugin that needs this one moved, and the ranges it asks
-   * for. The constraint gate folds them in place of its record's declarations.
+   * UPD-DEP-D1: the plugins that need this one moved, and the ranges each asks
+   * for. The constraint gate folds them in place of their records' declarations.
    */
-  readonly requester?: ConstraintRequester;
+  readonly requesters?: readonly ConstraintRequester[];
+  /**
+   * UPD-DEP-D1: the version a dependency plan chose for this move. A candidate
+   * at any other version fails the preflight, so a move lands exactly what the
+   * plan judged.
+   */
+  readonly expectVersion?: string;
   /**
    * UPD-DEP-D1: decide the candidate and write nothing, so a caller can judge
    * every dependency move before it makes the first one. A disabled record's
@@ -867,7 +873,15 @@ function postFetchGuard(
   verdict: UpdateConstraintVerdict,
   toVersion: string,
   base: { readonly plugin: string; readonly fromVersion: string },
-): PluginUpdateSkippedOutcome | undefined {
+  expectVersion: string | undefined,
+): PluginUpdateSkippedOutcome | PreflightFailedOutcome | undefined {
+  // UPD-DEP-D1: a dependency plan judged this move at `expectVersion`; any
+  // other candidate is a version the plan never judged, so the move fails.
+  if (expectVersion !== undefined && toVersion !== expectVersion) {
+    const note = `version ${toVersion} is not version ${expectVersion}, which the dependency plan chose`;
+    return failedCandidate(base, [note], [], new Error(note));
+  }
+
   if (verdict.kind !== "admits" || verdict.pin !== undefined) {
     return undefined;
   }
@@ -922,11 +936,11 @@ function constraintFromVerdict(
  */
 function constraintGateOptions(
   options: PreparePluginUpdateOptions,
-  base: Omit<UpdateConstraintOptions, "marketplaceTagMemo" | "requester" | "seam" | "tagMemo">,
+  base: Omit<UpdateConstraintOptions, "marketplaceTagMemo" | "requesters" | "seam" | "tagMemo">,
 ): UpdateConstraintOptions {
   return {
     ...base,
-    ...(options.requester !== undefined && { requester: options.requester }),
+    ...(options.requesters !== undefined && { requesters: options.requesters }),
     ...(options.constraintTagMemo !== undefined && { tagMemo: options.constraintTagMemo }),
     ...(options.constraintMarketplaceTagMemo !== undefined && {
       marketplaceTagMemo: options.constraintMarketplaceTagMemo,
@@ -1034,10 +1048,12 @@ export async function preparePluginUpdate(
     pin?.version,
   );
 
-  const stageTwoHold = postFetchGuard(verdict, toVersion, {
-    plugin: options.plugin,
-    fromVersion: triaged.record.version,
-  });
+  const stageTwoHold = postFetchGuard(
+    verdict,
+    toVersion,
+    { plugin: options.plugin, fromVersion: triaged.record.version },
+    options.expectVersion,
+  );
   if (stageTwoHold !== undefined) {
     return stageTwoHold;
   }

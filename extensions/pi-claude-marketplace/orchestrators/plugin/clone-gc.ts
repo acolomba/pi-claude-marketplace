@@ -65,10 +65,33 @@ function deriveLiveCloneKeys(state: ExtensionState, pluginClonesDir: string): Se
   return liveKeys;
 }
 
+/** The `plugin-clones/` entries on disk; a missing dir has none (NFR-3). */
+async function readCloneKeys(locations: ScopedLocations): Promise<string[]> {
+  try {
+    return await readdir(locations.pluginClonesDir);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+
+    throw err;
+  }
+}
+
+/**
+ * UPD-DEP-D1: the clone keys on disk now, so a sweep after a refused plan can
+ * leave every clone that was already there alone, such as a mirror `fetch`
+ * warmed.
+ */
+export async function listPluginClones(locations: ScopedLocations): Promise<ReadonlySet<string>> {
+  return new Set(await readCloneKeys(locations));
+}
+
 /**
  * PURL-05 / PURL-06 / D-78-01: delete every unreferenced `plugin-clones/<key>/`
  * directory, returning per-dir rm-failure leak strings (callers ignore them --
- * hygienic cleanup never becomes the primary path, D-19-01).
+ * hygienic cleanup never becomes the primary path, D-19-01). A key in `keep`
+ * stays even when unreferenced (UPD-DEP-D1).
  *
  * Flow:
  *   1. Load the scope state and derive the live clone-key set. A record
@@ -84,25 +107,17 @@ function deriveLiveCloneKeys(state: ExtensionState, pluginClonesDir: string): Se
  *      enforce NFR-10 BEFORE any delete) then `rm(dir, { recursive, force })`
  *      inside a try/catch that records `<key>: <message>` leaks (D-19-01 swallow).
  */
-export async function garbageCollectPluginClones(locations: ScopedLocations): Promise<string[]> {
+export async function garbageCollectPluginClones(
+  locations: ScopedLocations,
+  keep: ReadonlySet<string> = new Set(),
+): Promise<string[]> {
   const state = await loadState(locations.extensionRoot);
   const liveKeys = deriveLiveCloneKeys(state, locations.pluginClonesDir);
-
-  let entries: string[];
-  try {
-    entries = await readdir(locations.pluginClonesDir);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      // NFR-3: a missing cache dir is a no-op; nothing to sweep.
-      return [];
-    }
-
-    throw err;
-  }
+  const entries = await readCloneKeys(locations);
 
   const leaks: string[] = [];
   for (const key of entries) {
-    if (liveKeys.has(key)) {
+    if (liveKeys.has(key) || keep.has(key)) {
       continue;
     }
 

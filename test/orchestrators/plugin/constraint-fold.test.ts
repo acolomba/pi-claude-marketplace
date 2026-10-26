@@ -101,10 +101,9 @@ describe("foldDeclaredConstraint", () => {
     });
 
     // act
-    const verdict = foldDeclaredConstraint(declarations, state, "target", "mp", {
-      key: "app@mp",
-      ranges: ["^2.0.0"],
-    });
+    const verdict = foldDeclaredConstraint(declarations, state, "target", "mp", [
+      { key: "app@mp", ranges: ["^2.0.0"] },
+    ]);
 
     // assert
     assert.deepStrictEqual(verdict, {
@@ -119,10 +118,9 @@ describe("foldDeclaredConstraint", () => {
     const declarations = new Map<string, readonly AddressedDependency[]>();
 
     // act
-    const verdict = foldDeclaredConstraint(declarations, stateOf({ mp: {} }), "target", "mp", {
-      key: "app@mp",
-      ranges: ["^2.0.0"],
-    });
+    const verdict = foldDeclaredConstraint(declarations, stateOf({ mp: {} }), "target", "mp", [
+      { key: "app@mp", ranges: ["^2.0.0"] },
+    ]);
 
     // assert
     assert.deepStrictEqual(verdict, {
@@ -131,6 +129,33 @@ describe("foldDeclaredConstraint", () => {
       holders: [{ key: "app@mp", range: "^2.0.0", disabled: false }],
       fellBackToCurrentCopy: false,
       disclosure: 'constrained to the combined range (^2.0.0) -- required by "app@mp"',
+    });
+  });
+
+  test("UPD-DEP-D1: every requester's ranges replace what its own record declares", () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["aaa@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+    ]);
+    const state = stateOf({ mp: { target: pluginRecord(), aaa: pluginRecord() } });
+
+    // act
+    const verdict = foldDeclaredConstraint(declarations, state, "target", "mp", [
+      { key: "app@mp", ranges: ["^2.0.0"] },
+      { key: "aaa@mp", ranges: [">=2.1.0"] },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(verdict, {
+      kind: "admits",
+      range: ">=2.1.0 >=2.0.0 <3.0.0-0",
+      holders: [
+        { key: "aaa@mp", range: ">=2.1.0", disabled: false },
+        { key: "app@mp", range: "^2.0.0", disabled: false },
+      ],
+      fellBackToCurrentCopy: false,
+      disclosure:
+        'constrained to the combined range (>=2.1.0, ^2.0.0) -- required by "aaa@mp", "app@mp"',
     });
   });
 

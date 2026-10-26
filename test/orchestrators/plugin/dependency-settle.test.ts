@@ -4,25 +4,47 @@ import { describe, test } from "node:test";
 import {
   failedMoveError,
   settleDependencies,
+  settleWithoutMoves,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts";
 import { DependencyCascadeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
+import type {
+  DependencyMoveRequest,
+  PlannedDependencyMove,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts";
 import type { DependencySettlePorts } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts";
 import type { CascadeFailureSubject } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts";
-import type { OutOfRangeMember } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts";
+import type { CascadePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts";
 import type {
   MovedDependency,
   UpdateDependencyRow,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 
-const LIB: OutOfRangeMember = {
+const LIB: DependencyMoveRequest = {
   key: "lib@mp",
   name: "lib",
   marketplace: "mp",
-  requiredBy: "app@mp",
-  ranges: ["^2.0.0"],
-  range: "^2.0.0",
   recordedVersion: "1.0.0",
+  requesters: [{ key: "app@mp", ranges: ["^2.0.0"] }],
+};
+
+const LIB_MOVE: PlannedDependencyMove = { request: LIB, version: "2.0.0" };
+
+const PLANNED: CascadePlan = {
+  kind: "planned",
+  freshMembers: [],
+  outOfRange: [
+    {
+      key: "lib@mp",
+      name: "lib",
+      marketplace: "mp",
+      requiredBy: "app@mp",
+      ranges: ["^2.0.0"],
+      range: "^2.0.0",
+      recordedVersion: "1.0.0",
+    },
+  ],
+  recordedMembers: [{ key: "lib@mp", ranges: ["^2.0.0"] }],
 };
 
 function row(name: string, status: "installed" | "updated" = "installed"): UpdateDependencyRow {
@@ -118,9 +140,9 @@ describe("settleDependencies", () => {
   test("refuses a plan, collects its clones, and moves nothing", async () => {
     // arrange
     const bound = ports({
-      firstRun: () => Promise.resolve({ kind: "planned", freshMembers: [], outOfRange: [LIB] }),
+      firstRun: () => Promise.resolve(PLANNED),
       plan: () => Promise.resolve({ ok: false, subject: SUBJECT }),
-      collectClones: () => Promise.resolve([]),
+      collectClones: () => Promise.resolve(),
     });
 
     // act
@@ -131,12 +153,13 @@ describe("settleDependencies", () => {
     assert.deepStrictEqual(bound.calls, ["run first", "plan", "collect clones", "refuse"]);
   });
 
-  test("refuses when a move does not land and reports every move attempted", async () => {
+  test("refuses when a move does not land, collects the plan's clones, and reports every move attempted", async () => {
     // arrange
     const bound = ports({
-      firstRun: () => Promise.resolve({ kind: "planned", freshMembers: [], outOfRange: [LIB] }),
-      plan: () => Promise.resolve({ ok: true }),
-      runMoves: () => Promise.resolve({ ok: false, moved: [LIB_MOVED], member: LIB }),
+      firstRun: () => Promise.resolve(PLANNED),
+      plan: () => Promise.resolve({ ok: true, moves: [LIB_MOVE] }),
+      runMoves: () => Promise.resolve({ ok: false, moved: [LIB_MOVED], request: LIB }),
+      collectClones: () => Promise.resolve(),
     });
 
     // act
@@ -148,16 +171,16 @@ describe("settleDependencies", () => {
       rows: [LIB_MOVED.row],
       cause: failedMoveError(LIB),
     });
-    assert.deepStrictEqual(bound.calls, ["run first", "plan", "move"]);
+    assert.deepStrictEqual(bound.calls, ["run first", "plan", "move", "collect clones"]);
   });
 
   test("moves first, then settles the closure again and reports the moves before its rows", async () => {
     // arrange
     const bound = ports({
-      firstRun: () => Promise.resolve({ kind: "planned", freshMembers: [], outOfRange: [LIB] }),
-      plan: () => Promise.resolve({ ok: true }),
-      runMoves: (members) => {
-        assert.deepStrictEqual(members, [LIB]);
+      firstRun: () => Promise.resolve(PLANNED),
+      plan: () => Promise.resolve({ ok: true, moves: [LIB_MOVE] }),
+      runMoves: (moves) => {
+        assert.deepStrictEqual(moves, [LIB_MOVE]);
         return Promise.resolve({ ok: true, moved: [LIB_MOVED] });
       },
       secondRun: () => Promise.resolve({ kind: "installed", rows: [row("zcore@mp")] }),
@@ -177,8 +200,8 @@ describe("settleDependencies", () => {
   test("refuses a second run that fails, keeping the moves' rows first", async () => {
     // arrange
     const bound = ports({
-      firstRun: () => Promise.resolve({ kind: "planned", freshMembers: [], outOfRange: [LIB] }),
-      plan: () => Promise.resolve({ ok: true }),
+      firstRun: () => Promise.resolve(PLANNED),
+      plan: () => Promise.resolve({ ok: true, moves: [LIB_MOVE] }),
       runMoves: () => Promise.resolve({ ok: true, moved: [LIB_MOVED] }),
       secondRun: () => Promise.resolve({ kind: "refused", subject: SUBJECT }),
     });
@@ -195,16 +218,53 @@ describe("settleDependencies", () => {
   });
 });
 
-describe("failedMoveError", () => {
-  test("names the dependency and the range it did not move into", () => {
+describe("settleWithoutMoves", () => {
+  test("settles with the one run's rows and moves nothing", async () => {
+    // arrange
+    const bound = ports({
+      secondRun: () => Promise.resolve({ kind: "installed", rows: [row("zcore@mp")] }),
+    });
+
     // act
-    const error = failedMoveError(LIB);
+    const settlement = await settleWithoutMoves(bound);
+
+    // assert
+    assert.deepStrictEqual(settlement, { kind: "settled", rows: [row("zcore@mp")] });
+    assert.deepStrictEqual(bound.calls, ["run second"]);
+  });
+
+  test("refuses with the failing dependency's row when the run fails", async () => {
+    // arrange
+    const bound = ports({
+      secondRun: () => Promise.resolve({ kind: "refused", subject: SUBJECT }),
+    });
+
+    // act
+    const settlement = await settleWithoutMoves(bound);
+
+    // assert
+    assert.deepStrictEqual(settlement, {
+      kind: "refused",
+      rows: [REFUSAL_ROW],
+      cause: new Error("refused"),
+    });
+    assert.deepStrictEqual(bound.calls, ["run second", "refuse"]);
+  });
+});
+
+describe("failedMoveError", () => {
+  test("names the dependency and every range it did not move into", () => {
+    // act
+    const error = failedMoveError({
+      ...LIB,
+      requesters: [...LIB.requesters, { key: "aaa@mp", ranges: [">=2.1.0"] }],
+    });
 
     // assert
     assert.ok(error instanceof DependencyCascadeError);
     assert.deepStrictEqual(
       [error.message, error.key],
-      ['Dependency "lib@mp" did not move into ^2.0.0.', "lib@mp"],
+      ['Dependency "lib@mp" did not move into ^2.0.0, >=2.1.0.', "lib@mp"],
     );
   });
 });

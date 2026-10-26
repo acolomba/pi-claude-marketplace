@@ -241,12 +241,14 @@ export interface InstallLedgerOptions {
   };
   /**
    * WR-07: the transaction's list of the marketplaces its adds recorded, each
-   * with the clone directory a github or url add created. The lock owner owns
-   * the list: it removes the clones when its transaction does not save, and
-   * settles each marketplace after a save. The enable path passes none.
+   * with the raw source it was added from and the clone directory a github or
+   * url add created. The lock owner owns the list: it removes the clones when
+   * its transaction does not save, and settles each marketplace after a save.
+   * The enable path passes none.
    */
   readonly addedMarketplaces?: {
     readonly marketplace: string;
+    readonly rawSource: string;
     readonly cloneDir: string | undefined;
   }[];
 }
@@ -547,7 +549,7 @@ async function addTargetScopeMarketplace(
     deviceFlowHttp: opts.deviceFlowHttp,
     authMemo: opts.authMemo,
   });
-  opts.addedMarketplaces?.push({ marketplace: added.name, cloneDir: added.cloneDir });
+  opts.addedMarketplaces?.push({ marketplace: added.name, rawSource, cloneDir: added.cloneDir });
   const targetRecord = ownValue(state.marketplaces, marketplace);
   if (added.name !== marketplace || targetRecord === undefined) {
     throw new InvalidMarketplaceManifestError(

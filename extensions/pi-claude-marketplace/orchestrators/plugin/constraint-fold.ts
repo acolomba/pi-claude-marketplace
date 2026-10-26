@@ -59,9 +59,9 @@ export interface UpdateTagPin {
 
 /**
  * UPD-DEP-D1: a plugin that asks for the target at `ranges` before it lands:
- * a plugin being installed, or the new version of a plugin being updated. Its
- * ranges replace whatever its record declares, so the fold judges the target
- * by what the scope will declare once the requester lands.
+ * a plugin being installed, or the new version of a plugin being updated or
+ * moved. Its ranges replace whatever its record declares, so the fold judges
+ * the target by what the scope will declare once the requester lands.
  */
 export interface ConstraintRequester {
   readonly key: string;
@@ -190,11 +190,11 @@ function recordKey(name: string, marketplace: string): string {
   return `${name}@${marketplace}`;
 }
 
-/** UPD-DEP-D1: one holder per range the requester asks for, never disabled. */
-function requesterHolders(requester: ConstraintRequester | undefined): ConstraintHolder[] {
-  return requester === undefined
-    ? []
-    : requester.ranges.map((range) => ({ key: requester.key, range, disabled: false }));
+/** UPD-DEP-D1: one holder per range each requester asks for, never disabled. */
+function requesterHolders(requesters: readonly ConstraintRequester[]): ConstraintHolder[] {
+  return requesters.flatMap((requester) =>
+    requester.ranges.map((range) => ({ key: requester.key, range, disabled: false })),
+  );
 }
 
 /**
@@ -207,17 +207,17 @@ function requesterHolders(requester: ConstraintRequester | undefined): Constrain
  * declarer whose key equals the target's own is skipped before its
  * declarations are even read: a plugin that declares itself constrains
  * nothing. `provenance` is never read -- the question is who declares this
- * key, not how the record got here (D-10-08). UPD-DEP-D1: a requester's
+ * key, not how the record got here (D-10-08). UPD-DEP-D1: each requester's
  * record is skipped too, and its ranges hold the target in its place.
  */
 function collectHolders(
   declarations: ReadonlyMap<string, readonly AddressedDependency[]>,
   state: ExtensionState,
   target: string,
-  requester: ConstraintRequester | undefined,
+  requesters: readonly ConstraintRequester[],
 ): readonly ConstraintHolder[] {
-  const holders = requesterHolders(requester);
-  const replaced = new Set([target, requester?.key]);
+  const holders = requesterHolders(requesters);
+  const replaced = new Set([target, ...requesters.map((requester) => requester.key)]);
   for (const marketplace of Object.values(state.marketplaces)) {
     for (const [name, record] of Object.entries(marketplace.plugins)) {
       const declarerKey = recordKey(name, marketplace.name);
@@ -293,7 +293,7 @@ export function transportHeld(
  * range-only `admits` with no pin.
  *
  * `state` is the ONE scope document the declarations were walked over, so
- * the holders are scope-local by construction (D-10-07). A `requester`'s
+ * the holders are scope-local by construction (D-10-07). Each requester's
  * ranges stand in for its record's declarations (UPD-DEP-D1).
  */
 export function foldDeclaredConstraint(
@@ -301,9 +301,9 @@ export function foldDeclaredConstraint(
   state: ExtensionState,
   plugin: string,
   marketplace: string,
-  requester?: ConstraintRequester,
+  requesters: readonly ConstraintRequester[] = [],
 ): UpdateConstraintVerdict {
-  const holders = collectHolders(declarations, state, recordKey(plugin, marketplace), requester);
+  const holders = collectHolders(declarations, state, recordKey(plugin, marketplace), requesters);
   // A declaration HOLDS the key whatever it names, but only a declared RANGE
   // constrains a version: a holder with no `range` stays in `holders` for
   // the cause line and is left out of the fold below.
@@ -370,8 +370,8 @@ export interface CatalogConstraintOptions {
   readonly state: ExtensionState;
   readonly locations: ScopedLocations;
   readonly seam?: CatalogConstraintSeam;
-  /** UPD-DEP-D1: the plugin whose ranges the move must also satisfy. */
-  readonly requester?: ConstraintRequester;
+  /** UPD-DEP-D1: the plugins whose ranges the move must also satisfy. */
+  readonly requesters?: readonly ConstraintRequester[];
 }
 
 const REAL_CATALOG_CONSTRAINT_SEAM: CatalogConstraintSeam = Object.freeze({
@@ -407,6 +407,6 @@ export async function evaluateCatalogConstraint(
     options.state,
     options.plugin,
     options.marketplace,
-    options.requester,
+    options.requesters,
   );
 }

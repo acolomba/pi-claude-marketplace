@@ -60,6 +60,7 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { McpServerCollisionError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
+  CrossPluginConflictError,
   DependencyCascadeError,
   InvalidGitHubBaseUrlError,
   InvalidMarketplaceManifestError,
@@ -18401,6 +18402,44 @@ for (const orchestrated of [false, true]) {
   });
 }
 
+test("UPD-DEP-D1 / MISS-01: an install whose later step installs missing dependencies moves a dependency without installing what its new version needs", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({ aaa: { version: "1.0.0" } });
+    await installed(owner, cwd, "aaa");
+    await publishCatalog(marketplaceRoot, {
+      app: { version: "1.0.0", dependencies: ["aaa@^2.0.0"] },
+      aaa: { version: "2.0.0", dependencies: ["zzz"] },
+      zzz: { version: "1.0.0" },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    const outcome = await owner.installPlugin({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "app",
+      notifications: { mode: "orchestrated" },
+      dependencyInstallsFollow: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      outcome.status === "installed" &&
+        outcome.movedDependencies?.map((entry) => [entry.key, entry.row.status]),
+      [["aaa@mp", "updated"]],
+    );
+    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(await recordedVersions(cwd), {
+      aaa: ["2.0.0", true],
+      app: ["1.0.0", true],
+    });
+  });
+});
+
 describe("createUpdateDependencyResolver", () => {
   test("installs a dependency the new version needs and reports its row", async () => {
     await withHermeticHome(async (owner) => {
@@ -18446,6 +18485,61 @@ describe("createUpdateDependencyResolver", () => {
       assert.deepStrictEqual(await recordedVersions(cwd), {
         widget: ["1.0.0", true],
         zcore: ["1.0.0", true],
+      });
+    });
+  });
+
+  test("WR-C: refuses a version whose names another plugin owns before it installs any dependency", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        widget: { version: "1.0.0" },
+        other: { version: "1.0.0" },
+        zcore: { version: "1.0.0" },
+      });
+      await installed(owner, cwd, "widget");
+      await installed(owner, cwd, "other");
+      const locations = locationsFor("project", cwd);
+      const state = await loadState(locations.extensionRoot);
+      const other = state.marketplaces.mp?.plugins.other;
+      assert.ok(other !== undefined);
+      other.resources = {
+        ...other.resources,
+        skills: [...other.resources.skills, "widget-helper"],
+      };
+      await saveState(locations.extensionRoot, state);
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      await mkdir(path.join(marketplaceRoot, "plugins", "widget", "skills", "helper"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(marketplaceRoot, "plugins", "widget", "skills", "helper", "SKILL.md"),
+        "---\nname: helper\n---\n",
+      );
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      // act & assert
+      await assert.rejects(
+        settle(updateArgs(owner, cwd, "widget"), await preparedUpdate(cwd, "widget"), {
+          ctx,
+          run,
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof CrossPluginConflictError);
+          return true;
+        },
+      );
+      assert.deepStrictEqual(await recordedVersions(cwd), {
+        other: ["1.0.0", true],
+        widget: ["1.0.0", true],
       });
     });
   });

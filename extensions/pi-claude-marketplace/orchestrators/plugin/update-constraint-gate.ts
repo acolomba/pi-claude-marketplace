@@ -66,8 +66,8 @@ export interface UpdateConstraintOptions {
   readonly tagMemo?: Map<string, readonly RemoteTag[]>;
   /** The path-source analogue of `tagMemo` (D-10-18), same status. */
   readonly marketplaceTagMemo?: Map<string, readonly ReleaseTagCandidate[]>;
-  /** UPD-DEP-D1: the plugin whose ranges the move must also satisfy. */
-  readonly requester?: ConstraintRequester;
+  /** UPD-DEP-D1: the plugins whose ranges the move must also satisfy. */
+  readonly requesters?: readonly ConstraintRequester[];
   readonly auth: {
     readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
     readonly credentialOps: CredentialOps;

@@ -496,23 +496,6 @@ export interface InstallCascadeOptions {
    */
   readonly treatDisabledAsWall?: true;
   /**
-   * UPD-DEP-D1 / RESV-05: report recorded members whose version the closure's
-   * range rejects as `dependencies-out-of-range` instead of failing, so the
-   * caller can move them first. Omitted, such a member fails the cascade.
-   */
-  readonly moveOutOfRange?: true;
-  /**
-   * UPD-DEP-D1: the root is a recorded plugin moving to a newer version. Its
-   * closure is materialized and the root itself is not; the result is
-   * `dependencies-installed`.
-   */
-  readonly rootRecorded?: true;
-  /**
-   * UPD-DEP-D1: resolve the closure and materialize nothing; the result is
-   * `planned`, which a dependency plan reads without a write.
-   */
-  readonly planOnly?: true;
-  /**
    * D-10-18: one operation's tag listing memos, so the plan and the cascade
    * that executes it list a source once. Absent, each run allocates its own.
    */
@@ -560,7 +543,7 @@ export type InstallCascadeResult =
       readonly mcpConfigNotices: readonly McpConfigNotice[];
     }
   | {
-      /** UPD-DEP-D1: the `rootRecorded` arm of `installed`; no root summary. */
+      /** UPD-DEP-D1: `installed` for a recorded root, which does not materialize; no root summary. */
       readonly kind: "dependencies-installed";
       readonly members: readonly CascadeMemberOutcome[];
       readonly alreadyInstalled: readonly CascadeSkippedMember[];
@@ -569,13 +552,15 @@ export type InstallCascadeResult =
   | {
       /**
        * UPD-DEP-D1: nothing materialized. `outOfRange` must move first, and
-       * `freshMembers` (the root aside) would install. A `planOnly` run always
-       * ends here; a `moveOutOfRange` run ends here when `outOfRange` is not
-       * empty.
+       * `freshMembers` (the root aside) would install. `recordedMembers` is
+       * every recorded member the closure reached, with the ranges it declared
+       * for each, so a plan can check a version another move lands against
+       * them and order the moves.
        */
       readonly kind: "planned";
       readonly freshMembers: readonly ResolvedCascadeMember[];
       readonly outOfRange: readonly OutOfRangeMember[];
+      readonly recordedMembers: readonly RecordedCascadeMember[];
     }
   | { readonly kind: "marketplace-absent" }
   | {
@@ -596,6 +581,33 @@ export type InstallCascadeResult =
        */
       readonly mcpConfigNotices: readonly McpConfigNotice[];
     };
+
+/** UPD-DEP-D1: a recorded closure member and every range the closure declared for it. */
+export interface RecordedCascadeMember {
+  readonly key: string;
+  readonly ranges: readonly string[];
+}
+
+/** The arms a cascade reaches when its closure or a constraint fails, before any write. */
+export type CascadeResolutionFailure = Extract<
+  InstallCascadeResult,
+  { readonly kind: "closure-failed" | "constraint-failed" }
+>;
+
+/** UPD-DEP-D1: the arm a cascade reaches when recorded dependencies must move first. */
+export type CascadePlan = Extract<InstallCascadeResult, { readonly kind: "planned" }>;
+
+/** What a cascade that installs the root answers. */
+export type RootCascadeResult = Exclude<
+  InstallCascadeResult,
+  { readonly kind: "dependencies-installed" | "planned" }
+>;
+
+/** UPD-DEP-D1: what a cascade rooted at a recorded plugin answers. */
+export type DependencyCascadeResult = Exclude<
+  InstallCascadeResult,
+  { readonly kind: "installed" | "planned" }
+>;
 
 /** Mutable ledger context: what the phases record as they run. */
 interface CascadeRun {
@@ -1276,40 +1288,18 @@ function buildReEnableMemberPhase(
   };
 }
 
-/** Project the ledger result and the run's records onto the caller-facing arm. */
-function toCascadeResult(
+/** A ledger run's result and the run's records, before the caller's arm is chosen. */
+interface MaterializedCascade {
+  readonly result: RunPhasesResult;
+  readonly run: CascadeRun;
+  readonly alreadyInstalled: readonly CascadeSkippedMember[];
+}
+
+/** The failure arms a ledger run can reach. */
+function failedCascade(
   options: InstallCascadeOptions,
-  result: RunPhasesResult,
-  run: CascadeRun,
-  alreadyInstalled: readonly CascadeSkippedMember[],
-): InstallCascadeResult {
-  if (result.ok && options.rootRecorded === true) {
-    return {
-      kind: "dependencies-installed",
-      members: run.members,
-      alreadyInstalled,
-      mcpConfigNotices: run.mcpConfigNotices,
-    };
-  }
-
-  if (result.ok) {
-    const root = run.root;
-    if (root === undefined) {
-      // The closure always ends at the root, so a clean ledger run always
-      // recorded it. Reaching here means the injected scheduler reported
-      // success without running the phases.
-      throw new Error("Install cascade reported success without materializing the root plugin.");
-    }
-
-    return {
-      kind: "installed",
-      root,
-      members: run.members,
-      alreadyInstalled,
-      mcpConfigNotices: run.mcpConfigNotices,
-    };
-  }
-
+  { result, run }: MaterializedCascade,
+): Extract<InstallCascadeResult, { readonly kind: "marketplace-absent" | "member-failed" }> {
   if (run.marketplaceAbsent) {
     return { kind: "marketplace-absent" };
   }
@@ -1323,17 +1313,67 @@ function toCascadeResult(
   };
 }
 
-/**
- * Resolve the requested plugin's dependency closure and materialize every
- * member of it, all-or-nothing.
- *
- * Nothing is materialized when the closure itself fails, and `runPhases` never
- * throws on its own -- its `{ok: false}` result is translated here, so the
- * caller sees one discriminated value for every outcome.
- */
-export async function runInstallCascade(
+/** Projects a ledger run that installed the root onto the caller-facing arm. */
+function rootCascadeResult(
   options: InstallCascadeOptions,
-): Promise<InstallCascadeResult> {
+  materialized: MaterializedCascade,
+): RootCascadeResult {
+  const { result, run, alreadyInstalled } = materialized;
+  if (!result.ok) {
+    return failedCascade(options, materialized);
+  }
+
+  const root = run.root;
+  if (root === undefined) {
+    // The closure always ends at the root, so a clean ledger run always
+    // recorded it. Reaching here means the injected scheduler reported
+    // success without running the phases.
+    throw new Error("Install cascade reported success without materializing the root plugin.");
+  }
+
+  return {
+    kind: "installed",
+    root,
+    members: run.members,
+    alreadyInstalled,
+    mcpConfigNotices: run.mcpConfigNotices,
+  };
+}
+
+/** UPD-DEP-D1: projects a ledger run rooted at a recorded plugin onto its arm. */
+function dependencyCascadeResult(
+  options: InstallCascadeOptions,
+  materialized: MaterializedCascade,
+): DependencyCascadeResult {
+  const { result, run, alreadyInstalled } = materialized;
+  return result.ok
+    ? {
+        kind: "dependencies-installed",
+        members: run.members,
+        alreadyInstalled,
+        mcpConfigNotices: run.mcpConfigNotices,
+      }
+    : failedCascade(options, materialized);
+}
+
+/** The closure walked and every member's constraint decided, nothing materialized. */
+interface ResolvedCascade {
+  readonly kind: "resolved";
+  readonly alreadyInstalled: readonly ClosureMember[];
+  readonly members: readonly CascadePhaseMember[];
+  readonly outOfRange: readonly OutOfRangeMember[];
+}
+
+/**
+ * Walks the requested plugin's dependency closure and decides every member's
+ * constraint, with no write. With `moveOutOfRange` (UPD-DEP-D1 / RESV-05), a
+ * recorded member whose version the range rejects is collected for a move
+ * instead of failing the cascade.
+ */
+async function resolveCascade(
+  options: InstallCascadeOptions,
+  moveOutOfRange: boolean,
+): Promise<ResolvedCascade | CascadeResolutionFailure> {
   // EDEP-03: a disabled record is not a wall by default. The walk reads
   // through it, so its own dependencies -- disabled or never installed -- are
   // members of this closure with their ranges merged across every declaring
@@ -1373,7 +1413,7 @@ export async function runInstallCascade(
     marketplaceTagMemo:
       options.marketplaceTagMemo ?? new Map<string, readonly ReleaseTagCandidate[]>(),
     ...(options.rootRanges !== undefined && { rootRanges: options.rootRanges }),
-    ...(options.moveOutOfRange !== undefined && { moveOutOfRange: options.moveOutOfRange }),
+    ...(moveOutOfRange && { moveOutOfRange: true }),
     ...(options.marketplaceTagProbe !== undefined && {
       marketplaceTagProbe: options.marketplaceTagProbe,
     }),
@@ -1385,16 +1425,46 @@ export async function runInstallCascade(
     return { kind: "constraint-failed", failure: constraints.failure };
   }
 
-  if (options.planOnly === true || constraints.outOfRange.length > 0) {
-    return {
-      kind: "planned",
-      freshMembers: constraints.members.flatMap((entry) =>
-        entry.kind === "install" && entry.member.key !== options.rootKey ? [entry.member] : [],
-      ),
-      outOfRange: constraints.outOfRange,
-    };
-  }
+  return {
+    kind: "resolved",
+    alreadyInstalled: closure.alreadyInstalled,
+    members: constraints.members,
+    outOfRange: constraints.outOfRange,
+  };
+}
 
+/** UPD-DEP-D1: what a resolved cascade would do, nothing materialized. */
+function cascadePlan(options: InstallCascadeOptions, resolved: ResolvedCascade): CascadePlan {
+  const reEnabled = resolved.members.flatMap((entry) =>
+    entry.kind === "re-enable" ? [entry.member] : [],
+  );
+  return {
+    kind: "planned",
+    freshMembers: resolved.members.flatMap((entry) =>
+      entry.kind === "install" && entry.member.key !== options.rootKey ? [entry.member] : [],
+    ),
+    outOfRange: resolved.outOfRange,
+    recordedMembers: [...resolved.alreadyInstalled, ...reEnabled].map((member) => ({
+      key: member.key,
+      ranges: member.ranges,
+    })),
+  };
+}
+
+/**
+ * Materializes every member of a resolved closure, all-or-nothing. A recorded
+ * root (UPD-DEP-D1) is the plugin an update moves; its own swap replaces it,
+ * so only its closure becomes phases.
+ *
+ * `runPhases` never throws on its own -- its `{ok: false}` result is
+ * translated by the caller's projection, so the caller sees one
+ * discriminated value for every outcome.
+ */
+async function materializeCascade(
+  options: InstallCascadeOptions,
+  resolved: ResolvedCascade,
+  rootRecorded: boolean,
+): Promise<MaterializedCascade> {
   const seam = options.seam ?? REAL_INSTALL_CASCADE_SEAM;
   const transaction = options.transaction ?? DEFAULT_INSTALL_CASCADE_TRANSACTION;
   const run: CascadeRun = {
@@ -1407,12 +1477,9 @@ export async function runInstallCascade(
   };
   // One phase per closure member, in the walk's post order: a dependency is
   // live -- installed or re-enabled -- before the member that needs it runs.
-  // UPD-DEP-D1: a recorded root is the plugin an update moves; its own swap
-  // replaces it, so only its closure becomes phases.
-  const members =
-    options.rootRecorded === true
-      ? constraints.members.filter((entry) => entry.member.key !== options.rootKey)
-      : constraints.members;
+  const members = rootRecorded
+    ? resolved.members.filter((entry) => entry.member.key !== options.rootKey)
+    : resolved.members;
   const phases: readonly Phase<CascadeRun>[] = members.map((entry) =>
     entry.kind === "re-enable"
       ? buildReEnableMemberPhase(options, seam, transaction, entry.member, entry.record)
@@ -1422,12 +1489,86 @@ export async function runInstallCascade(
   // the ledger -- these members never reach a phase, so the run has nothing to
   // record about them. They are carried out of the cascade so the block can
   // report them as left alone rather than omitting them entirely.
-  const alreadyInstalled: readonly CascadeSkippedMember[] = closure.alreadyInstalled.map(
+  const alreadyInstalled: readonly CascadeSkippedMember[] = resolved.alreadyInstalled.map(
     (member) => ({
       key: member.key,
       version: recordedVersionOf(options.state, member),
     }),
   );
 
-  return toCascadeResult(options, await transaction.runPhases(phases, run), run, alreadyInstalled);
+  return { result: await transaction.runPhases(phases, run), run, alreadyInstalled };
+}
+
+/**
+ * Resolve the requested plugin's dependency closure and materialize every
+ * member of it, all-or-nothing. Nothing is materialized when the closure
+ * itself fails. A recorded member outside its range fails the cascade.
+ */
+export async function runInstallCascade(
+  options: InstallCascadeOptions,
+): Promise<RootCascadeResult> {
+  const resolved = await resolveCascade(options, false);
+  return resolved.kind === "resolved"
+    ? rootCascadeResult(options, await materializeCascade(options, resolved, false))
+    : resolved;
+}
+
+/**
+ * UPD-DEP-D1 / RESV-05: `runInstallCascade`, except that recorded members
+ * outside their range are reported as a plan for the caller to move first,
+ * and nothing materializes.
+ */
+export async function runInstallCascadeOrPlanMoves(
+  options: InstallCascadeOptions,
+): Promise<RootCascadeResult | CascadePlan> {
+  const resolved = await resolveCascade(options, true);
+  if (resolved.kind !== "resolved") {
+    return resolved;
+  }
+
+  return resolved.outOfRange.length > 0
+    ? cascadePlan(options, resolved)
+    : rootCascadeResult(options, await materializeCascade(options, resolved, false));
+}
+
+/**
+ * UPD-DEP-D1: the cascade of a recorded root, the plugin an update moves:
+ * its closure materializes and the root itself does not. A recorded member
+ * outside its range fails the cascade.
+ */
+export async function runDependencyCascade(
+  options: InstallCascadeOptions,
+): Promise<DependencyCascadeResult> {
+  const resolved = await resolveCascade(options, false);
+  return resolved.kind === "resolved"
+    ? dependencyCascadeResult(options, await materializeCascade(options, resolved, true))
+    : resolved;
+}
+
+/**
+ * UPD-DEP-D1: `runDependencyCascade`, except that recorded members outside
+ * their range are reported as a plan, and nothing materializes.
+ */
+export async function runDependencyCascadeOrPlanMoves(
+  options: InstallCascadeOptions,
+): Promise<DependencyCascadeResult | CascadePlan> {
+  const resolved = await resolveCascade(options, true);
+  if (resolved.kind !== "resolved") {
+    return resolved;
+  }
+
+  return resolved.outOfRange.length > 0
+    ? cascadePlan(options, resolved)
+    : dependencyCascadeResult(options, await materializeCascade(options, resolved, true));
+}
+
+/**
+ * UPD-DEP-D1: resolves the closure of a recorded root and materializes
+ * nothing, so a dependency plan reads it without a write.
+ */
+export async function planDependencyCascade(
+  options: InstallCascadeOptions,
+): Promise<CascadeResolutionFailure | CascadePlan> {
+  const resolved = await resolveCascade(options, true);
+  return resolved.kind === "resolved" ? cascadePlan(options, resolved) : resolved;
 }

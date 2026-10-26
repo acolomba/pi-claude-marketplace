@@ -235,8 +235,10 @@ export interface ThreePhaseArgsBase {
    * does (Device Flow included).
    */
   readonly preflightNotification?: PreparePluginUpdateOptions["notification"];
-  /** UPD-DEP-D1: the plugin a dependency move is made for (`PreparePluginUpdateOptions`). */
-  readonly requester?: NonNullable<PreparePluginUpdateOptions["requester"]>;
+  /** UPD-DEP-D1: the plugins a dependency move is made for (`PreparePluginUpdateOptions`). */
+  readonly requesters?: NonNullable<PreparePluginUpdateOptions["requesters"]>;
+  /** UPD-DEP-D1: the version the dependency plan chose (`PreparePluginUpdateOptions`). */
+  readonly expectVersion?: string;
   /**
    * UPD-DEP-D1: settles the dependency closure of the version the update
    * moves to before the swap, under a policy that resolves it. Absent, the
@@ -1347,6 +1349,27 @@ function composePhase3FailureOutcome(
   };
 }
 
+/**
+ * PI-6: discovers the candidate's generated names and refuses one another
+ * plugin of the scope already owns, checked against `preflight.state` without
+ * the plugin's own record, so an update never conflicts with itself (a plugin
+ * moving its skill names from {a,b} to {a,c} would otherwise conflict on
+ * "a"). Writes nothing, so UPD-DEP-D1's plan runs it before any dependency
+ * moves, and the swap runs it again over the scope the moves left.
+ */
+export async function assertUpdateNamesFree(
+  args: Pick<ThreePhaseArgsBase, "marketplace" | "plugin" | "scope">,
+  preflight: Pick<PreparedPluginUpdate, "installable" | "state">,
+): Promise<Awaited<ReturnType<typeof discoverGeneratedNames>>> {
+  const generatedNames = await discoverGeneratedNames(args.plugin, preflight.installable);
+  assertNoCrossPluginConflicts(
+    args.scope,
+    generatedNames,
+    removePluginRecord(preflight.state, args.marketplace, args.plugin),
+  );
+  return generatedNames;
+}
+
 // The three-phase update body sequences preflight, the D-UPD disabled-record
 // fast path, prepare-handles, the intent-mark window, phase-3a per-bridge
 // commits, finalize, and the phase-3b aggregate error path. The per-phase
@@ -1358,7 +1381,7 @@ export async function swapPluginUpdate(
   preflight: PreparedPluginUpdate,
   policy: MaterializationPolicy,
 ): Promise<UpdateRunOutcome> {
-  const { plugin, marketplace, scope } = args;
+  const { plugin, marketplace } = args;
   const { installable } = preflight;
 
   // ─── : prepare into tmp ────────────────────────────────────────────
@@ -1369,14 +1392,9 @@ export async function swapPluginUpdate(
   // materializes the merged doc; commit writes mcp.json atomically).
   //
   // PI-6 cross-plugin guard: re-check generated names against the SAME-SCOPE
-  // state EXCLUDING this plugin's currently-recorded resources -- updating
-  // your own plugin against your own state must not count as cross-plugin
-  // conflict (a plugin updating its skill names from {a,b} -> {a,c} would
-  // otherwise self-conflict on "a").
+  // state EXCLUDING this plugin's currently-recorded resources.
 
-  const generatedNames = await discoverGeneratedNames(plugin, installable);
-  const stateForGuard = removePluginRecord(preflight.state, marketplace, plugin);
-  assertNoCrossPluginConflicts(scope, generatedNames, stateForGuard);
+  const generatedNames = await assertUpdateNamesFree(args, preflight);
   // D-08-12: this verb owns the swap lifecycle, so it constructs the removal
   // operations once and every prepare, commit, and abort step below performs its
   // cleanup through that one collaborator.

@@ -170,7 +170,7 @@ async function prepare(
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
     readonly onRecord?: PreparePluginUpdateOptions["onRecord"];
-    readonly requester?: PreparePluginUpdateOptions["requester"];
+    readonly move?: Pick<PreparePluginUpdateOptions, "expectVersion" | "requesters">;
     readonly judgeOnly?: true;
   } = {},
 ) {
@@ -196,7 +196,7 @@ async function prepare(
     ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
     ...(options.authMemo !== undefined && { authMemo: options.authMemo }),
     ...(options.onRecord !== undefined && { onRecord: options.onRecord }),
-    ...(options.requester !== undefined && { requester: options.requester }),
+    ...options.move,
     ...(options.judgeOnly !== undefined && { judgeOnly: options.judgeOnly }),
   });
 }
@@ -1200,22 +1200,22 @@ test("the constraint gate call omits both tag memos when the caller supplies nei
   assert.strictEqual(Object.hasOwn(received[0] as object, "marketplaceTagMemo"), false);
 });
 
-test("UPD-DEP-D1: the requester reaches the constraint gate as the caller supplied it", async (t) => {
+test("UPD-DEP-D1: the requesters reach the constraint gate as the caller supplied them", async (t) => {
   // arrange
   const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
-  const requester = { key: "app@mp", ranges: ["^2.0.0"] };
+  const requesters = [{ key: "app@mp", ranges: ["^2.0.0"] }];
   const received: unknown[] = [];
   const constraintGate: PreparePluginUpdateOptions["constraintGate"] = (gateOptions) => {
-    received.push(gateOptions.requester);
+    received.push(gateOptions.requesters);
     return Promise.resolve({ kind: "unconstrained" });
   };
 
   // act
-  await prepare(seed, { constraintGate, requester });
+  await prepare(seed, { constraintGate, move: { requesters } });
 
   // assert
-  assert.deepStrictEqual(received, [requester]);
+  assert.deepStrictEqual(received, [requesters]);
 });
 
 test("UPD-DEP-D1: judging a disabled record prepares its candidate and leaves its pin alone", async (t) => {
@@ -1233,6 +1233,46 @@ test("UPD-DEP-D1: judging a disabled record prepares its candidate and leaves it
     isUpdatePreflightOutcome(outcome) ? undefined : [outcome.fromVersion, outcome.toVersion],
     ["1.0.0", "2.0.0"],
   );
+  assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), before);
+});
+
+test("UPD-DEP-D1: a candidate at the version the dependency plan chose prepares as usual", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+
+  // act
+  const outcome = await prepare(seed, { move: { expectVersion: "2.0.0" } });
+
+  // assert
+  assert.deepStrictEqual(
+    isUpdatePreflightOutcome(outcome) ? outcome : [outcome.fromVersion, outcome.toVersion],
+    ["1.0.0", "2.0.0"],
+  );
+});
+
+test("UPD-DEP-D1: a candidate at another version than the dependency plan chose fails and keeps the record", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const before = await readFile(seed.locations.stateJsonPath, "utf8");
+  const note = "version 2.0.0 is not version 3.0.0, which the dependency plan chose";
+
+  // act
+  const outcome = await prepare(seed, { move: { expectVersion: "3.0.0" } });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: [note],
+    reasons: [],
+    cause: new Error(note),
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
   assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), before);
 });
 

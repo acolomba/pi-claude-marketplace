@@ -15,12 +15,21 @@ import path from "node:path";
 
 import type { DataTable } from "@cucumber/cucumber";
 
+/** A dependency element in object form: a plugin name and the version range it asks for. */
+export interface RangedDependency {
+  readonly name: string;
+  readonly version: string;
+}
+
 /** One plugin the marketplace offers. */
 export interface OfferedPlugin {
   readonly name: string;
   readonly version: string;
-  /** Dependency elements such as `lib` or `lib@tools`; absent means none. */
-  readonly dependencies?: readonly string[];
+  /**
+   * Dependency elements such as `lib`, `lib@tools` or `lib@^2.0.0`, or an
+   * object naming a range the string form cannot carry; absent means none.
+   */
+  readonly dependencies?: readonly (string | RangedDependency)[];
 }
 
 /** Throws unless the table's header is exactly `columns`. */
@@ -38,9 +47,22 @@ export function readOfferedPlugins(table: DataTable): OfferedPlugin[] {
 }
 
 /**
+ * One element of a `dependencies` cell: `lib (>=2.0.0)` is the object form
+ * `{ "name": "lib", "version": ">=2.0.0" }`, for a range the string form
+ * cannot carry; any other element is written as it reads.
+ */
+function readDependencyElement(element: string): string | RangedDependency {
+  const ranged = /^(\S+) \((.+)\)$/.exec(element);
+  return ranged?.[1] === undefined || ranged[2] === undefined
+    ? element
+    : { name: ranged[1], version: ranged[2] };
+}
+
+/**
  * Reads a `| name | version | dependencies |` table, throwing on a missing or
  * unknown column. The `dependencies` cell is a comma-separated list of
- * elements such as `lib` or `lib@tools`; an empty cell means none.
+ * elements such as `lib`, `lib@tools`, `lib@^2.0.0` or `lib (>=2.0.0)`; an
+ * empty cell means none.
  */
 export function readOfferedPluginsWithDependencies(table: DataTable): OfferedPlugin[] {
   requireColumns(table, ["name", "version", "dependencies"]);
@@ -48,7 +70,8 @@ export function readOfferedPluginsWithDependencies(table: DataTable): OfferedPlu
     const dependencies = String(row.dependencies)
       .split(",")
       .map((element) => element.trim())
-      .filter((element) => element !== "");
+      .filter((element) => element !== "")
+      .map(readDependencyElement);
     return {
       name: String(row.name),
       version: String(row.version),
