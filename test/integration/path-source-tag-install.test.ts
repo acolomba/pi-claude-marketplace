@@ -221,10 +221,13 @@ test("TAGS-01/TAGS-03: a constrained path-source dependency installs from the ma
     "tagged-content\n",
   );
 
-  // The install record's version is the tag's own semver, and resolvedSha is
+  // GV-01: the install record's version is the declared one with the tag's
+  // commit, its resolvedVersion is the tag's own semver, and resolvedSha is
   // the tag's commit oid.
-  assert.strictEqual(formatterRecord.version, "1.0.0");
-  assert.strictEqual(formatterRecord.resolvedSha, tagOid);
+  assert.deepStrictEqual(
+    [formatterRecord.version, formatterRecord.resolvedVersion, formatterRecord.resolvedSha],
+    [`1.0.0-${tagOid.slice(0, 12)}`, "1.0.0", tagOid],
+  );
   assert.ok(
     formatterRecord.resolvedSource.includes(`${path.sep}plugin-clones${path.sep}`),
     `resolvedSource does not sit inside plugin-clones/: ${formatterRecord.resolvedSource}`,
@@ -429,8 +432,10 @@ test("TAGS-01: two cascade members resolving against the SAME marketplace clone 
     formatterRecord !== undefined && linterRecord !== undefined,
     `a dependency did not install: ${JSON.stringify(installCtx.notifications)}`,
   );
-  assert.strictEqual(formatterRecord.version, "1.0.0");
-  assert.strictEqual(linterRecord.version, "1.0.0");
+  // GV-01: each records its declared version with the tag's commit.
+  const tagVersion = `1.0.0-${tagOid.slice(0, 12)}`;
+  assert.strictEqual(formatterRecord.version, tagVersion);
+  assert.strictEqual(linterRecord.version, tagVersion);
   assert.strictEqual(formatterRecord.resolvedSha, tagOid);
   assert.strictEqual(linterRecord.resolvedSha, tagOid);
 
