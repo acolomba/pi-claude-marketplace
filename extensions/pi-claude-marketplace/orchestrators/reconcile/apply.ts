@@ -1673,8 +1673,10 @@ function cascadeRows(
   const rows: PerEntryOutcome[] = [];
   for (const report of reports) {
     const replacement = byKey.get(report.key) ?? [];
-    rows.push(...(report.replaceable === true && replacement.length > 0 ? [] : report.rows));
-    rows.push(...replacement);
+    rows.push(
+      ...(report.replaceable === true && replacement.length > 0 ? [] : report.rows),
+      ...replacement,
+    );
     byKey.delete(report.key);
   }
 
