@@ -4263,3 +4263,21 @@ open. None changes a result a user relies on.
   landed (documented in UPD-DEP-D1). The check needs the swap's staged files.
 - `orchestrators/plugin/install-flow.ts` is about 3,700 lines. The planning
   ports use too many of its private helpers to move out cheaply.
+
+## PARITYGV-01: four small Claude Code differences left by the version parity work
+
+Quick task 261026-dpt (ece42b45) kept these on purpose. Claude Code 2.1.310
+evidence is in that task's SUMMARY.
+
+- `list` marks git-source plugins upgradable (PL-5). Claude Code computes an
+  available version only for relative-path and `claudeai` entries, so it shows
+  no upgrade state for git sources.
+- A refusal for a non-root cascade member names only the first declarer that
+  reached it. Claude Code names every member that declared a range
+  (`required by "a", "b"`). Fixing it changes the closure-member shape that
+  many tests compare exactly.
+- Claude Code truncates names and ranges at 120 characters in these refusal
+  messages. This extension bounds ranges its own way.
+- `apply` shows a failed row when MISS-01 refuses a missing dependency. Claude
+  Code's `resolveMissingDependencies` only logs it. The row matches how `apply`
+  reports every other change; changing it is a product decision.
