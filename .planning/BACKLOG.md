@@ -4237,3 +4237,29 @@ disabled with "Install …" until the next `apply`.
 
 Needs a decision: run the moves before MISS-01, or repeat MISS-01 after the
 moves. Related: APPLY1-01 (two `apply` runs for a co-released dependency).
+
+## UPDDEP-01: leftovers from the UPD-DEP-D1 dependency resolver reviews
+
+The four reviews of the update-dependency work (1daa12d0..fdb584a6) left these
+open. None changes a result a user relies on.
+
+- An unpinned git dependency installed fresh is resolved twice over the
+  network, once by the plan's preview and once by the install. The second fetch
+  can land a revision the plan never previewed. Fix: hand the previewed commit
+  to the install run. NFR-5 allows the extra fetch.
+- The offline refusal of an install that would move a git dependency gives no
+  next step. A hint to run `update` on the dependency needs the source kind at
+  the judge.
+- The update preflight reads other installed plugins' ranges from the catalog
+  version, not from the version installed. This predates UPD-DEP-D1 and is
+  shared with `pending`.
+- The plan previews dependencies that `apply` installs in its own later step,
+  so one bad dependency refuses the root plugin before its moves land. Whether
+  it should is a product choice.
+- The resolver is a greedy search with permanent exclusions, not a complete
+  solver: a conflict two moved dependencies cause together excludes a version
+  from the first that still has one left. A solvable graph can be refused.
+- Agent-target refusals still run in the update swap, after earlier moves have
+  landed (documented in UPD-DEP-D1). The check needs the swap's staged files.
+- `orchestrators/plugin/install-flow.ts` is about 3,700 lines. The planning
+  ports use too many of its private helpers to move out cheaply.
