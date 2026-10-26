@@ -4219,3 +4219,21 @@ Each item changes what a user sees or what a command does in an edge case. None 
 - Stale comments and docs from before APL-D1 (phase 29 review IN-02): `orchestrators/reconcile/dependency-verdict.ts:37` says the walk "disables it on the next reload", and `docs/output-catalog.md:2557` describes a "Load-time install failed" state, but a load changes nothing now. The other deferred phase 29 info items (IN-01, IN-04, IN-05, IN-07, IN-08, IN-09 in `29-REVIEW-DISPOSITION.md`) were not re-checked. IN-07 and IN-09 may be superseded by APPLY1-D1.
 - Phase 18 behaviors with no Key Decision row in `.planning/PROJECT.md`: `update --partial` records the plugin as not installable (consented partial), an occupied agent name fails before the intent mark, and the recovery hint `Run /claude:plugin reinstall <p>@<m> to repair it.` The hint and the order are documented in `docs/output-catalog.md:1932-1937`. Record IDs if the user wants them.
 - Six feature files have a four-line description, where `.agents/skills/cucumber/rules/features.md:27` allows two or three: `features/plugin/{cross-scope-install,autoapply,git-source-update,reconcile,update-dependencies,update-rollback}.feature`.
+
+## PENDMOVE-01: `pending` lists a disable that `apply` does not make
+
+Found by quick task 261026-c06. A plugin's move waits on a moved dependency
+whose new version needs a plugin MISS-01 installs. `pending` lists the plugin
+as `(will disable)`, but `apply` moves it. The bug predates that quick task.
+`pending` should show the move that `apply` makes.
+
+## MISSORDER-01: MISS-01 runs before the catalog moves in `apply`
+
+Found by quick task 261026-c06. `apply` installs missing dependencies (MISS-01)
+before it runs the catalog moves. A missing dependency that needs a version the
+same `apply` moves to fails to install. Example: the new dependency needs
+`ycore@^2`, but ycore is still at 1.0 when MISS-01 runs. The dependent is then
+disabled with "Install …" until the next `apply`.
+
+Needs a decision: run the moves before MISS-01, or repeat MISS-01 after the
+moves. Related: APPLY1-01 (two `apply` runs for a co-released dependency).
