@@ -34,7 +34,14 @@ test("exports the complete import command context", () => {
   // arrange
   const expectedContext = {
     Messaging: { label: "Import" },
-    rowPolicyStatuses: ["installed", "partially-installed", "skipped", "failed", "unavailable"],
+    rowPolicyStatuses: [
+      "installed",
+      "partially-installed",
+      "skipped",
+      "failed",
+      "unavailable",
+      "updated",
+    ],
   };
 
   // act
@@ -272,5 +279,6 @@ test("IMPORT_CONTEXT declares complete row policies", () => {
     skipped: { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
     unavailable: { markers: false, contentReasons: true },
+    updated: { markers: true, contentReasons: true },
   });
 });

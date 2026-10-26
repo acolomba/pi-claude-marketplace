@@ -391,8 +391,10 @@ Feature: Plugin import
       """
     When the user runs "/claude:plugin import --scope user"
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id           | name | version | status    | reasons | scope |
-      | fixtures         | user              | skipped            | already added       | app@fixtures | app  | 1.0.0   | installed |         | user  |
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id           | name         | status    | reasons                 | scope | version | from  | to    | cause chain                                                              | cause truncated | leaks | rollback partial |
+      | fixtures         | user              | skipped            | already added       | app@fixtures | app          | installed |                         | user  | 1.0.0   |       |       |                                                                          |                 |       |                  |
+      | fixtures         | user              | skipped            | already added       | fff@fixtures | fff@fixtures | installed |                         | user  | 1.0.0   |       |       |                                                                          |                 |       |                  |
+      | fixtures         | user              | skipped            | already added       | aaa@fixtures | aaa@fixtures | updated   | dependency current copy | user  |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@fixtures" | false           |       |                  |
     Then the installation record of the user scope holds these plugins:
       | id           | version | enabled |
       | aaa@fixtures | 2.0.0   | true    |
@@ -514,3 +516,76 @@ Feature: Plugin import
     Then the import leaves no installation record in the user scope
     Then the user scope holds no marketplace checkout
     Then the "claude-plugins.json" file of the user scope does not exist
+
+  Scenario: Importing a plugin whose moved dependency needs a disabled dependency keeps that dependency's disabled config entry
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | aaa  | 1.0.0   |              |
+      | ddd  | 1.0.0   |              |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install aaa@fixtures --scope user"
+    Given the user has run "/claude:plugin install ddd@fixtures --scope user"
+    Given the user has run "/claude:plugin disable ddd@fixtures --scope user"
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | aaa@^2.0.0   |
+      | aaa  | 2.0.0   | ddd          |
+      | ddd  | 1.0.0   |              |
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "app@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id           | enabled |
+      | aaa@fixtures |         |
+      | ddd@fixtures | false   |
+      | app@fixtures |         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id           | name         | status    | reasons                               | scope | version | from  | to    | cause chain                                                              | cause truncated | leaks | rollback partial |
+      | fixtures         | user              | skipped            | already added       | app@fixtures | app          | installed |                                       | user  | 1.0.0   |       |       |                                                                          |                 |       |                  |
+      | fixtures         | user              | skipped            | already added       | ddd@fixtures | ddd@fixtures | installed | already installed, dependency enabled | user  | 1.0.0   |       |       |                                                                          |                 |       |                  |
+      | fixtures         | user              | skipped            | already added       | aaa@fixtures | aaa@fixtures | updated   | dependency current copy               | user  |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@fixtures" | false           |       |                  |
+
+  Scenario: Importing a plugin whose second dependency move fails lists the move that landed
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | aaa  | 1.0.0   |              |
+      | zzz  | 1.0.0   |              |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install aaa@fixtures --scope user"
+    Given the user has run "/claude:plugin install zzz@fixtures --scope user"
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies          |
+      | app  | 1.0.0   | zzz@^2.0.0,aaa@^2.0.0 |
+      | aaa  | 2.0.0   |                       |
+      | zzz  | 2.0.0   |                       |
+    Given the published plugin "aaa" of the marketplace "fixtures" has an unreadable skill file
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "app@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id           | name         | status  | reasons                 | scope | version | from  | to    | cause chain                                                              | cause truncated | leaks | rollback partial |
+      | fixtures         | user              | skipped            | already added       | app@fixtures | app          | failed  | dependency failed       | user  |         |       |       | Dependency "aaa@fixtures" did not move into ^2.0.0.                      | false           |       |                  |
+      | fixtures         | user              | skipped            | already added       | zzz@fixtures | zzz@fixtures | updated | dependency current copy | user  |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@fixtures" | false           |       |                  |
+      | fixtures         | user              | skipped            | already added       | aaa@fixtures | aaa@fixtures | failed  |                         | user  | 1.0.0   |       |       | EACCES: permission denied, copyfile 'notes.md'                           | false           |       |                  |
+    Then the installation record of the user scope holds these plugins:
+      | id           | version | enabled |
+      | aaa@fixtures | 1.0.0   | true    |
+      | zzz@fixtures | 2.0.0   | true    |

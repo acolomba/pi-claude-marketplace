@@ -983,7 +983,7 @@ Some plugin operations have failed.
   ⊘ helper (failed) {dependency failed}
 ```
 
-The SAME `version conflict` token as the row above, over a different subject: the copy already on disk. The pair `{already installed, version conflict}` and the recorded version on the row are what separate the two, which is why the cascade mints one token rather than two -- the fact is identical and only the subject moves. UPD-DEP-D1 amends RESV-05: the cascade first tries to move the copy into the constraint (the state below), and this row is what it reports when no version can move there. After `cannot move:` the cause gives `update`'s own reason: the version the move would reach falls outside the range, or the dependency's other dependents hold it (`the declared ranges admit no version in common (...) -- required by ...`). Every move is judged before any runs, so a refusal changes nothing.
+The SAME `version conflict` token as the row above, over a different subject: the copy already on disk. The pair `{already installed, version conflict}` and the recorded version on the row are what separate the two, which is why the cascade mints one token rather than two -- the fact is identical and only the subject moves. UPD-DEP-D1 amends RESV-05: the cascade first tries to move the copy into the constraint (the state below), and this row is what it reports when no version can move there. After `cannot move:` the cause gives `update`'s own reason: the version the move would reach falls outside the range, or the dependency's other dependents hold it (`the declared ranges admit no version in common (...) -- required by ...`). A range or a plugin that repeats is named once. The whole dependency graph is planned before anything changes, so a refusal changes nothing.
 
 ### Dependency cascade -- an installed copy moved into the constraint first (UPD-DEP-D1)
 
@@ -2553,6 +2553,22 @@ Import: 1 failure, 2 successes
 ```
 
 `hello@mp` declares a dependency the marketplace does not declare, so its install cascade fails before `hello`'s own ledger runs. `installOnePlannedPlugin` drives exactly one orchestrated outcome per planned plugin (it does not install the dependency separately), so the two-row standalone cascade form -- a dependency row plus a `{dependency failed}` root row -- collapses onto the ONE row import can render: `hello`'s own row carries `{dependency failed}` and the failing dependency's cause line, exactly as the "Load-time install failed by a dependency" state under [`## reconcile-applied-cascade`](#reconcile-applied-cascade) renders it. `dispatchFailedOutcome` narrows on `instanceof DependencyCascadeError` before its generic fallthrough, so a cascade failure names its dependency instead of the bare `(failed)` row the fallthrough renders for an unclassified throw (IMP-09). Every other plugin in the batch is unaffected and keeps installing (D-115-08 continuation); the trailing tally counts the marketplace add and `before`'s install as successes and `hello`'s row as the one failure. Severity: `error`; reload-hint fires (`before` materialized).
+
+### An import whose install moves a dependency first (UPD-DEP-D1)
+
+<!-- catalog-state: import-dependency-moved -->
+
+```text
+● mp [user] (skipped) {already added}
+  ● app v1.0.0 (installed)
+  ● lib@mp v1.0.0 → v2.0.0 (updated)
+
+Import: 3 successes
+
+/reload to pick up changes
+```
+
+`app@mp` needs `lib` at a range its installed copy falls outside, so the install moves `lib` first, as a standalone `install` does. Each dependency an install changed gets its own row after the plugin's rows, named by its full key: installed, enabled, moved, or the one that failed. A failed install lists the changes that landed before it failed, beside its own `{dependency failed}` row.
 
 ### A repeat import skips what the scope already holds (IMP-06)
 

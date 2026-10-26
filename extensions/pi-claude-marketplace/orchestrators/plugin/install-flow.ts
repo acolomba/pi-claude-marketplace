@@ -48,17 +48,16 @@ import {
   planCloneSweep,
   tagMemosOf,
   updateCaller,
-  withPlannedVersions,
 } from "./dependency-bindings.ts";
 import { readDependencyDeclaration } from "./dependency-declaration-read.ts";
 import { readCandidateDeclaration } from "./dependency-declaration-read.ts";
 import {
   freshDependencyMoveMemos,
   judgeDependencyMove,
-  runDependencyMoves,
+  runDependencyMove,
 } from "./dependency-move.ts";
-import { planDependencyMoves } from "./dependency-plan.ts";
-import { failedMoveError, settleDependencies, settleWithoutMoves } from "./dependency-settle.ts";
+import { planDependencyGraph } from "./dependency-plan.ts";
+import { runDependencySteps, settleDependencies } from "./dependency-settle.ts";
 import {
   CASCADE_CONTEXT,
   cascadeFailureCause,
@@ -67,11 +66,11 @@ import {
   composeCascadeMemberRows,
 } from "./install-cascade.messaging.ts";
 import {
-  planDependencyCascade,
   runDependencyCascade,
   runDependencyCascadeOrPlanMoves,
   runInstallCascade,
   runInstallCascadeOrPlanMoves,
+  walkDependencyGraph,
 } from "./install-cascade.ts";
 import { probeInstallClone } from "./install-clone-probe.ts";
 import { resolveInstallDeclaredEnabled } from "./install-declared-enabled.ts";
@@ -120,12 +119,8 @@ import type {
   DependencyTarget,
 } from "./dependency-bindings.ts";
 import type { DependencyMoveContext, DependencyMoveMemos } from "./dependency-move.ts";
-import type {
-  DependencyMoveRequest,
-  DependencyPlanPorts,
-  PlannedDependencyMove,
-} from "./dependency-plan.ts";
-import type { SettleCascadeRun } from "./dependency-settle.ts";
+import type { DependencyPlan, DependencyPlanPorts } from "./dependency-plan.ts";
+import type { DependencyStepPorts, SettleCascadeRun } from "./dependency-settle.ts";
 import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
 import type {
   CascadeMarketplaceTagProbe,
@@ -136,6 +131,7 @@ import type {
   DependencyCascadeResult,
   InstallCascadeOptions,
   InstallCascadeResult,
+  PlannedClosure,
   ResolvedCascadeMember,
   RootCascadeResult,
 } from "./install-cascade.ts";
@@ -155,7 +151,6 @@ import type {
   ThreePhaseArgs,
   UpdateDependencyResolver,
   UpdateDependencySettlement,
-  UpdateDependencySettler,
 } from "./update-swap.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type {
@@ -339,9 +334,10 @@ export interface InstallPluginOptions {
   readonly authMemo?: Map<string, AuthAttemptResult>;
   /**
    * UPD-DEP-D1 / MISS-01: a later step of the caller installs the dependencies
-   * a moved dependency's new version needs, so the moves install nothing and
-   * list no release tag (D-23), as the caller's plan and `pending` do. Only
-   * `apply` sets it; the command and `import` settle each move's new closure.
+   * a moved dependency's new version needs, so the dependency plan installs
+   * only what the plugin reaches without passing a move, and its moves list no
+   * release tag (D-23), as the caller's plan and `pending` do. Only `apply`
+   * sets it; the command and `import` install what each move needs before it.
    */
   readonly dependencyInstallsFollow?: true;
   /**
@@ -1997,7 +1993,7 @@ function declaredRowOutcome(args: {
  */
 type InstallTransactionOutcome =
   | { kind: "invalid-config" }
-  | { kind: "dependency-moves"; planned: CascadePlan }
+  | { kind: "dependency-moves" }
   | { kind: "marketplace-absent" }
   | {
       kind: "refused";
@@ -2023,6 +2019,39 @@ type InstallTransactionOutcome =
       alreadyInstalled: readonly CascadeSkippedMember[];
       mcpConfigNotices: readonly McpConfigNotice[];
     };
+
+/**
+ * UPD-DEP-D1: the install that runs after a dependency plan's steps: the
+ * changes those steps landed, the marketplaces the first run added (WR-E),
+ * and the closure the plan left for this run.
+ */
+interface InstallAfterPlan {
+  readonly moved: readonly MovedDependency[];
+  readonly carried: CarriedAdd[];
+  readonly planned: PlannedClosure;
+}
+
+/**
+ * UPD-DEP-D1: what one run of the install reads: the first run may answer
+ * that a dependency plan must come first, and starts its own list of
+ * carried adds; the run after the plan materializes exactly the closure the
+ * plan left for it.
+ */
+function installRun(afterPlan: InstallAfterPlan | undefined): {
+  readonly moved?: readonly MovedDependency[];
+  readonly carried: CarriedAdd[];
+  readonly runCascade: (options: InstallCascadeOptions) => Promise<RootCascadeResult | CascadePlan>;
+} {
+  if (afterPlan === undefined) {
+    return { carried: [], runCascade: runInstallCascadeOrPlanMoves };
+  }
+
+  return {
+    moved: afterPlan.moved,
+    carried: afterPlan.carried,
+    runCascade: (options) => runInstallCascade({ ...options, planned: afterPlan.planned }),
+  };
+}
 
 /**
  * PI-1..15 entrypoint. The function never re-throws -- failures surface
@@ -2065,10 +2094,10 @@ async function installPluginWithTransaction(
   completionCache: CompletionCache,
   env: ClaudeEnv,
   opts: InstallPluginOptions,
-  moved?: readonly MovedDependency[],
-  carried: CarriedAdd[] = [],
+  afterPlan?: InstallAfterPlan,
 ): Promise<InstallPluginOutcome> {
   const { ctx, run, scope, cwd, marketplace, plugin } = opts;
+  const { moved, carried, runCascade } = installRun(afterPlan);
   const locations = locationsFor(scope, cwd);
   const disableCascade = composeInstallDisableCascade({
     hooksRouting,
@@ -2275,12 +2304,10 @@ async function installPluginWithTransaction(
             });
           },
         };
-        // UPD-DEP-D1: the first run may plan moving a dependency into range;
-        // the run after the moves refuses one still outside it.
-        const cascade =
-          moved === undefined
-            ? await runInstallCascadeOrPlanMoves(cascadeOptions)
-            : await runInstallCascade(cascadeOptions);
+        // UPD-DEP-D1: the first run may answer that a dependency plan must
+        // come first; the run after the plan materializes exactly the closure
+        // the plan left for it.
+        const cascade = await runCascade(cascadeOptions);
         // WR-04: a precondition miss is read-only in effect, NO tx.save().
         // UPD-DEP-D1 / RESV-05: so are the dependency moves, which this
         // closure only plans; they are judged and made after the lock is
@@ -2581,7 +2608,6 @@ async function installPluginWithTransaction(
       return installAfterMoves({
         owners: { transaction, hooksRouting, completionCache, env },
         opts,
-        planned: outcome.planned,
         carried,
       });
 
@@ -3126,10 +3152,10 @@ interface DependencyOwners extends DependencyMoveOwners {
 
 /**
  * Routes the cascade's non-failure arms for the plain install: a marketplace
- * neither scope records, the moves of recorded dependencies outside their
- * range, or the installed closure. The moves are only planned here, under the
- * lock; they are judged and made once it is released (`installAfterMoves`),
- * and `keepAddsForMoves` keeps what the run added for the run after them.
+ * neither scope records, a dependency plan that must come first, or the
+ * installed closure. The plan runs once the lock is released
+ * (`installAfterMoves`), and `keepAddsForMoves` keeps what the run added for
+ * the run after it.
  */
 function routeInstallCascade(
   installed: Extract<RootCascadeResult, { readonly kind: "installed" }> | CascadePlan | undefined,
@@ -3137,14 +3163,14 @@ function routeInstallCascade(
 ):
   | Extract<RootCascadeResult, { readonly kind: "installed" }>
   | { readonly kind: "marketplace-absent" }
-  | { readonly kind: "dependency-moves"; readonly planned: CascadePlan } {
+  | { readonly kind: "dependency-moves" } {
   if (installed === undefined) {
     return { kind: "marketplace-absent" };
   }
 
   if (installed.kind === "planned") {
     keepAddsForMoves();
-    return { kind: "dependency-moves", planned: installed };
+    return { kind: "dependency-moves" };
   }
 
   return installed;
@@ -3174,18 +3200,37 @@ function planningCatalog(
   };
 }
 
+/** The plugin a dependency plan is rooted at, and how its declarations are read. */
+interface PlanRoot {
+  readonly key: string;
+  readonly marketplace: string;
+  readonly plugin: string;
+  /** An update's candidate, whose tree the root's declarations are read from (CR-04). */
+  readonly prepared?: PreparedPluginUpdate;
+}
+
+/** A candidate's declarations, read from the tree its update lands (CR-04). */
+function candidateLookup(prepared: PreparedPluginUpdate): ReturnType<ClosureLookup> {
+  return readCandidateDeclaration({
+    pluginRoot: prepared.installable.pluginRoot,
+    entry: prepared.entry,
+  });
+}
+
 /**
  * UPD-DEP-D1: the plan's ports over one lock-free snapshot of the scope: the
- * move verdict, the write-free walk of a moved dependency's new closure, read
- * from the tree its move lands (CR-04), and the install preview.
+ * move verdict, the write-free walk of the whole graph rooted at `root`,
+ * reading each moved plugin from the tree its move lands (CR-04), and the
+ * install preview.
  */
 async function planningPorts(args: {
   readonly owners: DependencyOwners;
   readonly target: DependencyTarget;
   readonly caller: DependencyCaller;
   readonly context: DependencyMoveContext;
+  readonly root: PlanRoot;
 }): Promise<DependencyPlanPorts> {
-  const { owners, target, caller, context } = args;
+  const { owners, target, caller, context, root } = args;
   const state = await loadState(target.locations.extensionRoot);
   const catalog = planningCatalog(state, target);
   const ledgerOptionsFor = dependencyLedgerOptions(caller, owners.env, {
@@ -3193,77 +3238,72 @@ async function planningPorts(args: {
     cwd: target.cwd,
     adds: trackInstallAdds(owners.transaction, undefined),
   });
+  const rootAllowedMarketplaces = await loadInstallRootAllowlist(
+    catalog.recordFor,
+    root.marketplace,
+    root.plugin,
+  );
+  const knownMarketplaces = await collectInstallReachableMarketplaces({
+    targetScope: target.scope,
+    cwd: target.cwd,
+    targetState: state,
+  });
   return {
     judge: (request) => judgeDependencyMove(request, context),
-    walk: async (request, prepared, planned) => {
-      const view = withPlannedVersions(state, planned);
-      return planDependencyCascade({
-        state: view,
+    walk: (moving) =>
+      walkDependencyGraph({
+        state,
         locations: target.locations,
-        rootKey: request.key,
-        rootAllowedMarketplaces: await loadInstallRootAllowlist(
-          catalog.recordFor,
-          request.marketplace,
-          request.name,
-        ),
-        lookup: (subject) =>
-          subject.key === request.key
-            ? readCandidateDeclaration({
-                pluginRoot: prepared.installable.pluginRoot,
-                entry: prepared.entry,
-              })
-            : catalog.lookup(subject),
+        rootKey: root.key,
+        rootAllowedMarketplaces,
+        lookup: (subject) => {
+          const prepared = subject.key === root.key ? root.prepared : moving.get(subject.key);
+          return prepared === undefined ? catalog.lookup(subject) : candidateLookup(prepared);
+        },
         marketplaceRecordFor: catalog.recordFor,
-        installedKeys: collectInstalledKeys(view),
-        knownMarketplaces: await collectInstallReachableMarketplaces({
-          targetScope: target.scope,
-          cwd: target.cwd,
-          targetState: view,
-        }),
+        installedKeys: collectInstalledKeys(state),
+        readThrough: new Set(moving.keys()),
+        knownMarketplaces,
         ledgerOptionsFor,
         tagMemo: context.constraintTagMemo,
         marketplaceTagMemo: context.constraintMarketplaceTagMemo,
-      });
-    },
+      }),
     preview: (member) => previewInstall(state, target.locations, ledgerOptionsFor(member)),
   };
 }
 
-/** The plugin a cascade rooted at a recorded plugin settles, and its key. */
-interface RecordedRoot {
-  readonly key: string;
-  readonly marketplace: string;
-  readonly plugin: string;
-}
-
-/** What one locked run of a recorded root's closure cascade reads. */
-interface RecordedRootCascade {
+/** What one locked run of a cascade rooted at the operation's plugin reads. */
+interface RootCascade {
   readonly owners: DependencyOwners;
   readonly target: DependencyTarget;
   readonly caller: DependencyCaller;
-  readonly root: RecordedRoot;
-  /** The version the root moves to, whose declarations the cascade reads (CR-04). */
-  readonly prepared: PreparedPluginUpdate;
+  readonly root: PlanRoot;
   readonly memos: DependencyMoveMemos;
-  /** WR-E: the marketplaces a planning run added, kept for the run after the moves. */
+  /** WR-E: the marketplaces a planning run added, kept for the run after the plan. */
   readonly carried: CarriedAdd[];
+  /**
+   * WR-N2: whether a re-enabled member's `enabled: false` config entry is
+   * patched, as the operation's own cascade patches it. An install that
+   * `import` or `apply` runs patches none.
+   */
+  readonly writesConfig: boolean;
 }
 
-/** What a locked run of a recorded root's cascade hands the step that finishes it. */
+/** What a locked run of a root cascade hands the step that finishes it. */
 interface LockedRootRun {
   readonly tx: LockedStateTransaction;
   readonly adds: InstallAdds;
 }
 
 /**
- * UPD-DEP-D1: one locked run of a recorded root's closure cascade, reading
- * the root's declarations from `prepared`. `cascade` decides whether it may
- * plan moves instead, and `finish` what happens to its result under the same
- * lock. A failure no dependency caused -- a held lock, an unreadable state --
- * is the update's own, and its runner reports it as it always has.
+ * UPD-DEP-D1: one locked run of a cascade rooted at the operation's plugin.
+ * An update's root reads its declarations from its candidate. `cascade`
+ * decides what the run materializes, and `finish` what happens to its result
+ * under the same lock. A failure no dependency caused -- a held lock, an
+ * unreadable state -- throws, and its caller reports it as its own.
  */
 async function lockedRootCascade<S extends Exclude<InstallCascadeResult, CascadeFailureArm>, T>(
-  args: RecordedRootCascade,
+  args: RootCascade,
   cascade: (options: InstallCascadeOptions) => Promise<S | CascadeFailureArm>,
   finish: (settled: S, run: LockedRootRun) => Promise<T>,
 ): Promise<T | Extract<SettleCascadeRun, { readonly kind: "refused" }>> {
@@ -3284,15 +3324,13 @@ async function lockedRootCascade<S extends Exclude<InstallCascadeResult, Cascade
         capture,
         transaction: owners.transaction,
       });
+      const prepared = root.prepared;
       const settled = unwrapCascade(
         await cascade({
           ...shared,
           lookup: (subject) =>
-            subject.key === root.key
-              ? readCandidateDeclaration({
-                  pluginRoot: args.prepared.installable.pluginRoot,
-                  entry: args.prepared.entry,
-                })
+            subject.key === root.key && prepared !== undefined
+              ? candidateLookup(prepared)
               : shared.lookup(subject),
           tagMemo: args.memos.constraintTagMemo,
           marketplaceTagMemo: args.memos.constraintMarketplaceTagMemo,
@@ -3326,15 +3364,18 @@ async function lockedRootCascade<S extends Exclude<InstallCascadeResult, Cascade
 }
 
 /**
- * Saves what a recorded root's cascade materialized and reports one row per
- * member, still under its lock.
+ * Saves what a root cascade materialized and reports one row per member,
+ * still under its lock.
  */
 async function saveRootClosure(
-  args: RecordedRootCascade,
+  args: RootCascade,
   settled: Extract<DependencyCascadeResult, { readonly kind: "dependencies-installed" }>,
   run: LockedRootRun,
 ): Promise<SettleCascadeRun> {
-  await writeReEnabledCascadeMemberConfigEntries(args.target.locations, settled.members);
+  if (args.writesConfig) {
+    await writeReEnabledCascadeMemberConfigEntries(args.target.locations, settled.members);
+  }
+
   await run.tx.save();
   await hydrateInstalledHooks({
     hooksRouting: args.owners.hooksRouting,
@@ -3352,10 +3393,10 @@ async function saveRootClosure(
 
 /**
  * The first run's finish: a plan saves nothing and keeps what the run added
- * for the run after the moves (WR-E); an installed closure saves.
+ * for the runs after it (WR-E); an installed closure saves.
  */
 async function saveRootClosureOrKeepPlan(
-  args: RecordedRootCascade,
+  args: RootCascade,
   settled: Exclude<DependencyCascadeResult | CascadePlan, CascadeFailureArm>,
   run: LockedRootRun,
 ): Promise<SettleCascadeRun | CascadePlan> {
@@ -3367,59 +3408,45 @@ async function saveRootClosureOrKeepPlan(
   return saveRootClosure(args, settled, run);
 }
 
-/** The plugin an update's arguments name, as a recorded cascade root. */
-function recordedRootOf(args: ThreePhaseArgs): RecordedRoot {
-  return {
-    key: `${args.plugin}@${args.marketplace}`,
-    marketplace: args.marketplace,
-    plugin: args.plugin,
-  };
-}
-
 /**
- * UPD-DEP-D1: the settle of one planned move. It installs and enables what
- * the version the move lands needs, and moves nothing: the plan judged that
- * closure and ordered every move it needs before this one, so a dependency
- * still outside its range refuses the move.
+ * UPD-DEP-D1: the steps of one operation's plan: a closure slice lands in
+ * one locked cascade that walks nothing, and a move is one update at the
+ * version the plan chose.
  */
-function settlePlannedMove(
-  owners: DependencyOwners,
-  caller: DependencyCaller,
-  carried: CarriedAdd[],
-): UpdateDependencySettler {
-  return async (args, prepared) => {
-    const root = recordedRootOf(args);
-    const cascade: RecordedRootCascade = {
-      owners,
-      target: { scope: args.scope, cwd: args.cwd, locations: args.locations },
-      caller,
-      root,
-      prepared,
-      memos: tagMemosOf(args, freshDependencyMoveMemos()),
-      carried,
-    };
-    return settleWithoutMoves({
-      secondRun: () =>
-        lockedRootCascade(cascade, runDependencyCascade, (settled, locked) =>
-          saveRootClosure(cascade, settled, locked),
-        ),
-      refusal: dependencyRefusal({ rootKey: root.key, scope: args.scope }),
-    });
+function dependencyStepPorts(
+  cascade: RootCascade,
+  context: DependencyMoveContext,
+): DependencyStepPorts {
+  return {
+    materialize: (members) =>
+      lockedRootCascade(
+        cascade,
+        (options) =>
+          runDependencyCascade({ ...options, planned: { members, alreadyInstalled: [] } }),
+        (settled, run) => saveRootClosure(cascade, settled, run),
+      ),
+    move: (move) => runDependencyMove(move, context),
+    refusal: dependencyRefusal({ rootKey: cascade.root.key, scope: cascade.target.scope }),
   };
 }
 
+/** The plan of an install, or the failure its catch site renders. */
+type InstallPlanResult =
+  | Extract<DependencyPlan, { readonly ok: true }>
+  | { readonly err: unknown; readonly cascadeFailure: CascadeFailureSink };
+
 /**
- * UPD-DEP-D1: an install whose closure must move recorded dependencies first.
- * With the lock released, the plan previews the plugin the user named and
- * judges every move and every moved dependency's new closure; a refusal
- * changes nothing, and the clones the plan created are removed. The moves
- * then run in the plan's order, and the install runs again with every
- * dependency in range.
+ * UPD-DEP-D1: an install whose dependency graph moves recorded dependencies.
+ * With the lock released, the plan previews the plugin the user named, then
+ * settles the version of every plugin of the graph (`dependency-plan.ts`); a
+ * refusal changes nothing. The plan's steps then run, and the install runs
+ * again over exactly the closure the plan left for it. Whatever happens, the
+ * clones the operation left unreferenced are removed, and clones that were
+ * there before stay.
  */
 async function installAfterMoves(args: {
   readonly owners: DependencyOwners;
   readonly opts: InstallPluginOptions;
-  readonly planned: CascadePlan;
   readonly carried: CarriedAdd[];
 }): Promise<InstallPluginOutcome> {
   const { owners, opts, carried } = args;
@@ -3429,74 +3456,82 @@ async function installAfterMoves(args: {
     cwd: opts.cwd,
     locations: locationsFor(opts.scope, opts.cwd),
   };
-  const rootKey = `${opts.plugin}@${opts.marketplace}`;
+  const root: PlanRoot = {
+    key: `${opts.plugin}@${opts.marketplace}`,
+    marketplace: opts.marketplace,
+    plugin: opts.plugin,
+  };
   // CR-A / MISS-01: only `apply` installs a moved dependency's new
   // dependencies through a later step of its own.
-  const settles = opts.dependencyInstallsFollow !== true;
+  const defers = opts.dependencyInstallsFollow === true;
+  const memos = freshDependencyMoveMemos();
   const context = dependencyMoveContext({
     owners,
     target,
     caller: opts,
-    policy: settles ? INSTALL_MOVE_MATERIALIZATION : RECONCILE_MOVE_MATERIALIZATION,
-    memos: freshDependencyMoveMemos(),
-    ...(settles && { settleDependencies: settlePlannedMove(owners, opts, carried) }),
+    policy: defers ? RECONCILE_MOVE_MATERIALIZATION : INSTALL_MOVE_MATERIALIZATION,
+    memos,
   });
-  const sweep = await planCloneSweep(target.locations);
-  const plan = await planInstallMoves({ ...args, target, rootKey, context });
-  if ("err" in plan) {
-    await sweep();
-    await discardCarriedAdds(carried, target.locations);
-    return handleCaughtInstallFailure({
-      ...plan,
-      ctx: opts.ctx,
-      run: opts.run,
-      marketplace: opts.marketplace,
-      scope: opts.scope,
-      plugin: opts.plugin,
-      rootKey,
-      capture: { rollbackPartials: [], version: undefined },
-      orchestrated,
-    });
-  }
-
-  const result = await runDependencyMoves(plan.moves, context);
-  if (!result.ok) {
-    await sweep();
-    await discardCarriedAdds(carried, target.locations);
-    return failedMoveOutcome({ opts, moved: result.moved, request: result.request, orchestrated });
-  }
-
-  const outcome = await installPluginWithTransaction(
-    owners.transaction,
-    owners.hooksRouting,
-    owners.completionCache,
-    owners.env,
-    opts,
-    result.moved,
+  const cascade: RootCascade = {
+    owners,
+    target,
+    caller: opts,
+    root,
+    memos,
     carried,
-  );
-  await discardCarriedAdds(carried, target.locations);
-  return outcome;
+    writesConfig: !orchestrated,
+  };
+  const failure = {
+    ctx: opts.ctx,
+    run: opts.run,
+    marketplace: opts.marketplace,
+    scope: opts.scope,
+    plugin: opts.plugin,
+    rootKey: root.key,
+    capture: { rollbackPartials: [], version: undefined },
+    orchestrated,
+  };
+  const sweep = await planCloneSweep(target.locations);
+  try {
+    const plan = await planInstallMoves({ owners, opts, target, root, context, defers });
+    if ("err" in plan) {
+      return handleCaughtInstallFailure({ ...failure, ...plan });
+    }
+
+    const ran = await runDependencySteps(plan.steps, dependencyStepPorts(cascade, context));
+    if (!ran.ok) {
+      return failedMoveOutcome({ opts, moved: ran.landed, cause: ran.cause, orchestrated });
+    }
+
+    return await installPluginWithTransaction(
+      owners.transaction,
+      owners.hooksRouting,
+      owners.completionCache,
+      owners.env,
+      opts,
+      { moved: ran.landed, carried, planned: plan.final },
+    );
+  } finally {
+    await sweep();
+    await discardCarriedAdds(carried, target.locations);
+  }
 }
 
 /**
- * The plan of an install's moves: the plugin the user named first, then the
- * plan proper. Answers the planned moves, or the failure the catch site
- * renders.
+ * The plan of an install: the plugin the user named first, then the whole
+ * graph. CR-N2: anything the plan throws -- an unreadable catalog only a
+ * moved dependency's new version reaches, say -- is the install's failure,
+ * rendered at the catch site like the first run's.
  */
 async function planInstallMoves(args: {
   readonly owners: DependencyOwners;
   readonly opts: InstallPluginOptions;
-  readonly planned: CascadePlan;
   readonly target: DependencyTarget;
-  readonly rootKey: string;
+  readonly root: PlanRoot;
   readonly context: DependencyMoveContext;
-}): Promise<
-  | { readonly moves: readonly PlannedDependencyMove[] }
-  | { readonly err: unknown; readonly cascadeFailure: CascadeFailureSink }
-> {
+  readonly defers: boolean;
+}): Promise<InstallPlanResult> {
   const { owners, opts, target } = args;
-  const ports = await planningPorts({ owners, target, caller: opts, context: args.context });
   try {
     await previewInstall(
       await loadState(target.locations.extensionRoot),
@@ -3511,32 +3546,31 @@ async function planInstallMoves(args: {
         addedMarketplaces: [],
       }),
     );
+    const ports = await planningPorts({ ...args, caller: opts });
+    const plan = await planDependencyGraph(ports, { deferMoveDependencies: args.defers });
+    return plan.ok
+      ? plan
+      : {
+          err: cascadeFailureCause(plan.subject, args.root.key),
+          cascadeFailure: { subject: plan.subject, mcpConfigNotices: [] },
+        };
   } catch (err) {
     return { err, cascadeFailure: { mcpConfigNotices: [] } };
   }
-
-  const plan = await planDependencyMoves({ rootKey: args.rootKey, ...args.planned }, ports);
-  return plan.ok
-    ? { moves: plan.moves }
-    : {
-        err: cascadeFailureCause(plan.subject, args.rootKey),
-        cascadeFailure: { subject: plan.subject, mcpConfigNotices: [] },
-      };
 }
 
 /**
- * UPD-DEP-D1: an install whose dependency move did not land fails: its row
- * reads `{dependency failed}` beside the rows of every move attempted. The
- * moves made before it stay, each a complete update.
+ * UPD-DEP-D1: an install whose plan failed while it ran fails: its row reads
+ * `{dependency failed}` beside the rows of every change that landed and the
+ * one that failed. The changes made before it stay, each complete.
  */
 function failedMoveOutcome(args: {
   readonly opts: InstallPluginOptions;
   readonly moved: readonly MovedDependency[];
-  readonly request: DependencyMoveRequest;
+  readonly cause: Error;
   readonly orchestrated: boolean;
 }): InstallPluginOutcome {
   const { opts } = args;
-  const error = failedMoveError(args.request);
   if (!args.orchestrated) {
     notifyWithContext(
       opts.ctx,
@@ -3564,8 +3598,8 @@ function failedMoveOutcome(args: {
 
   return {
     status: "failed",
-    error,
-    cause: formatOrchestratedCause(error),
+    error: args.cause,
+    cause: formatOrchestratedCause(args.cause),
     ...movedMember(args.moved),
   };
 }
@@ -3573,7 +3607,7 @@ function failedMoveOutcome(args: {
 /**
  * UPD-DEP-D1: settles the dependency closure of `prepared`, the version an
  * update moves `args.plugin` to, through `dependency-settle.ts`'s order over
- * install's own cascade, plan and moves. WR-C: the swap's PI-6 name check
+ * install's own cascade, plan and steps. WR-C: the swap's PI-6 name check
  * runs first, so a name conflict refuses the update before anything lands.
  */
 async function settleUpdateDependencies(input: {
@@ -3585,7 +3619,12 @@ async function settleUpdateDependencies(input: {
   const { owners, args, prepared } = input;
   await assertUpdateNamesFree(args, prepared);
   const target = { scope: args.scope, cwd: args.cwd, locations: args.locations };
-  const root = recordedRootOf(args);
+  const root: PlanRoot = {
+    key: `${args.plugin}@${args.marketplace}`,
+    marketplace: args.marketplace,
+    plugin: args.plugin,
+    prepared,
+  };
   const caller = updateCaller(args, input.notification);
   const memos = tagMemosOf(args, freshDependencyMoveMemos());
   const carried: CarriedAdd[] = [];
@@ -3595,28 +3634,28 @@ async function settleUpdateDependencies(input: {
     caller,
     policy: UPDATE_MATERIALIZATION,
     memos,
-    settleDependencies: settlePlannedMove(owners, caller, carried),
   });
-  const cascade: RecordedRootCascade = { owners, target, caller, root, prepared, memos, carried };
-  const sweep = await planCloneSweep(target.locations);
+  const cascade: RootCascade = {
+    owners,
+    target,
+    caller,
+    root,
+    memos,
+    carried,
+    writesConfig: true,
+  };
   try {
     return await settleDependencies({
       firstRun: () =>
         lockedRootCascade(cascade, runDependencyCascadeOrPlanMoves, (settled, run) =>
           saveRootClosureOrKeepPlan(cascade, settled, run),
         ),
-      secondRun: () =>
-        lockedRootCascade(cascade, runDependencyCascade, (settled, run) =>
-          saveRootClosure(cascade, settled, run),
-        ),
-      plan: async (planned) =>
-        planDependencyMoves(
-          { rootKey: root.key, ...planned },
-          await planningPorts({ owners, target, caller, context }),
-        ),
-      runMoves: (moves) => runDependencyMoves(moves, context),
-      refusal: dependencyRefusal({ rootKey: root.key, scope: args.scope }),
-      collectClones: sweep,
+      plan: async () =>
+        planDependencyGraph(await planningPorts({ owners, target, caller, context, root }), {
+          deferMoveDependencies: false,
+        }),
+      steps: dependencyStepPorts(cascade, context),
+      planSweep: () => planCloneSweep(target.locations),
     });
   } finally {
     await discardCarriedAdds(carried, target.locations);

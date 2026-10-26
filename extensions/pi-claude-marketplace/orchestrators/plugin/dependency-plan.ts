@@ -1,59 +1,62 @@
 // orchestrators/plugin/dependency-plan.ts
 //
-// UPD-DEP-D1: the write-free plan of an install or update whose closure moves
-// recorded dependencies into range. Before anything is written, it judges the
-// whole operation:
+// UPD-DEP-D1: the one write-free plan of an install or update whose
+// dependency graph moves recorded dependencies. One resolver covers the whole
+// graph: the plugin being installed or updated, every dependency it would
+// install fresh, and every recorded dependency that may move.
 //
-//   - each plugin the operation installs fresh, with the install's own
-//     preflight (the installability gate, `--partial` consent, the PI-6 name
-//     check);
-//   - each move, with `update`'s preflight, folding the ranges of every plugin
-//     known to ask for the dependency (the version it lands is the
-//     preflight's chosen tag or the catalog version);
-//   - each moved dependency's new closure, read from the version the move
-//     lands, transitively: its new dependencies, the moves they need, and
-//     their installability.
+// The plan walks the graph, then chooses a version for each recorded plugin
+// in it: the recorded version when every range the graph declares for it
+// admits that version, else the version `update` lands for the combined
+// range (the highest release tag inside it, else the catalog version). A
+// fresh plugin's pin comes from the same walk, over every range the graph
+// declares for it. A version chosen for a moved plugin changes what that
+// plugin declares, so the plan walks the graph again with every moved plugin
+// read from the version it moves to, and chooses again. It stops when no
+// choice changes. A plugin no version satisfies, a walk that fails, or
+// choices that do not settle within `MAX_PLAN_ROUNDS` refuse the operation.
+// Then each fresh plugin is previewed with the install's own preflight.
 //
-// Each dependency is planned once. A range found after a dependency was
-// judged must admit the version the plan chose, or the plan refuses. The
-// chosen version is the highest the ranges known at judgement admit, so when
-// it also satisfies the later ones it is the highest the whole graph admits.
+// The answer is the steps that carry the plan out, in dependency order: each
+// move at exactly the version the plan chose, the fresh installs and
+// re-enables a move needs before it, and the closure the plugin being
+// installed lands with. The steps settle and walk nothing.
 //
-// The plan answers the moves in the order they must run: a move whose new
-// closure needs another dependency moved first comes after it, so each move
-// settles its own new closure without moving anything (`dependency-move.ts`).
-//
-// The first thing that cannot be done refuses the operation, and nothing has
-// changed. The plan runs with no state lock held: the move preflight takes
-// the lock itself for an unpinned git source, and the lock is not re-entrant.
-//
-// The walk, the install preview and the move verdict are ports the caller
-// binds, so the plan is a pure worklist over them.
+// The plan runs with no state lock held: the move preflight takes the lock
+// itself for an unpinned git source, and the lock is not re-entrant. The
+// walk, the move verdict and the install preview are ports the caller binds,
+// so the plan is pure over them.
 
 import { recordedVersionSatisfies, renderDeclaredRanges } from "../../domain/dependency-range.ts";
 
-import type { ConstraintRequester } from "./constraint-fold.ts";
 import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
 import type {
-  CascadePlan,
   CascadeResolutionFailure,
-  OutOfRangeMember,
-  RecordedCascadeMember,
+  DependencyGraph,
+  DependencyGraphNode,
+  GraphRequester,
+  PlannedCascadeMember,
+  PlannedClosure,
+  RecordedGraphNode,
   ResolvedCascadeMember,
 } from "./install-cascade.ts";
 import type { PreparedPluginUpdate } from "./update-preflight.ts";
 
-/** What a write-free walk of a moved dependency's new closure can answer. */
-export type DependencyPlanWalk = CascadePlan | CascadeResolutionFailure;
+/**
+ * How many times the plan walks the graph before it gives up. Each walk
+ * after the first follows a changed choice; a graph whose choices keep
+ * changing has no answer the plan can find.
+ */
+const MAX_PLAN_ROUNDS = 8;
 
-/** One recorded dependency the plan moves, and every plugin known to ask for it. */
+/** One recorded dependency the plan moves, and every plugin of the graph that asks for it. */
 export interface DependencyMoveRequest {
   readonly key: string;
   readonly name: string;
   readonly marketplace: string;
   readonly recordedVersion: string;
   /** Each plugin that asks for the dependency and its ranges, folded in place of its record. */
-  readonly requesters: readonly ConstraintRequester[];
+  readonly requesters: readonly GraphRequester[];
 }
 
 /** One move the plan holds, at the version the plan chose for it. */
@@ -79,69 +82,54 @@ export interface DependencyPlanPorts<P extends PlannedCandidate = PreparedPlugin
   /** `update`'s verdict on one move: the candidate it lands, or why it cannot move. */
   readonly judge: (request: DependencyMoveRequest) => Promise<PlanJudgement<P>>;
   /**
-   * Walks the closure of `prepared`, the version `request` moves to, with no
-   * write, over the scope as the plan leaves it (`planned` maps each moved
-   * dependency's key to the version it lands).
+   * Walks the whole graph with no write, reading each key of `moving` from
+   * the candidate its move lands.
    */
   readonly walk: (
-    request: DependencyMoveRequest,
-    prepared: P,
-    planned: ReadonlyMap<string, string>,
-  ) => Promise<DependencyPlanWalk>;
+    moving: ReadonlyMap<string, P>,
+  ) => Promise<DependencyGraph | CascadeResolutionFailure>;
   /** Throws what installing `member` would throw, with no write. */
   readonly preview: (member: ResolvedCascadeMember) => Promise<void>;
 }
 
-/** Where the plan starts: the cascade's first, write-free resolution of the root. */
-export interface DependencyPlanStart extends Pick<
-  CascadePlan,
-  "freshMembers" | "outOfRange" | "recordedMembers"
-> {
-  /** The plugin the operation installs or updates; it moves last, so a move of it is refused. */
-  readonly rootKey: string;
-}
+/** What the plan carries out: materialize a closure slice, or make one move. */
+export type DependencyPlanStep =
+  | { readonly kind: "materialize"; readonly members: readonly PlannedCascadeMember[] }
+  | { readonly kind: "move"; readonly move: PlannedDependencyMove };
 
-/** The moves in the order they run, or the first thing that refuses the plan. */
+/**
+ * The steps in the order they run, then `final`: the closure that lands last,
+ * with the plugin being installed (an update's root lands through its own
+ * swap). Or the first thing that refuses the plan.
+ */
 export type DependencyPlan =
-  | { readonly ok: true; readonly moves: readonly PlannedDependencyMove[] }
+  | {
+      readonly ok: true;
+      readonly steps: readonly DependencyPlanStep[];
+      readonly final: PlannedClosure;
+    }
   | { readonly ok: false; readonly subject: CascadeFailureSubject };
 
-/** A request as the plan builds it: one entry per requester. */
-interface RequestDraft {
-  readonly key: string;
-  readonly name: string;
-  readonly marketplace: string;
-  readonly recordedVersion: string;
-  readonly requesters: Map<string, readonly string[]>;
+/** How the caller carries the plan out. */
+export interface DependencyPlanOptions {
+  /**
+   * MISS-01: a later step of the caller installs what a moved dependency's
+   * new version needs, so the steps install only what the plugin being
+   * installed reaches without passing a move. Only `apply` sets it.
+   */
+  readonly deferMoveDependencies: boolean;
 }
 
-/** A judged move, and the recorded members its new closure reached. */
-interface PlanEntry {
-  readonly draft: RequestDraft;
-  readonly version: string;
-  recorded: readonly RecordedCascadeMember[];
+/** A move the plan chose: the request it judged and the candidate it lands. */
+interface Choice<P extends PlannedCandidate> {
+  readonly request: DependencyMoveRequest;
+  readonly prepared: P;
 }
 
-/** The plan's working state. */
-interface PlanState {
-  readonly drafts: Map<string, RequestDraft>;
-  readonly queue: RequestDraft[];
-  readonly entries: Map<string, PlanEntry>;
-  readonly versions: Map<string, string>;
-}
-
-function requestOf(draft: RequestDraft): DependencyMoveRequest {
-  return {
-    key: draft.key,
-    name: draft.name,
-    marketplace: draft.marketplace,
-    recordedVersion: draft.recordedVersion,
-    requesters: [...draft.requesters].map(([key, ranges]) => ({ key, ranges })),
-  };
-}
+type Refusal = Extract<DependencyPlan, { readonly ok: false }>;
 
 /** RESV-05's subject for a recorded dependency that cannot move into its range. */
-function unmovable(draft: RequestDraft, cause: string): DependencyPlan {
+function unmovable(request: DependencyMoveRequest, cause: string): Refusal {
   return {
     ok: false,
     subject: {
@@ -149,46 +137,157 @@ function unmovable(draft: RequestDraft, cause: string): DependencyPlan {
       failure: {
         kind: "range-conflict",
         why: "installed-unsatisfied",
-        key: draft.key,
-        range: renderDeclaredRanges([...draft.requesters.values()].flat()),
-        recordedVersion: draft.recordedVersion,
+        key: request.key,
+        range: renderRequestedRanges(request.requesters),
+        recordedVersion: request.recordedVersion,
         moveRefusal: cause,
       },
     },
   };
 }
 
-/** Records that `member.requiredBy` asks for `member`, queueing a dependency seen first. */
-function noteRequest(plan: PlanState, member: OutOfRangeMember): void {
-  let draft = plan.drafts.get(member.key);
-  if (draft === undefined) {
-    draft = {
-      key: member.key,
-      name: member.name,
-      marketplace: member.marketplace,
-      recordedVersion: member.recordedVersion,
-      requesters: new Map(),
-    };
-    plan.drafts.set(member.key, draft);
-    plan.queue.push(draft);
-  }
-
-  draft.requesters.set(member.requiredBy, member.ranges);
+/** IN-N2: every distinct range the requesters declare, as a row renders them. */
+export function renderRequestedRanges(requesters: readonly GraphRequester[]): string {
+  return renderDeclaredRanges([...new Set(requesters.flatMap((requester) => requester.ranges))]);
 }
 
-/** The first fresh member the install's own preflight refuses, if any. */
-async function previewAll<P extends PlannedCandidate>(
-  members: readonly ResolvedCascadeMember[],
+function walkRefusal(failure: CascadeResolutionFailure): Refusal {
+  return failure.kind === "closure-failed"
+    ? { ok: false, subject: { kind: "closure", failure: failure.failure } }
+    : { ok: false, subject: { kind: "constraint", failure: failure.failure } };
+}
+
+function satisfiesAll(version: string, ranges: readonly string[]): boolean {
+  return ranges.every((range) => recordedVersionSatisfies(version, range));
+}
+
+/** The move request of a recorded node the graph's ranges reject, or `undefined`. */
+function outOfRangeRequest(node: RecordedGraphNode): DependencyMoveRequest | undefined {
+  const ranges = node.requesters.flatMap((requester) => requester.ranges);
+  if (node.version === undefined || satisfiesAll(node.version, ranges)) {
+    return undefined;
+  }
+
+  return {
+    key: node.member.key,
+    name: node.member.name,
+    marketplace: node.member.marketplace,
+    recordedVersion: node.version,
+    requesters: node.requesters,
+  };
+}
+
+/**
+ * Chooses the version of every recorded plugin of one walk: kept when every
+ * range admits it, else the move `update` would make for the combined range.
+ * Each request is judged once per set of requesters.
+ */
+async function chooseMoves<P extends PlannedCandidate>(
+  graph: DependencyGraph,
   ports: DependencyPlanPorts<P>,
-): Promise<DependencyPlan | undefined> {
-  for (const member of members) {
+  verdicts: Map<string, Promise<PlanJudgement<P>>>,
+): Promise<Map<string, Choice<P>> | Refusal> {
+  const choices = new Map<string, Choice<P>>();
+  for (const node of graph.nodes) {
+    const request = node.kind === "recorded" ? outOfRangeRequest(node) : undefined;
+    if (request === undefined) {
+      continue;
+    }
+
+    const signature = JSON.stringify([request.key, request.requesters]);
+    const verdict = verdicts.get(signature) ?? ports.judge(request);
+    verdicts.set(signature, verdict);
+    // eslint-disable-next-line no-await-in-loop -- the first plugin that cannot move ends the plan
+    const judged = await verdict;
+    if (!judged.ok) {
+      return unmovable(request, judged.cause);
+    }
+
+    choices.set(request.key, { request, prepared: judged.prepared });
+  }
+
+  return choices;
+}
+
+/**
+ * The first choice that differs between two rounds: one `after` made anew,
+ * or one `before` made that `after` dropped. `undefined` when they agree.
+ */
+function changedChoice<P extends PlannedCandidate>(
+  before: ReadonlyMap<string, Choice<P>>,
+  after: ReadonlyMap<string, Choice<P>>,
+): Choice<P> | undefined {
+  for (const [key, choice] of after) {
+    if (before.get(key)?.prepared.toVersion !== choice.prepared.toVersion) {
+      return choice;
+    }
+  }
+
+  return [...before].find(([key]) => !after.has(key))?.[1];
+}
+
+/** The graph the choices settle on, with the choices, or the refusal. */
+async function settleChoices<P extends PlannedCandidate>(
+  ports: DependencyPlanPorts<P>,
+): Promise<
+  | { readonly ok: true; readonly graph: DependencyGraph; readonly moves: Map<string, Choice<P>> }
+  | Refusal
+> {
+  const verdicts = new Map<string, Promise<PlanJudgement<P>>>();
+  let moving = new Map<string, Choice<P>>();
+  for (let round = 1; ; round++) {
+    // eslint-disable-next-line no-await-in-loop -- each walk reads the choices the last one settled
+    const graph = await ports.walk(
+      new Map([...moving].map(([key, choice]) => [key, choice.prepared])),
+    );
+    if (graph.kind !== "graph") {
+      return walkRefusal(graph);
+    }
+
+    // eslint-disable-next-line no-await-in-loop -- each walk reads the choices the last one settled
+    const next = await chooseMoves(graph, ports, verdicts);
+    if (!(next instanceof Map)) {
+      return next;
+    }
+
+    const changed = changedChoice(moving, next);
+    if (changed === undefined) {
+      return { ok: true, graph, moves: next };
+    }
+
+    if (round === MAX_PLAN_ROUNDS) {
+      return unmovable(
+        changed.request,
+        "its version does not settle: each version chosen for it changes what the other dependencies need",
+      );
+    }
+
+    moving = next;
+  }
+}
+
+/** The first fresh plugin the install's own preflight refuses, if any. */
+async function previewFresh<P extends PlannedCandidate>(
+  graph: DependencyGraph,
+  ports: DependencyPlanPorts<P>,
+): Promise<Refusal | undefined> {
+  for (const node of graph.nodes) {
+    if (node.kind !== "fresh") {
+      continue;
+    }
+
     try {
       // eslint-disable-next-line no-await-in-loop -- the first refusal ends the plan
-      await ports.preview(member);
+      await ports.preview(node.member);
     } catch (err) {
       return {
         ok: false,
-        subject: { kind: "member", key: member.key, error: err as Error, rollbackPartials: [] },
+        subject: {
+          kind: "member",
+          key: node.member.key,
+          error: err as Error,
+          rollbackPartials: [],
+        },
       };
     }
   }
@@ -196,166 +295,126 @@ async function previewAll<P extends PlannedCandidate>(
   return undefined;
 }
 
-/** A walk's refusal as the plan's, or its findings for the worklist. */
-function walkFindings(walk: DependencyPlanWalk): DependencyPlan | CascadePlan {
-  if (walk.kind === "closure-failed") {
-    return { ok: false, subject: { kind: "closure", failure: walk.failure } };
+/** What a node materializes in a cascade, when it materializes anything. */
+function materialized(node: DependencyGraphNode): PlannedCascadeMember | undefined {
+  if (node.kind === "fresh") {
+    return { kind: "install", member: node.member };
   }
 
-  if (walk.kind === "constraint-failed") {
-    return { ok: false, subject: { kind: "constraint", failure: walk.failure } };
-  }
-
-  return walk;
+  return node.walked && node.disabled ? { kind: "re-enable", member: node.member } : undefined;
 }
 
 /**
- * Plans one move: its verdict over every range known so far, then its new
- * closure. Returns the refusal, or `undefined` once the closure's moves are
- * queued.
+ * Every key `from` reaches through the graph's `dependsOn` edges. A key in
+ * `stops` is reached but not walked past.
  */
-async function planMove<P extends PlannedCandidate>(
-  plan: PlanState,
-  draft: RequestDraft,
-  start: DependencyPlanStart,
-  ports: DependencyPlanPorts<P>,
-): Promise<DependencyPlan | undefined> {
-  if (draft.key === start.rootKey) {
-    return unmovable(draft, "a move of it is already in progress");
-  }
-
-  const request = requestOf(draft);
-  const judged = await ports.judge(request);
-  if (!judged.ok) {
-    return unmovable(draft, judged.cause);
-  }
-
-  const entry: PlanEntry = { draft, version: judged.prepared.toVersion, recorded: [] };
-  plan.entries.set(draft.key, entry);
-  plan.versions.set(draft.key, entry.version);
-  const found = walkFindings(await ports.walk(request, judged.prepared, plan.versions));
-  if ("ok" in found) {
-    return found;
-  }
-
-  entry.recorded = found.recordedMembers;
-  for (const member of found.outOfRange) {
-    noteRequest(plan, member);
-  }
-
-  return previewAll(found.freshMembers, ports);
-}
-
-function satisfiesAll(version: string, ranges: readonly string[]): boolean {
-  return ranges.every((range) => recordedVersionSatisfies(version, range));
-}
-
-/**
- * The first range of the final graph that rejects the version the plan chose
- * for a move, or `undefined`. The rejecting plugin joins the request, so the
- * row names its range.
- */
-function rejectedVersion(
-  plan: PlanState,
-  walks: readonly (readonly [string, readonly RecordedCascadeMember[]])[],
-): DependencyPlan | undefined {
-  for (const [owner, recorded] of walks) {
-    for (const member of recorded) {
-      const entry = plan.entries.get(member.key);
-      if (entry !== undefined && !satisfiesAll(entry.version, member.ranges)) {
-        entry.draft.requesters.set(owner, member.ranges);
-        return unmovable(
-          entry.draft,
-          `version ${entry.version}, which another move lands, does not satisfy it`,
-        );
-      }
-    }
-  }
-
-  return undefined;
-}
-
-/**
- * Orders the moves dependencies first: a move whose new closure asks for a
- * dependency the plan moves, at a range its recorded version fails, runs
- * after that dependency's move. Two moves that each need the other first
- * refuse the plan.
- */
-function orderMoves(plan: PlanState): DependencyPlan {
-  const order: PlannedDependencyMove[] = [];
-  const done = new Set<string>();
-  const visiting = new Set<string>();
-  const visit = (entry: PlanEntry): DependencyPlan | undefined => {
-    if (done.has(entry.draft.key)) {
-      return undefined;
-    }
-
-    visiting.add(entry.draft.key);
-    for (const member of entry.recorded) {
-      const first = plan.entries.get(member.key);
-      if (first === undefined || satisfiesAll(first.draft.recordedVersion, member.ranges)) {
+function reachable(
+  graph: DependencyGraph,
+  from: readonly string[],
+  stops: ReadonlySet<string>,
+): ReadonlySet<string> {
+  const seen = new Set(from);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const node of graph.nodes) {
+      const key = node.member.key;
+      if (!seen.has(key) || stops.has(key)) {
         continue;
       }
 
-      if (visiting.has(member.key)) {
-        return unmovable(
-          first.draft,
-          `it and "${entry.draft.key}" each need the other moved first`,
-        );
+      for (const next of node.dependsOn.filter((dependency) => !seen.has(dependency))) {
+        seen.add(next);
+        grew = true;
       }
-
-      const refused = visit(first);
-      if (refused !== undefined) {
-        return refused;
-      }
-    }
-
-    visiting.delete(entry.draft.key);
-    done.add(entry.draft.key);
-    order.push({ request: requestOf(entry.draft), version: entry.version });
-    return undefined;
-  };
-
-  for (const entry of plan.entries.values()) {
-    const refused = visit(entry);
-    if (refused !== undefined) {
-      return refused;
     }
   }
 
-  return { ok: true, moves: order };
+  return seen;
 }
 
 /**
- * Judges the whole operation before any write. Each move is planned once, in
- * the order the walks reach it; the answer lists the moves in the order they
- * run.
+ * Orders the plan into steps. Each move runs after the fresh installs and
+ * re-enables its new version needs, which land in one cascade just before it.
+ * A disabled plugin that moves refreshes its pin in its move and re-enables
+ * after it, at the new version. Everything else lands in `final`, with the
+ * plugin being installed. Under `deferMoveDependencies`, a move's needs are
+ * left to the caller's later step, and `final` holds only what the root
+ * reaches without passing a move.
  */
-export async function planDependencyMoves<P extends PlannedCandidate>(
-  start: DependencyPlanStart,
-  ports: DependencyPlanPorts<P>,
-): Promise<DependencyPlan> {
-  const previewed = await previewAll(start.freshMembers, ports);
-  if (previewed !== undefined) {
-    return previewed;
-  }
-
-  const plan: PlanState = { drafts: new Map(), queue: [], entries: new Map(), versions: new Map() };
-  for (const member of start.outOfRange) {
-    noteRequest(plan, member);
-  }
-
-  for (let draft = plan.queue.shift(); draft !== undefined; draft = plan.queue.shift()) {
-    // eslint-disable-next-line no-await-in-loop -- each move's closure names the moves the next ones cover
-    const refused = await planMove(plan, draft, start, ports);
-    if (refused !== undefined) {
-      return refused;
+function schedule<P extends PlannedCandidate>(
+  graph: DependencyGraph,
+  moves: ReadonlyMap<string, Choice<P>>,
+  options: DependencyPlanOptions,
+): Extract<DependencyPlan, { readonly ok: true }> {
+  const moved = new Set(moves.keys());
+  const pending = graph.nodes.flatMap((node) => {
+    const member = materialized(node);
+    return member === undefined ? [] : [member];
+  });
+  const done = new Set<string>();
+  const take = (keys: ReadonlySet<string>): PlannedCascadeMember[] => {
+    const taken = pending.filter(
+      (entry) => keys.has(entry.member.key) && !done.has(entry.member.key),
+    );
+    for (const entry of taken) {
+      done.add(entry.member.key);
     }
+
+    return taken;
+  };
+
+  const steps: DependencyPlanStep[] = [];
+  for (const node of graph.nodes) {
+    const choice = moves.get(node.member.key);
+    if (choice === undefined) {
+      continue;
+    }
+
+    const needs = options.deferMoveDependencies
+      ? []
+      : take(reachable(graph, node.dependsOn, new Set()));
+    steps.push(...(needs.length > 0 ? [{ kind: "materialize" as const, members: needs }] : []), {
+      kind: "move",
+      move: { request: choice.request, version: choice.prepared.toVersion },
+    });
   }
 
-  const walks = [
-    [start.rootKey, start.recordedMembers] as const,
-    ...[...plan.entries.values()].map((entry) => [entry.draft.key, entry.recorded] as const),
-  ];
-  return rejectedVersion(plan, walks) ?? orderMoves(plan);
+  const fromRoot = reachable(graph, graph.rootDependsOn, moved);
+  const rest = options.deferMoveDependencies
+    ? take(fromRoot)
+    : take(new Set(graph.nodes.map((node) => node.member.key)));
+  return {
+    ok: true,
+    steps,
+    final: {
+      members: [
+        ...rest,
+        ...(graph.root === undefined ? [] : [{ kind: "install" as const, member: graph.root }]),
+      ],
+      alreadyInstalled: graph.nodes.flatMap((node) =>
+        node.kind === "recorded" && !node.walked && fromRoot.has(node.member.key)
+          ? [node.member]
+          : [],
+      ),
+    },
+  };
+}
+
+/**
+ * Plans the whole operation before any write: the version of every plugin
+ * of its dependency graph, settled over every range the final graph
+ * declares, then the steps that carry it out.
+ */
+export async function planDependencyGraph<P extends PlannedCandidate>(
+  ports: DependencyPlanPorts<P>,
+  options: DependencyPlanOptions,
+): Promise<DependencyPlan> {
+  const settled = await settleChoices(ports);
+  if (!settled.ok) {
+    return settled;
+  }
+
+  return (
+    (await previewFresh(settled.graph, ports)) ?? schedule(settled.graph, settled.moves, options)
+  );
 }

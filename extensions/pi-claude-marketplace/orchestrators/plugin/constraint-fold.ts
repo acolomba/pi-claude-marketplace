@@ -165,7 +165,8 @@ function nameHolder(holder: ConstraintHolder): string {
  *
  * INR-05: a range-naming arm's detail is the declared ranges of the holders
  * the line names, in holder order, joined with `, ` as Claude Code joins
- * them; a holder that declared no range is named but adds nothing. Each
+ * them; a holder that declared no range is named but adds nothing. IN-N2: a
+ * range or a holder that repeats is named once. Each
  * declared range passed `domain/dependencies.ts`' allowlist and 64-character
  * bound at parse time, and the join is bounded again here. The `transport`
  * arm's classification is bounded the same way. A stage-two `version` is
@@ -176,10 +177,12 @@ function describeConstraint(holders: readonly ConstraintHolder[], line: Constrai
   const detail =
     line.arm === "transport"
       ? renderConstraintRange(line.classification)
-      : renderDeclaredRanges(
-          holders.flatMap((holder) => (holder.range === undefined ? [] : [holder.range])),
-        );
-  const required = holders.map(nameHolder).join(", ");
+      : renderDeclaredRanges([
+          ...new Set(
+            holders.flatMap((holder) => (holder.range === undefined ? [] : [holder.range])),
+          ),
+        ]);
+  const required = [...new Set(holders.map(nameHolder))].join(", ");
   const fetched =
     line.arm === "transport" || line.version === undefined ? "" : `version ${line.version} `;
   return `${fetched}${ARM_CLAUSE[line.arm]} (${detail}) -- required by ${required}`;

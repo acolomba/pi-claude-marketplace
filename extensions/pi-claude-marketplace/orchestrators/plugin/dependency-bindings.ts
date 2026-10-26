@@ -2,25 +2,24 @@
 //
 // UPD-DEP-D1: what install's flow binds the dependency plan and its moves to:
 // the materialization policy of each operation, the context every move of one
-// operation shares, the scope as a plan leaves it, the refusal rows of an
-// update's settle, and the cleanup of the clones a plan created. The cascade
-// runs and the plan ports stay in `install-flow.ts`, which owns the cascade's
-// lock body; this leaf holds the bindings that need none of it.
+// operation shares, the refusal rows of an update's settle, and the cleanup of
+// the clones a plan created. The cascade runs and the plan ports stay in
+// `install-flow.ts`, which owns the cascade's lock body; this leaf holds the
+// bindings that need none of it.
 
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 
-import { garbageCollectPluginClones, listPluginClones } from "./clone-gc.ts";
+import { garbageCollectPluginClones, listUnreferencedPluginClones } from "./clone-gc.ts";
 import { cascadeFailureCause, composeCascadeFailureMessage } from "./install-cascade.messaging.ts";
 
 import type { DependencyMoveContext, DependencyMoveMemos } from "./dependency-move.ts";
 import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
 import type { MaterializationPolicy } from "./update-preflight.ts";
-import type { ThreePhaseArgs, UpdateDependencySettler } from "./update-swap.ts";
+import type { ThreePhaseArgs } from "./update-swap.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -92,17 +91,20 @@ function callerFields(
 }
 
 /**
- * UPD-DEP-D1: what every dependency move of one operation runs with.
- * `settleDependencies` installs what a moved dependency's new version needs;
- * an operation whose later step installs missing dependencies binds none.
+ * IN-N4: a move collects no clone. The operation's sweep after its last step
+ * collects the revisions its moves replaced.
  */
+function leaveClonesToTheSweep(): Promise<void> {
+  return Promise.resolve();
+}
+
+/** UPD-DEP-D1: what every dependency move of one operation runs with. */
 export function dependencyMoveContext(args: {
   readonly owners: DependencyMoveOwners;
   readonly target: DependencyTarget;
   readonly caller: DependencyCaller;
   readonly policy: MaterializationPolicy;
   readonly memos: DependencyMoveMemos;
-  readonly settleDependencies?: UpdateDependencySettler;
 }): DependencyMoveContext {
   const { owners, caller } = args;
   return {
@@ -112,9 +114,9 @@ export function dependencyMoveContext(args: {
     env: owners.env,
     policy: args.policy,
     softDeps: caller.run.softDeps,
+    cleanupClones: leaveClonesToTheSweep,
     ...callerFields(caller),
     ...args.memos,
-    ...(args.settleDependencies !== undefined && { settleDependencies: args.settleDependencies }),
   };
 }
 
@@ -127,7 +129,12 @@ export function tagMemosOf(args: ThreePhaseArgs, fresh: DependencyMoveMemos): De
   };
 }
 
-/** The update arguments' caller fields, spread only when set. */
+/**
+ * The update arguments' caller fields, spread only when set. WR-N3: a
+ * cascade-mode update's `partial` is SEV-03's in-place degrade of the plugin
+ * it updates, not the user's `--partial`, so its dependencies get none and
+ * need their own consent, as on an install.
+ */
 export function updateCaller(
   args: ThreePhaseArgs,
   notification: { readonly ctx: NotificationContext; readonly run: NotificationRun },
@@ -135,37 +142,31 @@ export function updateCaller(
   return {
     ...notification,
     ...(args.mapModel !== undefined && { mapModel: args.mapModel }),
-    ...(args.partial !== undefined && { partial: args.partial }),
+    ...(!args.cascade && args.partial !== undefined && { partial: args.partial }),
     ...(args.credentialOps !== undefined && { credentialOps: args.credentialOps }),
     ...(args.deviceFlowHttp !== undefined && { deviceFlowHttp: args.deviceFlowHttp }),
     ...(args.authMemo !== undefined && { authMemo: args.authMemo }),
   };
 }
 
-/** The scope as the plan leaves it: each moved dependency at the version its move lands. */
-export function withPlannedVersions(
-  state: ExtensionState,
-  planned: ReadonlyMap<string, string>,
-): ExtensionState {
-  const view = structuredClone(state);
-  for (const [name, marketplace] of Object.entries(view.marketplaces)) {
-    for (const [plugin, record] of Object.entries(marketplace.plugins)) {
-      record.version = planned.get(`${plugin}@${name}`) ?? record.version;
-    }
-  }
-
-  return view;
-}
-
 /**
- * UPD-DEP-D1 / WR-A: notes the clones on disk before a plan, and returns the
- * sweep that removes the unreferenced clones created since. A clone that was
- * there before, such as a mirror `fetch` warmed, stays. The sweep never
- * throws (D-19-01): a failure is traced, and a later lifecycle operation
- * retries it.
+ * UPD-DEP-D1 / WR-A / IN-N4: notes the unreferenced clones on disk before a
+ * plan, and returns the sweep that removes every other unreferenced clone
+ * once the operation ends: those the plan created, and the revisions its
+ * moves replaced. A clone that was unreferenced before, such as a mirror
+ * `fetch` warmed, stays. IN-N5: when the clones cannot be listed, the sweep
+ * removes nothing. The sweep never throws (D-19-01): a failure is traced, and
+ * a later lifecycle operation retries it.
  */
 export async function planCloneSweep(locations: ScopedLocations): Promise<() => Promise<void>> {
-  const before = await listPluginClones(locations);
+  let before: ReadonlySet<string>;
+  try {
+    before = await listUnreferencedPluginClones(locations);
+  } catch (err) {
+    hookDebugLog(`dependency plan: clone listing failed: ${errorMessage(err)}`, "install");
+    return () => Promise.resolve();
+  }
+
   return async () => {
     try {
       await garbageCollectPluginClones(locations, before);

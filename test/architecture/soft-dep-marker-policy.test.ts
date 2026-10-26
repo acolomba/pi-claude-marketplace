@@ -203,6 +203,7 @@ const MARKER_POLICY_TABLE = [
       skipped: { markers: false, contentReasons: true },
       failed: { markers: false, contentReasons: true },
       unavailable: { markers: false, contentReasons: true },
+      updated: { markers: true, contentReasons: true },
     },
   },
   {

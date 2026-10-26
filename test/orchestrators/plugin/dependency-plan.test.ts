@@ -1,108 +1,124 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { describe, test } from "node:test";
 
-import { planDependencyMoves } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts";
+import {
+  planDependencyGraph,
+  renderRequestedRanges,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts";
 
 import type {
   DependencyMoveRequest,
   DependencyPlanPorts,
-  DependencyPlanStart,
-  DependencyPlanWalk,
   PlanJudgement,
   PlannedCandidate,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts";
 import type {
-  OutOfRangeMember,
-  RecordedCascadeMember,
+  CascadeResolutionFailure,
+  DependencyGraph,
+  FreshGraphNode,
+  GraphRequester,
+  RecordedGraphNode,
   ResolvedCascadeMember,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts";
 
-function outOfRange(name: string, overrides: Partial<OutOfRangeMember> = {}): OutOfRangeMember {
+const APP_ASKS_2: readonly GraphRequester[] = [{ key: "app@mp", ranges: ["^2.0.0"] }];
+
+function member(name: string): ResolvedCascadeMember {
+  return { key: `${name}@mp`, name, marketplace: "mp", requiredBy: "app@mp", ranges: [] };
+}
+
+/** A recorded plugin the walk stopped at, at `version`. */
+function wall(
+  name: string,
+  version: string | undefined,
+  requesters: readonly GraphRequester[],
+): RecordedGraphNode {
   return {
-    key: `${name}@mp`,
-    name,
-    marketplace: "mp",
-    requiredBy: "app@mp",
-    ranges: ["^2.0.0"],
-    range: "^2.0.0",
-    recordedVersion: "1.0.0",
-    ...overrides,
+    kind: "recorded",
+    member: member(name),
+    requesters,
+    dependsOn: [],
+    version,
+    disabled: false,
+    walked: false,
   };
 }
 
-function recorded(name: string, ranges: readonly string[] = ["^2.0.0"]): RecordedCascadeMember {
-  return { key: `${name}@mp`, ranges };
+/** A recorded plugin the walk read through: moving, or disabled. */
+function walked(
+  name: string,
+  requesters: readonly GraphRequester[],
+  options: { readonly dependsOn?: readonly string[]; readonly disabled?: boolean } = {},
+): RecordedGraphNode {
+  return {
+    kind: "recorded",
+    member: member(name),
+    requesters,
+    dependsOn: options.dependsOn ?? [],
+    version: "1.0.0",
+    disabled: options.disabled ?? false,
+    walked: true,
+  };
+}
+
+function fresh(name: string, dependsOn: readonly string[] = []): FreshGraphNode {
+  return { kind: "fresh", member: member(name), requesters: [], dependsOn };
+}
+
+/** The graph of installing `app@mp`. */
+function graph(nodes: DependencyGraph["nodes"], rootDependsOn: readonly string[]): DependencyGraph {
+  return { kind: "graph", root: member("app"), rootDependsOn, nodes };
 }
 
 function request(
   name: string,
-  requesters: DependencyMoveRequest["requesters"] = [{ key: "app@mp", ranges: ["^2.0.0"] }],
+  requesters: readonly GraphRequester[] = APP_ASKS_2,
 ): DependencyMoveRequest {
   return { key: `${name}@mp`, name, marketplace: "mp", recordedVersion: "1.0.0", requesters };
 }
 
-function fresh(name: string): ResolvedCascadeMember {
-  return { key: `${name}@mp`, name, marketplace: "mp", requiredBy: "app@mp", ranges: [] };
-}
-
-/** A walk that adds nothing: no fresh members, no moves, no recorded members. */
-function walked(overrides: Partial<Extract<DependencyPlanWalk, { kind: "planned" }>> = {}) {
-  return {
-    kind: "planned",
-    freshMembers: [],
-    outOfRange: [],
-    recordedMembers: [],
-    ...overrides,
-  } satisfies DependencyPlanWalk;
-}
-
-interface Recorded {
+interface Calls {
+  readonly walks: string[];
   readonly judged: DependencyMoveRequest[];
-  readonly walked: string[];
   readonly previewed: string[];
 }
 
-/** Ports that admit every move at 2.0.0, walk to nothing, and preview cleanly, recording each call. */
-function ports(
-  overrides: Partial<DependencyPlanPorts<PlannedCandidate>> = {},
-): DependencyPlanPorts<PlannedCandidate> & { readonly calls: Recorded } {
-  const calls: Recorded = { judged: [], walked: [], previewed: [] };
+/**
+ * Ports over a scripted world. `walks` answers each walk by the moves it
+ * reads, written `key=version,...` in the order the plan chose them.
+ * `versions` answers each judged key; a key it lacks cannot move.
+ */
+function ports(world: {
+  readonly walks: Readonly<Record<string, DependencyGraph | CascadeResolutionFailure>>;
+  readonly versions?: (request: DependencyMoveRequest) => string | undefined;
+  readonly preview?: (member: ResolvedCascadeMember) => Promise<void>;
+}): DependencyPlanPorts<PlannedCandidate> & { readonly calls: Calls } {
+  const calls: Calls = { walks: [], judged: [], previewed: [] };
   return {
     calls,
-    judge: (moveRequest) => {
-      calls.judged.push(moveRequest);
-      return (
-        overrides.judge?.(moveRequest) ??
-        Promise.resolve<PlanJudgement<PlannedCandidate>>({
-          ok: true,
-          prepared: { toVersion: "2.0.0" },
-        })
+    walk: (moving) => {
+      const signature = [...moving].map(([key, prepared]) => `${key}=${prepared.toVersion}`).join();
+      calls.walks.push(signature);
+      const answer = world.walks[signature];
+      assert.ok(answer !== undefined, `no walk scripted for "${signature}"`);
+      return Promise.resolve(answer);
+    },
+    judge: (judged) => {
+      calls.judged.push(judged);
+      const version = world.versions?.(judged);
+      return Promise.resolve<PlanJudgement<PlannedCandidate>>(
+        version === undefined
+          ? { ok: false, cause: "version 1.5.0 falls outside the range" }
+          : { ok: true, prepared: { toVersion: version } },
       );
     },
-    walk: (moveRequest, candidate, planned) => {
-      calls.walked.push(
-        `${moveRequest.key} ${[...planned].map(([key, v]) => `${key}=${v}`).join(",")}`,
-      );
-      return overrides.walk?.(moveRequest, candidate, planned) ?? Promise.resolve(walked());
-    },
-    preview: (member) => {
-      calls.previewed.push(member.key);
-      return overrides.preview?.(member) ?? Promise.resolve();
+    preview: (previewed) => {
+      calls.previewed.push(previewed.key);
+      return world.preview?.(previewed) ?? Promise.resolve();
     },
   };
 }
 
-function start(overrides: Partial<DependencyPlanStart> = {}): DependencyPlanStart {
-  return {
-    rootKey: "app@mp",
-    freshMembers: [],
-    outOfRange: [],
-    recordedMembers: [],
-    ...overrides,
-  };
-}
-
-/** The refusal RESV-05 reports for a recorded dependency that cannot move. */
 function refusal(key: string, range: string, moveRefusal: string) {
   return {
     ok: false,
@@ -120,303 +136,379 @@ function refusal(key: string, range: string, moveRefusal: string) {
   } as const;
 }
 
-test("UPD-DEP-D1: holds when every fresh member previews and every move lands a version in range", async () => {
-  // arrange
-  const bound = ports();
+describe("planDependencyGraph", () => {
+  test("UPD-DEP-D1: keeps every recorded dependency every range admits and leaves the closure to the install", async () => {
+    // arrange
+    const bound = ports({
+      walks: {
+        "": graph(
+          [wall("lib", "2.1.0", APP_ASKS_2), wall("old", undefined, APP_ASKS_2), fresh("helper")],
+          ["lib@mp", "old@mp", "helper@mp"],
+        ),
+      },
+    });
 
-  // act
-  const plan = await planDependencyMoves(
-    start({ freshMembers: [fresh("helper")], outOfRange: [outOfRange("lib")] }),
-    bound,
-  );
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
 
-  // assert
-  assert.deepStrictEqual(plan, {
-    ok: true,
-    moves: [{ request: request("lib"), version: "2.0.0" }],
+    // assert
+    assert.deepStrictEqual(plan, {
+      ok: true,
+      steps: [],
+      final: {
+        members: [
+          { kind: "install", member: member("helper") },
+          { kind: "install", member: member("app") },
+        ],
+        alreadyInstalled: [member("lib"), member("old")],
+      },
+    });
+    assert.deepStrictEqual(bound.calls, { walks: [""], judged: [], previewed: ["helper@mp"] });
   });
-  assert.deepStrictEqual(bound.calls, {
-    judged: [request("lib")],
-    walked: ["lib@mp lib@mp=2.0.0"],
-    previewed: ["helper@mp"],
+
+  test("UPD-DEP-D1: moves a dependency the graph's ranges reject to the version its judge lands", async () => {
+    // arrange
+    const bound = ports({
+      walks: {
+        "": graph([wall("lib", "1.0.0", APP_ASKS_2)], ["lib@mp"]),
+        "lib@mp=2.0.0": graph([walked("lib", APP_ASKS_2)], ["lib@mp"]),
+      },
+      versions: () => "2.0.0",
+    });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      ok: true,
+      steps: [{ kind: "move", move: { request: request("lib"), version: "2.0.0" } }],
+      final: { members: [{ kind: "install", member: member("app") }], alreadyInstalled: [] },
+    });
+    assert.deepStrictEqual(bound.calls.walks, ["", "lib@mp=2.0.0"]);
+    assert.deepStrictEqual(bound.calls.judged, [request("lib")]);
   });
-});
 
-test("UPD-DEP-D1: refuses a fresh member the install's preflight refuses, naming it", async () => {
-  // arrange
-  const cause = new Error("partially available");
-  const bound = ports({ preview: () => Promise.reject(cause) });
+  test("UPD-DEP-D1 / WR-N1: judges a dependency again when a moved dependency's new version narrows its range", async () => {
+    // arrange
+    const narrowed: readonly GraphRequester[] = [
+      { key: "app@mp", ranges: ["^1.2.0"] },
+      { key: "fff@mp", ranges: ["<1.5.0"] },
+    ];
+    const moved = graph(
+      [
+        walked("bbb", narrowed),
+        fresh("fff", ["bbb@mp"]),
+        walked("aaa", APP_ASKS_2, { dependsOn: ["fff@mp"] }),
+      ],
+      ["aaa@mp", "bbb@mp"],
+    );
+    const bound = ports({
+      walks: {
+        "": graph(
+          [
+            wall("aaa", "1.0.0", APP_ASKS_2),
+            wall("bbb", "1.0.0", [{ key: "app@mp", ranges: ["^1.2.0"] }]),
+          ],
+          ["aaa@mp", "bbb@mp"],
+        ),
+        "aaa@mp=2.0.0,bbb@mp=1.9.0": moved,
+        "bbb@mp=1.4.0,aaa@mp=2.0.0": moved,
+      },
+      versions: (judged) => {
+        if (judged.key === "aaa@mp") {
+          return "2.0.0";
+        }
 
-  // act
-  const plan = await planDependencyMoves(
-    start({ freshMembers: [fresh("helper")], outOfRange: [outOfRange("lib")] }),
-    bound,
-  );
+        return judged.requesters.length === 2 ? "1.4.0" : "1.9.0";
+      },
+    });
 
-  // assert
-  assert.deepStrictEqual(plan, {
-    ok: false,
-    subject: { kind: "member", key: "helper@mp", error: cause, rollbackPartials: [] },
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      ok: true,
+      steps: [
+        { kind: "move", move: { request: request("bbb", narrowed), version: "1.4.0" } },
+        { kind: "materialize", members: [{ kind: "install", member: member("fff") }] },
+        { kind: "move", move: { request: request("aaa"), version: "2.0.0" } },
+      ],
+      final: { members: [{ kind: "install", member: member("app") }], alreadyInstalled: [] },
+    });
+    assert.deepStrictEqual(bound.calls.walks, [
+      "",
+      "aaa@mp=2.0.0,bbb@mp=1.9.0",
+      "bbb@mp=1.4.0,aaa@mp=2.0.0",
+    ]);
+    assert.deepStrictEqual(
+      bound.calls.judged.map((judged) => [judged.key, judged.requesters.length]),
+      [
+        ["aaa@mp", 1],
+        ["bbb@mp", 1],
+        ["bbb@mp", 2],
+      ],
+    );
   });
-  assert.deepStrictEqual(bound.calls.judged, []);
-});
 
-test("UPD-DEP-D1: refuses a move update's preflight refuses, with RESV-05's subject and its cause", async () => {
-  // arrange
-  const bound = ports({ judge: () => Promise.resolve({ ok: false, cause: "held" }) });
+  test("UPD-DEP-D1: drops a move a moved dependency's new version no longer needs", async () => {
+    // arrange
+    const bound = ports({
+      walks: {
+        "": graph(
+          [
+            wall("aaa", "1.0.0", APP_ASKS_2),
+            wall("lib", "1.0.0", [{ key: "app@mp", ranges: ["^2.0.0"] }]),
+          ],
+          ["aaa@mp"],
+        ),
+        "aaa@mp=2.0.0,lib@mp=2.0.0": graph(
+          [
+            walked("lib", [{ key: "aaa@mp", ranges: ["^1.0.0"] }]),
+            walked("aaa", APP_ASKS_2, { dependsOn: ["lib@mp"] }),
+          ],
+          ["aaa@mp"],
+        ),
+        "aaa@mp=2.0.0": graph(
+          [
+            wall("lib", "1.0.0", [{ key: "aaa@mp", ranges: ["^1.0.0"] }]),
+            walked("aaa", APP_ASKS_2, { dependsOn: ["lib@mp"] }),
+          ],
+          ["aaa@mp"],
+        ),
+      },
+      versions: () => "2.0.0",
+    });
 
-  // act
-  const plan = await planDependencyMoves(start({ outOfRange: [outOfRange("lib")] }), bound);
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
 
-  // assert
-  assert.deepStrictEqual(plan, refusal("lib@mp", "^2.0.0", "held"));
-  assert.deepStrictEqual(bound.calls.walked, []);
-});
+    // assert
+    assert.deepStrictEqual(plan, {
+      ok: true,
+      steps: [{ kind: "move", move: { request: request("aaa"), version: "2.0.0" } }],
+      final: { members: [{ kind: "install", member: member("app") }], alreadyInstalled: [] },
+    });
+    assert.deepStrictEqual(bound.calls.walks, ["", "aaa@mp=2.0.0,lib@mp=2.0.0", "aaa@mp=2.0.0"]);
+  });
 
-test("UPD-DEP-D1: refuses a move of the plugin the operation installs or updates, without judging it", async () => {
-  // arrange
-  const bound = ports({
-    walk: (moveRequest) =>
-      Promise.resolve(
-        moveRequest.key === "lib@mp"
-          ? walked({ outOfRange: [outOfRange("app", { requiredBy: "lib@mp" })] })
-          : walked(),
+  test("UPD-DEP-D1 / WR-N4: moves a disabled dependency, then enables it before the move that needs it", async () => {
+    // arrange
+    const bound = ports({
+      walks: {
+        "": graph(
+          [wall("aaa", "1.0.0", APP_ASKS_2), walked("ddd", APP_ASKS_2, { disabled: true })],
+          ["aaa@mp", "ddd@mp"],
+        ),
+        "aaa@mp=2.0.0,ddd@mp=2.0.0": graph(
+          [
+            walked("ddd", [{ key: "aaa@mp", ranges: [] }, ...APP_ASKS_2], { disabled: true }),
+            walked("aaa", APP_ASKS_2, { dependsOn: ["ddd@mp"] }),
+          ],
+          ["aaa@mp", "ddd@mp"],
+        ),
+      },
+      versions: () => "2.0.0",
+    });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      ok: true,
+      steps: [
+        {
+          kind: "move",
+          move: {
+            request: request("ddd", [{ key: "aaa@mp", ranges: [] }, ...APP_ASKS_2]),
+            version: "2.0.0",
+          },
+        },
+        { kind: "materialize", members: [{ kind: "re-enable", member: member("ddd") }] },
+        { kind: "move", move: { request: request("aaa"), version: "2.0.0" } },
+      ],
+      final: { members: [{ kind: "install", member: member("app") }], alreadyInstalled: [] },
+    });
+  });
+
+  test("MISS-01: a deferring plan leaves a move's needs out and lands only what the root reaches without a move", async () => {
+    // arrange
+    const bound = ports({
+      walks: {
+        "": graph([wall("aaa", "1.0.0", APP_ASKS_2), fresh("ggg")], ["aaa@mp", "ggg@mp"]),
+        "aaa@mp=2.0.0": graph(
+          [
+            wall("kept", "1.0.0", []),
+            fresh("fff", ["kept@mp"]),
+            walked("aaa", APP_ASKS_2, { dependsOn: ["fff@mp"] }),
+            fresh("ggg"),
+          ],
+          ["aaa@mp", "ggg@mp"],
+        ),
+      },
+      versions: () => "2.0.0",
+    });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: true });
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      ok: true,
+      steps: [{ kind: "move", move: { request: request("aaa"), version: "2.0.0" } }],
+      final: {
+        members: [
+          { kind: "install", member: member("ggg") },
+          { kind: "install", member: member("app") },
+        ],
+        alreadyInstalled: [],
+      },
+    });
+  });
+
+  test("UPD-DEP-D1: an update's plan lands its final closure without a root", async () => {
+    // arrange
+    const bound = ports({
+      walks: { "": { ...graph([fresh("helper")], ["helper@mp"]), root: undefined } },
+    });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      ok: true,
+      steps: [],
+      final: { members: [{ kind: "install", member: member("helper") }], alreadyInstalled: [] },
+    });
+  });
+
+  test("UPD-DEP-D1: refuses a dependency no version moves into range, before anything else is judged", async () => {
+    // arrange
+    const requesters: readonly GraphRequester[] = [
+      { key: "aaa@mp", ranges: ["^2.0.0"] },
+      { key: "app@mp", ranges: ["^2.0.0"] },
+    ];
+    const bound = ports({
+      walks: {
+        "": graph([wall("lib", "1.0.0", requesters), wall("zzz", "1.0.0", APP_ASKS_2)], []),
+      },
+    });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
+
+    // assert
+    assert.deepStrictEqual(
+      plan,
+      refusal("lib@mp", "^2.0.0", "version 1.5.0 falls outside the range"),
+    );
+    assert.deepStrictEqual(bound.calls.judged, [request("lib", requesters)]);
+  });
+
+  test("UPD-DEP-D1: refuses a closure the walk cannot resolve", async () => {
+    // arrange
+    const failure = { ok: false, reason: "cycle", chain: ["app@mp", "aaa@mp", "app@mp"] } as const;
+    const bound = ports({ walks: { "": { kind: "closure-failed", failure } } });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
+
+    // assert
+    assert.deepStrictEqual(plan, { ok: false, subject: { kind: "closure", failure } });
+  });
+
+  test("UPD-DEP-D1 / CR-N1: refuses ranges the walk finds contradictory", async () => {
+    // arrange
+    const failure = {
+      kind: "range-conflict",
+      why: "contradictory-declarations",
+      key: "fff@mp",
+      range: "^1.0.0, ^2.0.0",
+      detail: "no version satisfies all 2 declared ranges",
+    } as const;
+    const bound = ports({
+      walks: {
+        "": graph([wall("aaa", "1.0.0", APP_ASKS_2)], ["aaa@mp"]),
+        "aaa@mp=2.0.0": { kind: "constraint-failed", failure },
+      },
+      versions: () => "2.0.0",
+    });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
+
+    // assert
+    assert.deepStrictEqual(plan, { ok: false, subject: { kind: "constraint", failure } });
+    assert.deepStrictEqual(bound.calls.previewed, []);
+  });
+
+  test("UPD-DEP-D1: refuses a graph whose choices never settle", async () => {
+    // arrange
+    const bound = ports({
+      walks: {
+        "": graph([wall("lib", "1.0.0", APP_ASKS_2)], ["lib@mp"]),
+        "lib@mp=2.0.0": graph([walked("lib", [])], ["lib@mp"]),
+      },
+      versions: () => "2.0.0",
+    });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
+
+    // assert
+    assert.deepStrictEqual(
+      plan,
+      refusal(
+        "lib@mp",
+        "^2.0.0",
+        "its version does not settle: each version chosen for it changes what the other dependencies need",
       ),
+    );
+    assert.deepStrictEqual(bound.calls.walks, [
+      "",
+      "lib@mp=2.0.0",
+      "",
+      "lib@mp=2.0.0",
+      "",
+      "lib@mp=2.0.0",
+      "",
+      "lib@mp=2.0.0",
+    ]);
   });
 
-  // act
-  const plan = await planDependencyMoves(start({ outOfRange: [outOfRange("lib")] }), bound);
+  test("UPD-DEP-D1: refuses the first fresh dependency the install's preflight refuses", async () => {
+    // arrange
+    const error = new Error('Plugin "helper" is not installable: contains outputStyles');
+    const bound = ports({
+      walks: { "": graph([fresh("helper"), fresh("other")], ["helper@mp", "other@mp"]) },
+      preview: (previewed) =>
+        previewed.key === "helper@mp" ? Promise.reject(error) : Promise.resolve(),
+    });
 
-  // assert
-  assert.deepStrictEqual(plan, refusal("app@mp", "^2.0.0", "a move of it is already in progress"));
-  assert.deepStrictEqual(
-    bound.calls.judged.map((judged) => judged.key),
-    ["lib@mp"],
-  );
-});
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
 
-test("UPD-DEP-D1: refuses a move whose new closure fails the walk", async () => {
-  // arrange
-  const failure = {
-    ok: false,
-    reason: "not-found",
-    key: "ghost@mp",
-    missing: "ghost@mp",
-    requiredBy: "lib@mp",
-  } as const;
-  const bound = ports({ walk: () => Promise.resolve({ kind: "closure-failed", failure }) });
-
-  // act
-  const plan = await planDependencyMoves(start({ outOfRange: [outOfRange("lib")] }), bound);
-
-  // assert
-  assert.deepStrictEqual(plan, { ok: false, subject: { kind: "closure", failure } });
-});
-
-test("UPD-DEP-D1: refuses a move whose new closure fails a constraint", async () => {
-  // arrange
-  const failure = { kind: "no-matching-tag", key: "base@mp", range: "^3.0.0" } as const;
-  const bound = ports({ walk: () => Promise.resolve({ kind: "constraint-failed", failure }) });
-
-  // act
-  const plan = await planDependencyMoves(start({ outOfRange: [outOfRange("lib")] }), bound);
-
-  // assert
-  assert.deepStrictEqual(plan, { ok: false, subject: { kind: "constraint", failure } });
-});
-
-test("UPD-DEP-D1: previews the fresh members a move's new closure adds", async () => {
-  // arrange
-  const cause = new Error("name conflict");
-  const bound = ports({
-    walk: () => Promise.resolve(walked({ freshMembers: [fresh("base")] })),
-    preview: (member) => (member.key === "base@mp" ? Promise.reject(cause) : Promise.resolve()),
-  });
-
-  // act
-  const plan = await planDependencyMoves(start({ outOfRange: [outOfRange("lib")] }), bound);
-
-  // assert
-  assert.deepStrictEqual(plan, {
-    ok: false,
-    subject: { kind: "member", key: "base@mp", error: cause, rollbackPartials: [] },
+    // assert
+    assert.deepStrictEqual(plan, {
+      ok: false,
+      subject: { kind: "member", key: "helper@mp", error, rollbackPartials: [] },
+    });
+    assert.deepStrictEqual(bound.calls.previewed, ["helper@mp"]);
   });
 });
 
-test("UPD-DEP-D1: judges a shared dependency once, with every range known, and moves it before the plugin that needs it", async () => {
-  // arrange: the root asks for aaa and zzz at ^2.0.0; aaa 2.0.0 asks for zzz at >=2.0.0.
-  const bound = ports({
-    walk: (moveRequest) =>
-      Promise.resolve(
-        moveRequest.key === "aaa@mp"
-          ? walked({
-              outOfRange: [outOfRange("zzz", { requiredBy: "aaa@mp", ranges: [">=2.0.0"] })],
-              recordedMembers: [recorded("zzz", [">=2.0.0"])],
-            })
-          : walked(),
-      ),
+describe("renderRequestedRanges", () => {
+  test("IN-N2: names each range once, in requester order", () => {
+    // act
+    const rendered = renderRequestedRanges([
+      { key: "aaa@mp", ranges: ["^2.0.0"] },
+      { key: "app@mp", ranges: ["^2.0.0", ">=2.1.0"] },
+    ]);
+
+    // assert
+    assert.strictEqual(rendered, "^2.0.0, >=2.1.0");
   });
-  const zzz = request("zzz", [
-    { key: "app@mp", ranges: ["^2.0.0"] },
-    { key: "aaa@mp", ranges: [">=2.0.0"] },
-  ]);
-
-  // act
-  const plan = await planDependencyMoves(
-    start({
-      outOfRange: [outOfRange("aaa"), outOfRange("zzz")],
-      recordedMembers: [recorded("aaa"), recorded("zzz")],
-    }),
-    bound,
-  );
-
-  // assert
-  assert.deepStrictEqual(plan, {
-    ok: true,
-    moves: [
-      { request: zzz, version: "2.0.0" },
-      { request: request("aaa"), version: "2.0.0" },
-    ],
-  });
-  assert.deepStrictEqual(bound.calls.judged, [request("aaa"), zzz]);
-  assert.deepStrictEqual(bound.calls.walked, [
-    "aaa@mp aaa@mp=2.0.0",
-    "zzz@mp aaa@mp=2.0.0,zzz@mp=2.0.0",
-  ]);
-});
-
-test("UPD-DEP-D1: keeps the order the walks reach the moves when no move needs another first", async () => {
-  // arrange: aaa's new version accepts zzz's recorded version.
-  const bound = ports({
-    walk: (moveRequest) =>
-      Promise.resolve(
-        moveRequest.key === "aaa@mp"
-          ? walked({ recordedMembers: [recorded("zzz", ["*"])] })
-          : walked(),
-      ),
-  });
-
-  // act
-  const plan = await planDependencyMoves(
-    start({ outOfRange: [outOfRange("aaa"), outOfRange("zzz")] }),
-    bound,
-  );
-
-  // assert
-  assert.deepStrictEqual(plan, {
-    ok: true,
-    moves: [
-      { request: request("aaa"), version: "2.0.0" },
-      { request: request("zzz"), version: "2.0.0" },
-    ],
-  });
-});
-
-test("UPD-DEP-D1: refuses a dependency whose planned version a range found later rejects, naming that range", async () => {
-  // arrange: zzz is planned at 2.0.0 before aaa's new version asks for ^3.0.0.
-  const bound = ports({
-    walk: (moveRequest) =>
-      Promise.resolve(
-        moveRequest.key === "aaa@mp"
-          ? walked({
-              outOfRange: [outOfRange("zzz", { requiredBy: "aaa@mp", ranges: ["^3.0.0"] })],
-              recordedMembers: [recorded("zzz", ["^3.0.0"])],
-            })
-          : walked(),
-      ),
-  });
-
-  // act
-  const plan = await planDependencyMoves(
-    start({ outOfRange: [outOfRange("zzz"), outOfRange("aaa")] }),
-    bound,
-  );
-
-  // assert
-  assert.deepStrictEqual(
-    plan,
-    refusal(
-      "zzz@mp",
-      "^2.0.0, ^3.0.0",
-      "version 2.0.0, which another move lands, does not satisfy it",
-    ),
-  );
-});
-
-test("UPD-DEP-D1: refuses a move whose planned version the root's own range rejects", async () => {
-  // arrange: the root accepts zzz 1.x, and aaa's new version moves it to 2.0.0.
-  const bound = ports({
-    walk: (moveRequest) =>
-      Promise.resolve(
-        moveRequest.key === "aaa@mp"
-          ? walked({
-              outOfRange: [outOfRange("zzz", { requiredBy: "aaa@mp" })],
-              recordedMembers: [recorded("zzz")],
-            })
-          : walked(),
-      ),
-  });
-
-  // act
-  const plan = await planDependencyMoves(
-    start({ outOfRange: [outOfRange("aaa")], recordedMembers: [recorded("zzz", ["^1.0.0"])] }),
-    bound,
-  );
-
-  // assert
-  assert.deepStrictEqual(
-    plan,
-    refusal(
-      "zzz@mp",
-      "^2.0.0, ^1.0.0",
-      "version 2.0.0, which another move lands, does not satisfy it",
-    ),
-  );
-});
-
-test("UPD-DEP-D1: refuses two moves whose new versions each need the other moved first", async () => {
-  // arrange
-  const bound = ports({
-    walk: (moveRequest) =>
-      Promise.resolve(
-        walked({
-          recordedMembers: [recorded(moveRequest.key === "aaa@mp" ? "zzz" : "aaa")],
-        }),
-      ),
-  });
-
-  // act
-  const plan = await planDependencyMoves(
-    start({ outOfRange: [outOfRange("aaa"), outOfRange("zzz")] }),
-    bound,
-  );
-
-  // assert
-  assert.deepStrictEqual(
-    plan,
-    refusal("aaa@mp", "^2.0.0", 'it and "zzz@mp" each need the other moved first'),
-  );
-});
-
-test("UPD-DEP-D1: moves a dependency two moved plugins need once, before both", async () => {
-  // arrange
-  const bound = ports({
-    walk: (moveRequest) =>
-      Promise.resolve(
-        moveRequest.key === "zzz@mp" ? walked() : walked({ recordedMembers: [recorded("zzz")] }),
-      ),
-  });
-
-  // act
-  const plan = await planDependencyMoves(
-    start({ outOfRange: [outOfRange("aaa"), outOfRange("bbb"), outOfRange("zzz")] }),
-    bound,
-  );
-
-  // assert
-  assert.deepStrictEqual(plan.ok && plan.moves.map((move) => move.request.key), [
-    "zzz@mp",
-    "aaa@mp",
-    "bbb@mp",
-  ]);
 });

@@ -6,7 +6,7 @@ import { describe, test, type TestContext } from "node:test";
 
 import {
   garbageCollectPluginClones,
-  listPluginClones,
+  listUnreferencedPluginClones,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -444,17 +444,25 @@ describe("garbageCollectPluginClones", () => {
   });
 });
 
-describe("listPluginClones", () => {
-  test("UPD-DEP-D1: lists every clone key on disk", async (t) => {
+describe("listUnreferencedPluginClones", () => {
+  test("UPD-DEP-D1: lists the clone keys on disk that no record references", async (t) => {
     // arrange
     const locations = await freshLocations(t);
-    await seedCloneDirectories(locations, ["alpha", "beta"]);
+    await seedState(locations, {
+      mp: marketplace(locations, "mp", {
+        live: pluginRecord({
+          resolvedSource: path.join(locations.pluginClonesDir, "live-clone"),
+          resolvedSha: SHA_ALPHA,
+        }),
+      }),
+    });
+    await seedCloneDirectories(locations, ["live-clone", "fetched-mirror", "stale"]);
 
     // act
-    const keys = await listPluginClones(locations);
+    const keys = await listUnreferencedPluginClones(locations);
 
     // assert
-    assert.deepStrictEqual([...keys].sort(), ["alpha", "beta"]);
+    assert.deepStrictEqual([...keys].sort(), ["fetched-mirror", "stale"]);
   });
 
   test("UPD-DEP-D1: lists nothing when the clone cache is absent", async (t) => {
@@ -462,7 +470,7 @@ describe("listPluginClones", () => {
     const locations = await freshLocations(t);
 
     // act
-    const keys = await listPluginClones(locations);
+    const keys = await listUnreferencedPluginClones(locations);
 
     // assert
     assert.deepStrictEqual(keys, new Set());

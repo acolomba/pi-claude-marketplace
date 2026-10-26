@@ -10,12 +10,9 @@
 //
 // `judgeDependencyMove` decides one move and writes nothing; the dependency
 // plan (`dependency-plan.ts`) judges every move of an operation before any
-// runs. `runDependencyMoves` then makes the planned moves in the plan's
-// order, each its own update landing exactly the version the plan chose. A
-// move settles its own new closure without moving anything: the plan
-// already moved what that closure needs. A move that fails stops the rest;
-// the moves already made stay, each a complete update, and the result lists
-// them.
+// runs. `runDependencyMove` then makes one planned move, its own update
+// landing exactly the version the plan chose. It settles nothing: the plan
+// placed what the new version needs in the steps before it.
 //
 // Never called while the scope's state lock is held: the preflight takes it
 // itself for an unpinned git source, and the lock is not re-entrant.
@@ -23,10 +20,10 @@
 // Not a plugin ledger and names no git surface: the preflight and the shared
 // runner reach git through their own seams.
 
-import { errorMessage } from "../../shared/errors.ts";
+import { errorMessage, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 import { companionSeverity } from "../../shared/notify-reasons.ts";
+import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 
-import { garbageCollectPluginClones } from "./clone-gc.ts";
 import { materializeLatestVersion } from "./materialize-latest.ts";
 import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-preflight.ts";
 import { updatedRowFromOutcome } from "./update-row.ts";
@@ -38,11 +35,7 @@ import type {
   PreparedPluginUpdate,
   PreparePluginUpdateOptions,
 } from "./update-preflight.ts";
-import type {
-  CascadeThreePhaseArgs,
-  UpdateDependencySettler,
-  UpdateRunOutcome,
-} from "./update-swap.ts";
+import type { CascadeThreePhaseArgs, UpdateRunOutcome } from "./update-swap.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { SoftDepStatus } from "../../platform/pi-api.ts";
@@ -50,7 +43,7 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { MovedDependency, UpdateDependencyRow } from "../types.ts";
+import type { UpdateDependencyRow } from "../types.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
 
 /** The collaborators every dependency move of one operation shares. */
@@ -64,6 +57,7 @@ export interface DependencyMoveContext {
   /**
    * The operation's materialization knobs: `install` reads a present mirror
    * offline (NFR-5), `update` refreshes it, and `apply` lists no tag (D-23).
+   * The judge reads them; the move after it reads the mirror the judge left.
    */
   readonly policy: MaterializationPolicy;
   /** The command's `--partial` and `--map-model`, cascade-wide as on an install. */
@@ -79,14 +73,13 @@ export interface DependencyMoveContext {
   readonly constraintMarketplaceTagMemo: NonNullable<
     CascadeThreePhaseArgs["constraintMarketplaceTagMemo"]
   >;
-  /**
-   * Installs and enables what the moved dependency's new version needs. It
-   * moves nothing: the plan already ordered every move that closure needs
-   * before this one. `apply` binds none, because its own later step installs
-   * missing dependencies (MISS-01).
-   */
-  readonly settleDependencies?: UpdateDependencySettler;
   readonly stateTransaction?: LockedStateTransactionDeps;
+  /**
+   * IN-N4: what a move that changed a git revision collects. The operation's
+   * own sweep runs after its last step, knowing which clones were there
+   * before it started.
+   */
+  readonly cleanupClones: CascadeThreePhaseArgs["cleanupClones"];
   /** The soft-dependency snapshot the moved rows stamp severity from. */
   readonly softDeps: SoftDepStatus;
 }
@@ -110,14 +103,11 @@ export type DependencyMoveJudgement =
   | { readonly ok: true; readonly prepared: PreparedPluginUpdate }
   | { readonly ok: false; readonly cause: string };
 
-/** The moves all landed, or the one that did not; `moved` lists every row reported. */
-export type DependencyMoveResult =
-  | { readonly ok: true; readonly moved: readonly MovedDependency[] }
-  | {
-      readonly ok: false;
-      readonly moved: readonly MovedDependency[];
-      readonly request: DependencyMoveRequest;
-    };
+/** What one move did: whether it landed, and the row that reports it. */
+export interface DependencyMoveRun {
+  readonly landed: boolean;
+  readonly rows: readonly UpdateDependencyRow[];
+}
 
 function moveArgs(
   context: DependencyMoveContext,
@@ -133,7 +123,7 @@ function moveArgs(
     completionCache: context.completionCache,
     env: context.env,
     cascade: true,
-    cleanupClones: garbageCollectPluginClones,
+    cleanupClones: context.cleanupClones,
     constraintTagMemo: context.constraintTagMemo,
     constraintMarketplaceTagMemo: context.constraintMarketplaceTagMemo,
     requesters: request.requesters,
@@ -143,9 +133,6 @@ function moveArgs(
     ...(context.credentialOps !== undefined && { credentialOps: context.credentialOps }),
     ...(context.deviceFlowHttp !== undefined && { deviceFlowHttp: context.deviceFlowHttp }),
     ...(context.authMemo !== undefined && { authMemo: context.authMemo }),
-    ...(context.settleDependencies !== undefined && {
-      settleDependencies: context.settleDependencies,
-    }),
     ...(context.stateTransaction !== undefined && { stateTransaction: context.stateTransaction }),
   };
 }
@@ -169,6 +156,8 @@ function refusalCause(
  * Judges one move with the update preflight under `judgeOnly`, which writes
  * no state, then the swap's PI-6 name check: the candidate it would land, or
  * why it cannot move. A git source clones on a cache miss, as the move would.
+ * GHB-03: an invalid GitHub base override is the command's failure, not a
+ * refusal, so it propagates.
  */
 export async function judgeDependencyMove(
   request: DependencyMoveRequest,
@@ -189,6 +178,7 @@ export async function judgeDependencyMove(
     await assertUpdateNamesFree(args, prepared);
     return { ok: true, prepared };
   } catch (err) {
+    rethrowInvalidGitHubBaseUrl(err);
     return { ok: false, cause: errorMessage(err) };
   }
 }
@@ -197,7 +187,8 @@ export async function judgeDependencyMove(
  * Whether a move landed. `unchanged` passed the same range check, so the
  * recorded revision is already the candidate. A disabled record's move
  * refreshes its pin and stays disabled (D-05), so its preflight reports it
- * skipped as already disabled; the cascade then enables it at the new version.
+ * skipped as already disabled; a later step of the plan re-enables it at the
+ * new version.
  */
 function moveLanded(outcome: UpdateRunOutcome): boolean {
   return (
@@ -205,34 +196,6 @@ function moveLanded(outcome: UpdateRunOutcome): boolean {
     outcome.partition === "unchanged" ||
     (outcome.partition === "skipped" && outcome.reasons.includes("already disabled"))
   );
-}
-
-/**
- * One planned move through the shared runner, at exactly the version the plan
- * chose, its throw captured as a failed outcome.
- */
-async function runMove(
-  context: DependencyMoveContext,
-  move: PlannedDependencyMove,
-): Promise<UpdateRunOutcome> {
-  try {
-    return await materializeLatestVersion(
-      { ...moveArgs(context, move.request), expectVersion: move.version },
-      context.policy,
-    );
-  } catch (err) {
-    return {
-      partition: "failed",
-      name: move.request.name,
-      fromVersion: move.request.recordedVersion,
-      notes: [],
-      reasons: [],
-      cause: err as Error,
-      declaresAgents: false,
-      declaresMcp: false,
-      declaresWorkflows: false,
-    };
-  }
 }
 
 /**
@@ -268,43 +231,39 @@ function moveRow(
   };
 }
 
-/** A nested closure's row, which names its dependency by `<plugin>@<marketplace>`. */
-function movedFromRow(row: UpdateDependencyRow): MovedDependency {
-  const at = row.name.lastIndexOf("@");
-  return {
-    key: row.name,
-    name: row.name.slice(0, at),
-    marketplace: row.name.slice(at + 1),
-    row,
-  };
-}
-
-function moved(request: DependencyMoveRequest, row: UpdateDependencyRow): MovedDependency {
-  return { key: request.key, name: request.name, marketplace: request.marketplace, row };
+/**
+ * UPD-DEP-D1: makes one planned move through the shared runner, at exactly
+ * the version the plan chose. IN-04: it reads the mirror the judge refreshed
+ * moments before, so an unpinned git source is fetched once. A throw is the
+ * caller's to report.
+ */
+export async function runDependencyMove(
+  move: PlannedDependencyMove,
+  context: DependencyMoveContext,
+): Promise<DependencyMoveRun> {
+  const outcome = await materializeLatestVersion(
+    { ...moveArgs(context, move.request), expectVersion: move.version },
+    { ...context.policy, refreshSource: false },
+  );
+  const row = moveRow(context, move.request, outcome);
+  return { landed: moveLanded(outcome), rows: row === undefined ? [] : [row] };
 }
 
 /**
- * Makes the planned moves in the plan's order, each its own update. What a
- * moved dependency's new version installs or enables reports beside it. A
- * move that does not land stops the rest.
+ * The failed row of a move that threw, at the version it kept. Its cause
+ * chain is rebuilt with every absolute path redacted (T-55-02-02), since a
+ * swap's error names the staging files it was writing.
  */
-export async function runDependencyMoves(
-  moves: readonly PlannedDependencyMove[],
-  context: DependencyMoveContext,
-): Promise<DependencyMoveResult> {
-  const done: MovedDependency[] = [];
-  for (const move of moves) {
-    // eslint-disable-next-line no-await-in-loop -- each move locks the scope (retries: 0), dependencies first
-    const outcome = await runMove(context, move);
-    const row = moveRow(context, move.request, outcome);
-    done.push(
-      ...(row === undefined ? [] : [moved(move.request, row)]),
-      ...(outcome.dependencyRows ?? []).map(movedFromRow),
-    );
-    if (!moveLanded(outcome)) {
-      return { ok: false, moved: done, request: move.request };
-    }
-  }
-
-  return { ok: true, moved: done };
+export function failedMoveRow(
+  request: DependencyMoveRequest,
+  thrown: unknown,
+): UpdateDependencyRow {
+  return {
+    status: "failed",
+    name: request.key,
+    version: request.recordedVersion,
+    reasons: [],
+    cause: redactCauseChain(thrown) ?? new Error(errorMessage(thrown)),
+    severity: "error",
+  };
 }

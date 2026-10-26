@@ -79,12 +79,17 @@ async function readCloneKeys(locations: ScopedLocations): Promise<string[]> {
 }
 
 /**
- * UPD-DEP-D1: the clone keys on disk now, so a sweep after a refused plan can
- * leave every clone that was already there alone, such as a mirror `fetch`
- * warmed.
+ * UPD-DEP-D1 / IN-N4: the clone keys on disk now that no record references,
+ * such as a mirror `fetch` warmed. A sweep after a dependency plan keeps them
+ * and collects every other unreferenced clone: those the plan created, and
+ * the revisions its moves replaced.
  */
-export async function listPluginClones(locations: ScopedLocations): Promise<ReadonlySet<string>> {
-  return new Set(await readCloneKeys(locations));
+export async function listUnreferencedPluginClones(
+  locations: ScopedLocations,
+): Promise<ReadonlySet<string>> {
+  const state = await loadState(locations.extensionRoot);
+  const liveKeys = deriveLiveCloneKeys(state, locations.pluginClonesDir);
+  return new Set((await readCloneKeys(locations)).filter((key) => !liveKeys.has(key)));
 }
 
 /**

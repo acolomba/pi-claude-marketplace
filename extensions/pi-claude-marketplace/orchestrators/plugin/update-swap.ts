@@ -157,7 +157,7 @@ import type {
  * UPD-DEP-D1: what settling the dependency closure of an update's new version
  * produced. `settled` carries a row for each dependency it installed, enabled
  * or moved; `refused` carries the row of the dependency that cannot be met,
- * and nothing changed.
+ * after the rows of any change the settle made before a step failed.
  */
 export type UpdateDependencySettlement =
   | { readonly kind: "settled"; readonly rows: readonly UpdateDependencyRow[] }

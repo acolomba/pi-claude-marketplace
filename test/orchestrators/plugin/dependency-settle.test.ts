@@ -2,269 +2,457 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
-  failedMoveError,
+  runDependencySteps,
   settleDependencies,
-  settleWithoutMoves,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts";
-import { DependencyCascadeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  DependencyCascadeError,
+  InvalidGitHubBaseUrlError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type {
   DependencyMoveRequest,
+  DependencyPlan,
+  DependencyPlanStep,
   PlannedDependencyMove,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts";
-import type { DependencySettlePorts } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts";
+import type {
+  DependencySettlePorts,
+  DependencyStepPorts,
+  SettleCascadeRun,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-settle.ts";
 import type { CascadeFailureSubject } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts";
-import type { CascadePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts";
+import type { PlannedCascadeMember } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts";
 import type {
   MovedDependency,
   UpdateDependencyRow,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 
-const LIB: DependencyMoveRequest = {
-  key: "lib@mp",
-  name: "lib",
-  marketplace: "mp",
-  recordedVersion: "1.0.0",
-  requesters: [{ key: "app@mp", ranges: ["^2.0.0"] }],
-};
-
-const LIB_MOVE: PlannedDependencyMove = { request: LIB, version: "2.0.0" };
-
-const PLANNED: CascadePlan = {
-  kind: "planned",
-  freshMembers: [],
-  outOfRange: [
-    {
-      key: "lib@mp",
-      name: "lib",
-      marketplace: "mp",
-      requiredBy: "app@mp",
-      ranges: ["^2.0.0"],
-      range: "^2.0.0",
-      recordedVersion: "1.0.0",
-    },
-  ],
-  recordedMembers: [{ key: "lib@mp", ranges: ["^2.0.0"] }],
-};
-
-function row(name: string, status: "installed" | "updated" = "installed"): UpdateDependencyRow {
-  return status === "installed"
-    ? { status, name, dependencies: [], version: "1.0.0", severity: "info", needsReload: true }
-    : {
-        status,
-        name,
-        from: "1.0.0",
-        to: "2.0.0",
-        dependencies: [],
-        severity: "info",
-        needsReload: true,
-      };
+function lib(requesters: DependencyMoveRequest["requesters"]): DependencyMoveRequest {
+  return { key: "lib@mp", name: "lib", marketplace: "mp", recordedVersion: "1.0.0", requesters };
 }
 
-const LIB_MOVED: MovedDependency = {
-  key: "lib@mp",
-  name: "lib",
-  marketplace: "mp",
-  row: row("lib@mp", "updated"),
+const LIB = lib([{ key: "app@mp", ranges: ["^2.0.0"] }]);
+const LIB_MOVE: PlannedDependencyMove = { request: LIB, version: "2.0.0" };
+const HELPER: PlannedCascadeMember = {
+  kind: "install",
+  member: { key: "helper@mp", name: "helper", marketplace: "mp", requiredBy: "app@mp", ranges: [] },
 };
-
 const SUBJECT: CascadeFailureSubject = {
-  kind: "constraint",
-  failure: { kind: "no-matching-tag", key: "base@mp", range: "^3.0.0" },
+  kind: "member",
+  key: "helper@mp",
+  error: new Error("helper broke"),
+  rollbackPartials: [],
 };
 
-const REFUSAL_ROW: UpdateDependencyRow = {
-  status: "failed",
-  name: "base@mp",
-  reasons: ["no matching version"],
-  severity: "error",
-};
-
-/** Ports whose every step is a recorded stub; each case overrides the steps it is about. */
-function ports(overrides: Partial<DependencySettlePorts>): DependencySettlePorts & {
-  readonly calls: string[];
-} {
-  const calls: string[] = [];
-  const record =
-    <A extends unknown[], R>(name: string, step: ((...args: A) => R) | undefined) =>
-    (...args: A): R => {
-      calls.push(name);
-      return step === undefined ? assert.fail(`the settle does not ${name}`) : step(...args);
-    };
-
+function installedRow(name: string): UpdateDependencyRow {
   return {
-    calls,
-    firstRun: record("run first", overrides.firstRun),
-    secondRun: record("run second", overrides.secondRun),
-    plan: record("plan", overrides.plan),
-    runMoves: record("move", overrides.runMoves),
-    refusal: record(
-      "refuse",
-      overrides.refusal ?? (() => ({ rows: [REFUSAL_ROW], cause: new Error("refused") })),
-    ),
-    collectClones: record("collect clones", overrides.collectClones),
+    status: "installed",
+    name,
+    dependencies: [],
+    version: "1.0.0",
+    severity: "info",
+    needsReload: true,
   };
 }
 
-describe("settleDependencies", () => {
-  test("settles in one run when nothing must move", async () => {
+function updatedRow(name: string): UpdateDependencyRow {
+  return {
+    status: "updated",
+    name,
+    from: "1.0.0",
+    to: "2.0.0",
+    dependencies: [],
+    severity: "info",
+    needsReload: true,
+  };
+}
+
+function failedRow(name: string, cause: Error): UpdateDependencyRow {
+  return { status: "failed", name, version: "1.0.0", reasons: [], cause, severity: "error" };
+}
+
+function moved(row: UpdateDependencyRow): MovedDependency {
+  const [name = "", marketplace = ""] = row.name.split("@");
+  return { key: row.name, name, marketplace, row };
+}
+
+const REFUSAL_CAUSE = new DependencyCascadeError("helper broke", "helper@mp");
+const LIB_DID_NOT_MOVE = new DependencyCascadeError(
+  'Dependency "lib@mp" did not move into ^2.0.0.',
+  "lib@mp",
+);
+
+/** Step ports that record each call and answer from the given doubles. */
+function stepPorts(doubles: {
+  readonly materialize?: (members: readonly PlannedCascadeMember[]) => Promise<SettleCascadeRun>;
+  readonly move?: DependencyStepPorts["move"];
+}): DependencyStepPorts & { readonly calls: string[] } {
+  const calls: string[] = [];
+  return {
+    calls,
+    materialize: (members) => {
+      calls.push(`materialize ${members.map((entry) => entry.member.key).join()}`);
+      return (
+        doubles.materialize?.(members) ??
+        Promise.resolve({
+          kind: "installed",
+          rows: members.map((entry) => installedRow(entry.member.key)),
+        })
+      );
+    },
+    move: (move) => {
+      calls.push(`move ${move.request.key} ${move.version}`);
+      return (
+        doubles.move?.(move) ??
+        Promise.resolve({ landed: true, rows: [updatedRow(move.request.key)] })
+      );
+    },
+    refusal: (subject) => {
+      calls.push(`refusal ${subject.kind}`);
+      return { rows: [failedRow("helper@mp", REFUSAL_CAUSE)], cause: REFUSAL_CAUSE };
+    },
+  };
+}
+
+const STEPS: readonly DependencyPlanStep[] = [
+  { kind: "materialize", members: [HELPER] },
+  { kind: "move", move: LIB_MOVE },
+];
+
+describe("runDependencySteps", () => {
+  test("UPD-DEP-D1: runs every step in order and lists each change that landed", async () => {
     // arrange
-    const bound = ports({
-      firstRun: () => Promise.resolve({ kind: "installed", rows: [row("zcore@mp")] }),
-    });
+    const ports = stepPorts({});
 
     // act
-    const settlement = await settleDependencies(bound);
+    const ran = await runDependencySteps(STEPS, ports);
 
     // assert
-    assert.deepStrictEqual(settlement, { kind: "settled", rows: [row("zcore@mp")] });
-    assert.deepStrictEqual(bound.calls, ["run first"]);
+    assert.deepStrictEqual(ran, {
+      ok: true,
+      landed: [moved(installedRow("helper@mp")), moved(updatedRow("lib@mp"))],
+    });
+    assert.deepStrictEqual(ports.calls, ["materialize helper@mp", "move lib@mp 2.0.0"]);
   });
 
-  test("refuses a first run that fails with the dependency's row", async () => {
+  test("UPD-DEP-D1: a move that does not land stops the rest and lists the changes that landed", async () => {
     // arrange
-    const bound = ports({ firstRun: () => Promise.resolve({ kind: "refused", subject: SUBJECT }) });
+    const kept = failedRow("lib@mp", new Error("version 1.5.0 is not version 2.0.0"));
+    const ports = stepPorts({ move: () => Promise.resolve({ landed: false, rows: [kept] }) });
 
     // act
-    const settlement = await settleDependencies(bound);
-
-    // assert
-    assert.deepStrictEqual(settlement, {
-      kind: "refused",
-      rows: [REFUSAL_ROW],
-      cause: new Error("refused"),
-    });
-    assert.deepStrictEqual(bound.calls, ["run first", "refuse"]);
-  });
-
-  test("refuses a plan, collects its clones, and moves nothing", async () => {
-    // arrange
-    const bound = ports({
-      firstRun: () => Promise.resolve(PLANNED),
-      plan: () => Promise.resolve({ ok: false, subject: SUBJECT }),
-      collectClones: () => Promise.resolve(),
-    });
-
-    // act
-    const settlement = await settleDependencies(bound);
-
-    // assert
-    assert.strictEqual(settlement.kind, "refused");
-    assert.deepStrictEqual(bound.calls, ["run first", "plan", "collect clones", "refuse"]);
-  });
-
-  test("refuses when a move does not land, collects the plan's clones, and reports every move attempted", async () => {
-    // arrange
-    const bound = ports({
-      firstRun: () => Promise.resolve(PLANNED),
-      plan: () => Promise.resolve({ ok: true, moves: [LIB_MOVE] }),
-      runMoves: () => Promise.resolve({ ok: false, moved: [LIB_MOVED], request: LIB }),
-      collectClones: () => Promise.resolve(),
-    });
-
-    // act
-    const settlement = await settleDependencies(bound);
-
-    // assert
-    assert.deepStrictEqual(settlement, {
-      kind: "refused",
-      rows: [LIB_MOVED.row],
-      cause: failedMoveError(LIB),
-    });
-    assert.deepStrictEqual(bound.calls, ["run first", "plan", "move", "collect clones"]);
-  });
-
-  test("moves first, then settles the closure again and reports the moves before its rows", async () => {
-    // arrange
-    const bound = ports({
-      firstRun: () => Promise.resolve(PLANNED),
-      plan: () => Promise.resolve({ ok: true, moves: [LIB_MOVE] }),
-      runMoves: (moves) => {
-        assert.deepStrictEqual(moves, [LIB_MOVE]);
-        return Promise.resolve({ ok: true, moved: [LIB_MOVED] });
-      },
-      secondRun: () => Promise.resolve({ kind: "installed", rows: [row("zcore@mp")] }),
-    });
-
-    // act
-    const settlement = await settleDependencies(bound);
-
-    // assert
-    assert.deepStrictEqual(settlement, {
-      kind: "settled",
-      rows: [LIB_MOVED.row, row("zcore@mp")],
-    });
-    assert.deepStrictEqual(bound.calls, ["run first", "plan", "move", "run second"]);
-  });
-
-  test("refuses a second run that fails, keeping the moves' rows first", async () => {
-    // arrange
-    const bound = ports({
-      firstRun: () => Promise.resolve(PLANNED),
-      plan: () => Promise.resolve({ ok: true, moves: [LIB_MOVE] }),
-      runMoves: () => Promise.resolve({ ok: true, moved: [LIB_MOVED] }),
-      secondRun: () => Promise.resolve({ kind: "refused", subject: SUBJECT }),
-    });
-
-    // act
-    const settlement = await settleDependencies(bound);
-
-    // assert
-    assert.deepStrictEqual(settlement, {
-      kind: "refused",
-      rows: [LIB_MOVED.row, REFUSAL_ROW],
-      cause: new Error("refused"),
-    });
-  });
-});
-
-describe("settleWithoutMoves", () => {
-  test("settles with the one run's rows and moves nothing", async () => {
-    // arrange
-    const bound = ports({
-      secondRun: () => Promise.resolve({ kind: "installed", rows: [row("zcore@mp")] }),
-    });
-
-    // act
-    const settlement = await settleWithoutMoves(bound);
-
-    // assert
-    assert.deepStrictEqual(settlement, { kind: "settled", rows: [row("zcore@mp")] });
-    assert.deepStrictEqual(bound.calls, ["run second"]);
-  });
-
-  test("refuses with the failing dependency's row when the run fails", async () => {
-    // arrange
-    const bound = ports({
-      secondRun: () => Promise.resolve({ kind: "refused", subject: SUBJECT }),
-    });
-
-    // act
-    const settlement = await settleWithoutMoves(bound);
-
-    // assert
-    assert.deepStrictEqual(settlement, {
-      kind: "refused",
-      rows: [REFUSAL_ROW],
-      cause: new Error("refused"),
-    });
-    assert.deepStrictEqual(bound.calls, ["run second", "refuse"]);
-  });
-});
-
-describe("failedMoveError", () => {
-  test("names the dependency and every range it did not move into", () => {
-    // act
-    const error = failedMoveError({
-      ...LIB,
-      requesters: [...LIB.requesters, { key: "aaa@mp", ranges: [">=2.1.0"] }],
-    });
-
-    // assert
-    assert.ok(error instanceof DependencyCascadeError);
-    assert.deepStrictEqual(
-      [error.message, error.key],
-      ['Dependency "lib@mp" did not move into ^2.0.0, >=2.1.0.', "lib@mp"],
+    const ran = await runDependencySteps(
+      [...STEPS, { kind: "materialize", members: [HELPER] }],
+      ports,
     );
+
+    // assert
+    assert.deepStrictEqual(ran, {
+      ok: false,
+      landed: [moved(installedRow("helper@mp")), moved(kept)],
+      cause: LIB_DID_NOT_MOVE,
+    });
+    assert.deepStrictEqual(ports.calls, ["materialize helper@mp", "move lib@mp 2.0.0"]);
+  });
+
+  test("IN-N2: a move that does not land names each range it did not move into once", async () => {
+    // arrange
+    const ports = stepPorts({ move: () => Promise.resolve({ landed: false, rows: [] }) });
+    const request = lib([
+      { key: "aaa@mp", ranges: ["^2.0.0"] },
+      { key: "app@mp", ranges: ["^2.0.0"] },
+    ]);
+
+    // act
+    const ran = await runDependencySteps(
+      [{ kind: "move", move: { request, version: "2.0.0" } }],
+      ports,
+    );
+
+    // assert
+    assert.deepStrictEqual(ran, { ok: false, landed: [], cause: LIB_DID_NOT_MOVE });
+  });
+
+  test("UPD-DEP-D1: a closure slice the cascade refuses stops the rest with the refusal's row", async () => {
+    // arrange
+    const ports = stepPorts({
+      materialize: () => Promise.resolve({ kind: "refused", subject: SUBJECT }),
+    });
+
+    // act
+    const ran = await runDependencySteps(STEPS, ports);
+
+    // assert
+    assert.deepStrictEqual(ran, {
+      ok: false,
+      landed: [moved(failedRow("helper@mp", REFUSAL_CAUSE))],
+      cause: REFUSAL_CAUSE,
+    });
+    assert.deepStrictEqual(ports.calls, ["materialize helper@mp", "refusal member"]);
+  });
+
+  test("UPD-DEP-D1: a move that throws fails as a move that did not land, its row carrying what it threw with paths redacted", async () => {
+    // arrange
+    const thrown = new Error("EACCES: permission denied, copyfile '/home/u/.pi/x/notes.md'");
+    const ports = stepPorts({ move: () => Promise.reject(thrown) });
+
+    // act
+    const ran = await runDependencySteps(STEPS, ports);
+
+    // assert
+    assert.ok(!ran.ok);
+    assert.deepStrictEqual(ran.cause, LIB_DID_NOT_MOVE);
+    assert.deepStrictEqual(
+      ran.landed.map((entry) => [
+        entry.key,
+        entry.row.status,
+        entry.row.status === "failed" ? entry.row.cause?.message : undefined,
+      ]),
+      [
+        ["helper@mp", "installed", undefined],
+        ["lib@mp", "failed", "EACCES: permission denied, copyfile 'notes.md'"],
+      ],
+    );
+  });
+
+  test("UPD-DEP-D1: a closure slice that throws fails with what it threw", async () => {
+    // arrange
+    const thrown = new Error("state lock held");
+    const ports = stepPorts({ materialize: () => Promise.reject(thrown) });
+
+    // act
+    const ran = await runDependencySteps(STEPS, ports);
+
+    // assert
+    assert.deepStrictEqual(ran, { ok: false, landed: [], cause: thrown });
+    assert.deepStrictEqual(ports.calls, ["materialize helper@mp"]);
+  });
+
+  test("GHB-03: an invalid GitHub base override before any change landed fails the command", async () => {
+    // arrange
+    const invalid = new InvalidGitHubBaseUrlError(
+      "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+      "scheme",
+    );
+    const ports = stepPorts({ move: () => Promise.reject(invalid) });
+
+    // act & assert
+    await assert.rejects(runDependencySteps([{ kind: "move", move: LIB_MOVE }], ports), invalid);
+  });
+
+  test("GHB-03: an invalid GitHub base override after a change landed is the move's failure", async () => {
+    // arrange
+    const invalid = new InvalidGitHubBaseUrlError(
+      "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+      "scheme",
+    );
+    const ports = stepPorts({ move: () => Promise.reject(invalid) });
+
+    // act
+    const ran = await runDependencySteps(STEPS, ports);
+
+    // assert
+    assert.ok(!ran.ok);
+    assert.deepStrictEqual(ran.cause, LIB_DID_NOT_MOVE);
+    assert.deepStrictEqual(
+      ran.landed.map((entry) => [entry.key, entry.row.status]),
+      [
+        ["helper@mp", "installed"],
+        ["lib@mp", "failed"],
+      ],
+    );
+  });
+});
+
+/** Settle ports over `steps`, recording the order of every port call. */
+function settlePorts(doubles: {
+  readonly firstRun: DependencySettlePorts["firstRun"];
+  readonly plan?: DependencySettlePorts["plan"];
+  readonly steps?: DependencyStepPorts & { readonly calls: string[] };
+}): DependencySettlePorts & { readonly calls: string[] } {
+  const steps = doubles.steps ?? stepPorts({});
+  const calls = steps.calls;
+  return {
+    calls,
+    firstRun: () => {
+      calls.push("first run");
+      return doubles.firstRun();
+    },
+    plan: () => {
+      calls.push("plan");
+      return doubles.plan?.() ?? Promise.reject(new Error("no plan scripted"));
+    },
+    steps,
+    planSweep: () => {
+      calls.push("list clones");
+      return Promise.resolve(() => {
+        calls.push("sweep");
+        return Promise.resolve();
+      });
+    },
+  };
+}
+
+const PLAN: DependencyPlan = {
+  ok: true,
+  steps: [{ kind: "move", move: LIB_MOVE }],
+  final: { members: [HELPER], alreadyInstalled: [] },
+};
+
+describe("settleDependencies", () => {
+  test("UPD-DEP-D1: a closure with nothing out of range settles in its first run, with no plan", async () => {
+    // arrange
+    const ports = settlePorts({
+      firstRun: () => Promise.resolve({ kind: "installed", rows: [installedRow("zcore@mp")] }),
+    });
+
+    // act
+    const settled = await settleDependencies(ports);
+
+    // assert
+    assert.deepStrictEqual(settled, { kind: "settled", rows: [installedRow("zcore@mp")] });
+    assert.deepStrictEqual(ports.calls, ["first run"]);
+  });
+
+  test("UPD-DEP-D1: a first run the cascade refuses refuses the settle with the failing row", async () => {
+    // arrange
+    const ports = settlePorts({
+      firstRun: () => Promise.resolve({ kind: "refused", subject: SUBJECT }),
+    });
+
+    // act
+    const settled = await settleDependencies(ports);
+
+    // assert
+    assert.deepStrictEqual(settled, {
+      kind: "refused",
+      rows: [failedRow("helper@mp", REFUSAL_CAUSE)],
+      cause: REFUSAL_CAUSE,
+    });
+    assert.deepStrictEqual(ports.calls, ["first run", "refusal member"]);
+  });
+
+  test("UPD-DEP-D1: a planned settle runs the plan's steps, then its final closure, then sweeps", async () => {
+    // arrange
+    const ports = settlePorts({
+      firstRun: () => Promise.resolve({ kind: "planned" }),
+      plan: () => Promise.resolve(PLAN),
+    });
+
+    // act
+    const settled = await settleDependencies(ports);
+
+    // assert
+    assert.deepStrictEqual(settled, {
+      kind: "settled",
+      rows: [updatedRow("lib@mp"), installedRow("helper@mp")],
+    });
+    assert.deepStrictEqual(ports.calls, [
+      "first run",
+      "list clones",
+      "plan",
+      "move lib@mp 2.0.0",
+      "materialize helper@mp",
+      "sweep",
+    ]);
+  });
+
+  test("UPD-DEP-D1: a plan with an empty final closure materializes nothing after its steps", async () => {
+    // arrange
+    const ports = settlePorts({
+      firstRun: () => Promise.resolve({ kind: "planned" }),
+      plan: () => Promise.resolve({ ...PLAN, final: { members: [], alreadyInstalled: [] } }),
+    });
+
+    // act
+    const settled = await settleDependencies(ports);
+
+    // assert
+    assert.deepStrictEqual(settled, { kind: "settled", rows: [updatedRow("lib@mp")] });
+    assert.deepStrictEqual(ports.calls, [
+      "first run",
+      "list clones",
+      "plan",
+      "move lib@mp 2.0.0",
+      "sweep",
+    ]);
+  });
+
+  test("UPD-DEP-D1: a refused plan changes nothing, refuses with the failing row, and sweeps", async () => {
+    // arrange
+    const ports = settlePorts({
+      firstRun: () => Promise.resolve({ kind: "planned" }),
+      plan: () => Promise.resolve({ ok: false, subject: SUBJECT }),
+    });
+
+    // act
+    const settled = await settleDependencies(ports);
+
+    // assert
+    assert.deepStrictEqual(settled, {
+      kind: "refused",
+      rows: [failedRow("helper@mp", REFUSAL_CAUSE)],
+      cause: REFUSAL_CAUSE,
+    });
+    assert.deepStrictEqual(ports.calls, [
+      "first run",
+      "list clones",
+      "plan",
+      "refusal member",
+      "sweep",
+    ]);
+  });
+
+  test("UPD-DEP-D1: a step that fails refuses the settle with every change that landed, and sweeps", async () => {
+    // arrange
+    const kept = failedRow("lib@mp", new Error("did not land"));
+    const ports = settlePorts({
+      firstRun: () => Promise.resolve({ kind: "planned" }),
+      plan: () => Promise.resolve(PLAN),
+      steps: stepPorts({ move: () => Promise.resolve({ landed: false, rows: [kept] }) }),
+    });
+
+    // act
+    const settled = await settleDependencies(ports);
+
+    // assert
+    assert.deepStrictEqual(settled, { kind: "refused", rows: [kept], cause: LIB_DID_NOT_MOVE });
+    assert.deepStrictEqual(ports.calls, [
+      "first run",
+      "list clones",
+      "plan",
+      "move lib@mp 2.0.0",
+      "sweep",
+    ]);
+  });
+
+  test("UPD-DEP-D1 / CR-N2: a plan that throws refuses the settle with what it threw, and sweeps", async () => {
+    // arrange
+    const thrown = new Error("marketplace.json is not valid JSON");
+    const ports = settlePorts({
+      firstRun: () => Promise.resolve({ kind: "planned" }),
+      plan: () => Promise.reject(thrown),
+    });
+
+    // act
+    const settled = await settleDependencies(ports);
+
+    // assert
+    assert.deepStrictEqual(settled, { kind: "refused", rows: [], cause: thrown });
+    assert.deepStrictEqual(ports.calls, ["first run", "list clones", "plan", "sweep"]);
+  });
+
+  test("GHB-03: a plan that meets an invalid GitHub base override fails the command, and sweeps", async () => {
+    // arrange
+    const invalid = new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "query");
+    const ports = settlePorts({
+      firstRun: () => Promise.resolve({ kind: "planned" }),
+      plan: () => Promise.reject(invalid),
+    });
+
+    // act & assert
+    await assert.rejects(settleDependencies(ports), invalid);
+    assert.deepStrictEqual(ports.calls, ["first run", "list clones", "plan", "sweep"]);
   });
 });

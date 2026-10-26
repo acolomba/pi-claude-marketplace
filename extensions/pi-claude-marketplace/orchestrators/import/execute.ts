@@ -79,7 +79,11 @@ import type {
 } from "../../orchestrators/plugin/enable-disable.ts";
 import type { InstallHooksRouting } from "../../orchestrators/plugin/install-disable-cascade.ts";
 import type { ReconcilePlan } from "../../orchestrators/reconcile/types.ts";
-import type { InstallPluginOutcome } from "../../orchestrators/types.ts";
+import type {
+  InstallPluginOutcome,
+  MovedDependency,
+  UpdateDependencyRow,
+} from "../../orchestrators/types.ts";
 import type { MergedConfig } from "../../persistence/config-merge.ts";
 import type { ExtensionContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -236,6 +240,17 @@ export interface UnexpectedPluginFailureOutcome {
   readonly causeChain?: Error;
 }
 
+/**
+ * UPD-DEP-D1 / WR-N5: a dependency an install changed for the plugin it
+ * named -- installed, enabled, moved, or the one that failed -- reported
+ * under that plugin's marketplace by its full key, as `install` reports it.
+ */
+interface DependencyChangeOutcome {
+  readonly scope: Scope;
+  readonly marketplace: string;
+  readonly row: UpdateDependencyRow;
+}
+
 // Public readonly result shape. Internal mutation uses MutableImportResult.
 export interface ClaudeImportExecutionResult {
   readonly addedMarketplaces: readonly MarketplaceAddedOutcome[];
@@ -262,6 +277,11 @@ interface MutableImportResult {
   unexpectedPluginFailures: UnexpectedPluginFailureOutcome[];
   diagnostics: ImportDiagnostic[];
   changedResources: boolean;
+  /**
+   * WR-N5: the dependency changes the installs reported, in install order.
+   * The cascade shows them, and the returned result leaves them off.
+   */
+  dependencyChanges: DependencyChangeOutcome[];
   /**
    * AFILE-04: the MCP config notices the installs returned, in install order.
    * `importClaudeSettings` shows them after the cascade and leaves them off
@@ -312,6 +332,7 @@ function emptyResult(): MutableImportResult {
     sourceMismatches: [],
     unexpectedPluginFailures: [],
     diagnostics: [],
+    dependencyChanges: [],
     changedResources: false,
     mcpConfigNotices: [],
   };
@@ -638,6 +659,7 @@ function marketplaceFailureReasons(
  */
 function buildImportNotificationMarketplaces(
   result: ClaudeImportExecutionResult,
+  dependencyChanges: readonly DependencyChangeOutcome[],
 ): Plural<MarketplaceRows<ImportMsg>> {
   const byMp = new Map<string, MarketplaceBlock>();
   const rowsByMp = new Map<string, ImportMsg[]>();
@@ -712,6 +734,12 @@ function buildImportNotificationMarketplaces(
       needsReload: false,
     };
     pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, row);
+  }
+
+  // UPD-DEP-D1 / WR-N5: the dependencies each install changed, after the
+  // plugins' own rows.
+  for (const o of dependencyChanges) {
+    pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, o.row);
   }
 
   for (const o of result.warnings) {
@@ -1025,6 +1053,7 @@ async function installOnePlannedPlugin(
   // AFILE-04: both arms carry notices; a failed install can still have
   // rewritten the MCP config through a dependency that committed first.
   result.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
+  pushDependencyChanges(result, plugin, outcome.movedDependencies ?? []);
 
   // CR-01: a third `InstallPluginOutcome` arm must become a compile error here,
   // not get counted as a successful install in the cascade totals. The
@@ -1067,6 +1096,26 @@ async function installOnePlannedPlugin(
       }
 
       return "installed";
+  }
+}
+
+/**
+ * UPD-DEP-D1 / WR-N5: every dependency change an install reported, success
+ * or failure, as a row beside the plugin's own. A change that landed changed
+ * resources, as the plugin's own install does.
+ */
+function pushDependencyChanges(
+  result: MutableImportResult,
+  plugin: PlannedPlugin,
+  moved: readonly MovedDependency[],
+): void {
+  for (const entry of moved) {
+    result.dependencyChanges.push({
+      scope: plugin.scope,
+      marketplace: plugin.ref.marketplace,
+      row: entry.row,
+    });
+    result.changedResources ||= entry.row.status !== "failed";
   }
 }
 
@@ -1992,13 +2041,15 @@ export async function importClaudeSettings(
   // marketplaces) -> Plural row cardinality. D-02: thread IMPORT_CONTEXT + the
   // rows through notifyWithContext, so import's rows resolve through its own
   // row policies (MOD-03).
-  const marketplaces: Plural<MarketplaceRows<ImportMsg>> =
-    buildImportNotificationMarketplaces(result);
+  const { mcpConfigNotices, dependencyChanges, ...executionResult } = result;
+  const marketplaces: Plural<MarketplaceRows<ImportMsg>> = buildImportNotificationMarketplaces(
+    executionResult,
+    dependencyChanges,
+  );
   // OUT-04 / D-04: import is a plural (bulk) operation -> emit the trailing
   // per-operation tally under the `Import` label.
   notifyWithContext(opts.ctx, opts.run, IMPORT_CONTEXT, marketplaces, undefined, "plural");
   surfaceImportDiagnostics(opts.ctx, opts.run, result.diagnostics);
-  const { mcpConfigNotices, ...executionResult } = result;
   notifyMcpConfigNotices(opts.ctx, opts.run, mcpConfigNotices);
 
   return executionResult;

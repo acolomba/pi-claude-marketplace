@@ -926,7 +926,7 @@ test("D-12 / DLS-D1: a held dependent is judged by its catalog and installed cop
     holds: [
       toolsHold(
         "core",
-        'the declared ranges admit no version in common (^2.0.0, ^1.0.0) -- required by "widget@tools", "widget@tools"',
+        'the declared ranges admit no version in common (^2.0.0, ^1.0.0) -- required by "widget@tools"',
       ),
       WIDGET_HOLD,
     ],

@@ -285,6 +285,43 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
       },
     },
 
+    // UPD-DEP-D1 / WR-N5: the dependency an install moved first reports its
+    // own row after the plugin's, by its full key.
+    "import-dependency-moved": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Import",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            status: "skipped",
+            reasons: ["already added"],
+            plugins: [
+              {
+                status: "installed",
+                version: "1.0.0",
+                name: "app",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "updated",
+                name: "lib@mp",
+                from: "1.0.0",
+                to: "2.0.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     "repeat-import-skips": {
       pi: piWithBothLoaded(),
       message: {

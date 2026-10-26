@@ -100,6 +100,7 @@ import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
+import { DependencyCascadeError } from "../../shared/errors.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
 import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
@@ -308,24 +309,20 @@ type CascadePhaseMember =
     };
 
 /**
- * UPD-DEP-D1 / RESV-05: a recorded dependency whose version falls outside the
- * range the closure asks for. A caller that may move it judges and makes the
- * move through `update`'s own path, then runs the cascade again.
+ * UPD-DEP-D1: one closure member a dependency plan decided, as the cascade
+ * that carries the plan out materializes it.
  */
-export interface OutOfRangeMember {
-  readonly key: string;
-  readonly name: string;
-  readonly marketplace: string;
-  /**
-   * The plugin being installed or updated: its closure asks for `ranges`, so a
-   * move names it as the plugin that holds the dependency.
-   */
-  readonly requiredBy: string;
-  /** Every range the closure declared for the member. */
-  readonly ranges: readonly string[];
-  /** `ranges` as a row renders them. */
-  readonly range: string;
-  readonly recordedVersion: string;
+export type PlannedCascadeMember =
+  | { readonly kind: "install"; readonly member: ResolvedCascadeMember }
+  | { readonly kind: "re-enable"; readonly member: ClosureMember };
+
+/**
+ * UPD-DEP-D1: what a cascade carrying out a dependency plan materializes, in
+ * order, and the recorded members its rows report as left alone.
+ */
+export interface PlannedClosure {
+  readonly members: readonly PlannedCascadeMember[];
+  readonly alreadyInstalled: readonly ClosureMember[];
 }
 
 /** Every member decided, in the walk's post order, or the first failure one produced. */
@@ -333,7 +330,7 @@ type MemberConstraintResolution =
   | {
       readonly ok: true;
       readonly members: readonly CascadePhaseMember[];
-      readonly outOfRange: readonly OutOfRangeMember[];
+      readonly outOfRange: boolean;
     }
   | { readonly ok: false; readonly failure: CascadeConstraintFailure };
 
@@ -353,9 +350,12 @@ interface MemberConstraintOptions {
   readonly moveOutOfRange?: true;
   /**
    * Every member the walk returned, in post order. A member the snapshot
-   * records DISABLED re-enables through that record; the rest install fresh.
+   * records DISABLED re-enables through that record; one in `readThrough`
+   * is a recorded member a plan moves; the rest install fresh.
    */
   readonly closure: readonly ClosureMember[];
+  /** UPD-DEP-D1: the recorded ENABLED keys a dependency plan moves. */
+  readonly readThrough: ReadonlySet<string>;
   /**
    * The members RESV-05 skipped -- recorded and ENABLED -- which are CHECKED
    * and never installed.
@@ -496,6 +496,17 @@ export interface InstallCascadeOptions {
    */
   readonly treatDisabledAsWall?: true;
   /**
+   * UPD-DEP-D1: recorded ENABLED keys a dependency plan moves. The walk reads
+   * through each one, from the declarations of the version its move lands
+   * (the caller's `lookup` answers them), and none becomes a phase.
+   */
+  readonly readThrough?: ReadonlySet<string>;
+  /**
+   * UPD-DEP-D1: the members a dependency plan decided. The cascade
+   * materializes exactly these, in this order, and walks nothing.
+   */
+  readonly planned?: PlannedClosure;
+  /**
    * D-10-18: one operation's tag listing memos, so the plan and the cascade
    * that executes it list a source once. Absent, each run allocates its own.
    */
@@ -551,16 +562,11 @@ export type InstallCascadeResult =
     }
   | {
       /**
-       * UPD-DEP-D1: nothing materialized. `outOfRange` must move first, and
-       * `freshMembers` (the root aside) would install. `recordedMembers` is
-       * every recorded member the closure reached, with the ranges it declared
-       * for each, so a plan can check a version another move lands against
-       * them and order the moves.
+       * UPD-DEP-D1: nothing materialized, because a recorded member falls
+       * outside its range. The caller plans the whole operation before it
+       * writes anything (`dependency-plan.ts`).
        */
       readonly kind: "planned";
-      readonly freshMembers: readonly ResolvedCascadeMember[];
-      readonly outOfRange: readonly OutOfRangeMember[];
-      readonly recordedMembers: readonly RecordedCascadeMember[];
     }
   | { readonly kind: "marketplace-absent" }
   | {
@@ -582,10 +588,55 @@ export type InstallCascadeResult =
       readonly mcpConfigNotices: readonly McpConfigNotice[];
     };
 
-/** UPD-DEP-D1: a recorded closure member and every range the closure declared for it. */
-export interface RecordedCascadeMember {
+/** UPD-DEP-D1: one plugin that declares a graph node, and the ranges it declares for it. */
+export interface GraphRequester {
   readonly key: string;
   readonly ranges: readonly string[];
+}
+
+/**
+ * UPD-DEP-D1: a plugin of a dependency graph that is not installed yet. It
+ * installs with the pin its combined range chose.
+ */
+export interface FreshGraphNode {
+  readonly kind: "fresh";
+  readonly member: ResolvedCascadeMember;
+  /** Every plugin of the graph that declares this one, in walk order. */
+  readonly requesters: readonly GraphRequester[];
+  /** The keys this node's declarations name. */
+  readonly dependsOn: readonly string[];
+}
+
+/**
+ * UPD-DEP-D1: a plugin of a dependency graph the scope records. The walk read
+ * through it when it is disabled or moving (`walked`), and stopped at it
+ * otherwise.
+ */
+export interface RecordedGraphNode {
+  readonly kind: "recorded";
+  readonly member: ClosureMember;
+  readonly requesters: readonly GraphRequester[];
+  /** The keys this node's declarations name; empty when the walk stopped at it. */
+  readonly dependsOn: readonly string[];
+  readonly version: string | undefined;
+  readonly disabled: boolean;
+  readonly walked: boolean;
+}
+
+/** UPD-DEP-D1: one plugin of a dependency graph below its root. */
+export type DependencyGraphNode = FreshGraphNode | RecordedGraphNode;
+
+/**
+ * UPD-DEP-D1: one write-free walk of a whole dependency graph. `nodes` lists
+ * the recorded plugins the walk stopped at first, then the rest in post
+ * order, dependencies first. `root` is the root as it would install; a
+ * recorded root (an update) has none.
+ */
+export interface DependencyGraph {
+  readonly kind: "graph";
+  readonly root: ResolvedCascadeMember | undefined;
+  readonly rootDependsOn: readonly string[];
+  readonly nodes: readonly DependencyGraphNode[];
 }
 
 /** The arms a cascade reaches when its closure or a constraint fails, before any write. */
@@ -968,21 +1019,23 @@ function checkInstalledMember(
 }
 
 /**
- * RESV-05 over every recorded member -- the enabled ones the walk skipped and
- * the disabled ones it walked -- none of which needs a query. UPD-DEP-D1: with
- * `moveOutOfRange`, a member whose recorded version the range rejects is
- * collected for a move instead of failing the cascade; every other failure
- * still fails it.
+ * RESV-05 over every recorded member -- the enabled ones the walk skipped,
+ * the disabled ones it walked, and the ones a plan moves -- none of which
+ * needs a query. UPD-DEP-D1: with `moveOutOfRange`, a member whose recorded
+ * version the range rejects is noted for a move instead of failing the
+ * cascade; every other failure still fails it.
  */
 function checkRecordedMembers(options: MemberConstraintOptions): {
   readonly failure?: CascadeConstraintFailure;
-  readonly outOfRange: readonly OutOfRangeMember[];
+  readonly outOfRange: boolean;
 } {
-  const disabled = options.closure.filter(
-    (member) => disabledRecordOf(options.state, options.rootKey, member) !== undefined,
+  const walked = options.closure.filter(
+    (member) =>
+      disabledRecordOf(options.state, options.rootKey, member) !== undefined ||
+      options.readThrough.has(member.key),
   );
-  const outOfRange: OutOfRangeMember[] = [];
-  for (const member of [...options.alreadyInstalled, ...disabled]) {
+  let outOfRange = false;
+  for (const member of [...options.alreadyInstalled, ...walked]) {
     const failure = checkInstalledMember(options.state, member);
     if (failure === undefined) {
       continue;
@@ -996,15 +1049,7 @@ function checkRecordedMembers(options: MemberConstraintOptions): {
       return { failure, outOfRange };
     }
 
-    outOfRange.push({
-      key: member.key,
-      name: member.name,
-      marketplace: member.marketplace,
-      requiredBy: options.rootKey,
-      ranges: member.ranges,
-      range: failure.range,
-      recordedVersion: failure.recordedVersion,
-    });
+    outOfRange = true;
   }
 
   return { outOfRange };
@@ -1033,6 +1078,12 @@ async function resolveMemberConstraints(
     const record = disabledRecordOf(options.state, options.rootKey, member);
     if (record !== undefined) {
       members.push({ kind: "re-enable", member, record });
+      continue;
+    }
+
+    // UPD-DEP-D1: a recorded member a plan moves is neither a phase nor a
+    // fresh install; the plan decides its version.
+    if (options.readThrough.has(member.key)) {
       continue;
     }
 
@@ -1359,35 +1410,74 @@ function dependencyCascadeResult(
 /** The closure walked and every member's constraint decided, nothing materialized. */
 interface ResolvedCascade {
   readonly kind: "resolved";
+  /** The walk's post order, the members a plan moves included. */
+  readonly closure: readonly ClosureMember[];
   readonly alreadyInstalled: readonly ClosureMember[];
   readonly members: readonly CascadePhaseMember[];
-  readonly outOfRange: readonly OutOfRangeMember[];
+  /** UPD-DEP-D1: whether a recorded member falls outside its range. */
+  readonly outOfRange: boolean;
+}
+
+/**
+ * UPD-DEP-D1: the closure a dependency plan decided, taken as it stands. A
+ * member the plan re-enables must still be recorded disabled; a scope another
+ * process changed since the plan refuses the run.
+ */
+function plannedCascade(options: InstallCascadeOptions, planned: PlannedClosure): ResolvedCascade {
+  const members = planned.members.map((entry): CascadePhaseMember => {
+    if (entry.kind === "install") {
+      return entry;
+    }
+
+    const record = disabledRecordOf(options.state, options.rootKey, entry.member);
+    if (record === undefined) {
+      throw new DependencyCascadeError(
+        `Dependency "${entry.member.key}" changed since the dependency plan read it; run the command again.`,
+        entry.member.key,
+      );
+    }
+
+    return { kind: "re-enable", member: entry.member, record };
+  });
+  return {
+    kind: "resolved",
+    closure: planned.members.map((entry) => entry.member),
+    alreadyInstalled: planned.alreadyInstalled,
+    members,
+    outOfRange: false,
+  };
 }
 
 /**
  * Walks the requested plugin's dependency closure and decides every member's
  * constraint, with no write. With `moveOutOfRange` (UPD-DEP-D1 / RESV-05), a
- * recorded member whose version the range rejects is collected for a move
- * instead of failing the cascade.
+ * recorded member whose version the range rejects is noted for a move
+ * instead of failing the cascade. A cascade carrying out a plan walks nothing.
  */
 async function resolveCascade(
   options: InstallCascadeOptions,
   moveOutOfRange: boolean,
 ): Promise<ResolvedCascade | CascadeResolutionFailure> {
+  if (options.planned !== undefined) {
+    return plannedCascade(options, options.planned);
+  }
+
+  const readThrough = options.readThrough ?? new Set<string>();
   // EDEP-03: a disabled record is not a wall by default. The walk reads
   // through it, so its own dependencies -- disabled or never installed -- are
   // members of this closure with their ranges merged across every declaring
   // branch, and a declaration it cannot resolve fails this install naming it
   // as the dependent. D-09-04's `treatDisabledAsWall` is the one input that
   // reverses this: the walk stops at a disabled key exactly as it stops at a
-  // live one.
+  // live one. UPD-DEP-D1: a recorded key a plan moves is read through too.
+  const walls =
+    options.treatDisabledAsWall === true
+      ? options.installedKeys
+      : liveInstalledKeys(options.state, options.installedKeys);
   const closure = await resolveDependencyClosure({
     rootKey: options.rootKey,
     lookup: options.lookup,
-    installedKeys:
-      options.treatDisabledAsWall === true
-        ? options.installedKeys
-        : liveInstalledKeys(options.state, options.installedKeys),
+    installedKeys: new Set([...walls].filter((key) => !readThrough.has(key))),
     knownMarketplaces: options.knownMarketplaces,
     installPolicy: {
       allowedMarketplaces: options.rootAllowedMarketplaces,
@@ -1406,6 +1496,7 @@ async function resolveCascade(
     state: options.state,
     rootKey: options.rootKey,
     closure: closure.closure,
+    readThrough,
     alreadyInstalled: closure.alreadyInstalled,
     ledgerOptionsFor: options.ledgerOptionsFor,
     tagProbe: options.tagProbe ?? probeDependencyTags,
@@ -1427,27 +1518,10 @@ async function resolveCascade(
 
   return {
     kind: "resolved",
+    closure: closure.closure,
     alreadyInstalled: closure.alreadyInstalled,
     members: constraints.members,
     outOfRange: constraints.outOfRange,
-  };
-}
-
-/** UPD-DEP-D1: what a resolved cascade would do, nothing materialized. */
-function cascadePlan(options: InstallCascadeOptions, resolved: ResolvedCascade): CascadePlan {
-  const reEnabled = resolved.members.flatMap((entry) =>
-    entry.kind === "re-enable" ? [entry.member] : [],
-  );
-  return {
-    kind: "planned",
-    freshMembers: resolved.members.flatMap((entry) =>
-      entry.kind === "install" && entry.member.key !== options.rootKey ? [entry.member] : [],
-    ),
-    outOfRange: resolved.outOfRange,
-    recordedMembers: [...resolved.alreadyInstalled, ...reEnabled].map((member) => ({
-      key: member.key,
-      ranges: member.ranges,
-    })),
   };
 }
 
@@ -1514,9 +1588,8 @@ export async function runInstallCascade(
 }
 
 /**
- * UPD-DEP-D1 / RESV-05: `runInstallCascade`, except that recorded members
- * outside their range are reported as a plan for the caller to move first,
- * and nothing materializes.
+ * UPD-DEP-D1 / RESV-05: `runInstallCascade`, except that a recorded member
+ * outside its range answers `planned` and nothing materializes.
  */
 export async function runInstallCascadeOrPlanMoves(
   options: InstallCascadeOptions,
@@ -1526,8 +1599,8 @@ export async function runInstallCascadeOrPlanMoves(
     return resolved;
   }
 
-  return resolved.outOfRange.length > 0
-    ? cascadePlan(options, resolved)
+  return resolved.outOfRange
+    ? { kind: "planned" }
     : rootCascadeResult(options, await materializeCascade(options, resolved, false));
 }
 
@@ -1546,8 +1619,8 @@ export async function runDependencyCascade(
 }
 
 /**
- * UPD-DEP-D1: `runDependencyCascade`, except that recorded members outside
- * their range are reported as a plan, and nothing materializes.
+ * UPD-DEP-D1: `runDependencyCascade`, except that a recorded member outside
+ * its range answers `planned` and nothing materializes.
  */
 export async function runDependencyCascadeOrPlanMoves(
   options: InstallCascadeOptions,
@@ -1557,18 +1630,112 @@ export async function runDependencyCascadeOrPlanMoves(
     return resolved;
   }
 
-  return resolved.outOfRange.length > 0
-    ? cascadePlan(options, resolved)
+  return resolved.outOfRange
+    ? { kind: "planned" }
     : dependencyCascadeResult(options, await materializeCascade(options, resolved, true));
 }
 
-/**
- * UPD-DEP-D1: resolves the closure of a recorded root and materializes
- * nothing, so a dependency plan reads it without a write.
- */
-export async function planDependencyCascade(
+/** UPD-DEP-D1: what each plugin the walk read declares, by key. */
+type DeclaredEdges = Map<string, readonly { readonly key: string; readonly range?: string }[]>;
+
+/** Every plugin the walk read that declares `key`, with the ranges it declares, in walk order. */
+function requestersOf(declared: DeclaredEdges, key: string): GraphRequester[] {
+  const requesters: GraphRequester[] = [];
+  for (const [declarer, edges] of declared) {
+    const toKey = edges.filter((edge) => edge.key === key);
+    if (toKey.length > 0) {
+      requesters.push({
+        key: declarer,
+        ranges: toKey.flatMap((edge) => (edge.range === undefined ? [] : [edge.range])),
+      });
+    }
+  }
+
+  return requesters;
+}
+
+/** One graph node: fresh, or what the snapshot records. */
+function graphNode(
   options: InstallCascadeOptions,
-): Promise<CascadeResolutionFailure | CascadePlan> {
-  const resolved = await resolveCascade(options, true);
-  return resolved.kind === "resolved" ? cascadePlan(options, resolved) : resolved;
+  member: ClosureMember,
+  walked: boolean,
+  fresh: ReadonlyMap<string, ResolvedCascadeMember>,
+  facts: Pick<DependencyGraphNode, "dependsOn" | "requesters">,
+): DependencyGraphNode {
+  const resolved = fresh.get(member.key);
+  if (resolved !== undefined) {
+    return { kind: "fresh", member: resolved, ...facts };
+  }
+
+  return {
+    kind: "recorded",
+    member,
+    ...facts,
+    version: recordedVersionOf(options.state, member),
+    disabled: disabledRecordOf(options.state, options.rootKey, member) !== undefined,
+    walked,
+  };
+}
+
+/**
+ * UPD-DEP-D1: walks the whole dependency graph of `options.rootKey` with no
+ * write, reading through every key in `options.readThrough`, and answers each
+ * plugin it reached with the plugins that declare it and the ranges they
+ * declare. A fresh member's pin is chosen over every range the graph declares
+ * for it. A recorded member's version is not checked: the plan decides
+ * whether it moves.
+ */
+export async function walkDependencyGraph(
+  options: InstallCascadeOptions,
+): Promise<DependencyGraph | CascadeResolutionFailure> {
+  const declared: DeclaredEdges = new Map();
+  const resolved = await resolveCascade(
+    {
+      ...options,
+      lookup: async (subject) => {
+        const looked = await options.lookup(subject);
+        if (looked.kind === "found") {
+          declared.set(
+            subject.key,
+            looked.dependencies.map((dependency) => ({
+              key: `${dependency.name}@${dependency.marketplace ?? subject.marketplace}`,
+              ...(dependency.version !== undefined && { range: dependency.version }),
+            })),
+          );
+        }
+
+        return looked;
+      },
+    },
+    true,
+  );
+  if (resolved.kind !== "resolved") {
+    return resolved;
+  }
+
+  const dependsOn = (key: string): readonly string[] => [
+    ...new Set((declared.get(key) ?? []).map((edge) => edge.key)),
+  ];
+  const fresh = new Map(
+    resolved.members.flatMap((entry) =>
+      entry.kind === "install" ? [[entry.member.key, entry.member] as const] : [],
+    ),
+  );
+  const node = (member: ClosureMember, walked: boolean): DependencyGraphNode =>
+    graphNode(options, member, walked, fresh, {
+      requesters: requestersOf(declared, member.key),
+      dependsOn: dependsOn(member.key),
+    });
+  const nodes = [
+    ...resolved.alreadyInstalled.map((member) => node(member, false)),
+    ...resolved.closure
+      .filter((member) => member.key !== options.rootKey)
+      .map((member) => node(member, true)),
+  ];
+  return {
+    kind: "graph",
+    root: options.installedKeys.has(options.rootKey) ? undefined : fresh.get(options.rootKey),
+    rootDependsOn: dependsOn(options.rootKey),
+    nodes,
+  };
 }

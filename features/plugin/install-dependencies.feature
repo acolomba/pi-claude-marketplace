@@ -339,10 +339,10 @@ Feature: Plugin install dependencies
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name      | status    | reasons                 | scope   | version | from  | to    | cause chain                                                                                | cause truncated | leaks | rollback partial |
-      | tools            | project           | aaa@tools | aaa@tools | updated   | dependency current copy | project |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@tools"                      | false           |       |                  |
-      | tools            | project           | app@tools | app       | installed |                         | project | 1.0.0   |       |       |                                                                                            |                 |       |                  |
-      | tools            | project           | zzz@tools | zzz@tools | updated   | dependency current copy | project |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0, ^2.0.0) -- required by "aaa@tools", "app@tools" | false           |       |                  |
+      | marketplace name | marketplace scope | id        | name      | status    | reasons                 | scope   | version | from  | to    | cause chain                                                                        | cause truncated | leaks | rollback partial |
+      | tools            | project           | aaa@tools | aaa@tools | updated   | dependency current copy | project |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@tools"              | false           |       |                  |
+      | tools            | project           | app@tools | app       | installed |                         | project | 1.0.0   |       |       |                                                                                    |                 |       |                  |
+      | tools            | project           | zzz@tools | zzz@tools | updated   | dependency current copy | project |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "aaa@tools", "app@tools" | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | aaa@tools | 2.0.0   | true    |
@@ -551,3 +551,180 @@ Feature: Plugin install dependencies
       | app@tools | 1.0.0   | true    |
       | fff@up    | 1.0.0   | true    |
       | lib@tools | 2.0.0   | true    |
+
+  Scenario: Installing a plugin whose moved dependency asks a new dependency for a version the plugin excludes fails before anything changes
+    Given the git repository "fff" holds these plugins:
+      | name | version | path |
+      | fff  | 3.0.0   |      |
+    Given the git repository "fff" has a revision only the tag "fff--v1.5.0" reaches, holding these plugins:
+      | name | version | path |
+      | fff  | 1.5.0   |      |
+    Given the git repository "fff" has a revision only the tag "fff--v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | fff  | 2.0.0   |      |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | aaa  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install aaa@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies          |
+      | app  | 1.0.0   | aaa@^2.0.0,fff@^2.0.0 |
+      | aaa  | 2.0.0   | fff@^1.0.0            |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | fff  | url         | fff        | false  |
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status | reasons           | scope   | cause chain                                                                                                               | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed | dependency failed | project |                                                                                                                           |                 |       |                  |
+      | tools            | project           | fff@tools | fff@tools | failed | version conflict  | project | Dependency "fff@tools" has contradictory version constraints ^1.0.0, ^2.0.0 (no version satisfies all 2 declared ranges). | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | aaa@tools | 1.0.0   | true    |
+    Then the project scope holds no git clones
+
+  Scenario: Installing a plugin whose moved dependency's new version needs a plugin of a marketplace with a broken manifest fails as that plugin's install does
+    Given the marketplace "other" is published as a dir source
+    Given the marketplace "other" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | zzz  | 1.0.0   |              |
+    Given the marketplace "other" is added to the project scope
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | aaa  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install aaa@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | aaa@^2.0.0   |
+      | aaa  | 2.0.0   | zzz@other    |
+    Given the marketplace "tools" allows dependencies on the marketplace "other"
+    Given the manifest of the marketplace "other" is no longer valid json
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status | reasons | scope   | cause chain                                                                                                                                                                                                             | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app  | failed |         | project | marketplace.json is not valid JSON: SyntaxError: Expected ',' or '}' after property value in JSON at position 56 (line 1 column 57), Expected ',' or '}' after property value in JSON at position 56 (line 1 column 57) | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | aaa@tools | 1.0.0   | true    |
+
+  Scenario: Installing a plugin whose moved dependency narrows an installed dependency's range moves that dependency to the highest version every range admits
+    Given the git repository "bbb" holds these plugins:
+      | name | version | path |
+      | bbb  | 1.0.0   |      |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | aaa  | 1.0.0   |              |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | bbb  | url         | bbb        | false  |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install aaa@tools --scope project"
+    Given the user has run "/claude:plugin install bbb@tools --scope project"
+    Given the git repository "bbb" has a revision only the tag "bbb--v1.4.0" reaches, holding these plugins:
+      | name | version | path |
+      | bbb  | 1.4.0   |      |
+    Given the git repository "bbb" has a revision only the tag "bbb--v1.9.0" reaches, holding these plugins:
+      | name | version | path |
+      | bbb  | 1.9.0   |      |
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies          |
+      | app  | 1.0.0   | aaa@^2.0.0,bbb@^1.2.0 |
+      | aaa  | 2.0.0   | fff                   |
+      | fff  | 1.0.0   | bbb (<1.5.0)          |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | bbb  | url         | bbb        | false  |
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status    | reasons                 | scope   | version | from  | to    | cause chain                                                                                                    | cause truncated | leaks | rollback partial |
+      | tools            | project           | aaa@tools | aaa@tools | updated   | dependency current copy | project |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@tools"                                          | false           |       |                  |
+      | tools            | project           | app@tools | app       | installed |                         | project | 1.0.0   |       |       |                                                                                                                |                 |       |                  |
+      | tools            | project           | bbb@tools | bbb@tools | updated   |                         | project |         | 1.0.0 | 1.4.0 | already the highest version the combined range admits (^1.2.0, <1.5.0) -- required by "app@tools", "fff@tools" | false           |       |                  |
+      | tools            | project           | fff@tools | fff@tools | installed |                         | project | 1.0.0   |       |       |                                                                                                                |                 |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | aaa@tools | 2.0.0   | true    |
+      | app@tools | 1.0.0   | true    |
+      | bbb@tools | 1.4.0   | true    |
+      | fff@tools | 1.0.0   | true    |
+
+  Scenario: Installing a plugin whose moved dependency also needs a disabled dependency the plugin moves moves and enables that dependency once
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | aaa  | 1.0.0   |              |
+      | ddd  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install aaa@tools --scope project"
+    Given the user has run "/claude:plugin install ddd@tools --scope project"
+    Given the user has run "/claude:plugin disable ddd@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies          |
+      | app  | 1.0.0   | aaa@^2.0.0,ddd@^2.0.0 |
+      | aaa  | 2.0.0   | ddd                   |
+      | ddd  | 2.0.0   |                       |
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status    | reasons                               | scope   | version | from  | to    | cause chain                                                           | cause truncated | leaks | rollback partial |
+      | tools            | project           | aaa@tools | aaa@tools | updated   | dependency current copy               | project |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@tools" | false           |       |                  |
+      | tools            | project           | app@tools | app       | installed |                                       | project | 1.0.0   |       |       |                                                                       |                 |       |                  |
+      | tools            | project           | ddd@tools | ddd@tools | installed | already installed, dependency enabled | project | 2.0.0   |       |       |                                                                       |                 |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | aaa@tools | 2.0.0   | true    |
+      | app@tools | 1.0.0   | true    |
+      | ddd@tools | 2.0.0   | true    |
+
+  Scenario: Installing a plugin whose second dependency move fails keeps the first move and lists it
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | aaa  | 1.0.0   |              |
+      | zzz  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install aaa@tools --scope project"
+    Given the user has run "/claude:plugin install zzz@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies          |
+      | app  | 1.0.0   | zzz@^2.0.0,aaa@^2.0.0 |
+      | aaa  | 2.0.0   |                       |
+      | zzz  | 2.0.0   |                       |
+    Given the published plugin "aaa" of the marketplace "tools" has an unreadable skill file
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | true                                |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status  | reasons                 | scope   | version | from  | to    | cause chain                                                           | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed  | dependency failed       | project |         |       |       |                                                                       |                 |       |                  |
+      | tools            | project           | zzz@tools | zzz@tools | updated | dependency current copy | project |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@tools" | false           |       |                  |
+      | tools            | project           | aaa@tools | aaa@tools | failed  |                         | project | 1.0.0   |       |       | EACCES: permission denied, copyfile 'notes.md'                        | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | aaa@tools | 1.0.0   | true    |
+      | zzz@tools | 2.0.0   | true    |

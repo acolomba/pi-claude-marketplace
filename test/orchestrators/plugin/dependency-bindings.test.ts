@@ -17,7 +17,6 @@ import {
   planCloneSweep,
   tagMemosOf,
   updateCaller,
-  withPlannedVersions,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts";
 import { freshDependencyMoveMemos } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -31,10 +30,7 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
 import type { DependencyCaller } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-bindings.ts";
-import type {
-  CascadeThreePhaseArgs,
-  UpdateDependencySettler,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
+import type { CascadeThreePhaseArgs } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
@@ -71,6 +67,11 @@ function pluginRecord(version: string, resolvedSource = "/work/mp/plugins/p"): P
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
+}
+
+/** A git-source record whose clone is `clone`. */
+function gitRecord(clone: string): PluginRecord {
+  return { ...pluginRecord("1.0.0", clone), resolvedSha: "a".repeat(40) };
 }
 
 function stateWith(plugins: Record<string, PluginRecord>): ExtensionState {
@@ -123,8 +124,6 @@ describe("dependencyMoveContext", () => {
     const run = runWithNothingLoaded();
     const memos = freshDependencyMoveMemos();
     const authMemo = new Map<string, AuthAttemptResult>();
-    const settleDependencies: UpdateDependencySettler = () =>
-      Promise.resolve({ kind: "settled", rows: [] });
     const commandAuth = auth();
     const caller: DependencyCaller = {
       ctx: CTX,
@@ -142,11 +141,11 @@ describe("dependencyMoveContext", () => {
       caller,
       policy: INSTALL_MOVE_MATERIALIZATION,
       memos,
-      settleDependencies,
     });
 
     // assert
-    assert.deepStrictEqual(context, {
+    const { cleanupClones, ...carried } = context;
+    assert.deepStrictEqual(carried, {
       ...target,
       ...owners,
       policy: INSTALL_MOVE_MATERIALIZATION,
@@ -157,11 +156,11 @@ describe("dependencyMoveContext", () => {
       authMemo,
       ...commandAuth,
       ...memos,
-      settleDependencies,
     });
+    assert.strictEqual(typeof cleanupClones, "function");
   });
 
-  test("binds no settle and no caller field the caller leaves unset", () => {
+  test("binds no caller field the caller leaves unset", () => {
     // arrange
     const owners = {
       hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -186,7 +185,8 @@ describe("dependencyMoveContext", () => {
     });
 
     // assert
-    assert.deepStrictEqual(context, {
+    const { cleanupClones: _cleanup, ...carried } = context;
+    assert.deepStrictEqual(carried, {
       ...target,
       ...owners,
       policy: { ...INSTALL_MOVE_MATERIALIZATION, searchReleaseTags: false },
@@ -194,6 +194,31 @@ describe("dependencyMoveContext", () => {
       notification: { ctx: CTX, run },
       ...memos,
     });
+  });
+
+  test("IN-N4: a move collects no clone, leaving it to the operation's sweep", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-keep-");
+    const locations = locationsFor("project", cwd);
+    await saveState(locations.extensionRoot, { schemaVersion: 2, marketplaces: {} });
+    await mkdir(path.join(locations.pluginClonesDir, "replaced"), { recursive: true });
+    const context = dependencyMoveContext({
+      owners: {
+        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        completionCache: createCompletionCache(),
+        env: {},
+      },
+      target: { scope: "project", cwd, locations },
+      caller: { ctx: CTX, run: runWithNothingLoaded() },
+      policy: INSTALL_MOVE_MATERIALIZATION,
+      memos: freshDependencyMoveMemos(),
+    });
+
+    // act
+    await context.cleanupClones(locations);
+
+    // assert
+    assert.deepStrictEqual(await readdir(locations.pluginClonesDir), ["replaced"]);
   });
 });
 
@@ -236,7 +261,26 @@ describe("updateCaller", () => {
 
     // act
     const caller = updateCaller(
-      updateArgs({ mapModel: true, partial: false, authMemo, ...commandAuth }),
+      {
+        plugin: "zcore",
+        marketplace: "mp",
+        scope: "project",
+        cwd: "/work",
+        locations: locationsFor("project", "/work"),
+        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        completionCache: createCompletionCache(),
+        env: {},
+        cleanupClones: () => Promise.resolve(),
+        mapModel: true,
+        partial: true,
+        authMemo,
+        ...commandAuth,
+        cascade: false,
+        ctx: CTX,
+        run,
+        cardinality: "single",
+        notifyPhaseFailure: () => undefined,
+      },
       { ctx: CTX, run },
     );
 
@@ -245,10 +289,21 @@ describe("updateCaller", () => {
       ctx: CTX,
       run,
       mapModel: true,
-      partial: false,
+      partial: true,
       authMemo,
       ...commandAuth,
     });
+  });
+
+  test("WR-N3: leaves out the in-place degrade a cascade-mode update carries as partial", () => {
+    // arrange
+    const run = runWithNothingLoaded();
+
+    // act
+    const caller = updateCaller(updateArgs({ partial: true, mapModel: false }), { ctx: CTX, run });
+
+    // assert
+    assert.deepStrictEqual(caller, { ctx: CTX, run, mapModel: false });
   });
 
   test("carries only the notification when the update sets no caller field", () => {
@@ -263,35 +318,18 @@ describe("updateCaller", () => {
   });
 });
 
-describe("withPlannedVersions", () => {
-  test("shows each planned dependency at its planned version and leaves the snapshot alone", () => {
-    // arrange
-    const state = stateWith({ lib: pluginRecord("1.0.0"), other: pluginRecord("3.0.0") });
-
-    // act
-    const view = withPlannedVersions(state, new Map([["lib@mp", "2.0.0"]]));
-
-    // assert
-    assert.deepStrictEqual(
-      view,
-      stateWith({ lib: pluginRecord("2.0.0"), other: pluginRecord("3.0.0") }),
-    );
-    assert.deepStrictEqual(
-      state,
-      stateWith({ lib: pluginRecord("1.0.0"), other: pluginRecord("3.0.0") }),
-    );
-  });
-});
-
 describe("planCloneSweep", () => {
-  test("removes the unreferenced clones created after it was taken and keeps the earlier ones", async (t) => {
+  test("UPD-DEP-D1 / IN-N4: removes the clones the operation left unreferenced and keeps the ones unreferenced before it", async (t) => {
     // arrange
     const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-sweep-");
     const locations = locationsFor("project", cwd);
+    const live = path.join(locations.pluginClonesDir, "111111111111-aaaaaaaaaaaa");
     await mkdir(path.join(locations.pluginClonesDir, "fetched"), { recursive: true });
-    await saveState(locations.extensionRoot, { schemaVersion: 2, marketplaces: {} });
+    await mkdir(live, { recursive: true });
+    await saveState(locations.extensionRoot, stateWith({ lib: gitRecord(live) }));
     const sweep = await planCloneSweep(locations);
     await mkdir(path.join(locations.pluginClonesDir, "planned"), { recursive: true });
+    await saveState(locations.extensionRoot, stateWith({}));
 
     // act
     await sweep();
@@ -311,6 +349,23 @@ describe("planCloneSweep", () => {
 
     // act & assert
     await assert.doesNotReject(sweep());
+  });
+
+  test("IN-N5: removes nothing when the clones cannot be listed before the plan", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "dependency-bindings-sweep-list-");
+    const locations = locationsFor("project", cwd);
+    await saveState(locations.extensionRoot, { schemaVersion: 2, marketplaces: {} });
+    await writeFile(locations.pluginClonesDir, "not a directory");
+    const sweep = await planCloneSweep(locations);
+    await rm(locations.pluginClonesDir, { force: true });
+    await mkdir(path.join(locations.pluginClonesDir, "planned"), { recursive: true });
+
+    // act
+    await sweep();
+
+    // assert
+    assert.deepStrictEqual(await readdir(locations.pluginClonesDir), ["planned"]);
   });
 });
 

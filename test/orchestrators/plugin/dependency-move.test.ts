@@ -10,9 +10,10 @@ import {
 } from "../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
+  failedMoveRow,
   freshDependencyMoveMemos,
   judgeDependencyMove,
-  runDependencyMoves,
+  runDependencyMove,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -31,7 +32,6 @@ import type {
   PlannedDependencyMove,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts";
 import type { MaterializationPolicy } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
-import type { UpdateDependencyRow } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { TestContext } from "node:test";
 
@@ -117,6 +117,7 @@ async function seedDependency(
       env: {},
       softDeps: runWithNothingLoaded().softDeps,
       policy: UPDATE_POLICY,
+      cleanupClones: () => Promise.resolve(),
       ...freshDependencyMoveMemos(),
     },
   };
@@ -293,7 +294,7 @@ describe("judgeDependencyMove", () => {
   });
 });
 
-describe("runDependencyMoves", () => {
+describe("runDependencyMove", () => {
   test("moves a dependency into range and reports its update row by its full key", async (t) => {
     // arrange
     t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
@@ -303,30 +304,23 @@ describe("runDependencyMoves", () => {
     });
 
     // act
-    const result = await runDependencyMoves([move("2.0.0")], context);
+    const run = await runDependencyMove(move("2.0.0"), context);
 
     // assert
-    assert.deepStrictEqual(result, {
-      ok: true,
-      moved: [
+    assert.deepStrictEqual(run, {
+      landed: true,
+      rows: [
         {
-          key: "zcore@mp",
-          name: "zcore",
-          marketplace: "mp",
-          row: {
-            status: "updated",
-            name: "zcore@mp",
-            scope: "project",
-            from: "1.0.0",
-            to: "2.0.0",
-            dependencies: [],
-            reasons: ["dependency current copy"],
-            cause: new Error(
-              'constrained to the combined range (^2.0.0) -- required by "widget@mp"',
-            ),
-            severity: "info",
-            needsReload: true,
-          },
+          status: "updated",
+          name: "zcore@mp",
+          scope: "project",
+          from: "1.0.0",
+          to: "2.0.0",
+          dependencies: [],
+          reasons: ["dependency current copy"],
+          cause: new Error('constrained to the combined range (^2.0.0) -- required by "widget@mp"'),
+          severity: "info",
+          needsReload: true,
         },
       ],
     });
@@ -341,28 +335,21 @@ describe("runDependencyMoves", () => {
     // arrange
     const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
     const stateBefore = await readFile(context.locations.stateJsonPath, "utf8");
-    const planned = move("2.1.0");
 
     // act
-    const result = await runDependencyMoves([planned], context);
+    const run = await runDependencyMove(move("2.1.0"), context);
 
     // assert
-    assert.deepStrictEqual(result, {
-      ok: false,
-      request: planned.request,
-      moved: [
+    assert.deepStrictEqual(run, {
+      landed: false,
+      rows: [
         {
-          key: "zcore@mp",
-          name: "zcore",
-          marketplace: "mp",
-          row: {
-            status: "failed",
-            name: "zcore@mp",
-            version: "1.0.0",
-            reasons: [],
-            cause: new Error("version 2.0.0 is not version 2.1.0, which the dependency plan chose"),
-            severity: "error",
-          },
+          status: "failed",
+          name: "zcore@mp",
+          version: "1.0.0",
+          reasons: [],
+          cause: new Error("version 2.0.0 is not version 2.1.0, which the dependency plan chose"),
+          severity: "error",
         },
       ],
     });
@@ -378,10 +365,10 @@ describe("runDependencyMoves", () => {
     });
 
     // act
-    const result = await runDependencyMoves([move("2.0.0")], context);
+    const run = await runDependencyMove(move("2.0.0"), context);
 
     // assert
-    assert.deepStrictEqual(result, { ok: true, moved: [] });
+    assert.deepStrictEqual(run, { landed: true, rows: [] });
     const state = await loadState(context.locations.extensionRoot);
     assert.deepStrictEqual(
       [
@@ -392,33 +379,37 @@ describe("runDependencyMoves", () => {
     );
   });
 
-  test("stops at a move that does not land and reports it failed with what the update found", async (t) => {
+  test("reports a dependency already at the planned version as landed with no row", async (t) => {
     // arrange
-    const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "1.5.0" });
-    const planned = move("1.5.0");
+    const { context } = await seedDependency(t, { recorded: "2.0.0", offered: "2.0.0" });
 
     // act
-    const result = await runDependencyMoves([planned, move("2.0.0", { key: "next@mp" })], context);
+    const run = await runDependencyMove(move("2.0.0", { recordedVersion: "2.0.0" }), context);
 
     // assert
-    assert.deepStrictEqual(result, {
-      ok: false,
-      request: planned.request,
-      moved: [
+    assert.deepStrictEqual(run, { landed: true, rows: [] });
+  });
+
+  test("reports a move that does not land as failed with what the update found", async (t) => {
+    // arrange
+    const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "1.5.0" });
+
+    // act
+    const run = await runDependencyMove(move("1.5.0"), context);
+
+    // assert
+    assert.deepStrictEqual(run, {
+      landed: false,
+      rows: [
         {
-          key: "zcore@mp",
-          name: "zcore",
-          marketplace: "mp",
-          row: {
-            status: "failed",
-            name: "zcore@mp",
-            version: "1.0.0",
-            reasons: ["dependents constrain"],
-            cause: new Error(
-              'version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "widget@mp"',
-            ),
-            severity: "error",
-          },
+          status: "failed",
+          name: "zcore@mp",
+          version: "1.0.0",
+          reasons: ["dependents constrain"],
+          cause: new Error(
+            'version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "widget@mp"',
+          ),
+          severity: "error",
         },
       ],
     });
@@ -427,98 +418,69 @@ describe("runDependencyMoves", () => {
   test("reports a dependency the scope no longer records as a failed move at the version the plan read", async (t) => {
     // arrange
     const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
-    const planned = move("2.0.0", { key: "absent@mp", name: "absent", recordedVersion: "1.1.0" });
 
     // act
-    const result = await runDependencyMoves([planned], context);
+    const run = await runDependencyMove(
+      move("2.0.0", { key: "absent@mp", name: "absent", recordedVersion: "1.1.0" }),
+      context,
+    );
 
     // assert
-    assert.deepStrictEqual(result, {
-      ok: false,
-      request: planned.request,
-      moved: [
+    assert.deepStrictEqual(run, {
+      landed: false,
+      rows: [
         {
-          key: "absent@mp",
-          name: "absent",
-          marketplace: "mp",
-          row: {
-            status: "failed",
-            name: "absent@mp",
-            version: "1.1.0",
-            reasons: ["not installed"],
-            cause: new Error("not installed"),
-            severity: "error",
-          },
+          status: "failed",
+          name: "absent@mp",
+          version: "1.1.0",
+          reasons: ["not installed"],
+          cause: new Error("not installed"),
+          severity: "error",
         },
       ],
     });
   });
 
-  test("reports a move whose runner throws as failed with the thrown error", async (t) => {
+  test("leaves a throw from the update runner to its caller", async (t) => {
     // arrange
     const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
     const diskFull = new Error("disk full");
-    const planned = move("2.0.0");
 
+    // act & assert
+    await assert.rejects(
+      runDependencyMove(move("2.0.0"), {
+        ...context,
+        stateTransaction: { saveState: () => Promise.reject(diskFull) },
+      }),
+      diskFull,
+    );
+  });
+});
+
+describe("failedMoveRow", () => {
+  test("reports a move that threw at the version it kept, its cause with every path redacted", () => {
     // act
-    const result = await runDependencyMoves([planned], {
-      ...context,
-      stateTransaction: { saveState: () => Promise.reject(diskFull) },
-    });
+    const row = failedMoveRow(
+      request(),
+      new Error("EACCES: permission denied, copyfile '/home/u/.pi/skills-staging/x/notes.md'"),
+    );
 
     // assert
-    assert.deepStrictEqual(result, {
-      ok: false,
-      request: planned.request,
-      moved: [
-        {
-          key: "zcore@mp",
-          name: "zcore",
-          marketplace: "mp",
-          row: {
-            status: "failed",
-            name: "zcore@mp",
-            version: "1.0.0",
-            reasons: [],
-            cause: diskFull,
-            severity: "error",
-          },
-        },
-      ],
+    assert.deepStrictEqual(row, {
+      status: "failed",
+      name: "zcore@mp",
+      version: "1.0.0",
+      reasons: [],
+      cause: new Error("EACCES: permission denied, copyfile 'notes.md'"),
+      severity: "error",
     });
   });
 
-  test("reports the moved dependency's own closure beside its row", async (t) => {
-    // arrange
-    t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
-    const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
-    const nested = {
-      status: "installed",
-      name: "base@other",
-      dependencies: [],
-      version: "1.0.0",
-      severity: "info",
-      needsReload: true,
-    } satisfies UpdateDependencyRow;
-    const settledFor: string[] = [];
-
+  test("reports a move that threw nothing as failed with an empty cause", () => {
     // act
-    const result = await runDependencyMoves([move("2.0.0")], {
-      ...context,
-      settleDependencies: (args, prepared) => {
-        settledFor.push(`${args.plugin}@${args.marketplace} ${prepared.toVersion}`);
-        return Promise.resolve({ kind: "settled", rows: [nested] });
-      },
-    });
+    const row = failedMoveRow(request(), undefined);
 
     // assert
-    assert.deepStrictEqual(
-      result.moved.map((entry) => [entry.key, entry.name, entry.marketplace, entry.row.status]),
-      [
-        ["zcore@mp", "zcore", "mp", "updated"],
-        ["base@other", "base", "other", "installed"],
-      ],
-    );
-    assert.deepStrictEqual(settledFor, ["zcore@mp 2.0.0"]);
+    assert.deepStrictEqual(row.status === "failed" && row.cause, new Error("undefined"));
   });
 });

@@ -227,3 +227,88 @@ Feature: Plugin update dependencies
       | id           | version | enabled |
       | widget@tools | 1.1.0   | true    |
       | zcore@tools  | 1.0.0   | true    |
+
+  Scenario: Autoupdating a marketplace does not install a partially supported dependency a plugin's new version needs
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    Given the published plugin "zcore" of the marketplace "tools" has an output style
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id           | name        | status | reasons           | scope   | version | cause chain                                              | cause truncated | leaks | rollback partial |
+      | tools            | project           | updated            | widget@tools | widget      | failed | dependency failed | project | 1.0.0   |                                                          |                 |       |                  |
+      | tools            | project           | updated            | zcore@tools  | zcore@tools | failed |                   | project |         | Plugin "zcore" is not installable: contains outputStyles | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.0.0   | true    |
+
+  Scenario: Autoupdating a marketplace moves the installed dependency a plugin's new version needs at a newer version
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 2.0.0   |              |
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id           | name   | status  | reasons                 | scope   | from  | to    | cause chain                                                              | cause truncated | leaks | rollback partial |
+      | tools            | project           | updated            | zcore@tools  | zcore  | updated | dependency current copy | project | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "widget@tools" | false           |       |                  |
+      | tools            | project           | updated            | widget@tools | widget | updated |                         | project | 1.0.0 | 1.1.0 |                                                                          |                 |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.1.0   | true    |
+      | zcore@tools  | 2.0.0   | true    |
+
+  Scenario: Updating every plugin moves the installed dependency a plugin's new version needs at a newer version
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 2.0.0   |              |
+    When the user runs "/claude:plugin update --scope project"
+    Then the result has these fields:
+      | kind                | cascade       |
+      | severity            | info          |
+      | needs reload        | true          |
+      | tally label         | Plugin update |
+      | tally failures      | 0             |
+      | tally warnings      | 0             |
+      | tally success count | 2             |
+      | tally success verb  | updated       |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status  | reasons                 | scope   | from  | to    | cause chain                                                              | cause truncated | leaks | rollback partial |
+      | tools            | project           | zcore@tools  | zcore  | updated | dependency current copy | project | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "widget@tools" | false           |       |                  |
+      | tools            | project           | widget@tools | widget | updated |                         | project | 1.0.0 | 1.1.0 |                                                                          |                 |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.1.0   | true    |
+      | zcore@tools  | 2.0.0   | true    |

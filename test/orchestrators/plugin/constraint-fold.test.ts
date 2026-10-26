@@ -159,6 +159,23 @@ describe("foldDeclaredConstraint", () => {
     });
   });
 
+  test("IN-N2: a range two holders declare, and a holder with two ranges, are named once", () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>();
+
+    // act
+    const verdict = foldDeclaredConstraint(declarations, stateOf({ mp: {} }), "target", "mp", [
+      { key: "aaa@mp", ranges: ["^2.0.0"] },
+      { key: "app@mp", ranges: ["^2.0.0", ">=2.1.0"] },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(
+      verdict.kind === "admits" && verdict.disclosure,
+      'constrained to the combined range (^2.0.0, >=2.1.0) -- required by "aaa@mp", "app@mp"',
+    );
+  });
+
   test("UPDT-02: holders are named in lexicographic key order", () => {
     // arrange
     const declarations = new Map<string, readonly AddressedDependency[]>([

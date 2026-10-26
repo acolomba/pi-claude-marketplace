@@ -2540,6 +2540,139 @@ test("reports no changed resources when every install left the Pi resource set a
   verifyBoundary();
 });
 
+test("UPD-DEP-D1 / WR-N5: lists every dependency change an install made beside its row", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "dependency-changes");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const expectedResult: ClaudeImportExecutionResult = {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("mp", "user")],
+    changedResources: true,
+    installedPlugins: [installed("plugin", "mp", "user", { agents: false, mcp: false }, false)],
+  };
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: () =>
+        Promise.resolve({
+          ...installedOutcome(),
+          resourcesChanged: false,
+          movedDependencies: [
+            {
+              key: "lib@mp",
+              name: "lib",
+              marketplace: "mp",
+              row: {
+                status: "updated",
+                name: "lib@mp",
+                from: "1.0.0",
+                to: "2.0.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            },
+          ],
+        }),
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "plugin@mp": true },
+            extraKnownMarketplaces: { mp: { directory: "./mp" } },
+          }),
+        ),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, expectedResult);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● mp [user] (added)\n  ● plugin (installed)\n  ● lib@mp v1.0.0 → v2.0.0 (updated)\n\n" +
+        "Import: 3 successes\n\n" +
+        "/reload to pick up changes",
+    },
+  ]);
+  verifyBoundary();
+});
+
+test("UPD-DEP-D1 / WR-N5: lists the changes a failed install made, the failing one included", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "dependency-changes-failed");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const cause = 'Dependency "aaa@mp" did not move into ^2.0.0.';
+  const expectedResult: ClaudeImportExecutionResult = {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("mp", "user")],
+    unexpectedPluginFailures: [failedDependency("plugin", "mp", "user", cause)],
+  };
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: () =>
+        Promise.resolve({
+          ...failedInstallOutcome(new DependencyCascadeError(cause, "aaa@mp"), cause),
+          movedDependencies: [
+            {
+              key: "aaa@mp",
+              name: "aaa",
+              marketplace: "mp",
+              row: {
+                status: "failed",
+                name: "aaa@mp",
+                version: "1.0.0",
+                reasons: [],
+                cause: new Error("permission denied"),
+                severity: "error",
+              },
+            },
+          ],
+        }),
+      loadSettings: () =>
+        Promise.resolve(
+          claudeSettings({
+            enabledPlugins: { "plugin@mp": true },
+            extraKnownMarketplaces: { mp: { directory: "./mp" } },
+          }),
+        ),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, expectedResult);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some plugin operations have failed.\n\n" +
+        "● mp [user] (added)\n" +
+        "  ⊘ plugin (failed) {dependency failed}\n" +
+        `    cause: ${cause}\n` +
+        "  ⊘ aaa@mp v1.0.0 (failed)\n" +
+        "    cause: permission denied\n\n" +
+        "Import: 2 failures, 1 success",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
 test("installs only the plugin the state does not already record under a recorded marketplace", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "mixed-plugins");
