@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: lifecycle-coverage
 status: Awaiting next milestone
 stopped_at: Milestone lifecycle-coverage completed and archived
-last_updated: "2026-10-26T21:00:00.000Z"
+last_updated: "2026-10-26T23:00:00.000Z"
 last_activity: 2026-10-26
 last_activity_desc: Milestone lifecycle-coverage completed and archived
-state_head: 47f071896cf0b2954f0d55d7fbce4c3b580aed07
+state_head: 33c9ac69397a1128c0f9a9ee380848edcb78eb13
 progress:
   total_phases: 30
   completed_phases: 30
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 Phase: Milestone lifecycle-coverage complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-26 - Completed quick task 261026-gvt: record plugins at release tags as Claude Code does
+Last activity: 2026-10-26 - Completed quick task 261026-glv: match Claude Code on untagged updates and plugin directory ranges
 
 ### mcp-4 closeout
 
@@ -183,6 +183,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-c06 | Lifecycle-coverage leftovers: a lost state lock, apply dependency judgement, cross-marketplace trust | 2026-10-26 | 82ef8cac | complete | [261026-c06-fix-lock-compromise-apply-dependency-jud](./quick/261026-c06-fix-lock-compromise-apply-dependency-jud/) |
 | 261026-gv1 | GV-01: record git plugin versions as Claude Code does; errno wording per Node; two Sonar findings | 2026-10-26 | cf2a1c37 | complete | [261026-gv1-record-git-plugin-versions-as-claude-code](./quick/261026-gv1-record-git-plugin-versions-as-claude-code/) |
 | 261026-gvt | GV-01: record plugins at a range-selected release tag as Claude Code does, the tag semver kept as resolvedVersion | 2026-10-26 | 2638b001 | complete | [261026-gvt-record-plugins-at-release-tags-as-claude-code](./quick/261026-gvt-record-plugins-at-release-tags-as-claude-code/) |
+| 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 
 ## Session Continuity
 
