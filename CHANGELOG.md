@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- A new session now lists pending plugin changes, the new `/claude:plugin apply` makes them, and several plugin commands behave more like Claude Code.
+- A new session now lists pending plugin changes, the new `/claude:plugin apply` makes them, and several plugin commands behave more like Claude Code. (#274)
 
   - A new session or `/reload` lists the changes your configs and marketplaces need. `apply` makes them and moves plugins to the version their marketplace offers. Run `/reload` after it.
   - When a marketplace ships a plugin together with the newer dependency it needs, one `apply` moves both, the dependency first. No `apply` leaves a plugin enabled while a dependency it needs is missing, disabled, or out of range, and `pending` lists each such disable first.
