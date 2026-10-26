@@ -35,6 +35,7 @@
 // so the plan is pure over them.
 
 import { recordedVersionSatisfies, renderDeclaredRanges } from "../../domain/dependency-range.ts";
+import { withoutTagCommit } from "../../domain/version.ts";
 
 import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
 import type {
@@ -74,16 +75,18 @@ export interface PlannedDependencyMove {
 
 /**
  * A move's candidate: the plan reads only the version it lands, and the
- * release tag's semver a range reads in its place (GV-01).
+ * release tag's semver a range reads in its place (GV-01), or the commit a
+ * pinned `anthropic-plugin-directory` plugin's version carries.
  */
 export interface PlannedCandidate {
   readonly toVersion: string;
   readonly resolvedVersion?: string;
+  readonly resolvedSha?: string;
 }
 
 /** GV-01: the version a range reads for a candidate. */
 export function plannedRangeVersion(candidate: PlannedCandidate): string {
-  return candidate.resolvedVersion ?? candidate.toVersion;
+  return candidate.resolvedVersion ?? withoutTagCommit(candidate.toVersion, candidate.resolvedSha);
 }
 
 /** One move's verdict, over the candidate type the ports carry. */

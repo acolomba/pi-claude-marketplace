@@ -19,7 +19,8 @@
   - An install refuses a disabled dependency from another marketplace with `{cross-marketplace}` unless the plugin's marketplace allows that marketplace, as Claude Code does.
   - A state lock that another process takes or removes during a long command no longer crashes Pi. The command fails and saves no installation record after the loss.
   - Git plugins now record the version Claude Code records: the commit's first 12 characters without `sha-`, plus a path hash for `git-subdir` and the pin for pinned `anthropic-plugin-directory` plugins.
-  - A dependency that a version range installs at a release tag now records its version with the tag's commit, as Claude Code does. Version ranges still read the version the tag names.
+  - A dependency that a version range installs at a release tag now records the tag's commit in its version, as Claude Code does, and an update that finds no tag removes it.
+  - A version range now checks the listed copy of an `anthropic-plugin-directory` plugin instead of picking a release tag, as Claude Code does.
 
 - Internal: a new worktree session now runs `scripts/init.sh` once when it starts, also in the Claude desktop app. (#273)
 

@@ -1216,6 +1216,36 @@ export class PinnedCommitMissingError extends Error {
   }
 }
 
+/**
+ * GV-01: a plugin of Claude Code's plugin directory picks no release tag, and
+ * the copy its catalog lists declares a version outside the range its
+ * dependents ask for, or none. The message is Claude Code's own.
+ */
+export class DirectoryPinUnsatisfiedError extends Error {
+  readonly plugin: string;
+  readonly manifestVersion: string | undefined;
+  readonly ranges: string;
+  readonly requiredBy: string | undefined;
+  constructor(opts: {
+    plugin: string;
+    manifestVersion: string | undefined;
+    ranges: string;
+    requiredBy: string | undefined;
+  }) {
+    const listed =
+      opts.manifestVersion === undefined ? "no version" : `version ${opts.manifestVersion}`;
+    const requirer = opts.requiredBy === undefined ? "" : ` required by "${opts.requiredBy}"`;
+    super(
+      `"${opts.plugin}" from the Anthropic Directory is pinned to its listed commit (${listed}), which does not satisfy ${opts.ranges}${requirer}.`,
+    );
+    this.name = "DirectoryPinUnsatisfiedError";
+    this.plugin = opts.plugin;
+    this.manifestVersion = opts.manifestVersion;
+    this.ranges = opts.ranges;
+    this.requiredBy = opts.requiredBy;
+  }
+}
+
 export interface ResourcesDiscoverFailure {
   readonly scope: "user" | "project";
   readonly kind: "skills" | "prompts";

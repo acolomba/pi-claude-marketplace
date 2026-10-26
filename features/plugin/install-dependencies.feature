@@ -380,6 +380,89 @@ Feature: Plugin install dependencies
       | ext@tools | 1.0.0                  | true    |
       | lib@tools | 2.0.0-{lib revision 2} | true    |
 
+  Scenario: Installing a plugin whose anthropic-plugin-directory dependency carries a version constraint installs the dependency's listed copy, not a release tag
+    Given the git repository "dirp" holds these plugins:
+      | name | version | path |
+      | dirp | 1.0.0   |      |
+    Given the git repository "dirp" has a revision only the tag "dirp--v1.5.0" reaches, holding these plugins:
+      | name | version | path |
+      | dirp | 1.5.0   |      |
+    Given the marketplace "anthropic-plugin-directory" is published as a dir source
+    Given the marketplace "anthropic-plugin-directory" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | dirp@^1.0.0  |
+    Given the marketplace "anthropic-plugin-directory" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | dirp | url         | dirp       | false  |
+    Given the marketplace "anthropic-plugin-directory" is added to the project scope
+    When the user runs "/claude:plugin install app@anthropic-plugin-directory --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name           | marketplace scope | id                              | name                            | status    | reasons | scope   | version |
+      | anthropic-plugin-directory | project           | app@anthropic-plugin-directory  | app                             | installed |         | project | 1.0.0   |
+      | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp@anthropic-plugin-directory | installed |         | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id                              | version | enabled |
+      | app@anthropic-plugin-directory  | 1.0.0   | true    |
+      | dirp@anthropic-plugin-directory | 1.0.0   | true    |
+
+  Scenario: Installing a plugin whose anthropic-plugin-directory dependency's listed copy is outside its version constraint fails as a version conflict and installs nothing
+    Given the git repository "dirp" holds these plugins:
+      | name | version | path |
+      | dirp | 1.0.0   |      |
+    Given the git repository "dirp" has a revision only the tag "dirp--v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | dirp | 2.0.0   |      |
+    Given the marketplace "anthropic-plugin-directory" is published as a dir source
+    Given the marketplace "anthropic-plugin-directory" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | dirp@^2.0.0  |
+    Given the marketplace "anthropic-plugin-directory" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | dirp | url         | dirp       | false  |
+    Given the marketplace "anthropic-plugin-directory" is added to the project scope
+    When the user runs "/claude:plugin install app@anthropic-plugin-directory --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name           | marketplace scope | id                              | name                            | status | reasons           | scope   | cause chain                                                                                                                          | cause truncated | leaks | rollback partial |
+      | anthropic-plugin-directory | project           | app@anthropic-plugin-directory  | app                             | failed | dependency failed | project |                                                                                                                                      |                 |       |                  |
+      | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp@anthropic-plugin-directory | failed | version conflict  | project | "dirp" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "app". | false           |       |                  |
+    Then the project scope has no installed plugins
+
+  Scenario: Installing a plugin that asks for an installed pinned anthropic-plugin-directory plugin's range leaves that plugin in place
+    Given the git repository "dirp" holds these plugins:
+      | name | version | path |
+      | dirp | 1.0.0   |      |
+    Given the marketplace "anthropic-plugin-directory" is published as a dir source
+    Given the marketplace "anthropic-plugin-directory" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | dirp@^1.0.0  |
+    Given the marketplace "anthropic-plugin-directory" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | dirp | url         | dirp       | true   |
+    Given the marketplace "anthropic-plugin-directory" is added to the project scope
+    Given the user has run "/claude:plugin install dirp@anthropic-plugin-directory --scope project"
+    When the user runs "/claude:plugin install app@anthropic-plugin-directory --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name           | marketplace scope | id                              | name                            | status    | reasons           | scope   | version                 |
+      | anthropic-plugin-directory | project           | app@anthropic-plugin-directory  | app                             | installed |                   | project | 1.0.0                   |
+      | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp@anthropic-plugin-directory | skipped   | already installed | project | 1.0.0-{dirp revision 1} |
+    Then the installation record of the project scope holds these plugins:
+      | id                              | version                 | enabled |
+      | app@anthropic-plugin-directory  | 1.0.0                   | true    |
+      | dirp@anthropic-plugin-directory | 1.0.0-{dirp revision 1} | true    |
+
   Scenario: Installing a plugin whose first dependency's move also moves its second dependency moves each once
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

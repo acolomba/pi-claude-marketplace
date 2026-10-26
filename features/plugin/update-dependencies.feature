@@ -258,6 +258,95 @@ Feature: Plugin update dependencies
       | app@tools | 1.0.0                  | true    |
       | lib@tools | 2.1.0-{lib revision 3} | true    |
 
+  Scenario: Updating a dependency no range holds any longer at its release tag's commit records the version without the tag's commit
+    Given the git repository "lib" holds these plugins:
+      | name | version | path |
+      | lib  | 1.0.0   |      |
+    Given the git repository "lib" has a revision only the tag "lib--v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | lib  | 2.0.0   |      |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^2.0.0   |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | lib  | url         | lib        | true   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin uninstall app@tools --scope project"
+    When the user runs "/claude:plugin update lib@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status  | reasons | scope   | from                   | to    |
+      | tools            | project           | lib@tools | lib  | updated |         | project | 2.0.0-{lib revision 2} | 2.0.0 |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | lib@tools | 2.0.0   | true    |
+
+  Scenario: Updating again a dependency recorded without its release tag's commit leaves it up to date
+    Given the git repository "lib" holds these plugins:
+      | name | version | path |
+      | lib  | 1.0.0   |      |
+    Given the git repository "lib" has a revision only the tag "lib--v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | lib  | 2.0.0   |      |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^2.0.0   |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | lib  | url         | lib        | true   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin uninstall app@tools --scope project"
+    Given the user has run "/claude:plugin update lib@tools --scope project"
+    When the user runs "/claude:plugin update lib@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status  | reasons    | scope   |
+      | tools            | project           | lib@tools | lib  | skipped | up-to-date | project |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | lib@tools | 2.0.0   | true    |
+
+  Scenario: Updating an anthropic-plugin-directory dependency its range holds leaves it at its listed copy, not a newer release tag
+    Given the git repository "dirp" holds these plugins:
+      | name | version | path |
+      | dirp | 1.0.0   |      |
+    Given the marketplace "anthropic-plugin-directory" is published as a dir source
+    Given the marketplace "anthropic-plugin-directory" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | dirp@^1.0.0  |
+    Given the marketplace "anthropic-plugin-directory" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | dirp | url         | dirp       | false  |
+    Given the marketplace "anthropic-plugin-directory" is added to the project scope
+    Given the user has run "/claude:plugin install dirp@anthropic-plugin-directory --scope project"
+    Given the user has run "/claude:plugin install app@anthropic-plugin-directory --scope project"
+    Given the git repository "dirp" has a revision only the tag "dirp--v1.5.0" reaches, holding these plugins:
+      | name | version | path |
+      | dirp | 1.5.0   |      |
+    When the user runs "/claude:plugin update dirp@anthropic-plugin-directory --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these plugins:
+      | marketplace name           | marketplace scope | id                              | name | status  | reasons    | scope   | cause chain                                                                                | cause truncated | leaks | rollback partial |
+      | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp | skipped | up-to-date | project | constrained to the combined range (^1.0.0) -- required by "app@anthropic-plugin-directory" | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id                              | version | enabled |
+      | app@anthropic-plugin-directory  | 1.0.0   | true    |
+      | dirp@anthropic-plugin-directory | 1.0.0   | true    |
+
   Scenario: Updating every plugin installs the dependency a plugin's new version needs
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

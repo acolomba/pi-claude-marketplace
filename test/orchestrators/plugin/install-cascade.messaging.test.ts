@@ -11,6 +11,7 @@ import {
 import {
   causeChainTrailer,
   DependencyCascadeError,
+  DirectoryPinUnsatisfiedError,
   InstallMarketplaceAddError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notifyWithContext } from "../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
@@ -1017,6 +1018,37 @@ describe("composeCascadeFailureMessage", () => {
         "● official [user]",
         "  ⊘ formatter@tools (failed) {source missing}",
         "    cause: marketplace add failed",
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("GV-01 a plugin directory member outside its range names a version conflict", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "member",
+      key: "formatter@tools",
+      error: new DirectoryPinUnsatisfiedError({
+        plugin: "formatter",
+        manifestVersion: "1.0.0",
+        ranges: "^2.0.0",
+        requiredBy: "helper",
+      }),
+      rollbackPartials: [],
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools (failed) {version conflict}",
+        '    cause: "formatter" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "helper".',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });

@@ -103,6 +103,20 @@ test("GV-01: a range reads the release tag version a record holds, else its vers
   assert.deepStrictEqual(versions, ["2.0.0", "2.0.0"]);
 });
 
+test("GV-01: a range reads a pinned plugin directory record's version without its pin", () => {
+  // arrange
+  const pin = "0123456789abcdef0123456789abcdef01234567";
+
+  // act
+  const versions = [
+    rangeVersionOf({ version: "1.0.0-0123456789ab", resolvedSha: pin }),
+    rangeVersionOf({ version: "0123456789ab", resolvedSha: pin }),
+  ];
+
+  // assert
+  assert.deepStrictEqual(versions, ["1.0.0", "0123456789ab"]);
+});
+
 test("GV-01: a record moved to a catalog version keeps no release tag version", () => {
   // arrange
   const record: PluginInstallRecord = {

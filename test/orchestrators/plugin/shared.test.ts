@@ -2814,6 +2814,7 @@ describe("isSameRevision", () => {
     readonly toVersion: string;
     readonly resolvedSha?: string;
     readonly resolvedVersion?: string;
+    readonly searched?: boolean;
     readonly expected: boolean;
   }[] = [
     {
@@ -2848,12 +2849,55 @@ describe("isSameRevision", () => {
       expected: false,
     },
     {
-      title: "GV-01: a record at a release tag is the unpinned candidate of the same commit",
+      title:
+        "GV-01: with no tag search, a record at a release tag is the unpinned candidate of the same commit",
       recordVersion: "1.2.3-aaaaaaaaaaaa",
       recordSha: "a".repeat(40),
       recordResolvedVersion: "1.2.3",
       toVersion: "1.2.3",
       resolvedSha: "a".repeat(40),
+      expected: true,
+    },
+    {
+      title:
+        "GV-01: after a tag search that selected none, a record at a release tag is a new revision at the same commit",
+      recordVersion: "1.2.3-aaaaaaaaaaaa",
+      recordSha: "a".repeat(40),
+      recordResolvedVersion: "1.2.3",
+      toVersion: "1.2.3",
+      resolvedSha: "a".repeat(40),
+      searched: true,
+      expected: false,
+    },
+    {
+      title:
+        "GV-01: after a tag search that selected none, the version without the tag's commit is the same revision",
+      recordVersion: "1.2.3",
+      recordSha: "a".repeat(40),
+      toVersion: "1.2.3",
+      resolvedSha: "a".repeat(40),
+      searched: true,
+      expected: true,
+    },
+    {
+      title:
+        "GV-01: after a tag search that selected none, a commit version recorded at a tag is the same revision",
+      recordVersion: "aaaaaaaaaaaa",
+      recordSha: "a".repeat(40),
+      recordResolvedVersion: "1.2.3",
+      toVersion: "aaaaaaaaaaaa",
+      resolvedSha: "a".repeat(40),
+      searched: true,
+      expected: true,
+    },
+    {
+      title:
+        "GV-02: after a tag search, a legacy sha- version at the same commit is the same revision",
+      recordVersion: "sha-aaaaaaaaaaaa",
+      recordSha: "a".repeat(40),
+      toVersion: "aaaaaaaaaaaa",
+      resolvedSha: "a".repeat(40),
+      searched: true,
       expected: true,
     },
     {
@@ -2906,6 +2950,7 @@ describe("isSameRevision", () => {
     toVersion,
     resolvedSha,
     resolvedVersion,
+    searched,
     expected,
   } of cases) {
     test(title, () => {
@@ -2918,7 +2963,10 @@ describe("isSameRevision", () => {
       };
 
       // act
-      const same = isSameRevision(record, toVersion, resolvedSha, resolvedVersion);
+      const same = isSameRevision(record, toVersion, resolvedSha, {
+        resolvedVersion,
+        ...(searched !== undefined && { searched }),
+      });
 
       // assert
       assert.equal(same, expected);
@@ -2955,6 +3003,30 @@ describe("isRecordedCandidate", () => {
 
     // assert
     assert.equal(recorded, false);
+  });
+
+  test("GV-01: after a tag search that selected none, a record at a release tag is a new revision", () => {
+    // arrange
+    const record = {
+      ...makePluginRecord({}),
+      version: "1.2.3-aaaaaaaaaaaa",
+      resolvedSha: "a".repeat(40),
+      resolvedVersion: "1.2.3",
+    };
+    const candidate = {
+      toVersion: "1.2.3",
+      resolvedSha: "a".repeat(40),
+      pluginRoot: "/source/alpha",
+    };
+
+    // act
+    const verdicts = [
+      isRecordedCandidate(record, candidate),
+      isRecordedCandidate(record, { ...candidate, searchedReleaseTags: true }),
+    ];
+
+    // assert
+    assert.deepEqual(verdicts, [true, false]);
   });
 
   test("D-18-11: another version at the recorded root is a new revision", () => {

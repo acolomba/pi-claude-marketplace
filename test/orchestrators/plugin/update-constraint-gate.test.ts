@@ -328,6 +328,58 @@ describe("evaluateUpdateConstraint", () => {
     assert.deepStrictEqual(calls[0]?.auth, { ctx, run, credentialOps: credOps });
   });
 
+  test("GV-01: a plugin directory entry queries no tag listing and admits its range unpinned", async () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      [
+        "alpha@anthropic-plugin-directory",
+        [
+          dependency({
+            name: "target",
+            marketplace: "anthropic-plugin-directory",
+            version: "^1.0.0",
+          }),
+        ],
+      ],
+    ]);
+    const state = stateOf({
+      "anthropic-plugin-directory": { target: pluginRecord(), alpha: pluginRecord() },
+    });
+    const seam: UpdateConstraintSeam = {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+      probeDependencyTags: () => {
+        throw new Error("a plugin directory entry lists no git tags");
+      },
+      probeMarketplaceTags: () => {
+        throw new Error("a plugin directory entry lists no marketplace tags");
+      },
+    };
+
+    // act
+    const verdict = await evaluateUpdateConstraint(
+      options({
+        marketplace: "anthropic-plugin-directory",
+        state,
+        entry: { name: "target", source: gitSource() },
+        seam,
+        auth: {
+          notification: { ctx: silentCtx(), run: runWithNothingLoaded() },
+          credentialOps: credentialOps(),
+        },
+      }),
+    );
+
+    // assert
+    assert.deepStrictEqual(verdict, {
+      kind: "admits",
+      range: ">=1.0.0 <2.0.0-0",
+      holders: [{ key: "alpha@anthropic-plugin-directory", range: "^1.0.0", disabled: false }],
+      fellBackToCurrentCopy: false,
+      disclosure:
+        'constrained to the combined range (^1.0.0) -- required by "alpha@anthropic-plugin-directory"',
+    });
+  });
+
   test("D-10-20: a commit-pinned git entry still probes tags for its constraint", async () => {
     // arrange
     const declarations = new Map<string, readonly AddressedDependency[]>([

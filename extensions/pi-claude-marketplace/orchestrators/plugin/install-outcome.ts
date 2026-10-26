@@ -102,6 +102,7 @@ import {
   unstagePluginWorkflows,
 } from "../../bridges/workflows/index.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
+import { recordedVersionSatisfies } from "../../domain/dependency-range.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import {
   requirePartialInstallable,
@@ -111,6 +112,7 @@ import {
 import { parsePluginSource, type ParsedSource, type PathSource } from "../../domain/source.ts";
 import {
   ConcurrentInstallError,
+  DirectoryPinUnsatisfiedError,
   errorMessage,
   InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
@@ -146,6 +148,7 @@ import { discoverGeneratedNames } from "./discover-names.ts";
 import { probeInstallClone, type InstallCloneCacheSeam } from "./install-clone-probe.ts";
 import {
   assertNoCrossPluginConflicts,
+  readDeclaredPluginVersion,
   removePluginRecord,
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
@@ -175,6 +178,17 @@ import type { InstallPluginOutcome } from "../types.ts";
 export type InstallPluginNotifications =
   { readonly mode: "standalone" } | { readonly mode: "orchestrated" };
 
+/**
+ * GV-01: the range the listed copy of a plugin of Claude Code's plugin
+ * directory must satisfy, which picks no release tag, and what a refusal
+ * names: the declared ranges and the plugin that asked.
+ */
+export interface DirectoryPinRange {
+  readonly range: string;
+  readonly declared: string;
+  readonly requiredBy?: string;
+}
+
 /** Inputs consumed by the guard-free install ledger. */
 export interface InstallLedgerOptions {
   /** Context used only by the clone probe's authentication notification seam. */
@@ -198,6 +212,8 @@ export interface InstallLedgerOptions {
    * tags -- the entry still decides which repository is read.
    */
   readonly sourcePinOverride?: string;
+  /** GV-01: the range a plugin directory member's listed copy must satisfy. */
+  readonly directoryPin?: DirectoryPinRange;
   /**
    * GV-01: the semver of the release tag a dependency's version range
    * selected, which the record keeps as `resolvedVersion` and dependency
@@ -783,12 +799,39 @@ async function preflightInstallResolve(
     requireInstallable(resolved, "install");
   }
 
+  if (opts.directoryPin !== undefined) {
+    await assertDirectoryPinSatisfied(entry.name, resolved.pluginRoot, opts.directoryPin);
+  }
+
   // After the gate `resolved` is narrowed to the materializable union
   // (`installable | partially-available`); pluginRoot etc. are reachable.
   // The `partially-available` arm carries only supported kinds in
   // componentPaths, so the shared materialize phases degrade it naturally
   // (D-65-02, no partial branch).
   return { kind: "ready", entry, installable: resolved, resolvedSha };
+}
+
+/**
+ * GV-01: Claude Code checks the `plugin.json` version of a plugin directory
+ * copy against its dependents' range after the fetch, and refuses the install
+ * when it falls outside or declares none.
+ */
+async function assertDirectoryPinSatisfied(
+  plugin: string,
+  pluginRoot: string,
+  pin: DirectoryPinRange,
+): Promise<void> {
+  const manifestVersion = await readDeclaredPluginVersion(pluginRoot);
+  if (manifestVersion !== undefined && recordedVersionSatisfies(manifestVersion, pin.range)) {
+    return;
+  }
+
+  throw new DirectoryPinUnsatisfiedError({
+    plugin,
+    manifestVersion,
+    ranges: pin.declared,
+    requiredBy: pin.requiredBy?.split("@")[0],
+  });
 }
 
 /**

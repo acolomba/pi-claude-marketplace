@@ -1141,6 +1141,21 @@ Some plugin operations have failed.
 
 The dependency resolved cleanly and its own six-phase ledger then failed. There is no cascade reason to add -- the ledger's error IS the fact -- so the row carries an empty reasons array and the renderer suppresses the brace. The requesting plugin's row still says why it is there. Everything this command had already materialized is unwound; a dependency installed BEFORE the command ran is not touched (D-03-07). Re-running the same command after fixing the cause starts from the same state as the first attempt.
 
+### Dependency cascade -- a plugin directory copy outside the constraint (GV-01)
+
+<!-- catalog-state: dependency-directory-pin-unsatisfied -->
+
+```text
+Some plugin operations have failed.
+
+● official [user]
+  ⊘ formatter@anthropic-plugin-directory (failed) {version conflict}
+    cause: "formatter" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "helper".
+  ⊘ helper (failed) {dependency failed}
+```
+
+A plugin of the `anthropic-plugin-directory` marketplace never installs at a release tag, as in Claude Code: the dependency installs the copy its catalog entry lists, and that copy's `plugin.json` version must satisfy the constraint. It does not here, so the cascade fails and unwinds what it had materialized. The `version conflict` token is the one the other version rows use. The cause is Claude Code's own message, naming the listed version (`no version` when the copy declares none), the declared ranges, and the plugin that asked for the dependency. No reload-hint.
+
 ### Dependency promoted to a direct install (D-04-07)
 
 <!-- catalog-state: dependency-promoted -->

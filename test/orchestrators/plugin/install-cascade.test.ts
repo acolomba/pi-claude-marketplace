@@ -1284,6 +1284,99 @@ test("RESV-03 a satisfiable range pins the member and the pin reaches its ledger
   );
 });
 
+test("GV-01: a constrained plugin directory member makes no tag query and carries its range to its ledger", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-cascade-directory-");
+  const state = await seedMarketplace(environment.cwd, ["foo"]);
+  const locations = locationsFor("project", environment.cwd);
+  const materialized: InstallLedgerOptions[] = [];
+  const seen: DependencyTagProbeOptions[] = [];
+  const directory = "anthropic-plugin-directory";
+  const baseOptions = ledgerOptionsFor(environment.cwd);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", marketplace: directory, version: "^1.0.0" }],
+      [`bar@${directory}`]: [],
+    }),
+    ledgerOptionsFor: (member) => ({
+      ...baseOptions(member),
+      ...(member.directoryPin !== undefined && { directoryPin: member.directoryPin }),
+    }),
+    rootAllowedMarketplaces: new Set([directory]),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE, directory]),
+    seam: recordingLedgerSeam(environment.cwd, locations, materialized),
+    tagProbe: tagProbeAnswering(
+      { kind: "pinned", tag: "bar--v1.4.0", oid: PINNED_OID, version: "1.4.0" },
+      seen,
+    ),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(seen, []);
+  assert.deepStrictEqual(
+    materialized.map((options) => [
+      options.plugin,
+      options.sourcePinOverride,
+      options.directoryPin,
+    ]),
+    [
+      [
+        "bar",
+        undefined,
+        { range: ">=1.0.0 <2.0.0-0", declared: "^1.0.0", requiredBy: `foo@${MARKETPLACE}` },
+      ],
+      ["foo", undefined, undefined],
+    ],
+  );
+});
+
+test("GV-01 / D-09-05: a root range on a plugin directory root makes no tag query and names no requirer", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-cascade-directory-root-");
+  const state = await seedMarketplace(environment.cwd, []);
+  const locations = locationsFor("project", environment.cwd);
+  const materialized: InstallLedgerOptions[] = [];
+  const seen: DependencyTagProbeOptions[] = [];
+  const directory = "anthropic-plugin-directory";
+  const baseOptions = ledgerOptionsFor(environment.cwd);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `bar@${directory}`,
+    rootRanges: ["^1.0.0"],
+    lookup: catalog({ [`bar@${directory}`]: [] }),
+    ledgerOptionsFor: (member) => ({
+      ...baseOptions(member),
+      ...(member.directoryPin !== undefined && { directoryPin: member.directoryPin }),
+    }),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([directory]),
+    seam: recordingLedgerSeam(environment.cwd, locations, materialized),
+    tagProbe: tagProbeAnswering(
+      { kind: "pinned", tag: "bar--v1.4.0", oid: PINNED_OID, version: "1.4.0" },
+      seen,
+    ),
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(seen, []);
+  assert.deepStrictEqual(
+    materialized.map((options) => [options.plugin, options.directoryPin]),
+    [["bar", { range: ">=1.0.0 <2.0.0-0", declared: "^1.0.0" }]],
+  );
+});
+
 test("D-09-05: a root range pins the root through the tag probe like a constrained member", async (t) => {
   // arrange: `bar` is the ROOT itself, git-sourced and declaring nothing --
   // the caller's `rootRanges` is the only constraint on it.
@@ -4497,6 +4590,47 @@ test("UPD-DEP-D1 / GV-01: a graph walk names the release tag version a recorded 
       requesters: [{ key: `foo@${MARKETPLACE}`, ranges: ["*"] }],
       dependsOn: [],
       version: "0.0.1",
+      resolvedVersion: "0.0.1",
+      disabled: true,
+      walked: true,
+    },
+  ]);
+});
+
+test("UPD-DEP-D1 / GV-01: a graph walk names a pinned plugin directory record's version without its pin", async (t) => {
+  // arrange: `bar` records a version that carries its pin, as a pinned
+  // plugin directory plugin's does.
+  const environment = await createHermeticEnvironment(t, "install-cascade-plan-pin-");
+  const { state } = await seedOneDisabledDependency(environment.cwd);
+  const bar = state.marketplaces[MARKETPLACE]?.plugins.bar;
+  assert.ok(bar !== undefined, "the fixture records the disabled dependency");
+  bar.version = "0.0.1-0123456789ab";
+  bar.resolvedSha = PINNED_OID;
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const graph = await walkDependencyGraph({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "*" }],
+      [`bar@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set([`bar@${MARKETPLACE}`, `baz@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.deepStrictEqual(graph.kind === "graph" && graph.nodes, [
+    {
+      kind: "recorded",
+      member: { ...closureMember("bar", ["*"]), requiredBy: `foo@${MARKETPLACE}` },
+      requesters: [{ key: `foo@${MARKETPLACE}`, ranges: ["*"] }],
+      dependsOn: [],
+      version: "0.0.1-0123456789ab",
       resolvedVersion: "0.0.1",
       disabled: true,
       walked: true,

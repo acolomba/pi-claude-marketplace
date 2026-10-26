@@ -1151,6 +1151,40 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
       },
     },
 
+    // GV-01: a plugin directory dependency installs the copy its catalog
+    // lists, with no release tag, and that copy is outside the constraint.
+    "dependency-directory-pin-unsatisfied": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                name: "formatter@anthropic-plugin-directory",
+                reasons: ["version conflict"],
+                cause: new Error(
+                  '"formatter" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "helper".',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "helper",
+                reasons: ["dependency failed"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // D-04-07: the plugin was recorded as another plugin's dependency and the
     // user then installed it by name. One field of one record changes and
     // nothing is materialized, so the row is `installed` at info with no

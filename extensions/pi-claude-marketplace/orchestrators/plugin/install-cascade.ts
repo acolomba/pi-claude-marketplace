@@ -99,6 +99,7 @@ import {
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
+import { isPluginDirectoryMarketplace } from "../../domain/version.ts";
 import {
   isRecordedButDisabled,
   rangeVersionOf,
@@ -120,6 +121,7 @@ import type {
   DependencyTagProbeOptions,
 } from "./dependency-tag-probe.ts";
 import type {
+  DirectoryPinRange,
   InstallFailureCapture,
   InstallLedgerOptions,
   InstallLedgerResult,
@@ -295,6 +297,12 @@ export interface ResolvedCascadeMember extends ClosureMember {
    * installed fine.
    */
   readonly fellBackToCurrentCopy?: true;
+  /**
+   * GV-01: a member of Claude Code's plugin directory picks no release tag.
+   * It installs the copy its catalog entry lists, which must satisfy this
+   * range.
+   */
+  readonly directoryPin?: DirectoryPinRange;
 }
 
 /**
@@ -623,7 +631,11 @@ export interface RecordedGraphNode {
   /** The keys this node's declarations name; empty when the walk stopped at it. */
   readonly dependsOn: readonly string[];
   readonly version: string | undefined;
-  /** GV-01: the release tag's semver the record keeps, which ranges read. */
+  /**
+   * GV-01: the version ranges read when it is not the recorded one: the
+   * release tag's semver the record keeps, or the declared version of a
+   * pinned `anthropic-plugin-directory` plugin.
+   */
   readonly resolvedVersion?: string;
   readonly disabled: boolean;
   readonly walked: boolean;
@@ -919,9 +931,27 @@ async function resolveOneMember(
     return { kind: "failed", failure: toIntersectionFailure(member.key, ranges, intersected) };
   }
 
-  return isUnconstrainedRange(intersected.range)
-    ? { kind: "resolved", member }
-    : probeMemberPin(options, member, intersected.range, renderDeclaredRanges(ranges));
+  if (isUnconstrainedRange(intersected.range)) {
+    return { kind: "resolved", member };
+  }
+
+  // GV-01: Claude Code never picks a release tag for a plugin of its plugin
+  // directory; the copy its catalog lists must satisfy the range instead.
+  if (isPluginDirectoryMarketplace(member.marketplace)) {
+    return {
+      kind: "resolved",
+      member: {
+        ...member,
+        directoryPin: {
+          range: intersected.range,
+          declared: renderDeclaredRanges(ranges),
+          ...(member.requiredBy !== undefined && { requiredBy: member.requiredBy }),
+        },
+      },
+    };
+  }
+
+  return probeMemberPin(options, member, intersected.range, renderDeclaredRanges(ranges));
 }
 
 /**
@@ -1709,15 +1739,26 @@ function graphNode(
   }
 
   const record = recordOf(options.state, member);
+  const rangeVersion = nodeRangeVersion(record);
   return {
     kind: "recorded",
     member,
     ...facts,
     version: record?.version,
-    ...(record?.resolvedVersion !== undefined && { resolvedVersion: record.resolvedVersion }),
+    ...(rangeVersion !== undefined && { resolvedVersion: rangeVersion }),
     disabled: disabledRecordOf(options.state, options.rootKey, member) !== undefined,
     walked,
   };
+}
+
+/** GV-01: the version a recorded node's ranges read, when the record keeps one apart. */
+function nodeRangeVersion(record: PluginInstallRecord | undefined): string | undefined {
+  if (record === undefined || record.resolvedVersion !== undefined) {
+    return record?.resolvedVersion;
+  }
+
+  const rangeVersion = rangeVersionOf(record);
+  return rangeVersion === record.version ? undefined : rangeVersion;
 }
 
 /**

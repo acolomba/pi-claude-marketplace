@@ -139,6 +139,7 @@ import type {
 import type { InstallCloneCacheSeam } from "./install-clone-probe.ts";
 import type { InstallHooksRouting } from "./install-disable-cascade.ts";
 import type {
+  DirectoryPinRange,
   InstallFailureCapture,
   InstallLedgerOptions,
   InstallLedgerResult,
@@ -417,6 +418,8 @@ function buildInstallLedgerOptions(
     resolvedVersion?: string;
     /** The caller's `pinVersionOverride`, for the member the caller named. */
     pinVersion?: string;
+    /** GV-01: the range THIS plugin directory member's listed copy must satisfy. */
+    directoryPin?: DirectoryPinRange;
     /** D-04-01: whether THIS member is the plugin the caller named. */
     provenance?: PluginInstallRecord["provenance"];
     /**
@@ -436,6 +439,7 @@ function buildInstallLedgerOptions(
     plugin: core.plugin,
     ...(core.sourcePin !== undefined && { sourcePinOverride: core.sourcePin }),
     ...(core.resolvedVersion !== undefined && { resolvedVersion: core.resolvedVersion }),
+    ...(core.directoryPin !== undefined && { directoryPin: core.directoryPin }),
     ...(core.provenance !== undefined && { provenance: core.provenance }),
     ...(opts.mapModel !== undefined && { mapModel: opts.mapModel }),
     ...(opts.partial !== undefined && { partial: opts.partial }),
@@ -1002,6 +1006,7 @@ function dependencyLedgerOptions(
         sourcePin: member.pin.oid,
         resolvedVersion: member.pin.version,
       }),
+      ...(member.directoryPin !== undefined && { directoryPin: member.directoryPin }),
       provenance: "dependency",
       marketplaceAdd: core.adds.marketplaceAdd,
       addedMarketplaces: core.adds.addedMarketplaces,
@@ -2340,6 +2345,7 @@ async function installPluginWithTransaction(
                 sourcePin: member.pin.oid,
                 resolvedVersion: member.pin.version,
               }),
+              ...(member.directoryPin !== undefined && { directoryPin: member.directoryPin }),
               ...(pinVersion !== undefined && { pinVersion }),
               // D-04-01: the root is the one member the closure walk never
               // skips, so the key comparison alone decides provenance -- per

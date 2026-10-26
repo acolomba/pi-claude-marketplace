@@ -7,9 +7,11 @@ import { describe, test, type TestContext } from "node:test";
 import {
   computeHashVersion,
   declaredVersionWithPin,
+  isPluginDirectoryMarketplace,
   isSameVersion,
   shaVersion,
   tagShaVersion,
+  withoutTagCommit,
   withTagCommit,
 } from "../../extensions/pi-claude-marketplace/domain/version.ts";
 
@@ -283,6 +285,35 @@ describe("withTagCommit", () => {
 
   test("GV-01: a version that already ends in the commit keeps one copy", () => {
     assert.strictEqual(withTagCommit("2.0.0-a1b2c3d4e5f6", FULL_SHA), "2.0.0-a1b2c3d4e5f6");
+  });
+});
+
+describe("withoutTagCommit", () => {
+  test("GV-01: drops a dash and the first 12 characters of the commit", () => {
+    assert.strictEqual(withoutTagCommit("2.0.0-a1b2c3d4e5f6", FULL_SHA), "2.0.0");
+  });
+
+  test("GV-01: keeps a version that does not end in the commit", () => {
+    assert.strictEqual(withoutTagCommit("2.0.0-b1b2c3d4e5f6", FULL_SHA), "2.0.0-b1b2c3d4e5f6");
+  });
+
+  test("GV-01: keeps a version that is only the suffix", () => {
+    assert.strictEqual(withoutTagCommit("-a1b2c3d4e5f6", FULL_SHA), "-a1b2c3d4e5f6");
+  });
+
+  test("GV-01: keeps the version when no commit is recorded", () => {
+    assert.strictEqual(withoutTagCommit("2.0.0-a1b2c3d4e5f6", undefined), "2.0.0-a1b2c3d4e5f6");
+  });
+});
+
+describe("isPluginDirectoryMarketplace", () => {
+  test("GV-01: names Claude Code's plugin directory and no other marketplace", () => {
+    assert.deepStrictEqual(
+      ["anthropic-plugin-directory", "tools", "anthropic-plugin-directory-mirror"].map((name) =>
+        isPluginDirectoryMarketplace(name),
+      ),
+      [true, false, false],
+    );
   });
 });
 

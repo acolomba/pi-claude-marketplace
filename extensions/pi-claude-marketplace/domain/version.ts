@@ -101,6 +101,31 @@ export function withTagCommit(version: string, tagCommit: string): string {
 }
 
 /**
+ * GV-01: the version a dependency range reads for a recorded `version` at
+ * `commit`: without the `-` and first 12 characters of the commit that
+ * `withTagCommit` appended, as Claude Code reads the plugin's own declared
+ * version and never the recorded string.
+ */
+export function withoutTagCommit(version: string, commit: string | undefined): string {
+  if (commit === undefined) {
+    return version;
+  }
+
+  const suffix = `-${commit.slice(0, HASH_TRUNC)}`;
+  return version.length > suffix.length && version.endsWith(suffix)
+    ? version.slice(0, -suffix.length)
+    : version;
+}
+
+/**
+ * GV-01: whether a marketplace is Claude Code's plugin directory,
+ * whose plugins never install at a release tag a version range selects.
+ */
+export function isPluginDirectoryMarketplace(marketplaceName: string): boolean {
+  return marketplaceName === PLUGIN_DIRECTORY_MARKETPLACE;
+}
+
+/**
  * GV-01: a declared version as Claude Code records it. A plugin of the
  * `anthropic-plugin-directory` marketplace whose source is pinned to a commit
  * carries a `-` and the pin's first 12 characters, once.
@@ -111,7 +136,7 @@ export function declaredVersionWithPin(
   marketplaceName: string,
 ): string {
   const pin = sourcePin(source);
-  if (marketplaceName !== PLUGIN_DIRECTORY_MARKETPLACE || pin === undefined) {
+  if (!isPluginDirectoryMarketplace(marketplaceName) || pin === undefined) {
     return declared;
   }
 

@@ -21,6 +21,7 @@
 // `apply`'s runner share (D-23); this leaf adds the tag search on top.
 
 import { parsePluginSource } from "../../domain/source.ts";
+import { isPluginDirectoryMarketplace } from "../../domain/version.ts";
 
 import { admitsRange, evaluateCatalogConstraint, transportHeld } from "./constraint-fold.ts";
 import { buildScopeDeclarationDetail } from "./dependency-index.ts";
@@ -238,7 +239,9 @@ export async function evaluateUpdateConstraint(
   // D-10-05 / D-18-17: the walk and the fold are the tag-free gate's, so a
   // walk that cannot read a record fails the operation closed here too.
   const verdict = await evaluateCatalogConstraint({ ...options, seam });
-  if (verdict.kind !== "admits") {
+  // GV-01: Claude Code never picks a release tag for a plugin of its plugin
+  // directory; the range judges the copy the catalog lists instead.
+  if (verdict.kind !== "admits" || isPluginDirectoryMarketplace(options.marketplace)) {
     return verdict;
   }
 

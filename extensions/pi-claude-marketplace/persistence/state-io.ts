@@ -30,6 +30,7 @@ import Type from "typebox";
 import { Compile } from "typebox/compile";
 
 import { githubSource, parsePluginSource, pathSource } from "../domain/source.ts";
+import { withoutTagCommit } from "../domain/version.ts";
 import { atomicWriteJson } from "../shared/atomic-json.ts";
 import { errorMessage } from "../shared/errors.ts";
 
@@ -243,13 +244,16 @@ export function isRecordedButDisabled(record: { readonly enabled: boolean }): bo
 /**
  * GV-01: the version a dependency's version range reads for a record -- the
  * tag's semver when a range selected one, as Claude Code reads
- * `resolvedVersion` first, else the recorded version.
+ * `resolvedVersion` first, else the recorded version without the commit a
+ * pinned `anthropic-plugin-directory` plugin carries, as Claude Code reads
+ * the plugin's declared version.
  */
 export function rangeVersionOf(record: {
   readonly version: string;
   readonly resolvedVersion?: string;
+  readonly resolvedSha?: string;
 }): string {
-  return record.resolvedVersion ?? record.version;
+  return record.resolvedVersion ?? withoutTagCommit(record.version, record.resolvedSha);
 }
 
 /**

@@ -1,5 +1,9 @@
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
-import { DependencyCascadeError, InstallMarketplaceAddError } from "../../shared/errors.ts";
+import {
+  DependencyCascadeError,
+  DirectoryPinUnsatisfiedError,
+  InstallMarketplaceAddError,
+} from "../../shared/errors.ts";
 import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
 
@@ -475,6 +479,11 @@ function memberReasons(
 
   if (subject.error instanceof InstallMarketplaceAddError) {
     return [subject.error.reason];
+  }
+
+  // GV-01: a plugin directory copy outside its dependents' range.
+  if (subject.error instanceof DirectoryPinUnsatisfiedError) {
+    return ["version conflict"];
   }
 
   const gitReason = classifyGitHostFailure(subject.error);

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  plannedRangeVersion,
   planDependencyGraph,
   renderRequestedRanges,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-plan.ts";
@@ -757,5 +758,22 @@ describe("renderRequestedRanges", () => {
 
     // assert
     assert.strictEqual(rendered, "^2.0.0, >=2.1.0");
+  });
+});
+
+describe("plannedRangeVersion", () => {
+  test("GV-01: a range reads a tag's semver, else the version without a plugin directory pin", () => {
+    // arrange
+    const pin = "0123456789abcdef0123456789abcdef01234567";
+
+    // act
+    const versions = [
+      plannedRangeVersion({ toVersion: "2.0.0-0123456789ab", resolvedVersion: "2.0.0" }),
+      plannedRangeVersion({ toVersion: "1.0.0-0123456789ab", resolvedSha: pin }),
+      plannedRangeVersion({ toVersion: "1.0.0" }),
+    ];
+
+    // assert
+    assert.deepStrictEqual(versions, ["2.0.0", "1.0.0", "1.0.0"]);
   });
 });

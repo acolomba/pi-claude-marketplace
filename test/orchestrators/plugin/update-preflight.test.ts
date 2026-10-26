@@ -1135,6 +1135,107 @@ test("GV-02: a tag-pinned record written before GV-01 is unchanged at the same t
   assert.strictEqual(after, before);
 });
 
+/** A record at a release tag's commit, and a catalog entry pinned to that commit. */
+async function seedAtTagCommit() {
+  const pinnedSha = "6666666666666666666666666666666666666666";
+  const seed = await seedUpdate({
+    installed: (pluginRoot) => ({
+      ...pluginRecord("1.2.0-666666666666"),
+      resolvedSource: pluginRoot,
+      resolvedSha: pinnedSha,
+      resolvedVersion: "1.2.0",
+    }),
+    source: { source: "url", url: "https://example.com/tagged", sha: pinnedSha },
+    version: "1.2.0",
+  });
+  const cloneCacheSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: () =>
+      Promise.resolve({ cloneUrl: "https://example.com/tagged", pin: pinnedSha }),
+    materializePluginClone: () => Promise.resolve(seed.pluginRoot),
+    materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
+  };
+  return { seed, cloneCacheSeam };
+}
+
+test("GV-01: an update that selects no tag moves a record at a release tag's commit to the version without it", async (t) => {
+  // arrange
+  const { seed, cloneCacheSeam } = await seedAtTagCommit();
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+
+  // act
+  const prepared = await prepare(seed, {
+    cloneCacheSeam,
+    constraintGate: () => Promise.resolve({ kind: "unconstrained" }),
+  });
+
+  // assert
+  assert.ok(!("partition" in prepared));
+  assert.deepStrictEqual(
+    [prepared.fromVersion, prepared.toVersion, prepared.resolvedVersion],
+    ["1.2.0-666666666666", "1.2.0", undefined],
+  );
+});
+
+test("GV-01 / D-23: a policy that lists no tag leaves a record at a release tag's commit unchanged", async (t) => {
+  // arrange
+  const { seed, cloneCacheSeam } = await seedAtTagCommit();
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+
+  // act
+  const outcome = await prepare(seed, {
+    cloneCacheSeam,
+    policy: CONVERGE_POLICY,
+    constraintGate: () => Promise.resolve({ kind: "unconstrained" }),
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "unchanged",
+    name: "hello",
+    fromVersion: "1.2.0-666666666666",
+    toVersion: "1.2.0",
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    constraint: undefined,
+  });
+});
+
+test("GV-01: the post-fetch guard reads a pinned plugin directory candidate's declared version", async (t) => {
+  // arrange
+  const pinnedSha = "7777777777777777777777777777777777777777";
+  const seed = await seedUpdate({
+    marketplaceName: "anthropic-plugin-directory",
+    installed: pluginRecord("0.9.0"),
+    source: { source: "url", url: "https://example.com/directory", sha: pinnedSha },
+    version: "1.0.0",
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const cloneCacheSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: () =>
+      Promise.resolve({ cloneUrl: "https://example.com/directory", pin: pinnedSha }),
+    materializePluginClone: () => Promise.resolve(seed.pluginRoot),
+    materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
+  };
+  const constraintGate: PreparePluginUpdateOptions["constraintGate"] = () =>
+    Promise.resolve({
+      kind: "admits",
+      range: ">=1.0.0 <2.0.0-0",
+      holders: [{ key: "alpha@anthropic-plugin-directory", range: "^1.0.0", disabled: false }],
+      fellBackToCurrentCopy: false,
+      disclosure: "constrained to the combined range (^1.0.0)",
+    });
+
+  // act
+  const prepared = await prepare(seed, { cloneCacheSeam, constraintGate });
+
+  // assert
+  assert.ok(!("partition" in prepared));
+  assert.strictEqual(prepared.toVersion, "1.0.0-777777777777");
+});
+
 test("UPDT-01: a path-source pin materializes through the marketplace's own tag clone", async (t) => {
   // arrange
   const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), version: "1.2.0" });

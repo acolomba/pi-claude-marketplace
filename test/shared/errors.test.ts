@@ -15,6 +15,7 @@ import {
   DependencyCascadeError,
   DependencyDeclarationsUnreadableError,
   DeviceFlowUnavailableError,
+  DirectoryPinUnsatisfiedError,
   errorMessage,
   errorWithCleanupFailures,
   errorWithManualRecovery,
@@ -600,6 +601,59 @@ describe("withoutCleanupLeaks", () => {
 
     // assert
     assert.strictEqual(original, error);
+  });
+});
+
+describe("DirectoryPinUnsatisfiedError", () => {
+  test("GV-01: names the listed version, the declared ranges and the plugin that asked", () => {
+    // act
+    const error = new DirectoryPinUnsatisfiedError({
+      plugin: "dirp",
+      manifestVersion: "1.0.0",
+      ranges: "^2.0.0",
+      requiredBy: "app",
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        plugin: error.plugin,
+        manifestVersion: error.manifestVersion,
+        ranges: error.ranges,
+        requiredBy: error.requiredBy,
+      },
+      {
+        name: "DirectoryPinUnsatisfiedError",
+        message:
+          '"dirp" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "app".',
+        plugin: "dirp",
+        manifestVersion: "1.0.0",
+        ranges: "^2.0.0",
+        requiredBy: "app",
+      },
+    );
+  });
+
+  test("GV-01: a copy that declares no version, with no plugin that asked, says so", () => {
+    // act
+    const error = new DirectoryPinUnsatisfiedError({
+      plugin: "dirp",
+      manifestVersion: undefined,
+      ranges: "^2.0.0",
+      requiredBy: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      [error.message, error.manifestVersion, error.requiredBy],
+      [
+        '"dirp" from the Anthropic Directory is pinned to its listed commit (no version), which does not satisfy ^2.0.0.',
+        undefined,
+        undefined,
+      ],
+    );
   });
 });
 

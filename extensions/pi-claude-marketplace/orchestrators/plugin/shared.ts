@@ -1213,7 +1213,7 @@ async function manifestCandidateExists(manifestPath: string): Promise<boolean> {
  * no usable `version`, the answer falls to the marketplace entry, never to a sibling
  * candidate. Never throws (D-23-02 / D-23-03).
  */
-async function readDeclaredPluginVersion(pluginRoot: string): Promise<string | undefined> {
+export async function readDeclaredPluginVersion(pluginRoot: string): Promise<string | undefined> {
   for (const candidate of MANIFEST_CANDIDATES) {
     const manifestPath = path.join(pluginRoot, candidate);
 
@@ -1331,6 +1331,11 @@ export async function resolveTagPinnedPluginVersion(
  * revision too. Only when neither side has a sha does the version alone
  * decide.
  *
+ * `tags.resolvedVersion` is the semver of the release tag a range selected.
+ * `tags.searched` says that the candidate comes from a verb that lets a
+ * dependent's range pick a release tag (D-23), so a candidate with no
+ * `resolvedVersion` is one no tag applies to.
+ *
  * This is the disabled branch's rule (D-99-05a). The enabled branch also
  * compares the plugin root, through `isRecordedCandidate`.
  */
@@ -1338,7 +1343,7 @@ export function isSameRevision(
   record: PluginInstallRecord,
   toVersion: string,
   resolvedSha: string | undefined,
-  resolvedVersion?: string,
+  tags: { readonly resolvedVersion?: string | undefined; readonly searched?: boolean } = {},
 ): boolean {
   if (resolvedSha !== record.resolvedSha) {
     return false;
@@ -1347,9 +1352,19 @@ export function isSameRevision(
   // GV-01 / GV-02: at a release tag a range selected, the revision is the tag:
   // Claude Code's check reads the record's tag version and commit. A record
   // written before GV-01 holds the tag's semver as its version.
-  return resolvedVersion === undefined
-    ? isSameVersion(record.version, toVersion, record.resolvedSha)
-    : rangeVersionOf(record) === resolvedVersion;
+  if (tags.resolvedVersion !== undefined) {
+    return rangeVersionOf(record) === tags.resolvedVersion;
+  }
+
+  // GV-01: with no tag, Claude Code's update compares the recorded string, so
+  // a record at a tag's commit moves to the version without that commit. A
+  // check that never read the tags (D-23) cannot tell, and reads it as the
+  // same version.
+  return isSameVersion(
+    record.version,
+    toVersion,
+    tags.searched === true ? undefined : record.resolvedSha,
+  );
 }
 
 /**
@@ -1364,11 +1379,14 @@ export function isRecordedCandidate(
     readonly resolvedSha: string | undefined;
     readonly pluginRoot: string;
     readonly resolvedVersion?: string | undefined;
+    readonly searchedReleaseTags?: boolean;
   },
 ): boolean {
   return (
-    isSameRevision(record, candidate.toVersion, candidate.resolvedSha, candidate.resolvedVersion) &&
-    candidate.pluginRoot === record.resolvedSource
+    isSameRevision(record, candidate.toVersion, candidate.resolvedSha, {
+      resolvedVersion: candidate.resolvedVersion,
+      searched: candidate.searchedReleaseTags === true,
+    }) && candidate.pluginRoot === record.resolvedSource
   );
 }
 

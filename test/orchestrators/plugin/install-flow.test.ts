@@ -16192,6 +16192,96 @@ test("D-09-05: a pinned git-source root records the tag's commit and semver thro
   });
 });
 
+test("GV-01: a constrained plugin directory dependency installs its listed copy with no tag query", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-directory-dep-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "anthropic-plugin-directory",
+        pluginName: "gp",
+        source: { source: "url", url: "https://example.com/org/repo" },
+        fixtureRepoDir,
+        dependentPlugins: [{ name: "root", range: "^9.0.0" }],
+      });
+      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "anthropic-plugin-directory",
+        plugin: "root",
+        cloneCacheSeam: seamWith(gitOps),
+        tagProbe: () => Promise.reject(new Error("a plugin directory dependency lists no tags")),
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      const after = await loadState(locationsFor("project", cwd).extensionRoot);
+      const recorded = after.marketplaces["anthropic-plugin-directory"]?.plugins["gp"];
+      assert.deepStrictEqual(
+        [recorded?.version, recorded?.resolvedVersion, recorded?.provenance],
+        ["9.9.9", undefined, "dependency"],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GV-01: a missing plugin directory dependency outside its range is refused as Claude Code refuses it", async () => {
+  await withHermeticHome(async ({ installMissingDependency }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-directory-dep-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "anthropic-plugin-directory",
+        pluginName: "gp",
+        source: { source: "url", url: "https://example.com/org/repo" },
+        fixtureRepoDir,
+      });
+      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const locations = locationsFor("project", cwd);
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installMissingDependency({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "anthropic-plugin-directory",
+        plugin: "gp",
+        ranges: ["^10.0.0"],
+        requiredBy: "deploy-kit@anthropic-plugin-directory",
+        cloneCacheSeam: seamWith(gitOps),
+        tagProbe: () => Promise.reject(new Error("a plugin directory dependency lists no tags")),
+      });
+
+      // assert
+      assert.ok(outcome.status === "failed");
+      assert.equal(
+        outcome.error.message,
+        '"gp" from the Anthropic Directory is pinned to its listed commit (version 9.9.9), which does not satisfy ^10.0.0.',
+      );
+      const after = await loadState(locations.extensionRoot);
+      assert.deepStrictEqual(after.marketplaces["anthropic-plugin-directory"]?.plugins, {});
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("D-09-05: a malformed skill degrades the missing dependency and surfaces a post-commit warning", async () => {
   await withHermeticHome(async ({ installMissingDependency }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-malformed-skill-"));

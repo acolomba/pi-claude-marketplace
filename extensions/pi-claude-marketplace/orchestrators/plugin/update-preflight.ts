@@ -6,6 +6,7 @@ import {
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
+import { withoutTagCommit } from "../../domain/version.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
@@ -821,12 +822,10 @@ async function refreshDisabledPluginUpdate(
   }
 
   if (
-    isSameRevision(
-      preflight.record,
-      preflight.toVersion,
-      preflight.resolvedSha,
-      preflight.resolvedVersion,
-    )
+    isSameRevision(preflight.record, preflight.toVersion, preflight.resolvedSha, {
+      resolvedVersion: preflight.resolvedVersion,
+      searched: options.policy.searchReleaseTags,
+    })
   ) {
     return {
       partition: "unchanged",
@@ -907,10 +906,11 @@ async function resolvePinnedUpdateCandidate(
  */
 function postFetchGuard(
   verdict: UpdateConstraintVerdict,
-  toVersion: string,
+  candidate: { readonly toVersion: string; readonly resolvedSha: string | undefined },
   base: { readonly plugin: string; readonly fromVersion: string },
   expectVersion: string | undefined,
 ): PluginUpdateSkippedOutcome | PreflightFailedOutcome | undefined {
+  const { toVersion, resolvedSha } = candidate;
   // UPD-DEP-D1: a dependency plan judged this move at `expectVersion`; any
   // other candidate is a version the plan never judged, so the move fails.
   if (expectVersion !== undefined && toVersion !== expectVersion) {
@@ -922,7 +922,9 @@ function postFetchGuard(
     return undefined;
   }
 
-  const stageTwo = admitResolvedVersion(verdict, toVersion);
+  // GV-01: the range reads the declared version, never the commit a pinned
+  // `anthropic-plugin-directory` plugin's recorded version carries.
+  const stageTwo = admitResolvedVersion(verdict, withoutTagCommit(toVersion, resolvedSha));
   if (stageTwo.kind === "admitted") {
     return undefined;
   }
@@ -1088,7 +1090,7 @@ export async function preparePluginUpdate(
 
   const stageTwoHold = postFetchGuard(
     verdict,
-    toVersion,
+    { toVersion, resolvedSha },
     { plugin: options.plugin, fromVersion: triaged.record.version },
     options.expectVersion,
   );
@@ -1104,6 +1106,7 @@ export async function preparePluginUpdate(
       resolvedSha,
       pluginRoot: candidate.pluginRoot,
       resolvedVersion: pin?.version,
+      searchedReleaseTags: options.policy.searchReleaseTags,
     })
   ) {
     return {

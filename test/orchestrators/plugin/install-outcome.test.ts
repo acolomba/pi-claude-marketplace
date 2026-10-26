@@ -26,6 +26,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
   CrossPluginConflictError,
+  DirectoryPinUnsatisfiedError,
   InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
   PluginShapeError,
@@ -2458,6 +2459,62 @@ test("UPD-DEP-D1: previewInstall admits an installable plugin and writes nothing
   assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), bytesBefore);
   await assert.rejects(readdir(locations.skillsTargetDir), { code: "ENOENT" });
 });
+
+test("GV-01: a plugin directory copy whose declared version satisfies its range previews clean", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-directory-ok-");
+  const seeded = await seedPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+
+  // act & assert
+  await assert.doesNotReject(
+    previewInstall(seeded.state, locations, {
+      ...projectInstallOptions(environment.cwd),
+      directoryPin: { range: ">=0.0.1 <0.0.2-0", declared: "^0.0.1" },
+    }),
+  );
+});
+
+for (const { label, pluginJson, requiredBy, message } of [
+  {
+    label: "a declared version outside its range",
+    pluginJson: {},
+    requiredBy: "app@marketplace",
+    message:
+      '"empty" from the Anthropic Directory is pinned to its listed commit (version 0.0.1), which does not satisfy ^1.0.0 required by "app".',
+  },
+  {
+    label: "no declared version",
+    pluginJson: { version: undefined },
+    requiredBy: undefined,
+    message:
+      '"empty" from the Anthropic Directory is pinned to its listed commit (no version), which does not satisfy ^1.0.0.',
+  },
+]) {
+  test(`GV-01: a plugin directory copy with ${label} refuses the install as Claude Code does`, async (t) => {
+    // arrange
+    const environment = await createHermeticEnvironment(t, "install-outcome-directory-refused-");
+    const seeded = await seedPlugin(environment.cwd, { pluginJson });
+    const locations = locationsFor("project", environment.cwd);
+
+    // act & assert
+    await assert.rejects(
+      previewInstall(seeded.state, locations, {
+        ...projectInstallOptions(environment.cwd),
+        directoryPin: {
+          range: ">=1.0.0 <2.0.0-0",
+          declared: "^1.0.0",
+          ...(requiredBy !== undefined && { requiredBy }),
+        },
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof DirectoryPinUnsatisfiedError);
+        assert.strictEqual(error.message, message);
+        return true;
+      },
+    );
+  });
+}
 
 test("UPD-DEP-D1: previewInstall throws what the gate throws for a plugin pi supports only in part", async (t) => {
   // arrange
