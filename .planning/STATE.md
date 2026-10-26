@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: lifecycle-coverage
 status: Awaiting next milestone
 stopped_at: Milestone lifecycle-coverage completed and archived
-last_updated: "2026-10-26T05:39:41.077Z"
+last_updated: "2026-10-26T13:30:00.000Z"
 last_activity: 2026-10-26
 last_activity_desc: Milestone lifecycle-coverage completed and archived
-state_head: 6d57cb9a83232fc18f02a3ba7220246f83df8f7b
+state_head: 82ef8cac54aab681fa4157b8e60072aebd3408c1
 progress:
   total_phases: 30
   completed_phases: 30
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 Phase: Milestone lifecycle-coverage complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-26 - Completed quick task 261026-26d: plan every dependency move before the first write
+Last activity: 2026-10-26 - Completed quick task 261026-c06: lock compromise, apply dependency judgement, cross-marketplace trust
 
 ### mcp-4 closeout
 
@@ -180,6 +180,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 3 | APPLY1-01: move a plugin and its newer dependency in one apply | 2026-10-25 | a777b12f | complete | [261025-n1z](./quick/261025-n1z-move-a-plugin-and-its-newer-dependency-i/) |
 | 261025-vf1 | UPD-DEP-D1: settle the dependencies of every version a plugin moves to | 2026-10-26 | 1daa12d0 | complete | [261025-vf1-resolve-the-new-version-s-dependency-clo](./quick/261025-vf1-resolve-the-new-version-s-dependency-clo/) |
 | 261026-26d | UPDDEP-REVIEW: plan every dependency move before the first write | 2026-10-26 | 6d57cb9a | complete | [261026-26d-plan-dependency-moves-before-any-write](./quick/261026-26d-plan-dependency-moves-before-any-write/) |
+| 261026-c06 | Lifecycle-coverage leftovers: a lost state lock, apply dependency judgement, cross-marketplace trust | 2026-10-26 | 82ef8cac | complete | [261026-c06-fix-lock-compromise-apply-dependency-jud](./quick/261026-c06-fix-lock-compromise-apply-dependency-jud/) |
 
 ## Session Continuity
 
