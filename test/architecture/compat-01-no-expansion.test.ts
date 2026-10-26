@@ -311,6 +311,8 @@ const EXPECTED_REASONS = [
   "enabled in local layer",
   // UPD-11: an update's git host answered with an HTTP status other than 401/403.
   "network error",
+  // IMP-06: import's skipped header for a marketplace already recorded with the same source.
+  "already added",
 ] as const;
 
 const EXPECTED_STATUS_TOKENS = [
@@ -333,6 +335,9 @@ const EXPECTED_STATUS_TOKENS = [
   "will uninstall",
   "will enable",
   "will disable",
+  "will update",
+  "will add",
+  "will remove",
   "disabled",
   "partially-installed",
   "partially-upgradable",
@@ -355,6 +360,7 @@ const EXPECTED_PLUGIN_STATUSES = [
   "will uninstall",
   "will enable",
   "will disable",
+  "will update",
   "disabled",
   "partially-installed",
   "partially-upgradable",
@@ -370,6 +376,8 @@ const EXPECTED_MARKETPLACE_STATUSES = [
   "autoupdate enabled",
   "autoupdate disabled",
   "skipped",
+  "will add",
+  "will remove",
 ] as const;
 
 /**
@@ -644,8 +652,8 @@ type IsExact<Actual, Expected> = [Actual] extends [Expected]
 
 // The pinned key set of the persisted install record. A key may join it in one
 // of exactly two ways: as an OPTIONAL additive field that needs no schemaVersion
-// bump and no migrate fill (the resolvedSha / hookEntries / dependencyDisabled
-// precedent), or as a REQUIRED field that arrives WITH a schemaVersion bump and
+// bump and no migrate fill (the resolvedSha / hookEntries / dependencyDisabled /
+// resolvedVersion precedent), or as a REQUIRED field that arrives WITH a schemaVersion bump and
 // a migrate fill that runs before validation, so every earlier document loads
 // with a truthful default (the enabled / ENBL-02 and provenance / D-04-03
 // precedent). Removing one is a migration.
@@ -659,6 +667,7 @@ void (true satisfies IsExact<
   | "provenance"
   | "resolvedSha"
   | "resolvedSource"
+  | "resolvedVersion"
   | "resources"
   | "updatedAt"
   | "version"

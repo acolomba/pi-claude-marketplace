@@ -105,6 +105,7 @@ function registeredCommand(cwd: string): (args: string) => Promise<NotifyRecord[
       mcpStatus: noStatusSnapshot(),
       gitOps: createGitOpsFake({ boundary: "memory" }).gitOps,
       beginPluginUpdateRun: pluginUpdates.beginPluginUpdateRun,
+      applyReconcile: createApplyReconcile({ loadState }),
     },
     hooksRouting,
     pluginUpdates.updatePlugins,
@@ -240,13 +241,12 @@ for (const { marketplace, plugins, plugin } of [
         cwd,
         completionCache: createCompletionCache(),
         hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
-        reason: "reload",
       });
 
       // assert
       assert.deepStrictEqual(notifications, [
         {
-          message: `● ${marketplace} [project] (added)\n  ● ${plugin} (installed)\n\nReconcile: 2 successes`,
+          message: `● ${marketplace} [project] (added)\n  ● ${plugin} v1.0.0 (installed)\n\nReconcile: 2 successes\n\n/reload to pick up changes`,
         },
       ]);
       assert.deepStrictEqual(await recordedPlugins(cwd, marketplace), [[plugin, "1.0.0", true]]);
@@ -320,7 +320,7 @@ test("D-08-07: an import of constructor@mp installs it, and disable and uninstal
     assert.deepStrictEqual(imported, [
       {
         message:
-          "● mp [project] (added)\n  ● constructor (installed)\n\nImport: 2 successes\n\n" +
+          "● mp [project] (added)\n  ● constructor v1.0.0 (installed)\n\nImport: 2 successes\n\n" +
           "/reload to pick up changes",
       },
     ]);
@@ -431,11 +431,11 @@ for (const { command, notification } of [
   },
   {
     command: (name: string) => `reinstall ${name}@mp`,
-    notification: (name: string) => pluginFailed(name, "(skipped) {not installed}"),
+    notification: (name: string) => pluginFailed(name, "(failed) {not installed}"),
   },
   {
     command: (name: string) => `update ${name}@mp`,
-    notification: (name: string) => pluginFailed(name, "(failed) {not in manifest}"),
+    notification: (name: string) => pluginFailed(name, "(failed) {not installed}"),
   },
 ]) {
   test(`D-08-07: ${command("constructor")} prints what ${command("absent")} prints and changes no file`, async () => {

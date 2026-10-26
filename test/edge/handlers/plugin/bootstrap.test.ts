@@ -316,15 +316,23 @@ for (const scope of ["user", "project"] satisfies readonly Scope[]) {
   });
 }
 
-for (const { args, label, subject } of [
-  { args: "--local", label: "alone", subject: "when it is the only token" },
+for (const { args, flag, label, subject } of [
+  { args: "--local", flag: "--local", label: "alone", subject: "when it is the only token" },
+  { args: "--bogus", flag: "--bogus", label: "bogus", subject: "when it is the only token" },
+  {
+    args: "extra --bogus",
+    flag: "--bogus",
+    label: "with-positional",
+    subject: "before the positional is rejected",
+  },
   {
     args: "--scope user --local",
+    flag: "--local",
     label: "with-scope",
     subject: "before the scope guard is consulted",
   },
 ]) {
-  test(`takes the scope-target flag as a positional and rejects it ${subject}`, async (t) => {
+  test(`rejects the flag ${flag} as unknown ${subject}`, async (t) => {
     // arrange
     const { sourceTree, networkCallCount } = await createHermeticScope(t, `scope-target-${label}`);
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -335,7 +343,9 @@ for (const { args, label, subject } of [
     await bootstrapHandler(args, ctx, runWithNothingLoaded());
 
     // assert
-    assert.deepStrictEqual(notifications, [{ message: NO_ARGUMENTS_MESSAGE, severity: "error" }]);
+    assert.deepStrictEqual(notifications, [
+      { message: `Unknown flag: "${flag}".\n\nUsage: /claude:plugin bootstrap`, severity: "error" },
+    ]);
     assert.deepStrictEqual(git.clones, []);
     assert.strictEqual(networkCallCount(), 0);
     verifyBoundary();

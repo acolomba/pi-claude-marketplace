@@ -19,6 +19,9 @@ void ({
 } satisfies ScopeConfig);
 // @ts-expect-error schema version 2 belongs to a successor file
 void ({ schemaVersion: 2 } satisfies ScopeConfig);
+void ({ autoapply: true } satisfies ScopeConfig);
+// @ts-expect-error AAP-01: autoapply is a boolean
+void ({ autoapply: "yes" } satisfies ScopeConfig);
 
 describe("isDeclaredEnabled", () => {
   test("treats an absent flag as enabled", () => {
@@ -268,6 +271,42 @@ describe("loadConfig", () => {
       error: "schema validation failed: /schemaVersion: must be equal to constant",
     });
   });
+
+  for (const autoapply of [true, false]) {
+    test(`AAP-01: keeps an autoapply of ${String(autoapply)}`, async (t) => {
+      // arrange
+      const scopeRoot = await mkdtemp(path.join(tmpdir(), "config-io-autoapply-"));
+      t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+      const filePath = path.join(scopeRoot, "claude-plugins.json");
+      await writeFile(filePath, JSON.stringify({ autoapply }));
+
+      // act
+      const loadedConfig = await loadConfig(filePath);
+
+      // assert
+      assert.deepStrictEqual(loadedConfig, { status: "valid", filePath, config: { autoapply } });
+    });
+  }
+
+  for (const bytes of ['{"autoapply":"yes"}', '{"autoapply":1}', '{"autoapply":null}']) {
+    test(`AAP-01 / D-03: rejects the non-boolean autoapply ${bytes}`, async (t) => {
+      // arrange
+      const scopeRoot = await mkdtemp(path.join(tmpdir(), "config-io-autoapply-bad-"));
+      t.after(() => rm(scopeRoot, { recursive: true, force: true }));
+      const filePath = path.join(scopeRoot, "claude-plugins.json");
+      await writeFile(filePath, bytes);
+
+      // act
+      const loadedConfig = await loadConfig(filePath);
+
+      // assert
+      assert.deepStrictEqual(loadedConfig, {
+        status: "invalid",
+        filePath,
+        error: "schema validation failed: /autoapply: must be boolean",
+      });
+    });
+  }
 
   test("returns the complete ordinary read failure", async (t) => {
     // arrange

@@ -5,11 +5,14 @@ import {
   CASCADE_CONTEXT,
   cascadeFailureCause,
   composeCascadeFailureMessage,
+  composeCascadeMemberRow,
   composeCascadeMemberRows,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts";
 import {
   causeChainTrailer,
   DependencyCascadeError,
+  DirectoryPinUnsatisfiedError,
+  InstallMarketplaceAddError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { notifyWithContext } from "../../../extensions/pi-claude-marketplace/shared/notify-context.ts";
 import { runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
@@ -120,7 +123,7 @@ function failureRows(subject: CascadeFailureSubject): readonly CascadeMsg[] {
 }
 
 describe("CASCADE_CONTEXT", () => {
-  test("adds exactly the RESV-05 skipped policy to install's own row policies", () => {
+  test("adds exactly the RESV-05 skipped and UPD-DEP-D1 updated policies to install's own row policies", () => {
     // arrange
     const expectedPolicyStatuses = [
       "disabled",
@@ -130,6 +133,7 @@ describe("CASCADE_CONTEXT", () => {
       "partially-installed",
       "skipped",
       "unavailable",
+      "updated",
     ];
 
     // act
@@ -195,6 +199,44 @@ describe("composeCascadeMemberRows", () => {
         "  ● formatter@tools v2.1.0 (installed)",
         "  ● helper v1.0.0 (installed)",
         "  ⊘ linter@tools v3.0.0 (skipped) {already installed}",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    });
+  });
+
+  test("UPD-DEP-D1 a dependency moved into range reports its move in place of the skip", () => {
+    // arrange
+    const rows = composeCascadeMemberRows({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootRow: ROOT_ROW,
+      installed: [],
+      alreadyInstalled: [{ key: "linter@tools", version: "3.0.0" }],
+      probe: PROBE_BOTH_LOADED,
+      moved: [
+        {
+          status: "updated",
+          name: "linter@tools",
+          from: "2.0.0",
+          to: "3.0.0",
+          dependencies: [],
+          severity: "info",
+          needsReload: true,
+        },
+      ],
+    });
+
+    // act
+    const emitted = emit(rows, PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "info",
+      message: [
+        "● official [user]",
+        "  ● helper v1.0.0 (installed)",
+        "  ● linter@tools v2.0.0 → v3.0.0 (updated)",
         "",
         "/reload to pick up changes",
       ].join("\n"),
@@ -451,6 +493,27 @@ describe("composeCascadeMemberRows", () => {
   });
 });
 
+describe("composeCascadeMemberRow", () => {
+  test("UPD-DEP-D1 a member installed from its marketplace's current copy names the fallback", () => {
+    // act
+    const row = composeCascadeMemberRow(
+      member({ declaresMcp: true, fellBackToCurrentCopy: true }),
+      PROBE_BOTH_LOADED,
+    );
+
+    // assert
+    assert.deepStrictEqual(row, {
+      status: "installed",
+      name: "formatter@tools",
+      dependencies: ["mcp"],
+      version: "2.1.0",
+      reasons: ["dependency current copy"],
+      severity: "info",
+      needsReload: true,
+    });
+  });
+});
+
 describe("composeCascadeFailureMessage", () => {
   test("RESV-04 a cycle renders the whole chain including the repeated key", () => {
     // arrange
@@ -656,7 +719,7 @@ describe("composeCascadeFailureMessage", () => {
         kind: "range-conflict",
         why: "contradictory-declarations",
         key: "formatter@tools",
-        range: "^1.0.0 ^2.0.0",
+        range: "^1.0.0, ^2.0.0",
         detail: "inputs 1 and 2 do not overlap",
       },
     };
@@ -672,7 +735,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed) {version conflict}",
-        '    cause: Dependency "formatter@tools" has contradictory version constraints "^1.0.0 ^2.0.0" (inputs 1 and 2 do not overlap).',
+        '    cause: Dependency "formatter@tools" has contradictory version constraints ^1.0.0, ^2.0.0 (inputs 1 and 2 do not overlap).',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -702,7 +765,38 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
-        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy "^2.0.0".',
+        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0.',
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("UPD-DEP-D1 an installed copy that cannot move into the constraint names why", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "installed-unsatisfied",
+        key: "formatter@tools",
+        range: "^2.0.0",
+        recordedVersion: "1.0.0",
+        moveRefusal: "no release moves it",
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
+        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: no release moves it',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -726,7 +820,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed) {no matching version}",
-        '    cause: Dependency "formatter@tools" has no release tag satisfying "^2.0.0".',
+        '    cause: Dependency "formatter@tools" has no release tag satisfying ^2.0.0.',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -755,7 +849,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed) {authentication required}",
-        '    cause: Dependency "formatter@tools" could not be checked against "^2.0.0" (authentication required).',
+        '    cause: Dependency "formatter@tools" could not be checked against ^2.0.0 (authentication required).',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -784,7 +878,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed) {unreadable}",
-        '    cause: Dependency "formatter@tools" could not be checked against "^2.0.0" (tag listing failed).',
+        '    cause: Dependency "formatter@tools" could not be checked against ^2.0.0 (tag listing failed).',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -813,7 +907,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ formatter@tools (failed) {invalid version constraint}",
-        '    cause: Dependency "formatter@tools" declares an unparseable version constraint "nope" (input 1 of 1 is not a valid version range).',
+        '    cause: Dependency "formatter@tools" declares an unparseable version constraint nope (input 1 of 1 is not a valid version range).',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -869,6 +963,92 @@ describe("composeCascadeFailureMessage", () => {
         "● official [user]",
         "  ⊘ formatter@tools (failed)",
         "    cause: failed to stage skill a-fmt: EACCES",
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("INR-01 a member whose clone the git host refused names the host's reason", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "member",
+      key: "formatter@tools",
+      error: Object.assign(new Error("HTTP Error: 404 Not Found"), {
+        code: "HttpError",
+        data: { statusCode: 404 },
+      }),
+      rollbackPartials: [],
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools (failed) {source missing}",
+        "    cause: HTTP Error: 404 Not Found",
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("INR-01 a member whose marketplace add failed names the add's reason", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "member",
+      key: "formatter@tools",
+      error: new InstallMarketplaceAddError("source missing", "marketplace add failed"),
+      rollbackPartials: [],
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools (failed) {source missing}",
+        "    cause: marketplace add failed",
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("GV-01 a plugin directory member outside its range names a version conflict", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "member",
+      key: "formatter@tools",
+      error: new DirectoryPinUnsatisfiedError({
+        plugin: "formatter",
+        manifestVersion: "1.0.0",
+        ranges: "^2.0.0",
+        requiredBy: ["helper"],
+      }),
+      rollbackPartials: [],
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools (failed) {version conflict}",
+        '    cause: "formatter" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "helper".',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });
@@ -965,7 +1145,7 @@ describe("cascadeFailureCause", () => {
     assert.strictEqual(thrown.key, "formatter@tools");
     assert.strictEqual(
       thrown.message,
-      'Dependency "formatter@tools" has no release tag satisfying "^2.0.0".',
+      'Dependency "formatter@tools" has no release tag satisfying ^2.0.0.',
     );
     assert.ok(rendered !== undefined && "cause" in rendered);
     assert.strictEqual(rendered.cause?.message, thrown.message);

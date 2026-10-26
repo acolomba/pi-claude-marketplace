@@ -22,7 +22,7 @@
 //   (c) Exact per-verb parse-set pin: verbs whose handlers hard-reject unknown
 //       long flags inline instead of consuming the catalog
 //       (reinstall/enable/disable accept only `--local`;
-//       fetch/pending/import/bootstrap accept no extra flags) are pinned to
+//       fetch/pending/apply/import/bootstrap accept no extra flags) are pinned to
 //       the exact sets their handlers accept. install/update/uninstall DO
 //       consume the catalog for their long-flag gates, but install/update still
 //       name their flags literally where they map them to an option field
@@ -101,6 +101,8 @@ const EXPECTED_CATALOG_VERBS = [
   "enable",
   "disable",
   "pending",
+  "apply",
+  "autoapply",
   "import",
   "bootstrap",
   "browse",
@@ -174,6 +176,8 @@ const HANDLER_ACCEPTED_PARSE_SETS: Record<CatalogVerb, readonly string[]> = {
   enable: ["--local"],
   disable: ["--local"],
   pending: [],
+  apply: [],
+  autoapply: ["--local"],
   import: [],
   bootstrap: [],
   // The documentation/navigation verbs parse no flag of their own, and
@@ -255,6 +259,8 @@ const TOP_LEVEL_USAGE_FLAGS: Record<
   enable: { documented: ["--local"], omitted: [] },
   disable: { documented: ["--local"], omitted: [] },
   pending: { documented: [], omitted: [] },
+  apply: { documented: [], omitted: [] },
+  autoapply: { documented: ["--local"], omitted: [] },
   import: { documented: [], omitted: [] },
   bootstrap: { documented: [], omitted: [] },
   browse: { documented: [], omitted: [] },

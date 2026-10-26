@@ -7,10 +7,13 @@
  * hook creates registers its release here, and the world runs those releases
  * in reverse order when the scenario ends. A passing scenario also fails
  * there when a row array or an MCP config notice of its last results went
- * uncompared.
+ * uncompared, or when a new session reported a result whose fields no step
+ * stated. The last results are those of the last `When` step: a command or a
+ * new session.
  */
 
 import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -22,11 +25,15 @@ import {
   World,
 } from "@cucumber/cucumber";
 
+import { readSession } from "../lib/pi-commands.ts";
+import { PiProcess } from "../lib/pi-process.ts";
+import { rowArrays } from "../lib/result-rows.ts";
+
 import { currentRun } from "./pi-process.ts";
 
+import type { GitPluginRepository } from "../lib/git-plugin.ts";
 import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-git-host/server.ts";
-import type { NotificationPayload, OfferedSkill } from "../lib/pi-commands.ts";
-import type { PiProcess } from "../lib/pi-process.ts";
+import type { NotificationPayload, OfferedSkill, SessionReport } from "../lib/pi-commands.ts";
 import type { PublicationSites, PublishedMarketplace } from "../lib/published-marketplace.ts";
 import type { RunTokens } from "../lib/run-tokens.ts";
 
@@ -38,6 +45,8 @@ setDefaultTimeout(STEP_TIMEOUT_MS);
 
 export class ScenarioWorld extends World {
   results: readonly NotificationPayload[] | undefined = undefined;
+  // What produced `results`: a command or a new session.
+  resultsSource: "command" | "session" | undefined = undefined;
   // The non-empty row arrays of `results` that no step has compared yet, as
   // `<kind> <field>`. The steps that state a result's fields hide them, so a
   // row step must read them and then call `markRowsCompared()`.
@@ -46,6 +55,11 @@ export class ScenarioWorld extends World {
   // by kind. Only `the command reports these results:` states their fields,
   // and it calls `markNoticesCompared()`.
   uncomparedNotices: readonly string[] = [];
+  // The results of the last new session whose fields no step has stated yet,
+  // by kind. A command is always followed by a field step, a session is not,
+  // so a session payload without rows would otherwise pass unseen. The steps
+  // that state the fields of every result call `markResultsCompared()`.
+  uncomparedSessionResults: readonly string[] = [];
   // Cucumber builds the world before any `Before()` hook, so the
   // `{scenario time}` window opens before any setup command runs (D-05).
   readonly startedAt = Date.now();
@@ -55,11 +69,20 @@ export class ScenarioWorld extends World {
   // `support/https-git-host.ts` sets it.
   requestWindow: RequestWindow | undefined = undefined;
   private readonly published = new Map<string, PublishedMarketplace>();
+  private readonly gitRepositories = new Map<string, GitPluginRepository>();
+  private readonly errorMessages = new Map<string, string>();
   private readonly releases: Array<() => Promise<void> | void> = [];
+  // A Pi this scenario started with an environment of its own; while set it
+  // takes the place of the run's Pi.
+  private scenarioPi: PiProcess | undefined = undefined;
 
-  /** The run's Pi, which the `Before()` hook has reset for this scenario. */
+  /**
+   * The Pi the steps talk to: the one this scenario started with
+   * `usePiWithGitHubBaseUrl()`, or else the run's Pi, which the `Before()`
+   * hook has reset for this scenario.
+   */
   get pi(): PiProcess {
-    return currentRun().pi;
+    return this.scenarioPi ?? currentRun().pi;
   }
 
   /** The directory the marketplace steps write local marketplaces into. */
@@ -99,18 +122,84 @@ export class ScenarioWorld extends World {
     const run = currentRun();
     return {
       home: run.sandbox.home,
+      projectDir: run.sandbox.cwd,
+      agentDir: run.sandbox.agentDir,
       gitHost: run.gitHost.address,
       scenarioStartedAt: this.startedAt,
+      revisions: this.revisionTokens("revision", (sha) => sha.slice(0, 12)),
+      commits: this.revisionTokens("commit", (sha) => sha),
+      errors: this.errorMessages,
     };
   }
 
   /**
-   * Returns the one result of the last command, which a `When` step must have
-   * run. Fails when the command emitted more than one payload (DRV-01).
+   * Records `message`, the wording this Node gives a failing file call, as the
+   * value of the error token `token`, such as `{mcp-adapter.json read error}`.
+   * A step that sets up the failure reads the wording back by making the same
+   * call, since Node majors word one errno differently. A second recording
+   * must agree with the first.
+   */
+  recordErrorMessage(token: string, message: string): void {
+    const recorded = this.errorMessages.get(token);
+    if (recorded !== undefined) {
+      assert.strictEqual(message, recorded, `${token} already stands for another message`);
+    }
+
+    this.errorMessages.set(token, message);
+  }
+
+  // One `{<repository> <noun> <n>}` token per published revision, standing
+  // for `value` of that revision's commit.
+  private revisionTokens(noun: string, value: (sha: string) => string): Map<string, string> {
+    return new Map(
+      [...this.gitRepositories.values()].flatMap((repository) =>
+        repository.revisions.map((sha, index): [string, string] => [
+          `{${repository.name} ${noun} ${index + 1}}`,
+          value(sha),
+        ]),
+      ),
+    );
+  }
+
+  /**
+   * Keeps `results` as the last results, from `source`, after asserting that
+   * a step compared the rows and MCP config notices of the previous ones, and
+   * the fields of a previous session's results.
+   */
+  recordResults(results: readonly NotificationPayload[], source: "command" | "session"): void {
+    assert.deepStrictEqual(
+      this.uncomparedRows,
+      [],
+      "no step compared these rows of the previous results",
+    );
+    assert.deepStrictEqual(
+      this.uncomparedNotices,
+      [],
+      "no step compared these MCP config notices of the previous results",
+    );
+    assert.deepStrictEqual(
+      this.uncomparedSessionResults,
+      [],
+      "no step compared the fields of these results of the previous session",
+    );
+    this.results = results;
+    this.resultsSource = source;
+    this.uncomparedRows = rowArrays(results);
+    this.uncomparedNotices = results
+      .map((result) => result.kind)
+      .filter((kind) => kind === "mcp-config-notices");
+    this.uncomparedSessionResults =
+      source === "session" ? results.map((result) => result.kind) : [];
+  }
+
+  /**
+   * Returns the one result of the last command or session, which a `When`
+   * step must have run. Fails when it emitted more or fewer than one payload
+   * (DRV-01).
    */
   lastResult(): NotificationPayload {
     if (this.results === undefined) {
-      throw new Error("no command has run in this scenario");
+      throw new Error("no command or session has run in this scenario");
     }
 
     const [result, ...others] = this.results;
@@ -122,15 +211,26 @@ export class ScenarioWorld extends World {
   }
 
   /**
-   * Returns every result of the last command in emission order, which a
-   * `When` step must have run. The driver guarantees at least one (DRV-01).
+   * Returns every result of the last command or session in emission order,
+   * which a `When` step must have run. The driver guarantees a command at
+   * least one (DRV-01); a session may report none.
    */
   allResults(): readonly NotificationPayload[] {
     if (this.results === undefined) {
-      throw new Error("no command has run in this scenario");
+      throw new Error("no command or session has run in this scenario");
     }
 
     return this.results;
+  }
+
+  /** Returns every result of the last `When` step, failing unless it came from `source`. */
+  resultsOf(source: "command" | "session"): readonly NotificationPayload[] {
+    const results = this.allResults();
+    if (this.resultsSource !== source) {
+      assert.fail(`the last results came from a ${this.resultsSource}, not a ${source}`);
+    }
+
+    return results;
   }
 
   /**
@@ -162,6 +262,11 @@ export class ScenarioWorld extends World {
     this.uncomparedNotices = [];
   }
 
+  /** Records that a step compared the fields of every result of the last `When` step. */
+  markResultsCompared(): void {
+    this.uncomparedSessionResults = [];
+  }
+
   /** Records how this scenario published the marketplace `name`. */
   recordPublished(name: string, published: PublishedMarketplace): void {
     this.published.set(name, published);
@@ -182,6 +287,44 @@ export class ScenarioWorld extends World {
     return published;
   }
 
+  /** Records the git plugin repository `repository` under its name, replacing an earlier record. */
+  recordGitRepository(repository: GitPluginRepository): void {
+    this.gitRepositories.set(repository.name, repository);
+  }
+
+  /** Returns the git plugin repository `name` this scenario published, if it did. */
+  gitRepository(name: string): GitPluginRepository | undefined {
+    return this.gitRepositories.get(name);
+  }
+
+  /** Returns the git plugin repository `name` this scenario published, failing when it did not. */
+  requireGitRepository(name: string): GitPluginRepository {
+    const repository = this.gitRepositories.get(name);
+    if (repository === undefined) {
+      assert.fail(`the git repository ${name} is not published in this scenario`);
+    }
+
+    return repository;
+  }
+
+  /**
+   * Returns the one git plugin repository this scenario published that holds
+   * the plugin `plugin` now, failing when none or more than one does.
+   */
+  gitRepositoryServing(plugin: string): GitPluginRepository {
+    const serving = [...this.gitRepositories.values()].filter((repository) =>
+      repository.plugins.some((candidate) => candidate.name === plugin),
+    );
+    const [repository, ...others] = serving;
+    if (repository === undefined || others.length > 0) {
+      assert.fail(
+        `expected one git repository to hold the plugin ${plugin}, got ${JSON.stringify(serving.map((candidate) => candidate.name))}`,
+      );
+    }
+
+    return repository;
+  }
+
   /** Returns the skills of the last new session, which a `When` step must have started. */
   sessionSkills(): readonly OfferedSkill[] {
     if (this.skills === undefined) {
@@ -189,6 +332,45 @@ export class ScenarioWorld extends World {
     }
 
     return this.skills;
+  }
+
+  /**
+   * Starts a second Pi with the run's HOME and agent directory in a new,
+   * empty project directory, and returns what its first session offers and
+   * reports. The run's Pi keeps its own working directory for its whole
+   * life, so a session in another project needs a process of its own. This
+   * one lives only until its session is read.
+   */
+  async startSessionInAnotherProject(): Promise<SessionReport> {
+    const run = currentRun();
+    const cwd = await mkdtemp(path.join(run.root, "other-project-"));
+    this.onRelease(() => rm(cwd, { recursive: true, force: true }));
+    const { home, agentDir } = run.sandbox;
+    const pi = await PiProcess.start({ home, agentDir, cwd }, run.piEnvironment);
+    // Stopping a stopped Pi does nothing, so this only matters when reading
+    // the session fails.
+    this.onRelease(() => pi.stop());
+    const report = await readSession(pi);
+    await pi.stop();
+    return report;
+  }
+
+  /**
+   * Starts a second Pi with the run's sandbox and git environment, except that
+   * the GitHub base override is `value`, and makes it the Pi the steps talk
+   * to for the rest of the scenario. The run's Pi reads that variable once,
+   * at start, so a scenario that needs another value needs a process of its
+   * own. The run's Pi stays idle meanwhile, and the scenario's Pi stops with
+   * the scenario.
+   */
+  async usePiWithGitHubBaseUrl(value: string): Promise<void> {
+    const run = currentRun();
+    const pi = await PiProcess.start(run.sandbox, {
+      ...run.piEnvironment,
+      PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: value,
+    });
+    this.onRelease(() => pi.stop());
+    this.scenarioPi = pi;
   }
 
   /** Registers `release` to run when the scenario ends, before anything registered earlier. */
@@ -218,6 +400,7 @@ setWorldConstructor(ScenarioWorld);
 After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): Promise<void> {
   const uncompared = this.uncomparedRows;
   const uncomparedNotices = this.uncomparedNotices;
+  const uncomparedSessionResults = this.uncomparedSessionResults;
   await this.release();
   if (result?.status === Status.PASSED) {
     assert.deepStrictEqual(uncompared, [], "no step compared these rows of the last results");
@@ -225,6 +408,11 @@ After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): 
       uncomparedNotices,
       [],
       "no step compared these MCP config notices of the last results",
+    );
+    assert.deepStrictEqual(
+      uncomparedSessionResults,
+      [],
+      "no step compared the fields of these results of the last session",
     );
   }
 });

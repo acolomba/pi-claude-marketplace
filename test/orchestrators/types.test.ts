@@ -1,6 +1,8 @@
 import type { LedgerDegradationSignals } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/shared.ts";
 import type {
   InstallPluginOutcome,
+  PluginConvergeFn,
+  PluginConvergeTarget,
   PluginUpdateBase,
   PluginUpdateFailedOutcome,
   PluginUpdateFn,
@@ -13,6 +15,7 @@ import type {
   ReinstallPluginOutcome,
   ReinstallReinstalledOutcome,
   ReinstallSkippedOutcome,
+  RevisionMove,
   UpdatePhaseBridge,
   UpdatePhaseFailure,
 } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
@@ -27,10 +30,10 @@ const REINSTALL_REINSTALLED_CLEAN = {
   declaresAgents: false,
   declaresMcp: false,
   declaresWorkflows: false,
+  fromVersion: "1.0.0",
   marketplace: "official",
   name: "alpha",
   partition: "reinstalled",
-  resourcesChanged: false,
   scope: "project",
   stagedAgentNames: [],
   stagedMcpServerNames: [],
@@ -43,14 +46,16 @@ const REINSTALL_REINSTALLED_FULL = {
   declaresWorkflows: false,
   degradedKinds: ["skill", "command"],
   discoveryWarnings: ["skill alpha could not be read", "command beta could not be read"],
+  fromCommit: "1111111111111111111111111111111111111111",
+  fromVersion: "1.0.0",
   marketplace: "official",
   name: "alpha",
   notes: ["warning: skill alpha could not be read", "warning: command beta could not be read"],
   partition: "reinstalled",
-  resourcesChanged: true,
   scope: "user",
   stagedAgentNames: ["alpha-agent"],
   stagedMcpServerNames: ["alpha-mcp"],
+  toCommit: "2222222222222222222222222222222222222222",
   version: "2.0.0",
 } satisfies ReinstallReinstalledOutcome;
 
@@ -72,12 +77,16 @@ const REINSTALL_FAILED_CLEAN = {
 
 const REINSTALL_FAILED_FULL = {
   failureClass: "manual-recovery",
+  fromCommit: "1111111111111111111111111111111111111111",
+  fromVersion: "1.0.0",
   marketplace: "official",
   name: "alpha",
   notes: ["rollback left alpha-agent on disk"],
   partition: "failed",
   reasons: ["rollback partial", "permission denied"],
   scope: "user",
+  toCommit: "2222222222222222222222222222222222222222",
+  toVersion: "1.1.0",
 } satisfies ReinstallFailedOutcome;
 
 void REINSTALL_BASE;
@@ -235,6 +244,52 @@ const PLUGIN_UPDATE_FN = ((plugin, marketplace, scope) => {
 
 void PLUGIN_UPDATE_FN;
 
+// D-26: a catalog move names its scope's cwd, whether a partial candidate is admitted,
+// and whether it re-materializes the recorded revision (D-10 / D-25).
+const PLUGIN_CONVERGE_TARGET = {
+  plugin: "alpha",
+  marketplace: "official",
+  scope: "project",
+  cwd: "/project",
+  partial: false,
+  rematerialize: false,
+} satisfies PluginConvergeTarget;
+
+const PLUGIN_CONVERGE_FN = ((target) => {
+  void target;
+  return Promise.resolve(PLUGIN_UPDATE_UNCHANGED);
+}) satisfies PluginConvergeFn;
+
+void PLUGIN_CONVERGE_TARGET;
+void PLUGIN_CONVERGE_FN;
+
+void ({
+  plugin: "alpha",
+  marketplace: "official",
+  scope: "project",
+  partial: false,
+  rematerialize: false,
+  // @ts-expect-error a catalog move names its cwd explicitly
+} satisfies PluginConvergeTarget);
+
+void ({
+  plugin: "alpha",
+  marketplace: "official",
+  scope: "project",
+  cwd: "/project",
+  rematerialize: false,
+  // @ts-expect-error a catalog move states whether a partial candidate is admitted
+} satisfies PluginConvergeTarget);
+
+void ({
+  plugin: "alpha",
+  marketplace: "official",
+  scope: "project",
+  cwd: "/project",
+  partial: false,
+  // @ts-expect-error D-10 / D-25: a catalog move states whether it re-materializes the recorded revision
+} satisfies PluginConvergeTarget);
+
 const LEDGER_DEGRADATION_SIGNALS = {
   degradedKinds: ["skill", "command"],
   orphanRewake: true,
@@ -300,7 +355,6 @@ void ({
   marketplace: "official",
   name: "alpha",
   partition: "reinstalled",
-  resourcesChanged: false,
   scope: "project",
   stagedAgentNames: [],
   stagedMcpServerNames: [],
@@ -346,7 +400,6 @@ void ({
   name: "alpha",
   notes: undefined,
   partition: "reinstalled",
-  resourcesChanged: false,
   scope: "project",
   stagedAgentNames: [],
   stagedMcpServerNames: [],
@@ -363,12 +416,47 @@ void ({
   marketplace: "official",
   name: "alpha",
   partition: "reinstalled",
-  resourcesChanged: false,
   scope: "project",
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   version: "1.0.0",
 } satisfies ReinstallReinstalledOutcome);
+
+void ({
+  constraint: undefined,
+  declaresAgents: false,
+  declaresMcp: false,
+  declaresWorkflows: false,
+  fromCommit: "a".repeat(40),
+  fromVersion: "1.0.0",
+  name: "alpha",
+  partition: "updated",
+  stagedAgentNames: [],
+  stagedMcpServerNames: [],
+  toCommit: "b".repeat(40),
+  toVersion: "1.0.0",
+} satisfies PluginUpdateUpdatedOutcome);
+// UPR-02: each side's commit is optional on its own; a path source has none.
+void ({
+  fromVersion: "1.0.0",
+  toVersion: "1.0.0",
+  toCommit: "b".repeat(40),
+} satisfies RevisionMove);
+// UPR-03: a failure after the candidate names the move it attempted.
+void ({
+  declaresAgents: false,
+  declaresMcp: false,
+  declaresWorkflows: false,
+  fromCommit: "a".repeat(40),
+  fromVersion: "1.0.0",
+  name: "alpha",
+  notes: [],
+  partition: "failed",
+  toCommit: "b".repeat(40),
+  toVersion: "1.0.0",
+} satisfies PluginUpdateFailedOutcome);
+// @ts-expect-error a revision move always names both versions
+void ({ fromVersion: "1.0.0", fromCommit: "a".repeat(40) } satisfies RevisionMove);
 
 // @ts-expect-error an update outcome always carries its partition discriminant
 void ({ declaresAgents: false, declaresMcp: false, name: "alpha" } satisfies PluginUpdateOutcome);

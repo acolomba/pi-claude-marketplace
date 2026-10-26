@@ -1,5 +1,3 @@
-import { resolveStrict } from "../../domain/plugin-resolver.ts";
-import { parsePluginSource } from "../../domain/source.ts";
 import { rowClaimsInstallDisabled } from "../../domain/unsupported-components.ts";
 import {
   narrowProbeError,
@@ -7,11 +5,11 @@ import {
   narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
 
-import { makePresenceProbe } from "./git-source-probe.ts";
+import { resolveListCandidate } from "./list-candidate-version.ts";
 import { classifyManifestEntry } from "./plugin-state-classifier.ts";
 
 import type { ManifestPluginEntry } from "../../domain/manifest-lookup.ts";
-import type { ResolveContext } from "../../domain/resolver-types.ts";
+import type { ResolveContext, ResolvedPlugin } from "../../domain/resolver-types.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
 import type {
@@ -35,18 +33,19 @@ export interface CandidateRow {
   readonly bucket: FilterBucket;
 }
 
-type ResolvedCandidate =
-  | { readonly kind: "cold" }
-  | { readonly kind: "resolved"; readonly resolved: Awaited<ReturnType<typeof resolveStrict>> };
-
-function candidateRowFields(manifestEntry: ManifestPluginEntry): {
+interface CandidateRowFields {
   readonly name: string;
   readonly version?: string;
   readonly description?: string;
-} {
+}
+
+function candidateRowFields(
+  manifestEntry: ManifestPluginEntry,
+  version: string | undefined = manifestEntry.version,
+): CandidateRowFields {
   return {
     name: manifestEntry.name,
-    ...(manifestEntry.version !== undefined && { version: manifestEntry.version }),
+    ...(version !== undefined && { version }),
     ...(manifestEntry.description !== undefined && { description: manifestEntry.description }),
   };
 }
@@ -55,46 +54,6 @@ function installsDisabledField(claimsInstallDisabled: boolean): {
   readonly reasons?: readonly ContentReason[];
 } {
   return claimsInstallDisabled ? { reasons: ["installs disabled"] } : {};
-}
-
-type GitPluginSource = Parameters<ReturnType<typeof makePresenceProbe>>[0];
-
-function isGitPluginSource(
-  parsedSource: ReturnType<typeof parsePluginSource>,
-): parsedSource is GitPluginSource {
-  return (
-    parsedSource.kind === "url" ||
-    parsedSource.kind === "git-subdir" ||
-    parsedSource.kind === "github"
-  );
-}
-
-async function resolveCandidateEntry(
-  manifestEntry: ManifestPluginEntry,
-  marketplaceContext: Pick<ResolveContext, "marketplaceRoot" | "marketplaceName">,
-  locations: ScopedLocations,
-): Promise<ResolvedCandidate> {
-  const parsedSource = parsePluginSource(manifestEntry.source);
-  if (!isGitPluginSource(parsedSource)) {
-    return {
-      kind: "resolved",
-      resolved: await resolveStrict(manifestEntry, marketplaceContext),
-    };
-  }
-
-  const probe = makePresenceProbe(locations);
-  const presence = await probe(parsedSource);
-  if (presence.kind === "not-cached") {
-    return { kind: "cold" };
-  }
-
-  return {
-    kind: "resolved",
-    resolved: await resolveStrict(manifestEntry, {
-      ...marketplaceContext,
-      resolveGitPluginRoot: probe,
-    }),
-  };
 }
 
 function partialCandidateReasons(
@@ -108,8 +67,8 @@ function partialCandidateReasons(
 }
 
 function resolvedCandidateRow(
-  manifestEntry: ManifestPluginEntry,
-  resolved: Awaited<ReturnType<typeof resolveStrict>>,
+  fields: CandidateRowFields,
+  resolved: ResolvedPlugin,
   claimsInstallDisabled: boolean,
 ): CandidateRow {
   const bucket = classifyManifestEntry(resolved);
@@ -119,7 +78,7 @@ function resolvedCandidateRow(
       return {
         message: {
           status: "available",
-          ...candidateRowFields(manifestEntry),
+          ...fields,
           ...installsDisabledField(claimsInstallDisabled),
         },
         bucket,
@@ -128,7 +87,7 @@ function resolvedCandidateRow(
       return {
         message: {
           status: "partially-available",
-          ...candidateRowFields(manifestEntry),
+          ...fields,
           reasons: partialCandidateReasons(resolved.unsupported, claimsInstallDisabled),
         },
         bucket,
@@ -137,7 +96,7 @@ function resolvedCandidateRow(
       return {
         message: {
           status: "unavailable",
-          ...candidateRowFields(manifestEntry),
+          ...fields,
           reasons: narrowResolverNotes(resolved.notes),
         },
         bucket,
@@ -171,7 +130,7 @@ export async function availableRowMessage(
   const claimsInstallDisabled = rowClaimsInstallDisabled(manifestEntry, declaredEnabled);
 
   try {
-    const outcome = await resolveCandidateEntry(manifestEntry, marketplaceContext, locations);
+    const outcome = await resolveListCandidate(manifestEntry, marketplaceContext, locations);
     if (outcome.kind === "cold") {
       return {
         message: {
@@ -183,7 +142,11 @@ export async function availableRowMessage(
       };
     }
 
-    return resolvedCandidateRow(manifestEntry, outcome.resolved, claimsInstallDisabled);
+    return resolvedCandidateRow(
+      candidateRowFields(manifestEntry, outcome.version),
+      outcome.resolved,
+      claimsInstallDisabled,
+    );
   } catch (probeErr) {
     return probeFailureRow(manifestEntry, probeErr);
   }

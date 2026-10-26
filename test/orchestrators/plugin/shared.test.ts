@@ -17,7 +17,10 @@ import {
   absentTargetReasons,
   emitMarketplaceNotAdded,
   emitMarketplaceNotAddedSignal,
+  degradationFromEnable,
   enableRowDependencies,
+  isRecordedCandidate,
+  isSameRevision,
   keepLocalLayerTargets,
   loadTargetLayers,
   localOnlyMarketplaceRefusal,
@@ -32,6 +35,7 @@ import {
   resolveInstalledPluginTarget,
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
+  resolveTagPinnedPluginVersion,
   retiresWorkflowCommand,
   splitStagingWarnings,
   surfaceDiscoveryWarnings,
@@ -1742,7 +1746,8 @@ describe("keepLocalLayerTargets", () => {
           { declarer: error.declarer, message: error.message },
           {
             declarer: "app@tools",
-            message: "cannot read the dependencies of app@tools: not declared by its marketplace",
+            message:
+              "cannot read the dependencies of app@tools: not declared by its marketplace, and its installed copy cannot be read",
           },
         );
         return true;
@@ -2446,6 +2451,49 @@ describe("resolveInstalledMarketplaceTarget", () => {
 });
 
 describe("resolvePluginVersion", () => {
+  test("VER-01: a git commit names the version when none is declared", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+      await writeFile(path.join(pluginRoot, ".claude-plugin", "plugin.json"), "{}");
+      const entry = { name: "alpha", source: "./alpha" } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
+
+      // act
+      const version = await resolvePluginVersion(
+        entry,
+        installable,
+        "mp",
+        "0123456789abcdef0123456789abcdef01234567",
+      );
+
+      // assert
+      assert.equal(version, "0123456789ab");
+    });
+  });
+
+  test("VER-01: a declared version wins over a git commit", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(pluginRoot, { recursive: true });
+      const entry = { name: "alpha", source: "./alpha", version: "1.0.0" } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
+
+      // act
+      const version = await resolvePluginVersion(
+        entry,
+        installable,
+        "mp",
+        "0123456789abcdef0123456789abcdef01234567",
+      );
+
+      // assert
+      assert.equal(version, "1.0.0");
+    });
+  });
+
   test("prefers a non-empty plugin manifest version over the marketplace entry", async () => {
     // arrange
     await withTempScopes(async ({ root }) => {
@@ -2459,7 +2507,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.equal(version, "2.0.0");
@@ -2479,7 +2527,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.equal(version, "1.0.0");
@@ -2499,7 +2547,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.equal(version, "1.0.0");
@@ -2521,7 +2569,7 @@ describe("resolvePluginVersion", () => {
         const installable = makeMaterializablePlugin(pluginRoot);
 
         // act
-        const version = await resolvePluginVersion(entry, installable);
+        const version = await resolvePluginVersion(entry, installable, "mp");
 
         // assert
         assert.equal(version, "1.0.0");
@@ -2539,7 +2587,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.equal(version, "1.0.0");
@@ -2558,7 +2606,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.strictEqual(version, "1.0.0");
@@ -2576,7 +2624,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.strictEqual(version, "9.9.9");
@@ -2592,7 +2640,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.equal(version, "hash-e3b0c44298fc");
@@ -2609,7 +2657,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.equal(version, "2.0.0");
@@ -2630,7 +2678,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.equal(version, "2.0.0");
@@ -2650,11 +2698,350 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.equal(version, "1.0.0");
     });
+  });
+
+  test("GV-01: a git-subdir commit names the version with its path hash", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(pluginRoot, { recursive: true });
+      const entry = {
+        name: "alpha",
+        source: { source: "git-subdir", url: "https://h/acme/mono.git", path: "plugins/subp" },
+      } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
+
+      // act
+      const version = await resolvePluginVersion(
+        entry,
+        installable,
+        "mp",
+        "0123456789abcdef0123456789abcdef01234567",
+      );
+
+      // assert
+      assert.equal(version, "0123456789ab-3989e95a");
+    });
+  });
+
+  test("GV-01: a pinned plugin of the plugin directory records its pin", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(pluginRoot, { recursive: true });
+      const sha = "0123456789abcdef0123456789abcdef01234567";
+      const entry = {
+        name: "alpha",
+        source: { source: "github", repo: "acme/alpha", sha },
+        version: "1.0.0",
+      } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
+
+      // act
+      const version = await resolvePluginVersion(
+        entry,
+        installable,
+        "anthropic-plugin-directory",
+        sha,
+      );
+
+      // assert
+      assert.equal(version, "1.0.0-0123456789ab");
+    });
+  });
+});
+
+describe("resolveTagPinnedPluginVersion", () => {
+  const tagCommit = "0123456789abcdef0123456789abcdef01234567";
+
+  test("GV-01: a declared version carries the tag commit", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(pluginRoot, { recursive: true });
+      const entry = {
+        name: "alpha",
+        source: { source: "url", url: "https://example.com/alpha.git" },
+        version: "2.0.0",
+      } satisfies PluginEntry;
+
+      // act
+      const version = await resolveTagPinnedPluginVersion(
+        entry,
+        makeMaterializablePlugin(pluginRoot),
+        "mp",
+        tagCommit,
+      );
+
+      // assert
+      assert.equal(version, "2.0.0-0123456789ab");
+    });
+  });
+
+  test("GV-01: with no declared version, a path source records the tag commit and its path hash", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+      await writeFile(path.join(pluginRoot, ".claude-plugin", "plugin.json"), "{}");
+      const entry = { name: "alpha", source: "./plugins/subp" } satisfies PluginEntry;
+
+      // act
+      const version = await resolveTagPinnedPluginVersion(
+        entry,
+        makeMaterializablePlugin(pluginRoot),
+        "mp",
+        tagCommit,
+      );
+
+      // assert
+      assert.equal(version, "0123456789ab-3989e95a");
+    });
+  });
+});
+
+describe("isSameRevision", () => {
+  const cases: readonly {
+    readonly title: string;
+    readonly recordVersion?: string;
+    readonly recordSha?: string;
+    readonly recordResolvedVersion?: string;
+    readonly toVersion: string;
+    readonly resolvedSha?: string;
+    readonly resolvedVersion?: string;
+    readonly searched?: boolean;
+    readonly expected: boolean;
+  }[] = [
+    {
+      title: "D-16-09: the same version with no sha on either side is the same revision",
+      toVersion: "1.2.3",
+      expected: true,
+    },
+    {
+      title: "D-16-09: a different version is a new revision",
+      toVersion: "1.3.0",
+      expected: false,
+    },
+    {
+      title: "D-16-09: the same version at a moved commit is a new revision",
+      recordSha: "a".repeat(40),
+      toVersion: "1.2.3",
+      resolvedSha: "b".repeat(40),
+      expected: false,
+    },
+    {
+      title: "GV-02: a legacy sha- version at the same commit is the same revision",
+      recordVersion: "sha-aaaaaaaaaaaa",
+      recordSha: "a".repeat(40),
+      toVersion: "aaaaaaaaaaaa",
+      resolvedSha: "a".repeat(40),
+      expected: true,
+    },
+    {
+      title: "D-16-09: a sha on one side only is a new revision",
+      toVersion: "1.2.3",
+      resolvedSha: "b".repeat(40),
+      expected: false,
+    },
+    {
+      title:
+        "GV-01: with no tag search, a record at a release tag is the unpinned candidate of the same commit",
+      recordVersion: "1.2.3-aaaaaaaaaaaa",
+      recordSha: "a".repeat(40),
+      recordResolvedVersion: "1.2.3",
+      toVersion: "1.2.3",
+      resolvedSha: "a".repeat(40),
+      expected: true,
+    },
+    {
+      title:
+        "GV-01: after a tag search that selected none, a record at a release tag is a new revision at the same commit",
+      recordVersion: "1.2.3-aaaaaaaaaaaa",
+      recordSha: "a".repeat(40),
+      recordResolvedVersion: "1.2.3",
+      toVersion: "1.2.3",
+      resolvedSha: "a".repeat(40),
+      searched: true,
+      expected: false,
+    },
+    {
+      title:
+        "GV-01: after a tag search that selected none, the version without the tag's commit is the same revision",
+      recordVersion: "1.2.3",
+      recordSha: "a".repeat(40),
+      toVersion: "1.2.3",
+      resolvedSha: "a".repeat(40),
+      searched: true,
+      expected: true,
+    },
+    {
+      title:
+        "GV-01: after a tag search that selected none, a commit version recorded at a tag is the same revision",
+      recordVersion: "aaaaaaaaaaaa",
+      recordSha: "a".repeat(40),
+      recordResolvedVersion: "1.2.3",
+      toVersion: "aaaaaaaaaaaa",
+      resolvedSha: "a".repeat(40),
+      searched: true,
+      expected: true,
+    },
+    {
+      title:
+        "GV-02: after a tag search, a legacy sha- version at the same commit is the same revision",
+      recordVersion: "sha-aaaaaaaaaaaa",
+      recordSha: "a".repeat(40),
+      toVersion: "aaaaaaaaaaaa",
+      resolvedSha: "a".repeat(40),
+      searched: true,
+      expected: true,
+    },
+    {
+      title: "GV-01: at a release tag, the same tag version and commit are the same revision",
+      recordVersion: "1.2.3-aaaaaaaaaaaa",
+      recordSha: "a".repeat(40),
+      recordResolvedVersion: "1.2.3",
+      toVersion: "1.2.3-aaaaaaaaaaaa",
+      resolvedSha: "a".repeat(40),
+      resolvedVersion: "1.2.3",
+      expected: true,
+    },
+    {
+      title:
+        "GV-02: at a release tag, a record holding the tag's semver as its version is the same revision",
+      recordVersion: "1.2.3",
+      recordSha: "a".repeat(40),
+      toVersion: "1.2.3-aaaaaaaaaaaa",
+      resolvedSha: "a".repeat(40),
+      resolvedVersion: "1.2.3",
+      expected: true,
+    },
+    {
+      title: "GV-01: at a release tag, another tag version at the same commit is a new revision",
+      recordVersion: "1.2.3-aaaaaaaaaaaa",
+      recordSha: "a".repeat(40),
+      recordResolvedVersion: "1.2.3",
+      toVersion: "1.2.3-aaaaaaaaaaaa",
+      resolvedSha: "a".repeat(40),
+      resolvedVersion: "1.2.4",
+      expected: false,
+    },
+    {
+      title: "GV-01: at a release tag, another commit is a new revision",
+      recordVersion: "1.2.3-aaaaaaaaaaaa",
+      recordSha: "a".repeat(40),
+      recordResolvedVersion: "1.2.3",
+      toVersion: "1.2.3-bbbbbbbbbbbb",
+      resolvedSha: "b".repeat(40),
+      resolvedVersion: "1.2.3",
+      expected: false,
+    },
+  ];
+
+  for (const {
+    title,
+    recordVersion,
+    recordSha,
+    recordResolvedVersion,
+    toVersion,
+    resolvedSha,
+    resolvedVersion,
+    searched,
+    expected,
+  } of cases) {
+    test(title, () => {
+      // arrange
+      const record = {
+        ...makePluginRecord({}),
+        ...(recordVersion !== undefined && { version: recordVersion }),
+        ...(recordSha !== undefined && { resolvedSha: recordSha }),
+        ...(recordResolvedVersion !== undefined && { resolvedVersion: recordResolvedVersion }),
+      };
+
+      // act
+      const same = isSameRevision(record, toVersion, resolvedSha, {
+        resolvedVersion,
+        ...(searched !== undefined && { searched }),
+      });
+
+      // assert
+      assert.equal(same, expected);
+    });
+  }
+});
+
+describe("isRecordedCandidate", () => {
+  test("D-18-11: the recorded version at the recorded root is the recorded candidate", () => {
+    // arrange
+    const record = makePluginRecord({});
+
+    // act
+    const recorded = isRecordedCandidate(record, {
+      toVersion: "1.2.3",
+      resolvedSha: undefined,
+      pluginRoot: "/source/alpha",
+    });
+
+    // assert
+    assert.equal(recorded, true);
+  });
+
+  test("D-18-11: the recorded version at another root is a new revision", () => {
+    // arrange
+    const record = makePluginRecord({});
+
+    // act
+    const recorded = isRecordedCandidate(record, {
+      toVersion: "1.2.3",
+      resolvedSha: undefined,
+      pluginRoot: "/source/alpha-copy",
+    });
+
+    // assert
+    assert.equal(recorded, false);
+  });
+
+  test("GV-01: after a tag search that selected none, a record at a release tag is a new revision", () => {
+    // arrange
+    const record = {
+      ...makePluginRecord({}),
+      version: "1.2.3-aaaaaaaaaaaa",
+      resolvedSha: "a".repeat(40),
+      resolvedVersion: "1.2.3",
+    };
+    const candidate = {
+      toVersion: "1.2.3",
+      resolvedSha: "a".repeat(40),
+      pluginRoot: "/source/alpha",
+    };
+
+    // act
+    const verdicts = [
+      isRecordedCandidate(record, candidate),
+      isRecordedCandidate(record, { ...candidate, searchedReleaseTags: true }),
+    ];
+
+    // assert
+    assert.deepEqual(verdicts, [true, false]);
+  });
+
+  test("D-18-11: another version at the recorded root is a new revision", () => {
+    // arrange
+    const record = makePluginRecord({});
+
+    // act
+    const recorded = isRecordedCandidate(record, {
+      toVersion: "2.0.0",
+      resolvedSha: undefined,
+      pluginRoot: "/source/alpha",
+    });
+
+    // assert
+    assert.equal(recorded, false);
   });
 });
 
@@ -2996,12 +3383,12 @@ describe("emitMarketplaceNotAdded", () => {
 });
 
 describe("emitMarketplaceNotAddedSignal", () => {
-  test("renders the plugin row when nothing of the container is installed at the named scope", async () => {
+  test("UPR-04: renders the failed plugin row when nothing of the container is installed at the named scope", async () => {
     // arrange
     const context = {
       Messaging: { label: "Plugin reinstall" },
-      rowPolicies: { skipped: { markers: false, contentReasons: true } },
-    } satisfies CommandContext<"skipped">;
+      rowPolicies: { failed: { markers: false, contentReasons: true } },
+    } satisfies CommandContext<"failed">;
     const notifications: { message: string; severity?: string }[] = [];
     const { ctx } = makeRecordingBoundary(notifications);
 
@@ -3017,14 +3404,14 @@ describe("emitMarketplaceNotAddedSignal", () => {
 
     // assert
     assert.deepStrictEqual(context.rowPolicies, {
-      skipped: { markers: false, contentReasons: true },
+      failed: { markers: false, contentReasons: true },
     });
     assert.deepStrictEqual(notifications, [
       {
         message:
           "A plugin operation has failed.\n\n" +
           "● mp [project]\n" +
-          "  ⊘ hello (skipped) {not installed, marketplace in user scope}\n\n" +
+          "  ⊘ hello (failed) {not installed, marketplace in user scope}\n\n" +
           "Plugin reinstall: 1 failure",
         severity: "error",
       },
@@ -3036,8 +3423,8 @@ describe("emitMarketplaceNotAddedSignal", () => {
       // arrange
       const context = {
         Messaging: { label: "Plugin reinstall" },
-        rowPolicies: { skipped: { markers: false, contentReasons: false } },
-      } satisfies CommandContext<"skipped">;
+        rowPolicies: { failed: { markers: false, contentReasons: false } },
+      } satisfies CommandContext<"failed">;
       const notifications: { message: string; severity?: string }[] = [];
       const { ctx } = makeRecordingBoundary(notifications);
 
@@ -3300,5 +3687,37 @@ describe("sweepWorkflowsStaging", () => {
     assert.deepStrictEqual(logged, [
       `[hooks] install: workflows staging GC failed for hello@mp: ENOTDIR: not a directory, scandir '${staging}'`,
     ]);
+  });
+});
+
+describe("degradationFromEnable", () => {
+  test("lifts every signal the enable outcome carries", () => {
+    // act
+    const signals = degradationFromEnable({
+      unsupported: ["outputStyles"],
+      orphanRewake: true,
+      degradedKinds: ["skill"],
+      stagedAgents: true,
+      stagedMcpServers: true,
+      stagedWorkflows: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(signals, {
+      unsupported: ["outputStyles"],
+      orphanRewake: true,
+      degradedKinds: ["skill"],
+      stagedAgents: true,
+      stagedMcpServers: true,
+      stagedWorkflows: true,
+    });
+  });
+
+  test("lifts nothing from a clean enable", () => {
+    // act
+    const signals = degradationFromEnable({});
+
+    // assert
+    assert.deepStrictEqual(signals, {});
   });
 });

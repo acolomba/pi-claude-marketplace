@@ -1853,8 +1853,8 @@ for (const { kind, seed } of [
 
 // ───────────────────────────────────────────────────────────────────────────
 // ATTR-10 / D-48-B: a path-source marketplace.json that is malformed or
-// schema-invalid during `marketplace update` renders
-// `(failed) {invalid manifest}` on the synthetic-child failed row. The refresh
+// schema-invalid during `marketplace update` renders `(failed) {unparseable}`
+// or `(failed) {invalid manifest}` (MPA-02) on the synthetic-child failed row. The refresh
 // classifier recognizes the typed InvalidMarketplaceManifestError, which
 // refreshRecord wraps in a MarketplaceUpdateError. A path-source refresh
 // touches no network (NFR-5), and a refresh failure that no rule classifies
@@ -1917,14 +1917,15 @@ async function seedPathMarketplace(opts: {
   }
 }
 
-test("ATTR-10: path-source MALFORMED-JSON manifest renders `(failed) {invalid manifest}`, never `{network unreachable}`", async () => {
+test("ATTR-10 / MPA-02: path-source MALFORMED-JSON manifest renders `(failed) {unparseable}`, never `{network unreachable}`", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
     // A real on-disk marketplace whose marketplace.json is malformed JSON. The
     // PRE manifestContentKey read throws InvalidMarketplaceManifestError (cause:
     // SyntaxError) -> refreshRecord wraps it as MarketplaceUpdateError -> the
     // refreshOneMarketplace catch unwraps one cause level and classifies
-    // `invalid manifest`. Zero network/gitOps on the path branch (NFR-5).
+    // `unparseable`, as `list` and `info` do (MPA-02). Zero network/gitOps on
+    // the path branch (NFR-5).
     const localMpDir = await mkdtemp(path.join(tmpdir(), "mp-path-bad-json-"));
     try {
       await mkdir(path.join(localMpDir, ".claude-plugin"), { recursive: true });
@@ -1954,7 +1955,7 @@ test("ATTR-10: path-source MALFORMED-JSON manifest renders `(failed) {invalid ma
       const first = notifications[0];
       assert.ok(first !== undefined);
       assert.equal(first.severity, "error");
-      assert.match(first.message, /\(failed\) \{invalid manifest\}/);
+      assert.match(first.message, /\(failed\) \{unparseable\}/);
       assert.doesNotMatch(first.message, /\{network unreachable\}/);
     } finally {
       await rm(localMpDir, { recursive: true, force: true });
@@ -2038,10 +2039,10 @@ test("a pre-persistence manifest failure leaves cache rows intact and calls zero
 
       // assert
 
-      // The failed row classified `invalid manifest` (not a network reason).
+      // The failed row classified `unparseable` (not a network reason).
       const first = notifications[0];
       assert.ok(first !== undefined);
-      assert.match(first.message, /\(failed\) \{invalid manifest\}/);
+      assert.match(first.message, /\(failed\) \{unparseable\}/);
 
       // Zero gitOps -- the failure path is network-free.
       assert.equal(state.cloneCalls.length, 0);
@@ -2061,7 +2062,7 @@ for (const { invalidBody, problem, failure } of [
     problem: "malformed JSON",
     invalidBody: '{"name":"valid-marketplace","plugins":[',
     failure:
-      'Some operations have failed.\n\n⊘ malformed-JSON [project] (failed)\n  ⊘ malformed-JSON (failed) {invalid manifest}\n    cause: Failed to update marketplace "malformed-JSON". -> marketplace.json is not valid JSON: SyntaxError: Unexpected end of JSON input -> Unexpected end of JSON input',
+      'Some operations have failed.\n\n⊘ malformed-JSON [project] (failed)\n  ⊘ malformed-JSON (failed) {unparseable}\n    cause: Failed to update marketplace "malformed-JSON". -> marketplace.json is not valid JSON: SyntaxError: Unexpected end of JSON input -> Unexpected end of JSON input',
   },
   {
     problem: "an invalid schema",
@@ -4443,12 +4444,12 @@ test("a newly degraded autoupdate cascade emits its partial row and warning enve
     assert.ok(first !== undefined);
     const body = first.message;
     // Byte-exact partially-installed child row under the marketplace header. The
-    // ◉ glyph, single realized version, `(partially-installed)` token, and
+    // ◉ glyph, the version arrow (UPR-03), `(partially-installed)` token, and
     // `{lsp}` dropped-component brace mirror the plugin-surface byte lock
     // (`narrowUnsupportedKinds(["lspServers"]) -> "lsp"`). The `[project]` scope
     // bracket is orphan-folded (plugin.scope === mp.scope).
     const headerIdx = body.indexOf("● auto-mp [project]");
-    const rowIdx = body.indexOf("  ◉ hello v0.0.2 (partially-installed) {lsp}");
+    const rowIdx = body.indexOf("  ◉ hello v0.0.1 → v0.0.2 (partially-installed) {lsp}");
     assert.ok(headerIdx >= 0, `marketplace header missing:\n${body}`);
     assert.ok(rowIdx > headerIdx, `partially-installed child row missing/misplaced:\n${body}`);
     // newlyDegraded -> warning envelope -> the degraded summary variant.

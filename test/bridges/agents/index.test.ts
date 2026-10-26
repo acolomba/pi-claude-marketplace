@@ -4,66 +4,40 @@ import { describe, test } from "node:test";
 import { discoverPluginAgents as definingDiscoverPluginAgents } from "../../../extensions/pi-claude-marketplace/bridges/agents/discover.ts";
 import {
   abortPreparedAgents,
+  assertAgentCommitTargets,
   commitPreparedAgents,
   discoverPluginAgents,
-  finalizeAgentsReplacement,
   prepareStagePluginAgents,
-  replacePreparedAgents,
-  rollbackAgentsReplacement,
   unstagePluginAgents,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/index.ts";
 import {
   abortPreparedAgents as definingAbortPreparedAgents,
+  assertAgentCommitTargets as definingAssertAgentCommitTargets,
   commitPreparedAgents as definingCommitPreparedAgents,
-  finalizeAgentsReplacement as definingFinalizeAgentsReplacement,
   prepareStagePluginAgents as definingPrepareStagePluginAgents,
-  replacePreparedAgents as definingReplacePreparedAgents,
-  rollbackAgentsReplacement as definingRollbackAgentsReplacement,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/stage.ts";
 import { unstagePluginAgents as definingUnstagePluginAgents } from "../../../extensions/pi-claude-marketplace/bridges/agents/unstage.ts";
 
 import type * as AgentsBarrel from "../../../extensions/pi-claude-marketplace/bridges/agents/index.ts";
-import type {
-  AgentsReplacement as BarrelAgentsReplacement,
-  PreparedAgentsStaging as BarrelPreparedAgentsStaging,
-} from "../../../extensions/pi-claude-marketplace/bridges/agents/index.ts";
-import type {
-  AgentsReplacement as DefiningAgentsReplacement,
-  PreparedAgentsStaging as DefiningPreparedAgentsStaging,
-} from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
+import type { PreparedAgentsStaging as BarrelPreparedAgentsStaging } from "../../../extensions/pi-claude-marketplace/bridges/agents/index.ts";
+import type { PreparedAgentsStaging as DefiningPreparedAgentsStaging } from "../../../extensions/pi-claude-marketplace/bridges/agents/types.ts";
 
 type Same<Left, Right> = [Left] extends [Right] ? ([Right] extends [Left] ? true : false) : false;
 type PreparedAgentsNoop = Extract<BarrelPreparedAgentsStaging, { kind: "noop" }>;
 type PreparedAgentsStaged = Extract<BarrelPreparedAgentsStaging, { kind: "staged" }>;
-type AgentsReplacementNoop = Extract<BarrelAgentsReplacement, { kind: "noop" }>;
-type AgentsReplacementReplaced = Extract<BarrelAgentsReplacement, { kind: "replaced" }>;
 
-void (true satisfies Same<BarrelAgentsReplacement, DefiningAgentsReplacement>);
 void (true satisfies Same<BarrelPreparedAgentsStaging, DefiningPreparedAgentsStaging>);
 void (true satisfies Same<PreparedAgentsNoop["kind"], "noop">);
 void (true satisfies Same<PreparedAgentsStaged["kind"], "staged">);
-void (true satisfies Same<AgentsReplacementNoop["kind"], "noop">);
-void (true satisfies Same<AgentsReplacementReplaced["kind"], "replaced">);
-void (true satisfies Same<AgentsReplacementNoop["prepared"], PreparedAgentsNoop>);
-void (true satisfies Same<AgentsReplacementReplaced["prepared"], PreparedAgentsStaged>);
 void ({
   kind: "noop",
   result: { stagedNames: [], recorded: [], warnings: [], failed: [] },
 } satisfies BarrelPreparedAgentsStaging);
-void ({
-  kind: "noop",
-  prepared: {
-    kind: "noop",
-    result: { stagedNames: [], recorded: [], warnings: [], failed: [] },
-  },
-} satisfies BarrelAgentsReplacement);
 
 // @ts-expect-error staging internals require narrowing to the staged handle
 void ("/staging" satisfies BarrelPreparedAgentsStaging["stagingDir"]);
 // @ts-expect-error an agent preparation handle has a closed discriminant set
 void ({ kind: "missing" } satisfies BarrelPreparedAgentsStaging);
-// @ts-expect-error an agent replacement handle has a closed discriminant set
-void ({ kind: "staged" } satisfies BarrelAgentsReplacement);
 // @ts-expect-error the barrel keeps the staged implementation type private
 void ({} satisfies { readonly retired?: AgentsBarrel.PreparedAgentsStaged });
 // @ts-expect-error the barrel does not export the internal marker prefix
@@ -83,6 +57,19 @@ describe("abortPreparedAgents", () => {
 
     // assert
     assert.strictEqual(agentsAbortPreparedAgents, expectedAbortPreparedAgents);
+  });
+});
+
+describe("assertAgentCommitTargets", () => {
+  test("re-exports the defining binding", () => {
+    // arrange
+    const expectedAssertAgentCommitTargets = definingAssertAgentCommitTargets;
+
+    // act
+    const agentsAssertAgentCommitTargets = assertAgentCommitTargets;
+
+    // assert
+    assert.strictEqual(agentsAssertAgentCommitTargets, expectedAssertAgentCommitTargets);
   });
 });
 
@@ -112,19 +99,6 @@ describe("discoverPluginAgents", () => {
   });
 });
 
-describe("finalizeAgentsReplacement", () => {
-  test("re-exports the defining binding", () => {
-    // arrange
-    const expectedFinalizeAgentsReplacement = definingFinalizeAgentsReplacement;
-
-    // act
-    const agentsFinalizeAgentsReplacement = finalizeAgentsReplacement;
-
-    // assert
-    assert.strictEqual(agentsFinalizeAgentsReplacement, expectedFinalizeAgentsReplacement);
-  });
-});
-
 describe("prepareStagePluginAgents", () => {
   test("re-exports the defining binding", () => {
     // arrange
@@ -135,32 +109,6 @@ describe("prepareStagePluginAgents", () => {
 
     // assert
     assert.strictEqual(agentsPrepareStagePluginAgents, expectedPrepareStagePluginAgents);
-  });
-});
-
-describe("replacePreparedAgents", () => {
-  test("re-exports the defining binding", () => {
-    // arrange
-    const expectedReplacePreparedAgents = definingReplacePreparedAgents;
-
-    // act
-    const agentsReplacePreparedAgents = replacePreparedAgents;
-
-    // assert
-    assert.strictEqual(agentsReplacePreparedAgents, expectedReplacePreparedAgents);
-  });
-});
-
-describe("rollbackAgentsReplacement", () => {
-  test("re-exports the defining binding", () => {
-    // arrange
-    const expectedRollbackAgentsReplacement = definingRollbackAgentsReplacement;
-
-    // act
-    const agentsRollbackAgentsReplacement = rollbackAgentsReplacement;
-
-    // assert
-    assert.strictEqual(agentsRollbackAgentsReplacement, expectedRollbackAgentsReplacement);
   });
 });
 

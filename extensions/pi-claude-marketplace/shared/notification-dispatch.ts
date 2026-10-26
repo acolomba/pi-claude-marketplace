@@ -42,6 +42,7 @@ import type {
   CommandRunState,
 } from "./notification-run.ts";
 import type {
+  AutoapplyStatusSurface,
   CascadeNotificationMessage,
   DeviceFlowPrompt,
   HookSurface,
@@ -75,9 +76,8 @@ function isStructuredOutcome(presentation: NotificationPresentation): boolean {
     case "reconcile-pending-empty":
     case "prune-empty":
     case "prune-committed-warning":
-      return true;
     case "reconcile-applied-cascade":
-      return false;
+      return true;
   }
 }
 
@@ -85,6 +85,7 @@ function isRawOutcome(presentation: ResolvedRawSurface | CommandErrorPresentatio
   switch (presentation.kind) {
     case "usage-error":
     case "usage-info":
+    case "autoapply-status":
     case "internal-error":
       return true;
     case "diagnostic":
@@ -292,6 +293,15 @@ export function notifyUsageInfo(
   usage: string,
 ): void {
   emitPresentation(ctx, run, resolveRawSurface({ kind: "usage-info", usage }));
+}
+
+/** AAP-04: sends what `/claude:plugin autoapply` shows, or what its set form wrote. */
+export function notifyAutoapplyStatus(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  surface: AutoapplyStatusSurface,
+): void {
+  emitPresentation(ctx, run, resolveRawSurface(surface));
 }
 
 /**
@@ -532,7 +542,7 @@ function formatPresentationBody(presentation: NotificationPresentation): string 
       return renderMarketplaceNotAdded(presentation.message, presentation.reason);
     case "reconcile-pending-empty":
       return foldAdvisories(
-        renderReconcilePendingEmpty(),
+        renderReconcilePendingEmpty(presentation.message.command),
         presentation.message.advisories,
         presentation.message.retainedWorkflows,
       );

@@ -21,11 +21,13 @@ import { sourceLogical } from "../../../domain/source.ts";
 import { loadVisibleMarketplaces } from "../../../orchestrators/marketplace/shared.ts";
 import { loadPluginListPayload } from "../../../orchestrators/plugin/list-flow.ts";
 import { notify, notifyUsageError } from "../../../shared/notification-dispatch.ts";
+import { tokenizeArgs } from "../../args.ts";
 import {
   PluginBrowser,
   type MarketplaceEntry,
   type PickerResult,
 } from "../../browser/plugin-browser.ts";
+import { rejectUnknownFlag } from "../shared.ts";
 
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { NotificationRun } from "../../../shared/notification-run.ts";
@@ -128,7 +130,12 @@ async function dispatch(
  */
 export function makeBrowseHandler(handlers: BrowseActionHandlers): SubcommandHandler {
   return async (args, ctx, run): Promise<void> => {
-    if (args.trim() !== "") {
+    const tokens = tokenizeArgs(args).map((token) => token.value);
+    if (rejectUnknownFlag(tokens, { ctx, run, usage: USAGE })) {
+      return;
+    }
+
+    if (tokens.length > 0) {
       notifyUsageError(ctx, run, { message: "browse takes no arguments.", usage: USAGE });
       return;
     }

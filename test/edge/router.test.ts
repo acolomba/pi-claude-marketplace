@@ -95,7 +95,7 @@ test("executes a selected list route without selecting its handler again", async
 });
 
 const EXPECTED_TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|marketplace|help> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
@@ -106,6 +106,8 @@ const EXPECTED_TOP_LEVEL_USAGE =
   "  list [<marketplace>] [--scope user|project]   (alias: ls)\n" +
   "  info <plugin>@<marketplace> [--scope user|project]\n" +
   "  pending [--scope user|project]\n" +
+  "  apply [--scope user|project]\n" +
+  "  autoapply [on|off] [--scope user|project] [--local]\n" +
   "  enable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  import [--scope user|project]\n" +
@@ -252,6 +254,8 @@ const TOP_LEVEL_DISPATCH: readonly DispatchRow[] = [
   { subcommand: "ls", handler: "list", commandId: "plugin list" },
   { subcommand: "info", handler: "pluginInfo", commandId: "plugin info" },
   { subcommand: "pending", handler: "pending", commandId: "plugin pending" },
+  { subcommand: "apply", handler: "pluginApply", commandId: "plugin apply" },
+  { subcommand: "autoapply", handler: "autoapply", commandId: "plugin autoapply" },
   { subcommand: "enable", handler: "enable", commandId: "plugin enable" },
   { subcommand: "disable", handler: "disable", commandId: "plugin disable" },
   { subcommand: "import", handler: "import", commandId: "plugin import" },
@@ -309,6 +313,12 @@ for (const mode of ["json", "rpc"] as const) {
       handler: "help",
       commandId: "marketplace help",
       expectedArgs: "marketplace",
+    },
+    {
+      subcommand: 'help "marketplace"',
+      handler: "help",
+      commandId: "marketplace help",
+      expectedArgs: '"marketplace"',
     },
     {
       subcommand: "help marketplace extra",
@@ -783,6 +793,28 @@ test("refuses an argument after marketplace help rather than discarding it (AP-3
   verifyBoundary();
   verify(handlers);
 });
+
+for (const args of ["--bogus", "official --bogus"]) {
+  test(`MPA-03: names the flag in marketplace help ${args} as help marketplace does`, async () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const run = runWithNothingLoaded();
+    const handlers = mock<SubcommandHandlers>({ exactParams: true, name: "subcommand handlers" });
+
+    // act
+    await routeClaudePlugin(`marketplace help ${args}`, handlers, ctx, run);
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: 'Unknown flag: "--bogus".\n\nUsage: /claude:plugin marketplace help',
+        severity: "error",
+      },
+    ]);
+    verifyBoundary();
+    verify(handlers);
+  });
+}
 
 test("names an unrecognized marketplace token back to the operator with the marketplace usage block (AP-3)", async () => {
   // arrange

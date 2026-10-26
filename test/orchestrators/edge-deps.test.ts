@@ -41,6 +41,8 @@ interface HermeticScope {
 
 interface InstalledFixture {
   readonly version: string;
+  /** GV-01: the commit a record at a release tag holds. */
+  readonly resolvedSha?: string;
   readonly enabled?: boolean;
   readonly unsupported?: readonly string[];
 }
@@ -102,6 +104,7 @@ function pluginRecord(resolvedSource: string, installed: InstalledFixture): Plug
   return {
     version: installed.version,
     resolvedSource,
+    ...(installed.resolvedSha !== undefined && { resolvedSha: installed.resolvedSha }),
     compatibility: {
       installable: unsupported.length === 0,
       notes: [],
@@ -283,6 +286,18 @@ const bucketizerCases = [
     marketplace: "installed-mp",
     plugins: () => [{ name: "plug", manifestVersion: "1.0.0", installed: { version: "1.0.0" } }],
     rows: [{ name: "plug", status: "installed", version: "1.0.0" }],
+  },
+  {
+    title: "GV-01: marks a record at a release tag's commit upgradable to the manifest version",
+    marketplace: "tagged-mp",
+    plugins: () => [
+      {
+        name: "plug",
+        manifestVersion: "1.0.0",
+        installed: { version: "1.0.0-0123456789ab", resolvedSha: "0123456789ab".repeat(3) },
+      },
+    ],
+    rows: [{ name: "plug", status: "upgradable", version: "1.0.0-0123456789ab" }],
   },
   {
     title: "marks an installed record with a newer manifest version upgradable",

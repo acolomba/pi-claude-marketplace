@@ -28,13 +28,15 @@ export function hermeticGitEnvironment(home: string): NodeJS.ProcessEnv {
 }
 
 /**
- * Runs git with `args` in `cwd` and the environment of `home`. It never
- * blocks, because the worker that runs it may also serve the git host.
+ * Runs git with `args` in `cwd` and the environment of `home`, and returns its
+ * trimmed standard output. It never blocks, because the worker that runs it
+ * may also serve the git host.
  */
-export async function runGit(cwd: string, home: string, ...args: string[]): Promise<void> {
-  await execFileAsync(
+export async function runGit(cwd: string, home: string, ...args: string[]): Promise<string> {
+  const { stdout } = await execFileAsync(
     "git",
     ["-c", "init.defaultBranch=main", "-c", "commit.gpgsign=false", ...args],
     { cwd, env: hermeticGitEnvironment(home) },
   );
+  return stdout.trim();
 }

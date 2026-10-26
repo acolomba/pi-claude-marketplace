@@ -17,14 +17,22 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
-import { computeHashVersion } from "../../domain/version.ts";
+import { parsePluginSource } from "../../domain/source.ts";
+import {
+  computeHashVersion,
+  declaredVersionWithPin,
+  isSameVersion,
+  shaVersion,
+  tagShaVersion,
+  withTagCommit,
+} from "../../domain/version.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import {
   writeBatchedConfigEntries,
   writePluginConfigEntry,
 } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
+import { isRecordedButDisabled, loadState, rangeVersionOf } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   CrossPluginConflictError,
@@ -57,7 +65,7 @@ import type {
   ScopeConfig,
 } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
@@ -128,6 +136,30 @@ export interface LedgerDegradationSignals {
    * COUNT verdict only -- the staged workflow names never reach a rendered row.
    */
   readonly stagedWorkflows?: boolean;
+}
+
+/**
+ * Lift the ledger's degradation signals off an orchestrated enable outcome,
+ * for reconcile's enable row and import's (IMP-10). Each field is omitted when
+ * empty (`exactOptionalPropertyTypes`), so a clean enable yields `{}` and its
+ * projected row gains no markers (NREG-01). The `partition?: never` refusal
+ * keeps the update and reinstall partitions out, as on `enableRowDependencies`.
+ *
+ * SEV-01 / D-98-02: the staged-count verdicts ride here too -- they drive the
+ * projected row's dependency list, mirroring the install arm's
+ * `dependenciesFromInstall` derivation.
+ */
+export function degradationFromEnable(
+  result: LedgerDegradationSignals & { readonly partition?: never },
+): LedgerDegradationSignals {
+  return {
+    ...(result.unsupported !== undefined && { unsupported: result.unsupported }),
+    ...(result.orphanRewake === true && { orphanRewake: true }),
+    ...(result.degradedKinds !== undefined && { degradedKinds: result.degradedKinds }),
+    ...(result.stagedAgents === true && { stagedAgents: true }),
+    ...(result.stagedMcpServers === true && { stagedMcpServers: true }),
+    ...(result.stagedWorkflows === true && { stagedWorkflows: true }),
+  };
 }
 
 /**
@@ -257,7 +289,7 @@ export class MarketplaceNotAddedSignal extends Error {
   /**
    * SCOPE-01: set when the miss is really "nothing is installed at the scope
    * you named" -- see `missIsNotInstalled`. The handler then renders the
-   * PLUGIN row `(skipped|failed) {not installed}` instead of the marketplace
+   * PLUGIN row `(failed) {not installed}` instead of the marketplace
    * row, because the container's registration scope is not what the operator
    * asked about. Carries the plugin so the row has a subject; both fields are
    * set together or not at all.
@@ -1172,16 +1204,16 @@ async function manifestCandidateExists(manifestPath: string): Promise<boolean> {
 }
 
 /**
- * Tier 1 of {@link resolvePluginVersion}: the `version` the plugin's own
+ * The first tier of {@link resolveDeclaredPluginVersion}: the `version` the plugin's own
  * manifest declares, or `undefined` when it declares none usable.
  *
  * MANF-01: the walk is the shared `MANIFEST_CANDIDATES` ordering, so this
  * reader and the resolver read the same file. D-01-07: a candidate that
  * EXISTS ends the walk -- if it cannot be read, cannot be parsed, or carries
- * no usable `version`, the answer falls to tier 2, never to a sibling
+ * no usable `version`, the answer falls to the marketplace entry, never to a sibling
  * candidate. Never throws (D-23-02 / D-23-03).
  */
-async function readDeclaredPluginVersion(pluginRoot: string): Promise<string | undefined> {
+export async function readDeclaredPluginVersion(pluginRoot: string): Promise<string | undefined> {
   for (const candidate of MANIFEST_CANDIDATES) {
     const manifestPath = path.join(pluginRoot, candidate);
 
@@ -1195,7 +1227,7 @@ async function readDeclaredPluginVersion(pluginRoot: string): Promise<string | u
       // eslint-disable-next-line no-await-in-loop -- D-01-07: only the first existing candidate is read
       parsed = JSON.parse(await readFile(manifestPath, "utf8"));
     } catch (err) {
-      // Present and unusable: tier 2 / tier 3 cover it.
+      // Present and unusable: the entry, the commit, or the hash covers it.
       hookDebugLog(`resolvePluginVersion: plugin.json read/parse failed: ${errorMessage(err)}`);
       return undefined;
     }
@@ -1218,38 +1250,144 @@ function usableDeclaredVersion(parsed: unknown): string | undefined {
 }
 
 /**
- * PI-7 / PUP-3 / SNM-34 version precedence (3 tiers, highest first):
- *   1. The plugin's own manifest `version`, read at the first
- *      `MANIFEST_CANDIDATES` location present under `pluginRoot` (MANF-01;
- *      D-23-01: "If also set in the marketplace entry, `plugin.json` wins.").
- *   2. The marketplace `entry.version`.
- *   3. The PI-7 `computeHashVersion` content hash, as a last resort.
- *
- * Each declared `version` is accepted iff it is a non-empty string (the same
- * gate used for `entry.version`; D-23-03 -- no SemVer enforcement). The
- * plugin.json read is re-done here independently (D-23-02): the NFR-7
- * discriminated `ResolvedPluginInstallable` union is NOT widened with a
- * `manifest` field. Any read/parse failure (absence, malformed JSON, missing
- * or non-string `.version`) silently falls through to the next tier and never
- * throws.
+ * VER-01 / D-23-01: the version a plugin declares, or undefined when it
+ * declares none: the plugin's own manifest `version`, read at the first
+ * `MANIFEST_CANDIDATES` location present under `pluginRoot` (MANF-01;
+ * "If also set in the marketplace entry, `plugin.json` wins."), then the
+ * marketplace `entry.version`. Each is accepted iff it is a non-empty string
+ * (D-23-03 -- no SemVer enforcement). A read or parse failure falls through to
+ * the entry and never throws.
  */
-export async function resolvePluginVersion(
+export async function resolveDeclaredPluginVersion(
   entry: PluginEntry,
-  installable: MaterializablePlugin,
-): Promise<string> {
-  // Tier 1: the plugin's own manifest `version`.
-  const declaredVersion = await readDeclaredPluginVersion(installable.pluginRoot);
+  pluginRoot: string,
+): Promise<string | undefined> {
+  const declaredVersion = await readDeclaredPluginVersion(pluginRoot);
   if (declaredVersion !== undefined) {
     return declaredVersion;
   }
 
-  // Tier 2: the marketplace entry version.
-  if (typeof entry.version === "string" && entry.version.length > 0) {
-    return entry.version;
+  return typeof entry.version === "string" && entry.version.length > 0 ? entry.version : undefined;
+}
+
+/**
+ * PI-7 / PUP-3 / SNM-34 / VER-01 version precedence, highest first:
+ *   1. The declared version (`resolveDeclaredPluginVersion`: plugin.json,
+ *      then the marketplace entry), with the commit pin a plugin of the
+ *      `anthropic-plugin-directory` marketplace carries (GV-01).
+ *   2. The commit of `resolvedSha`, the commit a git source installs, as
+ *      `shaVersion` spells it (D-16-08, GV-01). Claude Code orders a git
+ *      plugin's version the same way: manifest, catalog entry, then the
+ *      commit.
+ *   3. The PI-7 `computeHashVersion` content hash, as a last resort.
+ *
+ * The plugin.json read is re-done here independently (D-23-02): the NFR-7
+ * discriminated `ResolvedPluginInstallable` union is NOT widened with a
+ * `manifest` field.
+ */
+export async function resolvePluginVersion(
+  entry: PluginEntry,
+  installable: MaterializablePlugin,
+  marketplaceName: string,
+  resolvedSha?: string,
+): Promise<string> {
+  const source = parsePluginSource(entry.source);
+  const declared = await resolveDeclaredPluginVersion(entry, installable.pluginRoot);
+  if (declared !== undefined) {
+    return declaredVersionWithPin(declared, source, marketplaceName);
   }
 
-  // Tier 3: PI-7 content hash (last resort, unchanged).
+  if (resolvedSha !== undefined) {
+    return shaVersion(resolvedSha, source);
+  }
+
   return computeHashVersion(installable.pluginRoot);
+}
+
+/**
+ * GV-01: the version Claude Code records for a plugin installed at the release
+ * tag a dependency's version range selected. A declared version (with GV-01's
+ * directory pin) gets the tag commit's first 12 characters appended; with none
+ * declared, the version is the tag commit's, as `tagShaVersion` spells it.
+ */
+export async function resolveTagPinnedPluginVersion(
+  entry: PluginEntry,
+  installable: MaterializablePlugin,
+  marketplaceName: string,
+  tagCommit: string,
+): Promise<string> {
+  const source = parsePluginSource(entry.source);
+  const declared = await resolveDeclaredPluginVersion(entry, installable.pluginRoot);
+  return declared === undefined
+    ? tagShaVersion(tagCommit, source)
+    : withTagCommit(declaredVersionWithPin(declared, source, marketplaceName), tagCommit);
+}
+
+/**
+ * D-16-09: whether an update candidate is the revision the record holds. A
+ * source that moved to a new commit is a new revision even when its declared
+ * version did not change, because the stored sha is the revision; a switch
+ * between a git and a `path` source adds or drops the sha, so it is a new
+ * revision too. Only when neither side has a sha does the version alone
+ * decide.
+ *
+ * `tags.resolvedVersion` is the semver of the release tag a range selected.
+ * `tags.searched` says that the candidate comes from a verb that lets a
+ * dependent's range pick a release tag (D-23), so a candidate with no
+ * `resolvedVersion` is one no tag applies to.
+ *
+ * This is the disabled branch's rule (D-99-05a). The enabled branch also
+ * compares the plugin root, through `isRecordedCandidate`.
+ */
+export function isSameRevision(
+  record: PluginInstallRecord,
+  toVersion: string,
+  resolvedSha: string | undefined,
+  tags: { readonly resolvedVersion?: string | undefined; readonly searched?: boolean } = {},
+): boolean {
+  if (resolvedSha !== record.resolvedSha) {
+    return false;
+  }
+
+  // GV-01 / GV-02: at a release tag a range selected, the revision is the tag:
+  // Claude Code's check reads the record's tag version and commit. A record
+  // written before GV-01 holds the tag's semver as its version.
+  if (tags.resolvedVersion !== undefined) {
+    return rangeVersionOf(record) === tags.resolvedVersion;
+  }
+
+  // GV-01: with no tag, Claude Code's update compares the recorded string, so
+  // a record at a tag's commit moves to the version without that commit. A
+  // check that never read the tags (D-23) cannot tell, and reads it as the
+  // same version.
+  return isSameVersion(
+    record.version,
+    toVersion,
+    tags.searched === true ? undefined : record.resolvedSha,
+  );
+}
+
+/**
+ * D-18-11: whether an enabled record already holds the candidate. A record made
+ * before per-commit copies names the mutable mirror as its root, so the copy at
+ * the same commit is a new revision and the swap re-anchors the record onto it.
+ */
+export function isRecordedCandidate(
+  record: PluginInstallRecord,
+  candidate: {
+    readonly toVersion: string;
+    readonly resolvedSha: string | undefined;
+    readonly pluginRoot: string;
+    readonly resolvedVersion?: string | undefined;
+    readonly searchedReleaseTags?: boolean;
+  },
+): boolean {
+  return (
+    isSameRevision(record, candidate.toVersion, candidate.resolvedSha, {
+      resolvedVersion: candidate.resolvedVersion,
+      searched: candidate.searchedReleaseTags === true,
+    }) && candidate.pluginRoot === record.resolvedSource
+  );
 }
 
 function compareNames(a: string, b: string): number {
@@ -1541,32 +1679,29 @@ export function emitMarketplaceNotAdded(args: {
  * Two arms, and which one fires is a property of the SIGNAL, not of the verb:
  *   - `notInstalledAt` + `plugin` set: the container sits one scope over, so
  *     nothing is installed at the scope the operator named. The PLUGIN is the
- *     subject, on the same `(skipped)` row an in-scope marketplace with no
- *     record yields -- but the brace names the container's actual scope beside
- *     `not installed` (SCOPE-01, via `absentTargetReasons`), because the two
- *     misses take different remedies and a shared byte form states neither.
+ *     subject, on the same `(failed)` row an in-scope marketplace with no
+ *     record yields, as uninstall's cross-scope row is (UPR-04) -- but the
+ *     brace names the container's actual scope beside `not installed`
+ *     (SCOPE-01, via `absentTargetReasons`), because the two misses take
+ *     different remedies and a shared byte form states neither.
  *   - otherwise: the marketplace row itself, `{marketplace not added}`
  *     (structural, no new REASONS member per D-47-B). `requestedScope` (when
  *     present) renders the `[scope]` bracket; the bare both-scopes-miss form
  *     carries no bracket and, per `crossScopeFlag`, is owed no sibling probe.
  *
- * The caller supplies its command label and skipped-row policy. Requiring
- * `CommandContext<"skipped">` keeps missing policies a compile error while the
+ * The caller supplies its command label and failed-row policy. Requiring
+ * `CommandContext<"failed">` keeps missing policies a compile error while the
  * row literal remains checked against the shared producer contract.
  *
- * SEV-04 / D-01: the row is stamped `error`. Its reasons always lead with
+ * SEV-04: the row is a failure stamped `error`: its reasons always lead with
  * `not installed` -- an absent target, i.e. the requested operation was NOT
- * carried out -- so both verbs' own skip-severity rules
- * (`update.ts::cascadeSkipSeverity`, `reinstall.ts`'s in-scope skipped arm)
- * collapse to the same constant here. Neither rule can be CALLED from this
- * module: both live in files that import this one, so reaching back for them
- * would close a module cycle.
+ * carried out.
  */
 export async function emitMarketplaceNotAddedSignal(args: {
   readonly ctx: NotificationContext;
   readonly run: NotificationRun;
   readonly cwd: string;
-  readonly context: CommandContext<"skipped">;
+  readonly context: CommandContext<"failed">;
   readonly cardinality: "single" | "plural";
   readonly err: MarketplaceNotAddedSignal;
 }): Promise<void> {
@@ -1583,7 +1718,7 @@ export async function emitMarketplaceNotAddedSignal(args: {
           scope: err.notInstalledAt,
           plugins: [
             {
-              status: "skipped",
+              status: "failed",
               name: err.plugin,
               reasons: absentTargetReasons(err.notInstalledAt),
               severity: "error",

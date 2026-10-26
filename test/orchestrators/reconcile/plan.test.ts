@@ -1096,6 +1096,7 @@ describe("planReconcile", () => {
           ranges: ["^2.0.0"],
           requiredBy: "deploy-kit@keep",
           declarers: ["deploy-kit@keep"],
+          requirers: ["deploy-kit@keep"],
         },
       ],
       sourceMismatches: [],
@@ -1131,6 +1132,7 @@ describe("planReconcile", () => {
         ranges: ["^1.0.0", ">=1.2.0"],
         requiredBy: "a@keep",
         declarers: ["a@keep", "b@keep"],
+        requirers: ["a@keep", "b@keep"],
       },
     ]);
   });
@@ -1166,6 +1168,7 @@ describe("planReconcile", () => {
         ranges: ["^1.0.0", ">=1.2.0", "<2.0.0"],
         requiredBy: "a@alpha",
         declarers: ["a@alpha", "c@gamma"],
+        requirers: ["a@alpha", "c@gamma"],
       },
     ]);
   });
@@ -1199,6 +1202,41 @@ describe("planReconcile", () => {
         ranges: ["^1.0.0"],
         requiredBy: "a@keep",
         declarers: ["a@keep", "b@keep"],
+        requirers: ["a@keep"],
+      },
+    ]);
+  });
+
+  test("GV-01: only a declarer that carries a range is a requirer, in verdict order", () => {
+    // arrange
+    const merged = mergedConfig({ keep: { source: "acme/keep" } }, { "a@keep": {}, "b@keep": {} });
+    const state = stateWith({
+      keep: marketplaceRecord("keep", githubSource("acme/keep"), {
+        a: pluginRecord(true),
+        b: pluginRecord(true),
+      }),
+    });
+    const verdict: ScopeSatisfactionVerdict = {
+      ok: true,
+      unsatisfied: [
+        { dependent: "a@keep", dependency: "c@keep", kind: "missing" },
+        { dependent: "b@keep", dependency: "c@keep", kind: "missing", ranges: ["^1.0.0"] },
+      ],
+    };
+
+    // act
+    const plan = planReconcile(merged, state, "project", verdict);
+
+    // assert
+    assert.deepStrictEqual(plan.pluginsToDependencyInstall, [
+      {
+        scope: "project",
+        plugin: "c",
+        marketplace: "keep",
+        ranges: ["^1.0.0"],
+        requiredBy: "a@keep",
+        declarers: ["a@keep", "b@keep"],
+        requirers: ["b@keep"],
       },
     ]);
   });
@@ -1761,6 +1799,7 @@ describe("planReconcile", () => {
     const verdict: ScopeSatisfactionVerdict = {
       ok: false,
       declarer: "deploy-kit@keep",
+      reason: "unreadable manifest",
       cause: new Error("cannot read the dependencies of deploy-kit@keep"),
     };
 

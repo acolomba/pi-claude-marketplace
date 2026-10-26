@@ -97,12 +97,19 @@ A marketplace can be published as one of several source kinds: `dir`, `file`, `u
 
 A behavior that only one kind has lives in a feature file of its own.
 
+A plugin can also come from a git repository on the git host, as a `github`, `url`, or `git-subdir` source. These are the plugin's source kinds, not the marketplace's: any marketplace kind can offer them. An Outline over the plugin source kinds names its column `plugin source kind` and keeps its `Examples:` blocks untagged, because `npm run check:features` reads a `source kind` column, and the `@url` and `@github` tags, as the marketplace's.
+
 ## Run tokens
 
 A scenario cannot know where its sandbox lives or when it runs. It writes each run-specific value as a brace token (D-03):
 
 - `{home}` is the home directory of the sandbox. A command expands it to the real path, and a result shows `{home}` wherever the real path appears.
+- `{project dir}` is the project directory of the sandbox, where Pi runs. The root of the project scope is `{project dir}/.pi`. It expands and projects back the same way.
+- `{agent dir}` is the Pi agent directory of the sandbox, which is the root of the user scope. It expands and projects back the same way.
 - `{git host}` is the `127.0.0.1:<port>` address of the run's https git host. A command expands it to that address, and a result shows `{git host}` wherever that exact address appears.
+- `{<repository> revision <n>}` is the version of the n-th revision, counted from 1, that a scenario published to a git plugin repository. For example, `{ghp revision 1}` is the version of the first revision of the repository `ghp`: the first 12 hex digits of its commit, which Claude Code records for a git plugin that declares no version. Commit dates change every run, so the commit does too. A version with more around it keeps the rest as written: a `git-subdir` plugin's `{mono revision 1}-3989e95a`, or a pinned plugin of the plugin directory's `1.0.0-{dirp revision 1}`. A command expands the token to the version, and a result shows the token wherever that version appears.
+- `{<repository> commit <n>}` is the full 40-hex commit of the same revision. For example, `{ghp commit 2}` is the commit of the second revision of the repository `ghp`. A command expands the token to the commit, and a result shows the token wherever that commit appears.
+- An error token, such as `{mcp-adapter.json read error}` or `{unreadable skill file copy error}`, is the message Node gives a file call that a `Given` set up to fail. Node majors word one errno differently, with or without the path, so the step makes the same call, checks its code and syscall, and records the message it gets. A result shows the token wherever that message appears, before any other token is projected.
 - `{scenario time}` in a `last updated at` cell matches any exact ISO timestamp between the start of the scenario and the check. Any other value stays as written, so a stale, future, or malformed time fails (D-05).
 
 A token never uses `<...>`, because an Outline uses that form for its placeholders. A token never uses `~`, because the product prints `~` itself. An `Examples:` cell can hold a token: `| dir | {home}/marketplaces/tools |`. A stand-in whose address shows up in a command or a result gets its own token in the same way.

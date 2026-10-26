@@ -3,10 +3,10 @@
  *
  * In RPC mode the extension appends each result as a `claude-plugin` custom
  * entry (JOUT-01), so a step reads structured payloads and never parses
- * text. A command returns every payload it emits, in emission order, each
- * validated against the published payload schema (DRV-01). State persists
- * between commands through the sandbox directories, as it does between two
- * Pi sessions of one user.
+ * text. A command, or a new session, returns every payload it emits, in
+ * emission order, each validated against the published payload schema
+ * (DRV-01). State persists between commands through the sandbox directories,
+ * as it does between two Pi sessions of one user.
  */
 
 import assert from "node:assert/strict";
@@ -33,6 +33,12 @@ export interface OfferedSkill {
   readonly description: string;
 }
 
+/** What a new session offers and the payloads it emits, such as its reconcile report. */
+export interface SessionReport {
+  readonly skills: readonly OfferedSkill[];
+  readonly payloads: readonly NotificationPayload[];
+}
+
 const PAYLOAD_VALIDATOR = Compile(NOTIFICATION_PAYLOAD_SCHEMA);
 
 // The part of Pi's `get_commands` response that the skill steps read.
@@ -47,6 +53,22 @@ const COMMANDS_VALIDATOR = Compile(
   }),
 );
 
+// The part of Pi's `get_entries` response that the session payloads come from.
+const ENTRIES_VALIDATOR = Compile(
+  Type.Object({
+    success: Type.Literal(true),
+    data: Type.Object({
+      entries: Type.Array(
+        Type.Object({
+          type: Type.String(),
+          customType: Type.Optional(Type.String()),
+          data: Type.Optional(Type.Unknown()),
+        }),
+      ),
+    }),
+  }),
+);
+
 // What a request reports beyond its own result: neither an extension error
 // nor a dialog is ever expected.
 function assertQuiet(exchange: RpcExchange): void {
@@ -54,6 +76,22 @@ function assertQuiet(exchange: RpcExchange): void {
     { extensionErrors: exchange.extensionErrors, dialogs: exchange.dialogs },
     { extensionErrors: [], dialogs: [] },
   );
+}
+
+// The extension's payloads among `entries`, each valid against the payload
+// schema (DRV-01).
+function claudePluginPayloads(
+  entries: ReadonlyArray<{ readonly customType?: string; readonly data?: unknown }>,
+): NotificationPayload[] {
+  return entries
+    .filter((entry) => entry.customType === "claude-plugin")
+    .map(({ data: payload }) => {
+      assert.ok(
+        PAYLOAD_VALIDATOR.Check(payload),
+        JSON.stringify(PAYLOAD_VALIDATOR.Errors(payload)),
+      );
+      return payload;
+    });
 }
 
 /**
@@ -70,14 +108,9 @@ export async function runCommandPayloads(
   const exchange = await pi.request({ type: "prompt", message: command });
   assertQuiet(exchange);
   assert.deepStrictEqual(exchange.response.data, { disposition: "handled" }, command);
-  const payloads = exchange.entries
-    .filter((entry) => entry.customType === "claude-plugin")
-    .map((entry) => entry.data);
+  const payloads = claudePluginPayloads(exchange.entries);
   assert.notDeepStrictEqual(payloads, [], `${command} emitted no claude-plugin payload`);
-  return payloads.map((payload) => {
-    assert.ok(PAYLOAD_VALIDATOR.Check(payload), JSON.stringify(PAYLOAD_VALIDATOR.Errors(payload)));
-    return payload;
-  });
+  return payloads;
 }
 
 /**
@@ -95,15 +128,29 @@ export async function runCommand(pi: PiProcess, command: string): Promise<Cascad
 }
 
 /**
- * Starts a new session in `pi` and returns every skill it offers, in Pi's
- * order. A new session rebuilds the extension runtime and discovers its
- * resources again, which is what makes installed plugins visible, as
- * `/reload` does.
+ * Starts a new session in `pi` and returns what `readSession` reads from it.
+ * A new session rebuilds the extension runtime and discovers its resources
+ * again, which is what makes installed plugins visible, as `/reload` does.
  */
-export async function startSession(pi: PiProcess): Promise<readonly OfferedSkill[]> {
+export async function startSession(pi: PiProcess): Promise<SessionReport> {
   const started = await pi.request({ type: "new_session" });
   assertQuiet(started);
   assert.deepStrictEqual(started.response.data, { cancelled: false });
+  // Pi's RPC `new_session` binds the extension twice and subscribes to the
+  // session only after the first bind (rpc-mode.js, the `new_session` case),
+  // so the stream misses the first reconcile pass and repeats a lasting
+  // failure. The session's own entries hold both passes, duplicates kept.
+  return readSession(pi);
+}
+
+/**
+ * Returns every skill the current session of `pi` offers, in Pi's order, and
+ * every payload the session emitted, in session order, each valid against the
+ * payload schema (DRV-01). A session may emit none. The first session of a
+ * Pi that has just started holds the payloads of its startup, such as its
+ * reconcile report.
+ */
+export async function readSession(pi: PiProcess): Promise<SessionReport> {
   const listed = await pi.request({ type: "get_commands" });
   assertQuiet(listed);
   const { response } = listed;
@@ -111,7 +158,13 @@ export async function startSession(pi: PiProcess): Promise<readonly OfferedSkill
     COMMANDS_VALIDATOR.Check(response),
     JSON.stringify(COMMANDS_VALIDATOR.Errors(response)),
   );
-  return response.data.commands
+  const skills = response.data.commands
     .filter((command) => command.source === "skill")
     .map(({ name, description }) => ({ command: `/${name}`, description }));
+  const read = await pi.request({ type: "get_entries" });
+  assertQuiet(read);
+  const entries = read.response;
+  assert.ok(ENTRIES_VALIDATOR.Check(entries), JSON.stringify(ENTRIES_VALIDATOR.Errors(entries)));
+  const custom = entries.data.entries.filter((entry) => entry.type === "custom");
+  return { skills, payloads: claudePluginPayloads(custom) };
 }

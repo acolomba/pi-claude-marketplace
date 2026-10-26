@@ -1,28 +1,22 @@
 // orchestrators/plugin/reinstall-flow.ts
 //
-// PRL-02/03/04/05/06/07/08/09/10/11/12/13/14/15 reinstall core.
-// Single-plugin (PRL-02/06/07/08/09/10/11/12) and bulk reinstall
-// (PRL-03/04/05/13/14/15) are both implemented here.
-//
-// Reinstall is deliberately NOT uninstall+install and NOT update:
-// it targets an already-installed plugin, reads the cached marketplace
-// manifest only, preserves the installed record's version/installedAt, prepares
-// every bridge before physical replacement, then rolls physical resources back
-// if replacement or explicit state persistence fails.
+// PRL-02..PRL-15 reinstall, single-plugin and bulk. This module owns target
+// selection, the `not installed` failure, the `already disabled` skip, the named-layer
+// refusal, the post-success maintenance, and messaging. The materialization
+// is the shared runner `materialize-latest.ts` that `update` runs too, under
+// reinstall's policy (UPR-01, D-18-02..D-18-10). So a reinstall installs the
+// version the marketplace offers now and records it (REI-04, D-18-08).
 //
 // Each orchestration arm emits exactly one `notify(ctx, run, ...)` call.
 // notify() owns severity, the reload-hint trailer, and the cause-chain.
 // Manual-recovery rows are folded into the cascade `plugins[]` array as
 // `PluginManualRecoveryMessage` entries rather than emitted separately.
-// D-141-03 / D-141-05: the four bridges' staging warnings are split, not
-// folded flat. The skills and commands halves are DISCOVERY warnings and
-// reach both modes. The agents and mcp halves are hygiene warnings and stay
-// orchestrated-only beside the maintenance warnings, because
-// MarketplaceNotificationMessage has no field for one and a standalone user
-// has nothing to do about it (D-19-01, unchanged). The underlying side
-// effects (dropMarketplaceCache + rm) run either way, and the internal
-// `notes` field on `ReinstallPluginOutcome` carries every half for
-// orchestrated-mode consumers.
+// D-141-03 / D-141-05: the shared swap carries only the DISCOVERY half of the
+// staging warnings (skills, commands, workflows) in direct mode, as it does
+// for a direct `update`; they reach both modes. The maintenance warnings stay
+// orchestrated-only, because MarketplaceNotificationMessage has no field for
+// one and a standalone user has nothing to do about it (D-19-01). The side
+// effects behind them (dropMarketplaceCache + rm) run either way.
 //
 // The discovery diagnostic is emitted by whichever function renders the row
 // it qualifies, always after that row. The USER-INVOKED entrypoint reaches
@@ -37,52 +31,38 @@
 // fact: it is what would keep `surfaceReinstallDiscoveryWarnings` from
 // double-rendering, not the reason that arm is silent.
 //
-// `reconcile/backfill.ts` is the other production caller -- `render: "none"`
-// too, reached from `resources_discover` -> `applyReconcile`. It consumes the
-// outcome without rendering EITHER half: `PluginBackfilledOutcome` carries no
-// warnings field, and `reconcile/apply.ts::surfacePostCommitWarnings` renders
-// only the `plugin-installed`/`plugin-disabled` arms. So a reconcile-driven
-// re-materialize of a colliding plugin reports nothing while a
-// reconcile-driven INSTALL of the same plugin reports it. Tracked as part of
-// BACKLOG UPCASC-01 (decide the cascade rendering once).
+// The user-invoked reinstall is the only production path. Its single-plugin
+// operation is the one `operations.ts::createReinstallOperation` binds, and
+// `edge/register.ts` hands it to `createNodeReinstallPlugins`. No reconcile
+// step reinstalls anything: `apply` moves a plugin through the update runner
+// instead (D-26).
 
-import path from "node:path";
+import { rm } from "node:fs/promises";
 
-import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { requirePartialInstallable, resolveStrict } from "../../domain/plugin-resolver.ts";
-import { asAbsolutePluginRoot } from "../../domain/plugin-root.ts";
-import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { clonePluginRecord, isRecordedButDisabled } from "../../persistence/state-io.ts";
-import { hookDebugLog } from "../../shared/debug-log.ts";
+import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import {
   composeErrorWithCauseChain,
   errorMessage,
-  errorWithManualRecovery,
   rethrowInvalidGitHubBaseUrl,
 } from "../../shared/errors.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type PluginFailedMessage,
-  type PluginManualRecoveryMessage,
-  type PluginNotificationMessage,
   type PluginReinstalledMessage,
-  type PluginSkippedMessage,
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
-import { skipSeverity } from "../../shared/notify-reasons.ts";
 import { ownValue } from "../../shared/own-key.ts";
-import {
-  type LockedStateTransaction,
-  type LockedStateTransactionDeps,
-} from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS } from "../auth-host.ts";
+import { type LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 
-import { discoverGeneratedNames } from "./discover-names.ts";
-import { probeReinstallClone } from "./reinstall-clone-probe.ts";
-import { recordReinstallOutcome, reinstallReasonsFromError } from "./reinstall-record.ts";
-import { REAL_REINSTALL_TRANSACTION } from "./reinstall-replace.ts";
+import { garbageCollectPluginClones } from "./clone-gc.ts";
+import { materializeLatestVersion, recordCandidate } from "./materialize-latest.ts";
+import {
+  recordReinstallOutcome,
+  reinstallOutcomeFromRun,
+  reinstallReasonsFromError,
+} from "./reinstall-record.ts";
 import { selectReinstallTargets } from "./reinstall-targets.ts";
 import {
   REINSTALL_CONTEXT,
@@ -91,20 +71,15 @@ import {
   renderReinstallPartitionAndNotify,
 } from "./reinstall.messaging.ts";
 import {
-  assertNoCrossPluginConflicts,
   emitMarketplaceNotAddedSignal,
   keepLocalLayerTargets,
   MarketplaceNotAddedSignal,
   namedPluginLayerRefusal,
-  removePluginRecord,
   surfaceDiscoveryWarnings,
 } from "./shared.ts";
 
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
-import type { PluginEntry } from "../../domain/components/plugin.ts";
-import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
-import type { GitBackedSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
@@ -112,16 +87,25 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts";
-import type { ReinstallCloneCacheSeam } from "./reinstall-clone-probe.ts";
-import type {
-  ReinstallMaintenanceInput,
-  ReinstallTransaction,
-  RemoveDataDirFn,
-} from "./reinstall-replace.ts";
+import type { ReinstallFailedOutcome, ReinstallPluginOutcome, RevisionMove } from "../types.ts";
+import type { CandidateReport } from "./materialize-latest.ts";
+import type { ReinstallPhaseFailure } from "./reinstall-record.ts";
 import type { ReinstallPluginsTarget, ReinstallTargetSelection } from "./reinstall-targets.ts";
+import type { MaterializationPolicy, UpdateCloneCacheSeam } from "./update-preflight.ts";
+import type { RmOptions } from "node:fs";
 
-/** Hook-routing capabilities consumed by committed reinstall finalization. */
+/**
+ * Filesystem removal seam used after a committed reinstall. The options
+ * narrow Node's own removal options: both slots are optional booleans there,
+ * and pinning each to `true` is what stops a non-recursive or non-forced
+ * removal from satisfying the seam.
+ */
+export type RemoveDataDirFn = (
+  path: string,
+  options: RmOptions & { recursive: true; force: true },
+) => Promise<void>;
+
+/** Hook-routing capabilities the shared swap re-routes a reinstalled plugin with. */
 export type ReinstallHooksRouting = Pick<
   HooksRouting,
   "readAndCachePluginHooks" | "rebuildRoutingTables" | "removePluginConfigFromCache"
@@ -141,27 +125,28 @@ export interface ReinstallPluginOptions {
   /**
    * LAYER-04 / D-MF-03: the command named this plugin
    * (`<plugin>@<marketplace>`), so it acts on its target layer and is refused
-   * when only the other layer declares the plugin. A nameless form, the
-   * reconcile backfill, and any other caller that omits it are never refused.
+   * when only the other layer declares the plugin. A nameless form, and any
+   * other caller that omits it, is never refused.
    */
   readonly named?: boolean;
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly authMemo?: Map<string, AuthAttemptResult>;
   /**
-   * Locked-state transaction seam for this reinstall's load/save pair.
-   * Production callers leave this undefined and get the real state I/O.
+   * State I/O for this reinstall's state read and the shared swap's
+   * intent-mark and finalize guards. Production callers leave this undefined
+   * and get the real state I/O.
    */
   readonly stateTransaction?: LockedStateTransactionDeps;
   /**
    * Post-success plugin-data-directory removal seam. Production callers leave
-   * this undefined; `reinstall-replace.ts` owns the fallback.
+   * this undefined and get a recursive, forced `rm`.
    */
   readonly removeDataDir?: RemoveDataDirFn;
   /**
    * Test-only clone-cache seam override; production uses the real imports.
    */
-  readonly cloneCacheSeam?: ReinstallCloneCacheSeam;
+  readonly cloneCacheSeam?: UpdateCloneCacheSeam;
 }
 
 /** Complete inputs for targeted or bulk plugin reinstall. */
@@ -179,8 +164,8 @@ export interface ReinstallPluginsOptions {
   readonly credentialOps?: CredentialOps;
   readonly deviceFlowHttp?: DeviceFlowHttp;
   /**
-   * Locked-state transaction seam, forwarded unchanged to every per-plugin
-   * reinstall in the cascade. Production callers leave this undefined.
+   * State I/O seam, forwarded unchanged to every per-plugin reinstall in the
+   * cascade. Production callers leave this undefined.
    */
   readonly stateTransaction?: LockedStateTransactionDeps;
   /**
@@ -192,10 +177,10 @@ export interface ReinstallPluginsOptions {
    * Test-only clone-cache seam override, forwarded unchanged to every
    * per-plugin reinstall in the cascade; production uses the real imports.
    */
-  readonly cloneCacheSeam?: ReinstallCloneCacheSeam;
+  readonly cloneCacheSeam?: UpdateCloneCacheSeam;
 }
 
-/** One plugin reinstall bound to a transaction and lifecycle routing owner. */
+/** One plugin reinstall bound to a lifecycle routing owner. */
 export type ReinstallPluginFn = (
   options: ReinstallPluginOptions,
 ) => Promise<ReinstallPluginOutcome>;
@@ -207,78 +192,72 @@ export type ReinstallPluginsFn = (
 
 /** Named leaf owners bound by the public reinstall flow composition root. */
 interface ReinstallFlowOwners {
-  readonly probeReinstallClone: typeof probeReinstallClone;
   readonly recordReinstallOutcome: typeof recordReinstallOutcome;
   readonly reinstallReasonsFromError: typeof reinstallReasonsFromError;
   readonly selectReinstallTargets: typeof selectReinstallTargets;
 }
 
 const REINSTALL_FLOW_OWNERS: ReinstallFlowOwners = {
-  probeReinstallClone,
   recordReinstallOutcome,
   reinstallReasonsFromError,
   selectReinstallTargets,
 };
 
+/** Reinstall's knobs on the shared runner (D-18-04, D-18-15, D-23). */
+const REINSTALL_MATERIALIZATION: MaterializationPolicy = {
+  /** D-18-04: read a present git mirror's HEAD offline; only a missing mirror clones. */
+  refreshSource: false,
+  /** D-18-04: re-materialize the recorded revision too, which restores deleted artifacts. */
+  skipSameRevision: false,
+  /**
+   * D-18-15: RINST-01's repair overwrite of the plugin's own previous agent
+   * files a user edited.
+   */
+  overwrite: true,
+  /** D-23: a dependent's range still picks a release tag, as `update`'s does. */
+  searchReleaseTags: true,
+};
+
+/** The collaborators one reinstall binds. */
+interface ReinstallBindings {
+  readonly hooksRouting: ReinstallHooksRouting;
+  readonly completionCache: CompletionCache;
+  readonly env: ClaudeEnv;
+}
+
 /**
- * Binds one reinstall operation to a required semantic transaction owner.
+ * Binds one reinstall operation to its hook-routing owner and completion
+ * cache. D-18-05: the materialization is the shared runner's, and the
+ * post-success maintenance is this module's own step, so there is no
+ * transaction to inject.
  *
  * D-08-06: `env` is the environment the reinstall stages MCP servers with. It
  * defaults to Pi's process environment here, at the entry point, the way
  * `createGetPluginInfo` binds it.
  */
 export function createReinstallPlugin(
-  transaction: ReinstallTransaction,
   hooksRouting: ReinstallHooksRouting,
   completionCache: CompletionCache,
   env: ClaudeEnv = process.env,
 ): ReinstallPluginFn {
-  return (options) =>
-    reinstallPluginWithTransaction(
-      REINSTALL_FLOW_OWNERS,
-      transaction,
-      hooksRouting,
-      completionCache,
-      env,
-      options,
-    );
+  const bindings: ReinstallBindings = { hooksRouting, completionCache, env };
+  return (options) => reinstallPluginWith(REINSTALL_FLOW_OWNERS, bindings, options);
 }
 
-/**
- * Binds one production reinstall to the real transaction and supplied routing
- * owner. Module-private: `createNodeReinstallPlugins` below is its only
- * consumer, and a caller outside this module composes the same operation
- * through `orchestrators/plugin/operations.ts` (D-03).
- */
-function createNodeReinstallPlugin(
-  hooksRouting: ReinstallHooksRouting,
-  completionCache: CompletionCache,
-): ReinstallPluginFn {
-  return createReinstallPlugin(REAL_REINSTALL_TRANSACTION, hooksRouting, completionCache);
-}
-
-/** Binds direct and bulk production reinstall to one lifecycle routing owner. */
-export function createNodeReinstallPlugins(
-  hooksRouting: ReinstallHooksRouting,
-  completionCache: CompletionCache,
-): ReinstallPluginsFn {
-  const reinstallPlugin = createNodeReinstallPlugin(hooksRouting, completionCache);
+/** Binds the bulk reinstall around the single-plugin operation it drives per target. */
+export function createNodeReinstallPlugins(reinstallPlugin: ReinstallPluginFn): ReinstallPluginsFn {
   return (options) => reinstallPluginsWith(REINSTALL_FLOW_OWNERS, options, reinstallPlugin);
 }
 
-interface LockedSuccess {
+/** What one reinstall reached, before maintenance and rendering. */
+interface ReinstallReached {
   readonly outcome: ReinstallPluginOutcome;
-  /**
-   * D-141-03: the skills and commands halves of the staging warnings. These
-   * reach BOTH modes -- mirrors install's two-array `InstallCtx` shape.
-   */
+  /** D-141-03: the discovery half of the staging warnings; reaches both modes. */
   readonly discoveryWarnings: readonly string[];
   /**
-   * The agents and mcp halves, plus the `finalizeReplacements` leak strings.
-   * Orchestrated-only per D-19-01.
+   * AFILE-04: the MCP commit's file notices. Empty unless the MCP commit ran:
+   * on a reinstalled plugin, or on a failure after the commit rewrote the file.
    */
-  readonly bridgeWarnings: readonly string[];
-  /** AFILE-04: the MCP replace's file notices; empty for a skipped reinstall. */
   readonly mcpConfigNotices: readonly McpConfigNotice[];
 }
 
@@ -288,112 +267,78 @@ interface LockedSuccess {
 // The `reinstallPlugins` enumeration catch detects it via `instanceof` and
 // emits ONE standalone `MarketplaceNotAddedMessage` before any cascade row.
 
-/** Runs one reinstall through the retained transaction and notification sequence. */
-async function reinstallPluginWithTransaction(
+/** Runs one reinstall, its maintenance, and its notification. */
+async function reinstallPluginWith(
   owners: ReinstallFlowOwners,
-  transaction: ReinstallTransaction,
-  hooksRouting: ReinstallHooksRouting,
-  completionCache: CompletionCache,
-  env: ClaudeEnv,
+  bindings: ReinstallBindings,
   opts: ReinstallPluginOptions,
 ): Promise<ReinstallPluginOutcome> {
-  const { ctx, run, scope, cwd, marketplace, plugin } = opts;
+  const { ctx, run, scope, cwd, marketplace } = opts;
   const render = opts.render ?? "default";
   const locations = locationsFor(scope, cwd);
 
-  let locked: LockedSuccess;
+  // UPR-03: one holder per call, so a failure names this target's move only.
+  const candidate: CandidateReport = {};
+  let reached: ReinstallReached;
   try {
-    locked = await transaction.withLockedStateTransaction(
-      locations,
-      (tx) => runLockedReinstall(owners, transaction, hooksRouting, tx, locations, env, opts),
-      opts.stateTransaction,
-    );
+    reached = await runReinstall(owners, bindings, opts, locations, candidate);
   } catch (err) {
+    // GHB-03 / D-18-16: an invalid GitHub base override fails the command,
+    // warm cache or not.
     rethrowInvalidGitHubBaseUrl(err);
-    return handleSinglePluginFailure(owners, opts, err as Error, render);
+    return failReinstall(owners, opts, err, render, candidate.move);
   }
 
-  if (locked.outcome.partition !== "reinstalled") {
-    // CR-02 / D-01: the standalone single-plugin path must emit the absent-target
-    // row, not return silently. A `skipped` partition is the "not installed" case
-    // D-01 targets -> error; other skip reasons fall back to `skipSeverity`.
-    // Mirrors the bulk `outcomeToPluginMessage` skipped arm.
+  const { outcome } = reached;
+  if (outcome.partition !== "reinstalled") {
+    // CR-02 / D-01: the standalone single-plugin path must emit the row, not
+    // return silently. The bulk mapper composes it, so the two agree.
     if (render !== "none") {
-      const reasons = narrowReasons(locked.outcome.notes);
-      const skippedRow: PluginSkippedMessage = {
-        status: "skipped",
-        name: plugin,
-        reasons,
-        severity: reasons.includes("not installed") ? "error" : skipSeverity(reasons),
-        needsReload: false,
-      };
-      notifyWithContext(
-        ctx,
-        run,
-        REINSTALL_CONTEXT,
-        [{ name: marketplace, scope, plugins: [skippedRow] }],
-        undefined,
-        "single",
-      );
+      renderReinstallPartitionAndNotify(ctx, run, [outcome], "single");
+      // AFILE-04: a failure after the MCP commit leaves the rewritten file.
+      notifyMcpConfigNotices(ctx, run, reached.mcpConfigNotices);
     }
 
-    return locked.outcome;
+    return outcome;
   }
 
-  const maintenanceWarnings = await transaction.runPostSuccessMaintenance(
-    maintenanceInput(opts),
+  const maintenanceWarnings = await runPostSuccessMaintenance(
+    opts,
     locations,
-    completionCache,
+    bindings.completionCache,
   );
   if (render === "none") {
-    const notes = [
-      ...locked.discoveryWarnings,
-      ...locked.bridgeWarnings,
-      ...maintenanceWarnings,
-    ].map((w) => `warning: ${w}`);
+    const notes = [...reached.discoveryWarnings, ...maintenanceWarnings].map(
+      (w) => `warning: ${w}`,
+    );
     // NREG-01: each carrier key stays absent when it is empty, so a clean
     // reinstall's outcome shape is unchanged. AFILE-04: an MCP notice needs no
     // note to travel with it.
     return {
-      ...locked.outcome,
+      ...outcome,
       ...(notes.length > 0 && { notes }),
-      ...(locked.discoveryWarnings.length > 0 && {
-        discoveryWarnings: locked.discoveryWarnings,
+      ...(reached.discoveryWarnings.length > 0 && {
+        discoveryWarnings: reached.discoveryWarnings,
       }),
-      ...(locked.mcpConfigNotices.length > 0 && { mcpConfigNotices: locked.mcpConfigNotices }),
+      ...(reached.mcpConfigNotices.length > 0 && { mcpConfigNotices: reached.mcpConfigNotices }),
     };
   }
 
-  // IN-01 / D-19-01: the HYGIENE warnings (bridge + maintenance) are NOT
-  // surfaced -- there is no clean MarketplaceNotificationMessage
-  // representation for a post-success soft warning. The underlying side
-  // effects (cache drop + data-dir rm + bridge finalize) still fire above;
-  // the orchestrated-mode `notes` field at the `render === "none"` arm still
-  // carries the warning strings for consumers outside the notify path.
-  // `maintenanceWarnings` is awaited strictly for its side effects. The
-  // DISCOVERY warnings are the D-141-03 exception, but this arm does not
-  // render them either: no production caller reaches it, and
+  // IN-01 / D-19-01: the maintenance warnings are NOT surfaced -- there is no
+  // clean MarketplaceNotificationMessage representation for a post-success
+  // soft warning. The underlying side effects (cache drop + data-dir rm) still
+  // fire above; the orchestrated-mode `notes` field at the `render === "none"`
+  // arm still carries the warning strings for consumers outside the notify
+  // path. The DISCOVERY warnings are the D-141-03 exception, but this arm does
+  // not render them either: no production caller reaches it, and
   // `reinstallPlugins` already renders them after the cascade row for the
   // `render: "none"` arm every caller does reach.
-
-  // Single-plugin reinstall success is a 1-row cascade carrying a
-  // PluginReinstalledMessage variant; this branch and the bulk-cascade branch
-  // both emit one notify() call with structured payloads.
-  // `reinstalledRowFromOutcome` sets this row's `needsReload: true`
-  // explicitly (a realized reinstall always reloads); notify() aggregates
-  // per-row severity/needsReload into the cascade's overall `/reload to pick
-  // up changes` trailer.
   //
-  // WR-09: the ONE row composer, shared with the bulk cascade mapper. Two
-  // reinstall surfaces disagreeing about a degrade the same ledger produced is
-  // the drift the shared signal exists to close, so neither surface composes the
-  // row itself -- including its severity, which the composer raises to `warning`
-  // for a degraded component. `undefined` is the orphan-fold scope decision this
-  // branch always makes: the row's scope matches its marketplace block.
-  const reinstalledRow: PluginReinstalledMessage = reinstalledRowFromOutcome(
-    locked.outcome,
-    undefined,
-  );
+  // WR-09: the ONE row composer, shared with the bulk cascade mapper, so the
+  // two surfaces cannot report the same reinstall differently. `undefined` is
+  // the orphan-fold scope decision this branch always makes: the row's scope
+  // matches its marketplace block.
+  const reinstalledRow: PluginReinstalledMessage = reinstalledRowFromOutcome(outcome, undefined);
   notifyWithContext(
     ctx,
     run,
@@ -404,86 +349,154 @@ async function reinstallPluginWithTransaction(
   );
   // AFILE-04: this arm renders its own row, so it shows the MCP config file
   // notices after it.
-  notifyMcpConfigNotices(ctx, run, locked.mcpConfigNotices);
-  return locked.outcome;
-}
-
-function maintenanceInput(opts: ReinstallPluginOptions): ReinstallMaintenanceInput {
-  return {
-    scope: opts.scope,
-    marketplace: opts.marketplace,
-    plugin: opts.plugin,
-    ...(opts.removeDataDir !== undefined && {
-      removeDataDir: opts.removeDataDir,
-    }),
-  };
+  notifyMcpConfigNotices(ctx, run, reached.mcpConfigNotices);
+  return outcome;
 }
 
 /**
- * handle the single-plugin reinstall failure path. Extracted
- * from `reinstallPlugin` to keep that function's cognitive complexity
- * inside the sonarjs/cognitive-complexity ceiling (15). Produces both
- * the standalone-mode notify emission (when render !== "none") and
- * the orchestrated-mode `ReinstallFailedOutcome` (always returned).
- *
- * Manual-recovery class is a STRUCTURAL plugin variant
- * (`PluginManualRecoveryMessage`); other failures are
- * `PluginFailedMessage`. Severity + reload-hint computed by notify
- * .
+ * Reads the record, applies reinstall's own skips and the layer refusal, then
+ * materializes through the shared runner. D-18-10: no lock is held across the
+ * operation; the shared swap takes update's intent-mark and finalize guards.
  */
-function handleSinglePluginFailure(
+async function runReinstall(
+  owners: ReinstallFlowOwners,
+  bindings: ReinstallBindings,
+  opts: ReinstallPluginOptions,
+  locations: ScopedLocations,
+  candidate: CandidateReport,
+): Promise<ReinstallReached> {
+  const target = { name: opts.plugin, marketplace: opts.marketplace, scope: opts.scope };
+  const state = await (opts.stateTransaction?.loadState ?? loadState)(locations.extensionRoot);
+  const record = ownValue(ownValue(state.marketplaces, opts.marketplace)?.plugins, opts.plugin);
+  if (record === undefined) {
+    // UPR-04: a target the scope does not record fails as not installed, as
+    // uninstall's does; nothing is changed.
+    return reachedBeforeRunner(
+      owners.recordReinstallOutcome({ partition: "failed", ...target, reason: "not installed" }),
+    );
+  }
+
+  // ENBL-05: a record carrying an explicit `enabled: false` marker is the
+  // user's standing instruction, read through the single predicate
+  // `persistence/state-io.ts` owns so this site cannot drift from `update`'s.
+  // Re-materializing under it would restore the plugin's hooks, MCP servers and
+  // PATH entries with no command and no prompt. The skip comes before the
+  // shared runner, so the preflight's disabled-record pin refresh stays
+  // update's alone (D-18-05). ENBL-18: the record keeps its `resources.*`
+  // inventory while disabled, so a populated inventory is not evidence that
+  // anything is on disk and must not be read as one.
+  if (isRecordedButDisabled(record)) {
+    return reachedBeforeRunner(
+      owners.recordReinstallOutcome({
+        partition: "skipped",
+        ...target,
+        reason: "already disabled",
+      }),
+    );
+  }
+
+  await refuseOtherLayerReinstall(locations, opts);
+  let phaseFailure: ReinstallPhaseFailure | undefined;
+  const run = await materializeLatestVersion(
+    {
+      // The runner's optional seams are reinstall's own options, carried over
+      // unchanged; the members only reinstall reads ride along unread.
+      ...opts,
+      locations,
+      hooksRouting: bindings.hooksRouting,
+      completionCache: bindings.completionCache,
+      env: bindings.env,
+      cascade: false,
+      cardinality: "single",
+      // D-18-06 / BFILL-01: reinstall is partial-capable, so a still-partial
+      // plugin re-materializes in place.
+      partial: true,
+      cleanupClones: garbageCollectPluginClones,
+      // D-18-10: the commit or finalize failure is reinstall's own outcome to
+      // render, so the callback only captures it.
+      notifyPhaseFailure: (error, failures) => {
+        phaseFailure = { error, failures };
+      },
+      ...recordCandidate(candidate),
+    },
+    REINSTALL_MATERIALIZATION,
+  );
+  return {
+    outcome: reinstallOutcomeFromRun(target, run, phaseFailure),
+    discoveryWarnings: run.partition === "updated" ? (run.notes ?? []) : [],
+    mcpConfigNotices:
+      run.partition === "updated" || run.partition === "failed" ? (run.mcpConfigNotices ?? []) : [],
+  };
+}
+
+/** An outcome reinstall reached before the shared runner, which stages nothing. */
+function reachedBeforeRunner(outcome: ReinstallPluginOutcome): ReinstallReached {
+  return { outcome, discoveryWarnings: [], mcpConfigNotices: [] };
+}
+
+const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
+  await rm(dataDir, { recursive: true, force: true });
+};
+
+/**
+ * D-18-05: the non-fatal cleanup after a reinstalled outcome. It drops the
+ * marketplace's completion cache and removes the plugin-data directory, and
+ * returns one deferral warning per step that failed.
+ */
+async function runPostSuccessMaintenance(
+  opts: ReinstallPluginOptions,
+  locations: ScopedLocations,
+  completionCache: CompletionCache,
+): Promise<readonly string[]> {
+  const { scope, marketplace, plugin } = opts;
+  const warnings: string[] = [];
+  try {
+    await completionCache.dropMarketplaceCache(
+      await locations.pluginCacheFile(marketplace),
+      scope,
+      marketplace,
+    );
+  } catch (error) {
+    warnings.push(
+      `Plugin "${plugin}" reinstalled; completion cache refresh deferred: ${errorMessage(error)}`,
+    );
+  }
+
+  const dataDir = await locations.pluginDataDir(marketplace, plugin);
+  const removeDataDir = opts.removeDataDir ?? defaultRemoveDataDir;
+  try {
+    await removeDataDir(dataDir, { recursive: true, force: true });
+  } catch (error) {
+    warnings.push(
+      `Plugin "${plugin}" reinstalled; data cleanup deferred at ${dataDir}: ${errorMessage(error)}`,
+    );
+  }
+
+  return Object.freeze(warnings);
+}
+
+/**
+ * Composes a thrown reinstall's failed outcome and, unless the caller renders,
+ * its row. The row comes from the same mapper the bulk cascade uses, so the
+ * standalone and bulk failure rows cannot differ.
+ */
+function failReinstall(
   owners: ReinstallFlowOwners,
   opts: ReinstallPluginOptions,
-  err: Error,
+  err: unknown,
   render: "default" | "none",
+  move?: Partial<RevisionMove>,
 ): ReinstallFailedOutcome {
-  const { ctx, run, scope, marketplace, plugin } = opts;
   const outcome = owners.recordReinstallOutcome({
     partition: "failed",
-    name: plugin,
-    marketplace,
-    scope,
+    name: opts.plugin,
+    marketplace: opts.marketplace,
+    scope: opts.scope,
     error: err,
+    ...(move !== undefined && { move }),
   });
-
-  const causeErr = err;
-  const typedReasons = outcome.reasons;
-  const isManualRecovery = outcome.failureClass === "manual-recovery";
-  const reasons: readonly ContentReason[] = isManualRecovery
-    ? (["rollback partial"] as const)
-    : (typedReasons ?? narrowReasons(outcome.notes));
-
   if (render !== "none") {
-    // Per-row scope is OMITTED (orphan-fold) since it matches the
-    // marketplace block's scope at this single-plugin surface.
-    const failureRow: PluginNotificationMessage = isManualRecovery
-      ? ({
-          status: "manual recovery",
-          name: plugin,
-          reasons,
-          cause: causeErr,
-          // D-03/D-06: manual-recovery anchor is always actionable -> warning,
-          // no reload.
-          severity: "warning",
-          needsReload: false,
-        } satisfies PluginManualRecoveryMessage)
-      : ({
-          status: "failed",
-          name: plugin,
-          reasons,
-          cause: causeErr,
-          // D-03/D-06: a failed reinstall -> error, no reload.
-          severity: "error",
-          needsReload: false,
-        } satisfies PluginFailedMessage);
-    notifyWithContext(
-      ctx,
-      run,
-      REINSTALL_CONTEXT,
-      [{ name: marketplace, scope, plugins: [failureRow] }],
-      undefined,
-      "single",
-    );
+    renderReinstallPartitionAndNotify(opts.ctx, opts.run, [outcome], "single");
   }
 
   return outcome;
@@ -581,10 +594,10 @@ async function selectTargets(
 }
 
 /**
- * AFILE-04: show the MCP config file notices of every reinstalled plugin, in
- * outcome order, after the cascade and the discovery diagnostics. A failed
- * reinstall restores the file's exact bytes, so only reinstalled outcomes
- * carry notices.
+ * AFILE-04: show the MCP config file notices of every reinstalled or failed
+ * plugin, in outcome order, after the cascade and the discovery diagnostics.
+ * The shared swap does not restore the MCP config file, so a failure after the
+ * MCP commit carries the notices of the write it left in place.
  */
 function surfaceReinstallMcpConfigNotices(
   ctx: NotificationContext,
@@ -595,7 +608,7 @@ function surfaceReinstallMcpConfigNotices(
     ctx,
     run,
     outcomes.flatMap((outcome) =>
-      outcome.partition === "reinstalled" ? (outcome.mcpConfigNotices ?? []) : [],
+      outcome.partition === "skipped" ? [] : (outcome.mcpConfigNotices ?? []),
     ),
   );
 }
@@ -699,202 +712,10 @@ async function handleEnumerationFailure(
   );
 }
 
-async function runLockedReinstall(
-  owners: ReinstallFlowOwners,
-  transaction: ReinstallTransaction,
-  hooksRouting: ReinstallHooksRouting,
-  tx: LockedStateTransaction,
-  locations: ScopedLocations,
-  env: ClaudeEnv,
-  opts: ReinstallPluginOptions,
-): Promise<LockedSuccess> {
-  const { scope, cwd, marketplace, plugin } = opts;
-  const mp = ownValue(tx.state.marketplaces, marketplace);
-  const oldRecord = ownValue(mp?.plugins, plugin);
-  if (mp === undefined || oldRecord === undefined) {
-    return {
-      outcome: owners.recordReinstallOutcome({
-        partition: "skipped",
-        name: plugin,
-        marketplace,
-        scope,
-        reason: "not installed",
-      }),
-      discoveryWarnings: [],
-      bridgeWarnings: [],
-      mcpConfigNotices: [],
-    };
-  }
-
-  // ENBL-05: a record carrying an explicit `enabled: false` marker is the
-  // user's standing instruction, read through the single predicate
-  // `persistence/state-io.ts` owns so this site cannot drift from `update`'s.
-  // Re-materializing under it would restore the plugin's hooks, MCP servers and
-  // PATH entries with no command and no prompt, and the record write below
-  // would turn the plugin back on while the configuration still says otherwise.
-  //
-  // The counterpart branch in `update` refreshes the record's pin before it
-  // returns; this one refreshes NOTHING and returns before the resolve, because
-  // reinstall preserves the recorded version (D-68-02) and carries the recorded
-  // git identity forward (PURL-07) -- there is no pin for it to move, so there
-  // is nothing a re-resolve could truthfully write. ENBL-18: the record keeps
-  // its `resources.*` inventory while disabled, so a populated inventory is not
-  // evidence that anything is on disk and must not be read as one.
-  if (isRecordedButDisabled(oldRecord)) {
-    return {
-      outcome: owners.recordReinstallOutcome({
-        partition: "skipped",
-        name: plugin,
-        marketplace,
-        scope,
-        reason: "already disabled",
-      }),
-      discoveryWarnings: [],
-      bridgeWarnings: [],
-      mcpConfigNotices: [],
-    };
-  }
-
-  await refuseOtherLayerReinstall(locations, opts);
-  const oldSnapshot = clonePluginRecord(oldRecord);
-  const entry = await loadCachedEntry(mp.manifestPath, marketplace, plugin);
-  const installable = await resolveInstallable(owners, {
-    entry,
-    marketplaceRoot: mp.marketplaceRoot,
-    marketplaceName: marketplace,
-    locations,
-    recordedSha: oldSnapshot.resolvedSha,
-    ...(opts.cloneCacheSeam !== undefined && {
-      seam: opts.cloneCacheSeam,
-    }),
-    ctx: opts.ctx,
-    run: opts.run,
-    credentialOps: opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS,
-    ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-    ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
-  });
-  const generated = await discoverGeneratedNames(plugin, installable);
-  assertNoCrossPluginConflicts(
-    scope,
-    { skills: generated.skills, commands: generated.commands, agents: generated.agents },
-    removePluginRecord(tx.state, marketplace, plugin),
-  );
-
-  const pluginDataDir = await locations.pluginDataDir(marketplace, plugin);
-  const replacement = await transaction.replaceReinstalledPlugin(
-    {
-      locations,
-      cwd,
-      marketplace,
-      plugin,
-      installable,
-      pluginDataDir,
-      oldRecord: oldSnapshot,
-      agentsDirs: generated.agentsDirs,
-      referenceNames: generated,
-      workflowNames: generated.workflows,
-      env,
-    },
-    transaction.replaceOperations,
-  );
-
-  const sourceKind = parsePluginSource(entry.source).kind;
-  let outcome: ReinstallPluginOutcome;
-  try {
-    outcome = owners.recordReinstallOutcome({
-      partition: "reinstalled",
-      name: plugin,
-      marketplace,
-      scope,
-      state: tx.state,
-      oldRecord: oldSnapshot,
-      installable,
-      handles: replacement.handles,
-      hookEntries: replacement.hookEntries,
-      // PURL-07: a git source's reinstall re-pins to the SAME recorded sha,
-      // so its old `resolvedSha` is still truthful and worth carrying
-      // forward (see `recordReinstalledOutcome`). A `path` source's
-      // reinstall re-resolves through the marketplace's current checkout,
-      // not the tag-pin probe (see `resolveInstallable` above), so an old
-      // `resolvedSha` on that record would name a commit the fresh
-      // `resolvedSource` no longer sits at.
-      isGitSource: sourceKind === "url" || sourceKind === "git-subdir" || sourceKind === "github",
-      placedWorkflowNames: replacement.placedWorkflowNames,
-    });
-
-    // LAYER-04 / D-MF-03: a reinstall changes the installation and its record,
-    // never a layer config, so a dependency it reinstalls stays undeclared.
-    await tx.save();
-  } catch (err) {
-    throw errorWithManualRecovery(err, await transaction.rollbackReinstalledPlugin(replacement));
-  }
-
-  // WR-06 + WR-03 + D-60-05: reinstall does NOT delegate to install/
-  // uninstall, so the parsed-config cache + routing table would
-  // otherwise stay pinned to the OLD plugin's hooks config (or be
-  // entirely absent if the previous install pre-dated the bridge).
-  // Mirror the install / uninstall pattern explicitly inside the
-  // per-plugin lock: drop the old cache entry, re-populate from the
-  // just-installed `hooks.json` (when present), then rebuild the
-  // routing table once.
-  //
-  // Moved AFTER `tx.save()` so a tx.save throw aborts BEFORE the cache
-  // mutates -- otherwise a phantom routing entry survives a closure throw and
-  // the next dispatch fires against a record state.json never wrote.
-  // Post-save semantics are safe:
-  // state.json now matches in-memory state, and the next `/reload`'s
-  // factory-time hydrate (D-59-03) rebuilds the cache from disk.
-  // Synchronous + zero disk I/O per DISP-02; the readFile/parse path
-  // is the same defensive shape `install-outcome.ts` uses (failures route
-  // through the hooks helper's debug log and the next `/reload` rehydrates).
-  //
-  // WR-03: post-`tx.save()` cache+routing mutations are non-fatal --
-  // mirrors install-flow.ts's WR-02. Own try/catch (NOT the tx.save try/catch
-  // above), so a throw here can never reach `rollbackReinstalledPlugin`: that
-  // rollback physically reverts the already-replaced files back to the OLD
-  // content while state.json already durably records the NEW version, which
-  // would be a genuine content/state mismatch. Mirrors
-  // `uninstall.ts::dropCachedHooks`. `/reload`'s factory-time hydrate
-  // (D-59-03) rebuilds the cache from state.json. Failures route through the
-  // hooks helper's debug log.
-  try {
-    hooksRouting.removePluginConfigFromCache(scope, marketplace, plugin);
-    if (installable.hooksConfigPath !== undefined) {
-      await hooksRouting.readAndCachePluginHooks({
-        scope,
-        marketplace,
-        plugin,
-        resolvedSource: asAbsolutePluginRoot(installable.pluginRoot),
-        hooksJsonPath: path.join(installable.pluginRoot, installable.hooksConfigPath),
-        cwd,
-        logPrefix: "reinstall",
-      });
-    }
-
-    hooksRouting.rebuildRoutingTables();
-  } catch (cacheErr) {
-    hookDebugLog(
-      `reinstall: post-save cache/routing mutation failed for ${plugin}@${marketplace}: ${errorMessage(cacheErr)} -- hooks for this plugin remain stale until /reload rebuilds routing from state.json`,
-    );
-  }
-
-  const bridgeWarnings = [
-    ...replacement.bridgeWarnings,
-    ...(await transaction.finalizeReinstalledPlugin(replacement)),
-  ];
-  return {
-    outcome,
-    discoveryWarnings: replacement.discoveryWarnings,
-    bridgeWarnings,
-    mcpConfigNotices: replacement.mcpConfigNotices,
-  };
-}
-
 /**
  * LAYER-04 / D-MF-03: refuse a named reinstall of a plugin only the other
  * layer declares, or one whose layer config cannot be read (CFG-03). It runs
- * before anything is resolved or replaced, so the rollback path is never
- * reached and the locked closure leaves without a save (NFR-3).
+ * before anything is resolved or staged, so a refusal changes nothing (NFR-3).
  */
 async function refuseOtherLayerReinstall(
   locations: ScopedLocations,
@@ -913,81 +734,4 @@ async function refuseOtherLayerReinstall(
   if (refusal !== undefined) {
     throw refusal;
   }
-}
-
-async function loadCachedEntry(
-  manifestPath: string,
-  marketplace: string,
-  plugin: string,
-): Promise<PluginEntry> {
-  const manifest = await loadMarketplaceManifest(manifestPath);
-  const entryRaw = manifest.plugins.find((p) => p.name === plugin);
-  if (entryRaw === undefined) {
-    throw new Error(
-      `Plugin "${plugin}" not found in cached manifest for marketplace "${marketplace}".`,
-    );
-  }
-
-  return entryRaw;
-}
-
-// BFILL-01 / D-68-02: reinstall is partial-capable. It resolves through the
-// `requirePartialInstallable` gate (admitting both `installable` and the
-// partially-available arm) so backfill can re-materialize a
-// still-partial plugin in place without throwing `{not-installable}`. The
-// `unavailable` arm is still rejected (NFR-7). Resolution stays cache-only via
-// `resolveStrict` -- no network (NFR-5).
-//
-// PURL-07 / D-78-02: for a git source (url / git-subdir / github) with a
-// recorded sha, inject the recorded-sha probe so the git plugin re-materializes
-// offline from the warm cache. A path source (or a git record predating the
-// resolvedSha field) keeps the existing no-callback resolveStrict path.
-async function resolveInstallable(
-  owners: ReinstallFlowOwners,
-  input: {
-    readonly entry: PluginEntry;
-    readonly marketplaceRoot: string;
-    readonly marketplaceName: string;
-    readonly locations: ScopedLocations;
-    readonly recordedSha: string | undefined;
-    readonly seam?: ReinstallCloneCacheSeam;
-    readonly ctx: NotificationContext;
-    readonly run: NotificationRun;
-    readonly credentialOps: CredentialOps;
-    readonly deviceFlowHttp?: DeviceFlowHttp;
-    readonly authMemo?: Map<string, AuthAttemptResult>;
-  },
-): Promise<MaterializablePlugin> {
-  const parsedSource = parsePluginSource(input.entry.source);
-  const isGitSource =
-    parsedSource.kind === "url" ||
-    parsedSource.kind === "git-subdir" ||
-    parsedSource.kind === "github";
-  const recordedSha = input.recordedSha;
-
-  const resolveGitPluginRoot =
-    isGitSource && recordedSha !== undefined
-      ? (source: GitBackedSource) =>
-          owners.probeReinstallClone({
-            source,
-            locations: input.locations,
-            recordedSha,
-            ...(input.seam !== undefined && { seam: input.seam }),
-            auth: {
-              ctx: input.ctx,
-              run: input.run,
-              credentialOps: input.credentialOps,
-              ...(input.deviceFlowHttp !== undefined && { deviceFlowHttp: input.deviceFlowHttp }),
-              ...(input.authMemo !== undefined && { authMemo: input.authMemo }),
-            },
-          })
-      : undefined;
-
-  const resolved = await resolveStrict(input.entry, {
-    marketplaceRoot: input.marketplaceRoot,
-    marketplaceName: input.marketplaceName,
-    ...(resolveGitPluginRoot !== undefined && { resolveGitPluginRoot }),
-  });
-  requirePartialInstallable(resolved, "install");
-  return resolved;
 }

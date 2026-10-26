@@ -37,8 +37,11 @@
 //     one flag is set, show UNION of selected buckets.
 //   - PL-3 marketplace narrowing: optional opts.marketplace filters which
 //     marketplace records are walked.
-//   - PL-5 upgradable: STRING comparison (manifest.version !== installed
-//     record version). NOT semver.
+//   - PL-5 upgradable: STRING comparison of the record's version against
+//     the candidate version the one version rule derives offline
+//     (plugin.json, then the entry, then the tree's commit version for an
+//     undeclared git plugin), falling back to the entry version when no
+//     candidate resolves (VER-01, VER-02). NOT semver.
 //   - PL-6 manifest soft-fail: per-marketplace manifest load failure
 //     surfaces as a `(failed)` MarketplaceNotificationMessage with
 //     `status: "failed"` and `plugins: []`. No marketplace-level cause
@@ -59,6 +62,7 @@ import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { notify } from "../../shared/notification-dispatch.ts";
 import {
   type MarketplaceDetails,
   type PluginFailedMessage,
@@ -70,6 +74,8 @@ import {
 } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { narrowProbeError as sharedNarrowProbeError } from "../../shared/probe-classifiers.ts";
+import { crossScopeFlag } from "../marketplace/shared.ts";
+import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
 
 import { availableRowMessage, type FilterBucket } from "./list-candidate-row.ts";
 import { composeInstalledListRow } from "./list-installed-row.ts";
@@ -139,10 +145,9 @@ type PluginRenderStatus =
 export interface PluginListPayloadOptions {
   readonly ctx: ExtensionContext;
   readonly cwd: string;
-  /** SC-6 enumeration narrowing: when undefined the cross-scope walk + fold
-   *  rule applies. When set, the orchestrator STILL reads both scopes (the
-   *  fold rule needs visibility into both) but constrains which blocks are
-   *  emitted at the end. */
+  /** SC-6 / LST-05 enumeration narrowing: when undefined the cross-scope walk
+   *  + fold rule applies. When set, only that scope's marketplace records are
+   *  emitted, each enumerated from that scope alone, with no fold. */
   readonly scope?: Scope;
   /** PL-3 marketplace narrowing: when undefined, every marketplace is walked. */
   readonly marketplace?: string;
@@ -629,6 +634,18 @@ async function buildMarketplaceMessage(args: {
 }
 
 /**
+ * D-13-17 / LST-05: the orphan fold serves the both-scopes view only. Under
+ * `--scope`, a project clone of a user marketplace is that scope's own block.
+ */
+function foldsInBothScopeView(
+  opts: PluginListPayloadOptions,
+  projectMp: ExtensionState["marketplaces"][string] | undefined,
+  userMp: ExtensionState["marketplaces"][string] | undefined,
+): projectMp is ExtensionState["marketplaces"][string] {
+  return opts.scope === undefined && isOrphanMarketplaceClone(projectMp, userMp);
+}
+
+/**
  * D-02: pure payload builder for the cross-scope
  * plugin list. Reads BOTH scopes' state regardless of `opts.scope` -- the
  * fold rule needs visibility into both; final scope-filtering applies AFTER
@@ -661,8 +678,8 @@ export async function loadPluginListPayload(
     // Orphan-fold rule: if the project-scope record is a CLONE of the
     // user-scope record (same marketplaceRoot), DO NOT emit a separate
     // project-scope block. The project-scope plugins fold under the
-    // user-scope header below.
-    if (isOrphanMarketplaceClone(mpRecord, userMp)) {
+    // user-scope header below. The fold serves the both-scopes view only.
+    if (foldsInBothScopeView(opts, mpRecord, userMp)) {
       continue;
     }
 
@@ -686,9 +703,9 @@ export async function loadPluginListPayload(
     }
 
     // Fold orphan project plugins iff the matching project-scope record
-    // is a clone (per D-13-17 semantics) and exists.
+    // is a clone (per D-13-17 semantics) and exists, in the both-scopes view.
     const projectMp = ownValue(projectState.marketplaces, mpName);
-    const { folded, foldedNames } = isOrphanMarketplaceClone(projectMp, mpRecord)
+    const { folded, foldedNames } = foldsInBothScopeView(opts, projectMp, mpRecord)
       ? // eslint-disable-next-line no-await-in-loop -- bounded by the user marketplaces, one orphan fold each
         await computeOrphanFold(opts, mpName, projectMp, projectMerged)
       : EMPTY_ORPHAN_FOLD;
@@ -707,10 +724,10 @@ export async function loadPluginListPayload(
     blocks.push(built);
   }
 
-  // SC-6 scope narrowing: if the caller restricted the scope, only emit
-  // blocks whose ORIGINATING scope matches. The fold rule still applied
-  // above so the cross-scope visibility is preserved -- but the resulting
-  // surface is filtered to the requested scope.
+  // SC-6 / LST-05 scope narrowing: with the fold off, each block lists one
+  // scope's own records and candidates, so `--scope` keeps that scope's
+  // installations by keeping that scope's blocks. A project record cloned
+  // from a user marketplace (D-MF-04) shows under its own project header.
   const filtered =
     opts.scope === undefined ? blocks : blocks.filter((b) => b.emitScope === opts.scope);
 
@@ -755,16 +772,46 @@ const SYNTHETIC_LIST_FAILURE_MARKETPLACE_NAME = "(list)";
 const SYNTHETIC_LIST_FAILURE_PLUGIN_NAME = "(list)";
 
 /**
+ * PL-3: a named marketplace must be recorded in a consulted scope, the same
+ * presence test `plugin info` and `marketplace info` apply before they fail
+ * with `{marketplace not added}`.
+ */
+async function marketplaceAdded(opts: ListPluginsOptions, marketplace: string): Promise<boolean> {
+  const found = await collectMarketplaceRecordsByScope({
+    cwd: opts.cwd,
+    scope: opts.scope,
+    marketplace,
+  });
+  return found.length > 0;
+}
+
+/**
  * D-06 orchestrator entrypoint. Read-only listing of plugins. Constructs
  * the `NotificationMessage` payload inline and forwards it to a single
  * `notifyWithContext(ctx, run, ...)` call per orchestration arm (success or
- * failure). The command run carries the soft-dependency snapshot (D-05), and
+ * failure). A named marketplace that no consulted scope records instead
+ * emits one `marketplace-not-added` result through `notify()` (PL-3). The
+ * command run carries the soft-dependency snapshot (D-05), and
  * resolve composes the per-row `{requires pi-subagents}` /
  * `{requires pi-mcp-adapter}` markers from it when (declares AND companion unloaded).
  */
 export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
   const { ctx, run } = opts;
   try {
+    if (opts.marketplace !== undefined && !(await marketplaceAdded(opts, opts.marketplace))) {
+      notify(ctx, run, {
+        kind: "marketplace-not-added",
+        name: opts.marketplace,
+        ...(opts.scope !== undefined && { scope: opts.scope }),
+        ...(await crossScopeFlag({
+          cwd: opts.cwd,
+          marketplace: opts.marketplace,
+          scope: opts.scope,
+        })),
+      });
+      return;
+    }
+
     // OUT-07 / D-12: the list surface is a bulk op, so its row slot is typed
     // `Plural<Row>` (a readonly array). Additive typing only.
     // WR-01: loadPluginListPayload is typed to `MarketplaceRows<ListMsg>`, so the

@@ -34,7 +34,7 @@ import { REPO_ROOT, stripComments } from "./source-scan.ts";
 
 /**
  * The group in its declared order: the rule's definition site first, then the
- * three surfaces that judge absence, then the five that look an entry up for
+ * three surfaces that judge absence, then the three that look an entry up for
  * something else. The order is what aims each scan below, so the module
  * basenames are pinned inside the walk case (D-07-03) -- a member reordered,
  * added, or dropped in the registry would otherwise re-aim a scan at a file its
@@ -46,9 +46,7 @@ const [
   INFO_SURFACE,
   UPDATE_SURFACE,
   INSTALL_LOOKUP,
-  REINSTALL_LOOKUP,
   PENDING_LOOKUP,
-  BACKFILL_LOOKUP,
   EDGE_DEPS_LOOKUP,
 ] = MANIFEST_LOOKUP_TARGETS;
 
@@ -59,9 +57,7 @@ const DECLARED_MODULE_ORDER: ReadonlyArray<string> = [
   "info.ts",
   "update-preflight.ts",
   "install-outcome.ts",
-  "reinstall-flow.ts",
   "pending.ts",
-  "backfill.ts",
   "edge-deps.ts",
 ];
 
@@ -85,19 +81,9 @@ const NON_ABSENCE_LOOKUPS: ReadonlyArray<{ readonly rel: string; readonly purpos
       "fetches the entry it is about to INSTALL (the resolver's input). A miss throws PluginShapeError kind not-in-manifest; it renders no absence row.",
   },
   {
-    rel: REINSTALL_LOOKUP,
-    purpose:
-      "the reinstall flow fetches the entry it is about to REINSTALL from the cached manifest. A miss throws; it renders no absence row.",
-  },
-  {
     rel: PENDING_LOOKUP,
     purpose:
       "fetches the entry a pending install would materialize. A miss means `not a candidate` (returns undefined) -- the scan emits nothing, so no claim is made about the record.",
-  },
-  {
-    rel: BACKFILL_LOOKUP,
-    purpose:
-      "fetches the entry to resolve OFFLINE when re-materializing a recorded plugin. A miss returns undefined and the plugin is left alone.",
   },
   {
     rel: EDGE_DEPS_LOOKUP,

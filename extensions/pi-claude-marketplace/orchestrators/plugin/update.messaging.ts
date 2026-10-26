@@ -1,5 +1,6 @@
 import {
   type PluginFailedMessage,
+  type PluginInstalledMessage,
   type PluginPartiallyInstalledMessage,
   type PluginPartiallyUpgradableMessage,
   type PluginUpdateSkippedMessage,
@@ -15,7 +16,7 @@ import type { CommandContext } from "../../shared/notify-context.ts";
  * manual no-`--partial` decline of a partially-upgradable plugin.
  */
 type UpdateStatus =
-  "updated" | "partially-installed" | "skipped" | "partially-upgradable" | "failed";
+  "updated" | "partially-installed" | "skipped" | "partially-upgradable" | "failed" | "installed";
 
 /**
  * update's row message union -- the subset of central plugin shapes whose
@@ -23,6 +24,7 @@ type UpdateStatus =
  * `resolveRows` can compose its soft-dep markers (D-06 / TYPE-04 / D-12).
  */
 export type UpdateMsg =
+  | PluginInstalledMessage
   | PluginUpdatedMessage
   | PluginPartiallyInstalledMessage
   | PluginPartiallyUpgradableMessage
@@ -38,5 +40,7 @@ export const UPDATE_CONTEXT = {
     skipped: { markers: false, contentReasons: true },
     "partially-upgradable": { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
+    // UPD-DEP-D1: a dependency the update installed or enabled for the new version.
+    installed: { markers: true, contentReasons: true },
   },
 } as const satisfies CommandContext<UpdateStatus>;

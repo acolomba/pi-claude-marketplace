@@ -21,10 +21,9 @@
 //
 // D-115-07: every outcome kind the cascade can accumulate is produced here.
 //
-//   invalid-block            unparseable base / local config, an
-//                            unparseable state file, a held scope lock, a
-//                            refused first-run configuration write, and the
-//                            routing rebuild's own isolated failure
+//   invalid-block            an unparseable base config and an unparseable
+//                            state file; the read pass's other rows have
+//                            their owner in read-pass.test.ts
 //   mp-added                 a declared marketplace absent from the record
 //   mp-add-failed            a source directory that is not there, and a clone
 //                            that cannot reach its remote
@@ -59,7 +58,6 @@ import path from "node:path";
 import { describe, test } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import lockfile from "proper-lockfile";
 import { mock, verify, when } from "strong-mock";
 
 import {
@@ -82,8 +80,10 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { StateLockHeldError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
-import { EXTENSION_VERSION } from "../../../extensions/pi-claude-marketplace/shared/extension-version.ts";
+import {
+  InvalidGitHubBaseUrlError,
+  StateLockHeldError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import { createJsonCapture } from "../../edge/json-capture.ts";
@@ -97,7 +97,7 @@ import type { HooksRouting } from "../../../extensions/pi-claude-marketplace/bri
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type * as ApplyOrchestrator from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
-import type { ReconcileStateReader } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import type { ReconcileStateReader } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/read-pass.ts";
 import type {
   ApplyReconcileOptions,
   McpMigrationStep,
@@ -105,6 +105,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { Notification } from "../../edge/notification-boundary.ts";
 import type { TestContext } from "node:test";
 
@@ -458,6 +459,19 @@ interface RecordSeed {
   readonly hooks?: readonly string[];
 }
 
+/**
+ * D-10: the supported kinds a record's resources imply, so a seeded record
+ * whose plugin tree has not grown is not a growth move `apply` re-materializes.
+ */
+function impliedSupported(seed: RecordSeed): string[] {
+  return [
+    ...((seed.skills ?? []).length > 0 ? ["skills"] : []),
+    ...((seed.prompts ?? []).length > 0 ? ["commands"] : []),
+    ...((seed.agents ?? []).length > 0 ? ["agents"] : []),
+    ...((seed.hooks ?? []).length > 0 ? ["hooks"] : []),
+  ];
+}
+
 function pluginRecord(seed: RecordSeed): PluginRecord {
   return {
     version: "1.0.0",
@@ -465,7 +479,7 @@ function pluginRecord(seed: RecordSeed): PluginRecord {
     compatibility: {
       installable: seed.installable ?? true,
       notes: [],
-      supported: [...(seed.supported ?? [])],
+      supported: [...(seed.supported ?? impliedSupported(seed))],
       unsupported: [...(seed.unsupported ?? [])],
     },
     resources: {
@@ -560,7 +574,6 @@ async function seedLayerScope(
   await writeUnder(project.localConfigJsonPath, layers.local(marketplaceRoot));
   await seedState(project, {
     schemaVersion: 3,
-    lastReconciledExtensionVersion: EXTENSION_VERSION,
     marketplaces: {
       mp: marketplaceRecord({
         cwd,
@@ -656,14 +669,24 @@ function applyAfterSelectedStateRace(
     });
 }
 
+/** APL-01 / D-08: the advisory an apply pass that accumulates no outcome sends. */
+const APPLY_EMPTY_NOTICE = { message: "Apply: nothing to change." } satisfies Notification;
+
 /**
- * The atomic writer names its temporary file `<basename>.<random>` and the
- * EACCES message quotes that name, so the digits differ per run. Replacing them
- * keeps the assertion a whole-value comparison rather than a pattern match.
+ * MISS-02 / D-09-14: the row an apply reports for the missing dependency
+ * `secrets-vault@mp` that its marketplace does not list, once the dependent is
+ * already down.
  */
-function withoutTempSuffix(message: string): string {
-  return message.replaceAll(/claude-plugins\.json\.\d+/g, "claude-plugins.json.<tmp>");
-}
+const SECRETS_VAULT_NOT_IN_MANIFEST = {
+  message:
+    "A plugin operation has failed.\n" +
+    "\n" +
+    "● mp [project]\n" +
+    "  ⊘ secrets-vault (failed) {not in manifest}\n" +
+    "\n" +
+    "Reconcile: 1 failure",
+  severity: "error",
+} satisfies Notification;
 
 /**
  * AFILE-04: the warning `notifyMcpConfigNotices` sends after a rewrite drops the
@@ -719,7 +742,6 @@ async function seedCommentedAdapterScope(
   );
   await seedState(project, {
     schemaVersion: 3,
-    lastReconciledExtensionVersion: EXTENSION_VERSION,
     marketplaces: {
       mp: marketplaceRecord({
         cwd,
@@ -782,14 +804,33 @@ test("apply.ts exposes the reconcile factory and no composed value", async () =>
 });
 
 describe("applyReconcile", () => {
-  test("WR-05: leaves a scope with neither a state file nor a config untouched and silent", async (t) => {
+  test("WR-05 / D-08: leaves a scope with neither a state file nor a config untouched and reports nothing to change", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "pristine");
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
     await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
+    assert.deepStrictEqual(await retryTree(project.scopeRoot), []);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("AAP-02 / D-07: an autoapply load with nothing to change prints nothing", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "pristine-load");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+    // A load run carries no command state, as `index.ts` opens it.
+    const { commandState: _commandState, ...snapshot } = runWithNothingLoaded();
+    const run: NotificationRun = { ...snapshot, origin: { kind: "load" } };
+
+    // act
+    await applyReconcile({ ctx, run, cwd, gitOps });
 
     // assert
     assert.deepStrictEqual(notifications, []);
@@ -803,7 +844,6 @@ describe("applyReconcile", () => {
     const { cwd, project } = await createHermeticScopes(t, "invalid-base");
     const seeded: ExtensionState = {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         "should-stay": marketplaceRecord({
           cwd,
@@ -850,160 +890,6 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("CFG-03: reports a schema-invalid local config alongside an unparseable base one, each on its own row", async (t) => {
-    // arrange
-    const { cwd, project } = await createHermeticScopes(t, "invalid-both");
-    const seeded: ExtensionState = {
-      schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
-      marketplaces: {},
-    };
-    await seedState(project, seeded);
-    await writeUnder(project.baseConfigJsonPath, "{");
-    await writeUnder(project.localConfigJsonPath, JSON.stringify({ schemaVersion: 1, plugins: 7 }));
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const { gitOps, clonedUrls } = createOfflineGitOps();
-
-    // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "Some operations have failed.\n" +
-          "\n" +
-          "⊘ claude-plugins.json [project] (failed) {invalid manifest}\n" +
-          "  ⊘ claude-plugins.json (failed) {invalid manifest}\n" +
-          "    cause: JSON parse failed: Expected property name or '}' in JSON at position 1 (line 1 column 2)\n" +
-          "\n" +
-          "⊘ claude-plugins.local.json [project] (failed) {invalid manifest}\n" +
-          "  ⊘ claude-plugins.local.json (failed) {invalid manifest}\n" +
-          "    cause: schema validation failed: /plugins: must be object\n" +
-          "\n" +
-          "Reconcile: 4 failures",
-        severity: "error",
-      },
-    ]);
-    assert.deepStrictEqual(await loadState(project.extensionRoot), seeded);
-    assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
-
-  test("CFG-03: reports a schema-invalid local config on its own when the base config is valid", async (t) => {
-    // arrange
-    const { cwd, project } = await createHermeticScopes(t, "invalid-local");
-    await seedState(project, {
-      schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
-      marketplaces: {},
-    });
-    await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {} }));
-    await writeUnder(project.localConfigJsonPath, JSON.stringify({ schemaVersion: 1, plugins: 7 }));
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const { gitOps, clonedUrls } = createOfflineGitOps();
-
-    // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "Some operations have failed.\n" +
-          "\n" +
-          "⊘ claude-plugins.local.json [project] (failed) {invalid manifest}\n" +
-          "  ⊘ claude-plugins.local.json (failed) {invalid manifest}\n" +
-          "    cause: schema validation failed: /plugins: must be object\n" +
-          "\n" +
-          "Reconcile: 2 failures",
-        severity: "error",
-      },
-    ]);
-    assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
-
-  test("LAYER-06: a local layer that declares a plugin whose marketplace only the base layer declares stops the reload and writes nothing", async (t) => {
-    // arrange
-    const { cwd, project } = await seedLayerScope(t, "layer-gap-local", {
-      base: (root) => configBytes({ marketplaces: { mp: { source: root } } }),
-      local: () => configBytes({ plugins: { "hello@mp": {} } }),
-    });
-    const baseBytes = await readFile(project.baseConfigJsonPath, "utf8");
-    const localBytes = await readFile(project.localConfigJsonPath, "utf8");
-    const stateBytes = await readFile(project.stateJsonPath, "utf8");
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const { gitOps, clonedUrls } = createOfflineGitOps();
-
-    // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "A plugin operation has failed.\n" +
-          "\n" +
-          "● claude-plugins.local.json [project]\n" +
-          "  ⊘ claude-plugins.local.json (failed) {invalid manifest}\n" +
-          "    cause: The local config (claude-plugins.local.json) declares hello@mp, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config.\n" +
-          "\n" +
-          "Reconcile: 1 failure",
-        severity: "error",
-      },
-    ]);
-    assert.equal(await readFile(project.baseConfigJsonPath, "utf8"), baseBytes);
-    assert.equal(await readFile(project.localConfigJsonPath, "utf8"), localBytes);
-    assert.equal(await readFile(project.stateJsonPath, "utf8"), stateBytes);
-    assert.deepStrictEqual(await retryTree(project.scopeRoot), [
-      "claude-plugins.json",
-      "claude-plugins.local.json",
-      "pi-claude-marketplace/",
-      "pi-claude-marketplace/state.json",
-    ]);
-    assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
-
-  test("LAYER-06: each layer that declares a plugin whose marketplace only the other layer declares reports its own row", async (t) => {
-    // arrange
-    const { cwd, project } = await seedLayerScope(t, "layer-gap-both", {
-      base: (root) =>
-        configBytes({ marketplaces: { mp: { source: root } }, plugins: { "lib@other": {} } }),
-      local: (root) =>
-        configBytes({ marketplaces: { other: { source: root } }, plugins: { "hello@mp": {} } }),
-    });
-    const stateBytes = await readFile(project.stateJsonPath, "utf8");
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const { gitOps, clonedUrls } = createOfflineGitOps();
-
-    // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "Some plugin operations have failed.\n" +
-          "\n" +
-          "● claude-plugins.json [project]\n" +
-          "  ⊘ claude-plugins.json (failed) {invalid manifest}\n" +
-          "    cause: The base config (claude-plugins.json) declares lib@other, but only the local config (claude-plugins.local.json) declares its marketplace. Run /claude:plugin marketplace add <source> --scope project with the source the local config declares, or remove the plugin from the base config.\n" +
-          "\n" +
-          "● claude-plugins.local.json [project]\n" +
-          "  ⊘ claude-plugins.local.json (failed) {invalid manifest}\n" +
-          "    cause: The local config (claude-plugins.local.json) declares hello@mp, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config.\n" +
-          "\n" +
-          "Reconcile: 2 failures",
-        severity: "error",
-      },
-    ]);
-    assert.equal(await readFile(project.stateJsonPath, "utf8"), stateBytes);
-    assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
-
   test("LAYER-06: a plugin whose marketplace no layer declares keeps its dangling reference row while the scope still installs", async (t) => {
     // arrange
     const { cwd, project } = await seedLayerScope(t, "layer-gap-dangling", {
@@ -1024,12 +910,14 @@ describe("applyReconcile", () => {
           "Some operations have failed.\n" +
           "\n" +
           "● mp [project]\n" +
-          "  ● hello (installed)\n" +
+          "  ● hello v1.0.0 (installed)\n" +
           "\n" +
           "⊘ nowhere [project] (failed) {dangling reference}\n" +
           "  ⊘ ghost (failed) {dangling reference}\n" +
           "\n" +
-          "Reconcile: 2 failures, 1 success",
+          "Reconcile: 2 failures, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "error",
       },
     ]);
@@ -1052,7 +940,6 @@ describe("applyReconcile", () => {
     await writeUnder(user.baseConfigJsonPath, configBytes({ marketplaces: {} }));
     await seedState(user, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         "user-mp": marketplaceRecord({
           cwd,
@@ -1092,94 +979,6 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("WR-01: a scope lock held by another process reports lock held rather than falling back to unparseable", async (t) => {
-    // arrange
-    const { cwd, project } = await createHermeticScopes(t, "lock-held");
-    await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {} }));
-    await seedState(project, {
-      schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
-      marketplaces: {},
-    });
-    const release = await lockfile.lock(project.extensionRoot, {
-      lockfilePath: path.join(project.extensionRoot, ".state-lock"),
-      realpath: false,
-    });
-    t.after(async () => {
-      await release();
-    });
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const { gitOps, clonedUrls } = createOfflineGitOps();
-
-    // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "Some operations have failed.\n" +
-          "\n" +
-          "⊘ state.json [project] (failed) {lock held}\n" +
-          "  ⊘ state.json (failed) {lock held}\n" +
-          "    cause: Another pi-claude-marketplace operation is in progress for project scope (.state-lock). Retry after it completes.\n" +
-          "\n" +
-          "Reconcile: 2 failures",
-        severity: "error",
-      },
-    ]);
-    assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
-
-  test("MIG-01: a first-run config write blocked by permissions names the base config, not the state file", async (t) => {
-    // arrange
-    const { cwd, denyWrites, project } = await createHermeticScopes(t, "migrate-refused");
-    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {});
-    await seedState(project, {
-      schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
-      marketplaces: {
-        mp: marketplaceRecord({
-          cwd,
-          scope: "project",
-          marketplace: "mp",
-          rawSource: marketplaceRoot,
-          manifestPath,
-          marketplaceRoot,
-        }),
-      },
-    });
-    await denyWrites(project.scopeRoot);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const { gitOps, clonedUrls } = createOfflineGitOps();
-
-    // act
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
-
-    // assert
-    assert.deepStrictEqual(
-      notifications.map((notification) => ({
-        ...notification,
-        message: withoutTempSuffix(notification.message),
-      })),
-      [
-        {
-          message:
-            "Some operations have failed.\n" +
-            "\n" +
-            "⊘ claude-plugins.json [project] (failed) {permission denied}\n" +
-            "  ⊘ claude-plugins.json (failed) {permission denied}\n" +
-            "    cause: EACCES: permission denied, open 'claude-plugins.json.<tmp>'\n" +
-            "\n" +
-            "Reconcile: 2 failures",
-          severity: "error",
-        },
-      ],
-    );
-    assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
   const addBatchOrders = [
     { name: "first", keys: ["mike-mp", "zulu-mp", "alfa-mp"] },
     { name: "middle", keys: ["zulu-mp", "mike-mp", "alfa-mp"] },
@@ -1205,7 +1004,6 @@ describe("applyReconcile", () => {
       );
       await seedState(project, {
         schemaVersion: 3,
-        lastReconciledExtensionVersion: EXTENSION_VERSION,
         marketplaces: {},
       });
       const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -1259,7 +1057,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     const unreachable = new Error("connect ENETUNREACH");
@@ -1303,7 +1100,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {} }));
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1338,7 +1134,9 @@ describe("applyReconcile", () => {
           "● mp [project] (removed)\n" +
           "  ○ hello (uninstalled)\n" +
           "\n" +
-          "Reconcile: 2 successes",
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual((await loadState(project.extensionRoot)).marketplaces, {});
@@ -1353,6 +1151,126 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
+  test("APPLYTHROW-01: an invalid GitHub base address stops the pass after a removal and an MCP move, and both are reported before the throw", async (t) => {
+    // arrange: the removal of `mp` runs before the add of `remote-mp`, whose
+    // clone fails on the variable, so the pass throws after the removal and
+    // the MCP move have committed.
+    const { cwd, project } = await createHermeticScopes(t, "apply-throw");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean" },
+    });
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({ marketplaces: { "remote-mp": { source: "acme/remote" } } }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            hello: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "hello") }),
+          },
+        }),
+      },
+    });
+    const migrateMcpEntries: McpMigrationStep = async (input) => {
+      input.rows.push({
+        kind: "moved",
+        scope: input.scope,
+        plugin: "hello",
+        marketplace: "mp",
+        from: "srv",
+        to: "plugin_hello_srv_",
+      });
+      await Promise.resolve();
+    };
+
+    const invalid = new InvalidGitHubBaseUrlError(
+      "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+      "scheme",
+    );
+    const { gitOps } = createRemoteGitOps({
+      allowedRemoteUrls: ["https://github.com/acme/remote.git"],
+      cloneError: invalid,
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+
+    // act
+    const pass = applyReconcile({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+      migrateMcpEntries,
+    });
+
+    // assert
+    await assert.rejects(pass, (err: unknown) => err === invalid);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Plugin MCP servers moved from mcp.json to mcp-adapter.json.\n" +
+          "\n" +
+          "Moved to mcp-adapter.json:\n" +
+          "  srv -> plugin_hello_srv_ (hello) [project]\n" +
+          "The new names reset what pi-mcp-adapter keeps for each server name: sign in again to servers that use OAuth, and approve project servers again. Until you reload, pi-mcp-adapter can still show the old names.\n" +
+          "/reload to pick up changes",
+        severity: "info",
+      },
+      {
+        message:
+          "● mp [project] (removed)\n" +
+          "  ○ hello (uninstalled)\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual((await loadState(project.extensionRoot)).marketplaces, {});
+    verifyBoundary();
+  });
+
+  test("APPLYTHROW-01: a pass that throws before any step commits reports nothing and sends no apply-empty advisory", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "apply-throw-empty");
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({ marketplaces: { "remote-mp": { source: "acme/remote" } } }),
+    );
+    await seedState(project, { schemaVersion: 3, marketplaces: {} });
+    const invalid = new InvalidGitHubBaseUrlError(
+      "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+      "scheme",
+    );
+    const { gitOps } = createRemoteGitOps({
+      allowedRemoteUrls: ["https://github.com/acme/remote.git"],
+      cloneError: invalid,
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+
+    // act
+    const pass = applyReconcile({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+    });
+
+    // assert
+    await assert.rejects(pass, (err: unknown) => err === invalid);
+    assert.deepStrictEqual(notifications, []);
+    verifyBoundary();
+  });
+
   test("D-22-02: a removal that unstages one plugin and is refused on another renders both children under a bare failed header", async (t) => {
     // arrange
     const { cwd, denyWrites, project } = await createHermeticScopes(t, "remove-partial");
@@ -1363,7 +1281,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {} }));
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1410,7 +1327,9 @@ describe("applyReconcile", () => {
           "  ○ good (uninstalled)\n" +
           "  ⊘ stuck (failed) {permission denied}\n" +
           "\n" +
-          "Reconcile: 2 failures, 1 success",
+          "Reconcile: 2 failures, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "error",
       },
     ]);
@@ -1441,7 +1360,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {} }));
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1490,7 +1408,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("LOAD-03: a config-driven uninstall of a still-declared plugin proceeds and the next pass holds the dependent down", async (t) => {
+  test("LOAD-03 / MISS-01: a config-driven uninstall of a still-declared plugin proceeds and the next pass installs it back as a missing dependency", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "uninstall-still-declared");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -1506,7 +1424,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1516,13 +1433,16 @@ describe("applyReconcile", () => {
           manifestPath,
           marketplaceRoot,
           plugins: {
-            keeper: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "keeper") }),
+            keeper: pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "keeper"),
+            }),
             orphan: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "orphan") }),
           },
         }),
       },
     });
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1536,27 +1456,42 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "● mp [project]\n" + "  ○ orphan v1.0.0 (uninstalled)\n" + "\n" + "Reconcile: 1 success",
-      },
-      {
-        message:
           "A plugin operation needs attention.\n" +
           "\n" +
           "● mp [project]\n" +
+          "  ○ orphan v1.0.0 (uninstalled)\n" +
           "  ◍ keeper v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "orphan@mp" or uninstall "keeper@mp"\n' +
           "\n" +
-          "Reconcile: 1 warning",
+          "Reconcile: 1 warning, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "warning",
       },
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● orphan v1.0.0 (installed) {dependency installed}\n" +
+          "  ● keeper v1.0.0 (installed)\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+      APPLY_EMPTY_NOTICE,
     ]);
     // LOAD-03: the removal happened on the FIRST pass -- the reconcile-driven
-    // uninstall does not refuse -- and the row that reports the consequence
-    // for `keeper` is the load-time check's, on the next pass (D-06-06).
+    // uninstall does not refuse. APPLY1-01: no apply leaves `keeper` enabled on
+    // its missing dependency, so the same pass disables it. MISS-01 / D-02: the
+    // next pass installs the dependency and enables `keeper` again.
     assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["mp"]?.plugins ?? {}), ["keeper"]);
-    assert.equal(afterFirst.marketplaces["mp"]?.plugins["keeper"]?.enabled, true);
-    assert.equal(afterSecond.marketplaces["mp"]?.plugins["keeper"]?.enabled, false);
-    assert.equal(afterSecond.marketplaces["mp"]?.plugins["keeper"]?.dependencyDisabled, true);
+    assert.equal(afterFirst.marketplaces["mp"]?.plugins["keeper"]?.enabled, false);
+    assert.deepStrictEqual(Object.keys(afterSecond.marketplaces["mp"]?.plugins ?? {}), [
+      "keeper",
+      "orphan",
+    ]);
+    assert.equal(afterSecond.marketplaces["mp"]?.plugins["keeper"]?.enabled, true);
+    assert.equal(afterSecond.marketplaces["mp"]?.plugins["keeper"]?.dependencyDisabled, undefined);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
@@ -1574,7 +1509,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1594,7 +1528,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -1610,8 +1544,11 @@ describe("applyReconcile", () => {
           "  ○ orphan v1.0.0 (uninstalled)\n" +
           "  ○ keeper v1.0.0 (uninstalled)\n" +
           "\n" +
-          "Reconcile: 2 successes",
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
     assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["mp"]?.plugins ?? {}), []);
     assert.deepStrictEqual(clonedUrls(), []);
@@ -1634,10 +1571,12 @@ describe("applyReconcile", () => {
       }),
     );
     const orphan = pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "orphan") });
-    const keeper = pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "keeper") });
+    const keeper = pluginRecord({
+      supported: ["skills"],
+      pluginRoot: path.join(marketplaceRoot, "plugins", "keeper"),
+    });
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1656,7 +1595,6 @@ describe("applyReconcile", () => {
     });
     const competingState: ExtensionState = {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1689,10 +1627,22 @@ describe("applyReconcile", () => {
     });
 
     // assert
+    // APPLY1-01: `keeper` declares the removed `orphan`, so the same pass
+    // disables it; the next pass installs `orphan` back (MISS-01).
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "● mp [project]\n" + "  ○ orphan v1.0.0 (uninstalled)\n" + "\n" + "Reconcile: 1 success",
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ○ orphan v1.0.0 (uninstalled)\n" +
+          "  ◍ keeper v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "orphan@mp" or uninstall "keeper@mp"\n' +
+          "\n" +
+          "Reconcile: 1 warning, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "warning",
       },
     ]);
     assert.deepStrictEqual(
@@ -1726,7 +1676,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1756,7 +1705,9 @@ describe("applyReconcile", () => {
           "  ○ stray v1.0.0 (uninstalled)\n" +
           "  ○ victim v1.0.0 (uninstalled)\n" +
           "\n" +
-          "Reconcile: 2 successes",
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(
@@ -1785,7 +1736,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1811,16 +1761,17 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Some plugin operations have failed.\n" +
+          "A plugin operation has failed.\n" +
           "\n" +
           "● mp [project]\n" +
           "  ⊘ victim (failed) {unreadable}\n" +
-          "    cause: cannot read the dependencies of stray@mp: not declared by its marketplace\n" +
-          // `stray` itself is declared but its marketplace does not list it, so
-          // its own re-resolution fails on the same unreadable manifest entry.
-          "  ⊘ stray (failed) {unreadable}\n" +
+          "    cause: cannot read the dependencies of stray@mp: not declared by its marketplace, and its installed copy cannot be read\n" +
+          // REC-05: `stray` itself is declared but its marketplace does not
+          // list it, so its own row is the stale-declarer warning.
+          "  ⊘ stray (failed) {not in manifest}\n" +
+          "    cause: cannot read the dependencies of stray@mp: not declared by its marketplace, and its installed copy cannot be read\n" +
           "\n" +
-          "Reconcile: 2 failures",
+          "Reconcile: 1 failure, 1 warning",
         severity: "error",
       },
     ]);
@@ -1832,7 +1783,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("WR-06: a plugin whose declaration is deleted is uninstalled while its marketplace stays recorded, and the next pass is silent", async (t) => {
+  test("WR-06: a plugin whose declaration is deleted is uninstalled while its marketplace stays recorded, and the next pass has nothing to change", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "uninstall-direct");
     const pluginDataDir = await project.pluginDataDir("mp", "hello");
@@ -1847,7 +1798,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, declaration);
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -1869,7 +1819,7 @@ describe("applyReconcile", () => {
       path.join(project.skillsTargetDir, "hello-tool", "SKILL.md"),
       "---\nname: hello-tool\n---\n\nbody\n",
     );
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const ownerRuntime = createHooksRuntime();
     const peerRuntime = createHooksRuntime();
@@ -1958,8 +1908,10 @@ describe("applyReconcile", () => {
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: "● mp [project]\n  ○ hello v1.0.0 (uninstalled)\n\nReconcile: 1 success",
+        message:
+          "● mp [project]\n  ○ hello v1.0.0 (uninstalled)\n\nReconcile: 1 success\n\n/reload to pick up changes",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
     assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["mp"]?.plugins ?? {}), []);
     assert.strictEqual(dataExistsAfterFirst, false);
@@ -2009,7 +1961,6 @@ describe("applyReconcile", () => {
     });
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2067,7 +2018,8 @@ describe("applyReconcile", () => {
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: "● mp [project]\n  ○ hello v1.0.0 (uninstalled)\n\nReconcile: 1 success",
+        message:
+          "● mp [project]\n  ○ hello v1.0.0 (uninstalled)\n\nReconcile: 1 success\n\n/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(
@@ -2128,7 +2080,6 @@ describe("applyReconcile", () => {
       );
       await seedState(project, {
         schemaVersion: 3,
-        lastReconciledExtensionVersion: EXTENSION_VERSION,
         marketplaces: {
           mp: marketplaceRecord({
             cwd,
@@ -2176,7 +2127,9 @@ describe("applyReconcile", () => {
             "● mp [project]\n" +
             `${rows}\n` +
             "\n" +
-            "Reconcile: 1 failure, 2 successes",
+            "Reconcile: 1 failure, 2 successes\n" +
+            "\n" +
+            "/reload to pick up changes",
           severity: "error",
         },
       ]);
@@ -2202,7 +2155,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, declaration);
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2222,7 +2174,10 @@ describe("applyReconcile", () => {
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● mp [project]\n  ● hello (installed)\n\nReconcile: 1 success" },
+      {
+        message:
+          "● mp [project]\n  ● hello v1.0.0 (installed)\n\nReconcile: 1 success\n\n/reload to pick up changes",
+      },
     ]);
     const record = await recordFor(project, "mp", "hello");
     assert.deepStrictEqual(record?.resources, {
@@ -2265,7 +2220,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, declaration);
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2318,7 +2272,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2393,7 +2346,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, declaration);
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2454,7 +2406,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, declaration);
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         "canonical-name": marketplaceRecord({
           cwd,
@@ -2466,7 +2417,7 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -2479,10 +2430,13 @@ describe("applyReconcile", () => {
       {
         message:
           "● canonical-name [project]\n" +
-          "  ● formatter (installed)\n" +
+          "  ● formatter v1.0.0 (installed)\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
     assert.deepStrictEqual(Object.keys(afterFirst.marketplaces), ["canonical-name"]);
     assert.deepStrictEqual(Object.keys(afterFirst.marketplaces["canonical-name"]!.plugins), [
@@ -2504,7 +2458,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, declaration);
     const initialState = {
       schemaVersion: 3 as const,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         zeta: marketplaceRecord({
           cwd,
@@ -2564,7 +2517,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2589,9 +2541,11 @@ describe("applyReconcile", () => {
           "A plugin operation needs attention.\n" +
           "\n" +
           "● mp [project]\n" +
-          "  ● soft (installed) {malformed skill}\n" +
+          "  ● soft v1.0.0 (installed) {malformed skill}\n" +
           "\n" +
-          "Reconcile: 1 warning",
+          "Reconcile: 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "warning",
       },
       {
@@ -2627,7 +2581,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2659,7 +2612,8 @@ describe("applyReconcile", () => {
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: "● mp [project]\n  ● orphan (installed) {orphan rewake}\n\nReconcile: 1 success",
+        message:
+          "● mp [project]\n  ● orphan v1.0.0 (installed) {orphan rewake}\n\nReconcile: 1 success\n\n/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual((await recordFor(project, "mp", "orphan"))?.resources.hooks, ["orphan"]);
@@ -2687,7 +2641,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2710,9 +2663,11 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● rich (installed) {requires pi-subagents, requires pi-mcp-adapter}\n" +
+          "  ● rich v1.0.0 (installed) {requires pi-subagents, requires pi-mcp-adapter}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual((await recordFor(project, "mp", "rich"))?.resources.mcpServers, [
@@ -2738,7 +2693,6 @@ describe("applyReconcile", () => {
       );
       await seedState(project, {
         schemaVersion: 3,
-        lastReconciledExtensionVersion: EXTENSION_VERSION,
         marketplaces: {
           mp: marketplaceRecord({
             cwd,
@@ -2797,7 +2751,7 @@ describe("applyReconcile", () => {
             origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
             kind: "reconcile-applied-cascade",
             severity: "info",
-            needsReload: false,
+            needsReload: true,
             tally: { label: "Reconcile", failures: 0, warnings: 0, success: { count: 1 } },
             marketplaces: [
               {
@@ -2809,6 +2763,7 @@ describe("applyReconcile", () => {
                     id: "duo@mp",
                     scope: "project",
                     status: "installed",
+                    version: "1.0.0",
                     reasons: ["requires pi-subagents"],
                   },
                 ],
@@ -2854,7 +2809,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2903,7 +2857,7 @@ describe("applyReconcile", () => {
           origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
           kind: "reconcile-applied-cascade",
           severity: "info",
-          needsReload: false,
+          needsReload: true,
           tally: { label: "Reconcile", failures: 0, warnings: 0, success: { count: 1 } },
           marketplaces: [
             {
@@ -2915,6 +2869,7 @@ describe("applyReconcile", () => {
                   id: "duo@mp",
                   scope: "project",
                   status: "installed",
+                  version: "1.0.0",
                   reasons: ["requires pi-subagents"],
                 },
               ],
@@ -2947,7 +2902,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -2970,9 +2924,11 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● duo (installed) {requires pi-subagents}\n" +
+          "  ● duo v1.0.0 (installed) {requires pi-subagents}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       {
         message:
@@ -3002,7 +2958,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -3028,7 +2983,9 @@ describe("applyReconcile", () => {
           "  ◍ quiet v1.0.0 (disabled) {installs disabled}\n" +
           "    Run enable on this plugin to use its components.\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.equal((await recordFor(project, "mp", "quiet"))?.enabled, false);
@@ -3070,7 +3027,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -3096,7 +3052,9 @@ describe("applyReconcile", () => {
           "  ◍ quiet v1.0.0 (disabled) {installs disabled}\n" +
           "    Run enable on this plugin to use its components.\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.equal(await readFile(project.baseConfigJsonPath, "utf8"), baseDeclaration);
@@ -3114,12 +3072,12 @@ describe("applyReconcile", () => {
     {
       name: "first",
       keys: ["gone", "mike", "alfa"],
-      rows: "  ⊘ gone (failed) {no longer installable}\n  ● mike (installed)\n  ● alfa (installed)",
+      rows: "  ⊘ gone (failed) {source missing}\n  ● mike v1.0.0 (installed)\n  ● alfa v1.0.0 (installed)",
     },
     {
       name: "middle",
       keys: ["mike", "gone", "alfa"],
-      rows: "  ● mike (installed)\n  ⊘ gone (failed) {no longer installable}\n  ● alfa (installed)",
+      rows: "  ● mike v1.0.0 (installed)\n  ⊘ gone (failed) {source missing}\n  ● alfa v1.0.0 (installed)",
     },
   ] as const satisfies readonly {
     readonly name: string;
@@ -3146,7 +3104,6 @@ describe("applyReconcile", () => {
       );
       await seedState(project, {
         schemaVersion: 3,
-        lastReconciledExtensionVersion: EXTENSION_VERSION,
         marketplaces: {
           mp: marketplaceRecord({
             cwd,
@@ -3173,7 +3130,9 @@ describe("applyReconcile", () => {
             "● mp [project]\n" +
             `${rows}\n` +
             "\n" +
-            "Reconcile: 1 failure, 2 successes",
+            "Reconcile: 1 failure, 2 successes\n" +
+            "\n" +
+            "/reload to pick up changes",
           severity: "error",
         },
       ]);
@@ -3201,7 +3160,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, declaration);
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -3227,7 +3185,10 @@ describe("applyReconcile", () => {
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● mp [project]\n  ● hello v1.0.0 (installed)\n\nReconcile: 1 success" },
+      {
+        message:
+          "● mp [project]\n  ● hello v1.0.0 (installed)\n\nReconcile: 1 success\n\n/reload to pick up changes",
+      },
     ]);
     const record = await recordFor(project, "mp", "hello");
     assert.equal(record?.enabled, true);
@@ -3296,7 +3257,6 @@ describe("applyReconcile", () => {
       );
       await seedState(project, {
         schemaVersion: 3,
-        lastReconciledExtensionVersion: EXTENSION_VERSION,
         marketplaces: {
           mp: marketplaceRecord({
             cwd,
@@ -3323,7 +3283,7 @@ describe("applyReconcile", () => {
       // assert
       assert.deepStrictEqual(notifications, [
         {
-          message: `${summary}● mp [project]\n${row}\n\n${tally}`,
+          message: `${summary}● mp [project]\n${row}\n\n${tally}\n\n/reload to pick up changes`,
           ...(severity !== undefined && { severity }),
         },
       ]);
@@ -3348,7 +3308,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -3379,7 +3338,7 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "● mp [project]\n  ◉ hello v1.0.0 (partially-installed) {lsp}\n\nReconcile: 1 success",
+          "● mp [project]\n  ◉ hello v1.0.0 (partially-installed) {lsp}\n\nReconcile: 1 success\n\n/reload to pick up changes",
       },
     ]);
     assert.equal((await recordFor(project, "mp", "hello"))?.enabled, true);
@@ -3400,7 +3359,6 @@ describe("applyReconcile", () => {
     );
     const seeded: ExtensionState = {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -3459,7 +3417,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -3506,7 +3463,9 @@ describe("applyReconcile", () => {
           "  ◍ alfa v1.0.0 (disabled)\n" +
           "  ⊘ zulu (failed) {permission denied}\n" +
           "\n" +
-          "Reconcile: 1 failure, 1 success",
+          "Reconcile: 1 failure, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "error",
       },
     ]);
@@ -3536,7 +3495,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -3608,13 +3566,11 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, projectConfig);
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     await writeUnder(user.baseConfigJsonPath, userConfig);
     await seedState(user, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     await writeUnder(path.join(project.scopeRoot, "unrelated.txt"), "project bytes\n");
@@ -3647,7 +3603,6 @@ describe("applyReconcile", () => {
     assert.equal(userUpdatedAt >= startedAt && userUpdatedAt <= completedAt, true);
     assert.deepStrictEqual(projectState, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         "p-mp": {
           ...marketplaceRecord({
@@ -3665,7 +3620,6 @@ describe("applyReconcile", () => {
     });
     assert.deepStrictEqual(userState, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         "u-mp": {
           ...marketplaceRecord({
@@ -3717,7 +3671,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     await writeUnder(
@@ -3726,7 +3679,6 @@ describe("applyReconcile", () => {
     );
     await seedState(user, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     const { gitOps, clonedUrls } = createRemoteGitOps({
@@ -3777,7 +3729,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -3790,7 +3741,12 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "● mp [project] (added)\n" + "  ● hello (installed)\n" + "\n" + "Reconcile: 2 successes",
+          "● mp [project] (added)\n" +
+          "  ● hello v1.0.0 (installed)\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual((await recordFor(project, "mp", "hello"))?.resources.skills, [
@@ -3811,7 +3767,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     await writeUnder(
@@ -3820,7 +3775,6 @@ describe("applyReconcile", () => {
     );
     const userState: ExtensionState = {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     };
     await seedState(user, userState);
@@ -3848,20 +3802,19 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("RECON-05: two consecutive reconciles over a converged scope stay silent and leave both files byte-identical and untouched", async (t) => {
+  test("RECON-05 / D-08: two consecutive reconciles over a converged scope report nothing to change and leave both files byte-identical and untouched", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "converged");
     const declaration = configBytes({ marketplaces: {}, plugins: {} });
     await writeUnder(project.baseConfigJsonPath, declaration);
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     const stateBytes = await readFile(project.stateJsonPath, "utf8");
     const configModifiedAt = (await stat(project.baseConfigJsonPath)).mtimeMs;
     const stateModifiedAt = (await stat(project.stateJsonPath)).mtimeMs;
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -3869,7 +3822,7 @@ describe("applyReconcile", () => {
     await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE, APPLY_EMPTY_NOTICE]);
     assert.equal(await readFile(project.baseConfigJsonPath, "utf8"), declaration);
     assert.equal(await readFile(project.stateJsonPath, "utf8"), stateBytes);
     assert.equal((await stat(project.baseConfigJsonPath)).mtimeMs, configModifiedAt);
@@ -3883,7 +3836,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("BFILL-01: one cascade carries a backfill promotion row beside a fresh install row and no reload trailer", async (t) => {
+  test("BFILL-01 / D-13: one cascade carries a growth row beside a fresh install row, ends with the reload trailer and leaves the old stamp as written", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "promotion");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -3899,7 +3852,7 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      // Older than the running version, so the backfill gate opens.
+      // D-13: an old stamp gates nothing and stays as written.
       lastReconciledExtensionVersion: "0.0.0",
       marketplaces: {
         mp: marketplaceRecord({
@@ -3932,18 +3885,17 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● fresh (installed)\n" +
+          "  ● fresh v1.0.0 (installed)\n" +
           // WCONV-03: the promotion row says why it appeared; the fresh install
           // beside it has no such brace, which is the whole point of the marker.
           "  ● promoted v1.0.0 (installed) {components now supported}\n" +
           "\n" +
-          "Reconcile: 2 successes",
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
-    assert.equal(
-      (await loadState(project.extensionRoot)).lastReconciledExtensionVersion,
-      EXTENSION_VERSION,
-    );
+    assert.equal((await loadState(project.extensionRoot)).lastReconciledExtensionVersion, "0.0.0");
     assert.deepStrictEqual((await recordFor(project, "mp", "promoted"))?.resources.prompts, [
       "promoted:deploy",
     ]);
@@ -3969,18 +3921,18 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("WR-05: a scope that declares a configuration but has never recorded state stays silent and gains no state file", async (t) => {
+  test("WR-05 / D-08: a scope that declares a configuration but has never recorded state reports nothing to change and gains no state file", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "config-only");
     await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {}, plugins: {} }));
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
     await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
     assert.deepStrictEqual(await retryTree(project.scopeRoot), [
       "claude-plugins.json",
       "pi-claude-marketplace/",
@@ -4003,7 +3955,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4029,7 +3980,9 @@ describe("applyReconcile", () => {
           "  ◍ quiet v1.0.0 (disabled) {installs disabled}\n" +
           "    Run enable on this plugin to use its components.\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       {
         message:
@@ -4051,7 +4004,6 @@ describe("applyReconcile", () => {
     await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {} }));
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4102,7 +4054,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4178,7 +4129,6 @@ describe("applyReconcile", () => {
     await writeUnder(user.baseConfigJsonPath, configBytes({ marketplaces: {} }));
     const projectRecorded: ExtensionState = {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4192,7 +4142,6 @@ describe("applyReconcile", () => {
     };
     const userRecorded: ExtensionState = {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4221,7 +4170,7 @@ describe("applyReconcile", () => {
       },
     };
     const applyWithReader = createApplyReconcile(reader);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
     const { gitOps, clonedUrls } = createOfflineGitOps();
     const hooksRouting = createHooksRouting(createHooksRuntime(), { readHooksJson });
     const completionCache = createCompletionCache();
@@ -4257,6 +4206,7 @@ describe("applyReconcile", () => {
           "Reconcile: 1 failure, 1 success",
         severity: "error",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
     const expectedProjectState: ExtensionState = {
       ...projectRecorded,
@@ -4289,10 +4239,16 @@ describe("applyReconcile", () => {
       "user bytes\n",
     );
     assert.deepStrictEqual(clonedUrls(), []);
+    // Each pass reads each scope twice through the selected-state reader: the
+    // read pass, then the catalog convergence over the scope it left (D-08).
     assert.deepStrictEqual(readerRoots, [
       project.extensionRoot,
+      project.extensionRoot,
+      user.extensionRoot,
       user.extensionRoot,
       project.extensionRoot,
+      project.extensionRoot,
+      user.extensionRoot,
       user.extensionRoot,
     ]);
     verifyBoundary();
@@ -4310,7 +4266,6 @@ describe("applyReconcile", () => {
     );
     const competingState: ExtensionState = {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4339,14 +4294,14 @@ describe("applyReconcile", () => {
       },
     });
     const applyWithRace = applyAfterSelectedStateRace(project, competingState);
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
     await applyWithRace({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
     assert.strictEqual(await recordFor(project, "mp", "hello"), undefined);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
@@ -4367,7 +4322,6 @@ describe("applyReconcile", () => {
     const declaration = await readFile(project.baseConfigJsonPath, "utf8");
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4399,14 +4353,17 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "A plugin operation needs attention.\n" +
+          "A plugin operation has failed.\n" +
           "\n" +
           "\u25cf mp [project]\n" +
+          "  \u2298 secrets-vault (failed) {not in manifest}\n" +
           "  \u25cd deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 warning",
-        severity: "warning",
+          "Reconcile: 1 failure, 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
       },
     ]);
     const record = await recordFor(project, "mp", "deploy-kit");
@@ -4433,7 +4390,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4479,6 +4435,7 @@ describe("applyReconcile", () => {
           "Some operations have failed.\n" +
           "\n" +
           "● mp [project]\n" +
+          "  ⊘ secrets-vault (failed) {not in manifest}\n" +
           "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
@@ -4486,7 +4443,9 @@ describe("applyReconcile", () => {
           "  ⊘ state.json (failed) {lock held}\n" +
           "    cause: Another pi-claude-marketplace operation is in progress for project scope (.state-lock). Retry after it completes.\n" +
           "\n" +
-          "Reconcile: 2 failures, 1 warning",
+          "Reconcile: 3 failures, 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "error",
       },
     ]);
@@ -4497,7 +4456,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("LOAD-01: a scope whose declarations are all satisfied stays silent and leaves state.json untouched", async (t) => {
+  test("LOAD-01 / D-08: a scope whose declarations are all satisfied reports nothing to change and leaves state.json untouched", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-satisfied");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -4513,7 +4472,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4524,9 +4482,11 @@ describe("applyReconcile", () => {
           marketplaceRoot,
           plugins: {
             "deploy-kit": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
             }),
             "secrets-vault": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "secrets-vault"),
             }),
           },
@@ -4535,21 +4495,21 @@ describe("applyReconcile", () => {
     });
     const stateBytes = await readFile(project.stateJsonPath, "utf8");
     const stateModifiedAt = (await stat(project.stateJsonPath)).mtimeMs;
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
     await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
     assert.equal(await readFile(project.stateJsonPath, "utf8"), stateBytes);
     assert.equal((await stat(project.stateJsonPath)).mtimeMs, stateModifiedAt);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
 
-  test("D-06-02: a record disabled before the pass is held down without being stamped or reported", async (t) => {
+  test("D-06-02: a record disabled before the pass is held down without being stamped or given a row", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-already-disabled");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -4564,7 +4524,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4584,14 +4543,14 @@ describe("applyReconcile", () => {
     });
     const stateBytes = await readFile(project.stateJsonPath, "utf8");
     const stateModifiedAt = (await stat(project.stateJsonPath)).mtimeMs;
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
     await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [SECRETS_VAULT_NOT_IN_MANIFEST]);
     const record = await recordFor(project, "mp", "deploy-kit");
     assert.equal(record?.enabled, false);
     assert.equal(Object.hasOwn(record ?? {}, "dependencyDisabled"), false);
@@ -4618,7 +4577,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4634,6 +4592,7 @@ describe("applyReconcile", () => {
               pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
             }),
             "secrets-vault": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "secrets-vault"),
             }),
           },
@@ -4659,7 +4618,9 @@ describe("applyReconcile", () => {
           "\u25cf mp [project]\n" +
           "  \u25cf deploy-kit v1.0.0 (installed)\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(record?.resources.skills, ["deploy-kit-tool"]);
@@ -4668,7 +4629,73 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("LOAD-02: a second reload over an unchanged unsatisfied tree plans the retry bucket and stays silent", async (t) => {
+  test("GV-01: a missing plugin directory dependency outside its range fails as a version conflict naming its requirer", async (t) => {
+    // arrange
+    const directory = "anthropic-plugin-directory";
+    const { cwd, project } = await createHermeticScopes(t, "dependency-directory-pin");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(
+      cwd,
+      "mp-src",
+      directory,
+      {
+        "deploy-kit": { dependencies: ["secrets-vault@^2.0.0"], skill: "clean" },
+        "secrets-vault": { skill: "clean" },
+      },
+    );
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { [directory]: { source: marketplaceRoot } },
+        plugins: { [`deploy-kit@${directory}`]: {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        [directory]: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: directory,
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "\u25cf anthropic-plugin-directory [project]\n" +
+          "  \u2298 secrets-vault (failed) {version conflict}\n" +
+          '    cause: "secrets-vault" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "deploy-kit".\n' +
+          "  \u25cd deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "secrets-vault@anthropic-plugin-directory" or uninstall "deploy-kit@anthropic-plugin-directory"\n' +
+          "\n" +
+          "Reconcile: 1 failure, 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await recordFor(project, directory, "secrets-vault"), undefined);
+    verifyBoundary();
+  });
+
+  test("LOAD-02 / D-09-14: a second apply over an unchanged unsatisfied tree plans the retry bucket and retries the install", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-converges");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -4683,7 +4710,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4701,7 +4727,7 @@ describe("applyReconcile", () => {
       },
     });
     const first = createNotificationBoundary(1);
-    const second = createNotificationBoundary(0);
+    const second = createNotificationBoundary(1);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -4727,10 +4753,9 @@ describe("applyReconcile", () => {
     // later cannot slip past this case by being absent from a hand-written
     // literal. D-09-14: the dependency stays missing (mp never declared
     // secrets-vault), so the retry bucket re-plans the same entry every
-    // pass -- a deliberate non-fixpoint. This reconcile never opted into
-    // `reason: "reload"`, so the apply step drives nothing off it and the
-    // second pass is still silent (the LOAD-02 silence contract holds at
-    // startup, D-09-13).
+    // pass -- a deliberate non-fixpoint. Every apply retries the install
+    // (D-02), so the second pass reports the dependency's failure row alone
+    // and writes nothing.
     assert.equal(first.notifications.length, 1);
     assert.deepStrictEqual(replanned, {
       ...emptyReconcilePlan("project"),
@@ -4745,10 +4770,92 @@ describe("applyReconcile", () => {
         },
       ],
     });
-    assert.deepStrictEqual(second.notifications, []);
+    assert.deepStrictEqual(second.notifications, [SECRETS_VAULT_NOT_IN_MANIFEST]);
     assert.equal(await readFile(project.stateJsonPath, "utf8"), settledBytes);
     assert.equal((await stat(project.stateJsonPath)).mtimeMs, settledModifiedAt);
     assert.deepStrictEqual(clonedUrls(), []);
+    first.verifyBoundary();
+    second.verifyBoundary();
+  });
+
+  test("D-08 / D-21: one apply disables a dependent along with the dependency the config disables", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "dependency-config-disabled");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {}, "secrets-vault@mp": { enabled: false } },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+            "secrets-vault": pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "secrets-vault"),
+            }),
+          },
+        }),
+      },
+    });
+    const first = createNotificationBoundary(1);
+    const second = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({
+      ctx: first.ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+    });
+    const replanned = await replanFromDisk(project);
+    await applyReconcile({
+      ctx: second.ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(first.notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ◍ secrets-vault v1.0.0 (disabled)\n" +
+          "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Enable "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
+          "\n" +
+          "Reconcile: 1 warning, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "warning",
+      },
+    ]);
+    assert.deepStrictEqual(replanned, emptyReconcilePlan("project"));
+    assert.deepStrictEqual(second.notifications, [APPLY_EMPTY_NOTICE]);
+    assert.equal((await recordFor(project, "mp", "deploy-kit"))?.dependencyDisabled, true);
     first.verifyBoundary();
     second.verifyBoundary();
   });
@@ -4770,7 +4877,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4799,16 +4905,19 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "Some plugin operations need attention.\n" +
+          "A plugin operation has failed.\n" +
           "\n" +
           "● mp [project]\n" +
+          "  ⊘ charlie (failed) {not in manifest}\n" +
           "  ◍ bravo v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "charlie@mp" or uninstall "bravo@mp"\n' +
           "  ◍ alfa v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Enable "bravo@mp" or uninstall "alfa@mp"\n' +
           "\n" +
-          "Reconcile: 2 warnings",
-        severity: "warning",
+          "Reconcile: 1 failure, 2 warnings\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
       },
     ]);
     const alfa = await recordFor(project, "mp", "alfa");
@@ -4853,7 +4962,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4881,7 +4989,7 @@ describe("applyReconcile", () => {
       },
     });
     const first = createNotificationBoundary(1);
-    const second = createNotificationBoundary(0);
+    const second = createNotificationBoundary(1);
     const { gitOps, clonedUrls } = createOfflineGitOps();
 
     // act
@@ -4914,14 +5022,14 @@ describe("applyReconcile", () => {
       { alfaEnabled: true, alfaMarked: false, bravoEnabled: true, bravoMarked: false },
     );
     assert.equal(first.notifications.length, 1);
-    assert.deepStrictEqual(second.notifications, []);
+    assert.deepStrictEqual(second.notifications, [APPLY_EMPTY_NOTICE]);
     assert.equal(await readFile(project.stateJsonPath, "utf8"), settledBytes);
     assert.deepStrictEqual(clonedUrls(), []);
     first.verifyBoundary();
     second.verifyBoundary();
   });
 
-  test("D-05-07: a declarer whose own manifest cannot be read is reported and nothing in the scope is disabled", async (t) => {
+  test("D-05-07 / REC-05: a declarer whose own manifest cannot be read is a warning with its cause and nothing in the scope is disabled", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-unreadable");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -4941,7 +5049,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -4967,13 +5074,14 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "A plugin operation has failed.\n" +
+          "A plugin operation needs attention.\n" +
           "\n" +
           "\u25cf mp [project]\n" +
-          "  \u2298 broken (failed) {unreadable}\n" +
+          "  \u2298 broken (failed) {unreadable manifest}\n" +
+          "    cause: cannot read the dependencies of broken@mp: its own manifest is present but cannot be read\n" +
           "\n" +
-          "Reconcile: 1 failure",
-        severity: "error",
+          "Reconcile: 1 warning",
+        severity: "warning",
       },
     ]);
     assert.equal((await recordFor(project, "mp", "alfa"))?.enabled, true);
@@ -4981,6 +5089,65 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
+  test("REC-05: a declarer this pass disables still gets the warning that the check was lost", async (t) => {
+    // arrange -- `gone` is recorded and enabled, its catalog no longer lists
+    // it, and the config now declares it disabled.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-declarer-disabled");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      alfa: { skill: "clean" },
+    });
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "alfa@mp": {}, "gone@mp": { enabled: false } },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            alfa: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "alfa") }),
+            gone: pluginRecord({ pluginRoot: path.join(marketplaceRoot, "plugins", "gone") }),
+          },
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "\u25cf mp [project]\n" +
+          "  \u25cd gone v1.0.0 (disabled)\n" +
+          "  \u2298 gone (failed) {not in manifest}\n" +
+          "    cause: cannot read the dependencies of gone@mp: not declared by its marketplace, and its installed copy cannot be read\n" +
+          "\n" +
+          "Reconcile: 1 warning, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "warning",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "gone"))?.enabled, false);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
   test("LOAD-01: a held-down plugin whose unstage is refused reports the failure and is not stamped", async (t) => {
     // arrange
     const { cwd, denyWrites, project } = await createHermeticScopes(t, "dependency-refused");
@@ -4996,7 +5163,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5029,12 +5195,13 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "A plugin operation has failed.\n" +
+          "Some plugin operations have failed.\n" +
           "\n" +
           "\u25cf mp [project]\n" +
+          "  \u2298 secrets-vault (failed) {not in manifest}\n" +
           "  \u2298 deploy-kit (failed) {permission denied}\n" +
           "\n" +
-          "Reconcile: 1 failure",
+          "Reconcile: 2 failures",
         severity: "error",
       },
     ]);
@@ -5046,13 +5213,12 @@ describe("applyReconcile", () => {
   });
 
   // ───────────────────────────────────────────────────────────────────────
-  // MISS-01 / MISS-02 / D-09-04 .. D-09-14: the reload-only dependency-install
-  // step (`applyDependencyInstalls`) and its D-09-07 re-plan
-  // (`refreshTogglePlan`). Every case here passes `reason: "reload"` unless
-  // it is deliberately proving the startup/omitted posture.
+  // MISS-01 / MISS-02 / D-09-04 .. D-09-14: the dependency-install step
+  // (`applyDependencyInstalls`), which every apply runs (D-02), and its D-09-07
+  // re-plan (`refreshTogglePlan`).
   // ───────────────────────────────────────────────────────────────────────
 
-  test("MISS-01: a reload installs a missing declared dependency and the dependent stays up", async (t) => {
+  test("MISS-01 / D-02: a plain apply installs a missing declared dependency and the dependent stays enabled", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-reload-install");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -5069,7 +5235,6 @@ describe("applyReconcile", () => {
     const declaration = await readFile(project.baseConfigJsonPath, "utf8");
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5080,6 +5245,7 @@ describe("applyReconcile", () => {
           marketplaceRoot,
           plugins: {
             "deploy-kit": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
             }),
           },
@@ -5096,7 +5262,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -5106,7 +5271,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● secrets-vault v1.0.0 (installed) {dependency installed}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     const secretsVault = await recordFor(project, "mp", "secrets-vault");
@@ -5140,7 +5307,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5167,7 +5333,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert -- WARN-01: the root's own degradation signals ride the cascade row
@@ -5206,7 +5371,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5217,6 +5381,7 @@ describe("applyReconcile", () => {
           marketplaceRoot,
           plugins: {
             "deploy-kit": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
             }),
           },
@@ -5233,7 +5398,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -5243,7 +5407,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● secrets-vault v1.0.0 (installed) {dependency installed, orphan rewake}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(clonedUrls(), []);
@@ -5293,7 +5459,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5304,6 +5469,7 @@ describe("applyReconcile", () => {
           marketplaceRoot,
           plugins: {
             "deploy-kit": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
             }),
           },
@@ -5320,7 +5486,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -5330,138 +5495,16 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● secrets-vault v1.0.0 (installed) {dependency installed, dependency current copy}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
 
-  test("D-09-13: a startup reconcile plans the bucket but installs nothing and stays offline", async (t) => {
-    // arrange -- same fixture as the reload case above (secrets-vault is
-    // genuinely installable), but the host says `startup`.
-    const { cwd, project } = await createHermeticScopes(t, "dependency-startup-noop");
-    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
-      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
-      "secrets-vault": { skill: "clean" },
-    });
-    await writeUnder(
-      project.baseConfigJsonPath,
-      configBytes({
-        marketplaces: { mp: { source: marketplaceRoot } },
-        plugins: { "deploy-kit@mp": {} },
-      }),
-    );
-    await seedState(project, {
-      schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
-      marketplaces: {
-        mp: marketplaceRecord({
-          cwd,
-          scope: "project",
-          marketplace: "mp",
-          rawSource: marketplaceRoot,
-          manifestPath,
-          marketplaceRoot,
-          plugins: {
-            "deploy-kit": pluginRecord({
-              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
-            }),
-          },
-        }),
-      },
-    });
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const { gitOps, clonedUrls } = createOfflineGitOps();
-
-    // act
-    await applyReconcile({
-      ctx,
-      run: runWithNothingLoaded(),
-      cwd,
-      scope: "project",
-      gitOps,
-      reason: "startup",
-    });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "A plugin operation needs attention.\n" +
-          "\n" +
-          "● mp [project]\n" +
-          "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
-          '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
-          "\n" +
-          "Reconcile: 1 warning",
-        severity: "warning",
-      },
-    ]);
-    assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
-    assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
-
-  test("D-09-13: an omitted reason plans the bucket but installs nothing and stays offline", async (t) => {
-    // arrange -- identical fixture; `reason` left out of the call entirely.
-    const { cwd, project } = await createHermeticScopes(t, "dependency-omitted-reason-noop");
-    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
-      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
-      "secrets-vault": { skill: "clean" },
-    });
-    await writeUnder(
-      project.baseConfigJsonPath,
-      configBytes({
-        marketplaces: { mp: { source: marketplaceRoot } },
-        plugins: { "deploy-kit@mp": {} },
-      }),
-    );
-    await seedState(project, {
-      schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
-      marketplaces: {
-        mp: marketplaceRecord({
-          cwd,
-          scope: "project",
-          marketplace: "mp",
-          rawSource: marketplaceRoot,
-          manifestPath,
-          marketplaceRoot,
-          plugins: {
-            "deploy-kit": pluginRecord({
-              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
-            }),
-          },
-        }),
-      },
-    });
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
-    const { gitOps, clonedUrls } = createOfflineGitOps();
-
-    // act -- `reason` omitted entirely.
-    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
-
-    // assert
-    assert.deepStrictEqual(notifications, [
-      {
-        message:
-          "A plugin operation needs attention.\n" +
-          "\n" +
-          "● mp [project]\n" +
-          "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
-          '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
-          "\n" +
-          "Reconcile: 1 warning",
-        severity: "warning",
-      },
-    ]);
-    assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
-    assert.deepStrictEqual(clonedUrls(), []);
-    verifyBoundary();
-  });
-
-  test("D-09-07: a marker-held dependent comes back up in the same reload", async (t) => {
+  test("D-09-07: a marker-held dependent comes back up in the same apply", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-reload-lift");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -5477,7 +5520,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5506,7 +5548,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert -- the install row first (step 5), then the record-walk lift
@@ -5518,7 +5559,9 @@ describe("applyReconcile", () => {
           "  ● secrets-vault v1.0.0 (installed) {dependency installed}\n" +
           "  ● deploy-kit v1.0.0 (installed)\n" +
           "\n" +
-          "Reconcile: 2 successes",
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     const deployKit = await recordFor(project, "mp", "deploy-kit");
@@ -5528,7 +5571,71 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("D-09-08: a provenance-independent dependent comes back up in the same reload", async (t) => {
+  test("D-09-07: a dependent whose missing dependency a config install lands stays enabled", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "dependency-config-install-keeps");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {}, "secrets-vault@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+              skills: ["deploy-kit-tool"],
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● secrets-vault v1.0.0 (installed)\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    const deployKit = await recordFor(project, "mp", "deploy-kit");
+    assert.equal(deployKit?.enabled, true);
+    assert.equal(Object.hasOwn(deployKit ?? {}, "dependencyDisabled"), false);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-09-08: a provenance-independent dependent comes back up in the same apply", async (t) => {
     // arrange -- app (explicit, config-declared) declares lib; lib
     // (provenance: "dependency", never named by config) declares core; core
     // is missing. Installing core lifts lib, and lib's own lift brings app
@@ -5550,7 +5657,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5587,22 +5693,22 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert -- both app and lib reach pluginsToEnable through the D-09-08
-    // record-walk lift (the fresh verdict still holds app down too, since
-    // lib's record is not yet flipped inside the same verdict snapshot), in
-    // state.marketplaces iteration order: app was seeded before lib.
+    // record-walk lift; each has a growth move, so `apply` enables them in
+    // cascade order after their moves (APPLY1-01): lib, then app above it.
     assert.deepStrictEqual(notifications, [
       {
         message:
           "● mp [project]\n" +
           "  ● core v1.0.0 (installed) {dependency installed}\n" +
-          "  ● app v1.0.0 (installed)\n" +
           "  ● lib v1.0.0 (installed)\n" +
+          "  ● app v1.0.0 (installed)\n" +
           "\n" +
-          "Reconcile: 3 successes",
+          "Reconcile: 3 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     const app = await recordFor(project, "mp", "app");
@@ -5636,7 +5742,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5663,7 +5768,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -5678,7 +5782,9 @@ describe("applyReconcile", () => {
           "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 failure, 1 warning",
+          "Reconcile: 1 failure, 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "error",
       },
     ]);
@@ -5686,7 +5792,8 @@ describe("applyReconcile", () => {
     const deployKit = await recordFor(project, "mp", "deploy-kit");
     assert.equal(deployKit?.dependencyDisabled, true);
     const [notification] = notifications;
-    assert.ok(!(notification?.message ?? "").includes("/"));
+    const body = (notification?.message ?? "").replace(/\n\n\/reload to pick up changes$/u, "");
+    assert.ok(!body.includes("/"));
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
@@ -5730,7 +5837,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5758,7 +5864,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -5789,7 +5894,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5816,7 +5920,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert -- the root's own ledger failure passes through unwrapped, no
@@ -5831,7 +5934,9 @@ describe("applyReconcile", () => {
           "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 failure, 1 warning",
+          "Reconcile: 1 failure, 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "error",
       },
     ]);
@@ -5840,7 +5945,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("D-09-14: a failed dependency install is retried on the next reload and the dependent's row is silent once down", async (t) => {
+  test("D-09-14: a failed dependency install is retried on the next apply and the dependent's row is silent once down", async (t) => {
     // arrange -- the not-in-manifest fixture, reloaded twice.
     const { cwd, project } = await createHermeticScopes(t, "dependency-reload-retry");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -5855,7 +5960,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5883,7 +5987,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
     await applyReconcile({
       ctx: second.ctx,
@@ -5891,7 +5994,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert -- the second reload carries the same failure row; the disable
@@ -5914,7 +6016,7 @@ describe("applyReconcile", () => {
     second.verifyBoundary();
   });
 
-  test("D-09-04: a disabled recorded dependency is left alone by the reload", async (t) => {
+  test("D-09-04: a disabled recorded dependency is left alone by the apply", async (t) => {
     // arrange -- secrets-vault is recorded and disabled by the USER (no
     // marker); deploy-kit is enabled.
     const { cwd, project } = await createHermeticScopes(t, "dependency-reload-disabled-left-alone");
@@ -5931,7 +6033,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -5963,7 +6064,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert -- no plugin-installed row (nothing was attempted); the LOAD-01
@@ -5977,7 +6077,9 @@ describe("applyReconcile", () => {
           "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Enable "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 warning",
+          "Reconcile: 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
         severity: "warning",
       },
     ]);
@@ -6007,7 +6109,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -6018,6 +6119,7 @@ describe("applyReconcile", () => {
           marketplaceRoot,
           plugins: {
             "deploy-kit": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
             }),
           },
@@ -6034,15 +6136,19 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
-    // assert -- app's own cascade row is the only row (the standard install
-    // path carries no version for a config-declared install); helper is
+    // assert -- app's own cascade row is the only row; helper is
     // materialized once, and deploy-kit is left untouched.
     assert.deepStrictEqual(notifications, [
       {
-        message: "● mp [project]\n" + "  ● app (installed)\n" + "\n" + "Reconcile: 1 success",
+        message:
+          "● mp [project]\n" +
+          "  ● app v1.0.0 (installed)\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     const helper = await recordFor(project, "mp", "helper");
@@ -6070,7 +6176,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -6110,7 +6215,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
       completionCache: createCompletionCache(),
       hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     });
@@ -6146,7 +6250,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -6173,7 +6276,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6191,7 +6293,7 @@ describe("applyReconcile", () => {
     { name: "later same-marketplace source", secondMarketplace: "beta", secondAllows: false },
     { name: "neither original policy", secondMarketplace: "gamma", secondAllows: false },
   ] as const) {
-    test(`XMKT-01 reload evaluates ${scenario.name}`, async (t) => {
+    test(`XMKT-01 apply evaluates ${scenario.name}`, async (t) => {
       // arrange
       const { cwd, project, user } = await createHermeticScopes(t, "dependency-original-sources");
       const alpha = await writeMarketplaceSource(cwd, "alpha-src", "alpha", {
@@ -6229,7 +6331,6 @@ describe("applyReconcile", () => {
       );
       await seedState(project, {
         schemaVersion: 3,
-        lastReconciledExtensionVersion: EXTENSION_VERSION,
         marketplaces: {
           alpha: marketplaceRecord({
             cwd,
@@ -6239,7 +6340,10 @@ describe("applyReconcile", () => {
             manifestPath: alpha.manifestPath,
             marketplaceRoot: alpha.marketplaceRoot,
             plugins: {
-              a: pluginRecord({ pluginRoot: path.join(alpha.marketplaceRoot, "plugins", "a") }),
+              a: pluginRecord({
+                supported: ["skills"],
+                pluginRoot: path.join(alpha.marketplaceRoot, "plugins", "a"),
+              }),
             },
           }),
           beta: marketplaceRecord({
@@ -6251,7 +6355,10 @@ describe("applyReconcile", () => {
             marketplaceRoot: beta.marketplaceRoot,
             ...(scenario.secondMarketplace === "beta" && {
               plugins: {
-                c: pluginRecord({ pluginRoot: path.join(beta.marketplaceRoot, "plugins", "c") }),
+                c: pluginRecord({
+                  supported: ["skills"],
+                  pluginRoot: path.join(beta.marketplaceRoot, "plugins", "c"),
+                }),
               },
             }),
           }),
@@ -6264,7 +6371,10 @@ describe("applyReconcile", () => {
               manifestPath: gamma.manifestPath,
               marketplaceRoot: gamma.marketplaceRoot,
               plugins: {
-                c: pluginRecord({ pluginRoot: path.join(gamma.marketplaceRoot, "plugins", "c") }),
+                c: pluginRecord({
+                  supported: ["skills"],
+                  pluginRoot: path.join(gamma.marketplaceRoot, "plugins", "c"),
+                }),
               },
             }),
           }),
@@ -6291,7 +6401,6 @@ describe("applyReconcile", () => {
         cwd,
         scope: "project",
         gitOps,
-        reason: "reload",
       });
 
       // assert
@@ -6312,7 +6421,9 @@ describe("applyReconcile", () => {
               "● beta [project]\n" +
               "  ● b v1.0.0 (installed) {dependency installed}\n" +
               "\n" +
-              "Reconcile: 1 success",
+              "Reconcile: 1 success\n" +
+              "\n" +
+              "/reload to pick up changes",
           },
         ]);
       }
@@ -6323,7 +6434,7 @@ describe("applyReconcile", () => {
     });
   }
 
-  test("XMKT-01 reload installs a user-sourced missing dependency into project scope", async (t) => {
+  test("XMKT-01 apply installs a user-sourced missing dependency into project scope", async (t) => {
     // arrange
     const { cwd, project, user } = await createHermeticScopes(t, "dependency-user-source");
     const alpha = await writeMarketplaceSource(
@@ -6345,7 +6456,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         alpha: marketplaceRecord({
           cwd,
@@ -6355,7 +6465,10 @@ describe("applyReconcile", () => {
           manifestPath: alpha.manifestPath,
           marketplaceRoot: alpha.marketplaceRoot,
           plugins: {
-            a: pluginRecord({ pluginRoot: path.join(alpha.marketplaceRoot, "plugins", "a") }),
+            a: pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(alpha.marketplaceRoot, "plugins", "a"),
+            }),
           },
         }),
       },
@@ -6384,7 +6497,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6396,7 +6508,9 @@ describe("applyReconcile", () => {
           "● beta [project]\n" +
           "  ● b v1.0.0 (installed) {dependency installed}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(clonedUrls(), []);
@@ -6448,7 +6562,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -6459,6 +6572,7 @@ describe("applyReconcile", () => {
           marketplaceRoot: mp.marketplaceRoot,
           plugins: {
             "deploy-kit": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(mp.marketplaceRoot, "plugins", "deploy-kit"),
             }),
           },
@@ -6483,7 +6597,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6493,7 +6606,9 @@ describe("applyReconcile", () => {
           "● tools [project]\n" +
           "  ● shared-lib v1.0.0 (installed) {dependency installed}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(clonedUrls(), []);
@@ -6521,7 +6636,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -6532,9 +6646,11 @@ describe("applyReconcile", () => {
           marketplaceRoot,
           plugins: {
             "deploy-kit": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
             }),
             common: pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "common"),
             }),
           },
@@ -6552,7 +6668,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6562,7 +6677,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● secrets-vault v1.0.0 (installed) {dependency installed}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     const after = await recordFor(project, "mp", "common");
@@ -6587,7 +6704,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -6598,9 +6714,11 @@ describe("applyReconcile", () => {
           marketplaceRoot,
           plugins: {
             "deploy-kit": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
             }),
             "secrets-vault": pluginRecord({
+              supported: ["skills"],
               pluginRoot: path.join(marketplaceRoot, "plugins", "secrets-vault"),
             }),
           },
@@ -6622,7 +6740,7 @@ describe("applyReconcile", () => {
         },
       });
 
-    const startup = createNotificationBoundary(0);
+    const startup = createNotificationBoundary(1);
     await withCounter(() => {
       startupCalls += 1;
     })({
@@ -6636,7 +6754,7 @@ describe("applyReconcile", () => {
     });
 
     let reloadCalls = 0;
-    const reload = createNotificationBoundary(0);
+    const reload = createNotificationBoundary(1);
     await withCounter(() => {
       reloadCalls += 1;
     })({
@@ -6647,12 +6765,11 @@ describe("applyReconcile", () => {
       completionCache: createCompletionCache(),
       hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
       gitOps: createOfflineGitOps().gitOps,
-      reason: "reload",
     });
 
     // assert
-    assert.deepStrictEqual(startup.notifications, []);
-    assert.deepStrictEqual(reload.notifications, []);
+    assert.deepStrictEqual(startup.notifications, [APPLY_EMPTY_NOTICE]);
+    assert.deepStrictEqual(reload.notifications, [APPLY_EMPTY_NOTICE]);
     assert.equal(reloadCalls, startupCalls);
     assert.equal(await readFile(project.stateJsonPath, "utf8"), settledBytes);
     assert.equal((await stat(project.stateJsonPath)).mtimeMs, settledModifiedAt);
@@ -6678,7 +6795,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6686,9 +6802,11 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● hello (installed) {requires pi-mcp-adapter}\n" +
+          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       COMMENTS_REMOVED_NOTICE,
     ]);
@@ -6745,7 +6863,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6753,9 +6870,11 @@ describe("applyReconcile", () => {
       {
         message:
           "● mp [project]\n" +
-          "  ● hello (installed) {requires pi-mcp-adapter}\n" +
+          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       COMMENTS_REMOVED_NOTICE,
       {
@@ -6778,7 +6897,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("AFILE-04: a reload with nothing to apply stays silent and leaves the commented mcp-adapter.json unchanged", async (t) => {
+  test("AFILE-04 / D-08: a reload with nothing to apply reports so and leaves the commented mcp-adapter.json unchanged", async (t) => {
     // arrange
     const { cwd, project, adapter } = await seedCommentedAdapterScope(t, "afile-silent", {
       trees: { hello: { mcpServer: true } },
@@ -6786,7 +6905,7 @@ describe("applyReconcile", () => {
       recorded: { hello: { mcpServers: ["hello-echo"] } },
       owners: ["hello"],
     });
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
     const { gitOps } = createOfflineGitOps();
 
     // act
@@ -6796,11 +6915,10 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
     assert.equal(await readFile(project.mcpAdapterJsonPath, "utf8"), adapter);
     verifyBoundary();
   });
@@ -6823,13 +6941,13 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
     assert.deepStrictEqual(notifications, [
       {
-        message: "● mp [project]\n  ○ hello v1.0.0 (uninstalled)\n\nReconcile: 1 success",
+        message:
+          "● mp [project]\n  ○ hello v1.0.0 (uninstalled)\n\nReconcile: 1 success\n\n/reload to pick up changes",
       },
       COMMENTS_REMOVED_NOTICE,
     ]);
@@ -6855,7 +6973,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6865,7 +6982,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       COMMENTS_REMOVED_NOTICE,
     ]);
@@ -6890,12 +7009,14 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● mp [project]\n  ◍ hello v1.0.0 (disabled)\n\nReconcile: 1 success" },
+      {
+        message:
+          "● mp [project]\n  ◍ hello v1.0.0 (disabled)\n\nReconcile: 1 success\n\n/reload to pick up changes",
+      },
       COMMENTS_REMOVED_NOTICE,
     ]);
     assert.equal(await readFile(project.mcpAdapterJsonPath, "utf8"), '{\n  "mcpServers": {}\n}\n');
@@ -6920,14 +7041,17 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "A plugin operation needs attention.\n" +
+          "A plugin operation has failed.\n" +
           "\n" +
           "● mp [project]\n" +
+          "  ⊘ secrets-vault (failed) {not in manifest}\n" +
           "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 warning",
-        severity: "warning",
+          "Reconcile: 1 failure, 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
       },
       COMMENTS_REMOVED_NOTICE,
     ]);
@@ -6953,7 +7077,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -6963,7 +7086,9 @@ describe("applyReconcile", () => {
           "● mp [project] (removed)\n" +
           "  ○ hello (uninstalled)\n" +
           "\n" +
-          "Reconcile: 2 successes",
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       COMMENTS_REMOVED_NOTICE,
     ]);
@@ -7001,7 +7126,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -7028,7 +7152,7 @@ describe("applyReconcile", () => {
         "secrets-vault": { mcpServer: true },
       },
       declared: { "deploy-kit@mp": {} },
-      recorded: { "deploy-kit": {} },
+      recorded: { "deploy-kit": { supported: ["skills"] } },
       owners: [],
     });
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
@@ -7041,7 +7165,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -7051,7 +7174,9 @@ describe("applyReconcile", () => {
           "● mp [project]\n" +
           "  ● secrets-vault v1.0.0 (installed) {dependency installed, requires pi-mcp-adapter}\n" +
           "\n" +
-          "Reconcile: 1 success",
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       COMMENTS_REMOVED_NOTICE,
     ]);
@@ -7076,7 +7201,6 @@ describe("applyReconcile", () => {
       cwd,
       scope: "project",
       gitOps,
-      reason: "reload",
     });
 
     // assert
@@ -7085,9 +7209,11 @@ describe("applyReconcile", () => {
         message:
           "● mp [project]\n" +
           "  ○ alfa v1.0.0 (uninstalled)\n" +
-          "  ● bravo (installed) {requires pi-mcp-adapter}\n" +
+          "  ● bravo v1.0.0 (installed) {requires pi-mcp-adapter}\n" +
           "\n" +
-          "Reconcile: 2 successes",
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
       COMMENTS_REMOVED_NOTICE,
     ]);
@@ -7105,7 +7231,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -7128,7 +7253,6 @@ describe("applyReconcile", () => {
       const state = await loadState(locationsFor(input.scope, cwd).extensionRoot);
       calls.push({
         scope: input.scope,
-        reason: input.reason,
         plannedUninstalls: input.plan?.pluginsToUninstall.map((planned) => planned.plugin),
         recorded: Object.keys(state.marketplaces["mp"]?.plugins ?? {}),
         uninstallsBefore: uninstallPlugin.mock.callCount(),
@@ -7146,7 +7270,6 @@ describe("applyReconcile", () => {
       gitOps,
       hooksRouting,
       completionCache,
-      reason: "reload",
       uninstallPlugin,
       migrateMcpEntries,
     });
@@ -7155,20 +7278,23 @@ describe("applyReconcile", () => {
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "● mp [project]\n" + "  ○ gone v1.0.0 (uninstalled)\n" + "\n" + "Reconcile: 1 success",
+          "● mp [project]\n" +
+          "  ○ gone v1.0.0 (uninstalled)\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(calls, [
       {
         scope: "project",
-        reason: "reload",
         plannedUninstalls: ["gone"],
         recorded: ["gone"],
         uninstallsBefore: 0,
       },
       {
         scope: "user",
-        reason: "reload",
         plannedUninstalls: undefined,
         recorded: [],
         uninstallsBefore: 1,
@@ -7188,7 +7314,6 @@ describe("applyReconcile", () => {
     const { cwd, project } = await createHermeticScopes(t, "mcp-move-invalid-config");
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     await writeUnder(project.baseConfigJsonPath, "{");
@@ -7283,7 +7408,6 @@ describe("applyReconcile", () => {
     );
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {
         mp: marketplaceRecord({
           cwd,
@@ -7328,7 +7452,12 @@ describe("applyReconcile", () => {
       },
       {
         message:
-          "● mp [project]\n" + "  ○ gone v1.0.0 (uninstalled)\n" + "\n" + "Reconcile: 1 success",
+          "● mp [project]\n" +
+          "  ○ gone v1.0.0 (uninstalled)\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
       },
     ]);
     assert.deepStrictEqual(
@@ -7338,12 +7467,11 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("AMIG-03: the migration notice is sent alone when reconcile has no outcome", async (t) => {
+  test("AMIG-03 / D-08: the migration notice precedes the apply-empty advisory when reconcile has no outcome", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "mcp-move-alone");
     await seedState(project, {
       schemaVersion: 3,
-      lastReconciledExtensionVersion: EXTENSION_VERSION,
       marketplaces: {},
     });
     await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {} }));
@@ -7359,7 +7487,7 @@ describe("applyReconcile", () => {
       await Promise.resolve();
     };
 
-    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
     const { gitOps } = createOfflineGitOps();
 
     // act
@@ -7384,7 +7512,1267 @@ describe("applyReconcile", () => {
           "/reload to pick up changes",
         severity: "info",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
+    verifyBoundary();
+  });
+});
+
+/**
+ * APL-02: one project scope over the path marketplace `mp`, declaring and
+ * recording every plugin of `trees` at 1.0.0 with its supported kinds, so no
+ * move is a growth. `offered` then moves a plugin's catalog version, in both
+ * its own manifest and its marketplace entry; `dependencies` adds versioned
+ * declarations the same way.
+ */
+async function seedConvergenceScope(
+  t: TestContext,
+  label: string,
+  seed: {
+    readonly trees: Readonly<Record<string, PluginTree>>;
+    readonly supported: Readonly<Record<string, readonly string[]>>;
+    readonly offered?: Readonly<Record<string, string>>;
+    readonly dependencies?: Readonly<
+      Record<string, readonly { readonly name: string; readonly version: string }[]>
+    >;
+    /** Per-plugin record fields beyond the supported set; a disabled record is disabled in config too. */
+    readonly records?: Readonly<Record<string, Omit<RecordSeed, "pluginRoot" | "supported">>>;
+  },
+): Promise<{
+  readonly cwd: string;
+  readonly project: ScopedLocations;
+  readonly marketplaceRoot: string;
+}> {
+  const { cwd, project } = await createHermeticScopes(t, label);
+  const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(
+    cwd,
+    "mp-src",
+    "mp",
+    seed.trees,
+  );
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+    readonly name: string;
+    readonly plugins: readonly Record<string, unknown>[];
+  };
+  const plugins = Object.keys(seed.trees);
+  for (const plugin of plugins) {
+    const version = seed.offered?.[plugin] ?? "1.0.0";
+    const dependencies = seed.dependencies?.[plugin];
+    await writeFile(
+      path.join(marketplaceRoot, "plugins", plugin, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name: plugin,
+        version,
+        ...(dependencies !== undefined && { dependencies }),
+      }),
+    );
+  }
+
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      ...manifest,
+      plugins: manifest.plugins.map((entry) => {
+        const name = entry["name"] as string;
+        const dependencies = seed.dependencies?.[name];
+        return {
+          ...entry,
+          version: seed.offered?.[name] ?? "1.0.0",
+          ...(dependencies !== undefined && { dependencies }),
+        };
+      }),
+    }),
+  );
+  await writeUnder(
+    project.baseConfigJsonPath,
+    configBytes({
+      marketplaces: { mp: { source: marketplaceRoot } },
+      plugins: Object.fromEntries(
+        plugins.map((plugin) => [
+          `${plugin}@mp`,
+          seed.records?.[plugin]?.enabled === false ? { enabled: false } : {},
+        ]),
+      ),
+    }),
+  );
+  await seedState(project, {
+    schemaVersion: 3,
+    marketplaces: {
+      mp: marketplaceRecord({
+        cwd,
+        scope: "project",
+        marketplace: "mp",
+        rawSource: marketplaceRoot,
+        manifestPath,
+        marketplaceRoot,
+        plugins: Object.fromEntries(
+          plugins.map((plugin) => [
+            plugin,
+            pluginRecord({
+              ...seed.records?.[plugin],
+              pluginRoot: path.join(marketplaceRoot, "plugins", plugin),
+              supported: seed.supported[plugin] ?? [],
+            }),
+          ]),
+        ),
+      }),
+    },
+  });
+  return { cwd, project, marketplaceRoot };
+}
+
+/**
+ * APPLY1-01: `widget` 1.1.0 needs zcore ^2.0.0 and ships with `zcore` 2.0.0;
+ * both are recorded at 1.0.0. `widget`'s seeded record fields go in `widget`.
+ */
+function coShippedSeed(widget: Omit<RecordSeed, "pluginRoot" | "supported"> = {}) {
+  return {
+    trees: { widget: { skill: "clean" }, zcore: { skill: "clean" } },
+    supported: { widget: ["skills"], zcore: ["skills"] },
+    offered: { widget: "1.1.0", zcore: "2.0.0" },
+    dependencies: { widget: [{ name: "zcore", version: "^2.0.0" }] },
+    records: { widget },
+  } as const;
+}
+
+/** Leaves a file nobody may read in `plugin`'s skill, so its move fails to copy it. */
+async function unreadableSkill(marketplaceRoot: string, plugin: string): Promise<void> {
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    throw new Error("an unreadable file cannot stop root; run this suite as a non-root user");
+  }
+
+  await writeFile(
+    path.join(marketplaceRoot, "plugins", plugin, "skills", "tool", "notes.md"),
+    "x",
+    {
+      mode: 0o000,
+    },
+  );
+}
+
+/** Declares each plugin of `mp` enabled in the project's base config. */
+async function declareEnabled(
+  project: ScopedLocations,
+  cwd: string,
+  plugins: readonly string[],
+): Promise<void> {
+  await writeUnder(
+    project.baseConfigJsonPath,
+    configBytes({
+      marketplaces: { mp: { source: path.join(cwd, "mp-src") } },
+      plugins: Object.fromEntries(plugins.map((plugin) => [`${plugin}@mp`, {}])),
+    }),
+  );
+}
+
+describe("applyReconcile catalog convergence", () => {
+  test("APPLY1-01: a plugin and the newer dependency it needs move in one apply, the dependency first", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "cascade-co-shipped", coShippedSeed());
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● widget v1.0.0 → v1.1.0 (updated)\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "widget"))?.enabled, true);
+    verifyBoundary();
+  });
+
+  test("UPD-DEP-D1: a config install that moves its out-of-range dependency first reports the move as pending lists it", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(
+      t,
+      "install-moves-dependency",
+      coShippedSeed(),
+    );
+    const state = await loadState(project.extensionRoot);
+    const mp = state.marketplaces.mp;
+    assert.ok(mp !== undefined);
+    const { widget: _widget, ...recorded } = mp.plugins;
+    mp.plugins = recorded;
+    await saveState(project.extensionRoot, state);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
+          '    cause: constrained to the combined range (^2.0.0) -- required by "widget@mp"\n' +
+          "  ● widget v1.1.0 (installed)\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual(
+      [
+        (await recordFor(project, "mp", "zcore"))?.version,
+        (await recordFor(project, "mp", "widget"))?.version,
+      ],
+      ["2.0.0", "1.1.0"],
+    );
+    verifyBoundary();
+  });
+
+  test("UPD-DEP-D1: a config install whose dependency's move fails reports the failed move and installs nothing", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "install-move-fails",
+      coShippedSeed(),
+    );
+    const state = await loadState(project.extensionRoot);
+    const mp = state.marketplaces.mp;
+    assert.ok(mp !== undefined);
+    const { widget: _widget, ...recorded } = mp.plugins;
+    mp.plugins = recorded;
+    await saveState(project.extensionRoot, state);
+    await unreadableSkill(marketplaceRoot, "zcore");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some plugin operations have failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ widget (failed) {dependency failed}\n" +
+          '    cause: Dependency "zcore@mp" did not move into ^2.0.0.\n' +
+          "  ⊘ zcore v1.0.0 → v2.0.0 (failed) {permission denied}\n" +
+          "\n" +
+          "Reconcile: 2 failures",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(
+      [
+        (await recordFor(project, "mp", "zcore"))?.version,
+        await recordFor(project, "mp", "widget"),
+      ],
+      ["1.0.0", undefined],
+    );
+    verifyBoundary();
+  });
+
+  test("APPLY1-01: a dependency's failed move keeps its dependent where it is and disables it, naming the dependency", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-dependency-fails",
+      coShippedSeed(),
+    );
+    await unreadableSkill(marketplaceRoot, "zcore");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          'A plugin operation has failed.\n\n● mp [project]\n  ⊘ zcore v1.0.0 → v2.0.0 (failed) {permission denied}\n  ◍ widget v1.0.0 (disabled) {dependency failed}\n    cause: "zcore@mp" did not update; run apply again once it can, or uninstall "widget@mp"\n\nReconcile: 1 failure, 1 warning\n\n/reload to pick up changes',
+        severity: "error",
+      },
+    ]);
+    const widget = await recordFor(project, "mp", "widget");
+    assert.deepStrictEqual([widget?.version, widget?.enabled], ["1.0.0", false]);
+    verifyBoundary();
+  });
+
+  test("APPLY1-01: a dependent whose own move fails after its dependency moved is disabled with the marker", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-dependent-fails",
+      coShippedSeed(),
+    );
+    await unreadableSkill(marketplaceRoot, "widget");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
+          "  ⊘ widget v1.0.0 → v1.1.0 (failed) {permission denied}\n" +
+          "  ◍ widget v1.0.0 (disabled) {dependency version unsatisfied}\n" +
+          '    cause: The update of "widget@mp" did not install; run apply again once it can, or uninstall "widget@mp"\n' +
+          "\n" +
+          "Reconcile: 1 failure, 1 warning, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    const widget = await recordFor(project, "mp", "widget");
+    assert.deepStrictEqual(
+      [widget?.version, widget?.enabled, widget?.dependencyDisabled],
+      ["1.0.0", false, true],
+    );
+    verifyBoundary();
+  });
+
+  test("APPLY1-01: a dependent whose failed move the dependency move was not made for stays enabled", async (t) => {
+    // arrange -- `widget` declares `zcore` with no range, so the old `zcore`
+    // meets it and the move is not made for it.
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(t, "cascade-unrelated", {
+      ...coShippedSeed(),
+      dependencies: { widget: [{ name: "zcore", version: "*" }] },
+    });
+    await unreadableSkill(marketplaceRoot, "widget");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
+          "  ⊘ widget v1.0.0 → v1.1.0 (failed) {permission denied}\n" +
+          "\n" +
+          "Reconcile: 1 failure, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "widget"))?.enabled, true);
+    verifyBoundary();
+  });
+
+  test("APPLY1-01: held-down plugins that wait on a dependency's move are enabled in cascade order once it lands", async (t) => {
+    // arrange -- `lib` needs core ^2.0.0, `app` needs `lib`; both sit held down
+    // and neither moves itself.
+    const { cwd, project } = await seedConvergenceScope(t, "cascade-enable-only", {
+      trees: { app: { skill: "clean" }, lib: { skill: "clean" }, core: { skill: "clean" } },
+      supported: { app: ["skills"], lib: ["skills"], core: ["skills"] },
+      offered: { core: "2.0.0" },
+      dependencies: {
+        app: [{ name: "lib", version: "*" }],
+        lib: [{ name: "core", version: "^2.0.0" }],
+      },
+      records: {
+        app: { enabled: false, dependencyDisabled: true },
+        lib: { enabled: false, dependencyDisabled: true },
+      },
+    });
+    await declareEnabled(project, cwd, ["app", "lib", "core"]);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● core v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● lib v1.0.0 (installed)\n" +
+          "  ● app v1.0.0 (installed)\n" +
+          "\n" +
+          "Reconcile: 3 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    verifyBoundary();
+  });
+
+  test("APPLY1-01: held-down plugins that wait on a dependency's failed move stay disabled, and only the failed move is reported", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-enable-blocked",
+      {
+        trees: { app: { skill: "clean" }, lib: { skill: "clean" }, core: { skill: "clean" } },
+        supported: { app: ["skills"], lib: ["skills"], core: ["skills"] },
+        offered: { core: "2.0.0" },
+        dependencies: {
+          app: [{ name: "lib", version: "*" }],
+          lib: [{ name: "core", version: "^2.0.0" }],
+        },
+        records: {
+          app: { enabled: false, dependencyDisabled: true },
+          lib: { enabled: false, dependencyDisabled: true },
+        },
+      },
+    );
+    await declareEnabled(project, cwd, ["app", "lib", "core"]);
+    await unreadableSkill(marketplaceRoot, "core");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● mp [project]\n  ⊘ core v1.0.0 → v2.0.0 (failed) {permission denied}\n\nReconcile: 1 failure",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(
+      [
+        (await recordFor(project, "mp", "app"))?.enabled,
+        (await recordFor(project, "mp", "lib"))?.enabled,
+      ],
+      [false, false],
+    );
+    verifyBoundary();
+  });
+
+  test("APPLY1-01 / CR-B: a held-down dependency whose enable fails after the move it waited on keeps the plugin above it disabled", async (t) => {
+    // arrange -- `lib` needs core ^2.0.0 and cannot be read; `app` needs `lib`.
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-enable-fails",
+      {
+        trees: { app: { skill: "clean" }, lib: { skill: "clean" }, core: { skill: "clean" } },
+        supported: { app: ["skills"], lib: ["skills"], core: ["skills"] },
+        offered: { core: "2.0.0" },
+        dependencies: {
+          app: [{ name: "lib", version: "*" }],
+          lib: [{ name: "core", version: "^2.0.0" }],
+        },
+        records: {
+          app: { enabled: false, dependencyDisabled: true },
+          lib: { enabled: false, dependencyDisabled: true },
+        },
+      },
+    );
+    await declareEnabled(project, cwd, ["app", "lib", "core"]);
+    await unreadableSkill(marketplaceRoot, "lib");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● mp [project]\n  ● core v1.0.0 → v2.0.0 (updated)\n  ⊘ lib (failed) {unreadable}\n\nReconcile: 1 failure, 1 success\n\n/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(
+      [
+        (await recordFor(project, "mp", "app"))?.enabled,
+        (await recordFor(project, "mp", "lib"))?.enabled,
+      ],
+      [false, false],
+    );
+    verifyBoundary();
+  });
+
+  test("APPLY1-01 / WR-3: a held-down record whose enable fails keeps the copy its restored pin names", async (t) => {
+    // arrange -- `widget` runs a per-commit copy under the plugin clones; its
+    // pin refresh moves it to the marketplace's files, and its enable fails.
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-restored-copy",
+      coShippedSeed({ enabled: false, dependencyDisabled: true }),
+    );
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    const copy = path.join(project.pluginClonesDir, "widget-copy");
+    await writeUnder(
+      path.join(copy, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "widget", version: "1.0.0" }),
+    );
+    const seeded = await loadState(project.extensionRoot);
+    const widget = seeded.marketplaces.mp?.plugins.widget;
+    assert.ok(widget !== undefined);
+    widget.resolvedSource = copy;
+    widget.resolvedSha = "a".repeat(40);
+    await saveState(project.extensionRoot, seeded);
+    await unreadableSkill(marketplaceRoot, "widget");
+    const { ctx, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    const restored = await recordFor(project, "mp", "widget");
+    assert.deepStrictEqual(
+      [restored?.version, restored?.resolvedSource, restored?.resolvedSha, restored?.enabled],
+      ["1.0.0", copy, "a".repeat(40), false],
+    );
+    assert.equal(await pathExists(copy), true);
+    verifyBoundary();
+  });
+
+  test("APPLY1-01 / Review 4 WR-2: a clone cleanup that fails after a held-down step does not end the apply", async (t) => {
+    // arrange -- as the restored-copy case, with a plugin-clones directory
+    // nobody may list, so the deferred cleanup fails.
+    if (typeof process.getuid === "function" && process.getuid() === 0) {
+      throw new Error("a directory mode cannot stop root; run this suite as a non-root user");
+    }
+
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-cleanup-fails",
+      coShippedSeed({ enabled: false, dependencyDisabled: true }),
+    );
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    const copy = path.join(project.pluginClonesDir, "widget-copy");
+    await writeUnder(
+      path.join(copy, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "widget", version: "1.0.0" }),
+    );
+    const seeded = await loadState(project.extensionRoot);
+    const widget = seeded.marketplaces.mp?.plugins.widget;
+    assert.ok(widget !== undefined);
+    widget.resolvedSource = copy;
+    widget.resolvedSha = "a".repeat(40);
+    await saveState(project.extensionRoot, seeded);
+    await unreadableSkill(marketplaceRoot, "widget");
+    await chmod(project.pluginClonesDir, 0o300);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act -- the mode comes back before the case's tree is removed
+    try {
+      await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+    } finally {
+      await chmod(project.pluginClonesDir, 0o755);
+    }
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● mp [project]\n  ● zcore v1.0.0 → v2.0.0 (updated)\n  ⊘ widget v1.0.0 → v1.1.0 (failed) {unreadable}\n\nReconcile: 1 failure, 1 success\n\n/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    verifyBoundary();
+  });
+
+  test("APPLY1-01 / CR-03 / WR-C: a held-down record whose enable fails after its pin refresh is a failed move and keeps its version", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-deferred-fails",
+      coShippedSeed({ enabled: false, dependencyDisabled: true }),
+    );
+    await declareEnabled(project, cwd, ["widget", "zcore"]);
+    await unreadableSkill(marketplaceRoot, "widget");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● mp [project]\n  ● zcore v1.0.0 → v2.0.0 (updated)\n  ⊘ widget v1.0.0 → v1.1.0 (failed) {unreadable}\n\nReconcile: 1 failure, 1 success\n\n/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    const widget = await recordFor(project, "mp", "widget");
+    assert.deepStrictEqual([widget?.version, widget?.enabled], ["1.0.0", false]);
+    verifyBoundary();
+  });
+
+  test("APPLY1-01 / CR-01: a dependent whose own move is held is disabled with its dependents when the dependency fails", async (t) => {
+    // arrange -- `host` holds `widget` at ^1.0.0; `widget` 2.0.0 needs zcore ^2.0.0.
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "cascade-held-dependent",
+      {
+        trees: { host: { skill: "clean" }, widget: { skill: "clean" }, zcore: { skill: "clean" } },
+        supported: { host: ["skills"], widget: ["skills"], zcore: ["skills"] },
+        offered: { widget: "2.0.0", zcore: "2.0.0" },
+        dependencies: {
+          host: [{ name: "widget", version: "^1.0.0" }],
+          widget: [{ name: "zcore", version: "^2.0.0" }],
+        },
+      },
+    );
+    await unreadableSkill(marketplaceRoot, "zcore");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          'A plugin operation has failed.\n\n● mp [project]\n  ⊘ zcore v1.0.0 → v2.0.0 (failed) {permission denied}\n  ◍ host v1.0.0 (disabled) {dependency unsatisfied}\n    cause: Enable "widget@mp" or uninstall "host@mp"\n  ◍ widget v1.0.0 (disabled) {dependency failed}\n    cause: "zcore@mp" did not update; run apply again once it can, or uninstall "widget@mp"\n\nReconcile: 1 failure, 2 warnings\n\n/reload to pick up changes',
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(
+      [
+        (await recordFor(project, "mp", "host"))?.enabled,
+        (await recordFor(project, "mp", "widget"))?.enabled,
+      ],
+      [false, false],
+    );
+    verifyBoundary();
+  });
+
+  test("APPLY1-01: a dependent held down by an earlier pass is enabled after the move it waits on lands", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(
+      t,
+      "cascade-deferred",
+      coShippedSeed({ enabled: false, dependencyDisabled: true }),
+    );
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: path.join(cwd, "mp-src") } },
+        plugins: { "widget@mp": {}, "zcore@mp": {} },
+      }),
+    );
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● zcore v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● widget v1.0.0 → v1.1.0 (updated)\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    const widget = await recordFor(project, "mp", "widget");
+    assert.deepStrictEqual([widget?.version, widget?.enabled], ["1.1.0", true]);
+    verifyBoundary();
+  });
+
+  test("APL-02 / D-08: a path-source plugin the catalog moved is updated, recorded and reported with the reload trailer", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "converge-move", {
+      trees: { demo: { skill: "clean" } },
+      supported: { demo: ["skills"] },
+      offered: { demo: "1.1.0" },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● demo v1.0.0 → v1.1.0 (updated)\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "demo"))?.version, "1.1.0");
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-08 / NFR-3: a second apply after a move has nothing to change", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "converge-settled", {
+      trees: { demo: { skill: "clean" } },
+      supported: { demo: ["skills"] },
+      offered: { demo: "1.1.0" },
+    });
+    const { gitOps } = createOfflineGitOps();
+    await applyReconcile({
+      ctx: createNotificationBoundary(1).ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+    });
+    const settled = await readFile(project.stateJsonPath, "utf8");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), settled);
+    verifyBoundary();
+  });
+
+  test("D-12: a range-blocked move and a consent-needing move stay put with warning rows and write nothing", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(t, "converge-blocked", {
+      trees: { app: { skill: "clean" }, lib: { skill: "clean" }, styled: { skill: "clean" } },
+      supported: { app: ["skills"], lib: ["skills"], styled: ["skills"] },
+      offered: { lib: "2.0.0", styled: "1.1.0" },
+      dependencies: { app: [{ name: "lib", version: "^1.0.0" }] },
+    });
+    await writeUnder(
+      path.join(marketplaceRoot, "plugins", "styled", ".lsp.json"),
+      JSON.stringify({ servers: { ts: { command: "tsserver" } } }),
+    );
+    const before = await readFile(project.stateJsonPath, "utf8");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some plugin operations need attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ lib v1.0.0 (skipped) {dependents constrain}\n" +
+          '    cause: version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"\n' +
+          "  ● styled v1.0.0 (partially-upgradable) {lsp}\n" +
+          "    Run update --partial on this plugin to update it with the supported components.\n" +
+          "\n" +
+          "Reconcile: 2 warnings",
+        severity: "warning",
+      },
+    ]);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), before);
+    verifyBoundary();
+  });
+
+  test("D-12 / D-06: a held dependent's stricter catalog copy holds the move on every apply, and the dependent stays enabled", async (t) => {
+    // arrange -- `zzhost` holds `widget`, whose installed copy declares `zcore`
+    // with no range while its catalog copy declares `zcore@^1.0.0`. Moving
+    // `zcore` would leave the load-time check reading `widget`'s catalog copy
+    // as broken, so the move stays held.
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(t, "converge-held-copy", {
+      trees: { widget: { skill: "clean" }, zcore: { skill: "clean" }, zzhost: { skill: "clean" } },
+      supported: { widget: ["skills"], zcore: ["skills"], zzhost: ["skills"] },
+      offered: { widget: "1.1.0", zcore: "2.0.0" },
+      dependencies: {
+        widget: [{ name: "zcore", version: "^1.0.0" }],
+        zzhost: [{ name: "widget", version: "~1.0.0" }],
+      },
+    });
+    const installedCopy = path.join(marketplaceRoot, "plugins", "widget-installed");
+    await writeUnder(
+      path.join(installedCopy, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "widget", version: "1.0.0", dependencies: ["zcore"] }),
+    );
+    const seeded = await loadState(project.extensionRoot);
+    const widget = seeded.marketplaces.mp?.plugins.widget;
+    assert.ok(widget !== undefined);
+    widget.resolvedSource = installedCopy;
+    await saveState(project.extensionRoot, seeded);
+    const before = await readFile(project.stateJsonPath, "utf8");
+    const held = {
+      message:
+        "Some plugin operations need attention.\n" +
+        "\n" +
+        "● mp [project]\n" +
+        "  ⊘ widget v1.0.0 (skipped) {dependents constrain}\n" +
+        '    cause: version 1.1.0 falls outside what the combined range admits (~1.0.0) -- required by "zzhost@mp"\n' +
+        "  ⊘ zcore v1.0.0 (skipped) {dependents constrain}\n" +
+        '    cause: version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "widget@mp"\n' +
+        "\n" +
+        "Reconcile: 2 warnings",
+      severity: "warning",
+    };
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [held, held]);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), before);
+    verifyBoundary();
+  });
+
+  test("WR-01 / NFR-3: a state read that fails before the convergence reports a state.json row, never nothing to change", async (t) => {
+    // arrange -- the read pass reads the scope first, the convergence second.
+    const { cwd, project } = await seedConvergenceScope(t, "converge-unreadable", {
+      trees: { demo: { skill: "clean" } },
+      supported: { demo: ["skills"] },
+      offered: { demo: "1.1.0" },
+    });
+    let reads = 0;
+    const applyWithFailingConvergenceRead = createApplyReconcile({
+      async loadState(extensionRoot: string): Promise<ExtensionState> {
+        reads += extensionRoot === project.extensionRoot ? 1 : 0;
+        if (reads === 2) {
+          throw Object.assign(new Error("EACCES: permission denied, open 'state.json'"), {
+            code: "EACCES",
+          });
+        }
+
+        return loadState(extensionRoot);
+      },
+    });
+    const before = await readFile(project.stateJsonPath, "utf8");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+    // act
+    await applyWithFailingConvergenceRead({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps: createOfflineGitOps().gitOps,
+      completionCache: createCompletionCache(),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n" +
+          "\n" +
+          "⊘ state.json [project] (failed) {permission denied}\n" +
+          "  ⊘ state.json (failed) {permission denied}\n" +
+          "    cause: EACCES: permission denied, open 'state.json'\n" +
+          "\n" +
+          "Reconcile: 2 failures",
+        severity: "error",
+      },
+    ]);
+    assert.equal(reads, 2);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), before);
+    verifyBoundary();
+  });
+
+  test("D-13: a move that fails to materialize reports its reason and the next move still runs", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(t, "converge-failed", {
+      trees: { alpha: { skill: "clean", command: true }, beta: { skill: "clean" } },
+      supported: { alpha: ["skills", "commands"], beta: ["skills"] },
+      offered: { alpha: "1.1.0", beta: "1.1.0" },
+    });
+    const unreadable = path.join(marketplaceRoot, "plugins", "alpha", "commands", "deploy.md");
+    if (typeof process.getuid === "function" && process.getuid() === 0) {
+      throw new Error("an unreadable file cannot deny root; run this suite as a non-root user");
+    }
+
+    // An unreadable file still unlinks, so the tree removal needs no restore.
+    await chmod(unreadable, 0o000);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ alpha v1.0.0 → v1.1.0 (failed) {permission denied}\n" +
+          "  ● beta v1.0.0 → v1.1.0 (updated)\n" +
+          "\n" +
+          "Reconcile: 1 failure, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "alpha"))?.version, "1.0.0");
+    assert.equal((await recordFor(project, "mp", "beta"))?.version, "1.1.0");
+    verifyBoundary();
+  });
+
+  test("D-10 / D-25 / WCONV-03: a plugin whose supported set grew is re-materialized at its recorded version with the backfill row", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "converge-grown", {
+      trees: { demo: { skill: "clean", command: true } },
+      supported: { demo: ["skills"] },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● demo v1.0.0 (installed) {components now supported}\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    const record = await recordFor(project, "mp", "demo");
+    assert.equal(record?.version, "1.0.0");
+    assert.deepStrictEqual(record.resources.prompts, ["demo:deploy"]);
+    assert.ok(record.compatibility.supported.includes("commands"));
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("WCONV-03: a revision move whose supported set also grew leads its updated row with the growth marker", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "converge-grown-move", {
+      trees: { demo: { skill: "clean", command: true } },
+      supported: { demo: ["skills"] },
+      offered: { demo: "1.1.0" },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● demo v1.0.0 → v1.1.0 (updated) {components now supported}\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "demo"))?.version, "1.1.0");
+    verifyBoundary();
+  });
+
+  test("D-12 / D-25: a partial record whose supported set grew stays partial and names the kinds it still lacks", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "converge-grown-partial", {
+      trees: { demo: { skill: "clean", command: true, lsp: true } },
+      supported: { demo: ["skills"] },
+      records: { demo: { installable: false, unsupported: ["lspServers"] } },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ◉ demo v1.0.0 (partially-installed) {components now supported, lsp}\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    const record = await recordFor(project, "mp", "demo");
+    assert.equal(record?.compatibility.installable, false);
+    assert.deepStrictEqual(record.resources.prompts, ["demo:deploy"]);
+    verifyBoundary();
+  });
+
+  test("WCONV-01 / T-29-33: a clean record whose grown candidate is partially available is declined, not degraded", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "converge-grown-consent", {
+      trees: { demo: { skill: "clean", command: true, lsp: true } },
+      supported: { demo: ["skills"] },
+    });
+    const before = await readFile(project.stateJsonPath, "utf8");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● demo v1.0.0 (partially-upgradable) {lsp}\n" +
+          "    Run update --partial on this plugin to update it with the supported components.\n" +
+          "\n" +
+          "Reconcile: 1 warning",
+        severity: "warning",
+      },
+    ]);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), before);
+    verifyBoundary();
+  });
+
+  test("ENBL-08: a disabled record whose supported set grew is never re-materialized", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "converge-grown-disabled", {
+      trees: { demo: { skill: "clean", command: true } },
+      supported: { demo: ["skills"] },
+      records: { demo: { enabled: false } },
+    });
+    const before = await readFile(project.stateJsonPath, "utf8");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
+    assert.equal(await readFile(project.stateJsonPath, "utf8"), before);
+    verifyBoundary();
+  });
+
+  test("APL-02 / D-19: a partial record whose new version needs nothing unsupported is moved and recorded whole", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "converge-made-whole", {
+      trees: { demo: { skill: "clean" } },
+      supported: { demo: ["skills"] },
+      offered: { demo: "1.1.0" },
+      records: { demo: { installable: false, unsupported: ["outputStyles"] } },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● demo v1.0.0 → v1.1.0 (updated)\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    const record = await recordFor(project, "mp", "demo");
+    assert.equal(record?.version, "1.1.0");
+    assert.equal(record.compatibility.installable, true);
+    assert.deepStrictEqual(record.compatibility.unsupported, []);
+    verifyBoundary();
+  });
+
+  test("D-13: a growth move that fails to materialize reports its reason and the record keeps its supported set", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "converge-grown-failed",
+      {
+        trees: { demo: { skill: "clean", command: true } },
+        supported: { demo: ["skills"] },
+      },
+    );
+    if (typeof process.getuid === "function" && process.getuid() === 0) {
+      throw new Error("an unreadable file cannot deny root; run this suite as a non-root user");
+    }
+
+    // An unreadable file still unlinks, so the tree removal needs no restore.
+    await chmod(path.join(marketplaceRoot, "plugins", "demo", "commands", "deploy.md"), 0o000);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ demo v1.0.0 (failed) {permission denied}\n" +
+          "\n" +
+          "Reconcile: 1 failure",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual((await recordFor(project, "mp", "demo"))?.compatibility.supported, [
+      "skills",
+    ]);
+    verifyBoundary();
+  });
+
+  test("SURF-05 / WARN-01: a growth move names the orphan rewake and the malformed skill its re-materialize produced", async (t) => {
+    // arrange
+    const { cwd } = await seedConvergenceScope(t, "converge-grown-signals", {
+      trees: { demo: { skill: "malformed", orphanRewakeHooks: true } },
+      supported: { demo: ["skills"] },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● demo v1.0.0 (installed) {components now supported, orphan rewake, malformed skill}\n" +
+          "\n" +
+          "Reconcile: 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "warning",
+      },
+    ]);
+    verifyBoundary();
+  });
+
+  test("RECON-04 / ENBL-08: a plugin the same apply disables is not re-materialized for its grown set", async (t) => {
+    // arrange
+    const { cwd, project, marketplaceRoot } = await seedConvergenceScope(
+      t,
+      "converge-grown-toggled",
+      {
+        trees: { demo: { skill: "clean", command: true } },
+        supported: { demo: ["skills"] },
+      },
+    );
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "demo@mp": { enabled: false } },
+      }),
+    );
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ◍ demo v1.0.0 (disabled)\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual((await recordFor(project, "mp", "demo"))?.compatibility.supported, [
+      "skills",
+    ]);
+    verifyBoundary();
+  });
+
+  test("AFILE-04: a growth move that rewrites a commented mcp-adapter.json shows the notice after the cascade", async (t) => {
+    // arrange
+    const { cwd } = await seedCommentedAdapterScope(t, "afile-growth", {
+      trees: { alfa: { skill: "clean", mcpServer: true } },
+      declared: { "alfa@mp": {} },
+      recorded: { alfa: { mcpServers: ["alfa-echo"] } },
+      owners: ["alfa"],
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● alfa v1.0.0 (installed) {components now supported, requires pi-mcp-adapter}\n" +
+          "\n" +
+          "Reconcile: 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+      COMMENTS_REMOVED_NOTICE,
+    ]);
+    verifyBoundary();
+  });
+
+  test("WR-05: an apply over a declared scope that records nothing brings no state.json into existence", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "converge-no-state");
+    await writeUnder(project.baseConfigJsonPath, configBytes({ marketplaces: {} }));
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
+    assert.equal(await pathExists(project.stateJsonPath), false);
     verifyBoundary();
   });
 });

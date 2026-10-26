@@ -22,6 +22,7 @@ import {
   notifyReconcileAborted,
   notifyStopHookOverrideCap,
   notifyUsageError,
+  notifyAutoapplyStatus,
   notifyUsageInfo,
 } from "../../extensions/pi-claude-marketplace/shared/notification-dispatch.ts";
 import { CENTRAL_ROW_POLICY } from "../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
@@ -459,7 +460,11 @@ for (const { message, outcome, reload } of [
     reload: false,
   },
   { message: { kind: "marketplace-not-added", name: "demo" }, outcome: true, reload: false },
-  { message: { kind: "reconcile-pending-empty" }, outcome: true, reload: false },
+  {
+    message: { kind: "reconcile-pending-empty", command: "pending" },
+    outcome: true,
+    reload: false,
+  },
   { message: { kind: "prune-empty", scope: "project" }, outcome: true, reload: false },
   {
     message: { kind: "prune-committed-warning", scope: "project", cause: new Error("Saved.") },
@@ -468,7 +473,7 @@ for (const { message, outcome, reload } of [
   },
   {
     message: { kind: "reconcile-applied-cascade", marketplaces: [] },
-    outcome: false,
+    outcome: true,
     reload: false,
   },
 ] satisfies Array<{ message: NotificationMessage; outcome: boolean; reload: boolean }>) {
@@ -5792,11 +5797,11 @@ test("RECON-04: success cascade -- mixed marketplace add + plugin install across
   assert.equal(args.length, 1);
   assert.equal(
     args[0],
-    `● new-mp [project] (added)\n  ● new-plugin (installed)\n\n● other-mp [user] (added)\n  ● other-plugin (installed)`,
+    `● new-mp [project] (added)\n  ● new-plugin (installed)\n\n● other-mp [user] (added)\n  ● other-plugin (installed)\n\n/reload to pick up changes`,
   );
 });
 
-test("RECON-04: success cascade NEVER emits `/reload to pick up changes` trailer", (t) => {
+test("D-08: an apply report with a realized row ends with the reload trailer", (t) => {
   // arrange
   const ctx = createContext(t);
   const run = runWithAllLoaded();
@@ -5817,13 +5822,46 @@ test("RECON-04: success cascade NEVER emits `/reload to pick up changes` trailer
 
   // act
   notify(ctx, run, msg);
-  const emitted = ctx.ui.notify.mock.calls[0]!.arguments[0];
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
 
   // assert
-  assert.ok(
-    !emitted.includes("/reload to pick up changes"),
-    "RECON-04: reconcile-applied-cascade MUST NOT emit the reload-hint trailer (the reconcile already ran ON /reload)",
-  );
+  assert.deepStrictEqual(args, [
+    "● new-mp [user] (added)\n  ● a (installed)\n  ○ b (uninstalled)\n\n/reload to pick up changes",
+  ]);
+});
+
+test("D-08: an apply report with only failed rows carries no reload trailer", (t) => {
+  // arrange
+  const ctx = createContext(t);
+  const run = runWithAllLoaded();
+  const msg: NotificationMessage = {
+    kind: "reconcile-applied-cascade",
+    marketplaces: [
+      {
+        name: "new-mp",
+        scope: "user",
+        plugins: [
+          {
+            status: "failed",
+            name: "a",
+            reasons: ["not found"],
+            severity: "error",
+            needsReload: false,
+          },
+        ],
+      },
+    ],
+  };
+
+  // act
+  notify(ctx, run, msg);
+  const args = ctx.ui.notify.mock.calls[0]!.arguments;
+
+  // assert
+  assert.deepStrictEqual(args, [
+    "A plugin operation has failed.\n\n● new-mp [user]\n  ⊘ a (failed) {not found}",
+    "error",
+  ]);
 });
 
 test("RECON-04: soft-fail per-entry -- failed mp row mixed with successful install row routes to error + summary prepended", (t) => {
@@ -5868,7 +5906,7 @@ test("RECON-04: soft-fail per-entry -- failed mp row mixed with successful insta
   assert.equal(args[1], "error");
   assert.equal(
     args[0],
-    `A marketplace operation has failed.\n\n⊘ flaky-mp [user] (failed) {network unreachable}\n\n● ok-mp [user] (added)\n  ● ok-plugin (installed)`,
+    `A marketplace operation has failed.\n\n⊘ flaky-mp [user] (failed) {network unreachable}\n\n● ok-mp [user] (added)\n  ● ok-plugin (installed)\n\n/reload to pick up changes`,
   );
 });
 
@@ -6198,23 +6236,46 @@ for (const { name, plugin, expected } of [
   });
 }
 
-test("reconcile-pending-empty emits the exact zero-action advisory", (t) => {
-  // arrange
-  const ctx = createContext(t);
-  const run = runWithAllLoaded();
-  const message = {
-    kind: "reconcile-pending-empty",
-    retainedWorkflows: [],
-  } satisfies NotificationMessage;
+for (const { command, expected } of [
+  { command: "pending", expected: "Pending: /claude:plugin apply has nothing to change." },
+  { command: "apply", expected: "Apply: nothing to change." },
+] as const) {
+  test(`D-08 / D-14: reconcile-pending-empty emits the exact ${command} advisory`, (t) => {
+    // arrange
+    const ctx = createContext(t);
+    const run = runWithAllLoaded();
+    const message = {
+      kind: "reconcile-pending-empty",
+      command,
+      retainedWorkflows: [],
+    } satisfies NotificationMessage;
 
-  // act
-  notify(ctx, run, message);
+    // act
+    notify(ctx, run, message);
 
-  // assert
-  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
-    "Pending: next reload will apply 0 actions.",
-  ]);
-});
+    // assert
+    assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [expected]);
+  });
+
+  test(`WR-06: the retained-workflow advisory folds under the ${command} advisory`, (t) => {
+    // arrange
+    const ctx = createContext(t);
+    const run = runWithAllLoaded();
+    const message = {
+      kind: "reconcile-pending-empty",
+      command,
+      advisories: ["Retained staging tree."],
+    } satisfies NotificationMessage;
+
+    // act
+    notify(ctx, run, message);
+
+    // assert
+    assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+      `${expected}\n\nRetained staging tree.`,
+    ]);
+  });
+}
 
 for (const scope of ["user", "project"] as const) {
   test(`prune-empty emits the scoped informational sentence for ${scope}`, (t) => {
@@ -7436,6 +7497,24 @@ test("usage info dispatch preserves usage message at info severity", (t) => {
   ]);
 });
 
+test("AAP-04: autoapply status dispatch renders the effective value at info severity", (t) => {
+  // arrange
+  const ctx = createContext(t);
+
+  // act
+  notifyAutoapplyStatus(ctx, runWithNothingLoaded(), {
+    kind: "autoapply-status",
+    enabled: false,
+    files: [{ scope: "user", file: "claude-plugins.json" }],
+  });
+
+  // assert
+  assert.deepStrictEqual(ctx.ui.notify.mock.calls[0]!.arguments, [
+    "Autoapply: off (default)\n\nclaude-plugins.json [user]: not set",
+    "info",
+  ]);
+});
+
 test("notifyReconcileAborted emits the serialized cause at error severity", (t) => {
   // arrange
   const ctx = createContext(t);
@@ -7791,13 +7870,13 @@ test("reconcile context dispatch keeps its tally and omits reload", (t) => {
   ]);
 });
 
-test("reconcile context dispatch suppresses reload and stamps error severity", (t) => {
+test("reconcile context dispatch of a failed row omits reload and stamps error severity", (t) => {
   // arrange
-  // RECON-04: the reconcile ran ON /reload, so a row that asks for a reload must
-  // still produce no reload-hint trailer. The standalone `notify()` arm is gated
-  // in test/architecture/notify-grammar-invariant.test.ts; production reaches
-  // this emitter from shared/notify-context.ts, so the suppression, the
-  // failure tally, and the stamped severity argument are pinned here.
+  // D-08: a failed row changed nothing the session must load, so it stamps no
+  // reload. The standalone `notify()` arm is gated in
+  // test/architecture/notify-grammar-invariant.test.ts; production reaches this
+  // emitter from shared/notify-context.ts, so the missing trailer, the failure
+  // tally, and the stamped severity argument are pinned here.
   const ctx = createContext(t);
   const run = runWithAllLoaded();
 
@@ -7815,7 +7894,7 @@ test("reconcile context dispatch suppresses reload and stamps error severity", (
             name: "alpha",
             reasons: ["not found"],
             severity: "error",
-            needsReload: true,
+            needsReload: false,
           },
         ],
       },
@@ -7935,7 +8014,7 @@ test("an applied reconcile with a failed plugin emits the plural failure summary
             status: "failed",
             reasons: ["not found"],
             severity: "error",
-            needsReload: true,
+            needsReload: false,
           },
         ],
       },

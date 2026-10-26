@@ -16,10 +16,10 @@ import type { CatalogFixture, FixtureMap } from "./fixture-types.ts";
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const CATALOG_PATH = path.join(REPO_ROOT, "docs/output-catalog.md");
-const EXPECTED_MODULE_COUNT = 21;
-const EXPECTED_SECTION_COUNT = 21;
-const EXPECTED_STATE_COUNT = 290;
-const EXPECTED_UTF8_BYTES = 46_623;
+const EXPECTED_MODULE_COUNT = 22;
+const EXPECTED_SECTION_COUNT = 22;
+const EXPECTED_STATE_COUNT = 323;
+const EXPECTED_UTF8_BYTES = 54_039;
 
 const FIXTURE_SECTION_ORDER = [
   "/claude:plugin list",
@@ -36,6 +36,7 @@ const FIXTURE_SECTION_ORDER = [
   "/claude:plugin marketplace info <name>",
   "/claude:plugin info <plugin>@<marketplace>",
   "/claude:plugin pending",
+  "/claude:plugin apply",
   "reconcile-applied-cascade",
   "/claude:plugin marketplace remove <name>",
   "/claude:plugin marketplace update [<name>]",
@@ -268,7 +269,7 @@ test("catalog contract rejects equal-key ordering drift", () => {
   }, /Catalog tuple ordering drifted despite equal keys/u);
 });
 
-test("catalog contract matches all 21 fixture modules to 290 exact documented states", async () => {
+test("catalog contract matches all 22 fixture modules to 323 exact documented states", async () => {
   // arrange
   const fixtures = mergeFixtureMaps(FIXTURE_MAPS);
   const examples = loadCatalogExamples(await readFile(CATALOG_PATH, "utf8"));

@@ -750,6 +750,7 @@ const DEGRADED_STALE: InstallRecordProjection = {
 const DEGRADED_UPDATED: InstallRecordProjection = {
   ...DEGRADED_STALE,
   version: PROJECT_SOURCE_VERSION,
+  installable: false,
   unsupported: ["themes"],
 };
 

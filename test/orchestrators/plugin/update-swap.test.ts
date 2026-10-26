@@ -18,6 +18,8 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { PluginUpdateConcurrencyError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 // The flow suite supplies the real bridge, filesystem, rollback, and
@@ -25,11 +27,23 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 // through the extracted swap module.
 import { seedPathMarketplace, withHermeticHome } from "./update-flow.test.ts";
 
+import type { MaterializationPolicy } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import type {
   DirectThreePhaseArgs,
   ThreePhaseArgsBase,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import type { TestContext } from "node:test";
+
+/** `update`'s knobs on the shared runner (D-18-04). */
+const UPDATE_POLICY = {
+  refreshSource: true,
+  skipSameRevision: true,
+  overwrite: false,
+  searchReleaseTags: true,
+} satisfies MaterializationPolicy;
+
+// D-18-04: a caller names its verb's policy; omitting it does not compile.
+void (true satisfies undefined extends Parameters<typeof swapPluginUpdate>[2] ? false : true);
 
 /**
  * Seed a legacy pre-migration agent target, its index row, an unrelated
@@ -245,11 +259,11 @@ for (const scenario of ["prefixed", "coexistence"] as const) {
       // arrange
       const coexist = scenario === "coexistence";
       const fixture = await seedLegacyAgentUpdate(t, coexist);
-      const preflight = await preparePluginUpdate(fixture.options);
+      const preflight = await preparePluginUpdate({ ...fixture.options, policy: UPDATE_POLICY });
       assert.ok(!("partition" in preflight));
 
       // act
-      const outcome = await swapPluginUpdate(fixture.options, preflight);
+      const outcome = await swapPluginUpdate(fixture.options, preflight, UPDATE_POLICY);
 
       // assert
       await assertAgentsMigrated({ outcome, coexist, fixture });
@@ -257,61 +271,305 @@ for (const scenario of ["prefixed", "coexistence"] as const) {
   });
 }
 
-test("AGENT-01: update retries agent migration once the occupying target is freed", async (t) => {
+test("AGENT-01 / NFR-3: update refuses an occupied agent target before its intent mark and the retry migrates once it is freed", async (t) => {
   await withHermeticHome(async () => {
     // arrange
     const fixture = await seedLegacyAgentUpdate(t, false);
-    const { locations, newTarget, oldTarget, oldBytes, oldIndexBytes, oldRecord, options } =
-      fixture;
-    const preflight = await preparePluginUpdate(options);
+    const { locations, newTarget, oldTarget, oldBytes, oldIndexBytes, options } = fixture;
+    const preflight = await preparePluginUpdate({ ...options, policy: UPDATE_POLICY });
     assert.ok(!("partition" in preflight));
     await writeFile(newTarget, "Foreign new target.\n");
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
 
-    // act
-    const failure = await swapPluginUpdate(options, preflight);
-
-    // assert
-    const message = `Cannot replace agent target with non-previous content at ${newTarget}`;
-    assert.deepStrictEqual(failure, {
-      partition: "failed",
-      name: "hello",
-      fromVersion: "1.0.0",
-      toVersion: "2.0.0",
-      notes: [
-        'Plugin "hello" update failed during physical replace. plugin-uninstall + plugin-install for "hello".',
-        `agents: ${message}`,
-      ],
-      reasons: ["rollback partial"],
-      phaseFailures: [{ phase: "agents", msg: message }],
-      declaresAgents: false,
-      declaresMcp: false,
-      declaresWorkflows: false,
+    // act & assert
+    await assert.rejects(swapPluginUpdate(options, preflight, UPDATE_POLICY), (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.deepStrictEqual(
+        { name: error.name, message: error.message, cause: error.cause },
+        {
+          name: "Error",
+          message: `Cannot replace agent target with non-previous content at ${newTarget}`,
+          cause: undefined,
+        },
+      );
+      return true;
     });
     assert.strictEqual(await readFile(oldTarget, "utf8"), oldBytes);
     assert.strictEqual(await readFile(newTarget, "utf8"), "Foreign new target.\n");
     assert.strictEqual(await readFile(locations.agentsIndexPath, "utf8"), oldIndexBytes);
-    const failedState = await loadState(locations.extensionRoot);
-    assert.deepStrictEqual(failedState.marketplaces.mp?.plugins.hello, {
-      ...oldRecord,
-      compatibility: {
-        ...oldRecord.compatibility,
-        installable: false,
-        notes: ["update-in-progress"],
-      },
-      updatedAt: "2026-01-02T00:00:00.000Z",
-    });
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
 
     // arrange: the occupying file is gone, so the retry can replace it
     await rm(newTarget);
-    const retryPreflight = await preparePluginUpdate(options);
+    const retryPreflight = await preparePluginUpdate({ ...options, policy: UPDATE_POLICY });
     assert.ok(!("partition" in retryPreflight));
 
     // act
-    const outcome = await swapPluginUpdate(options, retryPreflight);
+    const outcome = await swapPluginUpdate(options, retryPreflight, UPDATE_POLICY);
 
     // assert
     await assertAgentsMigrated({ outcome, coexist: false, fixture });
   });
+});
+
+/** Cascade-mode swap arguments for `hello@mp` in the project scope of `cwd`. */
+function cascadeSwapArgs(cwd: string): ThreePhaseArgsBase & { readonly cascade: true } {
+  return {
+    plugin: "hello",
+    marketplace: "mp",
+    scope: "project",
+    cwd,
+    locations: locationsFor("project", cwd),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    completionCache: createCompletionCache(),
+    env: {},
+    cascade: true,
+    cleanupClones: () => Promise.resolve(),
+  };
+}
+
+test("D-18-06: a partially available candidate's swap records the plugin as not installable with its dropped kinds", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-partial-");
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasSkill: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  await mkdir(path.join(marketplaceRoot, "plugins", "hello", "themes"), { recursive: true });
+  const args = cascadeSwapArgs(cwd);
+  const preflight = await preparePluginUpdate({ policy: UPDATE_POLICY, ...args, partial: true });
+  assert.ok(!("partition" in preflight));
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+  // assert
+  assert.strictEqual(outcome.partition, "updated");
+  const state = await loadState(args.locations.extensionRoot);
+  assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.compatibility, {
+    installable: false,
+    notes: ["contains themes"],
+    supported: ["skills"],
+    unsupported: ["themes"],
+  });
+});
+
+test("ST-9: a same-revision swap prepared before another swap's intent mark fails concurrently updated and a fresh run converges", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-overlap-");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const args = cascadeSwapArgs(cwd);
+  const policy = {
+    refreshSource: false,
+    skipSameRevision: false,
+    overwrite: true,
+    searchReleaseTags: true,
+  } as const;
+  const first = await preparePluginUpdate({ ...args, policy });
+  const second = await preparePluginUpdate({ ...args, policy });
+  assert.ok(!("partition" in first));
+  assert.ok(!("partition" in second));
+  let saves = 0;
+  const refuseFinalize: typeof saveState = async (extensionRoot, state) => {
+    saves += 1;
+    if (saves === 2) {
+      throw new Error("finalize refused");
+    }
+
+    await saveState(extensionRoot, state);
+  };
+
+  const firstOutcome = await swapPluginUpdate(
+    { ...args, stateTransaction: { saveState: refuseFinalize } },
+    first,
+    policy,
+  );
+  assert.strictEqual(firstOutcome.partition, "failed");
+  const markedState = await readFile(args.locations.stateJsonPath, "utf8");
+
+  // act & assert
+  await assert.rejects(swapPluginUpdate(args, second, policy), (error: unknown) => {
+    assert.ok(error instanceof PluginUpdateConcurrencyError);
+    assert.deepStrictEqual(
+      {
+        kind: error.kind,
+        plugin: error.plugin,
+        marketplace: error.marketplace,
+        lifecycle: error.lifecycle,
+      },
+      { kind: "plugin-updated", plugin: "hello", marketplace: "mp", lifecycle: "intent" },
+    );
+    return true;
+  });
+  assert.strictEqual(await readFile(args.locations.stateJsonPath, "utf8"), markedState);
+
+  // arrange: a run that reads the marked record afterwards
+  const retry = await preparePluginUpdate({ ...args, policy });
+  assert.ok(!("partition" in retry));
+
+  // act
+  const retryOutcome = await swapPluginUpdate(args, retry, policy);
+
+  // assert
+  assert.strictEqual(retryOutcome.partition, "updated");
+  const record = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.deepStrictEqual(record?.compatibility, {
+    installable: true,
+    notes: [],
+    supported: ["skills"],
+    unsupported: [],
+  });
+});
+
+/**
+ * Seeds `hello` 2.0.0 shipping agent `bot`, and an install of 1.0.0 whose own
+ * agent file at the same target a user edited (an AG-5 preserved row).
+ */
+async function seedUserEditedAgentUpdate(t: TestContext) {
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { cwd } = await createHermeticEnvironment(t, "update-swap-overwrite-");
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot,
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "2.0.0", hasSkill: false, hasAgent: true } },
+    installedVersions: { hello: "1.0.0" },
+  });
+  const args = cascadeSwapArgs(cwd);
+  const { locations } = args;
+  const pluginRoot = path.join(marketplaceRoot, "plugins", "hello");
+  const target = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
+  const editedBytes = "---\nname: bot\n---\nEdited by hand.\n";
+  await mkdir(locations.agentsDir, { recursive: true });
+  await writeFile(target, editedBytes);
+  const indexBytes = JSON.stringify({
+    schemaVersion: 1,
+    agents: [
+      {
+        plugin: "hello",
+        marketplace: "mp",
+        sourceAgent: "bot",
+        generatedName: "pi-claude-marketplace-hello-bot",
+        sourcePath: path.join(pluginRoot, "agents", "bot.md"),
+        targetPath: target,
+        sourceHash: "a".repeat(64),
+        droppedFields: [],
+        droppedTools: [],
+        warnings: [],
+      },
+    ],
+  });
+  await writeFile(locations.agentsIndexPath, indexBytes);
+  const state = await loadState(locations.extensionRoot);
+  const oldRecord = state.marketplaces.mp?.plugins.hello;
+  assert.ok(oldRecord !== undefined);
+  oldRecord.resources = {
+    skills: [],
+    prompts: [],
+    agents: ["pi-claude-marketplace-hello-bot"],
+    mcpServers: [],
+    hooks: [],
+    workflows: [],
+  };
+  await saveState(locations.extensionRoot, state);
+  const preflight = await preparePluginUpdate({ ...args, policy: UPDATE_POLICY });
+  assert.ok(!("partition" in preflight));
+  return { args, preflight, pluginRoot, target, editedBytes, indexBytes, oldRecord };
+}
+
+test("D-18-15: an overwrite policy commits over a previous agent file a user edited", async (t) => {
+  // arrange
+  const { args, preflight, pluginRoot, target, oldRecord } = await seedUserEditedAgentUpdate(t);
+  const sourcePath = path.join(pluginRoot, "agents", "bot.md");
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, {
+    refreshSource: false,
+    skipSameRevision: false,
+    overwrite: true,
+    searchReleaseTags: true,
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "updated",
+    name: "hello",
+    fromVersion: "1.0.0",
+    toVersion: "2.0.0",
+    notes: ["[bot] source description was missing or empty -- using fallback"],
+    stagedAgentNames: ["pi-claude-marketplace-hello-bot"],
+    stagedMcpServerNames: [],
+    declaresAgents: true,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+  });
+  assert.strictEqual(
+    await readFile(target, "utf8"),
+    `---\nname: hello:bot\ndescription: Imported Claude Code plugin agent bot from plugin hello.\naliases: pi-claude-marketplace-hello-bot\ntools: read,grep\nsystemPromptMode: replace\ninheritProjectContext: true\ninheritSkills: false\nprovenance:\n  generatedBy: pi-claude-marketplace\n  sourcePlugin: hello\n  sourceAgent: bot\n  sourcePath: ${sourcePath}\n  droppedFields: []\n  droppedTools: []\n  warnings:\n    - source description was missing or empty -- using fallback\n---\n\nBody.\n`,
+  );
+  assert.deepStrictEqual(JSON.parse(await readFile(args.locations.agentsIndexPath, "utf8")), {
+    schemaVersion: 1,
+    agents: [
+      {
+        plugin: "hello",
+        marketplace: "mp",
+        sourceAgent: "bot",
+        generatedName: "pi-claude-marketplace-hello-bot",
+        sourcePath,
+        targetPath: target,
+        sourceHash: createHash("sha256")
+          .update("---\nname: bot\ntools: Read,Grep\n---\n\nBody.\n")
+          .digest("hex"),
+        droppedFields: [],
+        droppedTools: [],
+        warnings: ["source description was missing or empty -- using fallback"],
+      },
+    ],
+  });
+  const state = await loadState(args.locations.extensionRoot);
+  assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello, {
+    ...oldRecord,
+    version: "2.0.0",
+    resolvedSource: pluginRoot,
+    compatibility: { installable: true, notes: [], supported: ["agents"], unsupported: [] },
+    updatedAt: "2026-01-02T00:00:00.000Z",
+  });
+});
+
+test("D-18-15 / NFR-3: without an overwrite policy a user-edited previous agent file refuses the swap before it changes anything", async (t) => {
+  // arrange
+  const { args, preflight, target, editedBytes, indexBytes } = await seedUserEditedAgentUpdate(t);
+  const stateBefore = await readFile(args.locations.stateJsonPath, "utf8");
+
+  // act & assert
+  await assert.rejects(swapPluginUpdate(args, preflight, UPDATE_POLICY), (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, cause: error.cause },
+      {
+        name: "Error",
+        message: `Cannot replace agent target with non-previous content at ${target}`,
+        cause: undefined,
+      },
+    );
+    return true;
+  });
+  assert.strictEqual(await readFile(target, "utf8"), editedBytes);
+  assert.strictEqual(await readFile(args.locations.agentsIndexPath, "utf8"), indexBytes);
+  assert.strictEqual(await readFile(args.locations.stateJsonPath, "utf8"), stateBefore);
 });
 
 test("exposes the atomic plugin update swap owner", () => {
@@ -333,6 +591,7 @@ test("atomically replaces staged resources and finalizes the update ledger", asy
       });
       const locations = locationsFor("project", cwd);
       const preflight = await preparePluginUpdate({
+        policy: UPDATE_POLICY,
         plugin: "hello",
         marketplace: "mp",
         scope: "project",
@@ -356,6 +615,7 @@ test("atomically replaces staged resources and finalizes the update ledger", asy
           cleanupClones: () => Promise.resolve(),
         },
         preflight,
+        UPDATE_POLICY,
       );
 
       // assert
@@ -392,6 +652,7 @@ test("D-10-17a: the updated outcome forwards the preflight's own constraint, key
       });
       const locations = locationsFor("project", cwd);
       const preflight = await preparePluginUpdate({
+        policy: UPDATE_POLICY,
         plugin: "hello",
         marketplace: "mp",
         scope: "project",
@@ -424,6 +685,7 @@ test("D-10-17a: the updated outcome forwards the preflight's own constraint, key
           cleanupClones: () => Promise.resolve(),
         },
         preflight,
+        UPDATE_POLICY,
       );
 
       // assert -- the SAME value the preflight computed.
@@ -452,6 +714,7 @@ test("D-10-17a: an unconstrained update forwards constraint: undefined, key stil
       });
       const locations = locationsFor("project", cwd);
       const preflight = await preparePluginUpdate({
+        policy: UPDATE_POLICY,
         plugin: "hello",
         marketplace: "mp",
         scope: "project",
@@ -476,6 +739,7 @@ test("D-10-17a: an unconstrained update forwards constraint: undefined, key stil
           cleanupClones: () => Promise.resolve(),
         },
         preflight,
+        UPDATE_POLICY,
       );
 
       // assert -- the key is present (a plain assignment, not a conditional
@@ -511,6 +775,7 @@ test("WR-01: a successful path-source swap drops a stale resolvedSha the fresh r
       record.resolvedSha = "stale-sha-from-a-prior-tag-pin";
       await saveState(locations.extensionRoot, state);
       const preflight = await preparePluginUpdate({
+        policy: UPDATE_POLICY,
         plugin: "hello",
         marketplace: "mp",
         scope: "project",
@@ -538,10 +803,15 @@ test("WR-01: a successful path-source swap drops a stale resolvedSha the fresh r
           },
         },
         preflight,
+        UPDATE_POLICY,
       );
 
       // assert
       assert.strictEqual(outcome.partition, "updated");
+      // UPR-02: the record side had a sha and the candidate none, so only the
+      // record's commit is stamped.
+      assert.strictEqual(outcome.fromCommit, "stale-sha-from-a-prior-tag-pin");
+      assert.strictEqual(Object.hasOwn(outcome, "toCommit"), false);
       const after = await loadState(locations.extensionRoot);
       const afterRecord = after.marketplaces.mp?.plugins.hello;
       assert.ok(afterRecord !== undefined);
@@ -551,6 +821,68 @@ test("WR-01: a successful path-source swap drops a stale resolvedSha the fresh r
       // the old clone is now orphaned -- the post-swap sweep must not skip
       // this case the way "resolvedSha !== undefined" alone would have.
       assert.strictEqual(cleanupCalls, 1);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("UPR-02: the updated outcome stamps the record's and the candidate's commits", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-commits-"));
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "2.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const locations = locationsFor("project", cwd);
+      const fromCommit = "a".repeat(40);
+      const toCommit = "b".repeat(40);
+      const state = await loadState(locations.extensionRoot);
+      const record = state.marketplaces.mp?.plugins.hello;
+      assert.ok(record !== undefined);
+      record.resolvedSha = fromCommit;
+      await saveState(locations.extensionRoot, state);
+      const prepared = await preparePluginUpdate({
+        policy: UPDATE_POLICY,
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        locations,
+        cleanupClones: () => Promise.resolve(),
+      });
+      assert.ok(!("partition" in prepared));
+      // The candidate's sha, as a git source's clone would report it.
+      const preflight = { ...prepared, resolvedSha: toCommit };
+
+      // act
+      const outcome = await swapPluginUpdate(
+        {
+          plugin: "hello",
+          marketplace: "mp",
+          scope: "project",
+          cwd,
+          locations,
+          hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+          completionCache: createCompletionCache(),
+          env: {},
+          cascade: true,
+          cleanupClones: () => Promise.resolve(),
+        },
+        preflight,
+        UPDATE_POLICY,
+      );
+
+      // assert
+      assert.ok(outcome.partition === "updated");
+      assert.deepStrictEqual(
+        { fromCommit: outcome.fromCommit, toCommit: outcome.toCommit },
+        { fromCommit, toCommit },
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -571,6 +903,7 @@ test("finalizes the update ledger even when the post-finalize hooks-cache refres
       });
       const locations = locationsFor("project", cwd);
       const preflight = await preparePluginUpdate({
+        policy: UPDATE_POLICY,
         plugin: "hello",
         marketplace: "mp",
         scope: "project",
@@ -598,6 +931,7 @@ test("finalizes the update ledger even when the post-finalize hooks-cache refres
           cleanupClones: () => Promise.resolve(),
         },
         preflight,
+        UPDATE_POLICY,
       );
 
       // assert
@@ -630,6 +964,7 @@ test("retains the intent ledger and old resource tree after a replacement failur
       const skillObstacle = path.join(locations.skillsTargetDir, "hello-tool");
       await writeFile(skillObstacle, "old-resource-tree");
       const preflight = await preparePluginUpdate({
+        policy: UPDATE_POLICY,
         plugin: "hello",
         marketplace: "mp",
         scope: "project",
@@ -653,6 +988,7 @@ test("retains the intent ledger and old resource tree after a replacement failur
           cleanupClones: () => Promise.resolve(),
         },
         preflight,
+        UPDATE_POLICY,
       );
 
       // assert
@@ -710,6 +1046,7 @@ async function preflightOf(
   >,
 ) {
   const preflight = await preparePluginUpdate({
+    policy: UPDATE_POLICY,
     plugin: args.plugin,
     marketplace: args.marketplace,
     scope: args.scope,
@@ -738,7 +1075,7 @@ test("AFILE-04: a swap over a commented mcp-adapter.json carries the comments-re
       const preflight = await preflightOf(args);
 
       // act
-      const outcome = await swapPluginUpdate(args, preflight);
+      const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
 
       // assert
       assert.deepStrictEqual(outcome, {
@@ -772,7 +1109,7 @@ test("AFILE-04: a swap over a comment-free mcp-adapter.json carries no notice", 
       const preflight = await preflightOf(args);
 
       // act
-      const outcome = await swapPluginUpdate(args, preflight);
+      const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
 
       // assert
       assert.deepStrictEqual(outcome, {
@@ -793,25 +1130,80 @@ test("AFILE-04: a swap over a comment-free mcp-adapter.json carries no notice", 
   });
 });
 
+/**
+ * Gives `hello` a workflow whose saved target holds foreign content, so the
+ * swap's workflows commit refuses it after the MCP commit. Returns that path.
+ */
+async function seedRefusedWorkflowTarget(
+  locations: ReturnType<typeof locationsFor>,
+  pluginRoot: string,
+): Promise<string> {
+  await mkdir(path.join(pluginRoot, "workflows"), { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, "workflows", "greet.js"),
+    'export const meta = { name: "greet", description: "does greet" };\n',
+  );
+  const foreignPath = path.join(locations.workflowsSavedDir, "hello:greet.json");
+  await mkdir(locations.workflowsSavedDir, { recursive: true });
+  await writeFile(foreignPath, "{}");
+  return foreignPath;
+}
+
+test("UPR-03: a phase-3 failure outcome carries the commits of the move it attempted", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-phase3-commits-"));
+    try {
+      const { locations, pluginRoot, args } = await prepareMcpUpdate(cwd, COMMENTED_ADAPTER_TEXT);
+      await seedRefusedWorkflowTarget(locations, pluginRoot);
+      const fromCommit = "a".repeat(40);
+      const toCommit = "b".repeat(40);
+      const state = await loadState(locations.extensionRoot);
+      const record = state.marketplaces.mp?.plugins.hello;
+      assert.ok(record !== undefined);
+      record.resolvedSha = fromCommit;
+      await saveState(locations.extensionRoot, state);
+      const preflight = { ...(await preflightOf(args)), resolvedSha: toCommit };
+
+      // act
+      const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
+
+      // assert
+      assert.ok(outcome.partition === "failed");
+      assert.deepStrictEqual(
+        {
+          fromVersion: outcome.fromVersion,
+          toVersion: outcome.toVersion,
+          fromCommit: outcome.fromCommit,
+          toCommit: outcome.toCommit,
+          reasons: outcome.reasons,
+        },
+        {
+          fromVersion: "1.0.0",
+          toVersion: "2.0.0",
+          fromCommit,
+          toCommit,
+          reasons: ["rollback partial"],
+        },
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("AFILE-04: a swap whose workflows commit fails after the MCP commit carries the notice", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await mkdtemp(path.join(tmpdir(), "update-swap-afile04-failed-"));
     try {
       const { locations, pluginRoot, args } = await prepareMcpUpdate(cwd, COMMENTED_ADAPTER_TEXT);
-      await mkdir(path.join(pluginRoot, "workflows"), { recursive: true });
-      await writeFile(
-        path.join(pluginRoot, "workflows", "greet.js"),
-        'export const meta = { name: "greet", description: "does greet" };\n',
-      );
-      const foreignPath = path.join(locations.workflowsSavedDir, "hello:greet.json");
-      await mkdir(locations.workflowsSavedDir, { recursive: true });
-      await writeFile(foreignPath, "{}");
+      const foreignPath = await seedRefusedWorkflowTarget(locations, pluginRoot);
       const preflight = await preflightOf(args);
       const refusal = `Cannot replace workflow target with non-previous content at ${foreignPath}`;
 
       // act
-      const outcome = await swapPluginUpdate(args, preflight);
+      const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
 
       // assert
       assert.deepStrictEqual(outcome, {
@@ -820,7 +1212,7 @@ test("AFILE-04: a swap whose workflows commit fails after the MCP commit carries
         fromVersion: "1.0.0",
         toVersion: "2.0.0",
         notes: [
-          'Plugin "hello" update failed during physical replace. plugin-uninstall + plugin-install for "hello".',
+          'Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it.',
           `workflows: ${refusal}`,
         ],
         reasons: ["rollback partial"],
@@ -858,7 +1250,7 @@ test("AMIG-02: a swap removes the plugin's marked mcp.json entries after the MCP
       const preflight = await preflightOf(args);
 
       // act
-      const outcome = await swapPluginUpdate(args, preflight);
+      const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
 
       // assert
       assert.deepStrictEqual(outcome, {
@@ -909,7 +1301,7 @@ test("AMIG-02: a legacy removal that fails records an mcp phase failure and keep
       const preflight = await preflightOf(args);
 
       // act
-      const outcome = await swapPluginUpdate(args, preflight);
+      const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
       await chmod(lockedDirectory, 0o700);
 
       // assert
@@ -922,7 +1314,7 @@ test("AMIG-02: a legacy removal that fails records an mcp phase failure and keep
         fromVersion: "1.0.0",
         toVersion: "2.0.0",
         notes: [
-          'Plugin "hello" update failed during physical replace. plugin-uninstall + plugin-install for "hello".',
+          'Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it.',
           `mcp: ${failureMsg}`,
         ],
         reasons: ["rollback partial"],
@@ -1019,7 +1411,7 @@ test("LAYER-04: a direct swap writes no layer config", async () => {
       const preflight = await preflightOf(args);
 
       // act
-      const outcome = await swapPluginUpdate(args, preflight);
+      const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
 
       // assert
       assert.deepStrictEqual(outcome, DIRECT_UPDATED_OUTCOME);
@@ -1043,7 +1435,7 @@ test("LAYER-04: a direct swap with an unreadable local layer updates, renders no
       const preflight = await preflightOf(args);
 
       // act
-      const outcome = await swapPluginUpdate(args, preflight);
+      const outcome = await swapPluginUpdate(args, preflight, UPDATE_POLICY);
 
       // assert
       assert.deepStrictEqual(outcome, DIRECT_UPDATED_OUTCOME);

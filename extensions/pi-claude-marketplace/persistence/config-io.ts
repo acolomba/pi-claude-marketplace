@@ -62,6 +62,9 @@ const PLUGIN_CONFIG_ENTRY_SCHEMA = Type.Object({
  *     successor file, not by bumping this literal).
  *   - `marketplaces` / `plugins`: both Optional Records (D-05); absent is
  *     legal (means "no declarations"), distinct from present-but-empty.
+ *   - `autoapply`: Optional boolean (AAP-01); absent means off. A load reads
+ *     it through `config-merge.ts::effectiveAutoapply`, never from one file alone,
+ *     and a non-boolean value fails validation like any other bad field.
  *
  * D-09 (lenient): typebox's default for `Type.Object` accepts unknown extra
  * keys at the top level AND inside each entry. We do NOT add the
@@ -72,6 +75,7 @@ const CONFIG_SCHEMA = Type.Object({
   schemaVersion: Type.Optional(Type.Literal(1)),
   marketplaces: Type.Optional(Type.Record(Type.String(), MARKETPLACE_CONFIG_ENTRY_SCHEMA)),
   plugins: Type.Optional(Type.Record(Type.String(), PLUGIN_CONFIG_ENTRY_SCHEMA)),
+  autoapply: Type.Optional(Type.Boolean()),
 });
 
 export type ScopeConfig = Type.Static<typeof CONFIG_SCHEMA>;

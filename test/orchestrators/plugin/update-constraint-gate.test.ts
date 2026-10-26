@@ -4,11 +4,9 @@ import { describe, test } from "node:test";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { probeDependencyTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts";
 import { probeMarketplaceTags } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
-import {
-  admitResolvedVersion,
-  evaluateUpdateConstraint,
-} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts";
+import { evaluateUpdateConstraint } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { DependencyDeclarationsUnreadableError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { GitBackedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -16,6 +14,7 @@ import type {
   CredentialOps,
   DeviceFlowHttp,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
+import type { ConstraintHolder } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/constraint-fold.ts";
 import type { AddressedDependency } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts";
 import type {
   DependencyTagListingSeam,
@@ -23,10 +22,8 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-tag-probe.ts";
 import type { MarketplaceTagListingSeam } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
 import type {
-  ConstraintHolder,
   UpdateConstraintOptions,
   UpdateConstraintSeam,
-  UpdateConstraintVerdict,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-constraint-gate.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { RemoteTag } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -121,7 +118,8 @@ function seamReturning(
 
 function seamFailingWith(declarer: string, cause: Error): UpdateConstraintSeam {
   return {
-    buildScopeDeclarationDetail: () => Promise.resolve({ ok: false, declarer, cause }),
+    buildScopeDeclarationDetail: () =>
+      Promise.resolve({ ok: false, declarer, reason: "unreadable manifest", cause }),
     probeDependencyTags: noMatchingGitTag,
     probeMarketplaceTags: noMatchingMarketplaceTag,
   };
@@ -141,81 +139,6 @@ function options(overrides: Partial<UpdateConstraintOptions> = {}): UpdateConstr
 }
 
 describe("evaluateUpdateConstraint", () => {
-  test("UPDT-02: disjoint declared ranges hold the update and name both declarers", async () => {
-    // arrange
-    const declarations = new Map<string, readonly AddressedDependency[]>([
-      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
-      ["beta@mp", [dependency({ name: "target", version: "^2.0.0" })]],
-    ]);
-    const state = stateOf({
-      mp: { target: pluginRecord(), alpha: pluginRecord(), beta: pluginRecord() },
-    });
-
-    // act
-    const verdict = await evaluateUpdateConstraint(
-      options({ state, seam: seamReturning(declarations) }),
-    );
-
-    // assert
-    assert.deepStrictEqual(verdict, {
-      kind: "held",
-      cause:
-        'the declared ranges admit no version in common (no version satisfies all 2 declared ranges) -- required by "alpha@mp", "beta@mp"',
-    });
-  });
-
-  test("UPDT-02: holders are named in lexicographic key order", async () => {
-    // arrange
-    const declarations = new Map<string, readonly AddressedDependency[]>([
-      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
-      ["beta@mp", [dependency({ name: "target", version: "^2.0.0" })]],
-    ]);
-    const forward = stateOf({
-      mp: { target: pluginRecord(), alpha: pluginRecord(), beta: pluginRecord() },
-    });
-    const reversed = stateOf({
-      mp: { beta: pluginRecord(), alpha: pluginRecord(), target: pluginRecord() },
-    });
-
-    // act
-    const forwardVerdict = await evaluateUpdateConstraint(
-      options({ state: forward, seam: seamReturning(declarations) }),
-    );
-    const reversedVerdict = await evaluateUpdateConstraint(
-      options({ state: reversed, seam: seamReturning(declarations) }),
-    );
-
-    // assert
-    assert.deepStrictEqual(forwardVerdict, reversedVerdict);
-  });
-
-  test("UPDT-02: a disabled declarer is named and marked", async () => {
-    // arrange
-    const declarations = new Map<string, readonly AddressedDependency[]>([
-      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
-      ["beta@mp", [dependency({ name: "target", version: "^2.0.0" })]],
-    ]);
-    const state = stateOf({
-      mp: {
-        target: pluginRecord(),
-        alpha: pluginRecord(),
-        beta: pluginRecord({ enabled: false }),
-      },
-    });
-
-    // act
-    const verdict = await evaluateUpdateConstraint(
-      options({ state, seam: seamReturning(declarations) }),
-    );
-
-    // assert
-    assert.deepStrictEqual(verdict, {
-      kind: "held",
-      cause:
-        'the declared ranges admit no version in common (no version satisfies all 2 declared ranges) -- required by "alpha@mp", "beta@mp" (currently disabled)',
-    });
-  });
-
   test("UPDT-01: a target no installed record declares queries no tag listing", async () => {
     // arrange
     let calls = 0;
@@ -241,51 +164,26 @@ describe("evaluateUpdateConstraint", () => {
     assert.strictEqual(calls, 1);
   });
 
-  test("D-10-08: flipping a declarer's provenance changes neither the verdict nor the cause", async () => {
-    // arrange
-    const declarations = new Map<string, readonly AddressedDependency[]>([
-      ["alpha@mp", [dependency({ name: "target", version: "^1.0.0" })]],
-      ["beta@mp", [dependency({ name: "target", version: "^2.0.0" })]],
-    ]);
-    const direct = stateOf({
-      mp: {
-        target: pluginRecord(),
-        alpha: pluginRecord({ provenance: "explicit" }),
-        beta: pluginRecord({ provenance: "explicit" }),
-      },
-    });
-    const dependencyProvenance = stateOf({
-      mp: {
-        target: pluginRecord(),
-        alpha: pluginRecord({ provenance: "dependency" }),
-        beta: pluginRecord({ provenance: "dependency" }),
-      },
-    });
-
-    // act
-    const directVerdict = await evaluateUpdateConstraint(
-      options({ state: direct, seam: seamReturning(declarations) }),
-    );
-    const dependencyVerdict = await evaluateUpdateConstraint(
-      options({ state: dependencyProvenance, seam: seamReturning(declarations) }),
-    );
-
-    // assert
-    assert.deepStrictEqual(directVerdict, dependencyVerdict);
-  });
-
-  test("UPDT-02: an unreadable declarer holds the update and names itself", async () => {
+  test("UPDT-02 / D-18-17: an unreadable declarer fails the update closed and names itself", async () => {
     // arrange
     const cause = new Error(
-      "cannot read the dependencies of alpha@mp: not declared by its marketplace",
+      "cannot read the dependencies of alpha@mp: not declared by its marketplace, and its installed copy cannot be read",
     );
     const seam = seamFailingWith("alpha@mp", cause);
 
-    // act
-    const verdict = await evaluateUpdateConstraint(options({ seam }));
-
-    // assert
-    assert.deepStrictEqual(verdict, { kind: "held", cause: cause.message });
+    // act & assert
+    await assert.rejects(
+      () => evaluateUpdateConstraint(options({ seam })),
+      (error: unknown) => {
+        assert.ok(error instanceof DependencyDeclarationsUnreadableError);
+        assert.strictEqual(error.declarer, "alpha@mp");
+        assert.strictEqual(
+          error.message,
+          "cannot read the dependencies of alpha@mp: not declared by its marketplace, and its installed copy cannot be read",
+        );
+        return true;
+      },
+    );
   });
 
   test("UPDT-01: two overlapping declared ranges admit their intersection", async () => {
@@ -319,7 +217,7 @@ describe("evaluateUpdateConstraint", () => {
       // D-10-13: no tag matched, so nothing established a ceiling and the
       // disclosure names the range alone.
       disclosure:
-        'constrained to the combined range (>=1.0.0 <2.0.0-0 >=1.2.0) -- required by "alpha@mp", "beta@mp"',
+        'constrained to the combined range (^1.0.0, >=1.2.0) -- required by "alpha@mp", "beta@mp"',
     });
   });
 
@@ -334,129 +232,44 @@ describe("evaluateUpdateConstraint", () => {
     assert.deepStrictEqual(verdict, { kind: "unconstrained" });
   });
 
-  test("a declarer's other declarations do not hold the target", async () => {
-    // arrange
-    const declarations = new Map<string, readonly AddressedDependency[]>([
-      [
-        "alpha@mp",
-        [dependency({ name: "other" }), dependency({ name: "target", version: "^1.0.0" })],
-      ],
-    ]);
-    const state = stateOf({
-      mp: { target: pluginRecord(), alpha: pluginRecord(), other: pluginRecord() },
-    });
-
-    // act
-    const verdict = await evaluateUpdateConstraint(
-      options({ state, seam: seamReturning(declarations) }),
-    );
-
-    // assert
-    assert.deepStrictEqual(verdict, {
-      kind: "admits",
-      range: ">=1.0.0 <2.0.0-0",
-      holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
-      // D-10-14: a `path` entry source with no satisfying marketplace tag
-      // falls back to the current copy.
-      fellBackToCurrentCopy: true,
-      disclosure: 'constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
-    });
-  });
-
-  test("a plugin that declares its own key holds nothing", async () => {
-    // arrange
-    const declarations = new Map<string, readonly AddressedDependency[]>([
-      ["target@mp", [dependency({ name: "target", version: "^1.0.0" })]],
-    ]);
-
-    // act
-    const verdict = await evaluateUpdateConstraint(options({ seam: seamReturning(declarations) }));
-
-    // assert
-    assert.deepStrictEqual(verdict, { kind: "unconstrained" });
-  });
-
-  test("a declarer naming the target with no version holds the key but names no range", async () => {
-    // arrange
-    const declarations = new Map<string, readonly AddressedDependency[]>([
-      ["alpha@mp", [dependency({ name: "target" })]],
-    ]);
-    const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
-
-    // act
-    const verdict = await evaluateUpdateConstraint(
-      options({ state, seam: seamReturning(declarations) }),
-    );
-
-    // assert
-    assert.deepStrictEqual(verdict, { kind: "unconstrained" });
-  });
-
   for (const { title, cause } of [
     {
-      title: "D-05-07: a marketplace manifest load failure",
+      title: "D-05-07 / D-18-17: a marketplace manifest load failure",
       cause: new Error("cannot read the dependencies of app@mp"),
     },
     {
-      title: "D-05-07: a declarer its marketplace does not list",
+      title: "D-05-07 / D-18-17: a declarer its marketplace does not list",
       cause: new Error(
-        "cannot read the dependencies of helper@mp: not declared by its marketplace",
+        "cannot read the dependencies of helper@mp: not declared by its marketplace, and its installed copy cannot be read",
       ),
     },
     {
-      title: "D-05-07: a declarer's own manifest present but unusable",
+      title: "D-05-07 / D-18-17: a declarer's own manifest present but unusable",
       cause: new Error(
         "cannot read the dependencies of helper@mp: its own manifest is present but cannot be read",
       ),
     },
     {
-      title: "D-05-07: a declaration that parses as unusable",
+      title: "D-05-07 / D-18-17: a declaration that parses as unusable",
       cause: new Error("cannot read the dependencies of helper@mp: dependencies.0: Invalid input"),
     },
   ] as const) {
-    test(`UPDT-02: ${title} holds the update and names itself, verbatim`, async () => {
+    test(`UPDT-02: ${title} fails the update closed and names itself, verbatim`, async () => {
       // arrange
       const seam = seamFailingWith("helper@mp", cause);
 
-      // act
-      const verdict = await evaluateUpdateConstraint(options({ seam }));
-
-      // assert -- a refusal short-circuits before any fold: the seam returns
-      // no declarations at all, so `intersectDependencyRanges` is never
-      // reached for this verdict. `verdict.cause` is the double's own
-      // message string, passed through unchanged.
-      assert.deepStrictEqual(verdict, { kind: "held", cause: cause.message });
-      assert.doesNotMatch(cause.message, /(^|\s)\//u);
-    });
-  }
-
-  for (const { title, holder, expectedClause } of [
-    {
-      title: "invalid",
-      holder: dependency({ name: "target", version: "not-a-valid-range" }),
-      expectedClause: "a declared range could not be read",
-    },
-    {
-      title: "too-complex",
-      holder: dependency({ name: "target", version: "^1.0.0".repeat(700) }),
-      expectedClause: "the declared ranges are too complex to combine",
-    },
-  ] as const) {
-    test(`UPDT-01: a ${title} declared range holds the update with a distinct arm clause`, async () => {
-      // arrange
-      const declarations = new Map<string, readonly AddressedDependency[]>([
-        ["alpha@mp", [holder]],
-      ]);
-      const state = stateOf({ mp: { target: pluginRecord(), alpha: pluginRecord() } });
-
-      // act
-      const verdict = await evaluateUpdateConstraint(
-        options({ state, seam: seamReturning(declarations) }),
+      // act & assert -- the error's message is the walk's own message string,
+      // passed through unchanged.
+      await assert.rejects(
+        () => evaluateUpdateConstraint(options({ seam })),
+        (error: unknown) => {
+          assert.ok(error instanceof DependencyDeclarationsUnreadableError);
+          assert.strictEqual(error.declarer, "helper@mp");
+          assert.strictEqual(error.message, cause.message);
+          assert.doesNotMatch(error.message, /(^|\s)\//u);
+          return true;
+        },
       );
-
-      // assert
-      assert.ok(verdict.kind === "held");
-      assert.ok(verdict.cause.startsWith(expectedClause));
     });
   }
 
@@ -506,13 +319,65 @@ describe("evaluateUpdateConstraint", () => {
       pin: { oid: "oid-git", version: "1.4.0" },
       fellBackToCurrentCopy: false,
       disclosure:
-        'already the highest version the combined range admits (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+        'already the highest version the combined range admits (^1.0.0) -- required by "alpha@mp"',
     });
     assert.strictEqual(calls.length, 1);
     assert.strictEqual(calls[0]?.pluginName, "target");
     assert.deepStrictEqual(calls[0]?.source, source);
     assert.strictEqual(calls[0]?.range, ">=1.0.0 <2.0.0-0");
     assert.deepStrictEqual(calls[0]?.auth, { ctx, run, credentialOps: credOps });
+  });
+
+  test("GV-01: a plugin directory entry queries no tag listing and admits its range unpinned", async () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      [
+        "alpha@anthropic-plugin-directory",
+        [
+          dependency({
+            name: "target",
+            marketplace: "anthropic-plugin-directory",
+            version: "^1.0.0",
+          }),
+        ],
+      ],
+    ]);
+    const state = stateOf({
+      "anthropic-plugin-directory": { target: pluginRecord(), alpha: pluginRecord() },
+    });
+    const seam: UpdateConstraintSeam = {
+      buildScopeDeclarationDetail: () => Promise.resolve({ ok: true, declarations }),
+      probeDependencyTags: () => {
+        throw new Error("a plugin directory entry lists no git tags");
+      },
+      probeMarketplaceTags: () => {
+        throw new Error("a plugin directory entry lists no marketplace tags");
+      },
+    };
+
+    // act
+    const verdict = await evaluateUpdateConstraint(
+      options({
+        marketplace: "anthropic-plugin-directory",
+        state,
+        entry: { name: "target", source: gitSource() },
+        seam,
+        auth: {
+          notification: { ctx: silentCtx(), run: runWithNothingLoaded() },
+          credentialOps: credentialOps(),
+        },
+      }),
+    );
+
+    // assert
+    assert.deepStrictEqual(verdict, {
+      kind: "admits",
+      range: ">=1.0.0 <2.0.0-0",
+      holders: [{ key: "alpha@anthropic-plugin-directory", range: "^1.0.0", disabled: false }],
+      fellBackToCurrentCopy: false,
+      disclosure:
+        'constrained to the combined range (^1.0.0) -- required by "alpha@anthropic-plugin-directory"',
+    });
   });
 
   test("D-10-20: a commit-pinned git entry still probes tags for its constraint", async () => {
@@ -567,7 +432,7 @@ describe("evaluateUpdateConstraint", () => {
       pin: { oid: tagOid, version: "1.4.0" },
       fellBackToCurrentCopy: false,
       disclosure:
-        'already the highest version the combined range admits (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+        'already the highest version the combined range admits (^1.0.0) -- required by "alpha@mp"',
     });
     assert.strictEqual(calls.length, 1);
     assert.deepStrictEqual(calls[0]?.source, source);
@@ -649,7 +514,7 @@ describe("evaluateUpdateConstraint", () => {
       range: ">=1.0.0 <2.0.0-0",
       holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
       fellBackToCurrentCopy: false,
-      disclosure: 'constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+      disclosure: 'constrained to the combined range (^1.0.0) -- required by "alpha@mp"',
     });
   });
 
@@ -687,7 +552,7 @@ describe("evaluateUpdateConstraint", () => {
       pin: { oid: "oid-path", version: "1.4.0" },
       fellBackToCurrentCopy: false,
       disclosure:
-        'already the highest version the combined range admits (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+        'already the highest version the combined range admits (^1.0.0) -- required by "alpha@mp"',
     });
     assert.strictEqual(calls.length, 1);
     assert.strictEqual(calls[0]?.pluginName, "target");
@@ -859,9 +724,12 @@ describe("evaluateUpdateConstraint", () => {
     );
 
     // assert -- a repository that could not be reached has not told us
-    // anything, unlike the path arm's fallback above.
-    assert.ok(verdict.kind === "held");
-    assert.match(verdict.cause, /network unreachable/);
+    // anything, unlike the path arm's fallback above; the line names the
+    // classification, not a range.
+    assert.deepStrictEqual(verdict, {
+      kind: "held",
+      cause: 'the release tags could not be listed (network unreachable) -- required by "alpha@mp"',
+    });
   });
 
   test("UPDT-01: an entry source with no tag listing queries no probe", async () => {
@@ -891,7 +759,7 @@ describe("evaluateUpdateConstraint", () => {
       range: ">=1.0.0 <2.0.0-0",
       holders: [{ key: "alpha@mp", range: "^1.0.0", disabled: false }],
       fellBackToCurrentCopy: false,
-      disclosure: 'constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "alpha@mp"',
+      disclosure: 'constrained to the combined range (^1.0.0) -- required by "alpha@mp"',
     });
   });
 
@@ -1013,94 +881,5 @@ describe("evaluateUpdateConstraint", () => {
     assert.ok(first.kind === "held");
     assert.ok(second.kind === "admits");
     assert.deepStrictEqual(second.pin, { oid: "oid-1.0.0", version: "1.0.0" });
-  });
-});
-
-describe("admitResolvedVersion", () => {
-  /** An `admits` verdict fixture; `disclosure` is unused by stage two. */
-  function admits(
-    range: string,
-    holders: readonly ConstraintHolder[],
-  ): Extract<UpdateConstraintVerdict, { readonly kind: "admits" }> {
-    return { kind: "admits", range, holders, fellBackToCurrentCopy: false, disclosure: "unused" };
-  }
-
-  test("admits a version inside the range", () => {
-    // arrange
-    const verdict = admits("^1.0.0", []);
-
-    // act
-    const admission = admitResolvedVersion(verdict, "1.4.2");
-
-    // assert
-    assert.deepStrictEqual(admission, { kind: "admitted" });
-  });
-
-  test("UPDT-02: the out-of-range hold names only the rejecting dependents", () => {
-    // arrange
-    const holders: readonly ConstraintHolder[] = [
-      { key: "a@mp", range: "<=1.5.0", disabled: false },
-      { key: "b@mp", range: "^1.0.0", disabled: false },
-    ];
-    const verdict = admits("<=1.5.0", holders);
-
-    // act
-    const admission = admitResolvedVersion(verdict, "1.6.0");
-
-    // assert
-    assert.ok(admission.kind === "held");
-    assert.strictEqual(
-      admission.cause,
-      'version 1.6.0 falls outside what the combined range admits (<=1.5.0) -- required by "a@mp"',
-    );
-  });
-
-  test("UPDT-02: an inclusive upper bound admits the boundary version", () => {
-    // arrange
-    const holders: readonly ConstraintHolder[] = [
-      { key: "a@mp", range: "<=1.5.0", disabled: false },
-    ];
-    const verdict = admits("<=1.5.0", holders);
-
-    // act
-    const admission = admitResolvedVersion(verdict, "1.5.0");
-
-    // assert
-    assert.deepStrictEqual(admission, { kind: "admitted" });
-  });
-
-  test("UPDT-02: an exclusive upper bound holds the boundary version", () => {
-    // arrange
-    const holders: readonly ConstraintHolder[] = [
-      { key: "a@mp", range: "<1.5.0", disabled: false },
-    ];
-    const verdict = admits("<1.5.0", holders);
-
-    // act
-    const admission = admitResolvedVersion(verdict, "1.5.0");
-
-    // assert
-    assert.strictEqual(admission.kind, "held");
-  });
-
-  test("UPDT-02: a holder that declared no range is left off the held line", () => {
-    // arrange -- `b@mp` holds the key without constraining it, so it has
-    // nothing to reject the version with and sending the user to it would be
-    // a wrong remedy.
-    const holders: readonly ConstraintHolder[] = [
-      { key: "a@mp", range: "<=1.5.0", disabled: false },
-      { key: "b@mp", disabled: false },
-    ];
-    const verdict = admits("<=1.5.0", holders);
-
-    // act
-    const admission = admitResolvedVersion(verdict, "1.6.0");
-
-    // assert
-    assert.ok(admission.kind === "held");
-    assert.strictEqual(
-      admission.cause,
-      'version 1.6.0 falls outside what the combined range admits (<=1.5.0) -- required by "a@mp"',
-    );
   });
 });

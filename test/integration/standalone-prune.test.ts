@@ -203,6 +203,9 @@ function registeredCommand(cwd: string) {
           declaresMcp: false,
           constraint: undefined,
         }),
+      applyReconcile: (): Promise<void> => {
+        throw new Error("standalone prune must not run a reconcile apply");
+      },
     },
     hooksRouting,
     createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,
@@ -265,7 +268,7 @@ test("prune reports a held state lock and leaves the scope intact", async () => 
           message:
             "A plugin operation has failed.\n\n" +
             "● (prune) [user]\n  ⊘ (prune) (failed) {lock held}\n" +
-            "    cause: Another pi-claude-marketplace operation is in progress for user scope (.state-lock). Retry after it completes. -> Lock file is already being held",
+            `    cause: Another pi-claude-marketplace operation is in progress for user scope (${locations.stateLockFile}). Retry after it completes. -> Lock file is already being held`,
           severity: "error",
         },
       ]);
@@ -325,8 +328,8 @@ test("prune --dry-run previews the orphan without writing current state", async 
     await command.handler("prune --dry-run", ctx);
 
     assert.deepStrictEqual(notifications, [
-      { message: "● mp [user]\n  ○ orphan (will uninstall) {dependency pruned}" },
-      { message: "● mp [user]\n  ○ orphan (will uninstall) {dependency pruned}" },
+      { message: "● mp [user]\n  ○ orphan v1.0.0 (will uninstall) {dependency pruned}" },
+      { message: "● mp [user]\n  ○ orphan v1.0.0 (will uninstall) {dependency pruned}" },
     ]);
     assert.deepStrictEqual(await readFile(statePath), bytesBefore);
     assert.equal((await stat(statePath, { bigint: true })).mtimeNs, mtimeBefore);
@@ -396,7 +399,7 @@ test("preview and actual prune select the same dependent-first fixpoint", async 
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "● mp [user]\n  ○ orphan (will uninstall) {dependency pruned}\n\n● mp [user]\n  ○ leaf (will uninstall) {dependency pruned}",
+          "● mp [user]\n  ○ orphan v1.0.0 (will uninstall) {dependency pruned}\n\n● mp [user]\n  ○ leaf v1.0.0 (will uninstall) {dependency pruned}",
       },
     ]);
 
@@ -436,10 +439,10 @@ test("preview and actual preserve alternating marketplaces and held neighbors", 
     assert.deepStrictEqual(notifications, [
       {
         message:
-          "● alpha [project]\n  ○ a (will uninstall) {dependency pruned}\n\n" +
-          "● beta [project]\n  ○ z (will uninstall) {dependency pruned}\n\n" +
-          "● beta [project]\n  ○ b (will uninstall) {dependency pruned}\n\n" +
-          "● alpha [project]\n  ○ c (will uninstall) {dependency pruned}",
+          "● alpha [project]\n  ○ a v1.0.0 (will uninstall) {dependency pruned}\n\n" +
+          "● beta [project]\n  ○ z v1.0.0 (will uninstall) {dependency pruned}\n\n" +
+          "● beta [project]\n  ○ b v1.0.0 (will uninstall) {dependency pruned}\n\n" +
+          "● alpha [project]\n  ○ c v1.0.0 (will uninstall) {dependency pruned}",
       },
       {
         message:
@@ -502,7 +505,7 @@ test("actual prune reselects after a stale preview changes on disk", async () =>
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: "● mp [user]\n  ○ old (will uninstall) {dependency pruned}" },
+      { message: "● mp [user]\n  ○ old v1.0.0 (will uninstall) {dependency pruned}" },
       {
         message:
           "● mp [user]\n  ○ fresh v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes",
@@ -544,9 +547,9 @@ test("failed actual member holds its dependency until a later retry", async () =
     // assert
     assert.deepStrictEqual(notifications[0], {
       message:
-        "● alpha [project]\n  ○ a (will uninstall) {dependency pruned}\n\n" +
-        "● alpha [project]\n  ○ free (will uninstall) {dependency pruned}\n\n" +
-        "● beta [project]\n  ○ b (will uninstall) {dependency pruned}",
+        "● alpha [project]\n  ○ a v1.0.0 (will uninstall) {dependency pruned}\n\n" +
+        "● alpha [project]\n  ○ free v1.0.0 (will uninstall) {dependency pruned}\n\n" +
+        "● beta [project]\n  ○ b v1.0.0 (will uninstall) {dependency pruned}",
     });
     assert.deepStrictEqual(notifications[1], {
       message:
@@ -644,8 +647,8 @@ test("repeated legacy previews normalize in memory without writing the scope", a
     await command.handler("prune --dry-run", ctx);
 
     assert.deepStrictEqual(notifications, [
-      { message: "● mp [user]\n  ○ orphan (will uninstall) {dependency pruned}" },
-      { message: "● mp [user]\n  ○ orphan (will uninstall) {dependency pruned}" },
+      { message: "● mp [user]\n  ○ orphan v1.0.0 (will uninstall) {dependency pruned}" },
+      { message: "● mp [user]\n  ○ orphan v1.0.0 (will uninstall) {dependency pruned}" },
     ]);
     assert.deepStrictEqual(await readFile(locations.stateJsonPath), stateBefore);
     assert.equal((await stat(locations.stateJsonPath, { bigint: true })).mtimeNs, stateMtimeBefore);

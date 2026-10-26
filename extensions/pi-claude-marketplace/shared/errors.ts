@@ -279,7 +279,34 @@ export function appendLeakToError(err: unknown, leak: string | undefined): Error
     return baseError;
   }
 
-  return new Error(`${baseError.message} (additionally: ${leak})`, { cause: baseError });
+  return new CleanupLeakError(baseError, leak);
+}
+
+/**
+ * MA-9 / INR-02: an error whose cleanup leaked. `cause` is the original
+ * failure, so a classifier reads the reason through the wrapper.
+ */
+export class CleanupLeakError extends Error {
+  override readonly cause: Error;
+  constructor(original: Error, leak: string) {
+    super(`${original.message} (additionally: ${leak})`, { cause: original });
+    this.name = "CleanupLeakError";
+    this.cause = original;
+  }
+}
+
+/**
+ * INR-02: the failure behind the `CleanupLeakError` wrappers, walked through
+ * `causeChain`. A chain of wrappers deeper than its cap is returned as given.
+ */
+export function withoutCleanupLeaks(err: unknown): unknown {
+  for (const link of causeChain(err)) {
+    if (!(link instanceof CleanupLeakError)) {
+      return link;
+    }
+  }
+
+  return err;
 }
 
 /** Sequential `appendLeakToError` for multiple leak sources -- chains via Error.cause. */
@@ -648,11 +675,12 @@ export class InvalidGitHubBaseUrlError extends Error {
  * malformed JSON and a schema-invalid manifest. Giving the failure a typed
  * class lets consumers narrow on `instanceof` instead of substring-matching
  * the message text or sniffing for `SyntaxError`:
- *   - `orchestrators/marketplace/add.ts::classifyAddError` -> `invalid manifest`
- *     (ATTR-07).
- *   - `orchestrators/marketplace/update.ts::reasonsFromCascadeError` ->
- *     `invalid manifest` (ATTR-10), so a path-source manifest failure never
- *     falls back to the lying `network unreachable` default (NFR-5).
+ *   - `orchestrators/marketplace/add.ts::classifyAddError` and
+ *     `orchestrators/marketplace/update.ts::reasonsFromCascadeError` map it
+ *     through `narrowProbeError`: `unparseable` for malformed JSON,
+ *     `invalid manifest` for a schema-invalid manifest (ATTR-07, ATTR-10,
+ *     MPA-02), so a path-source manifest failure never falls back to the
+ *     lying `network unreachable` default (NFR-5).
  *
  * The original `SyntaxError` (when one originated the failure) is preserved via
  * `Error.cause` so the depth-5 `causeChainTrailer` walker still surfaces the
@@ -692,6 +720,10 @@ export class LayerConfigUnreadableError extends InvalidMarketplaceManifestError 
  * not read the dependencies of a plugin it covers, so it cannot tell which
  * dependencies to cover. The whole command refuses with `{unreadable}` and
  * changes nothing, as `uninstall` and `marketplace remove` refuse.
+ *
+ * D-18-17: the dependency-constraint gate's declaration walk throws it too,
+ * for `update` and `reinstall`, when it cannot read a recorded plugin's
+ * declarations. The plugin's row fails with `{unreadable}`.
  *
  * The message IS the failed row's cause line. It names the plugin by its
  * `<plugin>@<marketplace>` key and at most a fixed reason, never the text of a
@@ -858,6 +890,29 @@ export class StateLockHeldError extends Error {
       options,
     );
     this.name = "StateLockHeldError";
+    this.scope = scope;
+    this.lockPath = lockPath;
+  }
+}
+
+/**
+ * D-06 / NFR-2: the scope's state lock was lost while an operation held it.
+ *
+ * proper-lockfile reports a compromised lock (its mtime refresh failed, or
+ * another process took the lock) from a timer. `transaction/with-state-guard.ts`
+ * records it there and throws this error at the operation's next save, or when
+ * it releases the lock, so a lost lock never leads to a `state.json` write.
+ * `cause` carries proper-lockfile's `ECOMPROMISED` error.
+ */
+export class StateLockCompromisedError extends Error {
+  readonly scope: "user" | "project";
+  readonly lockPath: string;
+  constructor(scope: "user" | "project", lockPath: string, options?: ErrorOptions) {
+    super(
+      `The ${scope} scope state lock (${lockPath}) was lost before the operation finished. Run the command again.`,
+      options,
+    );
+    this.name = "StateLockCompromisedError";
     this.scope = scope;
     this.lockPath = lockPath;
   }
@@ -1145,6 +1200,54 @@ export class DependencyCascadeError extends Error {
     super(message, options);
     this.name = "DependencyCascadeError";
     this.key = key;
+  }
+}
+
+/**
+ * INR-03: a fresh clone of a git plugin source does not hold the commit the
+ * marketplace pins. The message is the whole cause (INR-06).
+ */
+export class PinnedCommitMissingError extends Error {
+  readonly sha: string;
+  constructor(sha: string) {
+    super(`A fresh clone from the git host does not hold the commit ${sha}`);
+    this.name = "PinnedCommitMissingError";
+    this.sha = sha;
+  }
+}
+
+function quotedName(name: string): string {
+  return `"${name}"`;
+}
+
+/**
+ * GV-01: a plugin of Claude Code's plugin directory picks no release tag, and
+ * the copy its catalog lists declares a version outside the range its
+ * dependents ask for, or none. The message is Claude Code's own.
+ */
+export class DirectoryPinUnsatisfiedError extends Error {
+  readonly plugin: string;
+  readonly manifestVersion: string | undefined;
+  readonly ranges: string;
+  readonly requiredBy: readonly string[];
+  constructor(opts: {
+    plugin: string;
+    manifestVersion: string | undefined;
+    ranges: string;
+    requiredBy: readonly string[];
+  }) {
+    const listed =
+      opts.manifestVersion === undefined ? "no version" : `version ${opts.manifestVersion}`;
+    const quoted = opts.requiredBy.map(quotedName).join(", ");
+    const requirers = quoted === "" ? "" : ` required by ${quoted}`;
+    super(
+      `"${opts.plugin}" from the Anthropic Directory is pinned to its listed commit (${listed}), which does not satisfy ${opts.ranges}${requirers}.`,
+    );
+    this.name = "DirectoryPinUnsatisfiedError";
+    this.plugin = opts.plugin;
+    this.manifestVersion = opts.manifestVersion;
+    this.ranges = opts.ranges;
+    this.requiredBy = opts.requiredBy;
   }
 }
 

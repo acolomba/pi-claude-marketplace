@@ -2,6 +2,40 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: lifecycle-coverage -- Plugin Lifecycle Behavioral Tests
+
+**Completed:** 2026-10-25 on `claude/plugin-lifecycle-coverage-b1d431` (not yet pushed, no npm release)
+**Phases:** 30 | **Plans:** 76 | **Requirements:** 104/104 | **Audit:** `tech_debt`, no blockers (integration 8/8, flows 8/8); override close (24 phase digests stale from post-verification doc edits)
+
+### What Was Built
+- Cucumber scenarios for every `/claude:plugin` plugin lifecycle verb (825 scenarios in the suite), with plugins served from git repositories on the loopback git host as `github`, `url`, or `git-subdir` sources.
+- Parity fixes the scenarios surfaced: one version rule, one update/reinstall runner with per-commit git copies, aligned failure reasons and rows, and a delisted plugin read from its installed copy.
+- A read-only load with the new `/claude:plugin apply` (APL-D1/D2), and the `autoapply` setting and command (AAP-D1/D2).
+
+### What Worked
+- **Phases 2-15 in parallel after a shared-steps phase 1.** A file ownership table let a dozen phase sessions run at once without step collisions.
+- **Second-round decision batching.** Review findings across phases were collected in one notes file and answered by the user in two rounds, which became phases 20-27 instead of piecemeal interrupts.
+- **Upstream binary grep for every parity question** (Claude Code 2.1.309): it settled the delisted-plugin walk, the `apply` split and the `autoapply` command shape with cited evidence.
+
+### What Was Inefficient
+- **Phase 29 changed scope mid-flight.** "Load converges on the catalog" became "read-only load plus `apply`" after planning; a review revert reopened CR-01 and left the two-apply case for the user to accept.
+- **The `autoapply` command shape took two redirects** (on/off vs a verb pair vs the upstream `/effort` + `/fast` shape) because the first prompt carried a wrong premise about `marketplace autoupdate`.
+
+### Patterns Established
+- **Load previews, `apply` mutates.** Every load-time change goes through one shared read pass and convergence planner, so `pending`, the load and `apply` cannot disagree.
+- **A fail-closed set for config writes:** a write refuses while any of the four config files is invalid, so a later repair cannot trigger a mass uninstall.
+
+### Key Lessons
+1. **Check a premise against the code before passing it on.** The `autoupdate` on/off claim cost a round trip.
+2. **A revert in a review-fix loop reopens earlier findings.** Re-run the disposition ledger after any revert and put the reopened finding to the user at once.
+
+### Cost Observations
+- Model mix: opus throughout (planning, execution, review, fixing, verification)
+- Timeline: 2026-10-22 -> 2026-10-25, ~470 commits on the branch
+- Notable: up to a dozen phase sessions ran in parallel worktrees; each merge was gated by a combined `npm run check` (~3-4 min).
+
+---
+
 ## Milestone: marketplace-features -- Marketplace Behavioral Tests (PR #271)
 
 **Completed:** 2026-10-21 on `features/cucumber-behavioral-tests` (not yet merged, no npm release)

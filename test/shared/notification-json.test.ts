@@ -383,6 +383,8 @@ interface ExpectedRow {
   readonly version?: string;
   readonly from?: string;
   readonly to?: string;
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
   readonly scope?: Scope;
   readonly description?: string;
   readonly partial?: boolean;
@@ -401,7 +403,12 @@ interface ExpectedBlock {
   readonly reasons?: readonly Reason[];
 }
 
-const INFO_ENVELOPE: ResolvedEnvelope = { severity: "info", needsReload: false, noOp: false };
+const INFO_ENVELOPE: ResolvedEnvelope = {
+  severity: "info",
+  needsReload: false,
+  needsApply: false,
+  noOp: false,
+};
 
 function presentationOf(
   marketplaces: readonly ResolvedMarketplace[],
@@ -629,11 +636,12 @@ const STATUS_CASES: { readonly [S in PluginStatus]: StatusCase<S> } = {
     },
   },
   "will uninstall": {
-    row: { status: "will uninstall", name: "alpha", reasons: ["plugins remain"] },
+    row: { status: "will uninstall", name: "alpha", version: "1.2.0", reasons: ["plugins remain"] },
     expected: {
       status: "will uninstall",
       name: "alpha",
       id: "alpha@mp",
+      version: "1.2.0",
       reasons: ["plugins remain"],
       scope: "user",
     },
@@ -651,6 +659,27 @@ const STATUS_CASES: { readonly [S in PluginStatus]: StatusCase<S> } = {
   "will disable": {
     row: { status: "will disable", name: "alpha", reasons: [] },
     expected: { status: "will disable", name: "alpha", id: "alpha@mp", reasons: [], scope: "user" },
+  },
+  "will update": {
+    row: {
+      status: "will update",
+      name: "alpha",
+      reasons: [],
+      from: "1.0.0",
+      to: "1.0.0",
+      commits: { from: "a".repeat(40), to: "b".repeat(40) },
+    },
+    expected: {
+      status: "will update",
+      name: "alpha",
+      id: "alpha@mp",
+      reasons: [],
+      from: "1.0.0",
+      to: "1.0.0",
+      fromCommit: "a".repeat(40),
+      toCommit: "b".repeat(40),
+      scope: "user",
+    },
   },
   disabled: {
     row: {
@@ -753,20 +782,212 @@ for (const [status, { row, expected }] of Object.entries(STATUS_CASES)) {
   });
 }
 
+test("UPR-02: an updated row with commits carries them whole as fromCommit and toCommit", () => {
+  // arrange
+  const fromCommit = "a".repeat(40);
+  const toCommit = "b".repeat(40);
+  const row: ResolvedRow = {
+    status: "updated",
+    name: "ghp",
+    severity: "info",
+    needsReload: true,
+    reasons: [],
+    from: "1.0.0",
+    to: "1.0.0",
+    commits: { from: fromCommit, to: toCommit },
+  };
+  const presentation = presentationOf([{ name: "mp", scope: "user", plugins: [row] }]);
+
+  // act
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    payload,
+    expectedInfoPayload([
+      {
+        name: "mp",
+        scope: "user",
+        plugins: [
+          {
+            status: "updated",
+            name: "ghp",
+            id: "ghp@mp",
+            reasons: [],
+            from: "1.0.0",
+            to: "1.0.0",
+            fromCommit,
+            toCommit,
+            scope: "user",
+          },
+        ],
+      },
+    ]),
+  );
+});
+
+test("D-10-13: an updated row's constraint disclosure rides the wire as its cause", () => {
+  // arrange
+  const disclosure = 'constrained to the combined range (^1.0.0) -- required by "app@tools"';
+  const row: ResolvedRow = {
+    status: "updated",
+    name: "lib",
+    severity: "info",
+    needsReload: true,
+    reasons: [],
+    from: "1.0.0",
+    to: "1.1.0",
+    failure: {
+      cause: { causeChain: [disclosure], truncated: false },
+      leaks: [],
+      rollbackPartial: [],
+    },
+  };
+  const presentation = presentationOf([{ name: "tools", scope: "project", plugins: [row] }]);
+
+  // act
+  const payload = toWirePayload(presentation, {
+    kind: "command",
+    commandId: "plugin",
+    invocationId: "test-run",
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    payload,
+    expectedInfoPayload([
+      {
+        name: "tools",
+        scope: "project",
+        plugins: [
+          {
+            status: "updated",
+            name: "lib",
+            id: "lib@tools",
+            reasons: [],
+            from: "1.0.0",
+            to: "1.1.0",
+            scope: "project",
+            cause: { causeChain: [disclosure], truncated: false },
+            leaks: [],
+            rollbackPartial: [],
+          },
+        ],
+      },
+    ]),
+  );
+});
+
+const MOVE_WIRE_ROWS = [
+  {
+    row: {
+      status: "reinstalled",
+      name: "ghp",
+      severity: "info",
+      needsReload: true,
+      reasons: [],
+      version: "1.0.0",
+    },
+    reasons: [],
+  },
+  {
+    row: {
+      status: "partially-installed",
+      name: "ghp",
+      severity: "info",
+      needsReload: true,
+      reasons: ["unsupported component"],
+      version: "1.0.0",
+    },
+    reasons: ["unsupported component"],
+  },
+  {
+    row: {
+      status: "failed",
+      name: "ghp",
+      severity: "error",
+      reasons: ["lock held"],
+      version: "1.0.0",
+    },
+    reasons: ["lock held"],
+  },
+] as const satisfies readonly { readonly row: ResolvedRow; readonly reasons: readonly Reason[] }[];
+
+for (const { row, reasons } of MOVE_WIRE_ROWS) {
+  test(`UPR-02 / UPR-03: a ${row.status} row that moved carries from and its commits beside version`, () => {
+    // arrange
+    const fromCommit = "a".repeat(40);
+    const toCommit = "b".repeat(40);
+    const moved: ResolvedRow = {
+      ...row,
+      from: "1.0.0",
+      commits: { from: fromCommit, to: toCommit },
+    };
+    const presentation = presentationOf([{ name: "mp", scope: "user", plugins: [moved] }]);
+
+    // act
+    const payload = toWirePayload(presentation, {
+      kind: "command",
+      commandId: "plugin",
+      invocationId: "test-run",
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      payload,
+      expectedInfoPayload([
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [
+            {
+              status: row.status,
+              name: "ghp",
+              id: "ghp@mp",
+              reasons,
+              version: "1.0.0",
+              from: "1.0.0",
+              fromCommit,
+              toCommit,
+              scope: "user",
+            },
+          ],
+        },
+      ]),
+    );
+  });
+}
+
 for (const { title, envelope, expectedEnvelope } of [
   {
     title: "emits an info envelope without a summary",
-    envelope: { severity: "info", needsReload: true, noOp: false },
+    envelope: { severity: "info", needsReload: true, needsApply: false, noOp: false },
     expectedEnvelope: { severity: "info", needsReload: true },
   },
   {
     title: "emits a warning envelope with its summary",
-    envelope: { severity: "warning", summary: "Heads up.", needsReload: false, noOp: false },
+    envelope: {
+      severity: "warning",
+      summary: "Heads up.",
+      needsReload: false,
+      needsApply: false,
+      noOp: false,
+    },
     expectedEnvelope: { severity: "warning", summary: "Heads up.", needsReload: false },
   },
   {
     title: "emits an error envelope with an empty summary",
-    envelope: { severity: "error", summary: "", needsReload: false, noOp: false },
+    envelope: {
+      severity: "error",
+      summary: "",
+      needsReload: false,
+      needsApply: false,
+      noOp: false,
+    },
     expectedEnvelope: { severity: "error", summary: "", needsReload: false },
   },
   {
@@ -774,6 +995,7 @@ for (const { title, envelope, expectedEnvelope } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin install", failures: 0, warnings: 1 },
     },
@@ -788,6 +1010,7 @@ for (const { title, envelope, expectedEnvelope } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin install", failures: 0, warnings: 0, success: { count: 2 } },
     },
@@ -802,6 +1025,7 @@ for (const { title, envelope, expectedEnvelope } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: {
         label: "Plugin update",
@@ -823,8 +1047,13 @@ for (const { title, envelope, expectedEnvelope } of [
   },
   {
     title: "emits noOp true for a no-op envelope",
-    envelope: { severity: "info", needsReload: false, noOp: true },
+    envelope: { severity: "info", needsReload: false, needsApply: false, noOp: true },
     expectedEnvelope: { severity: "info", needsReload: false, noOp: true },
+  },
+  {
+    title: "APL-04 / D-14: emits needsApply true when the envelope needs apply",
+    envelope: { severity: "info", needsReload: false, needsApply: true, noOp: false },
+    expectedEnvelope: { severity: "info", needsReload: false, needsApply: true },
   },
 ] satisfies readonly {
   title: string;
@@ -1276,6 +1505,7 @@ test("produces a payload that survives a JSON round trip with no undefined or nu
       severity: "error",
       summary: "A plugin operation has failed.",
       needsReload: false,
+      needsApply: false,
       noOp: false,
     },
     marketplaces: [
@@ -1340,6 +1570,7 @@ test("emits a reconcile-applied payload with its tally and no noOp", () => {
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Reconcile", failures: 0, warnings: 0, success: { count: 1 } },
     },
@@ -1369,7 +1600,13 @@ test("emits a reconcile-applied payload without a tally and with its summary", (
   // arrange
   const presentation: ReconcileAppliedPresentation = {
     kind: "reconcile-applied-cascade",
-    envelope: { severity: "warning", summary: "Heads up.", needsReload: false, noOp: false },
+    envelope: {
+      severity: "warning",
+      summary: "Heads up.",
+      needsReload: false,
+      needsApply: false,
+      noOp: false,
+    },
     marketplaces: [reconcileBlock()],
   };
 
@@ -1442,7 +1679,13 @@ test("emits noOp true with no tally and no reload for an update no-op presentati
 function warningPresentation(): CascadePresentation {
   return {
     kind: "cascade",
-    envelope: { severity: "warning", summary: "Verbatim summary.", needsReload: true, noOp: false },
+    envelope: {
+      severity: "warning",
+      summary: "Verbatim summary.",
+      needsReload: true,
+      needsApply: false,
+      noOp: false,
+    },
     marketplaces: [reconcileBlock()],
     advisories: ["advice"],
   };
@@ -1475,7 +1718,7 @@ function expectedReconcilePayload(): Record<string, unknown> {
 function reconcilePresentation(): ReconcileAppliedPresentation {
   return {
     kind: "reconcile-applied-cascade",
-    envelope: { severity: "info", needsReload: false, noOp: false },
+    envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
     marketplaces: [reconcileBlock()],
   };
 }
@@ -1552,7 +1795,7 @@ test("interleaved conversions of two presentations match each converted alone", 
 });
 
 function infoEnvelope(): ResolvedEnvelope {
-  return { severity: "info", needsReload: false, noOp: false };
+  return { severity: "info", needsReload: false, needsApply: false, noOp: false };
 }
 
 function githubMarketplaceInfo(): MarketplaceInfoMessage {
@@ -1869,6 +2112,7 @@ test("gives an installed plugin-info row with no scope of its own the marketplac
       severity: "error",
       summary: "A plugin operation has failed.",
       needsReload: false,
+      needsApply: false,
       noOp: false,
     },
     message: {
@@ -1980,6 +2224,7 @@ for (const { title, scope, expectedScope } of [
         severity: "error",
         summary: "A marketplace operation has failed.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
       },
       message: { kind: "marketplace-not-added", name: "mp", ...scope },
@@ -2015,6 +2260,7 @@ test("converts a pending-empty presentation with its advisories and retained wor
     envelope: infoEnvelope(),
     message: {
       kind: "reconcile-pending-empty",
+      command: "pending",
       advisories: ["note"],
       retainedWorkflows: [{ name: "flow", envelopeCount: 2 }],
     },
@@ -2039,25 +2285,25 @@ test("converts a pending-empty presentation with its advisories and retained wor
   });
 });
 
-test("converts a pending-empty presentation with no advisories to the bare envelope", () => {
+test("D-08: converts an apply-empty presentation to the bare envelope without its command", () => {
   // arrange
   const presentation = {
     kind: "reconcile-pending-empty",
     envelope: infoEnvelope(),
-    message: { kind: "reconcile-pending-empty" },
+    message: { kind: "reconcile-pending-empty", command: "apply" },
   } satisfies NotificationPresentation;
 
   // act
   const payload = toWirePayload(presentation, {
     kind: "command",
-    commandId: "plugin",
+    commandId: "plugin apply",
     invocationId: "test-run",
   });
 
   // assert
   assert.deepStrictEqual(payload, {
     schemaVersion: 1,
-    origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+    origin: { kind: "command", commandId: "plugin apply", invocationId: "test-run" },
     kind: "reconcile-pending-empty",
     severity: "info",
     needsReload: false,
@@ -2110,6 +2356,7 @@ for (const { title, cause, expectedCause } of [
         severity: "warning",
         summary: "Prune committed; finalization needs attention.",
         needsReload: true,
+        needsApply: false,
         noOp: false,
       },
       scope: "user",
@@ -2165,6 +2412,32 @@ const RAW_CASES: {
       severity: "info",
       needsReload: false,
       usage: "usage: install",
+    },
+  },
+  "autoapply-status": {
+    surface: {
+      kind: "autoapply-status",
+      enabled: false,
+      source: { scope: "user", file: "claude-plugins.json" },
+      files: [
+        { scope: "user", file: "claude-plugins.json", value: false },
+        { scope: "user", file: "claude-plugins.local.json" },
+      ],
+      set: { scope: "user", file: "claude-plugins.json", value: false },
+    },
+    expected: {
+      schemaVersion: 1,
+      origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+      kind: "autoapply-status",
+      severity: "info",
+      needsReload: false,
+      enabled: false,
+      source: { scope: "user", file: "claude-plugins.json" },
+      files: [
+        { scope: "user", file: "claude-plugins.json", value: false },
+        { scope: "user", file: "claude-plugins.local.json" },
+      ],
+      set: { scope: "user", file: "claude-plugins.json", value: false },
     },
   },
   diagnostic: {
@@ -2292,6 +2565,29 @@ for (const [kind, { surface, expected }] of Object.entries(RAW_CASES)) {
     assert.deepStrictEqual(payload, expectedPayload);
   });
 }
+
+test("AAP-04: converts a default autoapply status without a source or a set", () => {
+  // act
+  const payload = toWirePayload(
+    {
+      kind: "autoapply-status",
+      enabled: false,
+      files: [{ scope: "project", file: "claude-plugins.json" }],
+    },
+    { kind: "command", commandId: "plugin autoapply", invocationId: "test-run" },
+  );
+
+  // assert
+  assert.deepStrictEqual(payload, {
+    schemaVersion: 1,
+    origin: { kind: "command", commandId: "plugin autoapply", invocationId: "test-run" },
+    kind: "autoapply-status",
+    severity: "info",
+    needsReload: false,
+    enabled: false,
+    files: [{ scope: "project", file: "claude-plugins.json" }],
+  });
+});
 
 test("AFILE-04: converts every MCP config notice kind field by field", () => {
   // arrange
@@ -2494,7 +2790,7 @@ test("copies the diagnostic lines so the payload shares no array with the surfac
 function adjacentCascade(): CascadePresentation {
   return {
     kind: "cascade",
-    envelope: { severity: "info", needsReload: true, noOp: false },
+    envelope: { severity: "info", needsReload: true, needsApply: false, noOp: false },
     marketplaces: [],
   };
 }

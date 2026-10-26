@@ -161,9 +161,43 @@ Each scope declares its marketplaces and plugins in two layers: the base layer a
 | `user`    | `~/.pi/agent/claude-plugins.json` |
 | `project` | `<cwd>/.pi/claude-plugins.json`   |
 
-The configs of a scope are the authoritative record of its installed marketplaces and plugins. Pi applies their contents at extension load (`/reload`).
+The configs of a scope are the desired state of its marketplaces and plugins. The catalog of a marketplace is the list of plugins and versions that it offers. A new session or `/reload` does not change your installed plugins, unless you turn on [autoapply](#autoapply). It only lists the changes that your configs and the marketplace catalogs need.
+
+To see those changes, run `/claude:plugin pending`. To make them, run `/claude:plugin apply`. Then run `/reload` so that Pi loads the result.
+
+```text
+/claude:plugin pending
+/claude:plugin apply
+/reload
+```
 
 Whether Pi applies a declared plugin's components depends on the entry's optional `enabled` key and on the install-time default the plugin author declares. For more information, see [Plugin enablement](docs/plugin-enablement.md).
+
+### Autoapply
+
+To make each new session and `/reload` apply your configs, turn on `autoapply`:
+
+```text
+/claude:plugin autoapply on
+```
+
+This sets the top-level `autoapply` key of a config to `true`. Like `enable`, it writes the user base config unless you add `--scope project` or `--local`. `/claude:plugin autoapply off` sets the key to `false`. Run `/claude:plugin autoapply` with no value to see the value in effect, the config that sets it, and each config's own value. With `--scope` or `--local`, it lists only those configs. A set does not run `apply`: the next load reads the new value. You can also edit the key by hand:
+
+```json
+{
+  "autoapply": true,
+  "plugins": { "context7-plugin@context7-marketplace": {} }
+}
+```
+
+The default is `false`. When `autoapply` is on, the load runs `/claude:plugin apply` for both scopes before Pi looks for skills and prompts. So the plugins that it installs are ready in the same session. The load can clone repositories from the network, as `apply` does. A failed change shows as a failed row and stays in `pending`. The next load tries it again.
+
+Any config can set `autoapply`. The most specific config that sets it wins, in this order: the project local config, the project base config, the user local config, and the user base config. If a config is not valid, for example because `autoapply` is not `true` or `false`, the load does not apply anything and reports the config.
+
+A user config cannot turn off a project's `autoapply`, because the project configs are more specific. To stop it on your machine, set `"autoapply": false` in the project local config. A load never asks you to sign in. If a clone needs a credential that you have not stored, its row fails, and `/claude:plugin apply` can then ask you to sign in.
+
+> [!WARNING]
+> A project's base config is usually in version control. If it sets `autoapply` to `true`, starting `pi` in that project installs its plugins, hooks and MCP servers included, with no prompt. Read `.pi/claude-plugins.json` before you start `pi` in a project that you cloned. Claude Code has no such setting: it does not install a plugin that only a project's settings enable, and you install it with a command.
 
 ### The local config
 
@@ -194,7 +228,7 @@ User-scope configs live in your home directory. They are personal and never shar
 
 ## Command reference
 
-This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations. After you install, uninstall, update, or reinstall plugins, run `/reload`. Then Pi discovers the changed resources.
+This extension mirrors Claude Code's `/plugin` command. Use `/claude:plugin` in Pi for marketplace and plugin operations. After you install, uninstall, update, or reinstall plugins, run `/reload`. Then Pi discovers the changed resources. If you edit a config by hand, run `/claude:plugin apply` before `/reload`.
 
 ### Marketplace
 
@@ -366,7 +400,7 @@ Also remove the dependencies that no remaining plugin needs with `--prune`.
 /claude:plugin uninstall context7-plugin@context7-marketplace --prune
 ```
 
-You can uninstall a plugin that another installed plugin needs. Its row names the dependents as `{dependents unsatisfied}`. At the next reload, Pi disables those dependents. For more information, see [Dependency resolution](docs/dependency-resolution.md).
+You can uninstall a plugin that another installed plugin needs. Its row names the enabled dependents as `{dependents unsatisfied}`. The next `/claude:plugin apply` installs the plugin again as a dependency, because the dependents still declare it. If that install fails, `apply` disables those dependents. For more information, see [Dependency resolution](docs/dependency-resolution.md).
 
 To remove orphaned dependency installs without naming a plugin to uninstall, run `prune`. It selects the user scope by default. Use `--scope project` to select the project scope.
 
@@ -384,7 +418,7 @@ Preview the same scope with `--dry-run`. The preview reads the current state and
 
 Only dependency-installed plugins that no installed plugin in the same scope declares qualify. Even disabled plugins still hold their dependencies. Plugins you installed by name stay installed. The sweep repeats until no more plugins qualify. Actual rows read `(uninstalled) {dependency pruned}`; preview rows read `(will uninstall) {dependency pruned}`. If none qualify, both commands report `Nothing to prune in user scope: no orphaned dependency installs were found.` for the default scope.
 
-Reload Pi after changes. A reload never prunes orphaned dependencies. Run `prune` or `uninstall <plugin> --prune` to remove them.
+Reload Pi after changes. Neither `/reload` nor `/claude:plugin apply` prunes orphaned dependencies. Run `prune` or `uninstall <plugin> --prune` to remove them.
 
 ```text
 /reload

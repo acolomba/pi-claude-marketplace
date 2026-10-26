@@ -15,6 +15,9 @@ import type {
   RowHint,
 } from "./notification-resolve.ts";
 import type {
+  AutoapplyConfigFile,
+  AutoapplyFileValue,
+  AutoapplyStatusSurface,
   MarketplaceDetails,
   MarketplaceInfoCascadeMessage,
   MarketplaceInfoMessage,
@@ -24,11 +27,17 @@ import type {
   PluginInfoComponentsResolved,
   PluginInfoMessage,
   PluginInfoRow,
+  PluginFailedMessage,
   PluginNotificationMessage,
+  PluginPartiallyInstalledMessage,
+  PluginReinstalledMessage,
   PluginUpdatedMessage,
+  PluginWillUpdateMessage,
   PruneEmptyMessage,
   Reason,
+  ReconcilePendingEmptyMessage,
   Severity,
+  VersionCommits,
 } from "./notification-types.ts";
 import type { Scope } from "./types.ts";
 
@@ -226,6 +235,12 @@ export function renderMpHeader(mp: ResolvedMarketplace): string {
         : `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (skipped) ${reasonsBrace}`;
     }
 
+    case "will add":
+      // D-20: pending-tense marketplace header. Names only the marketplace
+      // and scope, never its declared source, and carries no reasons.
+      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (will add)`;
+    case "will remove":
+      return `${ICON_INSTALLED} ${mp.name} [${mp.scope}] (will remove)`;
     case undefined: {
       // List-surface case. mp.details is OPTIONAL and INDEPENDENT of mp.status.
       // Guard explicitly with an early return for SUB-BRANCH A
@@ -307,30 +322,27 @@ function formatHashVersionForDisplay(v: string): string {
 }
 
 /**
- * Anchored-exact predicate for a persisted git-source `sha-<12hex>` version
- * string. Matches EXACTLY `sha-` + 12 lowercase-hex chars -- the shape
- * produced by `domain/version.ts::shaVersion`. Local to the renderer tier
- * (shared/ must not import domain/), mirroring `looksLikeHashVersion` above.
+ * Anchored-exact match for a persisted git-source commit version: the
+ * `<12hex>` Claude Code records, with the `-<8hex>` path hash of a
+ * `git-subdir` source (GV-01), or the `sha-<12hex>` a record written before
+ * GV-01 holds. The shape `domain/version.ts::shaVersion` produces, kept local
+ * to the renderer tier (shared/ must not import domain/), mirroring
+ * `looksLikeHashVersion` above. Group 1 is the commit.
  */
-const SHA_VERSION_DISPLAY_RE = /^sha-[0-9a-f]{12}$/;
-function looksLikeShaVersion(v: string): boolean {
-  return SHA_VERSION_DISPLAY_RE.test(v);
-}
+const SHA_VERSION_DISPLAY_RE = /^(?:sha-)?([0-9a-f]{12})(?:-[0-9a-f]{8})?$/;
 
 /**
- * D-77-01 / PURL-09: render a persisted git-source `sha-<12hex>` version to the
- * same compact git-style short SHA as the hash-version arm: `sha-2ea95f857031`
- * -> `#2ea95f8` (the `sha-` prefix stripped, the first 7 of the 12 hex chars
- * kept). Returns WITHOUT the `v` prefix -- `renderVersion` prepends it, yielding
- * `v#2ea95f8`. A non-sha string passes through UNCHANGED so hash-versions and
- * SemVer are untouched. Renderer-only: persistence stays `sha-<12hex>`.
+ * PURL-09 / GV-01: render a persisted git-source commit version to the same
+ * compact git-style short SHA as the hash-version arm: `2ea95f857031`,
+ * `2ea95f857031-3989e95a`, and `sha-2ea95f857031` all render `#2ea95f8` (the
+ * first 7 of the commit's 12 hex chars). Returns WITHOUT the `v` prefix --
+ * `renderVersion` prepends it, yielding `v#2ea95f8`. A non-sha string passes
+ * through UNCHANGED so hash-versions and SemVer are untouched. Renderer-only:
+ * persistence keeps the recorded form.
  */
 function formatShaVersionForDisplay(v: string): string {
-  if (!looksLikeShaVersion(v)) {
-    return v;
-  }
-
-  return `#${v.slice("sha-".length, "sha-".length + 7)}`;
+  const commit = SHA_VERSION_DISPLAY_RE.exec(v)?.[1];
+  return commit === undefined ? v : `#${commit.slice(0, 7)}`;
 }
 
 /**
@@ -338,7 +350,7 @@ function formatShaVersionForDisplay(v: string): string {
  * undefined or empty so the join discipline collapses the slot cleanly.
  * Routes the token through `formatHashVersionForDisplay` then
  * `formatShaVersionForDisplay` so a persisted PI-7 `hash-<12hex>` OR a
- * git-source `sha-<12hex>` (D-77-01 / PURL-09) renders as `v#<7hex>`, while a
+ * git-source commit version (PURL-09 / GV-01) renders as `v#<7hex>`, while a
  * SemVer passes through to `v<version>` (SNM-35). Each formatter is a no-op on
  * a string the other owns, so the order is irrelevant. Single canonical
  * implementation.
@@ -359,8 +371,25 @@ function renderScopeBracket(pluginScope: Scope | undefined, mpScope: Scope): str
   return `[${pluginScope}]`;
 }
 
-function composeVersionArrow(from: string, to: string): string {
-  return `${renderVersion(from)} → ${renderVersion(to)}`;
+/**
+ * The `from → to` version slot. UPR-02: when the row carries `commits`, each
+ * side's version is followed by its commit's first 7 characters in
+ * parentheses. The producer decides whether a row carries them.
+ */
+function composeVersionArrow(
+  from: string,
+  to: string | undefined,
+  commits?: VersionCommits,
+): string {
+  if (commits === undefined) {
+    return `${renderVersion(from)} → ${renderVersion(to)}`;
+  }
+
+  return `${renderVersion(from)} (${shortCommit(commits.from)}) → ${renderVersion(to)} (${shortCommit(commits.to)})`;
+}
+
+function shortCommit(commit: string): string {
+  return commit.slice(0, 7);
 }
 
 /**
@@ -388,28 +417,33 @@ function composeReasons(reasons: readonly Reason[] | undefined): string {
 interface PluginRowLayout {
   readonly icon: string;
   readonly scope: boolean;
-  readonly version: "single" | "arrow" | "none";
+  /**
+   * `move` draws `from → version` when the row carries `from` (UPR-03), and
+   * the single version otherwise.
+   */
+  readonly version: "single" | "arrow" | "move" | "none";
 }
 
 const PLUGIN_ROW_LAYOUT = {
   installed: { icon: ICON_INSTALLED, scope: true, version: "single" },
   updated: { icon: ICON_INSTALLED, scope: true, version: "arrow" },
-  reinstalled: { icon: ICON_INSTALLED, scope: true, version: "single" },
+  reinstalled: { icon: ICON_INSTALLED, scope: true, version: "move" },
   uninstalled: { icon: ICON_AVAILABLE, scope: true, version: "single" },
   available: { icon: ICON_AVAILABLE, scope: false, version: "single" },
   remote: { icon: ICON_REMOTE, scope: false, version: "single" },
   unavailable: { icon: ICON_UNINSTALLABLE, scope: false, version: "single" },
   "partially-available": { icon: ICON_PARTIALLY_AVAILABLE, scope: false, version: "single" },
   upgradable: { icon: ICON_INSTALLED, scope: true, version: "single" },
-  "partially-installed": { icon: ICON_PARTIALLY_INSTALLED, scope: true, version: "single" },
+  "partially-installed": { icon: ICON_PARTIALLY_INSTALLED, scope: true, version: "move" },
   "partially-upgradable": { icon: ICON_INSTALLED, scope: true, version: "single" },
   skipped: { icon: ICON_UNINSTALLABLE, scope: true, version: "single" },
-  failed: { icon: ICON_UNINSTALLABLE, scope: true, version: "single" },
+  failed: { icon: ICON_UNINSTALLABLE, scope: true, version: "move" },
   "manual recovery": { icon: ICON_UNINSTALLABLE, scope: true, version: "single" },
   "will install": { icon: ICON_INSTALLED, scope: true, version: "none" },
-  "will uninstall": { icon: ICON_AVAILABLE, scope: true, version: "none" },
+  "will uninstall": { icon: ICON_AVAILABLE, scope: true, version: "single" },
   "will enable": { icon: ICON_INSTALLED, scope: true, version: "none" },
   "will disable": { icon: ICON_DISABLED, scope: true, version: "none" },
+  "will update": { icon: ICON_INSTALLED, scope: true, version: "arrow" },
   disabled: { icon: ICON_DISABLED, scope: true, version: "single" },
 } as const satisfies Record<PluginNotificationMessage["status"], PluginRowLayout>;
 
@@ -419,15 +453,7 @@ function formatPluginRow(row: ResolvedRow, mpScope: Scope): string {
   }
 
   const layout: PluginRowLayout = PLUGIN_ROW_LAYOUT[row.status];
-  let version = "";
-  if (layout.version === "single") {
-    version = renderVersion("version" in row ? row.version : undefined);
-  } else if (layout.version === "arrow") {
-    // Only the updated layout selects the from/to version slot.
-    const updated = row as ResolvedRow<PluginUpdatedMessage>;
-    version = composeVersionArrow(updated.from, updated.to);
-  }
-
+  const version = renderVersionSlot(row, layout.version);
   const status =
     row.status === "will install" && row.partial === true ? "will partially install" : row.status;
   return joinTokens([
@@ -438,6 +464,31 @@ function formatPluginRow(row: ResolvedRow, mpScope: Scope): string {
     `(${status})`,
     composeReasons(row.reasons),
   ]);
+}
+
+function renderVersionSlot(row: ResolvedRow, mode: PluginRowLayout["version"]): string {
+  switch (mode) {
+    case "single":
+      return renderVersion("version" in row ? row.version : undefined);
+    case "arrow": {
+      // Only the updated and will-update layouts select the from/to version slot.
+      const updated = row as ResolvedRow<PluginUpdatedMessage | PluginWillUpdateMessage>;
+      return composeVersionArrow(updated.from, updated.to, updated.commits);
+    }
+
+    case "move": {
+      // Only the reinstalled, partially-installed, and failed layouts select it.
+      const moved = row as ResolvedRow<
+        PluginReinstalledMessage | PluginPartiallyInstalledMessage | PluginFailedMessage
+      >;
+      return moved.from === undefined
+        ? renderVersion(moved.version)
+        : composeVersionArrow(moved.from, moved.version, moved.commits);
+    }
+
+    case "none":
+      return "";
+  }
 }
 
 /**
@@ -476,6 +527,19 @@ const PARTIAL_UPDATE_HINT_TRAILER =
 const STALE_GATE_UPDATE_HINT_TRAILER = "Run update --partial on this plugin, then enable it again.";
 
 /**
+ * D-24: the catalog decline's hint trailer, rendered below the
+ * partially-upgradable row `pending`, the load and `apply` give a catalog move
+ * that would drop components without consent. DISTINCT from
+ * `PARTIAL_UPDATE_HINT_TRAILER` because the command that holds the row is
+ * `apply` or `pending`, which take no `--partial`: the remedy names the
+ * per-plugin `update` consent command instead. Interpolates no plugin /
+ * marketplace identifier (T-73-01) and is locked byte-for-byte in
+ * docs/output-catalog.md and docs/messaging-style-guide.md.
+ */
+const CATALOG_PARTIAL_UPDATE_HINT_TRAILER =
+  "Run update --partial on this plugin to update it with the supported components.";
+
+/**
  * OUT-04 / D-102-10: the enable-hint trailer literal, rendered below an
  * install-disabled `(disabled)` row. The install materialized nothing the user
  * can reach, so the row alone leaves them with a fact and no next step; this
@@ -493,6 +557,7 @@ const ENABLE_HINT_TRAILER = "Run enable on this plugin to use its components.";
 const ROW_HINT_TRAILERS = {
   "partial-install": PARTIAL_INSTALL_HINT_TRAILER,
   "partial-update": PARTIAL_UPDATE_HINT_TRAILER,
+  "catalog-partial-update": CATALOG_PARTIAL_UPDATE_HINT_TRAILER,
   "stale-gate-update": STALE_GATE_UPDATE_HINT_TRAILER,
   enable: ENABLE_HINT_TRAILER,
 } as const satisfies Record<RowHint, string>;
@@ -830,12 +895,20 @@ export function renderMarketplaceNotAdded(
 }
 
 /**
- * DIFF-01: the `reconcile-pending-empty` body line. The bytes are locked to the
- * `empty-steady-state` state in `docs/output-catalog.md`. The caller folds the
- * message's advisories after it.
+ * DIFF-01 / D-08 / D-14: the `reconcile-pending-empty` body line. The bytes are
+ * locked to the `empty-steady-state` state of the pending section and the
+ * `nothing-to-change` state of the apply section in `docs/output-catalog.md`.
+ * The caller folds the message's advisories after it.
  */
-export function renderReconcilePendingEmpty(): string {
-  return "Pending: next reload will apply 0 actions.";
+export function renderReconcilePendingEmpty(
+  command: ReconcilePendingEmptyMessage["command"],
+): string {
+  switch (command) {
+    case "pending":
+      return "Pending: /claude:plugin apply has nothing to change.";
+    case "apply":
+      return "Apply: nothing to change.";
+  }
 }
 
 /** The `prune-empty` body: the scope held no orphaned dependency installs. */
@@ -991,6 +1064,7 @@ const DESCRIPTION_BEARING_STATUS = {
   "will uninstall": false,
   "will enable": false,
   "will disable": false,
+  "will update": false,
 } as const satisfies Record<PluginNotificationMessage["status"], boolean>;
 
 /**
@@ -1085,7 +1159,8 @@ function pushCauseLine(
 //
 //   <mp-header-1>
 //     <plugin-row-1>
-//       [cause-chain at 4-space indent if (failed | manual recovery) with cause]
+//       [cause-chain at 4-space indent if (failed | manual recovery) with cause,
+//        or a realized row whose producer set a cause]
 //       [rollback child row at 4-space indent for each rollbackPartial phase]
 //       [phase cause-chain at 6-space indent if phase.cause set]
 //     <plugin-row-2>
@@ -1099,6 +1174,8 @@ function pushCauseLine(
 //   [<tally sentence> | <update no-op headline>]
 //
 //   [/reload to pick up changes]  <-- iff the envelope needsReload
+//
+//   [/claude:plugin apply to make these changes]  <-- iff the envelope needsApply
 //
 // Joins / separators:
 //   - Plugin row prefix:                "  " (2 spaces)
@@ -1116,6 +1193,12 @@ function pushCauseLine(
 
 /** Reload-hint trailer literal. */
 const RELOAD_HINT_TRAILER = "/reload to pick up changes";
+
+/**
+ * APL-04 / D-05: the trailer of a `pending` block that holds a change. It is a
+ * fixed literal that names no plugin, marketplace, or path (T-73-01).
+ */
+const APPLY_HINT_TRAILER = "/claude:plugin apply to make these changes";
 
 /**
  * UGRM-01 / UGRM-02 never-silent no-op headline for a bulk `update` that
@@ -1169,12 +1252,12 @@ export type NotifyArguments = readonly [text: string] | readonly [text: string, 
 
 /**
  * Formats one resolved envelope around a rendered body. It folds `body`, then
- * the no-op headline or the tally sentence, then the reload trailer, dropping
- * each absent segment and joining the rest with one blank line. A warning or
- * error envelope then prepends its summary line as its own block (GRAM-01):
- * one blank line, never a single `\n`, which would glue the host `Error:` /
- * `Warning:` label onto the first detail row. An info envelope carries no
- * summary line.
+ * the no-op headline or the tally sentence, then the reload trailer, then the
+ * apply trailer, dropping each absent segment and joining the rest with one
+ * blank line. A warning or error envelope then prepends its summary line as its
+ * own block (GRAM-01): one blank line, never a single `\n`, which would glue the
+ * host `Error:` / `Warning:` label onto the first detail row. An info envelope
+ * carries no summary line.
  *
  * D-15: an info envelope yields one argument, the text alone. A warning or
  * error envelope yields two, the text and its severity.
@@ -1184,6 +1267,7 @@ export function formatEnvelopeArguments(envelope: ResolvedEnvelope, body: string
     body,
     envelope.noOp ? UPDATE_NO_OP_HEADLINE : tallySentence(envelope.tally),
     envelope.needsReload ? RELOAD_HINT_TRAILER : "",
+    envelope.needsApply ? APPLY_HINT_TRAILER : "",
   ]
     .filter((segment) => segment !== "")
     .join("\n\n");
@@ -1191,6 +1275,40 @@ export function formatEnvelopeArguments(envelope: ResolvedEnvelope, body: string
   return envelope.severity === "info"
     ? [folded]
     : [`${envelope.summary}\n\n${folded}`, envelope.severity];
+}
+
+function autoapplyValueToken(value: boolean | undefined): string {
+  if (value === undefined) {
+    return "not set";
+  }
+
+  return value ? "on" : "off";
+}
+
+function autoapplyFileLabel(file: AutoapplyConfigFile): string {
+  return `${file.file} [${file.scope}]`;
+}
+
+function autoapplyFileLine(file: AutoapplyFileValue): string {
+  return `${autoapplyFileLabel(file)}: ${autoapplyValueToken(file.value)}`;
+}
+
+/**
+ * AAP-04 / AAP-D2: the `autoapply` show and set text. A set names its write
+ * first, as Claude Code's `Set effort level to ...`; then the effective value
+ * and the file that set it, or `(default)`; then each listed file's own value.
+ */
+function composeAutoapplyStatusText(surface: AutoapplyStatusSurface): string {
+  const effective =
+    surface.source === undefined
+      ? `Autoapply: ${autoapplyValueToken(surface.enabled)} (default)`
+      : `Autoapply: ${autoapplyValueToken(surface.enabled)} (${autoapplyFileLabel(surface.source)})`;
+  const body = [effective, surface.files.map((file) => autoapplyFileLine(file)).join("\n")].join(
+    "\n\n",
+  );
+  return surface.set === undefined
+    ? body
+    : `Set autoapply to ${autoapplyValueToken(surface.set.value)} in ${autoapplyFileLabel(surface.set)}.\n\n${body}`;
 }
 
 /**
@@ -1213,6 +1331,8 @@ export function formatRawSurface(surface: ResolvedRawSurface): NotifyArguments |
       ];
     case "usage-info":
       return [surface.usage, RAW_SURFACE_SEVERITY[surface.kind]];
+    case "autoapply-status":
+      return [composeAutoapplyStatusText(surface), RAW_SURFACE_SEVERITY[surface.kind]];
     case "diagnostic":
       return surface.lines.length === 0
         ? undefined

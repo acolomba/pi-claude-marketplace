@@ -6,12 +6,13 @@
 // inadvertently reverted a locked invariant.
 //
 // Technique:
-//   - Blocks A-D: read each orchestrator's source on disk, strip comment
+//   - Blocks A, B, D: read each orchestrator's source on disk, strip comment
 //     lines, then assert that the cache-mutation call (`addPluginConfigToCache`
 //     / `removePluginConfigFromCache`) is followed within a bounded window
 //     by `rebuildRoutingTables` on a non-comment line. The bounded window
 //     forces the call-site to live INSIDE the same per-plugin lock body
-//     rather than in an entirely different code path.
+//     rather than in an entirely different code path. Reinstall has no
+//     block of its own: it runs update-swap's wiring (Block D, D-18-02).
 //   - Block E: WR-01 clear-cache prefix on `hydrateProjectScopeForCwd` --
 //     a `deleteParsedConfig` call must appear
 //     INSIDE the function body BEFORE any other significant statement, so
@@ -40,20 +41,19 @@ import type { HooksHydrationDeps } from "../../extensions/pi-claude-marketplace/
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { ExtensionAPI } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 
-// D-07-05: the four orchestrators this gate pins and the event-router where the
+// D-07-05: the three orchestrators this gate pins and the event-router where the
 // WR-01 prefix lives come from `HOOKS_LIFECYCLE_TARGETS`, so the registry
 // names every one of them. The group is a tuple,
 // so destructuring binds by POSITION -- which is why every read below states the
 // basename it expects and `readTargetSource` proves it.
-const [INSTALL_REL, UNINSTALL_REL, REINSTALL_REL, UPDATE_REL, EVENT_ROUTER_REL] =
-  HOOKS_LIFECYCLE_TARGETS;
+const [INSTALL_REL, UNINSTALL_REL, UPDATE_REL, EVENT_ROUTER_REL] = HOOKS_LIFECYCLE_TARGETS;
 
 /**
  * Read one registry target, proving first that the constant bound here really
  * addresses the module the caller names and second that the read produced text.
  *
  * D-07-05: the basename check is the positive control for a positionally-bound
- * name. Reordering the registry group rebinds all five local names at once, and
+ * name. Reordering the registry group rebinds all four local names at once, and
  * every block below would go on passing over the wrong file with no signal.
  *
  * D-07-03: an empty read means the block matched its patterns against nothing,
@@ -106,7 +106,7 @@ async function readNonCommentLines(rel: string, expectedBasename: string): Promi
 /**
  * Assert that within `nonCommentLines`, the first non-comment line that
  * contains `mutator` is followed within `window` subsequent non-comment
- * lines by a line that contains `rebuilder`. Used by Blocks A-D to pin
+ * lines by a line that contains `rebuilder`. Used by Blocks A, B, and D to pin
  * the cache-mutation -> rebuild call-site adjacency.
  */
 function assertMutatorFollowedByRebuilder(
@@ -194,49 +194,10 @@ test("WR-03 Block B: uninstall.ts pairs removePluginConfigFromCache with rebuild
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// Block C: WR-03 / D-60-05 -- reinstall-flow.ts explicit remove + add + rebuild
-// inside the per-plugin lock. The mutator pair lives in `runLockedReinstall`
-// (the re-install does NOT delegate to install/uninstall, so the wiring
-// must be present in THIS file -- D-60-05 audit closure).
-// ──────────────────────────────────────────────────────────────────────────
-
-test("WR-03 Block C: reinstall-flow.ts wires remove + add + rebuildRoutingTables in its per-plugin lock", async () => {
-  const lines = await readNonCommentLines(REINSTALL_REL, "reinstall-flow.ts");
-
-  // Both cache mutators must appear as call sites (not just imports). The
-  // add-side may flow through the bridge helper `readAndCachePluginHooks`
-  // which wraps `addPluginConfigToCache` with the disk read + parse.
-  const hasRemove = lines.some(
-    (l) => l.includes("removePluginConfigFromCache(") && !/\bimport\b/.test(l),
-  );
-  const hasAdd = lines.some(
-    (l) =>
-      (l.includes("addPluginConfigToCache(") || l.includes("readAndCachePluginHooks(")) &&
-      !/\bimport\b/.test(l),
-  );
-  const hasRebuild = lines.some(
-    (l) => l.includes("rebuildRoutingTables(") && !/\bimport\b/.test(l),
-  );
-  assert.ok(hasRemove, "reinstall-flow.ts: missing removePluginConfigFromCache call site");
-  assert.ok(
-    hasAdd,
-    "reinstall-flow.ts: missing addPluginConfigToCache / readAndCachePluginHooks call site",
-  );
-  assert.ok(hasRebuild, "reinstall-flow.ts: missing rebuildRoutingTables call site");
-
-  // The remove must be followed within window by the rebuild call.
-  assertMutatorFollowedByRebuilder(
-    lines,
-    "removePluginConfigFromCache(",
-    "rebuildRoutingTables(",
-    30,
-    "reinstall-flow.ts",
-  );
-});
-
-// ──────────────────────────────────────────────────────────────────────────
 // Block D: WR-03 / D-60-05 -- update-swap.ts explicit remove + add + rebuild
-// inside the per-plugin lock. Same gap as reinstall (no delegation).
+// inside the per-plugin lock. The swap does not delegate to install or
+// uninstall, so the wiring must be present in THIS file. Reinstall runs the
+// same swap (D-18-02), so this block pins its wiring too.
 // ──────────────────────────────────────────────────────────────────────────
 
 test("WR-03 Block D: update-swap.ts wires remove + add + rebuildRoutingTables in its per-plugin lock", async () => {
@@ -369,8 +330,9 @@ test("WR-03 Block F: every orchestrators/plugin/*.ts that mutates the cache also
   );
 
   // Guard against a future refactor that moves the call sites elsewhere: the
-  // scan MUST find at least the four wired lifecycle verbs (install,
-  // uninstall, reinstall, update).
+  // scan MUST find at least the four files that wire the cache today
+  // (uninstall, update-swap, which reinstall shares, enable-disable, and
+  // install-disable-cascade).
   assert.ok(
     scanned.length >= 4,
     `WR-03 Block F: expected at least 4 orchestrators with cache mutations + rebuild; found ${String(scanned.length)}`,

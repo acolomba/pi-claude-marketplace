@@ -20,7 +20,7 @@
 // (sha over ref; unpinned resolves remote HEAD via resolveRemoteRef, D-77-05).
 
 import { randomUUID } from "node:crypto";
-import { cp, mkdir, readFile, rename } from "node:fs/promises";
+import { cp, mkdir, readFile, rename, rm } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -32,7 +32,7 @@ import {
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { appendLeakToError } from "../../shared/errors.ts";
+import { appendLeakToError, PinnedCommitMissingError } from "../../shared/errors.ts";
 import {
   cleanupStaging,
   createRemovalOps,
@@ -71,6 +71,11 @@ import type { ScopedLocations } from "../../persistence/locations.ts";
  */
 function isGitCommitNotFetchedError(err: unknown): boolean {
   return err instanceof Error && err.name === "CommitNotFetchedError";
+}
+
+/** isomorphic-git's `NotFoundError`: the object a checkout names is absent. */
+function isGitNotFoundError(err: unknown): boolean {
+  return err instanceof Error && err.name === "NotFoundError";
 }
 
 /**
@@ -134,9 +139,10 @@ async function cloneIntoStaging(
  * so checkout throws `CommitNotFetchedError`. The recovery applies ONLY after
  * a ref-hint clone -- a no-ref clone already fetched every head, so the same
  * error there is a genuinely unreachable sha that must fail clean. The clone
- * left the wildcard fetch refspec, so one full fetch pulls every head and the
- * retry succeeds; a still-unreachable sha throws the same class again and
- * falls through to the caller's fail-clean fold.
+ * left the wildcard fetch refspec, so one full fetch pulls every head and
+ * every tag (INR-06) and the retry succeeds. A sha the fresh clone still
+ * lacks, with or without the refetch, throws `PinnedCommitMissingError`
+ * (INR-03) into the caller's fail-clean fold.
  */
 async function checkoutPinWithRefetch(
   gitOps: GitOps,
@@ -147,12 +153,26 @@ async function checkoutPinWithRefetch(
     await gitOps.checkout({ dir: stagingDir, ref: args.pin });
   } catch (checkoutErr) {
     if (args.ref === undefined || !isGitCommitNotFetchedError(checkoutErr)) {
-      throw checkoutErr;
+      throw asPinnedCommitMissing(checkoutErr, args.pin);
     }
 
-    await gitOps.fetch({ dir: stagingDir, remote: "origin", auth: args.auth });
-    await gitOps.checkout({ dir: stagingDir, ref: args.pin });
+    await gitOps.fetch({ dir: stagingDir, remote: "origin", tags: true, auth: args.auth });
+    try {
+      await gitOps.checkout({ dir: stagingDir, ref: args.pin });
+    } catch (retryErr) {
+      throw asPinnedCommitMissing(retryErr, args.pin);
+    }
   }
+}
+
+/**
+ * INR-03: a fresh clone that still lacks the pin means the git host does not
+ * have it. Any other checkout throw passes through unchanged. INR-06: the
+ * library's error is not chained, because its only addition is advice ("Do a
+ * git fetch") a Pi user cannot act on.
+ */
+function asPinnedCommitMissing(err: unknown, pin: string): unknown {
+  return isGitCommitNotFetchedError(err) ? new PinnedCommitMissingError(pin) : err;
 }
 
 /**
@@ -168,10 +188,10 @@ async function checkoutPinWithRefetch(
  *      outside the ref hint's history the singleBranch fetch never pulled the
  *      pinned commit, so the checkout throws `CommitNotFetchedError`; the
  *      clone left a wildcard fetch refspec, so one full fetch widens the
- *      staging clone to every head and the checkout is retried ONCE. A
- *      genuinely unreachable pin throws the same class on the retry and folds
- *      into the fail-clean path. A clone/checkout throw cleans staging and
- *      append-leak-rethrows (MA-9).
+ *      staging clone to every head and tag (INR-06) and the checkout is
+ *      retried ONCE. A genuinely unreachable pin throws
+ *      `PinnedCommitMissingError` (INR-03) and folds into the fail-clean path.
+ *      A clone/checkout throw cleans staging and append-leak-rethrows (MA-9).
  *   4. Atomic same-FS rename staging -> cloneRoot. An EEXIST/ENOTEMPTY rename
  *      means a concurrent install of the same url+sha already won the race;
  *      its tree is byte-equivalent (same key => same content), so clean our
@@ -236,10 +256,153 @@ export async function materializePluginClone(args: {
 }
 
 /**
+ * GIT-04: check `ref` out of a copy of the git directory `gitDir` into the
+ * empty staging dir `staging`, the one copy-and-checkout step every
+ * per-commit copy and tag clone shares.
+ *
+ * Only `.git` is copied (symlinks verbatim), and its index is dropped, so the
+ * non-forced checkout compares against an empty tree and writes exactly the
+ * commit's tree: no untracked or edited file of the source work tree rides
+ * along, a relative symlink stays relative instead of pointing back into the
+ * source (NFR-10), and a directory that holds only a symlink checks out
+ * (a forced checkout refuses it). Throws raw; the caller owns the staging
+ * cleanup.
+ */
+async function checkoutGitDirCopy(
+  gitOps: GitOps,
+  gitDir: string,
+  staging: string,
+  ref: string,
+): Promise<void> {
+  await mkdir(staging, { recursive: true });
+  await cp(gitDir, path.join(staging, ".git"), { recursive: true, verbatimSymlinks: true });
+  await rm(path.join(staging, ".git", "index"), { force: true });
+  await gitOps.checkout({ dir: staging, ref });
+}
+
+/**
+ * GIT-01: check out `sha` into `dest` from the URL-keyed mirror of
+ * `cloneUrl`, local only. Returns false when there is no mirror or the mirror
+ * does not hold `sha`, so the caller clones instead. A checkout failure other
+ * than a missing commit propagates with the staging leak appended (MA-9).
+ */
+async function copyMirrorAtCommit(
+  ops: RemovalOps,
+  args: {
+    readonly locations: ScopedLocations;
+    readonly cloneUrl: string;
+    readonly sha: string;
+    readonly gitOps: GitOps;
+  },
+  dest: string,
+): Promise<boolean> {
+  const mirrorRoot = await args.locations.pluginCloneDir(pluginMirrorKey(args.cloneUrl));
+  if (!(await pathExists(mirrorRoot))) {
+    return false;
+  }
+
+  const staging = await args.locations.sourcesStagingDir(randomUUID());
+  try {
+    await checkoutGitDirCopy(args.gitOps, path.join(mirrorRoot, ".git"), staging, args.sha);
+  } catch (err) {
+    const leak = await cleanupStaging(ops, staging, "plugin commit copy staging");
+    if (isGitCommitNotFetchedError(err) || isGitNotFoundError(err)) {
+      return false;
+    }
+
+    throw appendLeakToError(err, leak);
+  }
+
+  await promoteStagingToClone(ops, staging, dest, "plugin commit copy staging");
+  return true;
+}
+
+/**
+ * GIT-01 / D-16-02: materialize the per-commit copy of a git plugin source at
+ * `sha` into `plugin-clones/<key>/`, the key a pinned clone uses, and return
+ * its root. An installed plugin runs from this copy, so refreshing the mirror
+ * (`fetch`, `info --fetch`) never changes its files.
+ *
+ * A present copy is returned as is. Otherwise the URL-keyed mirror, when it
+ * holds `sha`, is copied and checked out at `sha` with no network access;
+ * failing that, `materializePluginClone` clones the commit.
+ */
+export async function materializePluginCommitCopy(args: {
+  locations: ScopedLocations;
+  cloneUrl: string;
+  networkUrl: string;
+  sha: string;
+  gitOps?: GitOps;
+  resolveAuth: () => GitAuthBundle;
+}): Promise<string> {
+  const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
+  const dest = await args.locations.pluginCloneDir(pluginCloneKey(args.cloneUrl, args.sha));
+  if (await pathExists(dest)) {
+    return dest;
+  }
+
+  if (await copyMirrorAtCommit(createRemovalOps(), { ...args, gitOps }, dest)) {
+    return dest;
+  }
+
+  return materializePluginClone({ ...args, gitOps, pin: args.sha });
+}
+
+/** The two clone-cache steps an unpinned source materializes through. */
+export interface UnpinnedSourceSteps {
+  readonly materializeOrRefreshPluginMirror: typeof materializeOrRefreshPluginMirror;
+  readonly materializePluginCommitCopy: typeof materializePluginCommitCopy;
+}
+
+/**
+ * GIT-01 / GIT-04: materialize an UNPINNED git source the way install,
+ * update, and reinstall all do: the mirror step (clone cold, refresh warm,
+ * or, with `refresh: false`, read the commit the mirror last fetched), then
+ * the per-commit copy at that commit, anchored to the source's subdir. The
+ * plugin runs from the copy, never from the mirror.
+ *
+ * The caller holds the scope's state lock around this call (GIT-03), so no
+ * `fetch` refreshes the mirror while its commit is read and copied.
+ */
+export async function materializeUnpinnedSource(
+  steps: UnpinnedSourceSteps,
+  args: {
+    readonly locations: ScopedLocations;
+    readonly source: GitBackedSource;
+    readonly auth: GitAuthBundle;
+    readonly refresh?: boolean;
+  },
+): Promise<GitPluginRootResult> {
+  const { locations, source, auth } = args;
+  const cloneUrl = canonicalCloneUrl(source);
+  const networkUrl = networkCloneUrl(source);
+  const mirror = await steps.materializeOrRefreshPluginMirror({
+    locations,
+    cloneUrl,
+    networkUrl,
+    ...(source.ref !== undefined && { ref: source.ref }),
+    auth,
+    ...(args.refresh !== undefined && { refresh: args.refresh }),
+  });
+  const copyRoot = await steps.materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl,
+    sha: mirror.resolvedSha,
+    resolveAuth: () => auth,
+  });
+  return resolveGitPluginRootWithSubdir(source, copyRoot, mirror.resolvedSha);
+}
+
+/**
  * MIRR-01/02/03 / D-79.1-01/02: materialize-or-refresh the single mutable
  * mirror clone for an UNPINNED git plugin source at `plugin-clones/<urlhash12>/`
  * (bare URL key, no sha suffix), returning the mirror root + the checked-out
  * HEAD sha.
+ *
+ * The mirror is a download cache only (GIT-01): a caller that installs code
+ * from it materializes the per-commit copy at the returned sha through
+ * `materializePluginCommitCopy` and never records the mirror itself.
  *
  * This is the marketplace clone lifecycle applied to a URL-keyed directory
  * (D-79.1-01): one mirror per canonical URL, refreshed in place on mutating
@@ -255,18 +418,22 @@ export async function materializePluginClone(args: {
  *      is byte-equivalent, same url => same content): clean staging and fall
  *      through to the refresh path -- the winner's tree still needs a HEAD read
  *      (D-79.1-03).
- *   3. After the dir exists (freshly materialized OR already present), refresh
- *      it in place via `refreshGitHubClone` -- fetch + force-update ref +
- *      checkout, the SAME function marketplace update uses. A just-materialized
- *      clone is also refreshed: that is the intended marketplace parity
- *      (refresh-on-warm, D-79.1-02). Reads (list/info) never call this seam, so
- *      NFR-5 is untouched.
+ *   3. When the mirror was already present, or a concurrent create won the
+ *      rename race, refresh it in place via `refreshGitHubClone` -- fetch +
+ *      force-update ref + checkout, the SAME function marketplace update uses
+ *      (refresh-on-warm, D-79.1-02). A mirror this call just cloned is not
+ *      refreshed: the clone already fetched the remote, and `marketplace add`
+ *      and Claude Code both clone a source once. Reads (list/info) never call
+ *      this seam, so NFR-5 is untouched. With `refresh: false` a present
+ *      mirror answers the commit its last fetch recorded for the declared ref,
+ *      with no network (reinstall, D-18-04); a missing mirror, or a ref the
+ *      mirror never fetched, is the NFR-5 cache miss and still reaches it.
  *   4. Read the pin: resolvedSha = resolveRef({ dir: mirrorRoot, ref: "HEAD" }).
  *
  * `auth` threads into the clone and the refresh fetch the way
- * `materializePluginClone`'s bundle does (no mirror-specific auth path). The
- * refresh always reaches the network, so the caller builds the bundle up
- * front. Derive-not-persist: mirror-dir existence IS the fetched-state -- no
+ * `materializePluginClone`'s bundle does (no mirror-specific auth path). Either
+ * the clone or the refresh reaches the network, so the caller builds the bundle
+ * up front. Derive-not-persist: mirror-dir existence IS the fetched-state -- no
  * migration stamp, no refcount.
  * All git surface (refreshGitHubClone, gitOps, resolveRef, DEFAULT_GIT_OPS)
  * stays confined to this file, never surfaced to install/list/info.
@@ -282,6 +449,7 @@ export async function materializeOrRefreshPluginMirror(args: {
   ref?: string;
   gitOps?: GitOps;
   auth: GitAuthBundle;
+  refresh?: boolean;
 }): Promise<{ pluginRoot: string; resolvedSha: string }> {
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   // D-08-12: this verb owns a staging lifecycle, so it is the composition root
@@ -299,6 +467,7 @@ export async function materializeOrRefreshPluginMirror(args: {
 
   // MIRR-01: materialize the mirror on a cold key (no fixed-pin checkout; the
   // mirror tracks a moving ref).
+  let promotion: "renamed" | "raced" | undefined;
   if (!(await pathExists(mirrorRoot))) {
     const stagingDir = await args.locations.sourcesStagingDir(randomUUID());
 
@@ -310,18 +479,64 @@ export async function materializeOrRefreshPluginMirror(args: {
     }
 
     // MIRR-03 / D-79.1-03: a `raced` promotion falls through to the refresh
-    // path exactly like a `renamed` one -- the winner's byte-equivalent tree
-    // still needs an in-place refresh plus a HEAD read.
-    await promoteStagingToClone(removalOps, stagingDir, mirrorRoot, "plugin mirror staging");
+    // path -- the winner's byte-equivalent tree still needs an in-place refresh
+    // plus a HEAD read.
+    promotion = await promoteStagingToClone(
+      removalOps,
+      stagingDir,
+      mirrorRoot,
+      "plugin mirror staging",
+    );
   }
 
-  // MIRR-02 / D-79.1-02: refresh the mirror in place (marketplace parity). A
-  // just-materialized clone is refreshed too -- refresh-on-warm. The HEAD sha
-  // read below is the fetched-state; no separate advance flag is consumed here.
-  await refreshGitHubClone(mirrorRoot, args.ref, gitOps, undefined, args.auth);
+  // MIRR-02 / D-79.1-02: refresh a warm mirror in place (marketplace parity).
+  // The HEAD sha read below is the fetched-state; no separate advance flag is
+  // consumed here. D-18-04: with `refresh: false` the declared ref is read
+  // from the mirror's last fetch instead, and only a ref the mirror never
+  // fetched falls back to the refresh, as a cache miss would.
+  if (promotion !== "renamed") {
+    const fetchedSha =
+      args.refresh === false
+        ? await resolveFetchedRefOffline(gitOps, mirrorRoot, args.ref)
+        : undefined;
+    if (fetchedSha !== undefined) {
+      return { pluginRoot: mirrorRoot, resolvedSha: fetchedSha };
+    }
+
+    await refreshGitHubClone(mirrorRoot, args.ref, gitOps, undefined, args.auth);
+  }
 
   const resolvedSha = await gitOps.resolveRef({ dir: mirrorRoot, ref: "HEAD" });
   return { pluginRoot: mirrorRoot, resolvedSha };
+}
+
+/**
+ * D-18-04 / REI-04: the commit a present mirror last fetched for the ref a
+ * source declares, read with no network. The mirror is keyed by URL only, so
+ * its checked-out HEAD belongs to whichever source refreshed it last, which
+ * can be another plugin with a different `ref`, or this entry before its
+ * `ref` changed. The remote-tracking ref is this source's own: the default
+ * branch (`refs/remotes/origin/HEAD`) when no ref is declared, otherwise
+ * `refs/remotes/origin/<ref>`.
+ *
+ * Returns undefined when the mirror holds no such ref, for example a tag or a
+ * branch no fetch brought in yet. The caller then refreshes.
+ */
+async function resolveFetchedRefOffline(
+  gitOps: GitOps,
+  mirrorRoot: string,
+  ref: string | undefined,
+): Promise<string | undefined> {
+  const trackingRef = ref === undefined ? "refs/remotes/origin/HEAD" : `refs/remotes/origin/${ref}`;
+  try {
+    return await gitOps.resolveRef({ dir: mirrorRoot, ref: trackingRef });
+  } catch (err) {
+    if (isGitNotFoundError(err)) {
+      return undefined;
+    }
+
+    throw err;
+  }
 }
 
 /**
@@ -433,19 +648,21 @@ async function seedOnePluginMirror(
 
   const staging = await locations.sourcesStagingDir(randomUUID());
   await mkdir(path.dirname(staging), { recursive: true });
-  // Copy the working tree AND `.git`, so the seeded mirror's origin remote is
-  // the real remote URL (SEED-05), never the local checkout path. `cp` is
-  // cross-FS safe; the visible mirror still appears only via the atomic rename.
-  await cp(marketplaceRoot, staging, { recursive: true });
-
-  // SEED-04: a pinned source is seeded ONLY after its sha checks out against the
-  // copied history -- a successful checkout IS the reachability proof. An
-  // unreachable pin (CommitNotFetchedError, or any throw) is skipped so the
-  // normal network path materializes it later; never fabricate an immutable
-  // per-sha entry from non-matching content.
-  if (source.sha !== undefined) {
+  if (source.sha === undefined) {
+    // The mirror is a download cache: copy the working tree AND `.git`, so its
+    // origin remote is the real remote URL (SEED-05), never the local checkout
+    // path, with symlinks kept as they are. `cp` is cross-FS safe; the visible
+    // mirror still appears only via the atomic rename.
+    await cp(marketplaceRoot, staging, { recursive: true, verbatimSymlinks: true });
+  } else {
+    // SEED-04 / GIT-04: a pinned source is a per-commit copy an install runs
+    // from, so it gets exactly the commit's tree through the shared step, and
+    // only when the sha checks out against the copied history -- a successful
+    // checkout IS the reachability proof. An unreachable pin (or any throw) is
+    // skipped so the normal network path materializes it later; never
+    // fabricate an immutable per-sha entry from non-matching content.
     try {
-      await gitOps.checkout({ dir: staging, ref: source.sha });
+      await checkoutGitDirCopy(gitOps, path.join(marketplaceRoot, ".git"), staging, source.sha);
     } catch {
       await cleanupStaging(ops, staging, "plugin mirror seed staging");
       return;
@@ -692,25 +909,16 @@ export async function materializeMarketplaceTagClone(args: {
   // content): no re-copy, no re-checkout.
   if (!(await pathExists(dest))) {
     const staging = await args.locations.sourcesStagingDir(randomUUID());
-    // Copy ONLY the gitdir into an otherwise-empty staging dir. A checkout
-    // never removes untracked/ignored files from an existing work tree, so
-    // starting from a copy of the marketplace's live work tree would let
-    // anything not part of the tag's tree (untracked files, gitignored
-    // trees) ride along into the cache. Starting empty means the checkout
-    // below is the ONLY thing that writes into the work tree, and it writes
-    // exactly the tag's tree.
-    await mkdir(staging, { recursive: true });
+    // GIT-04: the shared step checks the tag out of a copy of the
+    // marketplace's gitdir into an empty tree, so the checkout is the only
+    // thing that writes the work tree and it writes exactly the tag's tree.
     try {
-      await cp(path.join(args.marketplaceRoot, ".git"), path.join(staging, ".git"), {
-        recursive: true,
-      });
-      // `force: true` -- the copied `.git`'s index already matches `tagOid`
-      // whenever the tag names the marketplace's current HEAD (the common
-      // case for a freshly-tagged release), so a non-forced checkout would
-      // see index === target tree and write nothing at all, leaving the
-      // empty staging dir empty. Forcing makes the checkout compare against
-      // the actual (empty) work tree instead of trusting the index.
-      await gitOps.checkout({ dir: staging, ref: args.tagOid, force: true });
+      await checkoutGitDirCopy(
+        gitOps,
+        path.join(args.marketplaceRoot, ".git"),
+        staging,
+        args.tagOid,
+      );
     } catch (err) {
       const leak = await cleanupStaging(removalOps, staging, "marketplace tag clone staging");
       throw appendLeakToError(err, leak);

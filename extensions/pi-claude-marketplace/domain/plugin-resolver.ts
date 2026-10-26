@@ -33,6 +33,7 @@ import path from "node:path";
 
 import { errorMessage, isErrnoException, PluginShapeError } from "../shared/errors.ts";
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
+import { SOURCE_DIR_MISSING_NOTE } from "../shared/probe-classifiers.ts";
 
 import { collectStrictComponentPaths, type ComponentPathResolution } from "./component-paths.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
@@ -573,7 +574,7 @@ async function preflightStages(
       kind: "unavailable",
       result: unavailable(entry.name, [
         ...partial.notes,
-        `source dir does not exist: ${pluginRoot}`,
+        `${SOURCE_DIR_MISSING_NOTE}: ${pluginRoot}`,
       ]),
     };
   }
@@ -774,10 +775,10 @@ export function requireInstallable(
  * NFR-7). Throw shape mirrors `requireInstallable`; `r.notes` exists on all
  * three arms so `reasons` compiles.
  *
- * BFILL-01: the reinstall flow and its direct clone probe
- * (orchestrators/plugin/reinstall-clone-probe.ts) resolve through this gate so
- * they can re-materialize a partially-installed (`partially-available`)
- * plugin in place. The `--partial` install/update flag plumbing lands later.
+ * BFILL-01 / D-18-06: reinstall resolves through this gate (the shared
+ * runner admits a partial candidate for it), so it can re-materialize a
+ * partially-installed (`partially-available`) plugin in place. `install
+ * --partial` and `update --partial` resolve through it too.
  */
 export function requirePartialInstallable(
   r: ResolvedPlugin,

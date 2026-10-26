@@ -21,6 +21,8 @@ import {
   materializeMarketplaceTagClone,
   materializeOrRefreshPluginMirror,
   materializePluginClone,
+  materializePluginCommitCopy,
+  materializeUnpinnedSource,
   resolveGitPluginRootWithSubdir,
   resolveGitSubdirRoot,
   resolvePluginPin,
@@ -28,6 +30,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-cache.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { PinnedCommitMissingError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 
@@ -391,6 +394,11 @@ function commitNotFetchedError(ref: string): Error {
   return err;
 }
 
+/** INR-03 / INR-06: the typed missing-pin error, with no library advice chained under it. */
+function isPinnedCommitMissing(err: unknown, pin: string): boolean {
+  return err instanceof PinnedCommitMissingError && err.sha === pin && err.cause === undefined;
+}
+
 void test("PURL-04: a pin outside the ref-hint closure triggers ONE full fetch then retries the checkout to success", async (t) => {
   const locations = await freshLocations(t);
   const base = createGitOps();
@@ -436,6 +444,7 @@ void test("PURL-04: a pin outside the ref-hint closure triggers ONE full fetch t
     undefined,
     "recovery fetch pulls every head (no ref -> wildcard refspec)",
   );
+  assert.equal(base.state.fetchCalls[0]!.tags, true, "INR-06: the recovery fetch pulls tags too");
   assert.deepEqual(
     checkouts,
     [PIN_OUTSIDE_CLOSURE, PIN_OUTSIDE_CLOSURE],
@@ -461,7 +470,7 @@ void test("PURL-04: a pin reachable within the ref-hint closure stays on the fas
   assert.equal(state.fetchCalls.length, 0, "no recovery fetch when the pin is already present");
 });
 
-void test("PURL-04: a still-unreachable pin fails clean after the retry (fetch does not make it appear)", async (t) => {
+void test("PURL-04 / INR-03: a still-unreachable pin fails clean after the retry as a commit the host lacks", async (t) => {
   const locations = await freshLocations(t);
   const base = createGitOps();
   const gitOps = {
@@ -488,13 +497,13 @@ void test("PURL-04: a still-unreachable pin fails clean after the retry (fetch d
         ref: "v1.5.5",
         gitOps,
       }),
-    /is not available locally/,
-    "the original CommitNotFetchedError survives the fail-clean fold",
+    (err: unknown) => isPinnedCommitMissing(err, PIN_OUTSIDE_CLOSURE),
+    "INR-03: the unreachable pin reads as a commit the git host does not have",
   );
   assert.equal(base.state.fetchCalls.length, 1, "exactly one recovery fetch was attempted");
 });
 
-void test("PURL-04: a NO-ref clone whose checkout throws CommitNotFetchedError fails immediately with zero recovery fetches", async (t) => {
+void test("PURL-04 / INR-03: a NO-ref clone whose checkout throws CommitNotFetchedError fails immediately as a commit the host lacks", async (t) => {
   const locations = await freshLocations(t);
   const base = createGitOps();
   const gitOps = {
@@ -517,8 +526,8 @@ void test("PURL-04: a NO-ref clone whose checkout throws CommitNotFetchedError f
         pin: PIN_OUTSIDE_CLOSURE,
         gitOps,
       }),
-    /is not available locally/,
-    "the CommitNotFetchedError rethrows through the fail-clean fold",
+    (err: unknown) => isPinnedCommitMissing(err, PIN_OUTSIDE_CLOSURE),
+    "INR-03: the unreachable pin reads as a commit the git host does not have",
   );
   assert.equal(base.state.fetchCalls.length, 0, "the no-ref arm never attempts a recovery fetch");
   const stagingDir = base.state.cloneCalls[0]!.dir;
@@ -1029,7 +1038,7 @@ function mirrorGitOps(): ReturnType<typeof createGitOps> {
   });
 }
 
-void test("MIRR-01/02: mirror ABSENT materializes into staging then renames to plugin-clones/<bare-key>/, refreshes, returns HEAD", async (t) => {
+void test("MIRR-01: mirror ABSENT materializes into staging then renames to plugin-clones/<bare-key>/ and returns HEAD without a refresh", async (t) => {
   const locations = await freshLocations(t);
   const { gitOps, state } = mirrorGitOps();
 
@@ -1050,6 +1059,7 @@ void test("MIRR-01/02: mirror ABSENT materializes into staging then renames to p
   assert.match(path.basename(pluginRoot), /^[0-9a-f]{12}$/, "bare 12-hex key, no sha suffix");
   assert.equal(state.cloneCalls.length, 1, "MURL-09: exactly one clone attempt");
   assert.equal(state.cloneCalls[0]?.url, "https://example.com/repo");
+  assert.equal(state.fetchCalls.length, 0, "a just-cloned mirror is not fetched again");
   // The mirror tracks a moving ref -- it MUST NOT checkout a fixed 40-hex pin.
   assert.ok(
     !state.checkoutCalls.some((c) => /^[a-f0-9]{40}$/i.test(c.ref)),
@@ -1133,6 +1143,155 @@ void test("MIRR-02: mirror PRESENT (warm) refreshes in place via refreshGitHubCl
   assert.equal(second.resolvedSha, MIRROR_HEAD);
 });
 
+void test("D-18-04: a present mirror read with refresh: false keeps its HEAD and fetches nothing", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const { gitOps, state } = mirrorGitOps();
+  await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
+    locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    gitOps,
+  });
+  const fetchesAfterFirst = state.fetchCalls.length;
+  const clonesAfterFirst = state.cloneCalls.length;
+
+  // act
+  const second = await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
+    locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    gitOps,
+    refresh: false,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      fetches: state.fetchCalls.length - fetchesAfterFirst,
+      clones: state.cloneCalls.length - clonesAfterFirst,
+      second,
+    },
+    {
+      fetches: 0,
+      clones: 0,
+      second: {
+        pluginRoot: await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo")),
+        resolvedSha: MIRROR_HEAD,
+      },
+    },
+  );
+});
+
+void test("D-18-04 / REI-04: refresh: false answers the declared ref's last fetch, not the commit checked out for another ref", async (t) => {
+  // arrange
+  const releaseSha = "0123456789abcdef0123456789abcdef01234567";
+  const locations = await freshLocations(t);
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+  await mkdir(mirrorRoot, { recursive: true });
+  const { gitOps, state } = createGitOps({
+    head: MIRROR_HEAD,
+    localRefs: {
+      "refs/heads/main": MIRROR_HEAD,
+      "refs/remotes/origin/release": releaseSha,
+    },
+  });
+
+  // act
+  const mirror = await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
+    locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    ref: "release",
+    gitOps,
+    refresh: false,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    {
+      mirror,
+      clones: state.cloneCalls,
+      fetches: state.fetchCalls,
+      checkouts: state.checkoutCalls,
+    },
+    {
+      mirror: { pluginRoot: mirrorRoot, resolvedSha: releaseSha },
+      clones: [],
+      fetches: [],
+      checkouts: [],
+    },
+  );
+});
+
+void test("D-18-04: refresh: false refreshes a declared ref the mirror never fetched, as a cache miss", async (t) => {
+  // arrange
+  const devSha = "89abcdef0123456789abcdef0123456789abcdef";
+  const auth = publicCloneAuth();
+  const locations = await freshLocations(t);
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+  await mkdir(mirrorRoot, { recursive: true });
+  const { gitOps, state } = createGitOps({
+    head: MIRROR_HEAD,
+    localRefs: { "refs/heads/main": MIRROR_HEAD },
+    remoteRefs: { dev: devSha },
+  });
+
+  // act
+  const mirror = await materializeOrRefreshPluginMirror({
+    auth,
+    locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    ref: "dev",
+    gitOps,
+    refresh: false,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { mirror, clones: state.cloneCalls, fetches: state.fetchCalls },
+    {
+      mirror: { pluginRoot: mirrorRoot, resolvedSha: devSha },
+      clones: [],
+      fetches: [{ dir: mirrorRoot, remote: "origin", ref: "dev", auth }],
+    },
+  );
+});
+
+void test("D-18-04: refresh: false propagates a mirror ref read that fails for a reason other than a missing ref", async (t) => {
+  // arrange
+  const readFailure = Object.assign(new Error("EIO: i/o error, read"), { code: "EIO" });
+  const locations = await freshLocations(t);
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+  await mkdir(mirrorRoot, { recursive: true });
+  const { gitOps: baseGitOps, state } = createGitOps({ head: MIRROR_HEAD });
+  const gitOps: GitOps = { ...baseGitOps, resolveRef: () => Promise.reject(readFailure) };
+
+  // act & assert
+  await assert.rejects(
+    materializeOrRefreshPluginMirror({
+      auth: publicCloneAuth(),
+      locations,
+      cloneUrl: "https://example.com/repo",
+      networkUrl: "https://example.com/repo",
+      gitOps,
+      refresh: false,
+    }),
+    (error: unknown) => error === readFailure,
+  );
+  assert.deepStrictEqual(
+    { clones: state.cloneCalls, fetches: state.fetchCalls },
+    {
+      clones: [],
+      fetches: [],
+    },
+  );
+});
+
 void test("MIRR-02: two successive calls both succeed; the second refreshes rather than throwing (idempotent)", async (t) => {
   const locations = await freshLocations(t);
   const { gitOps } = mirrorGitOps();
@@ -1197,14 +1356,17 @@ void test("PROV-03: a private mirror forwards auth through clone and refresh fet
     kind: "stored-credential",
   };
 
-  // act
-  const mirror = await materializeOrRefreshPluginMirror({
+  const mirrorArgs = {
     locations,
     cloneUrl: "https://gitlab.example.com/o/r",
     networkUrl: "https://gitlab.example.com/o/r",
     gitOps,
     auth,
-  });
+  };
+
+  // act
+  await materializeOrRefreshPluginMirror(mirrorArgs);
+  const mirror = await materializeOrRefreshPluginMirror(mirrorArgs);
 
   // assert
   assert.deepEqual(mirror, {
@@ -1274,6 +1436,7 @@ void test("MIRR-03: a concurrent create losing the rename race treats the winner
 
   assert.equal(pluginRoot, keyDir, "returns the winner's mirror dir");
   assert.equal(resolvedSha, MIRROR_HEAD, "still reads HEAD from the winner's tree");
+  assert.equal(base.state.fetchCalls.length, 1, "the winner's tree is refreshed in place");
 });
 
 void test("MIRR-01/03: a clone failure cleans staging and rethrows the original error", async (t) => {
@@ -2002,4 +2165,331 @@ void test("materializeMarketplaceTagClone: a marketplace checkout with no discov
 
   // assert: materialization still succeeds off the name-keyed fallback.
   assert.equal(tagClone.kind, "materialized");
+});
+
+/**
+ * Seeds the URL-keyed mirror of `cloneUrl` with a `.git` holding a config and
+ * an index, and one untracked work-tree file, returning its root.
+ */
+async function seedMirror(locations: ScopedLocations, cloneUrl: string): Promise<string> {
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+  await mkdir(path.join(mirrorRoot, ".git"), { recursive: true });
+  await writeFile(path.join(mirrorRoot, ".git", "config"), "mirror config");
+  await writeFile(path.join(mirrorRoot, ".git", "index"), "mirror index");
+  await writeFile(path.join(mirrorRoot, "plugin.txt"), "untracked mirror file");
+  return mirrorRoot;
+}
+
+/** A fake gitOps whose first checkout rejects with `failure`. */
+function failingFirstCheckout(failure: Error): {
+  readonly gitOps: GitOps;
+  readonly state: ReturnType<typeof createGitOps>["state"];
+} {
+  let checkouts = 0;
+  const { gitOps: inner, state } = createGitOps({ remoteRefs: { [PIN_40]: PIN_40 } });
+  return {
+    gitOps: {
+      ...inner,
+      checkout(options) {
+        checkouts += 1;
+        return checkouts === 1 ? Promise.reject(failure) : inner.checkout(options);
+      },
+    },
+    state,
+  };
+}
+
+function namedError(name: string, message: string): Error {
+  const error = new Error(message);
+  error.name = name;
+  return error;
+}
+
+void test("GIT-01: a present per-commit copy uses the default git surface without a git call", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  const copyRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, PIN_40));
+  await mkdir(copyRoot, { recursive: true });
+
+  // act
+  const result = await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha: PIN_40,
+    resolveAuth: () => assert.fail("a present copy never builds clone auth"),
+  });
+
+  // assert
+  assert.strictEqual(result, copyRoot);
+});
+
+void test("GIT-01: a per-commit copy checks the commit out of the mirror's .git alone, offline", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  const mirrorRoot = await seedMirror(locations, cloneUrl);
+  const { gitOps, state } = createGitOps({ remoteRefs: { [PIN_40]: PIN_40 } });
+
+  // act
+  const result = await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha: PIN_40,
+    gitOps,
+    resolveAuth: () => assert.fail("a mirror copy never builds clone auth"),
+  });
+
+  // assert
+  assert.strictEqual(result, await locations.pluginCloneDir(pluginCloneKey(cloneUrl, PIN_40)));
+  assert.strictEqual(await readFile(path.join(result, ".git", "config"), "utf8"), "mirror config");
+  assert.strictEqual(await pathExists(path.join(result, ".git", "index")), false);
+  assert.strictEqual(await pathExists(path.join(result, "plugin.txt")), false);
+  assert.strictEqual(
+    await readFile(path.join(mirrorRoot, "plugin.txt"), "utf8"),
+    "untracked mirror file",
+  );
+  assert.deepStrictEqual(
+    state.checkoutCalls.map((call) => call.ref),
+    [PIN_40],
+  );
+  assert.strictEqual(state.cloneCalls.length, 0);
+  assert.deepStrictEqual(await readdir(path.join(locations.extensionRoot, "sources-staging")), []);
+});
+
+void test("GIT-01: a real per-commit copy holds the commit's tree with relative symlinks and no untracked file", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+  await mkdir(path.join(mirrorRoot, "shared"), { recursive: true });
+  await mkdir(path.join(mirrorRoot, "skills"), { recursive: true });
+  await writeFile(path.join(mirrorRoot, "shared", "tool.txt"), "first");
+  await fs.promises.symlink("../shared", path.join(mirrorRoot, "skills", "link"));
+  await git.init({ fs, dir: mirrorRoot, defaultBranch: "main" });
+  await git.add({ fs, dir: mirrorRoot, filepath: "shared/tool.txt" });
+  await git.add({ fs, dir: mirrorRoot, filepath: "skills/link" });
+  const sha = await git.commit({
+    fs,
+    dir: mirrorRoot,
+    message: "first",
+    author: { name: "test", email: "test@example.com" },
+  });
+  await writeFile(path.join(mirrorRoot, "shared", "tool.txt"), "edited in the mirror");
+  await writeFile(path.join(mirrorRoot, "untracked.txt"), "untracked");
+
+  // act
+  const result = await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha,
+    resolveAuth: () => assert.fail("a mirror copy never builds clone auth"),
+  });
+
+  // assert
+  assert.strictEqual(await readFile(path.join(result, "shared", "tool.txt"), "utf8"), "first");
+  assert.strictEqual(await fs.promises.readlink(path.join(result, "skills", "link")), "../shared");
+  assert.strictEqual(await pathExists(path.join(result, "untracked.txt")), false);
+});
+
+void test("GIT-01: a mirror that lacks the commit falls back to a clone of it", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  await seedMirror(locations, cloneUrl);
+  const { gitOps, state } = failingFirstCheckout(namedError("NotFoundError", "no such commit"));
+
+  // act
+  const result = await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha: PIN_40,
+    gitOps,
+    resolveAuth: publicCloneAuth,
+  });
+
+  // assert
+  assert.strictEqual(result, await locations.pluginCloneDir(pluginCloneKey(cloneUrl, PIN_40)));
+  assert.strictEqual(state.cloneCalls.length, 1);
+  assert.deepStrictEqual(await readdir(path.join(locations.extensionRoot, "sources-staging")), []);
+});
+
+void test("GIT-01: a mirror whose commit was not fetched falls back to a clone of it", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  await seedMirror(locations, cloneUrl);
+  const { gitOps, state } = failingFirstCheckout(
+    namedError("CommitNotFetchedError", "commit not fetched"),
+  );
+
+  // act
+  await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha: PIN_40,
+    gitOps,
+    resolveAuth: publicCloneAuth,
+  });
+
+  // assert
+  assert.strictEqual(state.cloneCalls.length, 1);
+});
+
+void test("GIT-01: any other checkout failure propagates without a clone", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  await seedMirror(locations, cloneUrl);
+  const failure = new Error("disk full");
+  const { gitOps, state } = failingFirstCheckout(failure);
+
+  // act & assert
+  await assert.rejects(
+    materializePluginCommitCopy({
+      locations,
+      cloneUrl,
+      networkUrl: cloneUrl,
+      sha: PIN_40,
+      gitOps,
+      resolveAuth: publicCloneAuth,
+    }),
+    (error: unknown) => error === failure,
+  );
+  assert.strictEqual(state.cloneCalls.length, 0);
+  assert.deepStrictEqual(await readdir(path.join(locations.extensionRoot, "sources-staging")), []);
+});
+
+void test("GIT-01: with no mirror the per-commit copy is cloned at the commit", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  const { gitOps, state } = createGitOps({ remoteRefs: { [PIN_40]: PIN_40 } });
+
+  // act
+  const result = await materializePluginCommitCopy({
+    locations,
+    cloneUrl,
+    networkUrl: cloneUrl,
+    sha: PIN_40,
+    gitOps,
+    resolveAuth: publicCloneAuth,
+  });
+
+  // assert
+  assert.strictEqual(result, await locations.pluginCloneDir(pluginCloneKey(cloneUrl, PIN_40)));
+  assert.strictEqual(state.cloneCalls.length, 1);
+  assert.deepStrictEqual(
+    state.checkoutCalls.map((call) => call.ref),
+    [PIN_40],
+  );
+});
+
+void test("GIT-01: a mirror that cannot be copied fails the copy and leaves no staging", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const cloneUrl = "https://example.com/repo";
+  const mirrorRoot = await seedMirror(locations, cloneUrl);
+  await chmod(path.join(mirrorRoot, ".git", "config"), 0o000);
+  const { gitOps, state } = createGitOps();
+
+  // act & assert
+  await assert.rejects(
+    materializePluginCommitCopy({
+      locations,
+      cloneUrl,
+      networkUrl: cloneUrl,
+      sha: PIN_40,
+      gitOps,
+      resolveAuth: publicCloneAuth,
+    }),
+    (error: unknown) => (error as NodeJS.ErrnoException).code === "EACCES",
+  );
+  assert.strictEqual(state.cloneCalls.length, 0);
+  assert.deepStrictEqual(await readdir(path.join(locations.extensionRoot, "sources-staging")), []);
+});
+
+void test("GIT-04: a tag clone checks out a directory that holds only a symlink", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const marketplaceRoot = await buildMarketplaceCheckout(t, {
+    originUrl: GITHUB_REPO_URL,
+    plugins: [],
+  });
+  await mkdir(path.join(marketplaceRoot, "plugins", "foo", "linked"), { recursive: true });
+  await fs.promises.symlink(
+    "../.claude-plugin",
+    path.join(marketplaceRoot, "plugins", "foo", "linked", "manifest"),
+  );
+  await git.add({ fs, dir: marketplaceRoot, filepath: "plugins/foo/linked/manifest" });
+  const tagOid = await git.commit({
+    fs,
+    dir: marketplaceRoot,
+    message: "symlink-only directory",
+    author: { name: "test", email: "test@example.com" },
+  });
+
+  // act
+  const tagClone = await materializeMarketplaceTagClone({
+    locations,
+    marketplaceRoot,
+    marketplaceSource: GITHUB_REPO_URL,
+    marketplaceName: "marketplace",
+    pathSource: pathSource("./plugins/foo"),
+    tagOid,
+  });
+
+  // assert
+  assert.ok(tagClone.kind === "materialized");
+  assert.strictEqual(
+    await fs.promises.readlink(path.join(tagClone.pluginRoot, "linked", "manifest")),
+    "../.claude-plugin",
+  );
+});
+
+void test("GIT-04: an unpinned source copies the mirror's commit and anchors its subdir", async (t) => {
+  // arrange
+  const locations = await freshLocations(t);
+  const copyRoot = path.join(locations.extensionRoot, "copy");
+  await mkdir(path.join(copyRoot, "plugins", "one"), { recursive: true });
+  const calls: unknown[] = [];
+  const source: GitSubdirSource = {
+    kind: "git-subdir",
+    raw: "https://example.com/mono.git",
+    url: "https://example.com/mono",
+    path: "plugins/one",
+    ref: "main",
+  };
+  const auth = publicCloneAuth();
+
+  // act
+  const result = await materializeUnpinnedSource(
+    {
+      materializeOrRefreshPluginMirror: (args) => {
+        calls.push({ step: "mirror", ref: args.ref, refresh: args.refresh, auth: args.auth });
+        return Promise.resolve({ pluginRoot: "unused", resolvedSha: PIN_40 });
+      },
+      materializePluginCommitCopy: (args) => {
+        calls.push({ step: "copy", sha: args.sha, auth: args.resolveAuth() });
+        return Promise.resolve(copyRoot);
+      },
+    },
+    { locations, source, auth, refresh: false },
+  );
+
+  // assert
+  assert.deepStrictEqual(result, {
+    kind: "materialized",
+    pluginRoot: path.join(copyRoot, "plugins", "one"),
+    resolvedSha: PIN_40,
+  });
+  assert.deepStrictEqual(calls, [
+    { step: "mirror", ref: "main", refresh: false, auth },
+    { step: "copy", sha: PIN_40, auth },
+  ]);
 });

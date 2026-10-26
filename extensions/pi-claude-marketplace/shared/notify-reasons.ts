@@ -42,6 +42,8 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 const IDEMPOTENT_REASONS = [
   "up-to-date",
   "already installed",
+  // IMP-06: import found the marketplace recorded with the same source.
+  "already added",
   "already autoupdate",
   "already no autoupdate",
   "already enabled",
@@ -412,11 +414,11 @@ type CommandPrivateReason =
   // a shared topic group. Like the cross-scope pair above, it IS a
   // `ContentReason`.
   | "stale workflow command"
-  // WCONV-03: the load-time convergence marker. The reconcile backfill
-  // projection places it on both arms of a re-materialized record's row, so a
-  // user can attribute new commands to a reload they did not initiate. Owned by
-  // that one projection rather than shared across topic groups, so it is named
-  // here for the proof. Like its neighbour above, it IS a `ContentReason`.
+  // WCONV-03: the convergence marker. `apply`'s growth move places it on both
+  // arms of a re-materialized record's row, and first on a grown revision
+  // move's row, so a user can tell a promotion from a fresh install. Owned by
+  // the reconcile projection rather than shared across topic groups, so it is
+  // named here for the proof. Like its neighbour above, it IS a `ContentReason`.
   | "components now supported"
   // LAYER-05 / D-MF-03: uninstall's no-op marker, owned by
   // `orchestrators/plugin/uninstall.messaging.ts`. The other layer still

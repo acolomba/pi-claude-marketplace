@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { rm, stat, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { publishGitRepository, pushGitBranch, pushGitRepository } from "./git-marketplace.ts";
@@ -44,14 +44,20 @@ const MANIFEST_WRITERS: Readonly<
   "schema-invalid": writeInvalidManifest,
 };
 
-/** The git host as the publishing code needs it: where it keeps and serves repositories. */
+/**
+ * The git host as the publishing code needs it: where it keeps and serves
+ * repositories. A repository belongs to an owner, the host's default owner
+ * when a caller names none.
+ */
 export interface GitRepositoryHost {
-  /** Returns the bare repository the host serves for `directory`. */
-  repositoryPath(directory: string): string;
-  /** Returns the URL a user types to clone the repository `directory`. */
-  repositoryUrl(directory: string): string;
-  /** Returns the `owner/repo` shorthand a user types for the repository `directory`. */
-  repositoryShorthand(directory: string): string;
+  /** Returns the bare repository the host serves for `directory` of `owner`. */
+  repositoryPath(directory: string, owner?: string): string;
+  /** Returns the URL a user types to clone the repository `directory` of `owner`. */
+  repositoryUrl(directory: string, owner?: string): string;
+  /** Returns the `owner/repo` shorthand a user types for the repository `directory` of `owner`. */
+  repositoryShorthand(directory: string, owner?: string): string;
+  /** The owner a repository is served under when a caller names none. */
+  readonly defaultOwner: string;
   /** The scratch HOME of every git that writes the host's repositories. */
   readonly gitHome: string;
 }
@@ -75,15 +81,16 @@ export interface PathPublication {
 
 /**
  * A marketplace published as a git repository: `root` is the work tree that
- * holds its files, `repository` the directory the git host serves it under
- * `acme/`, and `bareRepository` the repository the host serves. `gitHome` is
- * the HOME of the git that commits and publishes it.
+ * holds its files, `owner` and `repository` the owner and directory the git
+ * host serves it under, and `bareRepository` the repository the host serves.
+ * `gitHome` is the HOME of the git that commits and publishes it.
  */
 export interface GitPublication {
   readonly kind: "url" | "github";
   readonly root: string;
   readonly source: string;
   readonly manifestPath: string;
+  readonly owner: string;
   readonly repository: string;
   readonly bareRepository: string;
   readonly gitHome: string;
@@ -206,12 +213,54 @@ export async function publishMarketplaceIn(
             ? gitHost.repositoryUrl(directory)
             : gitHost.repositoryShorthand(directory),
         manifestPath,
+        owner: gitHost.defaultOwner,
         repository: directory,
         bareRepository,
         gitHome: gitHost.gitHome,
       };
     }
   }
+}
+
+// Claude Code's official marketplace: the GitHub repository `bootstrap` adds,
+// and the name its manifest declares.
+const OFFICIAL_OWNER = "anthropics";
+const OFFICIAL_REPOSITORY = "claude-plugins-official";
+const OFFICIAL_NAME = "claude-plugins-official";
+
+/**
+ * Publishes the official marketplace `name` at `sites` as a github source
+ * that offers no plugin, served by the git host as
+ * `anthropics/claude-plugins-official`. It refuses any name other than the
+ * one the official manifest declares, and fails when its work tree or its
+ * repository exists already.
+ */
+export async function publishOfficialMarketplace(
+  sites: PublicationSites,
+  name: string,
+): Promise<GitPublication> {
+  if (name !== OFFICIAL_NAME) {
+    throw new Error(`the official marketplace is named ${OFFICIAL_NAME}, not ${name}`);
+  }
+
+  const { gitHost } = sites;
+  const root = path.join(sites.marketplacesRoot, name);
+  const manifestPath = path.join(root, ".claude-plugin", "marketplace.json");
+  const bareRepository = gitHost.repositoryPath(OFFICIAL_REPOSITORY, OFFICIAL_OWNER);
+  await requireAbsent(root, name);
+  await requireAbsent(bareRepository, `${OFFICIAL_OWNER}/${OFFICIAL_REPOSITORY}`);
+  await writeMarketplace(root, name, [], manifestPath);
+  await publishGitRepository(root, bareRepository, gitHost.gitHome);
+  return {
+    kind: "github",
+    root,
+    source: gitHost.repositoryShorthand(OFFICIAL_REPOSITORY, OFFICIAL_OWNER),
+    manifestPath,
+    owner: OFFICIAL_OWNER,
+    repository: OFFICIAL_REPOSITORY,
+    bareRepository,
+    gitHome: gitHost.gitHome,
+  };
 }
 
 /** Publishes a file source outside the conventional manifest directory. */
@@ -314,6 +363,19 @@ export async function invalidateManifest(
 }
 
 /**
+ * Takes away every permission on the manifest of a local publication, so
+ * reading it fails with EACCES. Git stores no file mode that denies reading,
+ * so a git publication refuses.
+ */
+export async function makeManifestUnreadable(published: PublishedMarketplace): Promise<void> {
+  if (published.kind === "url" || published.kind === "github") {
+    throw new Error("a git repository cannot hold a file nobody may read");
+  }
+
+  await chmod(published.manifestPath, 0o000);
+}
+
+/**
  * Adds a file nobody may read to the skill of the published plugin `plugin`,
  * and returns its path. Pi reads the plugin's manifest and dependencies as
  * usual, then fails to copy the skill when it stages the update. Only a local
@@ -324,17 +386,63 @@ export async function publishUnreadableSkillFile(
   published: PublishedMarketplace,
   plugin: string,
 ): Promise<string> {
+  const file = unreadableSkillFile(published, plugin);
+  await writeFile(file, "Unreadable.\n", { mode: 0o000 });
+  return file;
+}
+
+/**
+ * Lets everyone read the file `publishUnreadableSkillFile` left in the plugin
+ * `plugin` again, and returns its path.
+ */
+export async function restoreUnreadableSkillFile(
+  published: PublishedMarketplace,
+  plugin: string,
+): Promise<string> {
+  const file = unreadableSkillFile(published, plugin);
+  await chmod(file, 0o644);
+  return file;
+}
+
+/**
+ * Copies the skill directory that holds the file `publishUnreadableSkillFile`
+ * left in `plugin` into a new directory under `scratch`, as Pi stages a skill,
+ * and returns the error the copy fails with. Each quoted path in its message
+ * is cut to its last segment, as Pi shows a cause, so the message reads as
+ * Pi reports the failed copy on this Node.
+ */
+export async function unreadableSkillCopyError(
+  published: PublishedMarketplace,
+  plugin: string,
+  scratch: string,
+): Promise<NodeJS.ErrnoException> {
+  const skillDir = path.dirname(unreadableSkillFile(published, plugin));
+  const error = await cp(skillDir, path.join(scratch, path.basename(skillDir)), {
+    recursive: true,
+    dereference: false,
+    verbatimSymlinks: true,
+    errorOnExist: true,
+    force: false,
+  }).then(
+    () => assert.fail(`copying ${skillDir} did not fail`),
+    (reason: unknown) => reason as NodeJS.ErrnoException,
+  );
+  error.message = error.message.replaceAll(
+    /'([^']+)'/gu,
+    (_quoted, quotedPath: string) => `'${path.basename(quotedPath)}'`,
+  );
+  return error;
+}
+
+// The skill file of `plugin` that `publishUnreadableSkillFile` writes.
+function unreadableSkillFile(published: PublishedMarketplace, plugin: string): string {
   switch (published.kind) {
     case "dir":
-    case "file": {
-      const file = ownedTarget(
+    case "file":
+      return ownedTarget(
         published,
         path.join(published.root, "plugins", plugin, "skills", `${plugin}-skill`, "notes.md"),
       );
-      await writeFile(file, "Unreadable.\n", { mode: 0o000 });
-      return file;
-    }
-
     case "url":
     case "github":
       throw new Error("a git repository cannot hold a file nobody may read");
@@ -342,18 +450,81 @@ export async function publishUnreadableSkillFile(
 }
 
 /**
+ * Deletes the directory of the published plugin `plugin`, which must exist,
+ * as a marketplace does when it stops shipping a plugin. A git publication
+ * commits and pushes the deletion.
+ */
+export async function removePublishedPlugin(
+  published: PublishedMarketplace,
+  plugin: string,
+): Promise<void> {
+  const target = ownedTarget(published, path.join(published.root, "plugins", plugin));
+  await changePublication(published, () => rm(target, { recursive: true }));
+}
+
+/**
  * Writes `text` to `file` inside the published plugin `plugin`, which must
- * not hold that file yet. It refuses a path outside the publication, and a
- * git publication commits and pushes the new file.
+ * not hold that file yet, and creates the directories above it. It refuses a
+ * path outside the publication, and a git publication commits and pushes the
+ * new file.
  */
 export async function writePublishedPluginFile(
   published: PublishedMarketplace,
   plugin: string,
   file: string,
   text: string,
-): Promise<void> {
+): Promise<string> {
   const target = ownedTarget(published, path.join(published.root, "plugins", plugin, file));
-  await changePublication(published, () => writeFile(target, text, { flag: "wx" }));
+  await changePublication(published, async () => {
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, text, { flag: "wx" });
+  });
+  return target;
+}
+
+/**
+ * Gives the published plugin `plugin` an output style and returns the path
+ * of its file. A plugin's `output-styles` directory holds its output styles,
+ * a component Pi does not support, so the plugin becomes partially
+ * available.
+ */
+export async function publishOutputStyle(
+  published: PublishedMarketplace,
+  plugin: string,
+): Promise<string> {
+  return writePublishedPluginFile(
+    published,
+    plugin,
+    path.join("output-styles", `${plugin}-style.md`),
+    [
+      "---",
+      `name: ${plugin}-style`,
+      `description: An output style of ${plugin}.`,
+      "---",
+      "",
+      "Answer in short sentences.",
+      "",
+    ].join("\n"),
+  );
+}
+
+/**
+ * Deletes the `output-styles` directory of the published plugin `plugin`,
+ * which must exist, and returns its path. Re-offering a plugin keeps the files
+ * its directory already holds, so this is how a new version stops shipping
+ * the output style an earlier one had. A git publication commits and pushes
+ * the deletion.
+ */
+export async function removePublishedOutputStyle(
+  published: PublishedMarketplace,
+  plugin: string,
+): Promise<string> {
+  const target = ownedTarget(
+    published,
+    path.join(published.root, "plugins", plugin, "output-styles"),
+  );
+  await changePublication(published, () => rm(target, { recursive: true }));
+  return target;
 }
 
 /**

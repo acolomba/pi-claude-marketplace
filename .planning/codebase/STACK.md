@@ -4,7 +4,7 @@ last_mapped_at: 2026-10-05
 ---
 # Technology Stack
 
-**Analysis Date:** 2026-10-05
+**Analysis Date:** 2026-10-25
 
 ## Languages
 
@@ -88,7 +88,7 @@ last_mapped_at: 2026-10-05
 - `pre-commit` (Python-based framework, Python 3.12 in CI) for the git hook pipeline
 
 **Production:**
-- Distributed as an npm package (`pi-claude-marketplace`, currently `0.19.2`) consumed as a Pi extension via `pi.extensions` in `package.json`, pointing at `./extensions/pi-claude-marketplace/index.ts`
+- Distributed as an npm package (`pi-claude-marketplace`, currently `0.20.1`) consumed as a Pi extension via `pi.extensions` in `package.json`, pointing at `./extensions/pi-claude-marketplace/index.ts`
 - Runs inside a host Pi agent process (`@earendil-works/pi-coding-agent`) -- no standalone server or deployment target of its own
 - Published to npm via GitHub Actions on `v*` tags (`.github/workflows/publish.yml`, which calls `ci.yml` as a reusable workflow via `workflow_call` before publishing, `id-token: write` for npm provenance)
 
@@ -107,4 +107,4 @@ Five workflow files in `.github/workflows/`:
 
 ---
 
-*Stack analysis: 2026-10-05*
+*Stack analysis: 2026-10-25*

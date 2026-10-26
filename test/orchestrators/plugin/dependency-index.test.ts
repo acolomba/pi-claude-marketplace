@@ -8,6 +8,8 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import {
   buildScopeDeclarationDetail,
   buildScopeDeclarationIndex,
+  readRecordDeclarations,
+  withoutDisabledHolders,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { InvalidMarketplaceManifestError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -16,6 +18,7 @@ import type { MarketplaceManifest } from "../../../extensions/pi-claude-marketpl
 import type { DependencyDeclarationReader } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-declaration-read.ts";
 import type {
   AddressedDependency,
+  DeclarerReadFailure,
   ScopeDeclarationDetailResult,
   ScopeDeclarationIndexResult,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts";
@@ -36,16 +39,19 @@ type MarketplaceRecord = ExtensionState["marketplaces"][string];
 interface RecordSeed {
   readonly enabled?: boolean;
   readonly provenance?: PluginRecord["provenance"];
+  readonly dependencyDisabled?: true;
+  readonly resolvedSource?: string;
 }
 
 function pluginRecord(seed: RecordSeed = {}): PluginRecord {
   return {
     version: "1.0.0",
-    resolvedSource: path.join(SCOPE_ROOT, "plugins", "x"),
+    resolvedSource: seed.resolvedSource ?? path.join(SCOPE_ROOT, "plugins", "x"),
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     resources: { workflows: [], skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
     enabled: seed.enabled ?? true,
     provenance: seed.provenance ?? "explicit",
+    ...(seed.dependencyDisabled !== undefined && { dependencyDisabled: seed.dependencyDisabled }),
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
@@ -275,6 +281,26 @@ test("D-05-04: a disabled record and a dependency-provenance record both hold th
   });
 });
 
+test("UNI-01 / MPR-01: dropping disabled holders keeps enabled and load-time-disabled ones", () => {
+  // arrange
+  const mp = marketplaceRecord("mp", {
+    app: {},
+    paused: { enabled: false },
+    held: { enabled: false, dependencyDisabled: true },
+  });
+  const index = new Map([
+    ["app@mp", new Set(["base@mp"])],
+    ["paused@mp", new Set(["base@mp"])],
+    ["held@mp", new Set(["base@mp"])],
+  ]);
+
+  // act
+  const enabled = withoutDisabledHolders(index, stateOf(mp));
+
+  // assert
+  assert.deepStrictEqual([...enabled.keys()], ["app@mp", "held@mp"]);
+});
+
 test("D-05-06: a record's own manifest outranks its marketplace entry", async () => {
   // arrange
   const mp = mpRecord();
@@ -375,10 +401,14 @@ test("D-05-07: a record its marketplace does not list ends the walk as not in ma
   // assert
   assert.equal(walk.ok, false);
   assert.deepStrictEqual(
-    walk.ok ? undefined : { declarer: walk.declarer, message: walk.cause.message },
+    walk.ok
+      ? undefined
+      : { declarer: walk.declarer, reason: walk.reason, message: walk.cause.message },
     {
       declarer: "helper@mp",
-      message: "cannot read the dependencies of helper@mp: not declared by its marketplace",
+      reason: "not in manifest",
+      message:
+        "cannot read the dependencies of helper@mp: not declared by its marketplace, and its installed copy cannot be read",
     },
   );
 });
@@ -406,9 +436,12 @@ test("D-05-07: an unusable declaration ends the walk as invalid manifest with th
   // assert
   assert.equal(walk.ok, false);
   assert.deepStrictEqual(
-    walk.ok ? undefined : { declarer: walk.declarer, message: walk.cause.message },
+    walk.ok
+      ? undefined
+      : { declarer: walk.declarer, reason: walk.reason, message: walk.cause.message },
     {
       declarer: "helper@mp",
+      reason: "invalid manifest",
       message: "cannot read the dependencies of helper@mp: dependencies.0: Invalid input",
     },
   );
@@ -440,9 +473,15 @@ test("D-05-07: a corrupt own manifest beside a silent entry ends the walk naming
   assert.deepStrictEqual(
     walk.ok
       ? undefined
-      : { declarer: walk.declarer, message: walk.cause.message, cause: walk.cause.cause },
+      : {
+          declarer: walk.declarer,
+          reason: walk.reason,
+          message: walk.cause.message,
+          cause: walk.cause.cause,
+        },
     {
       declarer: "helper@mp",
+      reason: "unreadable manifest",
       message:
         "cannot read the dependencies of helper@mp: its own manifest is present but cannot be read",
       cause: undefined,
@@ -453,6 +492,7 @@ test("D-05-07: a corrupt own manifest beside a silent entry ends the walk naming
 interface LoadFailureCase {
   readonly title: string;
   readonly thrown: Error;
+  readonly reason: DeclarerReadFailure;
   readonly message: string;
 }
 
@@ -461,33 +501,44 @@ const LOAD_FAILURES: readonly LoadFailureCase[] = [
     title:
       "D-05-07: a missing marketplace manifest ends the walk naming the record and the missing manifest",
     thrown: errno("ENOENT"),
+    reason: "source missing",
     message: "cannot read the dependencies of app@mp: its marketplace manifest is missing",
   },
   {
     title: "D-05-07: a marketplace manifest under a file instead of a directory reads as missing",
     thrown: errno("ENOTDIR"),
+    reason: "source missing",
     message: "cannot read the dependencies of app@mp: its marketplace manifest is missing",
   },
   {
     title:
       "D-05-07: a malformed marketplace manifest ends the walk naming the record and the invalid manifest",
     thrown: new InvalidMarketplaceManifestError("bad json", { cause: new SyntaxError("x") }),
+    reason: "unparseable",
+    message: "cannot read the dependencies of app@mp: its marketplace manifest is invalid",
+  },
+  {
+    title: "REC-05: a schema-invalid marketplace manifest ends the walk as an invalid manifest",
+    thrown: new InvalidMarketplaceManifestError("marketplace.json schema invalid"),
+    reason: "invalid manifest",
     message: "cannot read the dependencies of app@mp: its marketplace manifest is invalid",
   },
   {
     title:
       "D-05-07: a marketplace manifest the process may not read ends the walk naming the record and the unreadable manifest",
     thrown: errno("EACCES"),
+    reason: "permission denied",
     message: "cannot read the dependencies of app@mp: its marketplace manifest cannot be read",
   },
   {
     title: "D-05-07: a manifest load failure with no errno code reads as an unreadable manifest",
     thrown: new Error("lib@mp: marketplace text"),
+    reason: "unreadable",
     message: "cannot read the dependencies of app@mp: its marketplace manifest cannot be read",
   },
 ];
 
-for (const { title, thrown, message } of LOAD_FAILURES) {
+for (const { title, thrown, reason, message } of LOAD_FAILURES) {
   test(title, async () => {
     // arrange
     const mp = mpRecord();
@@ -505,8 +556,10 @@ for (const { title, thrown, message } of LOAD_FAILURES) {
     // assert
     assert.equal(walk.ok, false);
     assert.deepStrictEqual(
-      walk.ok ? undefined : { declarer: walk.declarer, message: walk.cause.message },
-      { declarer: "app@mp", message },
+      walk.ok
+        ? undefined
+        : { declarer: walk.declarer, reason: walk.reason, message: walk.cause.message },
+      { declarer: "app@mp", reason, message },
     );
   });
 }
@@ -561,10 +614,14 @@ test("D-05-07: the first unreadable record wins over a later one", async () => {
   // assert
   assert.equal(walk.ok, false);
   assert.deepStrictEqual(
-    walk.ok ? undefined : { declarer: walk.declarer, message: walk.cause.message },
+    walk.ok
+      ? undefined
+      : { declarer: walk.declarer, reason: walk.reason, message: walk.cause.message },
     {
       declarer: "missing@mp",
-      message: "cannot read the dependencies of missing@mp: not declared by its marketplace",
+      reason: "not in manifest",
+      message:
+        "cannot read the dependencies of missing@mp: not declared by its marketplace, and its installed copy cannot be read",
     },
   );
 });
@@ -707,9 +764,15 @@ test("ends the detail walk on the first declarer whose own manifest cannot be re
   assert.deepStrictEqual(
     walk.ok
       ? undefined
-      : { declarer: walk.declarer, message: walk.cause.message, cause: walk.cause.cause },
+      : {
+          declarer: walk.declarer,
+          reason: walk.reason,
+          message: walk.cause.message,
+          cause: walk.cause.cause,
+        },
     {
       declarer: "app@mp",
+      reason: "unreadable manifest",
       message:
         "cannot read the dependencies of app@mp: its own manifest is present but cannot be read",
       cause: undefined,
@@ -731,4 +794,124 @@ test("walks a scope with no recorded marketplace to an empty declaration map", a
 
   // assert
   assert.deepStrictEqual(detailEntries(walk), {});
+});
+
+/** The installed copy of `plugin` inside the marketplace `mp`'s clone root. */
+function copyRoot(plugin: string): string {
+  return path.join(SCOPE_ROOT, "mp", "plugins", plugin);
+}
+
+test("DLS-01: a record its marketplace no longer lists keeps the dependencies of its installed copy", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", {
+    app: { resolvedSource: copyRoot("app") },
+    lib: {},
+  });
+  const loadManifest = manifestLoader({ [mp.manifestPath]: manifestOf("mp", { lib: {} }) });
+  const reader = ownManifests({
+    [path.join(copyRoot("app"), ".claude-plugin", "plugin.json")]: JSON.stringify({
+      dependencies: ["lib@^1.0.0"],
+    }),
+  });
+
+  // act
+  const detail = await buildScopeDeclarationDetail({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader,
+    loadManifest,
+  });
+  const index = await buildScopeDeclarationIndex({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    exclude: "lib@mp",
+    reader,
+    loadManifest,
+  });
+
+  // assert
+  assert.deepStrictEqual(detailEntries(detail), {
+    "app@mp": [{ name: "lib", version: "^1.0.0", marketplace: "mp" }],
+    "lib@mp": [],
+  });
+  assert.deepStrictEqual(indexEntries(index), { "app@mp": ["lib@mp"] });
+});
+
+test("D-05-07: a delisted record whose installed copy is unusable ends the walk as unreadable manifest", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", { app: { resolvedSource: copyRoot("app") } });
+  const loadManifest = manifestLoader({ [mp.manifestPath]: manifestOf("mp", {}) });
+  const reader = ownManifests({
+    [path.join(copyRoot("app"), ".claude-plugin", "plugin.json")]: "{ truncated",
+  });
+
+  // act
+  const walk = await buildScopeDeclarationDetail({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader,
+    loadManifest,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    walk.ok
+      ? undefined
+      : { declarer: walk.declarer, reason: walk.reason, message: walk.cause.message },
+    {
+      declarer: "app@mp",
+      reason: "unreadable manifest",
+      message:
+        "cannot read the dependencies of app@mp: its own manifest is present but cannot be read",
+    },
+  );
+});
+
+test("D-05-07: a name with neither a record nor a catalog entry fails closed as not in manifest", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", {});
+  const loadManifest = manifestLoader({ [mp.manifestPath]: manifestOf("mp", {}) });
+
+  // act
+  const read = await readRecordDeclarations(
+    { state: stateOf(mp), locations: LOCATIONS, reader: ownManifests(), loadManifest },
+    mp,
+    "ghost",
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    read.ok ? undefined : { reason: read.reason, message: read.cause.message },
+    {
+      reason: "not in manifest",
+      message:
+        "cannot read the dependencies of ghost@mp: not declared by its marketplace, and its installed copy cannot be read",
+    },
+  );
+});
+
+test("DLS-01 / NFR-10: a delisted git-source record reads its copy under the scope's plugin clones", async () => {
+  // arrange
+  const clone = path.join(LOCATIONS.pluginClonesDir, "acme-app", "0123456");
+  const mp = marketplaceRecord("mp", { app: { resolvedSource: clone } });
+  const loadManifest = manifestLoader({ [mp.manifestPath]: manifestOf("mp", {}) });
+  const reader = ownManifests({
+    [path.join(clone, ".claude-plugin", "plugin.json")]: JSON.stringify({
+      dependencies: ["lib@^2.0.0"],
+    }),
+  });
+
+  // act
+  const read = await readRecordDeclarations(
+    { state: stateOf(mp), locations: LOCATIONS, reader, loadManifest },
+    mp,
+    "app",
+  );
+
+  // assert
+  assert.deepStrictEqual(read, {
+    ok: true,
+    declared: [{ name: "lib", version: "^2.0.0", marketplace: "mp" }],
+    delisted: true,
+  });
 });

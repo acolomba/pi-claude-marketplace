@@ -26,7 +26,8 @@ export const PLUGIN_BOOTSTRAP_FIXTURES: FixtureMap = {
           {
             name: "claude-plugins-official",
             scope: "user",
-            status: "updated",
+            status: "skipped",
+            reasons: ["already added"],
             plugins: [],
           },
         ],

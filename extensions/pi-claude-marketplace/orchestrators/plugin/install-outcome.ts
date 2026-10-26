@@ -13,10 +13,9 @@
 //       PI-2:                cached manifest read ONLY (no network)
 //       PI-4:                resolveStrict + requireInstallable
 //       PI-6:                assertNoCrossPluginConflicts(scope, names, state)
-//       PI-7:                deriveInstallVersion -- pin override, then the
-//                            git-source sha, then the 3-tier precedence
-//                            (plugin.json > entry.version > hash) delegated
-//                            to `shared.ts::resolvePluginVersion`
+//       PI-7:                deriveInstallVersion -- pin override, then
+//                            `shared.ts::resolvePluginVersion` (plugin.json >
+//                            entry.version > git sha > hash, VER-01)
 //       runPhases(phases, ctx)                             // D-01 7-phase ledger
 //       format rollback result, capture rows, throw error  // D-02 PI-14 bypass
 //   })
@@ -103,6 +102,7 @@ import {
   unstagePluginWorkflows,
 } from "../../bridges/workflows/index.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
+import { recordedVersionSatisfies } from "../../domain/dependency-range.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import {
   requirePartialInstallable,
@@ -110,9 +110,9 @@ import {
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource, type ParsedSource, type PathSource } from "../../domain/source.ts";
-import { shaVersion } from "../../domain/version.ts";
 import {
   ConcurrentInstallError,
+  DirectoryPinUnsatisfiedError,
   errorMessage,
   InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
@@ -148,9 +148,11 @@ import { discoverGeneratedNames } from "./discover-names.ts";
 import { probeInstallClone, type InstallCloneCacheSeam } from "./install-clone-probe.ts";
 import {
   assertNoCrossPluginConflicts,
+  readDeclaredPluginVersion,
   removePluginRecord,
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
+  resolveTagPinnedPluginVersion,
   type LedgerDegradationSignals,
 } from "./shared.ts";
 
@@ -176,6 +178,18 @@ import type { InstallPluginOutcome } from "../types.ts";
 export type InstallPluginNotifications =
   { readonly mode: "standalone" } | { readonly mode: "orchestrated" };
 
+/**
+ * GV-01: the range the listed copy of a plugin of Claude Code's plugin
+ * directory must satisfy, which picks no release tag, and what a refusal
+ * names: the declared ranges and the `name@marketplace` keys of the plugins
+ * that asked for one.
+ */
+export interface DirectoryPinRange {
+  readonly range: string;
+  readonly declared: string;
+  readonly requiredBy: readonly string[];
+}
+
 /** Inputs consumed by the guard-free install ledger. */
 export interface InstallLedgerOptions {
   /** Context used only by the clone probe's authentication notification seam. */
@@ -199,6 +213,16 @@ export interface InstallLedgerOptions {
    * tags -- the entry still decides which repository is read.
    */
   readonly sourcePinOverride?: string;
+  /** GV-01: the range a plugin directory member's listed copy must satisfy. */
+  readonly directoryPin?: DirectoryPinRange;
+  /**
+   * GV-01: the semver of the release tag a dependency's version range
+   * selected, which the record keeps as `resolvedVersion` and dependency
+   * ranges read. With `sourcePinOverride` at that tag's commit, the recorded
+   * version carries the commit (`resolveTagPinnedPluginVersion`). A caller
+   * re-materializing a kept record passes the record's own value back.
+   */
+  readonly resolvedVersion?: string;
   /**
    * D-04-01: how THIS member got here -- `"explicit"` for the plugin the user
    * named, `"dependency"` for a member its closure pulled in. The install
@@ -243,12 +267,14 @@ export interface InstallLedgerOptions {
   };
   /**
    * WR-07: the transaction's list of the marketplaces its adds recorded, each
-   * with the clone directory a github or url add created. The lock owner owns
-   * the list: it removes the clones when its transaction does not save, and
-   * settles each marketplace after a save. The enable path passes none.
+   * with the raw source it was added from and the clone directory a github or
+   * url add created. The lock owner owns the list: it removes the clones when
+   * its transaction does not save, and settles each marketplace after a save.
+   * The enable path passes none.
    */
   readonly addedMarketplaces?: {
     readonly marketplace: string;
+    readonly rawSource: string;
     readonly cloneDir: string | undefined;
   }[];
 }
@@ -359,6 +385,8 @@ interface InstallLedgerContext {
   // resolver's ResolvedPlugin schema cannot carry it, so it flows through this
   // side-channel into the state record). Undefined for path/non-git sources.
   readonly resolvedSha?: string;
+  /** GV-01: the release tag's semver, when a dependency's range selected one. */
+  readonly resolvedVersion?: string;
   readonly pluginDataDir: string;
   // Prep handles populated by each phase.do before that phase's commit.
   // Each phase.undo reads the matching handle to call the bridge unstage*
@@ -437,36 +465,49 @@ type InstallLedgerContextResult =
   | { readonly kind: "marketplace-absent" };
 
 /**
- * PI-7 / D-77-01 / PURL-09: derive the recorded plugin version.
+ * PI-7 / PURL-09 / VER-01: derive the recorded plugin version.
  *
  * Precedence:
  *   1. `pinVersionOverride` (D-54-01 / ENBL-02): an enable re-materialization
  *      reuses the caller-supplied pin verbatim so the recorded `version`
  *      survives across a disable/enable cycle.
- *   2. git source (url / git-subdir / github) with a captured sha: record
- *      `sha-<12hex>` -- the commit IS the version identity for a git-materialized
- *      plugin, REPLACING the whole 3-tier ladder (a plugin.json version inside a
- *      pinned commit is redundant with the sha). `resolvedSha` is set by the
- *      clone probe on the materialized path, which the install gate required.
- *   3. otherwise: the 3-tier ladder (plugin.json > entry.version > hash).
+ *   2. GV-01: at the release tag a dependency's range selected, the version
+ *      Claude Code records there, which carries the tag's commit.
+ *   3. otherwise `resolvePluginVersion`: the declared version (plugin.json,
+ *      then the marketplace entry, with GV-01's directory pin), then the
+ *      commit for a git source (url / git-subdir / github) whose clone probe
+ *      captured it, spelled as `shaVersion` spells it (GV-01), then the
+ *      content hash (D-16-08). The full sha is recorded apart (D-77-02).
  */
 async function deriveInstallVersion(args: {
   entry: PluginEntry;
   installable: MaterializablePlugin;
+  marketplaceName: string;
   resolvedSha: string | undefined;
   pinVersionOverride: string | undefined;
+  resolvedVersion: string | undefined;
 }): Promise<string> {
   if (args.pinVersionOverride !== undefined) {
     return args.pinVersionOverride;
   }
 
-  const kind = parsePluginSource(args.entry.source).kind;
-  const isGitSource = kind === "url" || kind === "git-subdir" || kind === "github";
-  if (isGitSource && args.resolvedSha !== undefined) {
-    return shaVersion(args.resolvedSha);
+  if (args.resolvedVersion !== undefined && args.resolvedSha !== undefined) {
+    return resolveTagPinnedPluginVersion(
+      args.entry,
+      args.installable,
+      args.marketplaceName,
+      args.resolvedSha,
+    );
   }
 
-  return resolvePluginVersion(args.entry, args.installable);
+  const kind = parsePluginSource(args.entry.source).kind;
+  const isGitSource = kind === "url" || kind === "git-subdir" || kind === "github";
+  return resolvePluginVersion(
+    args.entry,
+    args.installable,
+    args.marketplaceName,
+    isGitSource ? args.resolvedSha : undefined,
+  );
 }
 
 /** The real `marketplaceAdd` seam: the `marketplace add` body and settle. */
@@ -551,7 +592,7 @@ async function addTargetScopeMarketplace(
     deviceFlowHttp: opts.deviceFlowHttp,
     authMemo: opts.authMemo,
   });
-  opts.addedMarketplaces?.push({ marketplace: added.name, cloneDir: added.cloneDir });
+  opts.addedMarketplaces?.push({ marketplace: added.name, rawSource, cloneDir: added.cloneDir });
   const targetRecord = ownValue(state.marketplaces, marketplace);
   if (added.name !== marketplace || targetRecord === undefined) {
     throw new InvalidMarketplaceManifestError(
@@ -692,8 +733,8 @@ async function preflightInstallResolve(
   // resolveGitPluginRoot callback plus its captured resolved sha. The
   // resolver stays network-free; install injects THIS policy so a git source
   // clones once into the cache and returns the clone-anchored pluginRoot.
-  // The full sha is read AFTER the resolve for the sha-<12hex> version
-  // (D-77-01) and the full-sha state field (D-77-02).
+  // The full sha is read AFTER the resolve for the version's sha tier
+  // (VER-01) and the full-sha state field (D-77-02).
   let resolvedSha: string | undefined;
 
   // PI-4: resolveStrict + gate. Per D-04 the strict resolver consumes the
@@ -759,12 +800,80 @@ async function preflightInstallResolve(
     requireInstallable(resolved, "install");
   }
 
+  if (opts.directoryPin !== undefined) {
+    await assertDirectoryPinSatisfied(entry.name, resolved.pluginRoot, opts.directoryPin);
+  }
+
   // After the gate `resolved` is narrowed to the materializable union
   // (`installable | partially-available`); pluginRoot etc. are reachable.
   // The `partially-available` arm carries only supported kinds in
   // componentPaths, so the shared materialize phases degrade it naturally
   // (D-65-02, no partial branch).
   return { kind: "ready", entry, installable: resolved, resolvedSha };
+}
+
+/**
+ * GV-01: Claude Code checks the `plugin.json` version of a plugin directory
+ * copy against its dependents' range after the fetch, and refuses the install
+ * when it falls outside or declares none.
+ */
+async function assertDirectoryPinSatisfied(
+  plugin: string,
+  pluginRoot: string,
+  pin: DirectoryPinRange,
+): Promise<void> {
+  const manifestVersion = await readDeclaredPluginVersion(pluginRoot);
+  if (manifestVersion !== undefined && recordedVersionSatisfies(manifestVersion, pin.range)) {
+    return;
+  }
+
+  throw new DirectoryPinUnsatisfiedError({
+    plugin,
+    manifestVersion,
+    ranges: pin.declared,
+    requiredBy: pin.requiredBy.map((key) => key.replace(/@[^@]*$/u, "")),
+  });
+}
+
+/**
+ * UPD-DEP-D1: whether the ledger would install one plugin, decided with no
+ * write: the PI-15 / PI-3 / PI-4 preflight behind the same installability
+ * gate, then the PI-6 name check. It runs over a copy of `state`, and a
+ * marketplace only the user scope records is read from the user record rather
+ * than added (D-MF-04), so a refused plan adds nothing. A git source clones on
+ * a cache miss, as the install it previews would. Throws what the ledger
+ * would throw; a marketplace neither scope records resolves quietly, since
+ * the ledger reports it.
+ */
+export async function previewInstall(
+  state: ExtensionState,
+  locations: ScopedLocations,
+  opts: InstallLedgerOptions,
+): Promise<void> {
+  const preview = structuredClone(state);
+  if (ownValue(preview.marketplaces, opts.marketplace) === undefined) {
+    const source = await resolveInstallMarketplaceSource({
+      targetScope: opts.scope,
+      cwd: opts.cwd,
+      marketplace: opts.marketplace,
+      targetState: state,
+    });
+    if (source !== undefined) {
+      setOwn(preview.marketplaces, opts.marketplace, source.sourceRecord);
+    }
+  }
+
+  const preflight = await preflightInstallResolve(preview, locations, opts);
+  if (preflight.kind === "marketplace-absent") {
+    return;
+  }
+
+  const generatedNames = await discoverGeneratedNames(opts.plugin, preflight.installable);
+  assertNoCrossPluginConflicts(
+    opts.scope,
+    generatedNames,
+    removePluginRecord(preview, opts.marketplace, opts.plugin),
+  );
 }
 
 /**
@@ -906,13 +1015,14 @@ async function runInstallLedgerBody(
   // caller-supplied pin verbatim so the recorded `version` survives across a
   // disable/enable cycle.
   //
-  // D-77-01 / PURL-09: derive the recorded version (git => sha-<12hex>; path /
-  // github-name => the 3-tier ladder). See `deriveInstallVersion`.
+  // VER-01 / PURL-09: derive the recorded version. See `deriveInstallVersion`.
   const version = await deriveInstallVersion({
     entry,
     installable,
+    marketplaceName: marketplace,
     resolvedSha,
     pinVersionOverride: opts.pinVersionOverride,
+    resolvedVersion: opts.resolvedVersion,
   });
 
   // Resolve the per-plugin data dir up front; the bridges receive it
@@ -935,6 +1045,7 @@ async function runInstallLedgerBody(
     // D-77-02: git-source installs carry the full 40-hex resolved sha; path /
     // github-name sources leave it undefined (no key => omitted from the record).
     ...(resolvedSha !== undefined && { resolvedSha }),
+    ...(opts.resolvedVersion !== undefined && { resolvedVersion: opts.resolvedVersion }),
     pluginDataDir,
     hooksFileWritten: false,
     stagedSkillNames: [],
@@ -1334,6 +1445,8 @@ async function runInstallLedgerBody(
         // above); an unconstrained `path` or a github-name install still omits
         // it.
         ...(c.resolvedSha !== undefined && { resolvedSha: c.resolvedSha }),
+        // GV-01: the tag's semver, which dependency ranges read.
+        ...(c.resolvedVersion !== undefined && { resolvedVersion: c.resolvedVersion }),
         // D-100-01 / ENBL-10: describe the hooks the install materialized, so
         // a later `info` need not read the config back off disk. Omitted when
         // the plugin declares no hooks config -- there is nothing to describe.
@@ -1343,9 +1456,9 @@ async function runInstallLedgerBody(
           // resolve, not a hardcoded `true`. A `--partial` install of an
           // `partially-available` plugin persists `installable: false` with the still-
           // unsupported set (mirrors reinstall.ts::updateStateRecord), so the
-          // partially-installed derivation stays truthful AND load-time backfill
-          // (which keys on `!compatibility.installable`) can later promote it
-          // when its supported set grows. A clean install persists `true`.
+          // partially-installed derivation stays truthful AND `apply`'s growth
+          // move (which compares the recorded `supported` set) can later
+          // promote it when its supported set grows. A clean install persists `true`.
           installable: c.resolved.state === "installable",
           notes: [...c.resolved.notes],
           supported: [...c.resolved.supported],
@@ -1384,11 +1497,10 @@ async function runInstallLedgerBody(
         // down. Do not "fix" this literal by carrying the field through from
         // `existing`: a stale marker would make the planner read a live record
         // as one it is still responsible for. The reverse asymmetry is
-        // deliberate too -- `clonePluginRecord` and `toDisabledRecord`
-        // (`persistence/state-io.ts`) both PRESERVE the marker, because a
-        // snapshot restored after a failed operation and a record a user then
-        // disables are not re-materializations, and losing it there would let
-        // a held-down record read as a disable the user asked for.
+        // deliberate too -- `toDisabledRecord` (`persistence/state-io.ts`)
+        // PRESERVES the marker, because a record a user then disables is not a
+        // re-materialization, and losing it there would let a held-down record
+        // read as a disable the user asked for.
         // D-04-01 / ENBL-02: a KEPT record's provenance rides through the
         // enable branch, which hand-builds its options with
         // `allowExistingRecord` and never names the field -- falling back

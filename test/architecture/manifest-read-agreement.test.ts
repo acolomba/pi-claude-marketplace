@@ -93,7 +93,7 @@ test("both readers honor a manifest that lives only at the bare path", async (t)
   // act
   const resolved = await resolveStrict(ENTRY, { marketplaceRoot, marketplaceName: "third-party" });
   requireInstallable(resolved);
-  const version = await resolvePluginVersion(ENTRY, resolved);
+  const version = await resolvePluginVersion(ENTRY, resolved, "mp");
 
   // assert
   assert.strictEqual(resolved.defaultEnabled, false);
@@ -110,7 +110,7 @@ test("both readers prefer the wrapped manifest over a bare sibling", async (t) =
   // act
   const resolved = await resolveStrict(ENTRY, { marketplaceRoot, marketplaceName: "third-party" });
   requireInstallable(resolved);
-  const version = await resolvePluginVersion(ENTRY, resolved);
+  const version = await resolvePluginVersion(ENTRY, resolved, "mp");
 
   // assert
   assert.strictEqual(resolved.defaultEnabled, false);
@@ -124,7 +124,7 @@ test("both readers tolerate a plugin declaring no manifest at either path", asyn
   // act
   const resolved = await resolveStrict(ENTRY, { marketplaceRoot, marketplaceName: "third-party" });
   requireInstallable(resolved);
-  const version = await resolvePluginVersion(ENTRY, resolved);
+  const version = await resolvePluginVersion(ENTRY, resolved, "mp");
 
   // assert
   assert.strictEqual(resolved.defaultEnabled, true);
@@ -213,7 +213,7 @@ for (const { label, prepare, resolution, notification } of [
         rejected: error instanceof Error && "code" in error ? error.code : error,
       }),
     );
-    const version = await resolvePluginVersion(ENTRY, previousResolution);
+    const version = await resolvePluginVersion(ENTRY, previousResolution, "mp");
     await getPluginInfo({
       ctx,
       run,
@@ -270,7 +270,7 @@ for (const { label, prepare } of [
       marketplaceName: "third-party",
     });
     requireInstallable(resolved);
-    const version = await resolvePluginVersion(ENTRY, resolved);
+    const version = await resolvePluginVersion(ENTRY, resolved, "mp");
     await getPluginInfo({
       ctx,
       run,
@@ -289,7 +289,7 @@ for (const { label, prepare } of [
         state: "installable",
         version: "9.9.9",
         notifications: [
-          "● mp [user] <no autoupdate>\n  ○ alpha v1.0.0 (available)\n    dependencies: fresh-dep@mp",
+          "● mp [user] <no autoupdate>\n  ○ alpha v9.9.9 (available)\n    dependencies: fresh-dep@mp",
         ],
         declaration: declares("fresh-dep"),
       },
@@ -372,7 +372,7 @@ test("all four readers locate one bare manifest, and two let it outrank the entr
   // act
   const resolved = await resolveStrict(ENTRY, { marketplaceRoot, marketplaceName: "third-party" });
   requireInstallable(resolved);
-  const version = await resolvePluginVersion(ENTRY, resolved);
+  const version = await resolvePluginVersion(ENTRY, resolved, "mp");
   await getPluginInfo({
     ctx,
     run,
@@ -392,7 +392,7 @@ test("all four readers locate one bare manifest, and two let it outrank the entr
       defaultEnabled: false,
       version: "9.9.9",
       notifications: [
-        "● mp [user] <no autoupdate>\n  ○ alpha v1.0.0 (available)\n    dependencies: fresh-dep@mp",
+        "● mp [user] <no autoupdate>\n  ○ alpha v9.9.9 (available)\n    dependencies: fresh-dep@mp",
       ],
       declaration: declares("fresh-dep"),
     },

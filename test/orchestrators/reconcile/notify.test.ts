@@ -6,19 +6,26 @@ import { describe, test } from "node:test";
 
 import { UninstallRefusedError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import {
+  blockedMoveOutcomes,
   buildReconcileAppliedCascade,
   buildReconcilePendingNotification,
+  convergedMoveOutcomes,
+  enabledMoveOutcome,
   isReconcilePlanListEmpty,
+  planListNeedsApply,
+  recordedVersionEntries,
   resolvePendingForceInstalls,
   type PendingInstallCandidate,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/notify.ts";
 import { DependencyCascadeError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { PerEntryOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts";
+import type { PlannedMove } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/convergence.ts";
 import type {
   PlannedPluginInstall,
   ReconcilePlan,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
+import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 /**
@@ -405,6 +412,78 @@ function appliedOutcomeRows(): AppliedOutcomeRows {
                 reasons: ["lock held"],
                 severity: "error",
                 needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+    "plugin-declarer-unreadable": {
+      outcome: {
+        kind: "plugin-declarer-unreadable",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "cr",
+        reason: "not in manifest",
+        cause: new Error(
+          "cannot read the dependencies of cr@mp: not declared by its marketplace, and its installed copy cannot be read",
+        ),
+      },
+      expected: {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "cr",
+                reasons: ["not in manifest"],
+                cause: new Error(
+                  "cannot read the dependencies of cr@mp: not declared by its marketplace, and its installed copy cannot be read",
+                ),
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+    "plugin-converged": {
+      outcome: {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "cr",
+        row: {
+          status: "updated",
+          name: "cr",
+          scope: "project",
+          from: "1.0.0",
+          to: "1.1.0",
+          dependencies: [],
+          severity: "info",
+          needsReload: true,
+        },
+      },
+      expected: {
+        kind: "reconcile-applied-cascade",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "updated",
+                name: "cr",
+                scope: "project",
+                from: "1.0.0",
+                to: "1.1.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
               },
             ],
           },
@@ -1501,7 +1580,7 @@ describe("buildReconcileAppliedCascade", () => {
     // arrange
     const cause = new UninstallRefusedError(
       "unreadable",
-      "cannot read the dependencies of keeper@mp: not declared by its marketplace",
+      "cannot read the dependencies of keeper@mp: not declared by its marketplace, and its installed copy cannot be read",
     );
     const outcomes: readonly PerEntryOutcome[] = [
       {
@@ -1566,6 +1645,43 @@ describe("buildReconcileAppliedCascade", () => {
               status: "failed",
               name: "cr",
               reasons: ["permission denied"],
+              severity: "error",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("REC-06: renders the narrowed reasons a plugin-install-failed row carries", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "cr",
+        reason: "no longer installable",
+        reasons: ["unsupported hooks", "lsp"],
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "failed",
+              name: "cr",
+              reasons: ["unsupported hooks", "lsp"],
               severity: "error",
               needsReload: false,
             },
@@ -1771,6 +1887,438 @@ describe("buildReconcileAppliedCascade", () => {
   });
 });
 
+const DEMO_MOVE: PlannedMove = {
+  scope: "project",
+  marketplace: "mp",
+  plugin: "demo",
+  fromVersion: "1.0.0",
+  toVersion: "1.1.0",
+  revisionChanged: true,
+  grew: false,
+  partial: false,
+};
+
+const UPDATE_BASE = { name: "demo", declaresAgents: false, declaresMcp: false } as const;
+
+describe("blockedMoveOutcomes", () => {
+  test("D-12: reports a range hold and a consent decline with the rows pending lists", () => {
+    // arrange
+    const convergence = {
+      moves: [DEMO_MOVE],
+      holds: [
+        {
+          scope: "project",
+          marketplace: "mp",
+          plugin: "lib",
+          version: "1.0.0",
+          cause:
+            'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"',
+        },
+      ],
+      declines: [
+        {
+          scope: "user",
+          marketplace: "mp",
+          plugin: "styled",
+          version: "1.0.0",
+          unsupported: ["outputStyles"],
+        },
+      ],
+    } as const;
+
+    // act
+    const outcomes = blockedMoveOutcomes(convergence);
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "lib",
+        row: {
+          status: "skipped",
+          name: "lib",
+          version: "1.0.0",
+          reasons: ["dependents constrain"],
+          cause: new Error(
+            'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"',
+          ),
+          severity: "warning",
+          needsReload: false,
+        },
+      },
+      {
+        kind: "plugin-converged",
+        scope: "user",
+        marketplace: "mp",
+        plugin: "styled",
+        row: {
+          status: "partially-upgradable",
+          name: "styled",
+          version: "1.0.0",
+          reasons: ["unsupported component"],
+          catalogHint: true,
+          severity: "warning",
+          needsReload: false,
+        },
+      },
+    ]);
+  });
+
+  test("reports nothing for a plan with no blocked move", () => {
+    // act
+    const outcomes = blockedMoveOutcomes({ moves: [DEMO_MOVE], holds: [], declines: [] });
+
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+  });
+});
+
+describe("enabledMoveOutcome", () => {
+  test("APPLY1-01 / WR-02: a held-down record moved and enabled reports the move's updated row", () => {
+    // act
+    const outcome = enabledMoveOutcome({ ...DEMO_MOVE, grew: true });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "plugin-converged",
+      scope: "project",
+      marketplace: "mp",
+      plugin: "demo",
+      row: {
+        status: "updated",
+        name: "demo",
+        scope: "project",
+        from: DEMO_MOVE.fromVersion,
+        to: DEMO_MOVE.toVersion,
+        dependencies: [],
+        reasons: ["components now supported"],
+        severity: "info",
+        needsReload: true,
+      },
+    });
+  });
+});
+
+describe("convergedMoveOutcomes", () => {
+  test("D-08: an updated move reports update's row without the range disclosure", () => {
+    // arrange
+    const notice = {
+      kind: "comments-dropped",
+      scope: "project",
+      file: "mcp-adapter.json",
+    } as const;
+
+    // act
+    const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "updated",
+      fromVersion: "1.0.0",
+      toVersion: "1.1.0",
+      stagedAgentNames: [],
+      stagedMcpServerNames: [],
+      declaresWorkflows: true,
+      constraint: {
+        disclosure: 'constrained to the combined range (>=1.0.0) -- required by "app@mp"',
+        fellBackToCurrentCopy: true,
+      },
+      mcpConfigNotices: [notice],
+    });
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        row: {
+          status: "updated",
+          name: "demo",
+          scope: "project",
+          from: "1.0.0",
+          to: "1.1.0",
+          dependencies: ["workflows"],
+          severity: "info",
+          needsReload: true,
+        },
+        mcpConfigNotices: [notice],
+      },
+    ]);
+  });
+
+  test("D-08: a partial record's move that drops a kind reports the partially-installed row at info", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(
+      { ...DEMO_MOVE, partial: true },
+      {
+        ...UPDATE_BASE,
+        partition: "updated",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresWorkflows: false,
+        constraint: undefined,
+        partialDegrade: { kinds: ["outputStyles"], newlyDegraded: false },
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        row: {
+          status: "partially-installed",
+          name: "demo",
+          scope: "project",
+          version: "1.1.0",
+          from: "1.0.0",
+          dependencies: [],
+          reasons: ["unsupported component"],
+          severity: "info",
+          needsReload: true,
+        },
+      },
+    ]);
+  });
+
+  test("WCONV-03: a revision move whose supported set grew leads its updated row with the growth marker", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(
+      { ...DEMO_MOVE, grew: true },
+      {
+        ...UPDATE_BASE,
+        partition: "updated",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresWorkflows: false,
+        constraint: undefined,
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        row: {
+          status: "updated",
+          name: "demo",
+          scope: "project",
+          from: "1.0.0",
+          to: "1.1.0",
+          dependencies: [],
+          reasons: ["components now supported"],
+          severity: "info",
+          needsReload: true,
+        },
+      },
+    ]);
+  });
+
+  test("WCONV-03: a grown partial record's move puts the growth marker before the dropped kinds", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(
+      { ...DEMO_MOVE, partial: true, grew: true },
+      {
+        ...UPDATE_BASE,
+        partition: "updated",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresWorkflows: false,
+        constraint: undefined,
+        partialDegrade: { kinds: ["outputStyles"], newlyDegraded: false },
+      },
+    );
+
+    // assert
+    assert.deepStrictEqual(
+      outcomes.map((outcome) => outcome.row.reasons),
+      [["components now supported", "unsupported component"]],
+    );
+  });
+
+  test("a move the runner found at the recorded revision reports nothing", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "unchanged",
+      fromVersion: "1.0.0",
+      toVersion: "1.0.0",
+      declaresWorkflows: false,
+      constraint: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(outcomes, []);
+  });
+
+  test("D-12: a range hold the runner met reports the hold row with its cause", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "skipped",
+      fromVersion: "1.0.0",
+      notes: [
+        'version 1.1.0 falls outside what the combined range admits (~1.0.0) -- required by "app@mp"',
+      ],
+      reasons: ["dependents constrain"],
+      declaresWorkflows: false,
+    });
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        row: {
+          status: "skipped",
+          name: "demo",
+          version: "1.0.0",
+          reasons: ["dependents constrain"],
+          cause: new Error(
+            'version 1.1.0 falls outside what the combined range admits (~1.0.0) -- required by "app@mp"',
+          ),
+          severity: "warning",
+          needsReload: false,
+        },
+      },
+    ]);
+  });
+
+  test("a skip with no cause and no recorded version names the planned version and its reason", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "skipped",
+      notes: [],
+      reasons: ["already disabled"],
+      declaresWorkflows: false,
+    });
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        row: {
+          status: "skipped",
+          name: "demo",
+          version: "1.0.0",
+          reasons: ["already disabled"],
+          severity: "warning",
+          needsReload: false,
+        },
+      },
+    ]);
+  });
+
+  test("D-12 / D-24: a consent decline the runner met reports the decline row with the catalog hint", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "skipped",
+      fromVersion: "1.0.0",
+      notes: ['Plugin "demo" is no longer installable: contains outputStyles'],
+      reasons: ["unsupported component"],
+      partialUpgradable: true,
+      declaresWorkflows: false,
+    });
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        row: {
+          status: "partially-upgradable",
+          name: "demo",
+          version: "1.0.0",
+          reasons: ["unsupported component"],
+          catalogHint: true,
+          severity: "warning",
+          needsReload: false,
+        },
+      },
+    ]);
+  });
+
+  test("D-13 / T-55-02-02: a failed move reports its reason and the planned move, never the raw error", () => {
+    // arrange
+    const notice = { kind: "left-unchanged", scope: "project", file: "mcp.json" } as const;
+
+    // act
+    const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "failed",
+      fromVersion: "1.0.0",
+      notes: ["EACCES: permission denied, open '/secret/path'"],
+      reasons: ["permission denied"],
+      cause: new Error("EACCES: permission denied, open '/secret/path'"),
+      declaresWorkflows: false,
+      mcpConfigNotices: [notice],
+    });
+
+    // assert
+    assert.deepStrictEqual(outcomes, [
+      {
+        kind: "plugin-converged",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        row: {
+          status: "failed",
+          name: "demo",
+          version: "1.1.0",
+          from: "1.0.0",
+          reasons: ["permission denied"],
+          severity: "error",
+          needsReload: false,
+        },
+        mcpConfigNotices: [notice],
+      },
+    ]);
+  });
+
+  test("a failed move with no classified reason renders an empty brace", () => {
+    // act
+    const outcomes = convergedMoveOutcomes(DEMO_MOVE, {
+      ...UPDATE_BASE,
+      partition: "failed",
+      notes: ["boom"],
+      declaresWorkflows: false,
+    });
+
+    // assert
+    assert.deepStrictEqual(outcomes[0]?.row, {
+      status: "failed",
+      name: "demo",
+      version: "1.1.0",
+      from: "1.0.0",
+      reasons: [],
+      severity: "error",
+      needsReload: false,
+    });
+  });
+});
+
 describe("buildReconcilePendingNotification", () => {
   test("returns no marketplace blocks for an empty plan list", () => {
     // arrange
@@ -1794,7 +2342,7 @@ describe("buildReconcilePendingNotification", () => {
     assert.deepStrictEqual(pending, { marketplaces: [] });
   });
 
-  test("shows nothing pending for a marketplace add that carries no child work", () => {
+  test("D-20: previews a marketplace add with no child work as a bare will-add header", () => {
     // arrange
     const plans = [
       reconcilePlan("project", {
@@ -1808,10 +2356,21 @@ describe("buildReconcilePendingNotification", () => {
     const pending = buildReconcilePendingNotification(plans);
 
     // assert
-    assert.deepStrictEqual(pending, { marketplaces: [] });
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          status: "will add",
+          severity: "info",
+          needsReload: false,
+          plugins: [],
+        },
+      ],
+    });
   });
 
-  test("rides a planned install of a newly added marketplace on a bare header", () => {
+  test("D-20: rides a planned install of a newly added marketplace on its will-add header", () => {
     // arrange
     const plans = [
       reconcilePlan("project", {
@@ -1833,13 +2392,16 @@ describe("buildReconcilePendingNotification", () => {
         {
           name: "mp",
           scope: "project",
+          status: "will add",
+          severity: "info",
+          needsReload: false,
           plugins: [{ status: "will install", name: "cr" }],
         },
       ],
     });
   });
 
-  test("synthesizes one will-uninstall child per recorded plugin of a removed marketplace", () => {
+  test("D-20: synthesizes one will-uninstall child per recorded plugin of a will-remove marketplace", () => {
     // arrange
     const plans = [
       reconcilePlan("project", {
@@ -1856,6 +2418,9 @@ describe("buildReconcilePendingNotification", () => {
         {
           name: "old-mp",
           scope: "project",
+          status: "will remove",
+          severity: "info",
+          needsReload: false,
           plugins: [
             { status: "will uninstall", name: "p1" },
             { status: "will uninstall", name: "p2" },
@@ -1865,7 +2430,74 @@ describe("buildReconcilePendingNotification", () => {
     });
   });
 
-  test("shows nothing pending for a marketplace removal that has no recorded plugins", () => {
+  test("PRN-02: each will-uninstall row names the version its scope recorded", () => {
+    // arrange
+    const plugin = (
+      version: string,
+    ): ExtensionState["marketplaces"][string]["plugins"][string] => ({
+      version,
+      resolvedSource: "/plugins/p",
+      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+      enabled: true,
+      provenance: "explicit",
+      installedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const marketplace = (
+      name: string,
+      plugins: ExtensionState["marketplaces"][string]["plugins"],
+    ): ExtensionState["marketplaces"][string] => ({
+      name,
+      scope: "project",
+      source: { kind: "path", path: `/marketplaces/${name}` },
+      addedFromCwd: "/workspace",
+      manifestPath: `/marketplaces/${name}/.claude-plugin/marketplace.json`,
+      marketplaceRoot: `/marketplaces/${name}`,
+      plugins,
+    });
+    const state: ExtensionState = {
+      schemaVersion: 3,
+      marketplaces: {
+        "old-mp": marketplace("old-mp", { p1: plugin("1.0.0") }),
+        mp: marketplace("mp", { cr: plugin("2.1.0") }),
+      },
+    };
+    const plans = [
+      reconcilePlan("project", {
+        marketplacesToRemove: [{ scope: "project", marketplace: "old-mp", plugins: ["p1"] }],
+        pluginsToUninstall: [{ scope: "project", plugin: "cr", marketplace: "mp" }],
+      }),
+    ];
+
+    // act
+    const pending = buildReconcilePendingNotification(
+      plans,
+      new Set<string>(),
+      new Map(recordedVersionEntries("project", state)),
+    );
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [{ status: "will uninstall", name: "cr", version: "2.1.0" }],
+        },
+        {
+          name: "old-mp",
+          scope: "project",
+          status: "will remove",
+          severity: "info",
+          needsReload: false,
+          plugins: [{ status: "will uninstall", name: "p1", version: "1.0.0" }],
+        },
+      ],
+    });
+  });
+
+  test("D-20: previews a marketplace removal with no recorded plugins as a bare will-remove header", () => {
     // arrange
     const plans = [
       reconcilePlan("project", {
@@ -1877,7 +2509,18 @@ describe("buildReconcilePendingNotification", () => {
     const pending = buildReconcilePendingNotification(plans);
 
     // assert
-    assert.deepStrictEqual(pending, { marketplaces: [] });
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "old-mp",
+          scope: "project",
+          status: "will remove",
+          severity: "info",
+          needsReload: false,
+          plugins: [],
+        },
+      ],
+    });
   });
 
   for (const { bucket, actions, expectedRow } of [
@@ -2228,6 +2871,212 @@ describe("buildReconcilePendingNotification", () => {
     });
   });
 
+  test("D-14: previews a catalog move as a will-update row with its version arrow", () => {
+    // arrange
+    const plans = [reconcilePlan("project")];
+    const moves = [
+      {
+        scope: "project",
+        marketplace: "mp",
+        plugin: "demo",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        revisionChanged: true,
+        grew: false,
+        partial: false,
+      },
+    ] as const;
+
+    // act
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), {
+      moves,
+      holds: [],
+      declines: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [{ status: "will update", name: "demo", from: "1.0.0", to: "1.1.0" }],
+        },
+      ],
+    });
+  });
+
+  test("D-10 / WCONV-03: a growth-only move carries the components-now-supported marker", () => {
+    // arrange
+    const plans = [reconcilePlan("project")];
+    const moves = [
+      {
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
+        revisionChanged: false,
+        grew: true,
+        partial: false,
+      },
+    ] as const;
+
+    // act
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), {
+      moves,
+      holds: [],
+      declines: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "will update",
+              name: "hello",
+              from: "1.0.0",
+              to: "1.0.0",
+              reasons: ["components now supported"],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("D-12 / D-24: previews a range hold and a consent decline as update's warning rows after the moves", () => {
+    // arrange
+    const plans = [reconcilePlan("project")];
+    const convergence = {
+      moves: [
+        {
+          scope: "project",
+          marketplace: "mp",
+          plugin: "demo",
+          fromVersion: "1.0.0",
+          toVersion: "1.1.0",
+          revisionChanged: true,
+          grew: false,
+          partial: false,
+        },
+      ],
+      holds: [
+        {
+          scope: "project",
+          marketplace: "mp",
+          plugin: "lib",
+          version: "1.0.0",
+          cause:
+            'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"',
+        },
+      ],
+      declines: [
+        {
+          scope: "project",
+          marketplace: "mp",
+          plugin: "styled",
+          version: "1.0.0",
+          unsupported: ["outputStyles", "lspServers"],
+        },
+      ],
+    } as const;
+
+    // act
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), convergence);
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            { status: "will update", name: "demo", from: "1.0.0", to: "1.1.0" },
+            {
+              status: "skipped",
+              name: "lib",
+              version: "1.0.0",
+              reasons: ["dependents constrain"],
+              cause: new Error(
+                'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"',
+              ),
+              severity: "warning",
+              needsReload: false,
+            },
+            {
+              status: "partially-upgradable",
+              name: "styled",
+              version: "1.0.0",
+              reasons: ["unsupported component", "lsp"],
+              catalogHint: true,
+              severity: "warning",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("D-14 / UPR-02: a same-version move names its commits after the plan's rows", () => {
+    // arrange
+    const fromCommit = "a".repeat(40);
+    const toCommit = "b".repeat(40);
+    const plans = [
+      reconcilePlan("user", {
+        pluginsToInstall: [
+          { scope: "user", plugin: "ins", marketplace: "mp", configSource: "base" },
+        ],
+      }),
+    ];
+    const moves = [
+      {
+        scope: "user",
+        marketplace: "mp",
+        plugin: "ghp",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
+        fromCommit,
+        toCommit,
+        revisionChanged: true,
+        grew: false,
+        partial: false,
+      },
+    ] as const;
+
+    // act
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), {
+      moves,
+      holds: [],
+      declines: [],
+    });
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "user",
+          plugins: [
+            { status: "will install", name: "ins" },
+            {
+              status: "will update",
+              name: "ghp",
+              from: "1.0.0",
+              to: "1.0.0",
+              commits: { from: fromCommit, to: toCommit },
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   test("folds every planned action of one scope into name-ordered blocks", () => {
     // arrange
     const plans = [
@@ -2255,6 +3104,9 @@ describe("buildReconcilePendingNotification", () => {
         {
           name: "gone-mp",
           scope: "project",
+          status: "will remove",
+          severity: "info",
+          needsReload: false,
           plugins: [{ status: "will uninstall", name: "g1" }],
         },
         {
@@ -2288,6 +3140,92 @@ describe("buildReconcilePendingNotification", () => {
   });
 });
 
+/**
+ * APL-04 / D-14: one plan action per bucket `/claude:plugin apply` would act
+ * on. A source mismatch is not among them: `apply` cannot fix it.
+ */
+const CHANGE_BUCKETS = [
+  {
+    bucket: "a marketplace add on its own",
+    actions: {
+      marketplacesToAdd: [
+        { scope: "project", marketplace: "mp", source: "acme/tools", configSource: "base" },
+      ],
+    },
+  },
+  {
+    bucket: "a marketplace removal carrying recorded plugins",
+    actions: {
+      marketplacesToRemove: [{ scope: "project", marketplace: "old-mp", plugins: ["p1"] }],
+    },
+  },
+  {
+    bucket: "a marketplace removal with no recorded plugins",
+    actions: {
+      marketplacesToRemove: [{ scope: "project", marketplace: "old-mp", plugins: [] }],
+    },
+  },
+  {
+    bucket: "a planned install",
+    actions: {
+      pluginsToInstall: [
+        { scope: "project", plugin: "cr", marketplace: "mp", configSource: "base" },
+      ],
+    },
+  },
+  {
+    bucket: "a planned uninstall",
+    actions: { pluginsToUninstall: [{ scope: "project", plugin: "cr", marketplace: "mp" }] },
+  },
+  {
+    bucket: "a planned enable",
+    actions: { pluginsToEnable: [{ scope: "project", plugin: "cr", marketplace: "mp" }] },
+  },
+  {
+    bucket: "a planned disable",
+    actions: { pluginsToDisable: [{ scope: "project", plugin: "cr", marketplace: "mp" }] },
+  },
+  {
+    // WR-02: the load-time held-down bucket is an action the next reload
+    // performs, so a scope carrying only this bucket must not report as a
+    // steady state.
+    bucket: "a planned dependency disable",
+    actions: {
+      pluginsToDependencyDisable: [
+        {
+          scope: "project",
+          plugin: "cr",
+          marketplace: "mp",
+          dependency: "dep@mp",
+          kind: "missing",
+        },
+      ],
+    },
+  },
+  {
+    // MISS-01 / D-09-12: the dependency-install bucket is an action the
+    // next reload performs, so a scope carrying only this bucket must not
+    // report as a steady state.
+    bucket: "a planned dependency install",
+    actions: {
+      pluginsToDependencyInstall: [
+        {
+          scope: "project",
+          plugin: "cr",
+          marketplace: "mp",
+          ranges: [],
+          requiredBy: "dependent@mp",
+          declarers: ["dependent@mp"],
+        },
+      ],
+    },
+  },
+] satisfies readonly { bucket: string; actions: PlannedActions }[];
+
+const SOURCE_MISMATCH_ACTIONS = {
+  sourceMismatches: [{ scope: "project", cause: "malformed-plugin-key", rawKey: "my-plugin" }],
+} satisfies PlannedActions;
+
 describe("isReconcilePlanListEmpty", () => {
   test("reports an empty plan list as empty", () => {
     // arrange
@@ -2311,91 +3249,9 @@ describe("isReconcilePlanListEmpty", () => {
     assert.strictEqual(planListEmpty, true);
   });
 
-  test("reports a marketplace removal with no recorded plugins as empty", () => {
-    // arrange
-    const plans = [
-      reconcilePlan("project", {
-        marketplacesToRemove: [{ scope: "project", marketplace: "old-mp", plugins: [] }],
-      }),
-    ];
-
-    // act
-    const planListEmpty = isReconcilePlanListEmpty(plans);
-
-    // assert
-    assert.strictEqual(planListEmpty, true);
-  });
-
   for (const { bucket, actions } of [
-    {
-      bucket: "a marketplace removal carrying recorded plugins",
-      actions: {
-        marketplacesToRemove: [{ scope: "project", marketplace: "old-mp", plugins: ["p1"] }],
-      },
-    },
-    {
-      bucket: "a planned install",
-      actions: {
-        pluginsToInstall: [
-          { scope: "project", plugin: "cr", marketplace: "mp", configSource: "base" },
-        ],
-      },
-    },
-    {
-      bucket: "a planned uninstall",
-      actions: { pluginsToUninstall: [{ scope: "project", plugin: "cr", marketplace: "mp" }] },
-    },
-    {
-      bucket: "a planned enable",
-      actions: { pluginsToEnable: [{ scope: "project", plugin: "cr", marketplace: "mp" }] },
-    },
-    {
-      bucket: "a planned disable",
-      actions: { pluginsToDisable: [{ scope: "project", plugin: "cr", marketplace: "mp" }] },
-    },
-    {
-      // WR-02: the load-time held-down bucket is an action the next reload
-      // performs, so a scope carrying only this bucket must not report as a
-      // steady state.
-      bucket: "a planned dependency disable",
-      actions: {
-        pluginsToDependencyDisable: [
-          {
-            scope: "project",
-            plugin: "cr",
-            marketplace: "mp",
-            dependency: "dep@mp",
-            kind: "missing",
-          },
-        ],
-      },
-    },
-    {
-      // MISS-01 / D-09-12: the dependency-install bucket is an action the
-      // next reload performs, so a scope carrying only this bucket must not
-      // report as a steady state.
-      bucket: "a planned dependency install",
-      actions: {
-        pluginsToDependencyInstall: [
-          {
-            scope: "project",
-            plugin: "cr",
-            marketplace: "mp",
-            ranges: [],
-            requiredBy: "dependent@mp",
-            declarers: ["dependent@mp"],
-          },
-        ],
-      },
-    },
-    {
-      bucket: "a source mismatch",
-      actions: {
-        sourceMismatches: [
-          { scope: "project", cause: "malformed-plugin-key", rawKey: "my-plugin" },
-        ],
-      },
-    },
+    ...CHANGE_BUCKETS,
+    { bucket: "a source mismatch", actions: SOURCE_MISMATCH_ACTIONS },
   ] satisfies readonly { bucket: string; actions: PlannedActions }[]) {
     test(`reports a plan carrying ${bucket} as not empty`, () => {
       // arrange
@@ -2408,22 +3264,42 @@ describe("isReconcilePlanListEmpty", () => {
       assert.strictEqual(planListEmpty, false);
     });
   }
+});
 
-  test("reports a marketplace add on its own as empty", () => {
+describe("planListNeedsApply", () => {
+  test("reports an empty plan list as needing no apply", () => {
     // arrange
-    const plans = [
-      reconcilePlan("project", {
-        marketplacesToAdd: [
-          { scope: "project", marketplace: "mp", source: "acme/tools", configSource: "base" },
-        ],
-      }),
-    ];
+    const plans: readonly ReconcilePlan[] = [];
 
     // act
-    const planListEmpty = isReconcilePlanListEmpty(plans);
+    const needsApply = planListNeedsApply(plans);
 
     // assert
-    assert.strictEqual(planListEmpty, true);
+    assert.strictEqual(needsApply, false);
+  });
+
+  for (const { bucket, actions } of CHANGE_BUCKETS) {
+    test(`reports a plan carrying ${bucket} as needing apply`, () => {
+      // arrange
+      const plans = [reconcilePlan("project"), reconcilePlan("user", actions)];
+
+      // act
+      const needsApply = planListNeedsApply(plans);
+
+      // assert
+      assert.strictEqual(needsApply, true);
+    });
+  }
+
+  test("reports a plan carrying only a source mismatch as needing no apply", () => {
+    // arrange
+    const plans = [reconcilePlan("project", SOURCE_MISMATCH_ACTIONS)];
+
+    // act
+    const needsApply = planListNeedsApply(plans);
+
+    // assert
+    assert.strictEqual(needsApply, false);
   });
 });
 

@@ -7,10 +7,11 @@
 // and this walk does filesystem reads. The planner consumes the verdict as an
 // already-computed argument, the same way it consumes the marketplace diff.
 //
-// It takes NO lock. Its only caller runs inside the reconcile read pass's
-// existing `withLockedStateTransaction` closure over the same snapshot, and
+// It takes NO lock. The reconcile read pass calls it inside its existing
+// `withLockedStateTransaction` closure over the same snapshot, and
 // `proper-lockfile` is configured with no retries and is not re-entrant, so a
-// second guard here would self-deadlock into a lock-held row.
+// second guard here would self-deadlock into a lock-held row. `pending` calls
+// it on its own unlocked, read-only snapshot (D-21).
 //
 // D-06-05: the walk runs to a fixpoint. A record this pass decides to hold
 // down is itself an unsatisfied dependency for whoever declares it, so the
@@ -29,7 +30,7 @@
 // version falls outside the declared range. The range arm composes
 // `domain/dependency-range.ts` and adds no comparator of its own -- that module
 // is the single evaluator in this tree, so the D-03-04 coercion of the PI-7
-// `hash-` / `sha-` fallback version forms applies here unchanged.
+// `hash-` and git commit fallback version forms applies here unchanged.
 //
 // WR-07: the coercion costs more here than it does at install time. Install
 // time spends it on a candidate the user is watching; this walk spends it on a
@@ -49,15 +50,21 @@ import {
   intersectDependencyRanges,
   isUnconstrainedRange,
   recordedVersionSatisfies,
+  renderDeclaredRanges,
 } from "../../domain/dependency-range.ts";
-import { isRecordedButDisabled } from "../../persistence/state-io.ts";
-import { buildScopeDeclarationDetail } from "../plugin/dependency-index.ts";
+import {
+  atCatalogVersion,
+  isRecordedButDisabled,
+  rangeVersionOf,
+} from "../../persistence/state-io.ts";
+import { ownValue } from "../../shared/own-key.ts";
+import { buildScopeDeclarationDetail, readRecordDeclarations } from "../plugin/dependency-index.ts";
 
 import type { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { DependencyDeclarationReader } from "../plugin/dependency-declaration-read.ts";
-import type { AddressedDependency } from "../plugin/dependency-index.ts";
+import type { AddressedDependency, DeclarerReadFailure } from "../plugin/dependency-index.ts";
 
 /** Inputs of one scope-wide satisfaction verdict. */
 export interface ScopeSatisfactionOptions {
@@ -68,6 +75,11 @@ export interface ScopeSatisfactionOptions {
   readonly reader?: DependencyDeclarationReader;
   /** Manifest-load seam; production omits it and reads the memoized cache. */
   readonly loadManifest?: typeof loadMarketplaceManifest;
+  /**
+   * APPLY1-01: declarations already known to be unsatisfied, whose dependents
+   * start the walk held, so their own dependents are held too.
+   */
+  readonly seeded?: readonly UnsatisfiedDeclaration[];
 }
 
 /**
@@ -84,7 +96,10 @@ export interface UnsatisfiedDeclaration {
   /** `name@marketplace` of the declared dependency. */
   readonly dependency: string;
   readonly kind: UnsatisfiedKind;
-  /** The declared range, present only on the out-of-range kind. */
+  /**
+   * The declared ranges, joined with `, ` and bounded once for the cause line
+   * (INR-05), present only on the out-of-range kind.
+   */
   readonly range?: string;
   /**
    * Raw per-declarer range texts of the missing kind, so the reconcile
@@ -105,6 +120,7 @@ export type ScopeSatisfactionVerdict =
   | {
       readonly ok: false;
       readonly declarer: string;
+      readonly reason: DeclarerReadFailure;
       readonly cause: Error;
     };
 
@@ -114,6 +130,7 @@ export type ScopeSatisfactionVerdict =
  */
 interface RecordedPlugin {
   readonly disabled: boolean;
+  /** The version a declared range reads: the release tag's semver, if any (GV-01). */
   readonly version: string;
 }
 
@@ -146,7 +163,7 @@ function recordedPlugins(state: ExtensionState): ReadonlyMap<string, RecordedPlu
     for (const [name, record] of Object.entries(marketplace.plugins)) {
       recorded.set(`${name}@${marketplace.name}`, {
         disabled: isDisabledIndependently(record),
-        version: record.version,
+        version: rangeVersionOf(record),
       });
     }
   }
@@ -183,15 +200,17 @@ function constraintsByKey(
 }
 
 /**
- * The effective range a recorded version fails, or `undefined` when it holds.
+ * The declared ranges a recorded version fails, rendered for the cause line,
+ * or `undefined` when it holds.
  *
+ * The fold decides: a recorded version that satisfies the intersection holds.
  * A fold that produces no range -- declarations that contradict each other, or
  * a set that trips one of the two project-owned input caps -- is reported as
- * out-of-range against the conjunction of what was declared. It is never read
- * as "no constraint" (T-06-10): the caps exist to refuse work, and failing open
- * on one would silently satisfy every dependency an attacker can make expensive
- * to fold. The declared texts are joined rather than sliced, and the row bounds
- * the result through `renderConstraintRange`.
+ * out-of-range. It is never read as "no constraint" (T-06-10): the caps exist
+ * to refuse work, and failing open on one would silently satisfy every
+ * dependency an attacker can make expensive to fold. Either way the reported
+ * text is the declared ranges, joined with `, ` as Claude Code joins them and
+ * bounded once (INR-05), never the fold.
  *
  * The unconstrained short-circuit tests canonicalization rather than string
  * identity, so two authors independently spelling "any version" differently
@@ -200,14 +219,14 @@ function constraintsByKey(
 function unsatisfiedRange(ranges: readonly string[], version: string): string | undefined {
   const folded = intersectDependencyRanges(ranges);
   if (!folded.ok) {
-    return ranges.join(" ");
+    return renderDeclaredRanges(ranges);
   }
 
   if (isUnconstrainedRange(folded.range)) {
     return undefined;
   }
 
-  return recordedVersionSatisfies(version, folded.range) ? undefined : folded.range;
+  return recordedVersionSatisfies(version, folded.range) ? undefined : renderDeclaredRanges(ranges);
 }
 
 /**
@@ -230,10 +249,15 @@ function unsatisfiedEntries(
   declared: readonly AddressedDependency[],
   recorded: ReadonlyMap<string, RecordedPlugin>,
   held: ReadonlySet<string>,
+  scheduled: ReadonlySet<string> = new Set(),
 ): readonly UnsatisfiedDeclaration[] {
   const entries: UnsatisfiedDeclaration[] = [];
   for (const [key, ranges] of constraintsByKey(declared)) {
     const record = recorded.get(key);
+    if (record === undefined && scheduled.has(key)) {
+      continue;
+    }
+
     if (record === undefined) {
       entries.push({
         dependent,
@@ -275,16 +299,18 @@ function unsatisfiedEntries(
 function propagateUnsatisfied(
   declarations: ReadonlyMap<string, readonly AddressedDependency[]>,
   recorded: ReadonlyMap<string, RecordedPlugin>,
+  seeded: readonly UnsatisfiedDeclaration[],
+  scheduled?: ReadonlySet<string>,
 ): readonly UnsatisfiedDeclaration[] {
   const declarers = [...declarations];
-  const held = new Set<string>();
-  const unsatisfied: UnsatisfiedDeclaration[] = [];
+  const held = new Set(seeded.map((entry) => entry.dependent));
+  const unsatisfied: UnsatisfiedDeclaration[] = [...seeded];
   while (held.size < declarers.length) {
     const batch = declarers
       .filter(([declarer]) => !held.has(declarer))
       .map(([declarer, declared]) => ({
         declarer,
-        entries: unsatisfiedEntries(declarer, declared, recorded, held),
+        entries: unsatisfiedEntries(declarer, declared, recorded, held, scheduled),
       }))
       .filter((candidate) => candidate.entries.length > 0)
       .sort((left, right) => left.declarer.localeCompare(right.declarer));
@@ -315,6 +341,256 @@ export async function buildScopeSatisfactionVerdict(
 
   return {
     ok: true,
-    unsatisfied: propagateUnsatisfied(detail.declarations, recordedPlugins(options.state)),
+    unsatisfied: propagateUnsatisfied(
+      detail.declarations,
+      recordedPlugins(options.state),
+      options.seeded ?? [],
+    ),
+  };
+}
+
+/** A record a plan enables or disables. */
+export interface ToggledRecord {
+  readonly marketplace: string;
+  readonly plugin: string;
+}
+
+/** The records a plan enables and disables. */
+export interface PlannedToggles {
+  readonly enable: readonly ToggledRecord[];
+  readonly disable: readonly ToggledRecord[];
+}
+
+/** One record of a scope's state document. */
+export type PluginRecord = ExtensionState["marketplaces"][string]["plugins"][string];
+
+/** `state` with each record replaced by what `map` answers for its `plugin@marketplace` key. */
+export function mapRecords(
+  state: ExtensionState,
+  map: (key: string, record: PluginRecord) => PluginRecord,
+): ExtensionState {
+  const marketplaces = Object.fromEntries(
+    Object.entries(state.marketplaces).map(([name, mp]) => [
+      name,
+      {
+        ...mp,
+        plugins: Object.fromEntries(
+          Object.entries(mp.plugins).map(([plugin, record]) => [
+            plugin,
+            map(`${plugin}@${name}`, record),
+          ]),
+        ),
+      },
+    ]),
+  );
+  return { ...state, marketplaces };
+}
+
+/** The scope with every planned toggle applied to its record. */
+function stateAfterToggles(state: ExtensionState, toggles: PlannedToggles): ExtensionState {
+  const keyOf = (op: ToggledRecord): string => `${op.plugin}@${op.marketplace}`;
+  const enabled = new Set(toggles.enable.map(keyOf));
+  const disabled = new Set(toggles.disable.map(keyOf));
+  return mapRecords(state, (key, record) => {
+    if (disabled.has(key)) {
+      return { ...record, enabled: false, dependencyDisabled: false };
+    }
+
+    return enabled.has(key) ? { ...record, enabled: true } : record;
+  });
+}
+
+/**
+ * D-08 / D-21: the verdict once the plan's own enables and disables have run.
+ * A record the config disables is a disabled dependency of every record that
+ * declares it, and a record the config enables satisfies them again. So
+ * `apply` holds those dependents down, or lifts them, in the same pass, and
+ * `pending` lists that change. The disable is the user's own choice, so it
+ * carries no marker (LOAD-02). Answers `verdict` itself when the plan toggles
+ * nothing or the first walk failed (D-05-07).
+ */
+export async function verdictAfterToggles(
+  options: ScopeSatisfactionOptions,
+  verdict: ScopeSatisfactionVerdict,
+  toggles: PlannedToggles,
+): Promise<ScopeSatisfactionVerdict> {
+  if (!verdict.ok || toggles.enable.length + toggles.disable.length === 0) {
+    return verdict;
+  }
+
+  return buildScopeSatisfactionVerdict({
+    ...options,
+    state: stateAfterToggles(options.state, toggles),
+  });
+}
+
+/** The dependents a verdict holds down; every one when the walk failed is the caller's call. */
+function heldDependents(verdict: ScopeSatisfactionVerdict & { readonly ok: true }): Set<string> {
+  return new Set(verdict.unsatisfied.map((entry) => entry.dependent));
+}
+
+/**
+ * APPLY1-01: the held dependents a catalog move could satisfy. Each of their
+ * unsatisfied declarations names a recorded dependency that is out of range,
+ * or one this same verdict holds down. A dependency that is missing, or that
+ * the user or a config disabled, no move can bring back, so its dependents
+ * stay held. An empty set when the walk failed.
+ */
+export function releasableDependents(
+  verdict: ScopeSatisfactionVerdict,
+  state: ExtensionState,
+): ReadonlySet<string> {
+  if (!verdict.ok) {
+    return new Set();
+  }
+
+  const held = heldDependents(verdict);
+  const recorded = recordedPlugins(state);
+  const blocking = new Set(
+    verdict.unsatisfied
+      .filter(
+        (entry) =>
+          entry.kind === "missing" ||
+          (entry.kind === "disabled" &&
+            (!held.has(entry.dependency) || recorded.get(entry.dependency)?.disabled === true)),
+      )
+      .map((entry) => entry.dependent),
+  );
+  return new Set([...held].filter((dependent) => !blocking.has(dependent)));
+}
+
+/**
+ * APPLY1-01: `verdict` with the dependents in `released` no longer held, so a
+ * declaration naming one of them as a held dependency is satisfied too.
+ */
+export function verdictWithout(
+  verdict: ScopeSatisfactionVerdict,
+  released: ReadonlySet<string>,
+): ScopeSatisfactionVerdict {
+  if (!verdict.ok) {
+    return verdict;
+  }
+
+  return {
+    ok: true,
+    unsatisfied: verdict.unsatisfied.filter(
+      (entry) =>
+        !released.has(entry.dependent) &&
+        !(entry.kind === "disabled" && released.has(entry.dependency)),
+    ),
+  };
+}
+
+/** A catalog move as the verdict needs it: the record and the version it lands on. */
+export interface LandedMove {
+  readonly marketplace: string;
+  readonly plugin: string;
+  readonly toVersion: string;
+}
+
+/**
+ * APPLY1-01: the verdict once the plan's toggles have run and `moves` have
+ * landed, the way an install cascade judges a dependent against the closure
+ * it installs. Each moved record carries its new version; the walk already
+ * reads every record's catalog declarations (D-05-06).
+ */
+export async function verdictAfterMoves(
+  options: ScopeSatisfactionOptions,
+  toggles: PlannedToggles,
+  moves: readonly LandedMove[],
+): Promise<ScopeSatisfactionVerdict> {
+  const toggled = stateAfterToggles(options.state, toggles);
+  const marketplaces = { ...toggled.marketplaces };
+  for (const move of moves) {
+    const mp = ownValue(marketplaces, move.marketplace);
+    const record = ownValue(mp?.plugins, move.plugin);
+    if (mp !== undefined && record !== undefined) {
+      marketplaces[move.marketplace] = {
+        ...mp,
+        plugins: { ...mp.plugins, [move.plugin]: atCatalogVersion(record, move.toVersion) },
+      };
+    }
+  }
+
+  return buildScopeSatisfactionVerdict({ ...options, state: { ...toggled, marketplaces } });
+}
+
+/**
+ * The held dependents of `verdict` that `released` names, or all of
+ * `released` when the walk failed.
+ */
+export function stillHeld(
+  verdict: ScopeSatisfactionVerdict,
+  released: ReadonlySet<string>,
+): ReadonlySet<string> {
+  if (!verdict.ok) {
+    return released;
+  }
+
+  const held = heldDependents(verdict);
+  return new Set([...released].filter((dependent) => held.has(dependent)));
+}
+
+/** What a record's installed copy declares, or `undefined` when its copy is the catalog's. */
+export type InstalledDeclarationsReader = (
+  marketplace: ExtensionState["marketplaces"][string],
+  record: ExtensionState["marketplaces"][string]["plugins"][string],
+) => Promise<readonly AddressedDependency[] | undefined>;
+
+/** Inputs of the judgement `apply` makes once its cascade has run. */
+export interface FinalScopeOptions extends ScopeSatisfactionOptions {
+  readonly installedDeclarations: InstalledDeclarationsReader;
+  /**
+   * D-21 / MISS-01: plugins the same `apply` installs, which a declaration
+   * naming them counts as met.
+   */
+  readonly scheduled?: ReadonlySet<string>;
+}
+
+/**
+ * APPLY1-01: the scope as `apply` leaves it, judged strictly, to a fixed
+ * point. Every enabled record is measured by its catalog declarations and its
+ * installed copy's together (D-12a), against each dependency's recorded
+ * version and enabled state. Unlike the load-time verdict, a record held down
+ * by the marker is disabled here (no LOAD-02 optimism): the pass runs after
+ * every lift `apply` makes. A record that cannot be read ends the judgement
+ * with the walk's failure arm, as the load-time check does (D-05-07).
+ */
+export async function judgeFinalScope(
+  options: FinalScopeOptions,
+): Promise<ScopeSatisfactionVerdict> {
+  const declarations = new Map<string, readonly AddressedDependency[]>();
+  const recorded = new Map<string, RecordedPlugin>();
+  for (const marketplace of Object.values(options.state.marketplaces)) {
+    for (const [name, record] of Object.entries(marketplace.plugins)) {
+      const key = `${name}@${marketplace.name}`;
+      recorded.set(key, {
+        disabled: isRecordedButDisabled(record),
+        version: rangeVersionOf(record),
+      });
+      if (isRecordedButDisabled(record)) {
+        continue;
+      }
+
+      // eslint-disable-next-line no-await-in-loop -- the first unreadable record ends the judgement
+      const read = await readRecordDeclarations(options, marketplace, name);
+      if (!read.ok) {
+        return read;
+      }
+
+      // eslint-disable-next-line no-await-in-loop -- one installed-copy read per enabled record
+      const installed = (await options.installedDeclarations(marketplace, record)) ?? [];
+      declarations.set(key, [...read.declared, ...installed]);
+    }
+  }
+
+  return {
+    ok: true,
+    unsatisfied: propagateUnsatisfied(
+      declarations,
+      recorded,
+      options.seeded ?? [],
+      options.scheduled,
+    ),
   };
 }

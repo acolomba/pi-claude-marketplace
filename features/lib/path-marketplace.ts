@@ -15,16 +15,25 @@ import path from "node:path";
 
 import type { DataTable } from "@cucumber/cucumber";
 
+/** A dependency element in object form: a plugin name and the version range it asks for. */
+export interface RangedDependency {
+  readonly name: string;
+  readonly version: string;
+}
+
 /** One plugin the marketplace offers. */
 export interface OfferedPlugin {
   readonly name: string;
   readonly version: string;
-  /** Dependency elements such as `lib` or `lib@tools`; absent means none. */
-  readonly dependencies?: readonly string[];
+  /**
+   * Dependency elements such as `lib`, `lib@tools` or `lib@^2.0.0`, or an
+   * object naming a range the string form cannot carry; absent means none.
+   */
+  readonly dependencies?: readonly (string | RangedDependency)[];
 }
 
 /** Throws unless the table's header is exactly `columns`. */
-function requireColumns(table: DataTable, columns: readonly string[]): void {
+export function requireColumns(table: DataTable, columns: readonly string[]): void {
   const [header] = table.raw();
   if (JSON.stringify(header) !== JSON.stringify(columns)) {
     throw new Error(`expected the columns ${columns.join(", ")}, got ${header?.join(", ")}`);
@@ -38,17 +47,38 @@ export function readOfferedPlugins(table: DataTable): OfferedPlugin[] {
 }
 
 /**
+ * One element of a `dependencies` cell: `lib (>=2.0.0)` is the object form
+ * `{ "name": "lib", "version": ">=2.0.0" }`, for a range the string form
+ * cannot carry; any other element is written as it reads.
+ */
+function readDependencyElement(element: string): string | RangedDependency {
+  const ranged = /^(\S+) \((.+)\)$/.exec(element);
+  return ranged?.[1] === undefined || ranged[2] === undefined
+    ? element
+    : { name: ranged[1], version: ranged[2] };
+}
+
+/**
+ * Reads a `dependencies` cell: a comma-separated list of elements such as
+ * `lib`, `lib@tools`, `lib@^2.0.0` or `lib (>=2.0.0)`; an empty cell means
+ * none.
+ */
+export function readDependencyCell(cell: string): (string | RangedDependency)[] {
+  return cell
+    .split(",")
+    .map((element) => element.trim())
+    .filter((element) => element !== "")
+    .map(readDependencyElement);
+}
+
+/**
  * Reads a `| name | version | dependencies |` table, throwing on a missing or
- * unknown column. The `dependencies` cell is a comma-separated list of
- * elements such as `lib` or `lib@tools`; an empty cell means none.
+ * unknown column. The `dependencies` cell is read by `readDependencyCell`.
  */
 export function readOfferedPluginsWithDependencies(table: DataTable): OfferedPlugin[] {
   requireColumns(table, ["name", "version", "dependencies"]);
   return table.hashes().map((row) => {
-    const dependencies = String(row.dependencies)
-      .split(",")
-      .map((element) => element.trim())
-      .filter((element) => element !== "");
+    const dependencies = readDependencyCell(String(row.dependencies));
     return {
       name: String(row.name),
       version: String(row.version),
@@ -57,8 +87,11 @@ export function readOfferedPluginsWithDependencies(table: DataTable): OfferedPlu
   });
 }
 
-async function writePlugin(root: string, plugin: OfferedPlugin): Promise<void> {
-  const pluginRoot = path.join(root, "plugins", plugin.name);
+/**
+ * Writes the plugin `plugin` at `pluginRoot`: its `plugin.json` and one skill
+ * whose description names the plugin and its version.
+ */
+export async function writePluginFiles(pluginRoot: string, plugin: OfferedPlugin): Promise<void> {
   const skillDir = path.join(pluginRoot, "skills", `${plugin.name}-skill`);
   await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
   await mkdir(skillDir, { recursive: true });
@@ -74,6 +107,10 @@ async function writePlugin(root: string, plugin: OfferedPlugin): Promise<void> {
     path.join(skillDir, "SKILL.md"),
     `---\nname: ${plugin.name}-skill\ndescription: A skill of ${plugin.name} ${plugin.version}.\n---\n\nVersion ${plugin.version}.\n`,
   );
+}
+
+async function writePlugin(root: string, plugin: OfferedPlugin): Promise<void> {
+  await writePluginFiles(path.join(root, "plugins", plugin.name), plugin);
 }
 
 function manifestText(name: string, plugins: readonly OfferedPlugin[]): string {

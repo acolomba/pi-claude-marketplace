@@ -60,6 +60,7 @@ import {
   type PathSource,
 } from "../../domain/source.ts";
 import { rowClaimsInstallDisabled } from "../../domain/unsupported-components.ts";
+import { declaredVersionWithPin, shaVersion } from "../../domain/version.ts";
 import { locationsFor, type ScopedLocations } from "../../persistence/locations.ts";
 import {
   isRecordedButDisabled,
@@ -73,6 +74,7 @@ import {
   errorMessage,
   isErrnoException,
   rethrowInvalidGitHubBaseUrl,
+  StateLockHeldError,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
@@ -97,6 +99,7 @@ import {
   narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
+import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 import { crossScopeFlag } from "../marketplace/shared.ts";
 import { collectMarketplaceRecordsByScope, type ScopedMarketplaceRecord } from "../scope-fanout.ts";
@@ -112,6 +115,7 @@ import {
 import { makePresenceProbe } from "./git-source-probe.ts";
 import { withMcpServerStatus } from "./info-mcp-status.ts";
 import { PLUGIN_INFO_CONTEXT, type PluginInfoCascadeMsg } from "./info.messaging.ts";
+import { resolveDeclaredPluginVersion } from "./shared.ts";
 
 import type {
   GitPluginRootResult,
@@ -2109,8 +2113,29 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
     return resolveGitPluginRootWithSubdir(gitSource, cloneRoot, pin);
   };
 
+  // GIT-03: the mirror refresh runs under the scope's state lock, so no
+  // install copies from a mirror mid-refresh; a held lock fails the read. A
+  // pinned clone is immutable and never touches the mirror, as in `fetch`.
   return (gitSource) =>
-    gitSource.sha === undefined ? probeUnpinned(gitSource) : probePinned(gitSource);
+    gitSource.sha === undefined
+      ? withExistingScopeLock(locations, () => probeUnpinned(gitSource))
+      : probePinned(gitSource);
+}
+
+/**
+ * GIT-03: `info --fetch` refreshes under the scope's state lock, so a lock
+ * another process holds fails the read, as it fails every command that needs
+ * the lock, instead of degrading like a transport failure.
+ */
+function lockHeldRow(pluginName: string, version: string | undefined): PluginInfoRow {
+  return {
+    status: "failed",
+    name: pluginName,
+    ...(version !== undefined && { version }),
+    reasons: ["lock held"],
+    componentsResolved: true,
+    components: {},
+  };
 }
 
 /**
@@ -2183,7 +2208,8 @@ async function buildInstalledGitRow(opts: {
         marketplaceRoot: mpRecord.marketplaceRoot,
         marketplaceName: mpRecord.name,
         readFileText: (filePath) => reader.readTextFile(filePath),
-        resolveGitPluginRoot: probe,
+        // The tree the probe just materialized; probing again would fetch twice.
+        resolveGitPluginRoot: () => Promise.resolve(presence),
       });
       if (resolved.state === "installable") {
         return await buildResolvedInstalledRow(reader, env, presence.pluginRoot, resolved, {
@@ -2205,6 +2231,10 @@ async function buildInstalledGitRow(opts: {
     // closed-set reason on the recorded row (D-81-04 parity with the
     // not-installed arm) -- otherwise a failed `--fetch` would render
     // byte-identical to bare info.
+    if (err instanceof StateLockHeldError) {
+      return lockHeldRow(pluginName, version);
+    }
+
     if (fetchCtx !== undefined) {
       const base = buildNonPathInstalledRow(pluginName, version, description, installedRecord);
       return { ...base, reasons: [...(base.reasons ?? []), foldFetchOrProbeError(err)] };
@@ -2519,6 +2549,10 @@ async function buildGitNotInstalledRow(opts: {
     // `components: not resolved` arm with an existing closed-set reason
     // (network unreachable / authentication required, else the probe-error
     // ladder). The `(remote)` token is the not-installed git surface.
+    if (err instanceof StateLockHeldError) {
+      return lockHeldRow(pluginName, version);
+    }
+
     return {
       status: "remote",
       name: pluginName,
@@ -2534,11 +2568,19 @@ async function buildGitNotInstalledRow(opts: {
   }
 
   const pluginRoot = presence.pluginRoot;
+  // VER-01: the warm tree's version by the rule an install of it records --
+  // the declared version (plugin.json, then the entry), else its commit.
+  const declared = await resolveDeclaredPluginVersion(entry, pluginRoot);
+  const warmVersion =
+    declared === undefined
+      ? shaVersion(presence.resolvedSha, gitSource)
+      : declaredVersionWithPin(declared, gitSource, mpRecord.name);
   const ctx: ResolveContext = {
     marketplaceRoot: mpRecord.marketplaceRoot,
     marketplaceName: mpRecord.name,
     readFileText: (filePath) => reader.readTextFile(filePath),
-    resolveGitPluginRoot: probe,
+    // The tree the probe just materialized; probing again would fetch twice.
+    resolveGitPluginRoot: () => Promise.resolve(presence),
   };
   try {
     const resolved = await resolveStrict(entry, ctx);
@@ -2549,7 +2591,7 @@ async function buildGitNotInstalledRow(opts: {
         reader,
         env,
         pluginName,
-        version,
+        version: warmVersion,
         description,
         pluginRoot,
       });
@@ -2559,7 +2601,7 @@ async function buildGitNotInstalledRow(opts: {
       reader,
       env,
       pluginName,
-      version,
+      version: warmVersion,
       description,
       dependencies,
       pluginRoot,
@@ -2571,7 +2613,7 @@ async function buildGitNotInstalledRow(opts: {
     return {
       status: "remote",
       name: pluginName,
-      ...(version !== undefined && { version }),
+      version: warmVersion,
       ...(description !== undefined && { description }),
       reasons: [narrowProbeError(err)],
       componentsResolved: false,
@@ -2723,12 +2765,19 @@ async function buildNotInstalledRow(opts: {
     };
   }
 
+  // VER-02: a resolved path tree shows its declared version (plugin.json, then
+  // the entry), the version an install of it records. `unavailable` has no root.
+  const treeVersion =
+    resolved.state === "unavailable"
+      ? version
+      : await resolveDeclaredPluginVersion(entry, resolved.pluginRoot);
+
   if (resolved.state !== "installable") {
     return buildNotInstalledNonInstallableRow(resolved, {
       reader,
       env,
       pluginName,
-      version,
+      version: treeVersion,
       description,
       entry,
       mpRecord,
@@ -2745,7 +2794,7 @@ async function buildNotInstalledRow(opts: {
     reader,
     env,
     pluginName,
-    version,
+    version: treeVersion,
     description,
     dependencies,
     pluginRoot: resolved.pluginRoot,

@@ -28,6 +28,19 @@ Feature: Plugin install
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
+  Scenario: A session in another project offers the skills of a plugin installed into the user scope and none of a project-scope plugin
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | pp   | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has run "/claude:plugin install pp@fixtures --scope project"
+    When the user starts a new pi session in another project
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
   Scenario: The plugin list shows the installed plugin
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     When the user runs "/claude:plugin list --scope project"
@@ -54,6 +67,43 @@ Feature: Plugin install
       | marketplace name | marketplace scope | id               | name    | status | reasons         | scope   | cause chain                                           | cause truncated | leaks | rollback partial |
       | fixtures         | project           | missing@fixtures | missing | failed | not in manifest | project | Plugin "missing" not found in marketplace "fixtures". | false           |       |                  |
     Then the "claude-plugins.json" file of the project scope declares no plugins
+    Then the project scope has no installed plugins
+
+  Scenario: Installing a path-source plugin records the version its plugin.json declares over its entry's
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [{ "name": "demo", "source": "./plugins/demo", "version": "0.9.0" }]
+      }
+      """
+    When the user runs "/claude:plugin install demo@fixtures --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | installed |         | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+
+  Scenario: Installing a path-source plugin whose directory is missing names it unavailable as source missing
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [{ "name": "ghost", "source": "./plugins/ghost", "version": "1.0.0" }]
+      }
+      """
+    When the user runs "/claude:plugin install ghost@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id             | name  | status      | reasons        |
+      | fixtures         | project           | ghost@fixtures | ghost | unavailable | source missing |
     Then the project scope has no installed plugins
 
   Scenario: Installing a plugin that is already installed fails as already installed
@@ -177,3 +227,81 @@ Feature: Plugin install
     Then the "claude-plugins.local.json" file of the project scope declares these plugins:
       | id            |
       | demo@fixtures |
+
+  Scenario: Installing with no --scope records the plugin in the user scope only
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin install demo@fixtures"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the project scope has no installed plugins
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+
+  Scenario: Installing with --scope user records the plugin in the user scope only
+    Given the marketplace "fixtures" is added to the user scope
+    When the user runs "/claude:plugin install demo@fixtures --scope user"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | scope | version |
+      | fixtures         | user              | demo@fixtures | demo | installed |         | user  | 1.0.0   |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the project scope has no installed plugins
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+
+  Scenario: The project-scope plugin list offers the plugin as available once the user scope installs it with no --scope
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures"
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | version |
+      | fixtures         | project           | demo@fixtures | demo | available |         | 1.0.0   |
+
+  Scenario: The project-scope plugin list offers the plugin as available once the user scope installs it with --scope user
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status    | reasons | version |
+      | fixtures         | project           | demo@fixtures | demo | available |         | 1.0.0   |
+
+  Scenario: A session in another project offers the skills of a plugin installed with no --scope
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures"
+    When the user starts a new pi session in another project
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |

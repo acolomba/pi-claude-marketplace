@@ -12,6 +12,7 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import {
   installedPluginOutcome,
   ledgerDegradationSignals,
+  previewInstall,
   runInstallLedger,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -24,6 +25,8 @@ import {
   McpServerKeyCollisionError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
+  CrossPluginConflictError,
+  DirectoryPinUnsatisfiedError,
   InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
   PluginShapeError,
@@ -980,7 +983,9 @@ test("CMP-3 / LAYER-07: a project install adds the user-scope marketplace to the
       authMemo,
     },
   ]);
-  assert.deepStrictEqual(addedMarketplaces, [{ marketplace: "marketplace", cloneDir }]);
+  assert.deepStrictEqual(addedMarketplaces, [
+    { marketplace: "marketplace", rawSource: "./marketplace", cloneDir },
+  ]);
   assert.equal(
     seeded.state.marketplaces.marketplace?.marketplaceRoot,
     projectRecord.marketplaceRoot,
@@ -1033,7 +1038,9 @@ test("CMP-3 / LAYER-07: an add that records another marketplace name fails befor
     );
     return true;
   });
-  assert.deepStrictEqual(addedMarketplaces, [{ marketplace: "renamed", cloneDir }]);
+  assert.deepStrictEqual(addedMarketplaces, [
+    { marketplace: "renamed", rawSource: "./marketplace", cloneDir },
+  ]);
   assert.deepStrictEqual(Object.keys(seeded.state.marketplaces), ["renamed"]);
   assert.equal(transaction.runPhases.mock.callCount(), 0);
 });
@@ -2079,7 +2086,7 @@ test("ANAME-03: an install whose two servers share one key refuses before any wr
 /** A full 40-hex commit id, so the `sha-<12hex>` derivation has real bytes to cut. */
 const RESOLVED_SHA = "0123456789abcdef0123456789abcdef01234567";
 
-test("PURL-09 / D-77-01 / D-77-02: a git-source install takes its root and its version from the clone probe", async (t) => {
+test("PURL-09 / VER-01 / D-77-02: a git-source install takes its root from the clone probe and its declared version", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-git-");
   const seeded = await seedPlugin(environment.cwd, {
@@ -2123,12 +2130,45 @@ test("PURL-09 / D-77-01 / D-77-02: a git-source install takes its root and its v
   ]);
   assert.ok(ledgerOutcome.kind === "installed");
   assert.equal(ledgerOutcome.summary.resolved.pluginRoot, seeded.pluginRoot);
-  // D-77-01: a git source takes the `sha-<12hex>` version over the 3-tier
-  // ladder, and D-77-02 persists the full 40-hex sha beside it.
-  assert.equal(ledgerOutcome.summary.version, "sha-0123456789ab");
+  // VER-01: the declared version wins over the commit, and D-77-02 persists
+  // the full 40-hex sha beside it.
+  assert.equal(ledgerOutcome.summary.version, "0.0.1");
   const record = seeded.state.marketplaces.marketplace?.plugins.empty;
-  assert.equal(record?.version, "sha-0123456789ab");
+  assert.equal(record?.version, "0.0.1");
   assert.equal(record?.resolvedSha, RESOLVED_SHA);
+});
+
+test("GV-01: a git-source install that declares no version records its 12-hex commit", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-git-unversioned-");
+  const seeded = await seedPlugin(environment.cwd, {
+    gitSource: { source: "url", url: "https://example.com/org/repo", sha: RESOLVED_SHA },
+    components: { skills: ["alpha"] },
+    pluginJson: { version: undefined },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(seeded.state, locations, {
+    ctx: notificationContext(),
+    run: runWithNothingLoaded(),
+    cwd: environment.cwd,
+    marketplace: "marketplace",
+    plugin: "empty",
+    scope: "project",
+    removalOps: createRemovalOps(),
+    env: {},
+    cloneProbe: () =>
+      Promise.resolve({
+        result: { kind: "materialized", pluginRoot: seeded.pluginRoot, resolvedSha: RESOLVED_SHA },
+        resolvedSha: RESOLVED_SHA,
+      }),
+  });
+
+  // assert
+  assert.ok(ledgerOutcome.kind === "installed");
+  assert.equal(ledgerOutcome.summary.version, "0123456789ab");
+  assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty?.resolvedSha, RESOLVED_SHA);
 });
 
 test("RESV-03: a source pin override materializes the pinned commit, not the entry's own ref", async (t) => {
@@ -2165,7 +2205,7 @@ test("RESV-03: a source pin override materializes the pinned commit, not the ent
   // assert: the override rides the source's `sha`, which is what routes the
   // probe down its already-pinned arm rather than adding a second one.
   assert.ok(ledgerOutcome.kind === "installed");
-  assert.equal(ledgerOutcome.summary.version, "sha-0123456789ab");
+  assert.equal(ledgerOutcome.summary.version, "0.0.1");
   assert.deepStrictEqual(probed, [
     {
       kind: "url",
@@ -2223,6 +2263,8 @@ test("the callback reaches the real clone probe through the ledger's own cache, 
       },
       materializeOrRefreshPluginMirror: () =>
         Promise.reject(new Error("a sha-pinned source must not reach the mirror path")),
+      materializePluginCommitCopy: () =>
+        Promise.reject(new Error("a sha-pinned source must not reach the commit copy")),
     },
   });
 
@@ -2232,13 +2274,13 @@ test("the callback reaches the real clone probe through the ledger's own cache, 
   assert.deepStrictEqual(cloned, [{ cloneUrl: "https://example.com/org/repo", pin: RESOLVED_SHA }]);
   assert.ok(ledgerOutcome.kind === "installed");
   assert.equal(ledgerOutcome.summary.resolved.pluginRoot, seeded.pluginRoot);
-  assert.equal(ledgerOutcome.summary.version, "sha-0123456789ab");
+  assert.equal(ledgerOutcome.summary.version, "0.0.1");
   // A path source needs no credential, so the device flow is threaded but
   // never consulted.
   assert.deepStrictEqual(deviceFlow.calls.requestCode, []);
 });
 
-test("TAGS-01/03 (D-07-06/07): a pinned path-source install records the tag's own semver and its commit oid", async (t) => {
+test("TAGS-01/03 (D-07-06/07) / GV-01: a pinned path-source install records the tag's commit, its semver and its oid", async (t) => {
   // arrange: the entry names a default path source (no gitSource), the shape
   // a marketplace-relative dependency declares. The cascade would set both
   // overrides together from ONE member.pin -- this drives the ledger the same
@@ -2261,7 +2303,7 @@ test("TAGS-01/03 (D-07-06/07): a pinned path-source install records the tag's ow
     removalOps: createRemovalOps(),
     env: {},
     sourcePinOverride: RESOLVED_SHA,
-    pinVersionOverride: "2.1.0",
+    resolvedVersion: "2.1.0",
     pathPinProbe: (options) => {
       probed.push(options);
       return Promise.resolve({
@@ -2275,11 +2317,14 @@ test("TAGS-01/03 (D-07-06/07): a pinned path-source install records the tag's ow
   // assert
   assert.ok(ledgerOutcome.kind === "installed");
   assert.equal(ledgerOutcome.summary.resolved.pluginRoot, seeded.pluginRoot);
-  // RESV-05: the tag's own semver, never a git-source sha-<12hex> form.
-  assert.equal(ledgerOutcome.summary.version, "2.1.0");
+  // GV-01: the declared version with the tag's commit, as Claude Code records
+  // it, and RESV-05's tag semver apart, which the ranges read.
+  assert.equal(ledgerOutcome.summary.version, "0.0.1-0123456789ab");
   const record = seeded.state.marketplaces.marketplace?.plugins.empty;
-  assert.equal(record?.version, "2.1.0");
-  assert.equal(record?.resolvedSha, RESOLVED_SHA);
+  assert.deepStrictEqual(
+    [record?.version, record?.resolvedVersion, record?.resolvedSha],
+    ["0.0.1-0123456789ab", "2.1.0", RESOLVED_SHA],
+  );
   assert.deepStrictEqual(probed, [
     {
       locations,
@@ -2396,4 +2441,141 @@ test("D-07-06: a pinned path-source install whose callback does not materialize 
     return true;
   });
   assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty, undefined);
+});
+
+test("UPD-DEP-D1: previewInstall admits an installable plugin and writes nothing", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["tool"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const stateBefore = structuredClone(seeded.state);
+  const bytesBefore = await readFile(locations.stateJsonPath, "utf8");
+
+  // act
+  await previewInstall(seeded.state, locations, projectInstallOptions(environment.cwd));
+
+  // assert
+  assert.deepStrictEqual(seeded.state, stateBefore);
+  assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), bytesBefore);
+  await assert.rejects(readdir(locations.skillsTargetDir), { code: "ENOENT" });
+});
+
+test("GV-01: a plugin directory copy whose declared version satisfies its range previews clean", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-directory-ok-");
+  const seeded = await seedPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+
+  // act & assert
+  await assert.doesNotReject(
+    previewInstall(seeded.state, locations, {
+      ...projectInstallOptions(environment.cwd),
+      directoryPin: { range: ">=0.0.1 <0.0.2-0", declared: "^0.0.1", requiredBy: [] },
+    }),
+  );
+});
+
+for (const { label, pluginJson, requiredBy, message } of [
+  {
+    label: "a declared version outside its range",
+    pluginJson: {},
+    requiredBy: ["app@marketplace", "tool@marketplace"],
+    message:
+      '"empty" from the Anthropic Directory is pinned to its listed commit (version 0.0.1), which does not satisfy ^1.0.0 required by "app", "tool".',
+  },
+  {
+    label: "no declared version",
+    pluginJson: { version: undefined },
+    requiredBy: [],
+    message:
+      '"empty" from the Anthropic Directory is pinned to its listed commit (no version), which does not satisfy ^1.0.0.',
+  },
+]) {
+  test(`GV-01: a plugin directory copy with ${label} refuses the install as Claude Code does`, async (t) => {
+    // arrange
+    const environment = await createHermeticEnvironment(t, "install-outcome-directory-refused-");
+    const seeded = await seedPlugin(environment.cwd, { pluginJson });
+    const locations = locationsFor("project", environment.cwd);
+
+    // act & assert
+    await assert.rejects(
+      previewInstall(seeded.state, locations, {
+        ...projectInstallOptions(environment.cwd),
+        directoryPin: { range: ">=1.0.0 <2.0.0-0", declared: "^1.0.0", requiredBy },
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof DirectoryPinUnsatisfiedError);
+        assert.strictEqual(error.message, message);
+        return true;
+      },
+    );
+  });
+}
+
+test("UPD-DEP-D1: previewInstall throws what the gate throws for a plugin pi supports only in part", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-partial-");
+  const seeded = await seedPlugin(environment.cwd, {
+    pluginJson: { experimental: { themes: "./themes" } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act & assert
+  await assert.rejects(
+    previewInstall(seeded.state, locations, projectInstallOptions(environment.cwd)),
+    (error: unknown) => {
+      assert.ok(error instanceof PluginShapeError);
+      assert.equal(error.shape.kind, "not-installable");
+      return true;
+    },
+  );
+});
+
+test("UPD-DEP-D1: previewInstall reads a marketplace only the user scope records without adding it", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-user-");
+  const seeded = await seedPlugin(environment.cwd, {
+    marketplaceScope: "user",
+    pluginJson: { experimental: { themes: "./themes" } },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act & assert
+  await assert.rejects(
+    previewInstall(seeded.state, locations, projectInstallOptions(environment.cwd)),
+    PluginShapeError,
+  );
+  assert.deepStrictEqual(seeded.state, { marketplaces: {}, schemaVersion: 2 });
+});
+
+test("UPD-DEP-D1: previewInstall leaves a marketplace neither scope records to the ledger", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-absent-");
+  const locations = locationsFor("project", environment.cwd);
+  const state: ExtensionState = { marketplaces: {}, schemaVersion: 2 };
+
+  // act
+  await previewInstall(state, locations, projectInstallOptions(environment.cwd));
+
+  // assert
+  assert.deepStrictEqual(state, { marketplaces: {}, schemaVersion: 2 });
+});
+
+test("UPD-DEP-D1: previewInstall throws the PI-6 conflict with a name another plugin owns", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-conflict-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["tool"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const installedState = structuredClone(seeded.state);
+  await runInstallLedger(installedState, locations, projectInstallOptions(environment.cwd));
+  const marketplace = installedState.marketplaces.marketplace;
+  const record = marketplace?.plugins.empty;
+  assert.ok(marketplace !== undefined && record !== undefined);
+  marketplace.plugins = { other: record };
+
+  // act & assert
+  await assert.rejects(
+    previewInstall(installedState, locations, projectInstallOptions(environment.cwd)),
+    CrossPluginConflictError,
+  );
 });

@@ -5,16 +5,22 @@
  * WILL-02 names a SINGLE source of truth for "is this action reload-deferred?":
  * the per-command reload-hint discipline (the `/reload to pick up changes`
  * trailer, governed by D-17.1-01 / D-18-04 / D-03 / D-06). The pending
- * `will`-grammar must agree with it -- a pending row carries `will` exactly when
- * its corresponding REALIZED command cascade emits the reload-hint trailer.
+ * PLUGIN-level `will`-grammar must agree with it -- a pending plugin row
+ * carries `will` exactly when its corresponding REALIZED command cascade emits
+ * the reload-hint trailer.
  *
- * This test pins that agreement at the realized-cascade seam. For each realized
- * transition whose pending preview keeps a `will` token -- plugin install,
- * uninstall, enable, disable, and the marketplace-remove plugin-uninstall child
- * cascade -- the rendered cascade MUST contain the trailer. For the RETIRED
- * marketplace-level actions -- a realized `(added)` cascade and a realized
- * header-only `(removed)` cascade with no installed plugins (WILL-03) -- the
- * rendered cascade MUST NOT contain the trailer.
+ * Since D-20 the marketplace-level `will add` / `will remove` headers name
+ * changes `apply` makes, not reload-deferred ones, so WILL-02 holds for the
+ * plugin-level tokens only. Their realized forms are marketplace bookkeeping
+ * that loads no resource, so they never ask for a reload.
+ *
+ * This test pins both halves at the realized-cascade seam. For each realized
+ * plugin transition whose pending preview carries a `will` token -- plugin
+ * install, uninstall, enable, disable, update (D-14), and the plugin-uninstall children of a
+ * marketplace remove -- the rendered cascade MUST contain the trailer. For the
+ * realized marketplace-level actions -- an `(added)` cascade and a header-only
+ * `(removed)` cascade with no installed plugins -- the rendered cascade MUST
+ * NOT contain the trailer.
  *
  * The reload-deferral decision is the envelope's `needsReload`, which
  * `shared/notification-resolve.ts` resolves from the oracle
@@ -152,8 +158,33 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
     },
   },
   {
+    // D-14: a catalog move `apply` makes is the realized (updated) row.
+    label: "catalog move -- realized (updated) row",
+    pendingToken: "will update",
+    run: runWithAllLoaded(),
+    message: {
+      marketplaces: [
+        {
+          name: "official",
+          scope: "user",
+          plugins: [
+            {
+              status: "updated",
+              name: "helper",
+              from: "1.0.0",
+              to: "1.1.0",
+              dependencies: [],
+              severity: "info",
+              needsReload: true,
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     label: "marketplace remove with installed plugins -- realized (uninstalled) child cascade",
-    pendingToken: "will uninstall (per recorded plugin under a bare header)",
+    pendingToken: "will uninstall (per recorded plugin under a will-remove header)",
     run: runWithAllLoaded(),
     message: {
       marketplaces: [
@@ -199,13 +230,14 @@ const RELOAD_DEFERRED_FIXTURES: readonly AgreementFixture[] = [
   },
 ];
 
-// Immediate realized cascades -- the RETIRED marketplace-level actions
-// (WILL-03). No row stamps `needsReload: true`, so the reload-hint
-// trailer never fires (the pending surface therefore drops the `will` token).
-const IMMEDIATE_FIXTURES: readonly AgreementFixture[] = [
+// Realized marketplace-level cascades (D-20). Their pending `will add` /
+// `will remove` headers name `apply` changes, and the realized rows are
+// bookkeeping that loads no resource: no row stamps `needsReload: true`, so the
+// reload-hint trailer never fires.
+const MARKETPLACE_BOOKKEEPING_FIXTURES: readonly AgreementFixture[] = [
   {
     label: "marketplace add -- realized (added) header, no installed plugins",
-    pendingToken: "(retired) will add",
+    pendingToken: "will add",
     run: runWithAllLoaded(),
     message: {
       marketplaces: [{ name: "new-mp", scope: "user", status: "added", plugins: [] }],
@@ -213,7 +245,7 @@ const IMMEDIATE_FIXTURES: readonly AgreementFixture[] = [
   },
   {
     label: "marketplace remove with no installed plugins -- realized header-only (removed)",
-    pendingToken: "(retired) will remove",
+    pendingToken: "will remove",
     run: runWithAllLoaded(),
     message: {
       marketplaces: [{ name: "old-mp", scope: "user", status: "removed", plugins: [] }],
@@ -245,12 +277,12 @@ for (const fixture of RELOAD_DEFERRED_FIXTURES) {
   });
 }
 
-for (const fixture of IMMEDIATE_FIXTURES) {
-  test(`WILL-02: an immediate marketplace action's realized cascade omits the reload-hint trailer (pending drops the will-token): ${fixture.label}`, (t) => {
+for (const fixture of MARKETPLACE_BOOKKEEPING_FIXTURES) {
+  test(`D-20: a realized marketplace-level cascade omits the reload-hint trailer: ${fixture.label}`, (t) => {
     const emitted = render(t, fixture);
     assert.ok(
       !emitted.includes(RELOAD_HINT_TRAILER),
-      `${fixture.label}: the realized cascade for ${fixture.pendingToken} MUST NOT emit the reload-hint trailer (WILL-03)`,
+      `${fixture.label}: the realized cascade for pending '${fixture.pendingToken}' MUST NOT emit the reload-hint trailer (D-20)`,
     );
   });
 }

@@ -192,6 +192,50 @@ async function seedResolver(t: TestContext, label: string): Promise<SeededResolv
 }
 
 // ---------------------------------------------------------------------------
+// AAP-04: the value `autoapply` sets.
+// ---------------------------------------------------------------------------
+
+for (const { prefix, expected } of [
+  {
+    prefix: "autoapply ",
+    expected: [
+      { label: "on", value: "autoapply on " },
+      { label: "off", value: "autoapply off " },
+    ],
+  },
+  { prefix: "autoapply of", expected: [{ label: "off", value: "autoapply off " }] },
+  {
+    prefix: "autoapply --local o",
+    expected: [
+      { label: "on", value: "autoapply --local on " },
+      { label: "off", value: "autoapply --local off " },
+    ],
+  },
+]) {
+  test(`AAP-04 offers on and off after "${prefix}"`, async (t) => {
+    // arrange
+    const { completionCache, resolver } = await seedResolver(t, "autoapply-value");
+
+    // act
+    const suggestions = await getArgumentCompletions(prefix, resolver, completionCache);
+
+    // assert
+    assert.deepStrictEqual(suggestions, expected);
+  });
+}
+
+test("AAP-04 offers nothing after the autoapply value", async (t) => {
+  // arrange
+  const { completionCache, resolver } = await seedResolver(t, "autoapply-done");
+
+  // act
+  const suggestions = await getArgumentCompletions("autoapply on ", resolver, completionCache);
+
+  // assert
+  assert.strictEqual(suggestions, null);
+});
+
+// ---------------------------------------------------------------------------
 // TC-1: the top-level subcommand vocabulary.
 // ---------------------------------------------------------------------------
 
@@ -215,6 +259,8 @@ test("TC-1 offers the whole top-level vocabulary at an empty prefix, in declarat
     { label: "ls", value: "ls " },
     { label: "info", value: "info " },
     { label: "pending", value: "pending " },
+    { label: "apply", value: "apply " },
+    { label: "autoapply", value: "autoapply " },
     { label: "enable", value: "enable " },
     { label: "disable", value: "disable " },
     { label: "import", value: "import " },
@@ -508,6 +554,19 @@ test("TC-3 offers only scope and preview flags for standalone prune", async (t) 
       value: "prune --dry-run ",
       description: "Preview dependency plugins that prune would remove",
     },
+  ]);
+});
+
+test("TC-3 offers only the scope flag for apply (APL-04)", async (t) => {
+  // arrange
+  const { completionCache, resolver } = await seedResolver(t, "flags-apply");
+
+  // act
+  const suggestions = await getArgumentCompletions("apply --", resolver, completionCache);
+
+  // assert
+  assert.deepStrictEqual(suggestions, [
+    { label: "--scope", value: "apply --scope ", description: "Scope: user or project" },
   ]);
 });
 
@@ -845,7 +904,14 @@ test("TC-6 treats the partial flag as a positional for a head that does not acce
 // other providers still get a turn.
 // ---------------------------------------------------------------------------
 
-for (const prefix of ["pending ", "import ", "bootstrap ", "frobnicate ", "install alpha extra "]) {
+for (const prefix of [
+  "pending ",
+  "apply ",
+  "import ",
+  "bootstrap ",
+  "frobnicate ",
+  "install alpha extra ",
+]) {
   test(`offers nothing at the argument after ${JSON.stringify(prefix)}`, async (t) => {
     // arrange
     const { completionCache, resolver } = await seedResolver(t, "no-completion");

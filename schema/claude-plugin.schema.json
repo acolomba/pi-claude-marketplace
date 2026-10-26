@@ -58,6 +58,7 @@
           "additionalProperties": false
         },
         "noOp": { "type": "boolean", "const": true },
+        "needsApply": { "type": "boolean", "const": true },
         "marketplaces": {
           "type": "array",
           "items": {
@@ -88,6 +89,7 @@
                         "will uninstall",
                         "will enable",
                         "will disable",
+                        "will update",
                         "disabled",
                         "partially-installed",
                         "partially-upgradable",
@@ -177,18 +179,27 @@
                           "still installed in local layer",
                           "disabled in local layer",
                           "enabled in local layer",
-                          "network error"
+                          "network error",
+                          "already added"
                         ]
                       }
                     },
                     "version": { "type": "string" },
                     "from": { "type": "string" },
                     "to": { "type": "string" },
+                    "fromCommit": { "type": "string" },
+                    "toCommit": { "type": "string" },
                     "scope": { "enum": ["user", "project"] },
                     "description": { "type": "string" },
                     "partial": { "type": "boolean" },
                     "hint": {
-                      "enum": ["partial-install", "partial-update", "stale-gate-update", "enable"]
+                      "enum": [
+                        "partial-install",
+                        "partial-update",
+                        "catalog-partial-update",
+                        "stale-gate-update",
+                        "enable"
+                      ]
                     },
                     "cause": {
                       "type": "object",
@@ -232,7 +243,9 @@
                   "failed",
                   "autoupdate enabled",
                   "autoupdate disabled",
-                  "skipped"
+                  "skipped",
+                  "will add",
+                  "will remove"
                 ]
               },
               "details": {
@@ -324,7 +337,8 @@
                     "still installed in local layer",
                     "disabled in local layer",
                     "enabled in local layer",
-                    "network error"
+                    "network error",
+                    "already added"
                   ]
                 }
               }
@@ -432,6 +446,7 @@
                         "will uninstall",
                         "will enable",
                         "will disable",
+                        "will update",
                         "disabled",
                         "partially-installed",
                         "partially-upgradable",
@@ -521,18 +536,27 @@
                           "still installed in local layer",
                           "disabled in local layer",
                           "enabled in local layer",
-                          "network error"
+                          "network error",
+                          "already added"
                         ]
                       }
                     },
                     "version": { "type": "string" },
                     "from": { "type": "string" },
                     "to": { "type": "string" },
+                    "fromCommit": { "type": "string" },
+                    "toCommit": { "type": "string" },
                     "scope": { "enum": ["user", "project"] },
                     "description": { "type": "string" },
                     "partial": { "type": "boolean" },
                     "hint": {
-                      "enum": ["partial-install", "partial-update", "stale-gate-update", "enable"]
+                      "enum": [
+                        "partial-install",
+                        "partial-update",
+                        "catalog-partial-update",
+                        "stale-gate-update",
+                        "enable"
+                      ]
                     },
                     "cause": {
                       "type": "object",
@@ -576,7 +600,9 @@
                   "failed",
                   "autoupdate enabled",
                   "autoupdate disabled",
-                  "skipped"
+                  "skipped",
+                  "will add",
+                  "will remove"
                 ]
               },
               "details": {
@@ -668,7 +694,8 @@
                     "still installed in local layer",
                     "disabled in local layer",
                     "enabled in local layer",
-                    "network error"
+                    "network error",
+                    "already added"
                   ]
                 }
               }
@@ -930,7 +957,8 @@
                       "still installed in local layer",
                       "disabled in local layer",
                       "enabled in local layer",
-                      "network error"
+                      "network error",
+                      "already added"
                     ]
                   }
                 },
@@ -1120,7 +1148,8 @@
                       "still installed in local layer",
                       "disabled in local layer",
                       "enabled in local layer",
-                      "network error"
+                      "network error",
+                      "already added"
                     ]
                   }
                 },
@@ -1393,7 +1422,8 @@
                             "still installed in local layer",
                             "disabled in local layer",
                             "enabled in local layer",
-                            "network error"
+                            "network error",
+                            "already added"
                           ]
                         }
                       },
@@ -1589,7 +1619,8 @@
                             "still installed in local layer",
                             "disabled in local layer",
                             "enabled in local layer",
-                            "network error"
+                            "network error",
+                            "already added"
                           ]
                         }
                       },
@@ -1729,7 +1760,8 @@
               "still installed in local layer",
               "disabled in local layer",
               "enabled in local layer",
-              "network error"
+              "network error",
+              "already added"
             ]
           }
         }
@@ -1956,6 +1988,99 @@
         "needsReload": { "type": "boolean" },
         "kind": { "type": "string", "const": "usage-info" },
         "usage": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "schemaVersion",
+        "origin",
+        "severity",
+        "needsReload",
+        "kind",
+        "enabled",
+        "files"
+      ],
+      "properties": {
+        "schemaVersion": { "type": "number", "const": 1 },
+        "origin": {
+          "anyOf": [
+            {
+              "type": "object",
+              "required": ["kind", "commandId", "invocationId"],
+              "properties": {
+                "kind": { "type": "string", "const": "command" },
+                "commandId": { "type": "string", "minLength": 1 },
+                "invocationId": { "type": "string", "minLength": 1 }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "load" } },
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "required": ["kind"],
+              "properties": { "kind": { "type": "string", "const": "hook" } },
+              "additionalProperties": false
+            }
+          ]
+        },
+        "severity": { "enum": ["info", "warning", "error"] },
+        "needsReload": { "type": "boolean" },
+        "kind": { "type": "string", "const": "autoapply-status" },
+        "enabled": { "type": "boolean" },
+        "source": {
+          "type": "object",
+          "required": ["scope", "file"],
+          "properties": {
+            "scope": { "enum": ["user", "project"] },
+            "file": {
+              "anyOf": [
+                { "type": "string", "const": "claude-plugins.json" },
+                { "type": "string", "const": "claude-plugins.local.json" }
+              ]
+            }
+          },
+          "additionalProperties": false
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["scope", "file"],
+            "properties": {
+              "scope": { "enum": ["user", "project"] },
+              "file": {
+                "anyOf": [
+                  { "type": "string", "const": "claude-plugins.json" },
+                  { "type": "string", "const": "claude-plugins.local.json" }
+                ]
+              },
+              "value": { "type": "boolean" }
+            },
+            "additionalProperties": false
+          }
+        },
+        "set": {
+          "type": "object",
+          "required": ["scope", "file", "value"],
+          "properties": {
+            "scope": { "enum": ["user", "project"] },
+            "file": {
+              "anyOf": [
+                { "type": "string", "const": "claude-plugins.json" },
+                { "type": "string", "const": "claude-plugins.local.json" }
+              ]
+            },
+            "value": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        }
       },
       "additionalProperties": false
     },

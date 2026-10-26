@@ -129,6 +129,7 @@ import {
   type Single,
 } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
@@ -645,24 +646,19 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
     }
   }
 
-  // ATTR-10 / D-48-B: a typed marketplace-manifest parse/validation failure
-  // (malformed JSON or schema-invalid marketplace.json) maps to the closed-set
-  // `invalid manifest` reason for BOTH path and github sources. A path-source
-  // manifest failure is network-free (NFR-5); a github clone that advanced and
-  // then hit a malformed manifest is genuinely `invalid manifest` too (only
-  // typed manifest errors map here, not generic github fetch failures). The
-  // refresh classification sees
-  // the InvalidMarketplaceManifestError WRAPPED inside a MarketplaceUpdateError
-  // (refreshRecord rethrows with `{ cause }`), so unwrap ONE level of cause as
-  // well (mirrors add.ts::unwrapAddError). The cascadeAutoupdates catch passes
-  // the raw error, which the direct `instanceof` covers. Placed before the errno
-  // checks so the typed class takes precedence over any incidental errno on the
-  // cause chain.
-  if (
-    err instanceof InvalidMarketplaceManifestError ||
-    (err instanceof Error && err.cause instanceof InvalidMarketplaceManifestError)
-  ) {
-    return ["invalid manifest"] as const;
+  // ATTR-10 / D-48-B / MPA-02: a typed marketplace-manifest parse or
+  // validation failure maps to the token `list` and `info` use (D-11):
+  // malformed JSON reads `unparseable`, a schema-invalid manifest
+  // `invalid manifest`, for both path and github sources. The refresh
+  // classification sees the InvalidMarketplaceManifestError WRAPPED inside a
+  // MarketplaceUpdateError (refreshRecord rethrows with `{ cause }`), so unwrap
+  // ONE level of cause (mirrors add.ts::unwrapAddError); the cascadeAutoupdates
+  // catch passes the raw error. Placed before the errno checks so the typed
+  // class takes precedence over any incidental errno on the cause chain.
+  const manifestError =
+    err instanceof Error && err.cause instanceof InvalidMarketplaceManifestError ? err.cause : err;
+  if (manifestError instanceof InvalidMarketplaceManifestError) {
+    return [narrowProbeError(manifestError)] as const;
   }
 
   if (err instanceof Error && err.cause instanceof MarketplaceBaselineUnreadableError) {
@@ -904,7 +900,11 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       // WR-01: `outcomeToCascadePluginMessage` returns `UpdateRowMsg` by
       // construction, so the mapped rows are the narrowed Msg the
       // UPDATE_CONTEXT requires with no cast.
-      plugins: outcomes.map((o) => outcomeToCascadePluginMessage(o, scope)),
+      // UPD-DEP-D1: the dependencies an update changed render beside its row.
+      plugins: outcomes.flatMap((o) => [
+        outcomeToCascadePluginMessage(o, scope),
+        ...(o.dependencyRows ?? []),
+      ]),
     },
   ];
   notifyWithContext(ctx, run, UPDATE_CONTEXT, cascadeRows, undefined, cardinality);

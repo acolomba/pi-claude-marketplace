@@ -68,6 +68,7 @@ import {
   InvalidMarketplaceManifestError,
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
+  StateLockHeldError,
   UnreadableSourceCloneError,
   UnremovableLeftoverCloneError,
   UnsupportedSourceError,
@@ -96,6 +97,7 @@ import {
 } from "../../shared/notify-context.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
+import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 import {
   DEFAULT_CREDENTIAL_OPS,
@@ -109,6 +111,7 @@ import { seedSameRepoPluginMirrors } from "../plugin/clone-cache.ts";
 import { ADD_CONTEXT } from "./add.messaging.ts";
 import {
   DEFAULT_GIT_OPS,
+  marketplaceFailureRows,
   recordedManifestPath,
   type GitAuthBundle,
   type GitOps,
@@ -152,8 +155,8 @@ export type AddMarketplaceNotifications =
  *
  * `failed` collapses every classified precondition failure
  * (`classifyAddError` recognized: duplicate name / stale clone / permission
- * denied / unreadable / invalid manifest / unsupported source / source
- * missing / network unreachable / network error)
+ * denied / unreadable / unparseable or invalid manifest (MPA-02) /
+ * unsupported source / source missing / network unreachable / network error)
  * plus the catastrophic
  * fallback ("unparseable" -- chosen because every recognised add precondition
  * yields a typed error, so a non-enumerated throw is by construction an
@@ -214,11 +217,11 @@ export interface AddMarketplaceOptions {
   /**
    * Composition seam for `bootstrapClaudePlugin` (ATTR-07). When `true`, the
    * enumerated precondition errors are re-thrown (typed) instead of being
-   * routed through `notify` as a `(failed) {<reason>}` row. Bootstrap relies on
-   * catching `MarketplaceDuplicateNameError` to detect the idempotent re-run
-   * and SUPPRESS a duplicate add notification (one-signal-per-state-change). The
-   * public `marketplace add` command path omits this flag and gets the ATTR-07
-   * structured failed row. Omitted (undefined) => route through notify.
+   * routed through `notify` as a `(failed) {<reason>}` row. Bootstrap catches
+   * the error to skip its autoupdate step, then renders it with
+   * `notifyAddFailure`. The public `marketplace add` command path omits this
+   * flag and gets the ATTR-07 structured failed row. Omitted (undefined) =>
+   * route through notify.
    */
   readonly rethrowPreconditionErrors?: boolean;
   /**
@@ -255,7 +258,8 @@ function unwrapAddError(err: unknown): unknown {
     err instanceof StaleSourceCloneError ||
     err instanceof UnreadableSourceCloneError ||
     err instanceof InvalidMarketplaceManifestError ||
-    err instanceof UnsupportedSourceError
+    err instanceof UnsupportedSourceError ||
+    err instanceof ManifestReadDeniedError
   ) {
     return err;
   }
@@ -290,9 +294,10 @@ function joinLeaks(a: string | undefined, b: string | undefined): string | undef
 /**
  * ATTR-07: map an `addMarketplace` precondition error to its
  * closed-set `ContentReason`. Fully `instanceof`-driven (D-48-C A3) so the
- * catch-all returns `undefined` -- a non-enumerated error (e.g.
- * `StateLockHeldError`, an unforeseen catastrophic failure) re-throws at the
- * entrypoint rather than being silently mislabeled. No substring matching.
+ * catch-all returns `undefined` -- a non-enumerated error (an unforeseen
+ * catastrophic failure) re-throws at the entrypoint rather than being silently
+ * mislabeled. No substring matching. `handleAddFailure` reports a
+ * `StateLockHeldError` before it calls this classifier (FLR-02).
  */
 export function classifyAddError(rawErr: unknown): ContentReason | undefined {
   const err = unwrapAddError(rawErr);
@@ -308,34 +313,69 @@ export function classifyAddError(rawErr: unknown): ContentReason | undefined {
     return err.failure === "permission-denied" ? "permission denied" : "unreadable";
   }
 
+  // MPA-02 / D-11: a manifest fault reads the token `list` and `info` use, so
+  // malformed JSON is `unparseable` and a schema-invalid manifest is
+  // `invalid manifest`.
   if (err instanceof InvalidMarketplaceManifestError) {
-    return "invalid manifest";
+    return narrowProbeError(err);
   }
 
   if (err instanceof UnsupportedSourceError) {
     return "unsupported source";
   }
 
-  if (err instanceof Error) {
-    const code = (err as NodeJS.ErrnoException).code;
-
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return "source missing";
-    }
-
-    // GAUTH-02 / D-76-09: delegate git clone errors to the source-access
-    // classifier. It includes the shared auth/network ladder and adds
-    // repository-missing and host HTTP statuses for this source-access
-    // boundary. The opt-in layer keeps other callers' fallthrough semantics
-    // unchanged. The clone catch only cleans staging and rethrows, so this
-    // boundary must classify the error before Pi renders a raw exception.
-    const transportReason = classifyGitSourceAccessFailure(err);
-    if (transportReason !== undefined) {
-      return transportReason;
-    }
+  if (err instanceof ManifestReadDeniedError) {
+    return "permission denied";
   }
 
-  return undefined;
+  return err instanceof Error ? errorAddReason(err) : undefined;
+}
+
+/** The `classifyAddError` reason of an errno-bearing or git clone error. */
+function errorAddReason(err: Error): ContentReason | undefined {
+  const code = (err as NodeJS.ErrnoException).code;
+  if (code === "ENOENT" || code === "ENOTDIR") {
+    return "source missing";
+  }
+
+  // GAUTH-02 / D-76-09: delegate git clone errors to the source-access
+  // classifier. It includes the shared auth/network ladder and adds
+  // repository-missing and host HTTP statuses for this source-access
+  // boundary. The opt-in layer keeps other callers' fallthrough semantics
+  // unchanged. The clone catch only cleans staging and rethrows, so this
+  // boundary must classify the error before Pi renders a raw exception.
+  return classifyGitSourceAccessFailure(err);
+}
+
+/**
+ * MPA-02: a manifest read refused with EACCES or EPERM, classified as
+ * `permission denied` as `list` and `info` read it. Raised only where the add
+ * reads the source's manifest, so a refused state or config write keeps its
+ * own error.
+ */
+class ManifestReadDeniedError extends Error {
+  constructor(manifestPath: string, cause: Error) {
+    super(`cannot read the marketplace manifest ${manifestPath}`, { cause });
+    this.name = "ManifestReadDeniedError";
+  }
+}
+
+/**
+ * Reads the manifest, typing a read `narrowProbeError` calls `permission
+ * denied` (EACCES or EPERM) as `ManifestReadDeniedError`.
+ */
+async function readManifestDocument(
+  manifestPath: string,
+): ReturnType<typeof loadMarketplaceManifestDocument> {
+  try {
+    return await loadMarketplaceManifestDocument(manifestPath);
+  } catch (err) {
+    if (err instanceof Error && narrowProbeError(err) === "permission denied") {
+      throw new ManifestReadDeniedError(manifestPath, err);
+    }
+
+    throw err;
+  }
 }
 
 /**
@@ -352,7 +392,7 @@ async function newMarketplaceName(
   const {
     manifest: { name },
     comparisonJson,
-  } = await loadMarketplaceManifestDocument(manifestPath);
+  } = await readManifestDocument(manifestPath);
   if (isReservedRecordKey(name)) {
     throw new InvalidMarketplaceManifestError(
       `marketplace.json schema invalid: name "${name}" is reserved`,
@@ -423,13 +463,18 @@ function resolvesToRecord(
  * path source also `resolvesToRecord` (WR-06). A path spelled another way
  * (`~/tools` for `/home/me/tools`) is therefore not a match even when it names
  * the same directory: declaring it would make the planner report a source
- * mismatch on every reload. A target layer that already declares the name
- * refuses as a duplicate.
+ * mismatch on every reload.
  *
- * Returns the declared name, or `undefined` when no single record matches or
- * the add is orchestrated (reconcile and import never write a config back,
- * WR-09). The caller runs this outside the MA-9 / WR-07 cleanup catch: that
- * cleanup removes a clone the add created, and this path creates none.
+ * MPA-01: a target layer that already declares the name with a source that
+ * plans the same is the marketplace already added, so the add writes nothing
+ * (Claude Code: "already added; nothing changed"). A target layer that
+ * declares the name with another source refuses as a duplicate.
+ *
+ * Returns the matched name and whether the add declared it, or `undefined`
+ * when no single record matches or the add is orchestrated (reconcile and
+ * import never write a config back, WR-09). The caller runs this outside the
+ * MA-9 / WR-07 cleanup catch: that cleanup removes a clone the add created,
+ * and this path creates none.
  */
 async function redeclareRecordedSource(args: {
   marketplaces: ExtensionState["marketplaces"];
@@ -439,7 +484,7 @@ async function redeclareRecordedSource(args: {
   rawSource: string;
   cwd: string;
   orchestrated: boolean;
-}): Promise<string | undefined> {
+}): Promise<RecordedAdd | undefined> {
   const { current, locations, rawSource } = args;
   if (args.orchestrated) {
     return undefined;
@@ -455,14 +500,28 @@ async function redeclareRecordedSource(args: {
   }
 
   const [name] = match;
-  if (ownValue(current.marketplaces, name) !== undefined) {
-    throw new MarketplaceDuplicateNameError(name, locations.scope);
+  const declared = ownValue(current.marketplaces, name);
+  if (declared !== undefined) {
+    if (samePlannedSource(declared.source, rawSource) !== "same") {
+      throw new MarketplaceDuplicateNameError(name, locations.scope);
+    }
+
+    return { name, alreadyAdded: true };
   }
 
   await writeMarketplaceConfigEntry(current, args.targetConfigPath, locations.scopeRoot, name, {
     source: rawSource,
   });
-  return name;
+  return { name, alreadyAdded: false };
+}
+
+/**
+ * The name an add recorded or matched, and whether the scope already held it
+ * with the typed source, so the add changed nothing (MPA-01).
+ */
+interface RecordedAdd {
+  readonly name: string;
+  readonly alreadyAdded: boolean;
 }
 
 /**
@@ -586,7 +645,7 @@ async function runAddInGuard(args: {
   removalOps: RemovalOps;
   locations: ScopedLocations;
   orchestrated: boolean;
-}): Promise<string> {
+}): Promise<RecordedAdd> {
   const { opts, locations, orchestrated, removalOps } = args;
   const source = parseAddableSource(opts.rawSource);
 
@@ -607,7 +666,7 @@ async function runAddInGuard(args: {
     }
 
     const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-    const redeclaredName = await redeclareRecordedSource({
+    const redeclared = await redeclareRecordedSource({
       marketplaces: state.marketplaces,
       current,
       targetConfigPath,
@@ -616,8 +675,8 @@ async function runAddInGuard(args: {
       cwd: opts.cwd,
       orchestrated,
     });
-    if (redeclaredName !== undefined) {
-      return redeclaredName;
+    if (redeclared !== undefined) {
+      return redeclared;
     }
 
     const added = await addMarketplaceToState({
@@ -675,7 +734,7 @@ async function runAddInGuard(args: {
       throw wrapped instanceof Error ? wrapped : new Error(errorMessage(wrapped));
     }
 
-    return added.name;
+    return { name: added.name, alreadyAdded: false };
   });
 }
 
@@ -812,6 +871,37 @@ function hostErrorFrame(
 }
 
 /**
+ * FLR-02: an add that another process's state lock stopped fails with the
+ * row `marketplace update` shows for a held lock: the failed header and one
+ * failed child carrying `lock held` and the lock error as its cause. The add
+ * takes the lock before it reads a manifest, so the row names the marketplace
+ * by the typed source, as every failure before the manifest read does
+ * (ATTR-07 A2). Its child names that source, not a plugin, so the child's
+ * JSON id is the source alone, as on every failed add (ADD-10). The caller
+ * tests the raw error: `unwrapAddError` would read its ELOCKED cause instead.
+ */
+function surfaceLockHeldAdd(
+  opts: AddMarketplaceOptions,
+  err: StateLockHeldError,
+  orchestrated: boolean,
+): AddMarketplaceOutcome {
+  if (!orchestrated) {
+    const [block] = marketplaceFailureRows(opts.rawSource, opts.scope, "lock held", err);
+    const plugins = block.plugins.map((row) => ({ ...row, marketplaceSubject: true as const }));
+    notifyWithContext(
+      opts.ctx,
+      opts.run,
+      ADD_CONTEXT,
+      [{ ...block, plugins }],
+      undefined,
+      "single",
+    );
+  }
+
+  return { status: "failed", reason: "lock held", error: err, cause: errorMessage(err) };
+}
+
+/**
  * RECON-03: route the catch arm of `addMarketplace` to a typed
  * `AddMarketplaceOutcome`, emitting the standalone notify() row first when the
  * caller is not orchestrated. The outcome is returned on BOTH paths; the
@@ -824,9 +914,14 @@ function hostErrorFrame(
  * precondition yields a typed error and network reachability failures are
  * classified by `classifyAddError`'s errno ladder (WR-03 -- the github
  * guard's clone-catch only cleans staging and rethrows unclassified), so an
- * unrecognised throw is by construction an opaque source-tree shape.
+ * unrecognised throw is by construction an opaque source-tree shape. A
+ * malformed-JSON manifest also reads `"unparseable"` (MPA-02), so an
+ * orchestrated caller that needs to tell the two apart narrows `outcome.error`.
  * GHB-03: an `InvalidGitHubBaseUrlError` is the exception. Both modes rethrow
  * it, so an invalid variable fails the whole command.
+ *
+ * FLR-02: a held state lock fails the add as `lock held` in both modes (see
+ * `surfaceLockHeldAdd`).
  *
  * WR-02 / MA-14: the standalone row of a leftover the add could not remove
  * carries one advisory line naming the cleanup failure; the orchestrated
@@ -840,13 +935,17 @@ function handleAddFailure(
   err: unknown,
   orchestrated: boolean,
 ): AddMarketplaceOutcome {
+  if (err instanceof StateLockHeldError) {
+    return surfaceLockHeldAdd(opts, err, orchestrated);
+  }
+
   const reason = classifyAddError(err);
   const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
   if (reason === undefined) {
     rethrowInvalidGitHubBaseUrl(err);
     if (!orchestrated) {
-      // Not an enumerated add precondition (e.g. a StateLockHeldError or an
-      // unforeseen catastrophic error) -- never swallow it in standalone mode.
+      // Not an enumerated add precondition (an unforeseen catastrophic error)
+      // -- never swallow it in standalone mode.
       throw err;
     }
 
@@ -879,6 +978,15 @@ function handleAddFailure(
   }
 
   return { status: "failed", reason, error: wrapped, cause: errorMessage(err) };
+}
+
+/**
+ * Renders a failed add exactly as the public `marketplace add` command does,
+ * for a composer that passed `rethrowPreconditionErrors` and caught the error
+ * (bootstrap). An error that is not an add precondition is rethrown.
+ */
+export function notifyAddFailure(opts: AddMarketplaceOptions, err: unknown): void {
+  handleAddFailure(opts, err, false);
 }
 
 /**
@@ -947,21 +1055,40 @@ async function runAddOutcome(
   // closed-set add preconditions are caught here. The github guard's own catch
   // (cleanupStaging + appendLeakToError) runs FIRST and re-throws; this catch
   // sees the already-cleaned error, so no staging dir leaks.
-  let recordedName: string;
+  let recorded: RecordedAdd;
   try {
-    recordedName = await runAddInGuard({ opts, locations, removalOps, orchestrated });
+    recorded = await runAddInGuard({ opts, locations, removalOps, orchestrated });
   } catch (err) {
     // rethrowPreconditionErrors short-circuits BEFORE the mode branch so the
     // bootstrap composer contract is preserved in BOTH standalone and
     // orchestrated modes (the typed precondition flows past the orchestrator).
     if (opts.rethrowPreconditionErrors === true) {
       // Composition seam (bootstrap): re-throw the typed precondition so the
-      // caller can make a control-flow decision (e.g. swallow the idempotent
-      // duplicate-name re-run) instead of emitting a structured failed row.
+      // caller can make a control-flow decision (e.g. skip a later step)
+      // instead of emitting a structured failed row.
       throw err;
     }
 
     return handleAddFailure(opts, err, orchestrated);
+  }
+
+  const recordedName = recorded.name;
+  if (recorded.alreadyAdded) {
+    // MPA-01: only a standalone add matches a declared record (WR-09), so this
+    // arm always notifies and the entrypoint discards the outcome. Nothing
+    // changed, so there is nothing to settle. The header carries no severity
+    // stamp, so the result is `info`.
+    const skippedRows: Single<MarketplaceRows<never>> = [
+      {
+        name: recordedName,
+        scope: opts.scope,
+        status: "skipped",
+        reasons: ["already added"],
+        plugins: [],
+      },
+    ];
+    notifyWithContext(opts.ctx, opts.run, ADD_CONTEXT, skippedRows, undefined, "single");
+    return { status: "added", name: recordedName };
   }
 
   // D-03-INV / D-SEED-01: the settle runs after the state commit and before

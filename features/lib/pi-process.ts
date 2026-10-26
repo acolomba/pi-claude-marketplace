@@ -91,6 +91,7 @@ export class PiProcess {
   private nextId = 0;
   private stderr = "";
   private exited = false;
+  private stopped = false;
 
   private constructor(child: PiChild) {
     this.child = child;
@@ -141,8 +142,17 @@ export class PiProcess {
     });
   }
 
-  /** Closes Pi's stdin, waits for it to exit, and kills whatever its group left. */
+  /**
+   * Closes Pi's stdin, waits for it to exit, and kills whatever its group
+   * left. A second call does nothing: by then the group id may belong to an
+   * unrelated process.
+   */
   async stop(): Promise<void> {
+    if (this.stopped) {
+      return;
+    }
+
+    this.stopped = true;
     if (!this.exited) {
       const exit = once(this.child, "exit");
       this.child.stdin.end();

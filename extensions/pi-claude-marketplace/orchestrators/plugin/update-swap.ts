@@ -64,6 +64,7 @@ import path from "node:path";
 
 import {
   abortPreparedAgents,
+  assertAgentCommitTargets,
   commitPreparedAgents,
   prepareStagePluginAgents,
 } from "../../bridges/agents/index.ts";
@@ -140,11 +141,51 @@ import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
 import type {
+  MaterializationPolicy,
   PreparedPluginUpdate,
   PreparePluginUpdateOptions,
   UpdateCloneCacheSeam,
 } from "./update-preflight.ts";
-import type { PluginUpdateFailedOutcome, PluginUpdateOutcome } from "../types.ts";
+import type {
+  PluginUpdateFailedOutcome,
+  PluginUpdateOutcome,
+  RevisionMove,
+  UpdateDependencyRow,
+} from "../types.ts";
+
+/**
+ * UPD-DEP-D1: what settling the dependency closure of an update's new version
+ * produced. `settled` carries a row for each dependency it installed, enabled
+ * or moved; `refused` carries the row of the dependency that cannot be met,
+ * after the rows of any change the settle made before a step failed.
+ */
+export type UpdateDependencySettlement =
+  | { readonly kind: "settled"; readonly rows: readonly UpdateDependencyRow[] }
+  | {
+      readonly kind: "refused";
+      readonly rows: readonly UpdateDependencyRow[];
+      readonly cause: Error;
+    };
+
+/**
+ * UPD-DEP-D1: settles the closure of `prepared`, the version `args` moves its
+ * plugin to, so the closure read is the candidate's and not the catalog head's.
+ */
+export type UpdateDependencySettler = (
+  args: ThreePhaseArgs,
+  prepared: PreparedPluginUpdate,
+) => Promise<UpdateDependencySettlement>;
+
+/**
+ * UPD-DEP-D1: the settler an update operation is bound to, before the
+ * notification context of the command that runs it is known. Install's flow
+ * owns the cascade it runs (`createUpdateDependencyResolver`).
+ */
+export type UpdateDependencyResolver = (
+  args: ThreePhaseArgs,
+  prepared: PreparedPluginUpdate,
+  notification: { readonly ctx: NotificationContext; readonly run: NotificationRun },
+) => Promise<UpdateDependencySettlement>;
 
 /** Common collaborators and identity for one prepared plugin replacement. */
 export interface ThreePhaseArgsBase {
@@ -178,6 +219,34 @@ export interface ThreePhaseArgsBase {
     PreparePluginUpdateOptions["constraintMarketplaceTagMemo"]
   >;
   readonly cleanupClones: (locations: ScopedLocations) => Promise<unknown>;
+  /**
+   * UPR-03: receives the revisions of the derived candidate, reported once
+   * before the swap starts and never for a verdict the preflight returns, so
+   * a caller can name the move on a failure the swap throws without wrapping
+   * the error. Production callers that render failures set it.
+   */
+  readonly onCandidate?: (move: RevisionMove) => void;
+  /** UPR-03: the installed version, reported before any candidate; see `onCandidate`. */
+  readonly onRecord?: NonNullable<PreparePluginUpdateOptions["onRecord"]>;
+  /**
+   * UPD-DEP-D1: the command's context for a cascade-mode run's credential
+   * prompts. A dependency move runs in cascade mode, so its rows return to the
+   * command; on an interactive command it still authenticates as the command
+   * does (Device Flow included).
+   */
+  readonly preflightNotification?: PreparePluginUpdateOptions["notification"];
+  /** UPD-DEP-D1: the plugins a dependency move is made for (`PreparePluginUpdateOptions`). */
+  readonly requesters?: NonNullable<PreparePluginUpdateOptions["requesters"]>;
+  /** UPD-DEP-D1: the version the dependency plan chose (`PreparePluginUpdateOptions`). */
+  readonly expectVersion?: string;
+  /** WR-1: the versions the dependency plan ruled out (`PreparePluginUpdateOptions`). */
+  readonly excludedVersions?: PreparePluginUpdateOptions["excludedVersions"];
+  /**
+   * UPD-DEP-D1: settles the dependency closure of the version the update
+   * moves to before the swap, under a policy that resolves it. Absent, the
+   * update moves the plugin alone.
+   */
+  readonly settleDependencies?: UpdateDependencySettler;
   /**
    * State I/O for the intent-mark and finalize guards (and the disabled-pin
    * refresh in preflight). Production callers omit it and get the real state
@@ -225,19 +294,21 @@ export type NonFailedUpdateOutcome = Exclude<PluginUpdateOutcome, PluginUpdateFa
 
 /**
  * A failed update outcome the caller can render directly -- one that carries its
- * own reasons and none of the phase-3 rollback payload.
+ * own reasons and none of the phase-3 rollback payload. It may name the
+ * installed version and the error behind it (the preflight's candidate
+ * failures, SRC-01 / UPR-03), never a move.
  *
  * Stated as an intersection rather than as an interface extending an `Omit` of
- * the same five keys. Both admit exactly the same values, because every one of
- * those five slots is optional on the source; the intersection additionally
- * keeps each absence marker beside the slot it closes, so what the marker
- * narrows is readable from the declaration itself.
+ * the same keys. Both admit exactly the same values, because every one of
+ * those slots is optional on the source; the intersection additionally keeps
+ * each absence marker beside the slot it closes, so what the marker narrows is
+ * readable from the declaration itself.
  */
 export type DirectRenderableFailedOutcome = PluginUpdateFailedOutcome & {
   readonly reasons: readonly ContentReason[];
-  readonly cause?: never;
-  readonly fromVersion?: never;
+  readonly fromCommit?: never;
   readonly phaseFailures?: never;
+  readonly toCommit?: never;
   readonly toVersion?: never;
 };
 
@@ -561,10 +632,11 @@ type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
  * truthful current view during the intent-mark window; `finalizeUpdateRecord`
  * rewrites them on the all-success branch.
  *
- * No mutation to `sRecord.version`, `sRecord.resolvedSource`, or
- * `sRecord.updatedAt` -- those are the finalize step's responsibility.
- * `sRecord.resources.workflows` is the ONE exception, and CR-02 below says
- * why.
+ * No mutation to `sRecord.version` or `sRecord.resolvedSource` -- those are
+ * the finalize step's responsibility. `sRecord.updatedAt` is restamped here
+ * so the ST-9 check sees an overlapping run even when the version and the sha
+ * stay the same, and `sRecord.resources.workflows` is widened, as CR-02 below
+ * says.
  */
 async function markUpdateInProgress(
   args: ThreePhaseArgs,
@@ -586,13 +658,23 @@ async function markUpdateInProgress(
         throw new PluginUpdateConcurrencyError("plugin-uninstalled", plugin, marketplace);
       }
 
-      // ST-9: stale-version check.
-      if (sRecord.version !== fromVersion) {
+      // ST-9: stale-version check. Two git revisions can share a declared
+      // version (D-16-09), so the recorded commit must not have moved either.
+      // A same-revision run (every reinstall, D-18-04) moves neither, so the
+      // write stamp must not have moved too: the stamp below is what a second
+      // process that read the record before this mark then fails on.
+      if (
+        sRecord.version !== fromVersion ||
+        sRecord.resolvedSha !== preflight.record.resolvedSha ||
+        sRecord.updatedAt !== preflight.record.updatedAt
+      ) {
         throw new PluginUpdateConcurrencyError("plugin-updated", plugin, marketplace, {
           expectedVersion: fromVersion,
           actualVersion: sRecord.version,
         });
       }
+
+      sRecord.updatedAt = new Date().toISOString();
 
       sRecord.compatibility = {
         installable: false,
@@ -737,16 +819,21 @@ function applyPerBridgeResources(
 }
 
 /**
- * SC#2 all-or-nothing: the version bump, `installable: true` and
+ * SC#2 all-or-nothing: the version bump, the `compatibility` block and
  * `resolvedSource` happen ONLY when every bridge succeeded. On failure the
  * intent-mark `compatibility` set by `markUpdateInProgress` carries forward,
  * which is the truthful "we did not complete the swap" view.
+ *
+ * `installable` is the same derived flag install writes: a
+ * `partially-available` candidate records `false` beside its dropped kinds,
+ * because enable, install and backfill read that flag as the partial-consent
+ * marker (D-18-06).
  */
 function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: PluginPreflight): void {
   const { installable, toVersion, resolvedSha } = preflight;
   sRecord.version = toVersion;
   sRecord.compatibility = {
-    installable: true,
+    installable: installable.state === "installable",
     notes: [...installable.notes],
     supported: [...installable.supported],
     unsupported: [...installable.unsupported],
@@ -762,6 +849,14 @@ function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: Plug
     delete sRecord.resolvedSha;
   } else {
     sRecord.resolvedSha = resolvedSha;
+  }
+
+  // GV-01: the tag's semver when the dependents' range selected a tag, else
+  // none, as Claude Code writes `resolvedVersion` on an update.
+  if (preflight.resolvedVersion === undefined) {
+    delete sRecord.resolvedVersion;
+  } else {
+    sRecord.resolvedVersion = preflight.resolvedVersion;
   }
 }
 
@@ -920,8 +1015,7 @@ async function finalizeUpdateRecord(
  * preserves the OLD `resources.hooks` inventory in state.json, keeping the
  * truthful "swap incomplete" view. The /reload routing table points at the
  * partially-deleted file until the user runs reinstall
- * (RECOVERY_PLUGIN_REINSTALL_PREFIX hint). Same recovery contract as
- * `reinstall.ts::commitHooks` (WR-05).
+ * (RECOVERY_PLUGIN_REINSTALL_PREFIX hint).
  *
  * Returns the supported hook entries version B materialized (D-100-01 /
  * ENBL-10), or undefined when version B declares no hooks -- which is the
@@ -1051,12 +1145,17 @@ async function commitUpdateWorkflows(prepared: PreparedWorkflowsStaging): Promis
  * marked entries leave the scope's `mcp.json`. Update has no rollback, so a
  * removal that throws is an `mcp` failure that keeps the new entry and the
  * legacy one; the next reload or a reinstall finishes the move.
+ *
+ * D-18-15: `overwrite` reaches the agents commit only, as RINST-01 shipped.
+ * Skills and commands already replace a stray target; the workflows commit
+ * keeps its WR-06 refusal and MCP its ANAME-03 collision refusal.
  */
 async function commitUpdatePhase3a(
   ops: RemovalOps,
   args: ThreePhaseArgs,
   preflight: PluginPreflight,
   handles: PrepHandles,
+  overwrite: boolean,
 ): Promise<{
   readonly failures: UpdatePhase3Failure[];
   readonly hookEntries: readonly HookSummaryEntry[] | undefined;
@@ -1111,7 +1210,7 @@ async function commitUpdatePhase3a(
   }
 
   try {
-    const leak = await commitPreparedAgents(ops, handles.agents);
+    const leak = await commitPreparedAgents(ops, handles.agents, { force: overwrite });
     if (leak !== undefined) {
       const cleanupFailure = commitCleanupFailure(
         "agents",
@@ -1205,12 +1304,15 @@ function hasUpdatePhase3Failures(
 function composePhase3FailureOutcome(
   args: ThreePhaseArgs,
   failures: NonEmptyUpdatePhase3Failures,
-  versions: { readonly fromVersion: string; readonly toVersion: string },
+  move: RevisionMove,
   mcpConfigNotices: readonly McpConfigNotice[],
 ): UpdatePhase3FailedOutcome {
-  const { plugin } = args;
-  const recoveryHint = `${RECOVERY_PLUGIN_REINSTALL_PREFIX} "${plugin}".`;
-  const aggregateMsg = `Plugin "${plugin}" update failed during physical replace. ${recoveryHint}`;
+  const { plugin, marketplace } = args;
+  // D-18-10: running `reinstall` again repairs a partial replace for either
+  // verb, so `update` and `reinstall` share this hint, and the failure text
+  // names no verb.
+  const recoveryHint = `${RECOVERY_PLUGIN_REINSTALL_PREFIX} ${plugin}@${marketplace} to repair it.`;
+  const aggregateMsg = `Plugin "${plugin}" failed during physical replace. ${recoveryHint}`;
   // CR-01: phase-3 failure text is NOT path-redacted, in `msg` or along the
   // `cause` chain. These strings ARE the manual-recovery instructions: the
   // workflows commit deliberately leaves the only copy of a displaced envelope
@@ -1234,8 +1336,8 @@ function composePhase3FailureOutcome(
   return {
     partition: "failed",
     name: plugin,
-    fromVersion: versions.fromVersion,
-    toVersion: versions.toVersion,
+    // UPR-03: the versions, and the commits when a side has one.
+    ...move,
     notes: [aggregateMsg, ...failures.map((f) => `${f.phase}: ${f.msg}`)],
     // Pre-narrowed: phase-3 aggregate failures always render as `(failed)
     // {rollback partial}` per docs/output-catalog.md. The direct entrypoint
@@ -1257,17 +1359,40 @@ function composePhase3FailureOutcome(
   };
 }
 
+/**
+ * PI-6: discovers the candidate's generated names and refuses one another
+ * plugin of the scope already owns, checked against `preflight.state` without
+ * the plugin's own record, so an update never conflicts with itself (a plugin
+ * moving its skill names from {a,b} to {a,c} would otherwise conflict on
+ * "a"). Writes nothing, so UPD-DEP-D1's plan runs it before any dependency
+ * moves, and the swap runs it again over the scope the moves left.
+ */
+export async function assertUpdateNamesFree(
+  args: Pick<ThreePhaseArgsBase, "marketplace" | "plugin" | "scope">,
+  preflight: Pick<PreparedPluginUpdate, "installable" | "state">,
+): Promise<Awaited<ReturnType<typeof discoverGeneratedNames>>> {
+  const generatedNames = await discoverGeneratedNames(args.plugin, preflight.installable);
+  assertNoCrossPluginConflicts(
+    args.scope,
+    generatedNames,
+    removePluginRecord(preflight.state, args.marketplace, args.plugin),
+  );
+  return generatedNames;
+}
+
 // The three-phase update body sequences preflight, the D-UPD disabled-record
 // fast path, prepare-handles, the intent-mark window, phase-3a per-bridge
 // commits, finalize, and the phase-3b aggregate error path. The per-phase
 // save-vs-throw discipline stays visible here; the phase bodies themselves are
-// extracted above.
+// extracted above. `policy` is the calling verb's; its `overwrite` reaches the
+// agents commit.
 export async function swapPluginUpdate(
   args: ThreePhaseArgs,
   preflight: PreparedPluginUpdate,
+  policy: MaterializationPolicy,
 ): Promise<UpdateRunOutcome> {
-  const { plugin, marketplace, scope } = args;
-  const { installable, fromVersion, toVersion } = preflight;
+  const { plugin, marketplace } = args;
+  const { installable } = preflight;
 
   // ─── : prepare into tmp ────────────────────────────────────────────
   //
@@ -1277,14 +1402,9 @@ export async function swapPluginUpdate(
   // materializes the merged doc; commit writes mcp.json atomically).
   //
   // PI-6 cross-plugin guard: re-check generated names against the SAME-SCOPE
-  // state EXCLUDING this plugin's currently-recorded resources -- updating
-  // your own plugin against your own state must not count as cross-plugin
-  // conflict (a plugin updating its skill names from {a,b} -> {a,c} would
-  // otherwise self-conflict on "a").
+  // state EXCLUDING this plugin's currently-recorded resources.
 
-  const generatedNames = await discoverGeneratedNames(plugin, installable);
-  const stateForGuard = removePluginRecord(preflight.state, marketplace, plugin);
-  assertNoCrossPluginConflicts(scope, generatedNames, stateForGuard);
+  const generatedNames = await assertUpdateNamesFree(args, preflight);
   // D-08-12: this verb owns the swap lifecycle, so it constructs the removal
   // operations once and every prepare, commit, and abort step below performs its
   // cleanup through that one collaborator.
@@ -1311,10 +1431,14 @@ export async function swapPluginUpdate(
   // are the post-phase-3a `finalizeUpdateRecord` step's responsibility.
 
   try {
+    // NFR-3 / PI-6: the agents commit's target refusals run here first, so an
+    // occupied target refuses before the intent mark and changes nothing. The
+    // commit repeats them for a file that appears in between.
+    await assertAgentCommitTargets(handles.agents, { force: policy.overwrite });
     await markUpdateInProgress(args, preflight, handles);
   } catch (err) {
-    // Intent-mark failure (typically ST-9 stale-version): abort all prep
-    // handles + rethrow.
+    // A target refusal or an intent-mark failure (typically ST-9
+    // stale-version): abort all prep handles + rethrow.
     throw errorWithCleanupFailures(err, await abortHandles(removalOps, handles));
   }
 
@@ -1325,14 +1449,14 @@ export async function swapPluginUpdate(
     hookEntries,
     workflows: workflowsCommit,
     mcpConfigNotices,
-  } = await commitUpdatePhase3a(removalOps, args, preflight, handles);
+  } = await commitUpdatePhase3a(removalOps, args, preflight, handles, policy.overwrite);
 
   // ─── Phase 2b: finalize state (TR-04) ─────────────────────────────────────
   //
   // The finalize window writes per-bridge resource updates for every
   // bridge whose commit succeeded (independent of other bridges' outcomes),
-  // and bumps `version` + `installable=true` + `resolvedSource` ONLY when
-  // all four bridges succeeded.
+  // and bumps `version` + the `compatibility` block + `resolvedSource` ONLY
+  // when all four bridges succeeded.
   //
   // Order discipline: finalize MUST run BEFORE the phase-3b recovery-hint
   // emission. If finalize ran AFTER the recovery-hint emission on a success
@@ -1370,7 +1494,7 @@ export async function swapPluginUpdate(
     return composePhase3FailureOutcome(
       args,
       phase3aFailures,
-      { fromVersion, toVersion },
+      preflightMove(preflight),
       mcpConfigNotices,
     );
   }
@@ -1427,8 +1551,7 @@ export async function swapPluginUpdate(
   return {
     partition: "updated",
     name: plugin,
-    fromVersion,
-    toVersion,
+    ...preflightMove(preflight),
     stagedAgentNames,
     stagedMcpServerNames,
     declaresAgents: stagedAgentNames.length > 0,
@@ -1476,6 +1599,24 @@ export async function swapPluginUpdate(
     // AFILE-04: same NREG-01 spread rule; the caller that renders the row
     // routes these through `notifyMcpConfigNotices`.
     ...(mcpConfigNotices.length > 0 && { mcpConfigNotices }),
+  };
+}
+
+/**
+ * UPR-02 / UPR-03: the revisions a prepared update moves between -- the
+ * versions, and the record's and the candidate's commits, each commit key
+ * present exactly when its side has a sha (NREG-01). The one place both shas
+ * are read: the success outcome, the phase-3 failure outcome, and the
+ * runner's candidate report all take it from here.
+ */
+export function preflightMove(preflight: PreparedPluginUpdate): RevisionMove {
+  const fromCommit = preflight.record.resolvedSha;
+  const toCommit = preflight.resolvedSha;
+  return {
+    fromVersion: preflight.fromVersion,
+    toVersion: preflight.toVersion,
+    ...(fromCommit !== undefined && { fromCommit }),
+    ...(toCommit !== undefined && { toCommit }),
   };
 }
 

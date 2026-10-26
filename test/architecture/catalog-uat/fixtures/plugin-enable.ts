@@ -68,6 +68,33 @@ export const PLUGIN_ENABLE_FIXTURES: FixtureMap = {
       },
     },
 
+    // EDEP-01: enable is refused while a member of the plugin's dependency
+    // closure is not installed in the scope, as upstream's
+    // `dependency_missing`. Nothing is written; the cause names the missing
+    // dependencies and the order.
+    "enable-refused-missing-dependency": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "helper",
+                reasons: ["dependency unsatisfied"],
+                cause: new Error("Install formatter@tools first, then enable helper@official."),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // ENBL-07 / FSTAT-07 / D-66-04: a re-enable admitted through the partial
     // gate drops component kinds, so the row follows the RESOLUTION (`◉
     // (partially-installed)` + the kinds) rather than the verb. SEV-03: the

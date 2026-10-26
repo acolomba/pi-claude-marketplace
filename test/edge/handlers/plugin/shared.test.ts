@@ -38,6 +38,7 @@ import {
   parsePluginTarget,
   parseRequiredPluginMarketplaceRef,
   withParsedArgs,
+  withScopeOnlyArgs,
   type ParsedMapModelArgs,
   type ParsedPluginMarketplaceRef,
   type PluginCommandTarget,
@@ -48,6 +49,7 @@ import { createMachineNotificationBoundary } from "../../notification-boundary.t
 import { createNotificationBoundary } from "../../notification-boundary.ts";
 
 type PreludeOperation<P> = Parameters<typeof withParsedArgs<P>>[2];
+type ScopeOnlyOperation = Parameters<typeof withScopeOnlyArgs>[1];
 type Scope = NonNullable<ParsedMapModelArgs["scope"]>;
 
 const INSTALL_USAGE =
@@ -56,6 +58,7 @@ const UNINSTALL_USAGE =
   "Usage: /claude:plugin uninstall <plugin>@<marketplace> [--scope user|project] [--local]";
 const FETCH_USAGE =
   "Usage: /claude:plugin fetch [<plugin>@<marketplace> | @<marketplace>] [--scope user|project]";
+const APPLY_USAGE = "Usage: /claude:plugin apply [--scope user|project]";
 
 describe("parseMapModelArgs", () => {
   test("reports both downstream flags off and omits the scope member when none is supplied", () => {
@@ -657,6 +660,56 @@ describe("withParsedArgs", () => {
     verifyBoundary();
     verify(operation);
   });
+});
+
+describe("withScopeOnlyArgs", () => {
+  for (const { args, scope } of [
+    { args: "", scope: undefined },
+    { args: "--scope user", scope: "user" },
+    { args: "--scope project", scope: "project" },
+  ] satisfies readonly { args: string; scope: Scope | undefined }[]) {
+    test(`calls the operation once with scope ${String(scope)} for ${JSON.stringify(args)} (D-07)`, async () => {
+      // arrange
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(0);
+      const run = runWithNothingLoaded();
+      const operation = mock<ScopeOnlyOperation>({ exactParams: true, name: "scope operation" });
+      when(() => operation(scope, ctx, run)).thenResolve(undefined);
+      const handler = withScopeOnlyArgs(APPLY_USAGE, operation);
+
+      // act
+      await handler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(notifications, []);
+      verifyBoundary();
+      verify(operation);
+    });
+  }
+
+  for (const { args, message } of [
+    { args: "--bogus", message: 'Unknown flag: "--bogus".' },
+    { args: "extra --bogus", message: 'Unknown flag: "--bogus".' },
+    { args: "extra", message: "Too many arguments." },
+    { args: "--scope user extra", message: "Too many arguments." },
+  ]) {
+    test(`rejects ${JSON.stringify(args)} with the usage block and never reaches the operation`, async () => {
+      // arrange
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+      const run = runWithNothingLoaded();
+      const operation = mock<ScopeOnlyOperation>({ exactParams: true, name: "scope operation" });
+      const handler = withScopeOnlyArgs(APPLY_USAGE, operation);
+
+      // act
+      await handler(args, ctx, run);
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        { message: `${message}\n\n${APPLY_USAGE}`, severity: "error" },
+      ]);
+      verifyBoundary();
+      verify(operation);
+    });
+  }
 });
 
 for (const mode of ["json", "rpc"] as const) {

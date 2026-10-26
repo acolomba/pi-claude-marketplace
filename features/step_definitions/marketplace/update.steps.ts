@@ -3,7 +3,8 @@
  */
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
 
@@ -12,8 +13,10 @@ import {
   invalidateManifest,
   publishConventionalDecoy,
   publishUnreadableSkillFile,
+  restoreUnreadableSkillFile,
   removePublishedSource,
   rewritePublishedManifest,
+  unreadableSkillCopyError,
 } from "../../lib/published-marketplace.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
@@ -58,7 +61,7 @@ Given(
 );
 
 Given(
-  "updating the marketplace {string} in the {word} scope has failed as invalid manifest",
+  "updating the marketplace {string} in the {word} scope has failed as unparseable",
   async function (this: ScenarioWorld, name: string, scope: string) {
     const payload = await runCommand(
       this.pi,
@@ -75,23 +78,8 @@ Given(
       },
       {
         severity: "error",
-        marketplaces: [{ name, status: "failed", reasons: [["invalid manifest"]] }],
+        marketplaces: [{ name, status: "failed", reasons: [["unparseable"]] }],
       },
-    );
-  },
-);
-
-Given(
-  "the marketplace {string} source is repaired with a changed valid manifest",
-  async function (this: ScenarioWorld, name: string) {
-    await rewritePublishedManifest(
-      this.requirePublished(name),
-      JSON.stringify({
-        name,
-        owner: { name: "features" },
-        plugins: [],
-        description: "Repaired marketplace",
-      }),
     );
   },
 );
@@ -106,8 +94,22 @@ Given(
 Given(
   "the published plugin {string} of the marketplace {string} has an unreadable skill file",
   async function (this: ScenarioWorld, plugin: string, name: string) {
-    const file = await publishUnreadableSkillFile(this.requirePublished(name), plugin);
+    const published = this.requirePublished(name);
+    const file = await publishUnreadableSkillFile(published, plugin);
     await assert.rejects(readFile(file), { code: "EACCES" });
+    const scratch = await mkdtemp(path.join(this.tokens.home, "skill-copy-"));
+    this.onRelease(() => rm(scratch, { recursive: true, force: true }));
+    const error = await unreadableSkillCopyError(published, plugin, scratch);
+    assert.deepStrictEqual([error.code, error.syscall], ["EACCES", "copyfile"]);
+    this.recordErrorMessage("{unreadable skill file copy error}", error.message);
+  },
+);
+
+Given(
+  "the unreadable skill file of the published plugin {string} of the marketplace {string} can be read again",
+  async function (this: ScenarioWorld, plugin: string, name: string) {
+    const file = await restoreUnreadableSkillFile(this.requirePublished(name), plugin);
+    assert.strictEqual(await readFile(file, "utf8"), "Unreadable.\n");
   },
 );
 

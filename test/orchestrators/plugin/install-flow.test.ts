@@ -17,7 +17,9 @@ import {
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import test, { describe } from "node:test";
+
+import lockfile from "proper-lockfile";
 
 import { GENERATED_AGENT_MARKER } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import {
@@ -39,25 +41,33 @@ import {
 import {
   createInstallMissingDependency,
   createInstallPlugin,
+  createUpdateDependencyResolver,
   type InstallTransaction,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import { createInstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
+import {
+  isUpdatePreflightOutcome,
+  preparePluginUpdate,
+  UPDATE_MATERIALIZATION,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
-  clonePluginRecord,
   loadState,
   saveState,
+  toDisabledRecord,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { McpServerCollisionError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
+  CrossPluginConflictError,
   DependencyCascadeError,
   InvalidGitHubBaseUrlError,
   InvalidMarketplaceManifestError,
   MarketplaceInLocalLayerOnlyError,
   MarketplaceSourceUndeclarableError,
   PluginShapeError,
+  StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   createRemovalOps,
@@ -79,6 +89,7 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
+import { materializeCommitCopyWith } from "./mirror-checkout.ts";
 import { retryTree } from "./scope-tree-inventory.ts";
 
 import type { HooksRuntime } from "../../../extensions/pi-claude-marketplace/bridges/hooks/runtime.ts";
@@ -94,6 +105,8 @@ import type {
   InstallLedgerOptions,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import type { MarketplaceTagProbeOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
+import type { PreparedPluginUpdate } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
+import type { CascadeThreePhaseArgs } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   NotificationContext,
@@ -2522,7 +2535,11 @@ test("DFEN-06 / CFG-02: the reload after an install with --local of a plugin the
       });
 
       // assert
-      assert.deepEqual(reload.notifications, [], "a converged pass says nothing");
+      assert.deepEqual(
+        reload.notifications,
+        [{ message: "Apply: nothing to change." }],
+        "a converged pass has nothing to change",
+      );
 
       const after = await loadState(locations.extensionRoot);
       assert.equal(after.marketplaces["mp"]?.plugins["hello"]?.enabled, false);
@@ -5243,7 +5260,7 @@ test("RESV-03 regression: an unreadable version constraint still fails the insta
       // ledger phase, so state.json and the scope root are byte-identical.
       assertRetryFailure(
         outcome,
-        'Dependency "some-other-plugin@mp" declares an unparseable version constraint "not-a-version-range" (input 1 of 1 is not a valid version range).',
+        'Dependency "some-other-plugin@mp" declares an unparseable version constraint not-a-version-range (input 1 of 1 is not a valid version range).',
       );
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
@@ -6537,7 +6554,11 @@ test("D-04-05 / CMP-3: a dependency adopted from a user-scope marketplace surviv
         },
         { marketplacesToRemove: [], pluginsToUninstall: [] },
       );
-      assert.deepEqual(reload.notifications, [], "a converged pass says nothing");
+      assert.deepEqual(
+        reload.notifications,
+        [{ message: "Apply: nothing to change." }],
+        "a converged pass has nothing to change",
+      );
       assert.deepStrictEqual(
         (await loadState(projectLocations.extensionRoot)).marketplaces,
         installed.marketplaces,
@@ -8080,7 +8101,7 @@ test("D-04-01: a direct install stays a direct install when a later plugin decla
         "some-other-plugin"
       ];
       assert.ok(directRecord !== undefined, "the direct install succeeded, so its record exists");
-      const directSnapshot = clonePluginRecord(directRecord);
+      const directSnapshot = structuredClone(directRecord);
 
       // act
       await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
@@ -8541,6 +8562,44 @@ test("D-04-07: installing a disabled dependency by name promotes it, re-material
         declaresWorkflows: false,
         promoted: true,
       });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-04-07 / GV-01: a promoted dependency keeps the release tag version its record holds", async () => {
+  await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-tag-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { ctx, run } = await seedDependencyInstalled(cwd, installPlugin);
+      await disableSeededDependency(cwd, hooksRouting, { ctx, run });
+      const state = await loadState(locations.extensionRoot);
+      const dependency = state.marketplaces["mp"]?.plugins["some-other-plugin"];
+      assert.ok(dependency !== undefined);
+      dependency.resolvedVersion = "0.0.1";
+      await saveState(locations.extensionRoot, state);
+
+      // act
+      await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+
+      // assert
+      const promoted = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "some-other-plugin"
+      ];
+      assert.deepStrictEqual(
+        [promoted?.provenance, promoted?.enabled, promoted?.resolvedVersion],
+        ["explicit", true, "0.0.1"],
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -11076,6 +11135,7 @@ function seamWith(gitOps: GitOps): InstallCloneCacheSeam {
     materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
     materializeOrRefreshPluginMirror: (args) =>
       materializeOrRefreshPluginMirror({ ...args, gitOps }),
+    materializePluginCommitCopy: (args) => materializeCommitCopyWith(gitOps, args),
   };
 }
 
@@ -11109,6 +11169,7 @@ function captureInstallAuth(inner: InstallCloneCacheSeam): {
     calls,
     seam: {
       materializeOrRefreshPluginMirror: inner.materializeOrRefreshPluginMirror,
+      materializePluginCommitCopy: inner.materializePluginCommitCopy,
       materializePluginClone: (options) => {
         calls.push({ auth: options.resolveAuth(), cloneUrl: options.cloneUrl });
         return inner.materializePluginClone(options);
@@ -11212,7 +11273,7 @@ async function seedGitSourceMarketplace(opts: {
   await saveState(locations.extensionRoot, state);
 }
 
-test("RESV-03/RESV-05: a tag-pinned dependency records the tag's own version, and a later constraint reads it back", async () => {
+test("RESV-03/RESV-05/GV-01: a tag-pinned dependency records the tag's commit and semver, and a later constraint reads the semver back", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-resv03-repin-"));
     try {
@@ -11255,17 +11316,21 @@ test("RESV-03/RESV-05: a tag-pinned dependency records the tag's own version, an
           }),
       });
 
-      // assert: the checkout addresses the tag's commit, and the recorded
-      // version is the SEMVER that tag carries -- the value the constraint
-      // machinery reads back. The git-source `sha-<12hex>` form would coerce to
-      // an arbitrary digit run instead (this fixture's coerces to 1.0.0), so
-      // recording it would make the dependency fail the very range it just
-      // satisfied.
+      // assert: the checkout addresses the tag's commit. The recorded version
+      // is the declared one with the tag's commit appended, as Claude Code
+      // records it, and `resolvedVersion` is the SEMVER that tag carries --
+      // the value the constraint machinery reads back. The commit form is a
+      // semver prerelease that `^9.0.0` rejects, so reading it would make the
+      // dependency fail the very range it just satisfied.
       assert.equal(outcome.status, "installed");
       assert.equal(gitState.checkoutCalls.length, 1, "one checkout, at the selected tag");
       assert.equal(gitState.checkoutCalls[0]?.ref, GIT_SOURCE_SHA);
       const after = await loadState(locationsFor("project", cwd).extensionRoot);
-      assert.equal(after.marketplaces["mp"]?.plugins["gp"]?.version, "9.9.9");
+      const recorded = after.marketplaces["mp"]?.plugins["gp"];
+      assert.deepStrictEqual(
+        [recorded?.version, recorded?.resolvedVersion],
+        [`9.9.9-${GIT_SOURCE_SHA.slice(0, 12)}`, "9.9.9"],
+      );
 
       // act: a second plugin constraining the same dependency at the same range.
       // RESV-05 checks the RECORDED version and makes no tag query at all, so
@@ -11300,7 +11365,7 @@ test("RESV-03/RESV-05: a tag-pinned dependency records the tag's own version, an
   });
 });
 
-test("PURL-01/02/09: url-source install materializes a clone, records sha-<12hex> + resolvedSha", async () => {
+test("PURL-01/02/09 / VER-01: url-source install materializes a clone, records the declared version + resolvedSha", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-url-"));
     try {
@@ -11333,13 +11398,8 @@ test("PURL-01/02/09: url-source install materializes a clone, records sha-<12hex
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.ok(record !== undefined, "a state record must be written for a url-source install");
-      assert.match(record.version, /^sha-[0-9a-f]{12}$/, "version is sha-<12hex>");
+      assert.equal(record.version, "9.9.9", "VER-01: the declared version wins over the sha");
       assert.equal(record.resolvedSha, GIT_SOURCE_SHA, "full 40-hex resolvedSha recorded");
-      assert.equal(
-        record.version,
-        `sha-${GIT_SOURCE_SHA.slice(0, 12)}`,
-        "version 12-hex == resolvedSha first-12",
-      );
       // One clone (cold cache) and one checkout at the pin.
       assert.equal(gitState.cloneCalls.length, 1, "one clone on cold cache");
       assert.equal(
@@ -11641,7 +11701,7 @@ test("D-77-06: a github-object source dedups to the same clone as a url naming t
   });
 });
 
-test("MIRR-01/MIRR-03: an unpinned url source materializes the mirror and records the HEAD sha", async () => {
+test("GIT-01: an unpinned url source installs a per-commit copy at the mirror HEAD sha", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-unpinned-"));
     try {
@@ -11680,19 +11740,17 @@ test("MIRR-01/MIRR-03: an unpinned url source materializes the mirror and record
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.ok(record !== undefined, "unpinned install records");
       assert.equal(record.resolvedSha, headSha, "records the mirror HEAD sha");
-      assert.equal(
-        record.version,
-        `sha-${headSha.slice(0, 12)}`,
-        "version from the mirror HEAD sha",
-      );
+      assert.equal(record.version, "9.9.9", "VER-01: the declared version");
 
-      // The record anchors to the BARE mirror key `plugin-clones/<12hex>/`
-      // (no `-<sha>` suffix), so GC's first-segment derivation protects it.
-      const mirrorKey = pluginMirrorKey("https://example.com/org/repo");
-      const mirrorRoot = await locations.pluginCloneDir(mirrorKey);
-      assert.equal(record.resolvedSource, mirrorRoot, "resolvedSource points at the mirror root");
-      const segment = path.basename(record.resolvedSource);
-      assert.match(segment, /^[0-9a-f]{12}$/, "resolvedSource segment is a bare 12-hex mirror key");
+      // GIT-01: the record anchors to the per-commit copy at the mirror's HEAD,
+      // never to the bare mirror key a later fetch refreshes.
+      const cloneUrl = "https://example.com/org/repo";
+      const copyRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, headSha));
+      assert.equal(record.resolvedSource, copyRoot, "resolvedSource points at the commit copy");
+      assert.ok(
+        await pathExists(await locations.pluginCloneDir(pluginMirrorKey(cloneUrl))),
+        "the mirror stays as the download cache",
+      );
 
       // The pin-only resolveRemoteRef path is NOT taken for the mirror route.
       assert.equal(
@@ -11706,7 +11764,7 @@ test("MIRR-01/MIRR-03: an unpinned url source materializes the mirror and record
   });
 });
 
-test("MIRR-01/MIRR-03: an unpinned git-subdir source materializes the mirror under the bare key", async () => {
+test("GIT-01: an unpinned git-subdir source installs under the per-commit copy", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-purl-unpinned-subdir-"));
     try {
@@ -11744,25 +11802,16 @@ test("MIRR-01/MIRR-03: an unpinned git-subdir source materializes the mirror und
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.ok(record !== undefined, "unpinned git-subdir install records");
       assert.equal(record.resolvedSha, headSha, "records the mirror HEAD sha");
-      assert.equal(
-        record.version,
-        `sha-${headSha.slice(0, 12)}`,
-        "version from the mirror HEAD sha",
-      );
+      assert.equal(record.version, "9.9.9", "VER-01: the declared version");
 
-      // resolvedSource is the subdir UNDER the bare mirror key; the first
-      // path segment under plugin-clones is still the bare 12-hex mirror key.
-      const mirrorKey = pluginMirrorKey("https://example.com/org/mono");
-      const mirrorRoot = await locations.pluginCloneDir(mirrorKey);
+      // GIT-01: resolvedSource is the subdir under the per-commit copy.
+      const copyRoot = await locations.pluginCloneDir(
+        pluginCloneKey("https://example.com/org/mono", headSha),
+      );
       assert.equal(
         record.resolvedSource,
-        path.join(mirrorRoot, "packages/gp"),
-        "resolvedSource is mirrorRoot + subdir",
-      );
-      assert.match(
-        path.basename(mirrorRoot),
-        /^[0-9a-f]{12}$/,
-        "the mirror root segment is a bare 12-hex key",
+        path.join(copyRoot, "packages/gp"),
+        "resolvedSource is the commit copy + subdir",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -11854,7 +11903,7 @@ test("PURL-09 / sha over ref: a source with both ref and sha records the sha's v
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.equal(record?.resolvedSha, GIT_SOURCE_SHA, "sha wins over ref");
-      assert.equal(record?.version, `sha-${GIT_SOURCE_SHA.slice(0, 12)}`, "version from the sha");
+      assert.equal(record?.version, "9.9.9", "VER-01: the declared version");
       // resolveRemoteRef is NOT consulted when a sha is set.
       assert.equal(
         gitState.resolveRemoteRefCalls.length,
@@ -12337,7 +12386,7 @@ test("plugin install authentication: threads a GitHub provider bundle to the pin
         declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
-        version: "sha-a1b2c3d4e5f6",
+        version: "9.9.9",
       });
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(authCapture.calls.length, 1);
@@ -12744,7 +12793,7 @@ test("plugin install authentication: threads a host-keyed bundle for a host the 
         declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
-        version: "sha-a1b2c3d4e5f6",
+        version: "9.9.9",
       });
       assert.deepStrictEqual(notifications, []);
       assert.deepStrictEqual(
@@ -12831,7 +12880,7 @@ test("plugin install authentication: threads the GitLab provider bundle onto the
         declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
-        version: "sha-a1b2c3d4e5f6",
+        version: "9.9.9",
       });
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(authCapture.calls.length, 1);
@@ -12937,7 +12986,7 @@ test("plugin install authentication: memoizes one Device Flow result across same
             declaresWorkflows: false,
             resourcesChanged: true,
             status: "installed",
-            version: "sha-a1b2c3d4e5f6",
+            version: "9.9.9",
           },
           {
             declaresAgents: false,
@@ -12945,7 +12994,7 @@ test("plugin install authentication: memoizes one Device Flow result across same
             declaresWorkflows: false,
             resourcesChanged: true,
             status: "installed",
-            version: "sha-b2c3d4e5f607",
+            version: "9.9.9",
           },
         ],
       );
@@ -13048,7 +13097,7 @@ test("plugin install authentication: classifies a providerless 401 without a cau
   });
 });
 
-test("plugin install authentication: preserves a network failure outside authentication narrowing", async () => {
+test("plugin install authentication: names a network failure network unreachable and keeps its cause", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-auth-network-"));
     try {
@@ -13090,7 +13139,7 @@ test("plugin install authentication: preserves a network failure outside authent
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ network (failed)\n    cause: connect ENETUNREACH 10.0.0.1:443",
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ network (failed) {network unreachable}\n    cause: connect ENETUNREACH 10.0.0.1:443",
           severity: "error",
         },
       ]);
@@ -13119,6 +13168,7 @@ test("plugin install authentication: contains a non-Error clone failure without 
       const cloneCache = seamWith(git.gitOps);
       const seam: InstallCloneCacheSeam = {
         materializeOrRefreshPluginMirror: cloneCache.materializeOrRefreshPluginMirror,
+        materializePluginCommitCopy: cloneCache.materializePluginCommitCopy,
         materializePluginClone: async () => {
           await Promise.resolve();
           throw "disk exploded"; // eslint-disable-line @typescript-eslint/only-throw-error
@@ -13932,7 +13982,7 @@ test("an unpinned ref-only source forwards the moving ref to its cold mirror clo
         declaresWorkflows: false,
         resourcesChanged: true,
         status: "installed",
-        version: `sha-${headSha.slice(0, 12)}`,
+        version: "9.9.9",
       });
       assert.deepStrictEqual(
         git.state.cloneCalls.map(({ ref, singleBranch, url }) => ({ ref, singleBranch, url })),
@@ -16033,7 +16083,7 @@ test("D-09-05: the declarers' ranges reach the cascade as the root range", async
       assert.ok(outcome.status === "failed" && outcome.error instanceof DependencyCascadeError);
       assert.match(
         (outcome as { cause: string }).cause,
-        /^Dependency "secrets-vault@mp" has contradictory version constraints "\^1\.0\.0 \^2\.0\.0"/,
+        /^Dependency "secrets-vault@mp" has contradictory version constraints \^1\.0\.0, \^2\.0\.0 /,
       );
       const after = await loadState(locations.extensionRoot);
       assert.equal(after.marketplaces["mp"]?.plugins["secrets-vault"], undefined);
@@ -16086,7 +16136,7 @@ test("D-09-05: a satisfiable root range reaches the marketplace tag probe throug
   });
 });
 
-test("D-09-05: a pinned git-source root records the tag's own version through the shared ledger options", async () => {
+test("D-09-05: a pinned git-source root records the tag's commit and semver through the shared ledger options", async () => {
   await withHermeticHome(async ({ installMissingDependency }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-git-pin-"));
     try {
@@ -16131,13 +16181,116 @@ test("D-09-05: a pinned git-source root records the tag's own version through th
       assert.equal(gitState.checkoutCalls.length, 1, "one checkout, at the selected tag");
       assert.equal(gitState.checkoutCalls[0]?.ref, GIT_SOURCE_SHA);
       const after = await loadState(locations.extensionRoot);
-      assert.equal(after.marketplaces["mp"]?.plugins["gp"]?.version, "9.9.9");
-      assert.equal(after.marketplaces["mp"]?.plugins["gp"]?.provenance, "dependency");
+      const recorded = after.marketplaces["mp"]?.plugins["gp"];
+      assert.deepStrictEqual(
+        [recorded?.version, recorded?.resolvedVersion, recorded?.provenance],
+        [`9.9.9-${GIT_SOURCE_SHA.slice(0, 12)}`, "9.9.9", "dependency"],
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 });
+
+test("GV-01: a constrained plugin directory dependency installs its listed copy with no tag query", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-directory-dep-"));
+    try {
+      // arrange
+      const fixtureRepoDir = path.join(cwd, "repo-fixture");
+      await seedGitSourceMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "anthropic-plugin-directory",
+        pluginName: "gp",
+        source: { source: "url", url: "https://example.com/org/repo" },
+        fixtureRepoDir,
+        dependentPlugins: [{ name: "root", range: "^9.0.0" }],
+      });
+      const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+      const { ctx, run } = makeCtx();
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "anthropic-plugin-directory",
+        plugin: "root",
+        cloneCacheSeam: seamWith(gitOps),
+        tagProbe: () => Promise.reject(new Error("a plugin directory dependency lists no tags")),
+      });
+
+      // assert
+      assert.equal(outcome.status, "installed");
+      const after = await loadState(locationsFor("project", cwd).extensionRoot);
+      const recorded = after.marketplaces["anthropic-plugin-directory"]?.plugins["gp"];
+      assert.deepStrictEqual(
+        [recorded?.version, recorded?.resolvedVersion, recorded?.provenance],
+        ["9.9.9", undefined, "dependency"],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const { label, requirers, requiredByText } of [
+  { label: "naming no requirer the caller left out", requirers: undefined, requiredByText: "" },
+  {
+    label: "naming the requirers the caller passed",
+    requirers: ["deploy-kit@anthropic-plugin-directory", "lint-kit@anthropic-plugin-directory"],
+    requiredByText: ' required by "deploy-kit", "lint-kit"',
+  },
+]) {
+  test(`GV-01: a missing plugin directory dependency outside its range is refused as Claude Code refuses it, ${label}`, async () => {
+    await withHermeticHome(async ({ installMissingDependency }) => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-directory-dep-"));
+      try {
+        // arrange
+        const fixtureRepoDir = path.join(cwd, "repo-fixture");
+        await seedGitSourceMarketplace({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "anthropic-plugin-directory",
+          pluginName: "gp",
+          source: { source: "url", url: "https://example.com/org/repo" },
+          fixtureRepoDir,
+        });
+        const { gitOps } = createGitOps({ fixtureSourceDir: fixtureRepoDir });
+        const locations = locationsFor("project", cwd);
+        const { ctx, run } = makeCtx();
+
+        // act
+        const outcome = await installMissingDependency({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "anthropic-plugin-directory",
+          plugin: "gp",
+          ranges: ["^10.0.0"],
+          requiredBy: "deploy-kit@anthropic-plugin-directory",
+          ...(requirers !== undefined && { requirers }),
+          cloneCacheSeam: seamWith(gitOps),
+          tagProbe: () => Promise.reject(new Error("a plugin directory dependency lists no tags")),
+        });
+
+        // assert
+        assert.ok(outcome.status === "failed");
+        assert.equal(
+          outcome.error.message,
+          `"gp" from the Anthropic Directory is pinned to its listed commit (version 9.9.9), which does not satisfy ^10.0.0${requiredByText}.`,
+        );
+        const after = await loadState(locations.extensionRoot);
+        assert.deepStrictEqual(after.marketplaces["anthropic-plugin-directory"]?.plugins, {});
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
 
 test("D-09-05: a malformed skill degrades the missing dependency and surfaces a post-commit warning", async () => {
   await withHermeticHome(async ({ installMissingDependency }) => {
@@ -17986,5 +18139,862 @@ test("WGATE-01 / D-115-05: a standalone install renders every workflow discovery
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UPD-DEP-D1 / RESV-05: an installed dependency outside the range the closure
+// asks for moves first through `update`'s own path, and an update's new version
+// gets its closure the way an install does.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface CatalogPlugin {
+  readonly version: string;
+  readonly dependencies?: readonly string[];
+  readonly mcp?: true;
+  /** D-64-06: kinds pi does not support, which make the plugin partially available. */
+  readonly experimental?: object;
+}
+
+/** Writes the path marketplace `mp` under `marketplaceRoot` offering `plugins`. */
+async function publishCatalog(
+  marketplaceRoot: string,
+  plugins: Readonly<Record<string, CatalogPlugin>>,
+): Promise<void> {
+  for (const [name, plugin] of Object.entries(plugins)) {
+    const pluginRoot = path.join(marketplaceRoot, "plugins", name);
+    await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+    await mkdir(path.join(pluginRoot, "skills", "tool"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name,
+        version: plugin.version,
+        ...(plugin.dependencies !== undefined && { dependencies: plugin.dependencies }),
+        ...(plugin.experimental !== undefined && { experimental: plugin.experimental }),
+      }),
+    );
+    await writeFile(path.join(pluginRoot, "skills", "tool", "SKILL.md"), "---\nname: tool\n---\n");
+    if (plugin.mcp === true) {
+      await writeFile(
+        path.join(pluginRoot, ".mcp.json"),
+        JSON.stringify({ mcpServers: { [`${name}-server`]: { command: "node" } } }),
+      );
+    }
+  }
+
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: "mp",
+      plugins: Object.keys(plugins).map((name) => ({ name, source: `./plugins/${name}` })),
+    }),
+  );
+}
+
+/** A project scope that records the path marketplace `mp` offering `plugins`. */
+async function seedCatalogScope(
+  plugins: Readonly<Record<string, CatalogPlugin>>,
+): Promise<{ readonly cwd: string; readonly marketplaceRoot: string }> {
+  const cwd = await mkdtemp(path.join(tmpdir(), "install-upd-dep-"));
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await publishCatalog(marketplaceRoot, plugins);
+  const locations = locationsFor("project", cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 2,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "project",
+        source: pathSource("./mp-src"),
+        addedFromCwd: cwd,
+        manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+        marketplaceRoot,
+        plugins: {},
+      },
+    },
+  });
+  return { cwd, marketplaceRoot };
+}
+
+/** Installs `plugin@mp` into the project scope and requires that it landed. */
+async function installed(owner: InstallTestOwner, cwd: string, plugin: string): Promise<void> {
+  const { ctx, run } = makeCtx();
+  const outcome = await owner.installPlugin({
+    ctx,
+    run,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin,
+  });
+  assert.strictEqual(outcome.status, "installed");
+}
+
+/** Each record's version and enabled bit, by name. */
+async function recordedVersions(cwd: string): Promise<Record<string, [string, boolean]>> {
+  const state = await loadState(locationsFor("project", cwd).extensionRoot);
+  return Object.fromEntries(
+    Object.entries(state.marketplaces.mp?.plugins ?? {}).map(([name, record]) => [
+      name,
+      [record.version, record.enabled],
+    ]),
+  );
+}
+
+/** The candidate `update` would land for `plugin@mp`, as the update runner hands it to the settle. */
+async function preparedUpdate(cwd: string, plugin: string): Promise<PreparedPluginUpdate> {
+  const prepared = await preparePluginUpdate({
+    plugin,
+    marketplace: "mp",
+    scope: "project",
+    locations: locationsFor("project", cwd),
+    policy: UPDATE_MATERIALIZATION,
+    cleanupClones: () => Promise.resolve(),
+  });
+  assert.ok(!isUpdatePreflightOutcome(prepared), "the update has a candidate");
+  return prepared;
+}
+
+/** Holds the project scope's state lock until the returned release runs. */
+async function lockScope(cwd: string): Promise<() => Promise<void>> {
+  const locations = locationsFor("project", cwd);
+  return lockfile.lock(locations.extensionRoot, {
+    lockfilePath: locations.stateLockFile,
+    realpath: false,
+  });
+}
+
+/** The cascade-mode update arguments that settle `plugin@mp`'s closure. */
+function updateArgs(owner: InstallTestOwner, cwd: string, plugin: string): CascadeThreePhaseArgs {
+  return {
+    plugin,
+    marketplace: "mp",
+    scope: "project",
+    cwd,
+    locations: locationsFor("project", cwd),
+    hooksRouting: owner.hooksRouting,
+    completionCache: owner.completionCache,
+    env: {},
+    cascade: true,
+    cleanupClones: () => Promise.resolve(),
+  };
+}
+
+test("UPD-DEP-D1: installing a plugin moves an installed dependency outside its range first", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({ lib: { version: "1.2.0" } });
+    await installed(owner, cwd, "lib");
+    await publishCatalog(marketplaceRoot, {
+      app: { version: "1.0.0", dependencies: ["lib@^2.0.0"] },
+      lib: { version: "2.0.0" },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    const outcome = await owner.installPlugin({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "app",
+    });
+
+    // assert
+    assert.strictEqual(outcome.status, "installed");
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [project]",
+          "  ● app v1.0.0 (installed)",
+          "  ● lib@mp v1.2.0 → v2.0.0 (updated) {dependency current copy}",
+          '    cause: constrained to the combined range (^2.0.0) -- required by "app@mp"',
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      },
+    ]);
+    assert.deepStrictEqual(await recordedVersions(cwd), {
+      app: ["1.0.0", true],
+      lib: ["2.0.0", true],
+    });
+  });
+});
+
+test("UPD-DEP-D1: installing refuses a plugin whose installed dependency no release moves inside its range", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd } = await seedCatalogScope({
+      app: { version: "1.0.0", dependencies: ["lib@^2.0.0"] },
+      lib: { version: "1.2.0" },
+    });
+    await installed(owner, cwd, "lib");
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    const outcome = await owner.installPlugin({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "app",
+    });
+
+    // assert
+    assert.strictEqual(outcome.status, "failed");
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "Some plugin operations have failed.",
+          "",
+          "● mp [project]",
+          "  ⊘ app (failed) {dependency failed}",
+          "  ⊘ lib@mp v1.2.0 (failed) {already installed, version conflict}",
+          '    cause: Dependency "lib@mp" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: version 1.2.0 falls outside what the combined range admits (^2.0.0) -- required by "app@mp"',
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await recordedVersions(cwd), { lib: ["1.2.0", true] });
+  });
+});
+
+for (const orchestrated of [false, true]) {
+  test(`UPD-DEP-D1: a dependency move that fails fails the ${orchestrated ? "orchestrated" : "standalone"} install`, async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        lib: { version: "1.2.0", mcp: true },
+      });
+      await installed(owner, cwd, "lib");
+      await publishCatalog(marketplaceRoot, {
+        app: { version: "1.0.0", dependencies: ["lib@^2.0.0"] },
+        lib: { version: "2.0.0", mcp: true },
+      });
+      const adapterPath = locationsFor("project", cwd).mcpAdapterJsonPath;
+      await rm(adapterPath, { force: true });
+      await mkdir(adapterPath, { recursive: true });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await owner.installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "app",
+        ...(orchestrated && { notifications: { mode: "orchestrated" } }),
+      });
+
+      // assert
+      assert.ok(outcome.status === "failed");
+      assert.ok(outcome.error instanceof DependencyCascadeError);
+      assert.deepStrictEqual(
+        [outcome.error.message, outcome.error.key],
+        ['Dependency "lib@mp" did not move into ^2.0.0.', "lib@mp"],
+      );
+      // The cause line is the runner's EISDIR, whose text varies across Node releases.
+      assert.deepStrictEqual(
+        notifications.map((notification) => notification.message.split("\n").slice(0, 5)),
+        orchestrated
+          ? []
+          : [
+              [
+                "Some plugin operations have failed.",
+                "",
+                "● mp [project]",
+                "  ⊘ app (failed) {dependency failed}",
+                "  ⊘ lib@mp v1.2.0 (failed)",
+              ],
+            ],
+      );
+      assert.deepStrictEqual(await recordedVersions(cwd), { lib: ["1.2.0", true] });
+    });
+  });
+}
+
+test("UPD-DEP-D1: installing refuses a plugin pi supports only in part before its dependency moves", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({ lib: { version: "1.2.0" } });
+    await installed(owner, cwd, "lib");
+    await publishCatalog(marketplaceRoot, {
+      app: { version: "1.0.0", dependencies: ["lib@^2.0.0"], experimental: { themes: "./t" } },
+      lib: { version: "2.0.0" },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    const outcome = await owner.installPlugin({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "app",
+    });
+
+    // assert
+    assert.strictEqual(outcome.status, "failed");
+    assert.deepStrictEqual(
+      notifications.map((notification) => notification.message.split("\n").slice(0, 4)),
+      [
+        [
+          "A plugin operation has failed.",
+          "",
+          "● mp [project]",
+          "  ⊖ app (partially-available) {unsupported component}",
+        ],
+      ],
+    );
+    assert.deepStrictEqual(await recordedVersions(cwd), { lib: ["1.2.0", true] });
+  });
+});
+
+test("UPD-DEP-D1: installing moves a dependency whose new version installs a dependency of its own", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({ aaa: { version: "1.0.0" } });
+    await installed(owner, cwd, "aaa");
+    await publishCatalog(marketplaceRoot, {
+      app: { version: "1.0.0", dependencies: ["aaa@^2.0.0"] },
+      aaa: { version: "2.0.0", dependencies: ["zzz"] },
+      zzz: { version: "1.0.0" },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    const outcome = await owner.installPlugin({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "app",
+      pinVersionOverride: "1.0.0",
+    });
+
+    // assert
+    assert.strictEqual(outcome.status, "installed");
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [project]",
+          "  ● aaa@mp v1.0.0 → v2.0.0 (updated) {dependency current copy}",
+          '    cause: constrained to the combined range (^2.0.0) -- required by "app@mp"',
+          "  ● app v1.0.0 (installed)",
+          "  ● zzz@mp v1.0.0 (installed)",
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      },
+    ]);
+    assert.deepStrictEqual(await recordedVersions(cwd), {
+      aaa: ["2.0.0", true],
+      app: ["1.0.0", true],
+      zzz: ["1.0.0", true],
+    });
+  });
+});
+
+for (const orchestrated of [false, true]) {
+  test(`UPD-DEP-D1: a ${orchestrated ? "orchestrated" : "standalone"} install that fails after its dependency moved reports the move`, async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({ lib: { version: "1.2.0" } });
+      await installed(owner, cwd, "lib");
+      await publishCatalog(marketplaceRoot, {
+        app: { version: "1.0.0", dependencies: ["lib@^2.0.0"] },
+        lib: { version: "2.0.0" },
+      });
+      const locations = locationsFor("project", cwd);
+      await mkdir(locations.skillsTargetDir, { recursive: true });
+      await writeFile(path.join(locations.skillsTargetDir, "app-tool"), "not a skill");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await owner.installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "app",
+        ...(orchestrated && { notifications: { mode: "orchestrated" } }),
+      });
+
+      // assert
+      assert.deepStrictEqual(
+        outcome.status === "failed" &&
+          outcome.movedDependencies?.map((entry) => [entry.key, entry.row.status]),
+        [["lib@mp", "updated"]],
+      );
+      assert.deepStrictEqual(
+        notifications.map((notification) =>
+          notification.message.includes("lib@mp v1.2.0 → v2.0.0 (updated)"),
+        ),
+        orchestrated ? [] : [true],
+      );
+      assert.deepStrictEqual(await recordedVersions(cwd), { lib: ["2.0.0", true] });
+    });
+  });
+}
+
+test("WR-3: an orchestrated install after a dependency plan reports each dependency it installed with the plugin", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({ aaa: { version: "1.0.0" } });
+    await installed(owner, cwd, "aaa");
+    await publishCatalog(marketplaceRoot, {
+      app: { version: "1.0.0", dependencies: ["aaa@^2.0.0", "ggg"] },
+      aaa: { version: "2.0.0" },
+      ggg: { version: "1.0.0" },
+    });
+    const { ctx, run } = makeCtx();
+
+    // act
+    const outcome = await owner.installPlugin({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "app",
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      outcome.status === "installed" && [
+        outcome.movedDependencies?.map((entry) => [entry.key, entry.row.status]),
+        outcome.dependencyInstalls?.map((entry) => [
+          entry.key,
+          entry.name,
+          entry.marketplace,
+          entry.row.status,
+        ]),
+      ],
+      [[["aaa@mp", "updated"]], [["ggg@mp", "ggg", "mp", "installed"]]],
+    );
+  });
+});
+
+test("UPD-DEP-D1 / MISS-01: an install whose later step installs missing dependencies moves a dependency without installing what its new version needs", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({ aaa: { version: "1.0.0" } });
+    await installed(owner, cwd, "aaa");
+    await publishCatalog(marketplaceRoot, {
+      app: { version: "1.0.0", dependencies: ["aaa@^2.0.0"] },
+      aaa: { version: "2.0.0", dependencies: ["zzz"] },
+      zzz: { version: "1.0.0" },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    const outcome = await owner.installPlugin({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "app",
+      notifications: { mode: "orchestrated" },
+      dependencyInstallsFollow: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      outcome.status === "installed" &&
+        outcome.movedDependencies?.map((entry) => [entry.key, entry.row.status]),
+      [["aaa@mp", "updated"]],
+    );
+    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(await recordedVersions(cwd), {
+      aaa: ["2.0.0", true],
+      app: ["1.0.0", true],
+    });
+  });
+});
+
+describe("createUpdateDependencyResolver", () => {
+  test("installs a dependency the new version needs and reports its row", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        widget: { version: "1.0.0" },
+        zcore: { version: "1.0.0" },
+      });
+      await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+        {},
+      );
+
+      // act
+      const settlement = await settle(
+        updateArgs(owner, cwd, "widget"),
+        await preparedUpdate(cwd, "widget"),
+        { ctx, run },
+      );
+
+      // assert
+      assert.deepStrictEqual(settlement, {
+        kind: "settled",
+        rows: [
+          {
+            status: "installed",
+            name: "zcore@mp",
+            dependencies: [],
+            version: "1.0.0",
+            severity: "info",
+            needsReload: true,
+          },
+        ],
+      });
+      assert.deepStrictEqual(await recordedVersions(cwd), {
+        widget: ["1.0.0", true],
+        zcore: ["1.0.0", true],
+      });
+    });
+  });
+
+  test("WR-C: refuses a version whose names another plugin owns before it installs any dependency", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        widget: { version: "1.0.0" },
+        other: { version: "1.0.0" },
+        zcore: { version: "1.0.0" },
+      });
+      await installed(owner, cwd, "widget");
+      await installed(owner, cwd, "other");
+      const locations = locationsFor("project", cwd);
+      const state = await loadState(locations.extensionRoot);
+      const other = state.marketplaces.mp?.plugins.other;
+      assert.ok(other !== undefined);
+      other.resources = {
+        ...other.resources,
+        skills: [...other.resources.skills, "widget-helper"],
+      };
+      await saveState(locations.extensionRoot, state);
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      await mkdir(path.join(marketplaceRoot, "plugins", "widget", "skills", "helper"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(marketplaceRoot, "plugins", "widget", "skills", "helper", "SKILL.md"),
+        "---\nname: helper\n---\n",
+      );
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      // act & assert
+      await assert.rejects(
+        settle(updateArgs(owner, cwd, "widget"), await preparedUpdate(cwd, "widget"), {
+          ctx,
+          run,
+        }),
+        (error: unknown) => {
+          assert.ok(error instanceof CrossPluginConflictError);
+          return true;
+        },
+      );
+      assert.deepStrictEqual(await recordedVersions(cwd), {
+        other: ["1.0.0", true],
+        widget: ["1.0.0", true],
+      });
+    });
+  });
+
+  test("enables a disabled dependency the new version needs and declares it enabled", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        widget: { version: "1.0.0" },
+        zcore: { version: "1.0.0" },
+      });
+      await installed(owner, cwd, "widget");
+      await installed(owner, cwd, "zcore");
+      const state = await loadState(locationsFor("project", cwd).extensionRoot);
+      const marketplace = state.marketplaces.mp;
+      const zcore = marketplace?.plugins.zcore;
+      assert.ok(marketplace !== undefined && zcore !== undefined);
+      marketplace.plugins.zcore = toDisabledRecord(zcore, "2026-01-01T00:00:00.000Z");
+      await saveState(locationsFor("project", cwd).extensionRoot, state);
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      // act
+      const settlement = await settle(
+        { ...updateArgs(owner, cwd, "widget"), constraintTagMemo: new Map() },
+        await preparedUpdate(cwd, "widget"),
+        { ctx, run },
+      );
+
+      // assert
+      assert.deepStrictEqual(
+        settlement.rows.map((row) => [row.name, row.reasons]),
+        [["zcore@mp", ["already installed", "dependency enabled"]]],
+      );
+      assert.deepStrictEqual(await recordedVersions(cwd), {
+        widget: ["1.0.0", true],
+        zcore: ["1.0.0", true],
+      });
+    });
+  });
+
+  test("moves an out-of-range dependency first, then settles the closure again", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        widget: { version: "1.0.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["zcore@^2.0.0"] },
+        zcore: { version: "2.0.0" },
+      });
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      // act
+      const settlement = await settle(
+        updateArgs(owner, cwd, "widget"),
+        await preparedUpdate(cwd, "widget"),
+        { ctx, run },
+      );
+
+      // assert
+      assert.deepStrictEqual(
+        settlement.rows.map((row) => [row.status, row.name]),
+        [["updated", "zcore@mp"]],
+      );
+      assert.strictEqual(settlement.kind, "settled");
+      assert.deepStrictEqual(await recordedVersions(cwd), {
+        widget: ["1.0.0", true],
+        zcore: ["2.0.0", true],
+      });
+    });
+  });
+
+  test("refuses a closure whose dependency no marketplace offers and changes nothing", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({ widget: { version: "1.0.0" } });
+      await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["absent"] },
+      });
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      // act
+      const settlement = await settle(
+        updateArgs(owner, cwd, "widget"),
+        await preparedUpdate(cwd, "widget"),
+        { ctx, run },
+      );
+
+      // assert
+      assert.strictEqual(settlement.kind, "refused");
+      assert.deepStrictEqual(
+        settlement.rows.map((row) => [row.status, row.name, row.reasons]),
+        [["failed", "absent@mp", ["not in manifest"]]],
+      );
+      assert.deepStrictEqual(await recordedVersions(cwd), { widget: ["1.0.0", true] });
+    });
+  });
+
+  test("refuses a move that would need the plugin being updated moved again", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        widget: { version: "1.0.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "2.0.0", dependencies: ["zcore@^2.0.0"] },
+        zcore: { version: "2.0.0", dependencies: ["widget@^2.0.0"] },
+      });
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      // act
+      const settlement = await settle(
+        updateArgs(owner, cwd, "widget"),
+        await preparedUpdate(cwd, "widget"),
+        { ctx, run },
+      );
+
+      // assert
+      assert.strictEqual(settlement.kind, "refused");
+      assert.deepStrictEqual(
+        settlement.rows.map((row) => [row.status, row.name]),
+        [["failed", "widget@mp"]],
+      );
+      assert.deepStrictEqual(await recordedVersions(cwd), {
+        widget: ["1.0.0", true],
+        zcore: ["1.0.0", true],
+      });
+    });
+  });
+
+  test("rethrows a failure no dependency caused", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({ widget: { version: "1.0.0" } });
+      await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, { widget: { version: "1.1.0" } });
+      const held = await lockScope(cwd);
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      const prepared = await preparedUpdate(cwd, "widget");
+
+      // act & assert
+      await assert.rejects(
+        () => settle(updateArgs(owner, cwd, "widget"), prepared, { ctx, run }),
+        StateLockHeldError,
+      );
+      await held();
+    });
+  });
+
+  test("reports a dependency whose marketplace a member's ledger finds missing as the update's own failure", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        widget: { version: "1.0.0" },
+        zcore: { version: "1.0.0" },
+      });
+      await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      owner.transactionControl.runPhases = (phases, context) => {
+        Object.assign(context as object, { marketplaceAbsent: true });
+        return Promise.resolve({ ok: phases.length === 0, rollbackPartials: [], leaks: [] });
+      };
+
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      const prepared = await preparedUpdate(cwd, "widget");
+
+      // act & assert
+      await assert.rejects(
+        () => settle(updateArgs(owner, cwd, "widget"), prepared, { ctx, run }),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.strictEqual(
+            error.message,
+            'A dependency of "widget@mp" names a marketplace that is not added.',
+          );
+          return true;
+        },
+      );
+    });
+  });
+
+  test("threads the update's collaborators into the dependency installs", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        widget: { version: "1.0.0" },
+        zcore: { version: "1.0.0" },
+      });
+      await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const deviceFlow = createDeviceFlowFake({
+        boundary: "memory",
+        network: "disabled",
+        deviceCode: INSTALL_DEVICE_CODE,
+      });
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      // act
+      const settlement = await settle(
+        {
+          ...updateArgs(owner, cwd, "widget"),
+          mapModel: true,
+          partial: true,
+          credentialOps: credentials.credentialOps,
+          deviceFlowHttp: deviceFlow.http,
+          authMemo: new Map(),
+        },
+        await preparedUpdate(cwd, "widget"),
+        { ctx, run },
+      );
+
+      // assert
+      assert.deepStrictEqual(
+        settlement.rows.map((row) => [row.status, row.name]),
+        [["installed", "zcore@mp"]],
+      );
+      assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+      assert.deepStrictEqual(deviceFlow.calls, { requestCode: [], pollToken: [] });
+    });
   });
 });

@@ -12,15 +12,16 @@ import {
 import { pathSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 import { createInstallOperation } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
 import { createApplyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import { createLoadReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/load.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { EXTENSION_VERSION } from "../../extensions/pi-claude-marketplace/shared/extension-version.ts";
 import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 
 const applyReconcile = createApplyReconcile({ loadState });
+const loadReconcile = createLoadReconcile({ loadState }, applyReconcile);
 const installPlugin = createInstallOperation(
   createHooksRouting(createHooksRuntime(), { readHooksJson }),
   createCompletionCache(),
@@ -42,6 +43,9 @@ interface NotifyRecord {
   message: string;
   severity?: string;
 }
+
+/** APL-01 / D-08: the advisory an apply pass that accumulates no outcome sends. */
+const APPLY_EMPTY_NOTICE: NotifyRecord = { message: "Apply: nothing to change." };
 
 function makeCtx(): {
   ctx: ExtensionContext;
@@ -238,13 +242,14 @@ test("WINV-02 / WBRG-01: a workflow-bearing plugin installs with no partial flag
 });
 
 // ──────────────────────────────────────────────────────────────────────────
-// RECON-05: a load-time reconcile does not re-materialize workflow envelopes
+// RECON-05: `apply` does not re-materialize workflow envelopes
 //
 // Two independent structures already give this guarantee -- a declared,
-// enabled, already-recorded plugin lands in no plan bucket, and the load-time
-// backfill returns before scanning once the extension version has been stamped.
-// The cases below pin the OBSERVABLE consequence of both, so a later change to
-// either cannot quietly start rewriting executable code on every load.
+// enabled, already-recorded plugin lands in no plan bucket, and a record whose
+// catalog candidate neither moved nor grew its supported set is no catalog
+// move (D-10). The cases below pin the OBSERVABLE consequence of both, so a
+// later change to either cannot quietly start rewriting executable code on
+// every `apply`.
 //
 // Modification times are read back off the real files. They are backdated
 // first so that "no write happened" and "a write happened" are distinguishable
@@ -304,8 +309,7 @@ test("RECON-05: two consecutive reconciles leave a workflow envelope untouched",
       await stat(envelopePath);
       await backdate(envelopePath, locations.stateJsonPath);
 
-      // act -- the FIRST load also closes the backfill's version gate, which is
-      // a state.json write by design, so only the envelope is claimed here.
+      // act
       const first = makeCtx();
       await applyReconcile({
         ctx: first.ctx,
@@ -316,7 +320,6 @@ test("RECON-05: two consecutive reconciles leave a workflow envelope untouched",
         completionCache: createCompletionCache(),
       });
       const envelopeAfterFirst = await mtimeMsOf(envelopePath);
-      const stateAfterFirst = await mtimeMsOf(locations.stateJsonPath);
 
       const second = makeCtx();
       await applyReconcile({
@@ -328,32 +331,32 @@ test("RECON-05: two consecutive reconciles leave a workflow envelope untouched",
         completionCache: createCompletionCache(),
       });
 
-      // assert -- the envelope is untouched by BOTH loads, and the second load
-      // touches nothing at all: the plugin is declared, enabled and recorded,
-      // so it lands in no plan bucket, and the stamp the first load wrote
-      // closes the backfill gate before it scans.
+      // assert -- neither apply touches the envelope or state.json: the plugin
+      // is declared, enabled and recorded, so it lands in no plan bucket, and
+      // its supported set did not grow, so it is no catalog move. D-13: no
+      // apply writes the extension-version stamp either.
       assert.strictEqual(envelopeAfterFirst, BACKDATED.getTime());
       assert.strictEqual(await mtimeMsOf(envelopePath), BACKDATED.getTime());
-      assert.strictEqual(await mtimeMsOf(locations.stateJsonPath), stateAfterFirst);
-      // A clean, empty reconcile is documented as silent, so a notification is
-      // itself a regression -- it would mean an outcome row accumulated.
-      assert.deepStrictEqual(first.notifications, []);
-      assert.deepStrictEqual(second.notifications, []);
+      assert.strictEqual(await mtimeMsOf(locations.stateJsonPath), BACKDATED.getTime());
+      // D-08: a clean, empty apply reports only that it has nothing to change,
+      // so any other notification is a regression -- it would mean an outcome
+      // row accumulated.
+      assert.deepStrictEqual(first.notifications, [APPLY_EMPTY_NOTICE]);
+      assert.deepStrictEqual(second.notifications, [APPLY_EMPTY_NOTICE]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
   });
 });
 
-test("RECON-05 negative control: a forced-open gate over a grown set DOES rewrite it", async () => {
+test("RECON-05 negative control: a record whose supported set grew DOES rewrite it", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "workflow-reconcile-control-"));
     try {
       // arrange -- the same install and the same mtime harness as the case
-      // above, then the two conditions that case relies on being absent:
-      // a recorded extension version that differs from the running constant
-      // (gate open) over a record the resolver can now support more of than it
-      // did (strict growth), which is what the backfill re-materializes.
+      // above, then the condition that case relies on being absent: a record
+      // the resolver can now support more of than it did (strict growth),
+      // which `apply` re-materializes (D-10, D-25).
       await seedWorkflowPlugin({ cwd, marketplaceRoot: path.join(cwd, "mp-src") });
       const install = makeCtx();
       await installPlugin({
@@ -367,7 +370,6 @@ test("RECON-05 negative control: a forced-open gate over a grown set DOES rewrit
       const locations = locationsFor("project", cwd);
       const envelopePath = path.join(locations.workflowsSavedDir, "hello:greet.json");
       const persisted = JSON.parse(await readFile(locations.stateJsonPath, "utf8")) as {
-        lastReconciledExtensionVersion?: string;
         marketplaces: Record<
           string,
           {
@@ -387,12 +389,6 @@ test("RECON-05 negative control: a forced-open gate over a grown set DOES rewrit
       };
       const record = persisted.marketplaces["mp"]?.plugins["hello"];
       assert.ok(record, "precondition: the install must have written a record");
-      assert.notStrictEqual(
-        EXTENSION_VERSION,
-        "0.0.0",
-        "precondition: the forced stamp must differ from the running constant",
-      );
-      persisted.lastReconciledExtensionVersion = "0.0.0";
       record.compatibility = {
         installable: false,
         notes: [],
@@ -428,7 +424,7 @@ test("RECON-05 negative control: a forced-open gate over a grown set DOES rewrit
   });
 });
 
-test("WCONV-01 / WCONV-02: one load converges a record whose kind was invisible, and the next load rewrites nothing", async () => {
+test("WCONV-01 / WCONV-02: a load leaves a record whose kind was invisible alone, one apply converges it, and the next apply rewrites nothing", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "workflow-convergence-"));
     try {
@@ -457,12 +453,6 @@ test("WCONV-01 / WCONV-02: one load converges a record whose kind was invisible,
       const seeded = await loadState(locations.extensionRoot);
       const seededRecord = seeded.marketplaces["mp"]?.plugins["hello"];
       assert.ok(seededRecord, "precondition: the install must have written a record");
-      assert.notStrictEqual(
-        EXTENSION_VERSION,
-        "0.0.0",
-        "precondition: the forced stamp must differ from the running constant",
-      );
-      seeded.lastReconciledExtensionVersion = "0.0.0";
       seededRecord.compatibility = {
         installable: true,
         notes: [],
@@ -471,8 +461,28 @@ test("WCONV-01 / WCONV-02: one load converges a record whose kind was invisible,
       };
       seededRecord.resources = { ...seededRecord.resources, workflows: [] };
       await saveState(locations.extensionRoot, seeded);
+      const stateBeforeLoad = await fileSnapshot(locations.stateJsonPath);
 
       // act -- the load the user did not initiate
+      const load = makeCtx();
+      await loadReconcile({
+        ctx: load.ctx,
+        run: runWithNothingLoaded(),
+        cwd,
+        hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        completionCache: createCompletionCache(),
+      });
+
+      // assert -- APL-03 / D-04: the load only previews the growth move; it
+      // writes no record and places no envelope.
+      assert.deepStrictEqual(await fileSnapshot(locations.stateJsonPath), stateBeforeLoad);
+      await assert.rejects(stat(envelopePath), { code: "ENOENT" });
+      assert.match(
+        load.notifications.map((n) => n.message).join("\n"),
+        /hello .*\(will update\) \{components now supported/,
+      );
+
+      // act -- the apply the user runs
       const first = makeCtx();
       await applyReconcile({
         ctx: first.ctx,
@@ -483,12 +493,12 @@ test("WCONV-01 / WCONV-02: one load converges a record whose kind was invisible,
         completionCache: createCompletionCache(),
       });
 
-      // assert -- the FIRST load converged. Without this half the equality
-      // below would also be satisfied by a scan that never ran at all.
+      // assert -- the apply converged. Without this half the equality below
+      // would also be satisfied by a convergence that never ran at all.
       const converged = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
         "hello"
       ];
-      assert.ok(converged, "expected the record to survive the load");
+      assert.ok(converged, "expected the record to survive the apply");
       assert.ok(
         converged.compatibility.supported.includes("workflows"),
         `expected the grown set to be recorded; got: ${converged.compatibility.supported.join(" / ")}`,
@@ -499,10 +509,10 @@ test("WCONV-01 / WCONV-02: one load converges a record whose kind was invisible,
         description: "greets",
         script: 'export const meta = { name: "greet", description: "greets" };\n',
       });
-      // WCONV-03 on the bytes, not on the count. This is the only case that
-      // drives the real applyReconcile -> backfill -> projection -> notify
-      // chain, so it is the only place the PRODUCER of the convergence marker is
-      // exercised; the unit and catalog cases both hand-build their input. An
+      // WCONV-03 on the bytes, not on the count. This case drives the real
+      // applyReconcile -> convergence -> projection -> notify chain over an
+      // installed plugin, so the PRODUCER of the convergence marker is
+      // exercised end to end; the catalog cases hand-build their input. An
       // "emitted something" assertion would stay green through a regression that
       // stopped producing the outcome, or produced it under another kind.
       // The converged record now declares a `workflows` dependency, and this
@@ -513,16 +523,15 @@ test("WCONV-01 / WCONV-02: one load converges a record whose kind was invisible,
         /\(installed\) \{components now supported, requires pi-dynamic-workflows\}/,
       );
 
-      // arrange -- the snapshot that matters is taken AFTER the first load: the
+      // arrange -- the snapshot that matters is taken AFTER the first apply: the
       // promotion legitimately rewrites the compatibility block, the resources
-      // and the updated-at stamp, and the first load also closes the version
-      // gate. Backdating first removes any dependence on two loads landing in
-      // different timer ticks.
+      // and the updated-at stamp. Backdating first removes any dependence on
+      // two applies landing in different timer ticks.
       await backdate(envelopePath, locations.stateJsonPath);
       const stateAfterFirst = await fileSnapshot(locations.stateJsonPath);
       const envelopeAfterFirst = await fileSnapshot(envelopePath);
 
-      // act -- the next load over the converged scope
+      // act -- the next apply over the converged scope
       const second = makeCtx();
       await applyReconcile({
         ctx: second.ctx,
@@ -537,7 +546,7 @@ test("WCONV-01 / WCONV-02: one load converges a record whose kind was invisible,
       // is still a write, so bytes alone would not carry this claim.
       assert.deepStrictEqual(await fileSnapshot(locations.stateJsonPath), stateAfterFirst);
       assert.deepStrictEqual(await fileSnapshot(envelopePath), envelopeAfterFirst);
-      assert.deepStrictEqual(second.notifications, []);
+      assert.deepStrictEqual(second.notifications, [APPLY_EMPTY_NOTICE]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

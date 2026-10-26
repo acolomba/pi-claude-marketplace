@@ -63,6 +63,50 @@ Feature: Plugin update
       | marketplace name | marketplace scope | id            | name | status  | reasons    | scope   |
       | fixtures         | project           | demo@fixtures | demo | skipped | up-to-date | project |
 
+  Scenario: Updating a plugin that is not installed fails as not installed and changes nothing
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | pp   | 1.0.0   |
+    When the user runs "/claude:plugin update pp@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name | status | reasons       | scope   | leaks | rollback partial |
+      | fixtures         | project           | pp@fixtures | pp   | failed | not installed | project |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the project scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+
+  Scenario: Updating a plugin whose marketplace now names a missing source directory fails as source missing and keeps it installed
+    Given the marketplace "fixtures" publishes this manifest:
+      """
+      {
+        "name": "fixtures",
+        "owner": { "name": "features" },
+        "plugins": [{ "name": "demo", "source": "./plugins/ghost", "version": "1.0.0" }]
+      }
+      """
+    Given the user has run "/claude:plugin marketplace update fixtures --scope project"
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status | reasons        | scope   | version | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed | source missing | project | 1.0.0   |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+
   Scenario: Updating with --local a plugin only the base layer declares fails as plugin in base layer only
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
@@ -81,6 +125,14 @@ Feature: Plugin update
       | id            |
       | demo@fixtures |
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | will update |         | project | 1.0.0 | 1.1.0 |
+      | fixtures         | project           | demo@fixtures | demo | will update |         | project | 1.0.0 | 1.1.0 |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -112,6 +164,14 @@ Feature: Plugin update
       | id            |
       | demo@fixtures |
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+      | cascade | info     | false        | true        | Reconcile pending | 0              | 0              | 1                   |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | will update |         | project | 1.0.0 | 1.1.0 |
+      | fixtures         | project           | demo@fixtures | demo | will update |         | project | 1.0.0 | 1.1.0 |
     Then the session offers these skills:
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
@@ -180,6 +240,14 @@ Feature: Plugin update
       | marketplace name | marketplace scope | id                | name     | status | reasons    | scope   | cause chain                                                                    | cause truncated | leaks | rollback partial |
       | (update)         | project           | (update)@(update) | (update) | failed | unreadable | project | cannot read the dependencies of app@tools: its marketplace manifest is invalid | false           |       |                  |
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id        | name | status | reasons          | scope   | leaks | rollback partial | cause chain                                                                    | cause truncated |
+      | tools            | project           | lib@tools | lib  | failed | invalid manifest | project |       |                  | cannot read the dependencies of lib@tools: its marketplace manifest is invalid | false           |
+      | tools            | project           | lib@tools | lib  | failed | invalid manifest | project |       |                  | cannot read the dependencies of lib@tools: its marketplace manifest is invalid | false           |
     Then the session offers these skills:
       | command           | description            |
       | /skill:app-skill  | A skill of app 1.0.0.  |
@@ -231,3 +299,280 @@ Feature: Plugin update
     Then the "claude-plugins.local.json" file of the project scope declares these plugins:
       | id          |
       | pp@fixtures |
+
+  Scenario: Updating the plugins of one marketplace updates each outdated plugin of that marketplace only
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | pp   | 1.0.0   |
+    Given the user has run "/claude:plugin install pp@fixtures --scope project"
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | app  | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+      | pp   | 1.1.0   |
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | app  | 1.1.0   |
+    When the user runs "/claude:plugin update @fixtures --scope project"
+    Then the result has these fields:
+      | kind                | cascade       |
+      | severity            | info          |
+      | needs reload        | true          |
+      | tally label         | Plugin update |
+      | tally failures      | 0             |
+      | tally warnings      | 0             |
+      | tally success count | 2             |
+      | tally success verb  | updated       |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
+      | fixtures         | project           | pp@fixtures   | pp   | updated |         | project | 1.0.0 | 1.1.0 |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | app@tools     | 1.0.0   | true    |
+      | demo@fixtures | 1.1.0   | true    |
+      | pp@fixtures   | 1.1.0   | true    |
+
+  Scenario: Updating a dependency within the version range its dependent declares updates it
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^1.0.0   |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^1.0.0   |
+      | lib  | 1.1.0   |              |
+    When the user runs "/claude:plugin update lib@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status  | reasons                 | scope   | from  | to    | cause chain                                                            | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | updated | dependency current copy | project | 1.0.0 | 1.1.0 | constrained to the combined range (^1.0.0) -- required by "app@tools" | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | app@tools     | 1.0.0   | true    |
+      | demo@fixtures | 1.0.0   | true    |
+      | lib@tools     | 1.1.0   | true    |
+
+  Scenario: Updating a dependency past the version range its dependent declares holds the update and changes nothing
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^1.0.0   |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^1.0.0   |
+      | lib  | 2.0.0   |              |
+    When the user runs "/claude:plugin update lib@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | false                               |
+      | summary      | A plugin operation needs attention. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status  | reasons              | scope   | version | cause chain                                                                                              | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | skipped | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | app@tools     | 1.0.0   | true    |
+      | demo@fixtures | 1.0.0   | true    |
+      | lib@tools     | 1.0.0   | true    |
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | summary                             | tally label       | tally failures | tally warnings |
+      | cascade | warning  | false        | A plugin operation needs attention. | Reconcile pending | 0              | 1              |
+      | cascade | warning  | false        | A plugin operation needs attention. | Reconcile pending | 0              | 1              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id        | name | status  | reasons              | scope   | version | cause chain                                                                                    | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | skipped | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
+      | tools            | project           | lib@tools | lib  | skipped | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:app-skill  | A skill of app 1.0.0.  |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+      | /skill:lib-skill  | A skill of lib 1.0.0.  |
+
+  Scenario: Updating a plugin whose new version is only partially available is held without --partial and keeps the installed version
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has an output style
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | false                               |
+      | summary      | A plugin operation needs attention. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status               | reasons               | hint           | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | partially-upgradable | unsupported component | partial-update | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    When the user starts a new pi session
+    Then the session reports these results:
+      | kind    | severity | needs reload | summary                             | tally label       | tally failures | tally warnings |
+      | cascade | warning  | false        | A plugin operation needs attention. | Reconcile pending | 0              | 1              |
+      | cascade | warning  | false        | A plugin operation needs attention. | Reconcile pending | 0              | 1              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status               | reasons               | hint                   | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | partially-upgradable | unsupported component | catalog-partial-update | project | 1.0.0   |
+      | fixtures         | project           | demo@fixtures | demo | partially-upgradable | unsupported component | catalog-partial-update | project | 1.0.0   |
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.0.0. |
+
+  Scenario: Updating with --partial a plugin whose new version is only partially available installs the parts Pi supports
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has an output style
+    When the user runs "/claude:plugin update demo@fixtures --scope project --partial"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status              | reasons               | scope   | from  | version |
+      | fixtures         | project           | demo@fixtures | demo | partially-installed | unsupported component | project | 1.0.0 | 1.1.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.1.0   | true    |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command           | description            |
+      | /skill:demo-skill | A skill of demo 1.1.0. |
+
+  Scenario: Info on a plugin updated with --partial shows it partially installed with an unsupported component
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has an output style
+    Given the user has run "/claude:plugin update demo@fixtures --scope project --partial"
+    When the user runs "/claude:plugin info demo@fixtures"
+    Then the result has these fields:
+      | kind                           | plugin-info           |
+      | severity                       | info                  |
+      | needs reload                   | false                 |
+      | marketplace name               | fixtures              |
+      | marketplace scope              | project               |
+      | marketplace details autoupdate | false                 |
+      | plugin id                      | demo@fixtures         |
+      | plugin name                    | demo                  |
+      | plugin status                  | partially-installed   |
+      | plugin reasons                 | unsupported component |
+      | plugin scope                   | project               |
+      | plugin version                 | 1.1.0                 |
+      | plugin components resolved     | true                  |
+      | plugin components skills       | demo-skill            |
+
+  Scenario: The plugin list shows a plugin updated with --partial as partially installed
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has an output style
+    Given the user has run "/claude:plugin update demo@fixtures --scope project --partial"
+    When the user runs "/claude:plugin list --scope project"
+    Then the result has these fields:
+      | kind                | cascade     |
+      | severity            | info        |
+      | needs reload        | false       |
+      | tally label         | Plugin list |
+      | tally failures      | 0           |
+      | tally warnings      | 0           |
+      | tally success count | 1           |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status              | reasons               | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | partially-installed | unsupported component | project | 1.1.0   |
+
+  Scenario: Updating a dependency within the version range of a plugin its marketplace no longer lists updates it and names that range
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^1.0.0   |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 1.1.0   |              |
+    When the user runs "/claude:plugin update lib@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status  | reasons                 | scope   | from  | to    | cause chain                                                            | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | updated | dependency current copy | project | 1.0.0 | 1.1.0 | constrained to the combined range (^1.0.0) -- required by "app@tools" | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | app@tools     | 1.0.0   | true    |
+      | demo@fixtures | 1.0.0   | true    |
+      | lib@tools     | 1.1.0   | true    |
+
+  Scenario: Updating a dependency past the version range of a plugin its marketplace no longer lists holds the update and changes nothing
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^1.0.0   |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 2.0.0   |              |
+    When the user runs "/claude:plugin update lib@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | warning                             |
+      | needs reload | false                               |
+      | summary      | A plugin operation needs attention. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status  | reasons              | scope   | version | cause chain                                                                                    | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | skipped | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | app@tools     | 1.0.0   | true    |
+      | demo@fixtures | 1.0.0   | true    |
+      | lib@tools     | 1.0.0   | true    |
+
+  Scenario: Updating a plugin while a plugin its marketplace no longer lists has lost its files fails as unreadable and changes nothing
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^1.0.0   |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 1.1.0   |              |
+    Given the marketplace "tools" no longer holds the files of the plugin "app"
+    When the user runs "/claude:plugin update lib@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status | reasons    | scope   | version | cause chain                                                                                                       | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | failed | unreadable | project | 1.0.0   | cannot read the dependencies of app@tools: not declared by its marketplace, and its installed copy cannot be read | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | app@tools     | 1.0.0   | true    |
+      | demo@fixtures | 1.0.0   | true    |
+      | lib@tools     | 1.0.0   | true    |

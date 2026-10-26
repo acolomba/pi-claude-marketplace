@@ -1,36 +1,35 @@
 // orchestrators/reconcile/apply.ts
 //
-// RECON-01..05: the load-time apply orchestrator.
+// RECON-01..05: the reconcile apply orchestrator behind `/claude:plugin
+// apply` (APL-01). A load runs none of it (APL-03 / D-02) unless a config
+// turns `autoapply` on (AAP-02); otherwise the load runs `load.ts`, which
+// shares the read pass.
 // behavioral-composition-exception: applyReconcile
 //
 // CONTRACT:
-//   - Per-scope READ PASS (locked, WRITE-FREE -- WR-05) under
-//     `withLockedStateTransaction(loc, ...)` with NO `tx.save()`: a
-//     pristine scope (no state.json, no config) is skipped before the lock;
-//     otherwise run `migrateFirstRunConfig(loc, state)` FIRST (the
-//     surrounding lock covers the cross-process concurrent-first-load race;
-//     the D-13 existsSync gate is observed at the transaction's internal
-//     loadState BEFORE the closure runs), then `loadMergedScopeConfig(loc)`,
-//     then the CFG-03 invalid-arm check, then the LOAD-01 satisfaction
-//     verdict, then `planReconcile(merged, state, scope, verdict)`. Closure
-//     returns the plan + invalid blocks; lock releases on closure return;
-//     state.json bytes + mtime stay untouched.
+//   - Per-scope READ PASS (locked, WRITE-FREE -- WR-05), shared with the
+//     load: `read-pass.ts::readPassForScope` (MIG-01, merged config load,
+//     CFG-03, LAYER-06, the LOAD-01 verdict, the plan). state.json bytes +
+//     mtime stay untouched.
 //   - Per-scope APPLY PASS with NO outer lock (CR-01 lesson preserved): for
 //     each scope's plan (skip when invalid-config aborted the read pass),
 //     drive the orchestrators (uninstallPlugin, removeMarketplace,
-//     addMarketplace, installPlugin, the reload-only missing-dependency
-//     install, setPluginEnabled) in fixed order so each step's precondition
+//     addMarketplace, installPlugin, the missing-dependency install,
+//     setPluginEnabled) in fixed order so each step's precondition
 //     is established by the previous step:
 //
-//        uninstall -> remove -> add -> install -> install missing deps (reload only)
+//        uninstall -> remove -> add -> install -> install missing deps
 //                  -> [D-09-07 re-plan when something landed] -> enable -> disable
 //                  -> dependency-disable (LOAD-01)
 //                  -> source-mismatch (report-only)
+//                  -> converge
 //
-//     MISS-01 / D-09-06: `applyDependencyInstalls` runs only when
-//     `opts.reason === "reload"` (D-09-13) and drives the SAME cascade
-//     `installPlugin` drives, rooted at each missing dependency instead of at
-//     a user-typed plugin. When it materialized or found already-recorded at
+//     MISS-01 / D-09-06: `applyDependencyInstalls` installs a recorded
+//     plugin's missing declared dependency on every apply, because `apply` is
+//     the explicit command that changes state (D-02 supersedes D-09-13). It
+//     drives the SAME cascade `installPlugin` drives, rooted at each missing
+//     dependency instead of at a user-typed plugin. When it, or the install
+//     step before it, materialized or found already-recorded at
 //     least one key, D-09-07's `refreshTogglePlan` re-runs the read pass for
 //     this scope and substitutes ONLY the fresh plan's `pluginsToEnable`,
 //     `pluginsToDisable` and `pluginsToDependencyDisable` before the toggle
@@ -51,6 +50,13 @@
 //     leaving a rollback partial or an MCP config rewrite (AFILE-04) answers
 //     with its failed outcome instead; the pass continues, and a later target
 //     that reads the base ends it -- see the note above each loop.
+//   - CONVERGE per readable scope, after the apply pass (APL-02 / D-08):
+//     `convergeScope` runs the planner `pending` uses over the scope as the
+//     pass left it and materializes each revision move through the update
+//     runner's converge entry (D-26), not reinstall. A move the planner holds
+//     or declines is reported with the row `pending` lists and is not run
+//     (D-12); a move that fails reports `(failed)` and the next move still
+//     runs (D-13).
 //   - AMIG-01 MCP MOVE per scope, after the read pass and before the apply
 //     pass, also when the config is invalid and never after a read pass that
 //     threw (`mcp-migration.ts`). It takes its own scope lock; a throw out of
@@ -58,249 +64,95 @@
 //     (`notifyMcpMigration`) precedes the cascade and is sent even when
 //     reconcile has no outcome (AMIG-03).
 //   - SINGLE notify() emission per applyReconcile invocation (IL-2 /
-//     RECON-04). Empty-and-clean reconciles are SILENT (NFR-2 / A4) -- the
-//     orchestrator skips the notify() call when no outcomes accumulated AND
-//     no invalid-config rows surfaced.
+//     RECON-04). A pass that accumulated no outcome and no invalid-config row
+//     reports `Apply: nothing to change.` through the `reconcile-pending-empty`
+//     advisory and writes nothing (APL-01 / D-08). The load-time silence
+//     contract for an unchanged tree belongs to `load.ts` (D-05); when an
+//     autoapply load runs this pass (AAP-02), its `load` run keeps that
+//     silence and the empty advisory is not sent.
 //
-// A1: pi-coding-agent fires `resources_discover` AFTER `session_start` has
-// been emitted to every extension AND after all extension factory functions
-// have returned (`agent-session.js`: bindExtensions emits session_start,
-// then `extendResourcesFromExtensions` checks
-// `hasHandlers("resources_discover")` -- handlers come from each extension's
-// `pi.on(...)` registration during its factory call). The soft-dependency
-// snapshot is the run that index.ts opens at the start of the pass (D-05,
-// D-07), so it observes a stable pi-subagents / pi-mcp-adapter status.
+// D-05 / D-07: the soft-dependency snapshot is the run the `apply` command
+// (or, under autoapply, the load) opens before the pass, so it observes a
+// stable pi-subagents / pi-mcp-adapter status.
 
-import path from "node:path";
-
-import { findLayerMarketplaceGaps, loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { migrateFirstRunConfig } from "../../persistence/migrate-config.ts";
 import { declaredDependencies } from "../../shared/concerns/soft-dep.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { DependencyCascadeError, errorMessage } from "../../shared/errors.ts";
-import { pathExists } from "../../shared/fs-utils.ts";
 import {
+  DependencyCascadeError,
+  DirectoryPinUnsatisfiedError,
+  errorMessage,
+} from "../../shared/errors.ts";
+import {
+  notify,
   notifyDiagnostic,
   notifyMcpConfigNotices,
-  notifyMcpMigration,
 } from "../../shared/notification-dispatch.ts";
-import { type Reason } from "../../shared/notification-types.ts";
-import { notifyReconcileAppliedWithContext } from "../../shared/notify-context.ts";
+import { type ContentReason, type Reason } from "../../shared/notification-types.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
-import { withLockedStateTransaction, withStateGuard } from "../../transaction/with-state-guard.ts";
+import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { MarketplaceRemoveFailureError, removeMarketplace } from "../marketplace/remove.ts";
+import { garbageCollectPluginClones } from "../plugin/clone-gc.ts";
 import {
+  createConvergeOperation,
   createDependencyInstallOperation,
   createEnableOperation,
   createInstallOperation,
   createUninstallOperation,
 } from "../plugin/operations.ts";
+import { degradationFromEnable } from "../plugin/shared.ts";
 import { UninstallRefusedError } from "../plugin/uninstall.ts";
 
 import {
   carriedMcpConfigNotices,
+  cascadeDisabledOutcome,
   classifyOrchestratorThrow,
-  classifyReadPassThrow,
+  installFailureReasonFields,
   dependencyDisabledOutcome,
-  MigrateConfigSaveError,
+  sourceMismatchOutcomes,
 } from "./apply-outcomes.ts";
-import { applyBackfillForScopeIsolated, runScopeIsolated } from "./backfill.ts";
-import { buildScopeSatisfactionVerdict } from "./dependency-verdict.ts";
-import { migrateLegacyMcpEntries } from "./mcp-migration.ts";
-import { buildReconcileAppliedCascade } from "./notify.ts";
-import { planReconcile } from "./plan.ts";
-import { composeLayerMarketplaceCause, RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
+import {
+  cascadeDependencies,
+  dependenciesFirst,
+  installedCopyReader,
+  isPinnedCopy,
+  planConvergenceCascade,
+} from "./convergence.ts";
+import { buildScopeSatisfactionVerdict, judgeFinalScope } from "./dependency-verdict.ts";
+import { blockedMoveOutcomes, convergedMoveOutcomes, enabledMoveOutcome } from "./notify.ts";
+import {
+  closeScopePass,
+  notifyScopePasses,
+  openScopePass,
+  readPassForScope,
+  runScopeIsolated,
+} from "./read-pass.ts";
 
-import type { PerEntryOutcome } from "./apply-outcomes.ts";
+import type {
+  PerEntryOutcome,
+  PluginConvergedOutcome,
+  PluginDependencyDisabledOutcome,
+  PluginEnableFailedOutcome,
+} from "./apply-outcomes.ts";
+import type { ConvergenceCascade, PlannedMove } from "./convergence.ts";
+import type { ScopeSatisfactionVerdict, UnsatisfiedDeclaration } from "./dependency-verdict.ts";
+import type { ReconcileStateReader, ScopePassAccumulators } from "./read-pass.ts";
 import type {
   ApplyReconcileOptions,
   PlannedDependencyDisable,
+  PlannedPluginEnable,
   PlannedPluginUninstall,
   ReconcilePlan,
   ScopeReadResult,
 } from "./types.ts";
-import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
-import type { ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { loadState } from "../../persistence/state-io.ts";
-import type { McpConfigNotice, McpMigrationRow } from "../../shared/notification-types.ts";
+import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
-import type {
-  EnableDegradationSignals,
-  EnableDisablePluginOutcome,
-} from "../plugin/enable-disable.ts";
+import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
-
-/** Reads the one state snapshot selected by the reconcile read pass. */
-export interface ReconcileStateReader {
-  readonly loadState: typeof loadState;
-}
-
-// An absent or invalid layer declares nothing.
-function declaredConfig(result: ConfigLoadResult): ScopeConfig {
-  return result.status === "valid" ? result.config : {};
-}
-
-/**
- * LAYER-06 / D-MF-03: one outcome per layer that declares a plugin whose
- * marketplace only the other layer declares. Like an invalid layer config, it
- * stops the scope's reload; the plugins the scope installed keep loading from
- * state, and no file is repaired.
- */
-function layerMarketplaceGapOutcomes(
-  outcome: ScopeLoadOutcome,
-  loc: ScopedLocations,
-  scope: Scope,
-): PerEntryOutcome[] {
-  const gaps = findLayerMarketplaceGaps(
-    declaredConfig(outcome.base),
-    declaredConfig(outcome.local),
-  );
-  return gaps.map((gap) => ({
-    kind: "layer-marketplace-gap",
-    scope,
-    basename: path.basename(
-      gap.layer === "base" ? loc.baseConfigJsonPath : loc.localConfigJsonPath,
-    ),
-    cause: new Error(composeLayerMarketplaceCause(gap, scope)),
-  }));
-}
-
-/**
- * Per-scope read pass under the scope lock. Migrate-then-load-then-plan
- * inside ONE lock so the deferred ordering rail is wired.
- *
- * WR-05: the read pass is WRITE-FREE.
- *
- *   - Pristine-scope gate: a scope with NO state.json and NO config file
- *     has never been used by the extension -- the read pass returns before
- *     taking the lock (no mkdir, no lock file, no generated config). The
- *     pre-reconcile handler was read-only; starting Pi in an arbitrary
- *     repository must not create `.pi/claude-plugins.json` +
- *     `.pi/pi-claude-marketplace/state.json` there. The MIG-01 contract is
- *     "generate the config from EXISTING state.json on first load" -- an
- *     absent state.json means nothing to migrate.
- *   - No state save: the closure mutates nothing on state (migrate writes
- *     the CONFIG via saveConfig; load + plan are pure), so the guard is
- *     `withLockedStateTransaction` WITHOUT `tx.save()` -- a no-op reconcile
- *     leaves state.json bytes AND mtime untouched (mirrors the RECON-05
- *     invariant the tests assert for the config file).
- */
-async function readPassForScope(
-  reader: ReconcileStateReader,
-  scope: Scope,
-  cwd: string,
-): Promise<ScopeReadResult> {
-  const loc = locationsFor(scope, cwd);
-
-  const stateExists = await pathExists(loc.stateJsonPath);
-  const configExists =
-    (await pathExists(loc.baseConfigJsonPath)) || (await pathExists(loc.localConfigJsonPath));
-  if (!stateExists && !configExists) {
-    // Pristine scope: nothing recorded, nothing declared -- no-op without
-    // touching the disk.
-    return { plan: undefined, invalidOutcomes: [], stateExisted: false };
-  }
-
-  return withLockedStateTransaction(
-    loc,
-    async (tx) => {
-      const state = tx.state;
-      // (1) Migrate FIRST -- generates a fresh `claude-plugins.json` from the
-      // current `state.json` on first run (MIG-01). Idempotent: short-circuits
-      // when config already exists (valid OR invalid). The surrounding lock
-      // covers the cross-process concurrent-first-load race; the D-13
-      // existsSync gate is observed at the transaction's internal loadState
-      // BEFORE this closure runs, preserving legacy-autoupdate capture (the
-      // field still lives on state at this point). WR-05: `tx.save()` is
-      // deliberately NEVER called -- the read pass mutates nothing on state,
-      // so state.json stays byte-untouched.
-      //
-      // S3 / PR #51: when saveConfig inside migrateFirstRunConfig throws
-      // (e.g. EACCES on the scope dir), the failing file is
-      // `claude-plugins.json`, NOT state.json. Wrap the call so the throw
-      // carries an attribution sentinel; the per-scope catch in
-      // applyReconcile reads it to name the row's subject correctly.
-      try {
-        await migrateFirstRunConfig(loc, state);
-      } catch (err) {
-        throw new MigrateConfigSaveError(loc.baseConfigJsonPath, err);
-      }
-
-      // (2) Load the merged scope config (base + local).
-      const outcome = await loadMergedScopeConfig(loc);
-
-      // (3) CFG-03 abort: surface invalid arm(s) as structured (failed) rows
-      // with the file BASENAME (T-55-02-01 / T-53-02-02 information-disclosure
-      // mitigation). DO NOT call planReconcile -- coercing an invalid config
-      // to an empty desired state would emit a mass-uninstall plan.
-      const invalidOutcomes: PerEntryOutcome[] = [];
-      if (outcome.base.status === "invalid") {
-        // I5 / PR #51: thread loadConfig's diagnostic detail (EACCES vs
-        // JSON-parse vs schema key) into the rendered cause-chain trailer.
-        // Absolute paths are stripped at the boundary -- the projection
-        // walks Error.cause via causeChainTrailer, which does NOT strip
-        // paths on its own (NFR-9 surfaces message text verbatim).
-        invalidOutcomes.push({
-          kind: "invalid-block",
-          scope,
-          basename: path.basename(outcome.base.filePath),
-          reason: "invalid manifest",
-          cause: new Error(redactAbsolutePaths(outcome.base.error)),
-        });
-      }
-
-      if (outcome.local.status === "invalid") {
-        invalidOutcomes.push({
-          kind: "invalid-block",
-          scope,
-          basename: path.basename(outcome.local.filePath),
-          reason: "invalid manifest",
-          cause: new Error(redactAbsolutePaths(outcome.local.error)),
-        });
-      }
-
-      // LAYER-06 / D-MF-03: an invalid layer reads as declaring nothing, so it
-      // never also reports a missing marketplace.
-      invalidOutcomes.push(...layerMarketplaceGapOutcomes(outcome, loc, scope));
-      if (invalidOutcomes.length > 0) {
-        return { plan: undefined, invalidOutcomes, stateExisted: stateExists };
-      }
-
-      // (4) LOAD-01 / D-06-04: decide which recorded plugin has a declaration
-      // this scope does not satisfy. It runs HERE, not in index.ts, because the
-      // snapshot and the `ScopedLocations` bundle it walks are both produced
-      // inside this locked closure: computing it outside would mean a second
-      // unlocked state read that could disagree with the snapshot the planner
-      // sees, which is the race this lock exists to close. It takes NO lock of
-      // its own: this closure already holds the scope lock, and the guard is
-      // configured with no retries and is not re-entrant.
-      //
-      // WR-08: the walk costs one memoized manifest lookup plus one
-      // own-manifest probe per RECORDED plugin, so this critical section
-      // scales with the scope's install count rather than being the bounded
-      // config+state read the surrounding steps are. `proper-lockfile` has no
-      // retries, so two Pi processes starting against one scope have a window
-      // proportional to that count in which the second takes `ELOCKED` and
-      // skips its whole reconcile pass. A scope recording no plugins pays
-      // nothing: `buildScopeDeclarationDetail` reads a manifest per record and
-      // there are none.
-      const verdict = await buildScopeSatisfactionVerdict({ state, locations: loc });
-
-      // (5) Plan against the merged config + current state + the verdict.
-      // Pure -- no I/O.
-      const plan = planReconcile(outcome.merged, state, scope, verdict);
-      // BFILL-02: carry the loaded state snapshot out so applyBackfillForScope can
-      // read its stamp + scan every plugin it records (WCONV-01). planReconcile is
-      // pure, so the snapshot is the unmutated read-pass state.
-      return { plan, invalidOutcomes: [], state, stateExisted: stateExists, verdict };
-    },
-    { loadState: reader.loadState },
-  );
-}
+import type { MovedDependency, PluginUpdateOutcome } from "../types.ts";
 
 /**
  * Apply one plan's marketplacesToRemove bucket. NO outer lock around the
@@ -426,8 +278,7 @@ function foldRemoveOutcome(
  * carries that contract in its return type, so this loop reads the outcome
  * without a guard of its own. The exception is an `InvalidGitHubBaseUrlError`,
  * which `handleAddFailure` rethrows: it ends the reconcile pass, and the
- * resources_discover handler reports it as reconcile-aborted, so the throw
- * never leaves the Pi event (NFR-2, GHB-03).
+ * `apply` command reports it as its command error (GHB-03).
  */
 async function applyMarketplaceAdds(
   opts: ApplyReconcileOptions,
@@ -610,6 +461,32 @@ function redactedDependencyCascadeError(error: DependencyCascadeError): Dependen
 }
 
 /**
+ * UPD-DEP-D1 / CR-05: the dependency moves an install made, as `apply` rows
+ * under each dependency's own marketplace and by its bare name, as a catalog
+ * move's row reads; the range the move was made for stays on its cause line.
+ * A move that did not land is left to the catalog step, which tries it again
+ * and reports it with its closed-set reason (T-55-02-02).
+ */
+function movedDependencyOutcomes(
+  scope: Scope,
+  moved: readonly MovedDependency[],
+): PluginConvergedOutcome[] {
+  return moved.flatMap((entry) =>
+    entry.row.status === "failed"
+      ? []
+      : [
+          {
+            kind: "plugin-converged",
+            scope,
+            marketplace: entry.marketplace,
+            plugin: entry.name,
+            row: { ...entry.row, name: entry.name },
+          },
+        ],
+  );
+}
+
+/**
  * RECON-03 note: unlike the removal and uninstall loops, this one carries NO
  * per-entry try/catch. `installPlugin` documents that it never re-throws: its
  * whole body sits inside one try whose catch returns a typed failed outcome in
@@ -618,18 +495,21 @@ function redactedDependencyCascadeError(error: DependencyCascadeError): Dependen
  * overload carries that contract in its return type, so this loop reads the
  * outcome without a guard of its own. The exception is an
  * `InvalidGitHubBaseUrlError`, which the catch rethrows: it ends the reconcile
- * pass, and the resources_discover handler reports it as reconcile-aborted,
- * so the throw never leaves the Pi event (NFR-2, GHB-03). An install that
- * fails on it after leaving a rollback partial or an MCP config rewrite
- * (AFILE-04) returns its failed outcome instead: the pass continues past that
- * plugin, and a later target that reads the base ends it.
+ * pass, and the `apply` command reports it as its command error (GHB-03). An
+ * install that fails on it after leaving a rollback partial or an MCP config
+ * rewrite (AFILE-04) returns its failed outcome instead: the pass continues
+ * past that plugin, and a later target that reads the base ends it.
+ *
+ * Returns whether any install landed: the read pass judged the scope without
+ * it, so its toggle buckets are stale (D-09-07).
  */
 async function applyPluginInstalls(
   opts: ApplyReconcileOptions,
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
-): Promise<void> {
+): Promise<boolean> {
   const installPlugin = createInstallOperation(opts.hooksRouting, opts.completionCache);
+  let installed = false;
   for (const op of plan.pluginsToInstall) {
     // eslint-disable-next-line no-await-in-loop -- each install locks the scope (retries: 0)
     const result = await installPlugin({
@@ -640,6 +520,9 @@ async function applyPluginInstalls(
       marketplace: op.marketplace,
       plugin: op.plugin,
       notifications: { mode: "orchestrated" },
+      // UPD-DEP-D1 / MISS-01: apply's missing-dependency step installs what a
+      // moved dependency's new version needs, as `pending` previews it.
+      dependencyInstallsFollow: true,
       // DFEN-04 / D-102-04: unconditional on this path. A user who hand-adds
       // a bare `"p@mp": {}` entry has declared WHICH plugin, not WHETHER it
       // is enabled -- which is the gap the plugin's own `defaultEnabled`
@@ -655,6 +538,10 @@ async function applyPluginInstalls(
       // `exactOptionalPropertyTypes` rejects an explicit `undefined`.
       ...(op.configSource === "local" && { local: true }),
     });
+    // UPD-DEP-D1: the dependencies the install moved into range first report
+    // as the catalog moves they are, so `apply` lists every change it made.
+    outcomes.push(...movedDependencyOutcomes(op.scope, result.movedDependencies ?? []));
+    installed ||= result.status === "installed";
 
     if (result.status === "installed" && result.landedDisabled === true) {
       // DFEN-04: the install ran whole and then unstaged, because the
@@ -705,6 +592,7 @@ async function applyPluginInstalls(
         scope: op.scope,
         marketplace: op.marketplace,
         plugin: op.plugin,
+        ...(result.version !== undefined && { version: result.version }),
         dependencies: declaredDependencies(result),
         // S2 / PR #51: propagate post-commit warnings so the cascade
         // caller can surface them to the operator (mirrors the
@@ -723,7 +611,7 @@ async function applyPluginInstalls(
         scope: op.scope,
         marketplace: op.marketplace,
         plugin: op.plugin,
-        reason: classifyOrchestratorThrow(result.error),
+        ...installFailureReasonFields(result.error),
         // RESV-06: only a dependency-cascade failure carries a cause onto
         // this row. Redact defensively (T-55-02-02 / T-53-02-02) -- the
         // closure/constraint arms build their message from keys and version
@@ -741,13 +629,13 @@ async function applyPluginInstalls(
       });
     }
   }
+
+  return installed;
 }
 
 /**
- * MISS-01 / MISS-02 / D-09-06: drive the reload-only missing-dependency
- * install for every entry the read pass's `pluginsToDependencyInstall`
- * bucket planned. Returns `false` at once when `opts.reason !== "reload"`
- * (D-09-13) -- the gate lives here, in one `if`, not in `applyPlan`.
+ * MISS-01 / MISS-02 / D-09-06: drive the missing-dependency install for
+ * every entry the read pass's `pluginsToDependencyInstall` bucket planned.
  *
  * D-09-09: on `installed`, one `plugin-installed` outcome is pushed PER
  * cascade member -- every materialized member gets a row under its own
@@ -771,10 +659,6 @@ async function applyDependencyInstalls(
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<boolean> {
-  if (opts.reason !== "reload") {
-    return false;
-  }
-
   const installMissingDependency = createDependencyInstallOperation(
     opts.hooksRouting,
     opts.completionCache,
@@ -793,6 +677,7 @@ async function applyDependencyInstalls(
       ranges: op.ranges,
       requiredBy: op.requiredBy,
       declarers: op.declarers,
+      ...(op.requirers !== undefined && { requirers: op.requirers }),
     });
 
     if (result.status === "skipped") {
@@ -839,10 +724,11 @@ async function applyDependencyInstalls(
       scope: op.scope,
       marketplace: op.marketplace,
       plugin: op.plugin,
-      reason: result.reason ?? classifyOrchestratorThrow(result.error),
+      ...installFailureReasonFields(result.error, result.reason),
       ...(result.error instanceof DependencyCascadeError && {
         cause: redactedDependencyCascadeError(result.error),
       }),
+      ...(result.error instanceof DirectoryPinUnsatisfiedError && { cause: result.error }),
       ...carriedMcpConfigNotices(result),
     });
   }
@@ -851,10 +737,11 @@ async function applyDependencyInstalls(
 }
 
 /**
- * D-09-07: after `applyDependencyInstalls` materialized or found already
- * present at least one key, the round-1 read pass's toggle buckets predate
- * that change -- its `pluginsToDependencyDisable` still holds a dependent this
- * step just satisfied and its `pluginsToEnable` still excludes it (D-06-03).
+ * D-09-07: after `applyPluginInstalls` installed a plugin, or
+ * `applyDependencyInstalls` materialized or found already present at least one
+ * key, the round-1 read pass's toggle buckets predate that change -- its
+ * `pluginsToDependencyDisable` still holds a dependent these steps just
+ * satisfied and its `pluginsToEnable` still excludes it (D-06-03).
  * Re-running `readPassForScope` for this scope and taking ONLY
  * `pluginsToEnable`, `pluginsToDisable` and `pluginsToDependencyDisable` from
  * the fresh plan is what lets a marker-held dependent come back up in the
@@ -875,23 +762,33 @@ async function applyDependencyInstalls(
 async function refreshTogglePlan(
   reader: ReconcileStateReader,
   opts: ApplyReconcileOptions,
-  plan: ReconcilePlan,
+  toggles: TogglePlan,
   outcomes: PerEntryOutcome[],
-): Promise<ReconcilePlan> {
-  let fresh: ScopeReadResult = { plan: undefined, invalidOutcomes: [], stateExisted: true };
+): Promise<TogglePlan> {
+  const plan = toggles.plan;
+  let fresh: ScopeReadResult = { plan: undefined, invalidOutcomes: [] };
   await runScopeIsolated(plan.scope, outcomes, async () => {
     fresh = await readPassForScope(reader, plan.scope, opts.cwd);
   });
 
   outcomes.push(...fresh.invalidOutcomes);
   return fresh.plan === undefined
-    ? plan
+    ? toggles
     : {
-        ...plan,
-        pluginsToEnable: fresh.plan.pluginsToEnable,
-        pluginsToDisable: fresh.plan.pluginsToDisable,
-        pluginsToDependencyDisable: fresh.plan.pluginsToDependencyDisable,
+        plan: {
+          ...plan,
+          pluginsToEnable: fresh.plan.pluginsToEnable,
+          pluginsToDisable: fresh.plan.pluginsToDisable,
+          pluginsToDependencyDisable: fresh.plan.pluginsToDependencyDisable,
+        },
+        deferredEnables: fresh.deferredEnables ?? [],
       };
+}
+
+/** A plan's toggles and the enables that wait on its catalog moves (APPLY1-01). */
+interface TogglePlan {
+  readonly plan: ReconcilePlan;
+  readonly deferredEnables: readonly PlannedPluginEnable[];
 }
 
 interface PluginToggleAxes {
@@ -915,28 +812,6 @@ interface PluginToggleAxes {
     plugin: string;
     reason: Reason;
   }) => PerEntryOutcome;
-}
-
-/**
- * Lift the enable arm's degradation signals off the orchestrated outcome. Each
- * field is omitted when empty (`exactOptionalPropertyTypes`), so a clean enable
- * yields `{}` and its projected row gains no markers (NREG-01).
- *
- * SEV-01 / D-98-02: the staged-count verdicts ride here too -- they drive the
- * projected row's dependency list, mirroring the install arm's
- * `dependenciesFromInstall` derivation.
- */
-function degradationFromEnable(
-  result: Extract<EnableDisablePluginOutcome, { status: "enabled" }>,
-): EnableDegradationSignals {
-  return {
-    ...(result.unsupported !== undefined && { unsupported: result.unsupported }),
-    ...(result.orphanRewake === true && { orphanRewake: true }),
-    ...(result.degradedKinds !== undefined && { degradedKinds: result.degradedKinds }),
-    ...(result.stagedAgents === true && { stagedAgents: true }),
-    ...(result.stagedMcpServers === true && { stagedMcpServers: true }),
-    ...(result.stagedWorkflows === true && { stagedWorkflows: true }),
-  };
 }
 
 /**
@@ -965,12 +840,11 @@ function installedRowDegradation(
  * is a pure mapping. The orchestrated overload carries that contract in its
  * return type, so this loop reads the outcome without a guard of its own. The
  * exception is an enable that fails on an `InvalidGitHubBaseUrlError`, which
- * the mapping rethrows: it ends the reconcile pass, and the resources_discover
- * handler reports it as reconcile-aborted, so the throw never leaves the Pi
- * event (NFR-2, GHB-03). An enable that fails on it after leaving a rollback
- * partial or an MCP config rewrite (AFILE-04) returns its failed outcome
- * instead: the pass continues past that plugin, and a later target that reads
- * the base ends it.
+ * the mapping rethrows: it ends the reconcile pass, and the `apply` command
+ * reports it as its command error (GHB-03). An enable that fails on it after
+ * leaving a rollback partial or an MCP config rewrite (AFILE-04) returns its
+ * failed outcome instead: the pass continues past that plugin, and a later
+ * target that reads the base ends it.
  */
 async function applyPluginToggles(
   opts: ApplyReconcileOptions,
@@ -1114,12 +988,17 @@ async function stampDependencyDisabled(
  */
 async function applyDependencyDisables(
   opts: ApplyReconcileOptions,
-  plan: ReconcilePlan,
-  outcomes: PerEntryOutcome[],
+  scope: Scope,
+  ops: readonly PlannedDependencyDisable[],
+  outcomes: { push: (...rows: PluginRow[]) => number },
+  disabledOutcome: (
+    op: PlannedDependencyDisable,
+    version: string | undefined,
+  ) => PluginDependencyDisabledOutcome = dependencyDisabledOutcome,
 ): Promise<void> {
   const setPluginEnabled = createEnableOperation(opts.hooksRouting);
   const transitioned: PlannedDependencyDisable[] = [];
-  for (const op of plan.pluginsToDependencyDisable) {
+  for (const op of ops) {
     // eslint-disable-next-line no-await-in-loop -- each disable locks the scope (retries: 0)
     const result = await setPluginEnabled({
       ctx: opts.ctx,
@@ -1135,7 +1014,7 @@ async function applyDependencyDisables(
     if (result.status === "disabled") {
       transitioned.push(op);
       outcomes.push({
-        ...dependencyDisabledOutcome(op, result.version),
+        ...disabledOutcome(op, result.version),
         ...carriedMcpConfigNotices(result),
       });
     } else if (result.status === "failed") {
@@ -1153,62 +1032,22 @@ async function applyDependencyDisables(
   if (transitioned.length > 0) {
     const stamp = opts.stampDependencyDisabled;
     await (stamp === undefined
-      ? stampDependencyDisabled(opts, plan.scope, transitioned)
-      : stamp(plan.scope, transitioned));
+      ? stampDependencyDisabled(opts, scope, transitioned)
+      : stamp(scope, transitioned));
   }
 }
 
-/**
- * Source-mismatch and dangling-reference rows from the planner are NOT
- * actionable at apply time -- they surface as `(failed) {source mismatch}`
- * marketplace rows (with an optional plugin child for dangling references).
- * Routing them through the same per-entry outcome accumulator keeps the
- * projection a single seam.
- */
-function applySourceMismatches(plan: ReconcilePlan, outcomes: PerEntryOutcome[]): void {
-  for (const m of plan.sourceMismatches) {
-    // Per-cause propagation: each variant lifts its renderable fields onto
-    // the corresponding SourceMismatchOutcome arm. The renderer derives
-    // the subject from the variants via
-    // `sourceMismatchOutcomeSubject` (mp-name for the first three causes;
-    // rawKey for malformed-plugin-key).
-    switch (m.cause) {
-      case "source-mismatch":
-        outcomes.push({
-          kind: "source-mismatch",
-          cause: "source-mismatch",
-          scope: m.scope,
-          marketplace: m.marketplace,
-        });
-        break;
-      case "unknown-stored":
-        outcomes.push({
-          kind: "source-mismatch",
-          cause: "unknown-stored",
-          scope: m.scope,
-          marketplace: m.marketplace,
-        });
-        break;
-      case "dangling-reference":
-        outcomes.push({
-          kind: "source-mismatch",
-          cause: "dangling-reference",
-          scope: m.scope,
-          marketplace: m.marketplace,
-          plugin: m.plugin,
-        });
-        break;
-      case "malformed-plugin-key":
-        outcomes.push({
-          kind: "source-mismatch",
-          cause: "malformed-plugin-key",
-          scope: m.scope,
-          rawKey: m.rawKey,
-        });
-        break;
-    }
-  }
-}
+const ENABLE_AXES: PluginToggleAxes = {
+  enable: true,
+  // The signals ride `PluginEnabledOutcome` FLAT (it extends
+  // `EnableDegradationSignals`), so the nested carrier is spread here.
+  buildSuccess: ({ degradation, ...info }) => ({
+    kind: "plugin-enabled",
+    ...info,
+    ...degradation,
+  }),
+  buildFailed: (info) => ({ kind: "plugin-enable-failed", ...info }),
+};
 
 /**
  * The two `applyPluginToggles` calls and the LOAD-01 dependency-disable step,
@@ -1223,17 +1062,7 @@ async function applyToggleSteps(
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
 ): Promise<void> {
-  await applyPluginToggles(opts, plan.pluginsToEnable, outcomes, {
-    enable: true,
-    // The signals ride `PluginEnabledOutcome` FLAT (it extends
-    // `EnableDegradationSignals`), so the nested carrier is spread here.
-    buildSuccess: ({ degradation, ...info }) => ({
-      kind: "plugin-enabled",
-      ...info,
-      ...degradation,
-    }),
-    buildFailed: (info) => ({ kind: "plugin-enable-failed", ...info }),
-  });
+  await applyPluginToggles(opts, plan.pluginsToEnable, outcomes, ENABLE_AXES);
   await applyPluginToggles(opts, plan.pluginsToDisable, outcomes, {
     enable: false,
     // `degradation` is destructured off and DISCARDED: a disable materializes
@@ -1246,7 +1075,9 @@ async function applyToggleSteps(
     }),
     buildFailed: (info) => ({ kind: "plugin-disable-failed", ...info }),
   });
-  await runScopeIsolated(plan.scope, outcomes, () => applyDependencyDisables(opts, plan, outcomes));
+  await runScopeIsolated(plan.scope, outcomes, () =>
+    applyDependencyDisables(opts, plan.scope, plan.pluginsToDependencyDisable, outcomes),
+  );
 }
 
 /**
@@ -1269,135 +1100,680 @@ async function applyToggleSteps(
  *   3. add new marketplaces BEFORE installing into them.
  *   4. install new plugins under the marketplaces from step 3.
  *   5. MISS-01 / D-09-06: install every missing declared dependency of an
- *      eligible dependent, ROOTED AT THE DEPENDENCY -- reload only (D-09-13).
+ *      eligible dependent, ROOTED AT THE DEPENDENCY -- on every apply (D-02).
  *      A config-declared install from step 4 that already claimed this key
  *      answers idempotently (D-09-06).
- *   5a. D-09-07: when step 5 materialized or found already-present at least
- *      one key, re-run the read pass for this scope and take ONLY
+ *   5a. D-09-07: when step 4 installed a plugin, or step 5 materialized or
+ *      found already-present at least one key, re-run the read pass for this
+ *      scope and take ONLY
  *      `pluginsToEnable`, `pluginsToDisable` and `pluginsToDependencyDisable`
  *      from the fresh plan -- the round-1 plan's own uninstall / remove / add
  *      / install buckets and its source-mismatch rows are never re-driven.
- *      This is what lets a dependent step 5 just satisfied stay up (or come
- *      back up) in the SAME reload instead of the next one; step 5 finding
- *      nothing to do leaves the round-1 plan standing and costs nothing extra.
+ *      This is what lets a dependent steps 4 and 5 just satisfied stay up (or
+ *      come back up) in the SAME reload instead of the next one; steps 4 and
+ *      5 installing nothing leave the round-1 plan standing and cost nothing
+ *      extra.
  *   6. enable plugins newly declared enabled (round-1 or 5a's replacement).
  *   7. disable plugins newly declared disabled (round-1 or 5a's replacement).
  *   8. disable plugins the load-time check holds down (LOAD-01, round-1 or
  *      5a's replacement). It runs AFTER both toggle steps so a record the
  *      config already disabled in step 7 answers this step idempotently and
  *      is left unstamped (D-06-02). WR-05: a plugin INSTALLED by step 4 is
- *      not held down on this pass. The bucket is built in the read pass from
- *      a verdict computed over the pre-install snapshot, where that plugin
- *      has no record and is therefore no declarer; step 5a's re-plan (when it
- *      ran) or the next pass holds it down.
+ *      not held down by the round-1 bucket, which the read pass built from a
+ *      verdict over the pre-install snapshot, where that plugin has no record
+ *      and is therefore no declarer; step 5a's re-plan holds it down.
  *   9. source-mismatch / dangling rows (report-only), ALWAYS from the
  *      round-1 plan (D-09-07) -- folded last.
  */
 async function applyPlan(
   reader: ReconcileStateReader,
   opts: ApplyReconcileOptions,
-  plan: ReconcilePlan,
+  round1: TogglePlan,
   outcomes: PerEntryOutcome[],
-): Promise<void> {
+): Promise<readonly PlannedPluginEnable[]> {
+  const plan = round1.plan;
   await applyPluginUninstalls(opts, plan, outcomes);
   await applyMarketplaceRemoves(opts, plan, outcomes);
   await applyMarketplaceAdds(opts, plan, outcomes);
-  await applyPluginInstalls(opts, plan, outcomes);
+  const installed = await applyPluginInstalls(opts, plan, outcomes);
   const satisfied = await applyDependencyInstalls(opts, plan, outcomes);
-  const toggles = satisfied ? await refreshTogglePlan(reader, opts, plan, outcomes) : plan;
-  await applyToggleSteps(opts, toggles, outcomes);
-  applySourceMismatches(plan, outcomes);
+  const toggles =
+    installed || satisfied ? await refreshTogglePlan(reader, opts, round1, outcomes) : round1;
+  await applyToggleSteps(opts, toggles.plan, outcomes);
+  outcomes.push(...sourceMismatchOutcomes(plan));
+  return toggles.deferredEnables;
 }
 
 /**
- * D-05-07 / LOAD-01: report the one declarer whose declarations could not be
- * established, which is why no plugin in this scope was held down on this pass.
+ * APL-02 / D-08 / D-10: converge one scope on its catalog, after its apply
+ * pass. Only a scope whose read pass produced a plan gets here: a pristine
+ * scope (WR-05) and a scope whose config the read pass rejected (CFG-03) have
+ * none. The state is read fresh, so the planner takes no plan: the scope
+ * already reflects it. A read that throws moves nothing and becomes the
+ * `state.json` row every isolated step reports (WR-01), pushed onto
+ * `failures`, so `apply` never says it has nothing to change while the
+ * scope's moves stay pending (NFR-3).
  *
- * The walk fails closed, so an unreadable declarer never reads as a plugin that
- * declares nothing -- but it must not be silent either: a silent pass is
- * indistinguishable from a scope whose declarations are all satisfied, and the
- * dependent that should have been held down keeps loading. The row names the
- * DECLARER rather than `state.json`, because the read that failed was of a
- * plugin manifest and the read-pass catch's file row would make a false claim
- * about the state document.
- *
- * The key is built by the walk as `${name}@${marketplace}`, so splitting on the
- * last `@` is total and needs no fallback arm.
- *
- * RECON-04 single-emit: a declarer this pass already reported -- its clone is
- * gone, its install failed -- gets no second row. The same tree that stops a
- * manifest being read is usually the one that already failed something else
- * about that plugin, and two rows for one plugin state the same fact twice.
+ * APPLY1-01: the moves run as one cascade, dependencies first (D-26), with
+ * each deferred enable in its place (`runCascade`). Whatever lands, the scope
+ * is then judged as it stands (`judgeScopeAfterCascade`), so no `apply`
+ * leaves an enabled plugin on an unmet or disabled dependency. The judgement,
+ * the hold rows and the rows of the steps that ran also go out when the
+ * cascade ends on an `InvalidGitHubBaseUrlError` (GHB-03), which still ends
+ * the pass.
  */
-function reportUnreadableDeclarer(
+async function convergeScope(
+  reader: ReconcileStateReader,
+  opts: ApplyReconcileOptions,
   scope: Scope,
-  readResult: ScopeReadResult,
+  deferred: readonly PlannedPluginEnable[],
   outcomes: PerEntryOutcome[],
-): void {
-  const verdict = readResult.verdict;
-  if (verdict === undefined || verdict.ok) {
+  failures: PerEntryOutcome[],
+): Promise<void> {
+  const locations = locationsFor(scope, opts.cwd);
+  const planned: { cascade?: ConvergenceCascade; before?: CascadeStart } = {};
+  await runScopeIsolated(scope, failures, async () => {
+    const state = await reader.loadState(locations.extensionRoot);
+    const enable = new Set(deferred.map(pluginKey));
+    planned.cascade = await planConvergenceCascade({ scope, state, locations, enable });
+    const verdict = await buildScopeSatisfactionVerdict({ state, locations });
+    planned.before = { state, unsatisfied: verdict.ok ? verdict.unsatisfied : [] };
+  });
+  const { cascade, before } = planned;
+  if (cascade === undefined || before === undefined) {
     return;
   }
 
-  const at = verdict.declarer.lastIndexOf("@");
-  const marketplace = verdict.declarer.slice(at + 1);
-  const plugin = verdict.declarer.slice(0, at);
-  const reported = outcomes.some(
-    (outcome) =>
-      outcome.scope === scope &&
-      "plugin" in outcome &&
-      outcome.plugin === plugin &&
-      outcome.marketplace === marketplace,
+  // WR-D: an enable the toggle step could not make is a dependency that did
+  // not land for every step that declares it.
+  const failed: FailedSteps = {
+    all: new Set(failedEnables(outcomes, scope)),
+    own: new Set(),
+  };
+  const reports: StepReport[] = [];
+  try {
+    await runCascade(opts, cascade, { scope, deferred, before: before.state, failed, reports });
+  } finally {
+    const disabled: PluginRow[] = [];
+    const enabledAtEnd = new Set<string>();
+    await runScopeIsolated(scope, outcomes, () =>
+      judgeScopeAfterCascade(reader, opts, scope, {
+        cascade,
+        before,
+        failed,
+        ran: reports.length > 0,
+        refused: refusedDisables(outcomes, scope),
+        disabled,
+        enabledAtEnd,
+      }),
+    );
+    outcomes.push(
+      ...cascadeRows(cascade, reports, {
+        disabled: withoutUndoneEnables(outcomes, scope, disabled),
+        enabledAtEnd,
+      }),
+    );
+  }
+}
+
+/**
+ * WR-B: a plugin the toggle step enabled and the judgement disabled again is
+ * as it was before the apply, so neither its `(installed)` row nor its
+ * `(disabled)` row is reported; the failure that held it has its own row.
+ */
+function withoutUndoneEnables(
+  outcomes: PerEntryOutcome[],
+  scope: Scope,
+  disabled: readonly PluginRow[],
+): PluginRow[] {
+  const disabledKeys = new Set(
+    disabled.filter((row) => row.kind === "plugin-dependency-disabled").map(pluginKey),
   );
-  if (reported) {
-    return;
+  const isUndone = (outcome: PerEntryOutcome): outcome is PluginRow =>
+    outcome.kind === "plugin-enabled" &&
+    outcome.scope === scope &&
+    disabledKeys.has(pluginKey(outcome));
+  const undone = new Set(outcomes.filter(isUndone).map(pluginKey));
+  outcomes.splice(0, outcomes.length, ...outcomes.filter((outcome) => !isUndone(outcome)));
+  return disabled.filter((row) => !undone.has(pluginKey(row)));
+}
+
+function failedEnables(outcomes: readonly PerEntryOutcome[], scope: Scope): readonly string[] {
+  return keysOfKind(outcomes, scope, "plugin-enable-failed");
+}
+
+/** The plugins whose disable this apply already tried and was refused. */
+function refusedDisables(outcomes: readonly PerEntryOutcome[], scope: Scope): ReadonlySet<string> {
+  return new Set(keysOfKind(outcomes, scope, "plugin-disable-failed"));
+}
+
+function keysOfKind(
+  outcomes: readonly PerEntryOutcome[],
+  scope: Scope,
+  kind: "plugin-enable-failed" | "plugin-disable-failed",
+): string[] {
+  return outcomes.flatMap((outcome) =>
+    outcome.kind === kind && outcome.scope === scope ? [pluginKey(outcome)] : [],
+  );
+}
+
+function pluginKey(op: { readonly plugin: string; readonly marketplace: string }): string {
+  return `${op.plugin}@${op.marketplace}`;
+}
+
+/** The scope before the cascade: its state, and what the load-time check left unmet. */
+interface CascadeStart {
+  readonly state: ExtensionState;
+  readonly unsatisfied: readonly UnsatisfiedDeclaration[];
+}
+
+/**
+ * The cascade steps that did not land: every one, and the moves that failed on
+ * their own, with the reasons their rows gave.
+ */
+interface FailedSteps {
+  readonly all: Set<string>;
+  readonly own: Set<string>;
+}
+
+/** One step's rows, keyed so the judgement after the cascade can replace them. */
+interface StepReport {
+  readonly key: string;
+  readonly rows: readonly PerEntryOutcome[];
+  /** A row the judgement's `(disabled)` row replaces: the step did not run. */
+  readonly replaceable?: true;
+}
+
+/** One cascade step: a catalog move, a deferred enable, or both. */
+type CascadeStep =
+  | { readonly key: string; readonly move: PlannedMove; readonly enable?: PlannedPluginEnable }
+  | { readonly key: string; readonly move?: undefined; readonly enable: PlannedPluginEnable };
+
+/**
+ * IN-C: whether a move landed. A deferred record's move only refreshes its pin
+ * and answers `{already disabled}`; its enable decides. A move that landed on
+ * another version than the plan judged landed too: the judgement after the
+ * cascade measures it.
+ */
+function moveLanded(result: PluginUpdateOutcome, deferred: boolean): boolean {
+  if (result.partition === "skipped") {
+    return deferred && result.reasons.includes("already disabled");
   }
 
-  outcomes.push({
-    kind: "plugin-disable-failed",
-    scope,
-    marketplace,
-    plugin,
-    reason: "unreadable",
+  return result.partition !== "failed";
+}
+
+/**
+ * APPLY1-01: the cascade's steps in order, dependencies first: each move, and
+ * each deferred enable, which follows its own move (CR-03) or, with no move of
+ * its own, the steps it waits on.
+ */
+function cascadeSteps(
+  cascade: ConvergenceCascade,
+  deferred: readonly PlannedPluginEnable[],
+): readonly CascadeStep[] {
+  const enables = new Map(deferred.map((op) => [pluginKey(op), op]));
+  const moved = cascade.plan.moves.map((move): CascadeStep => {
+    const enable = enables.get(pluginKey(move));
+    return { key: pluginKey(move), move, ...(enable !== undefined && { enable }) };
+  });
+  const movedKeys = new Set(moved.map((step) => step.key));
+  const alone = deferred
+    .filter((op) => !movedKeys.has(pluginKey(op)))
+    .map((op): CascadeStep => ({ key: pluginKey(op), enable: op }));
+  return dependenciesFirst([...moved, ...alone], (step) => step.key, cascade.declarations);
+}
+
+/** What one cascade run needs besides the cascade. */
+interface CascadeRun {
+  readonly scope: Scope;
+  readonly deferred: readonly PlannedPluginEnable[];
+  /** The scope before the cascade, whose pins a failed deferred enable restores. */
+  readonly before: ExtensionState;
+  readonly failed: FailedSteps;
+  readonly reports: StepReport[];
+}
+
+/**
+ * APPLY1-01: runs the cascade's steps in order. A step that declares one that
+ * did not land is not run. A move reports `(skipped) {dependency failed}`; a
+ * deferred enable that does not run leaves its record as it was and reports
+ * nothing (WR-B).
+ */
+async function runCascade(
+  opts: ApplyReconcileOptions,
+  cascade: ConvergenceCascade,
+  run: CascadeRun,
+): Promise<void> {
+  const convergePlugin = createConvergeOperation(opts.hooksRouting, opts.completionCache);
+  for (const step of cascadeSteps(cascade, run.deferred)) {
+    if (
+      run.failed.all.has(step.key) ||
+      cascadeDependencies(cascade, step.key).some((dep) => run.failed.all.has(dep))
+    ) {
+      run.failed.all.add(step.key);
+      run.reports.push({ key: step.key, rows: dependencyFailedRows(step), replaceable: true });
+      continue;
+    }
+
+    // eslint-disable-next-line no-await-in-loop -- each step locks the scope (retries: 0)
+    await runStep(opts, convergePlugin, step, run);
+  }
+}
+
+/**
+ * The `(skipped) {dependency failed}` row of an enabled record's move whose
+ * dependency did not land.
+ */
+function dependencyFailedRows(step: CascadeStep): PerEntryOutcome[] {
+  // A deferred record stays disabled, as it was: no row (WR-B).
+  return step.move === undefined || step.enable !== undefined
+    ? []
+    : convergedMoveOutcomes(step.move, {
+        partition: "skipped",
+        name: step.move.plugin,
+        fromVersion: step.move.fromVersion,
+        notes: [],
+        reasons: ["dependency failed"],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+      });
+}
+
+/** The `(failed)` row of a move that did not land, with `reasons`. */
+function failedMoveRows(move: PlannedMove, reasons: readonly ContentReason[]): PerEntryOutcome[] {
+  return convergedMoveOutcomes(move, {
+    partition: "failed",
+    name: move.plugin,
+    fromVersion: move.fromVersion,
+    toVersion: move.toVersion,
+    notes: [],
+    reasons,
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
   });
 }
 
 /**
- * AMIG-01 / NFR-2: runs one scope's MCP move and turns any throw out of it
- * into a stopped row, never an `invalid-block` reconcile row, so the move
- * cannot abort the reconcile of either scope.
+ * Runs one step and records its rows and whether it landed. A deferred
+ * record's move refreshes its pin and its enable then materializes the new
+ * version, so a failed enable is a failed move: its pin goes back to what it
+ * was (WR-C), and it reports the move's `(failed)` row. A landed one reports
+ * the net `(updated)` row (WR-02).
  */
-async function migrateScopeIsolated(
+async function runStep(
+  opts: ApplyReconcileOptions,
+  convergePlugin: ReturnType<typeof createConvergeOperation>,
+  step: CascadeStep,
+  run: CascadeRun,
+): Promise<void> {
+  if (step.move === undefined) {
+    const rows: PerEntryOutcome[] = [];
+    if (!(await enableStep(opts, step.enable, rows))) {
+      run.failed.all.add(step.key);
+    }
+
+    run.reports.push({ key: step.key, rows, replaceable: true });
+    return;
+  }
+
+  const move = step.move;
+  const collect = { requested: false };
+  // D-10 / D-25: a move whose revision did not change exists because its
+  // supported set grew, so the runner re-materializes the recorded revision.
+  const rematerialize = !move.revisionChanged;
+  const result = await convergePlugin({
+    plugin: move.plugin,
+    marketplace: move.marketplace,
+    scope: run.scope,
+    cwd: opts.cwd,
+    partial: move.partial,
+    rematerialize,
+    // WR-3: a held-down record's clones are collected once its enable is known.
+    ...(step.enable !== undefined && { cleanupClones: deferCollection(collect) }),
+  });
+  const enable = step.enable;
+  if (!moveLanded(result, enable !== undefined) || enable === undefined) {
+    const landed = moveLanded(result, false);
+    if (!landed) {
+      run.failed.all.add(step.key);
+      run.failed.own.add(step.key);
+    }
+
+    run.reports.push({
+      key: step.key,
+      rows: rematerialize ? grownMoveOutcomes(move, result) : convergedMoveOutcomes(move, result),
+    });
+    return;
+  }
+
+  const enabled: PerEntryOutcome[] = [];
+  const landed = await enableStep(opts, enable, enabled);
+  if (!landed) {
+    await restorePin(opts, run.scope, move, run.before);
+  }
+
+  if (collect.requested) {
+    await collectClones(locationsFor(run.scope, opts.cwd));
+  }
+
+  if (landed) {
+    // A growth-only move keeps the version, so its enable row is the net row.
+    run.reports.push({ key: step.key, rows: rematerialize ? enabled : [enabledMoveOutcome(move)] });
+    return;
+  }
+
+  const reasons = enabled
+    .filter(
+      (outcome): outcome is PluginEnableFailedOutcome => outcome.kind === "plugin-enable-failed",
+    )
+    .map((outcome) => outcome.reason)
+    .filter(isContentReason);
+  run.failed.all.add(step.key);
+  run.reports.push({ key: step.key, rows: failedMoveRows(move, reasons) });
+}
+
+/**
+ * The clone collection a held-down record's move defers to `runStep`: the
+ * runner asks for it only when the pin's commit moved.
+ */
+function deferCollection(collect: { requested: boolean }): () => Promise<void> {
+  return () => {
+    collect.requested = true;
+    return Promise.resolve();
+  };
+}
+
+/**
+ * D-19-01 / Review 4 WR-2: clone cleanup is hygienic, as the runner's own is
+ * (`update-preflight.ts::refreshDisabledPluginUpdate`): a failure is traced and
+ * a later lifecycle operation retries it.
+ */
+async function collectClones(locations: ScopedLocations): Promise<void> {
+  try {
+    await garbageCollectPluginClones(locations);
+  } catch (err) {
+    hookDebugLog(`apply: clone cleanup failed: ${errorMessage(err)}`, "reconcile");
+  }
+}
+
+const NON_CONTENT_REASONS: ReadonlySet<string> = new Set([
+  "marketplace not added",
+  "marketplace not added to user scope",
+  "marketplace not added to project scope",
+]);
+
+function isContentReason(reason: Reason): reason is ContentReason {
+  return !NON_CONTENT_REASONS.has(reason);
+}
+
+/** Enables one record; answers whether it landed. */
+async function enableStep(
+  opts: ApplyReconcileOptions,
+  op: PlannedPluginEnable,
+  outcomes: PerEntryOutcome[],
+): Promise<boolean> {
+  await applyPluginToggles(opts, [op], outcomes, ENABLE_AXES);
+  return outcomes.every((outcome) => outcome.kind === "plugin-enabled");
+}
+
+/** The record fields a pin refresh rewrites (`update-preflight.ts::refreshDisabledRecord`). */
+const PIN_FIELDS: ReadonlySet<string> = new Set([
+  "version",
+  "resolvedSource",
+  "resolvedSha",
+  "compatibility",
+  "updatedAt",
+]);
+
+/**
+ * WR-C: puts back the pin a deferred record had before its move refreshed it,
+ * when its enable then failed, so the record keeps naming the version it
+ * holds, as a record lifted in the toggle step does.
+ */
+async function restorePin(
   opts: ApplyReconcileOptions,
   scope: Scope,
-  readResult: ScopeReadResult,
-  rows: McpMigrationRow[],
-  notices: McpConfigNotice[],
+  move: PlannedMove,
+  before: ExtensionState,
 ): Promise<void> {
-  try {
-    await (opts.migrateMcpEntries ?? migrateLegacyMcpEntries)({
-      scope,
-      cwd: opts.cwd,
-      plan: readResult.plan,
-      reason: opts.reason,
-      rows,
-      notices,
-    });
-  } catch (err) {
-    rows.push({ kind: "stopped", scope, detail: redactAbsolutePaths(errorMessage(err)) });
+  const key = pluginKey(move);
+  const pins = new Map(
+    Object.values(before.marketplaces).flatMap((mp) =>
+      Object.entries(mp.plugins).map(([plugin, record]) => [
+        `${plugin}@${mp.name}`,
+        Object.fromEntries(Object.entries(record).filter(([field]) => PIN_FIELDS.has(field))),
+      ]),
+    ),
+  );
+  await withStateGuard(locationsFor(scope, opts.cwd), (fresh) => {
+    for (const mp of Object.values(fresh.marketplaces)) {
+      for (const [plugin, record] of Object.entries(mp.plugins)) {
+        if (`${plugin}@${mp.name}` === key) {
+          delete record.resolvedSha;
+          Object.assign(record, pins.get(key));
+        }
+      }
+    }
+  });
+}
+
+/** What the judgement after the cascade reads, and where it writes. */
+interface CascadeJudgement {
+  readonly cascade: ConvergenceCascade;
+  readonly before: CascadeStart;
+  readonly failed: FailedSteps;
+  /** Whether a step ran, so the state may differ from `before.state`. */
+  readonly ran: boolean;
+  /** Plugins whose disable this apply already tried and was refused. */
+  readonly refused: ReadonlySet<string>;
+  readonly disabled: PluginRow[];
+  /** Filled with the plugins that end the apply enabled. */
+  readonly enabledAtEnd: Set<string>;
+}
+
+/**
+ * APPLY1-01 / LOAD-01: the one judgement that keeps the invariant. Once the
+ * cascade has run, every enabled plugin of the scope is judged by
+ * `judgeFinalScope`: its catalog and installed-copy declarations against each
+ * dependency's recorded version and enabled state, to a fixed point, so a
+ * disable reaches every plugin above it. Each plugin it holds is disabled with
+ * the marker; the remedy names the move that failed (its own, or the
+ * dependency's) or is the ordinary LOAD-01 one.
+ *
+ * Two inputs are this run's: a path-source dependent whose own move failed
+ * runs files the marketplace no longer holds, so its old declarations are
+ * unknown, and it is held when the dependency it needed moved for it (its
+ * catalog range was unmet before). A plugin whose disable this apply already
+ * tried and was refused is not tried again. A judgement whose walk fails
+ * disables nothing, as the load-time check does (D-05-07).
+ */
+async function judgeScopeAfterCascade(
+  reader: ReconcileStateReader,
+  opts: ApplyReconcileOptions,
+  scope: Scope,
+  judged: CascadeJudgement,
+): Promise<void> {
+  const { cascade, before, failed } = judged;
+  const locations = locationsFor(scope, opts.cwd);
+  const state = judged.ran ? await reader.loadState(locations.extensionRoot) : before.state;
+  const seeded: UnsatisfiedDeclaration[] = [];
+  for (const mp of Object.values(state.marketplaces)) {
+    for (const [plugin, record] of Object.entries(mp.plugins)) {
+      const key = `${plugin}@${mp.name}`;
+      // eslint-disable-next-line no-await-in-loop -- one copy check per failed dependent
+      if (failed.own.has(key) && !(await isPinnedCopy(locations, record.resolvedSource))) {
+        seeded.push(...movedFor(key, cascade, before.unsatisfied, failed));
+      }
+    }
+  }
+
+  const after = await judgeFinalScope({
+    state,
+    locations,
+    installedDeclarations: installedCopyReader(locations),
+    seeded,
+  });
+  const ops = enabledHolds(after, state, scope).filter((op) => !judged.refused.has(pluginKey(op)));
+  const enabledNow = Object.values(state.marketplaces).flatMap((mp) =>
+    Object.entries(mp.plugins).flatMap(([plugin, record]) =>
+      record.enabled ? [`${plugin}@${mp.name}`] : [],
+    ),
+  );
+  await applyDependencyDisables(opts, scope, ops, judged.disabled, (op, version) => {
+    if (failed.own.has(pluginKey(op))) {
+      return cascadeDisabledOutcome(op, version, "own-move");
+    }
+
+    return failed.all.has(op.dependency)
+      ? cascadeDisabledOutcome(op, version, "dependency-failed")
+      : dependencyDisabledOutcome(op, version);
+  });
+  const disabledNow = new Set(
+    judged.disabled.filter((row) => row.kind === "plugin-dependency-disabled").map(pluginKey),
+  );
+  for (const key of enabledNow.filter((key) => !disabledNow.has(key))) {
+    judged.enabledAtEnd.add(key);
   }
 }
 
 /**
- * RECON-01..05: the load-time apply orchestrator. Fans out across both
+ * The declaration a path-source dependent's failed move leaves unknown: the
+ * dependency that moved for it, whose catalog range the scope left unmet
+ * before the cascade.
+ */
+function movedFor(
+  key: string,
+  cascade: ConvergenceCascade,
+  unsatisfied: readonly UnsatisfiedDeclaration[],
+  failed: FailedSteps,
+): UnsatisfiedDeclaration[] {
+  const moved = new Set(cascade.plan.moves.map(pluginKey));
+  return unsatisfied
+    .filter(
+      (entry) =>
+        entry.dependent === key && moved.has(entry.dependency) && !failed.all.has(entry.dependency),
+    )
+    .slice(0, 1)
+    .map((entry) => ({ dependent: key, dependency: entry.dependency, kind: "out-of-range" }));
+}
+
+/**
+ * WR-B: the cascade's rows, one per plugin and outcome. A plugin the judgement
+ * disabled reports its `(disabled)` row in place of a step that did not run;
+ * a hold or decline row is kept only for a plugin that ends enabled.
+ */
+function cascadeRows(
+  cascade: ConvergenceCascade,
+  reports: readonly StepReport[],
+  judged: { readonly disabled: readonly PluginRow[]; readonly enabledAtEnd: ReadonlySet<string> },
+): PerEntryOutcome[] {
+  const { disabled, enabledAtEnd } = judged;
+  const byKey = new Map<string, PluginRow[]>();
+  for (const row of disabled) {
+    byKey.set(pluginKey(row), [...(byKey.get(pluginKey(row)) ?? []), row]);
+  }
+
+  const rows: PerEntryOutcome[] = [];
+  for (const report of reports) {
+    const replacement = byKey.get(report.key) ?? [];
+    rows.push(
+      ...(report.replaceable === true && replacement.length > 0 ? [] : report.rows),
+      ...replacement,
+    );
+    byKey.delete(report.key);
+  }
+
+  const holds = blockedMoveOutcomes(cascade.plan).filter((row) => enabledAtEnd.has(pluginKey(row)));
+  return [...rows, ...holds, ...[...byKey.values()].flat()];
+}
+
+/** A row that names one plugin, as every disable row does. */
+type PluginRow = Extract<PerEntryOutcome, { readonly plugin: string }>;
+
+/** The first unsatisfied declaration of every enabled plugin `verdict` holds. */
+function enabledHolds(
+  verdict: ScopeSatisfactionVerdict,
+  state: ExtensionState,
+  scope: Scope,
+): PlannedDependencyDisable[] {
+  if (!verdict.ok) {
+    return [];
+  }
+
+  const ops: PlannedDependencyDisable[] = [];
+  for (const mp of Object.values(state.marketplaces)) {
+    for (const [plugin, record] of Object.entries(mp.plugins)) {
+      const held = verdict.unsatisfied.find((entry) => entry.dependent === `${plugin}@${mp.name}`);
+      if (record.enabled && held !== undefined) {
+        ops.push({ ...held, scope, plugin, marketplace: mp.name });
+      }
+    }
+  }
+
+  return ops;
+}
+
+/** The file, scope and closed-set reason an `invalid-block` row reports. */
+function failureKey(outcome: PerEntryOutcome): string | undefined {
+  return outcome.kind === "invalid-block"
+    ? `${outcome.scope} ${outcome.basename} ${outcome.reason}`
+    : undefined;
+}
+
+/**
+ * WR-01 / NFR-3: the convergence's failure rows that no other step of the
+ * scope already reported. A state file that turned unreadable after the read
+ * pass also fails the closing routing rebuild, and that fault is one row.
+ */
+function unreportedFailures(
+  outcomes: readonly PerEntryOutcome[],
+  failures: readonly PerEntryOutcome[],
+): PerEntryOutcome[] {
+  const reported = new Set(outcomes.map(failureKey));
+  return failures.filter((failure) => !reported.has(failureKey(failure)));
+}
+
+/**
+ * D-08 / WCONV-03: a growth-only move that re-materialized reports the
+ * backfill row: `(installed)` or `(partially-installed)` at the recorded
+ * version, led by `{components now supported}`, so it never reads as a fresh
+ * install. Any other result reports what a catalog move reports.
+ */
+function grownMoveOutcomes(move: PlannedMove, result: PluginUpdateOutcome): PerEntryOutcome[] {
+  if (result.partition !== "updated") {
+    return convergedMoveOutcomes(move, result);
+  }
+
+  const unsupported = result.partialDegrade?.kinds ?? [];
+  return [
+    {
+      kind: "plugin-backfilled",
+      scope: move.scope,
+      marketplace: move.marketplace,
+      plugin: move.plugin,
+      version: result.toVersion,
+      dependencies: declaredDependencies(result),
+      installable: unsupported.length === 0,
+      unsupported,
+      ...installedRowDegradation(result),
+      ...carriedMcpConfigNotices(result),
+    },
+  ];
+}
+
+/**
+ * RECON-01..05: the reconcile apply orchestrator. Fans out across both
  * scopes project-first (or just the explicit scope when `opts.scope` is
  * set), per-scope read pass under withLockedStateTransaction (migrate ->
  * load -> plan), per-scope apply pass with NO outer lock, single notify()
- * emission per invocation (IL-2) -- empty-and-clean reconciles are SILENT
- * (NFR-2 / A4).
+ * emission per invocation (IL-2). An empty-and-clean pass reports
+ * `Apply: nothing to change.` and writes nothing (APL-01 / D-08).
  *
  * Returns `void`; the side effects are the orchestrator-driven state
- * mutations + the single notify() call (when non-empty).
+ * mutations + the single notify() call.
  */
 async function applyReconcileWithReader(
   reader: ReconcileStateReader,
@@ -1408,106 +1784,111 @@ async function applyReconcileWithReader(
   // Accumulate outcomes across both scopes; the projection sorts by
   // compareByNameThenScope (project-before-user per MSG-GR-3) so the final
   // cascade emits in canonical order regardless of which scope ran first.
-  const outcomes: PerEntryOutcome[] = [];
-  const migrationRows: McpMigrationRow[] = [];
-  const migrationNotices: McpConfigNotice[] = [];
+  const accumulators: ScopePassAccumulators = {
+    outcomes: [],
+    migration: { rows: [], notices: [] },
+  };
 
-  for (const scope of scopes) {
-    // WR-01: per-scope failure isolation. A read-pass
-    // throw (corrupt/unparseable state.json, StateLockHeldError from a
-    // concurrent process, an EACCES on the lock file) must NOT discard the
-    // sibling scope's already-accumulated outcomes or skip its reconcile --
-    // the scopes lock independently. The throw is coerced into the
-    // documented `invalid-block` state-load failure arm (basename subject,
-    // closed-set reason) so it surfaces as a structured `(failed)` row in
-    // the single cascade instead of aborting applyReconcile wholesale.
-    let readResult: ScopeReadResult;
-    try {
-      // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing
-      readResult = await readPassForScope(reader, scope, opts.cwd);
-    } catch (err) {
-      // S3 / PR #51: when the throw came from migrateFirstRunConfig's
-      // inner saveConfig (EACCES on the scope dir blocking the atomic
-      // tmp+rename), attribute to claude-plugins.json -- the file the
-      // load pass was trying to WRITE, not state.json. Without this special
-      // case, every read-pass throw would attribute to state.json regardless
-      // of which file actually failed.
-      const isMigrateSave = err instanceof MigrateConfigSaveError;
-      const basename = isMigrateSave ? path.basename(err.configFilePath) : "state.json";
-      // Unwrap the cause for classification so the closed-set reason
-      // (`permission denied`, `unparseable`, etc.) reflects the underlying
-      // error, not the sentinel.
-      const classifiable = isMigrateSave ? err.cause : err;
-      const causeText = errorMessage(classifiable);
-      outcomes.push({
-        kind: "invalid-block",
-        scope,
-        basename,
-        reason: classifyReadPassThrow(classifiable),
-        cause: new Error(redactAbsolutePaths(causeText)),
-      });
-      continue;
-    }
-
-    // AMIG-01: the MCP move runs before the plan is applied, also when the
-    // config is invalid. A scope whose read pass threw skips it above.
-    // eslint-disable-next-line no-await-in-loop -- each scope's move takes that scope's lock
-    await migrateScopeIsolated(opts, scope, readResult, migrationRows, migrationNotices);
-
-    // CFG-03 / state-load invalid rows surfaced first; the plan is undefined
-    // for that scope so we skip the apply pass.
-    if (readResult.invalidOutcomes.length > 0) {
-      outcomes.push(...readResult.invalidOutcomes);
-      continue;
-    }
-
-    if (readResult.plan !== undefined) {
-      // eslint-disable-next-line no-await-in-loop -- each scope's apply edits shared hooks routing
-      await applyPlan(reader, opts, readResult.plan, outcomes);
-    }
-
-    reportUnreadableDeclarer(scope, readResult, outcomes);
-
-    // BFILL-01 / BFILL-02 / D-68-03: load-time backfill sibling step. Runs in
-    // the no-outer-lock apply region (CR-01) after applyPlan so re-materialized
-    // promotions ride the same single cascade (RECON-04). Gated on the version
-    // stamp; stamps the running version whenever the gate opened. WR-01: a
-    // transient lock-held / EACCES throw is coerced to a structured row so it
-    // never aborts the cascade.
-    // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing
-    await applyBackfillForScopeIsolated(opts, scope, readResult, outcomes);
-
-    // DISP-02: after the per-scope apply pass (or the no-plan arm), rebuild
-    // this scope's routing tables so the next Pi event fires against a
-    // bucket reflecting the post-reconcile state. WR-01-style isolation:
-    // a transient lock-held / EACCES throw is captured into a structured
-    // `invalid-block` outcome via `rebuildScopeRoutingTableIsolated`.
-    // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing
-    await rebuildScopeRoutingTableIsolated(scope, opts.cwd, opts.hooksRouting, outcomes);
+  try {
+    await applyScopes(reader, opts, scopes, accumulators);
+  } catch (err) {
+    // APPLYTHROW-01: a GHB-03 throw ends the pass after earlier steps have
+    // committed, so their rows, the migration notice, and the `/reload` hint
+    // go out before the throw reaches the caller.
+    reportScopePasses(opts, accumulators);
+    throw err;
   }
 
-  // AMIG-03: the one migration notice for both scopes comes before the
-  // reconcile cascade and speaks even when reconcile has no outcome.
-  notifyMcpMigration(opts.ctx, opts.run, { rows: migrationRows, notices: migrationNotices });
+  // AMIG-03 / IL-2 / RECON-04: the one migration notice, then the single
+  // cascade through RECONCILE_APPLIED_CONTEXT. An empty-and-clean pass sends
+  // the apply-empty advisory instead (APL-01 / D-08).
+  if (!reportScopePasses(opts, accumulators)) {
+    // AAP-02 / D-07: an autoapply load with nothing to change keeps the load's
+    // silence (RECON-05); the advisory answers the command.
+    if (opts.run.origin.kind !== "load") {
+      notify(opts.ctx, opts.run, { kind: "reconcile-pending-empty", command: "apply" });
+    }
+  }
+}
 
-  // Empty-and-clean reconcile -> SILENT (NFR-2 / A4 / RECON-05). The load-
-  // time invariant is that a no-op reconcile produces zero notifications;
-  // the operator only hears from the extension when something happened.
-  if (outcomes.length === 0) {
+/**
+ * Runs each scope's read pass, plan, convergence, and close in turn,
+ * project first, collecting rows into `accumulators`.
+ */
+async function applyScopes(
+  reader: ReconcileStateReader,
+  opts: ApplyReconcileOptions,
+  scopes: readonly Scope[],
+  accumulators: ScopePassAccumulators,
+): Promise<void> {
+  const outcomes = accumulators.outcomes;
+  for (const scope of scopes) {
+    // WR-01 / AMIG-01 / CFG-03: a read-pass throw or an invalid config stops
+    // this scope with its rows and never the sibling scope; the MCP move runs
+    // before the plan is applied (`openScopePass`).
+    // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing
+    const readResult = await openScopePass({
+      ...accumulators,
+      reader,
+      scope,
+      cwd: opts.cwd,
+      migrateMcpEntries: opts.migrateMcpEntries,
+    });
+    if (readResult === undefined) {
+      continue;
+    }
+
+    const convergeFailures: PerEntryOutcome[] = [];
+    try {
+      // eslint-disable-next-line no-await-in-loop -- each scope's apply edits shared hooks routing
+      await applyAndConverge(reader, opts, scope, readResult, { outcomes, convergeFailures });
+    } finally {
+      // REC-05 / DLS-01 / DISP-02: after the convergence, so a failed move for
+      // the same plugin suppresses the unreadable-declarer row as an apply-pass
+      // failure does; the routing rebuild reflects the post-reconcile state,
+      // also when the pass ends on a GHB-03 throw (IN-A).
+      // eslint-disable-next-line no-await-in-loop -- each scope's pass edits shared hooks routing
+      await closeScopePass(scope, readResult, opts.cwd, opts.hooksRouting, outcomes);
+      outcomes.push(...unreportedFailures(outcomes, convergeFailures));
+    }
+  }
+}
+
+/** One scope's plan, then its catalog convergence (APL-02 / D-08). */
+async function applyAndConverge(
+  reader: ReconcileStateReader,
+  opts: ApplyReconcileOptions,
+  scope: Scope,
+  readResult: ScopeReadResult,
+  sinks: { readonly outcomes: PerEntryOutcome[]; readonly convergeFailures: PerEntryOutcome[] },
+): Promise<void> {
+  if (readResult.plan === undefined) {
     return;
   }
 
-  // Single CASCADE notify() per applyReconcile (IL-2 / RECON-04). The
-  // projection T-55-02-02 contract: consumes only outcome.reason; raw
-  // error.message never reaches the notify body.
-  //
-  // D-02 / MOD-03: thread RECONCILE_APPLIED_CONTEXT so the realized transition
-  // rows resolve through reconcile's own row policies. The
-  // `reconcile-applied-cascade` standalone envelope
-  // (its content-derived severity + the load-time silence contract) stays
-  // central via emitReconcileAppliedContextCascade.
-  const message = buildReconcileAppliedCascade(outcomes);
-  notifyReconcileAppliedWithContext(opts.ctx, opts.run, RECONCILE_APPLIED_CONTEXT, message);
+  const deferred = await applyPlan(
+    reader,
+    opts,
+    { plan: readResult.plan, deferredEnables: readResult.deferredEnables ?? [] },
+    sinks.outcomes,
+  );
+  await convergeScope(reader, opts, scope, deferred, sinks.outcomes, sinks.convergeFailures);
+}
+
+/**
+ * Sends the migration notice and the cascade, then the post-cascade warnings
+ * and MCP config notices. Returns whether the cascade was sent; with no
+ * cascade it sends no warning or notice either.
+ */
+function reportScopePasses(
+  opts: ApplyReconcileOptions,
+  accumulators: ScopePassAccumulators,
+): boolean {
+  if (!notifyScopePasses(opts.ctx, opts.run, accumulators)) {
+    return false;
+  }
+
+  const outcomes = accumulators.outcomes;
 
   // S2 / PR #51: post-cascade hygiene warnings. The cascade carries plugin
   // transition rows (installed/uninstalled/failed) under IL-2's single-
@@ -1525,16 +1906,17 @@ async function applyReconcileWithReader(
   surfacePostCommitWarnings(opts, outcomes);
 
   // AFILE-04: the MCP config notices every orchestrated operation returned,
-  // shown after the cascade rows they explain. The empty-reconcile return
-  // above keeps a reconcile with no outcomes silent (RECON-05).
+  // shown after the cascade rows they explain. The empty-pass return above
+  // sends none, since a pass with no outcome carries no notice.
   surfaceMcpConfigNotices(opts, outcomes);
+  return true;
 }
 
 /**
  * Creates a reconcile apply operation with one required selected-state reader.
  * The single production composition of it lives in the extension entry point,
  * which binds `loadState` once per extension load and hands the operation to
- * its `resources_discover` handler.
+ * the `apply` command (APL-01).
  */
 export function createApplyReconcile(
   reader: ReconcileStateReader,
@@ -1542,53 +1924,6 @@ export function createApplyReconcile(
   return async function applyReconcile(opts: ApplyReconcileOptions): Promise<void> {
     await applyReconcileWithReader(reader, opts);
   };
-}
-
-/**
- * DISP-02: rebuild the per-scope routing tables under a brief read-only
- * `withLockedStateTransaction` so the rebuild observes a consistent state
- * snapshot. No `tx.save()` -- the rebuild is a pure cache walk that does
- * not mutate state. A transient lock-held / EACCES throw propagates so the
- * caller's WR-01 isolation arm coerces it into a structured
- * `invalid-block` outcome.
- *
- * Pristine-scope gate (WR-05): skip the rebuild entirely when state.json
- * does not exist -- the lock acquisition itself would mkdir the
- * extensionRoot, violating the "clean reconcile creates no unsolicited
- * files" contract. A scope without a state.json has zero installed plugins
- * to register anyway.
- */
-async function rebuildScopeRoutingTable(
-  scope: Scope,
-  cwd: string,
-  hooksRouting: ApplyReconcileOptions["hooksRouting"],
-): Promise<void> {
-  const loc = locationsFor(scope, cwd);
-  if (!(await pathExists(loc.stateJsonPath))) {
-    return;
-  }
-
-  await withLockedStateTransaction(loc, async (_tx) => {
-    hooksRouting.rebuildRoutingTables();
-    // NO tx.save() -- read-only snapshot acquisition.
-    await Promise.resolve();
-  });
-}
-
-/**
- * WR-01-isolated wrapper around `rebuildScopeRoutingTable`. A transient
- * lock-held / EACCES throw is captured as a structured `invalid-block`
- * outcome (subject `state.json`, closed-set reason) so the rebuild's
- * failure surfaces alongside the other per-scope outcomes instead of
- * aborting `applyReconcile` wholesale.
- */
-async function rebuildScopeRoutingTableIsolated(
-  scope: Scope,
-  cwd: string,
-  hooksRouting: ApplyReconcileOptions["hooksRouting"],
-  outcomes: PerEntryOutcome[],
-): Promise<void> {
-  await runScopeIsolated(scope, outcomes, () => rebuildScopeRoutingTable(scope, cwd, hooksRouting));
 }
 
 function surfacePostCommitWarnings(

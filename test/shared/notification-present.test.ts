@@ -49,7 +49,7 @@ function infoPresentation(
 ): CascadePresentation {
   return {
     kind: "cascade",
-    envelope: { severity: "info", needsReload: true, noOp: false },
+    envelope: { severity: "info", needsReload: true, needsApply: false, noOp: false },
     marketplaces: [
       {
         name: "mp",
@@ -119,6 +119,7 @@ describe("presentCascade", () => {
         severity: "error",
         summary: "A plugin operation has failed.",
         needsReload: true,
+        needsApply: false,
         noOp: false,
       },
       marketplaces: [
@@ -159,7 +160,7 @@ describe("presentCascade", () => {
     };
     const expectedPresentation: CascadePresentation = {
       kind: "cascade",
-      envelope: { severity: "info", needsReload: false, noOp: false },
+      envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
       marketplaces: [],
       advisories: ["advice"],
       retainedWorkflows: [{ name: "wf", envelopeCount: 2 }],
@@ -180,7 +181,7 @@ describe("presentCascade", () => {
     };
     const expectedPresentation: CascadePresentation = {
       kind: "cascade",
-      envelope: { severity: "info", needsReload: false, noOp: false },
+      envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
       marketplaces: [],
       advisories: ["clone https://***@host/o/r failed", "plain advice"],
     };
@@ -196,7 +197,7 @@ describe("presentCascade", () => {
     // arrange
     const expectedPresentation: CascadePresentation = {
       kind: "cascade",
-      envelope: { severity: "info", needsReload: false, noOp: false },
+      envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
       marketplaces: [],
     };
 
@@ -233,6 +234,7 @@ describe("presentCascade", () => {
         severity: "error",
         summary: "A plugin operation has failed.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
       },
       marketplaces: [
@@ -282,7 +284,7 @@ describe("presentUpdateNoOp", () => {
     const rowPolicies: RowPolicyMap = { installed: { markers: true, contentReasons: false } };
     const expectedPresentation: CascadePresentation = {
       kind: "cascade",
-      envelope: { severity: "info", needsReload: false, noOp: true },
+      envelope: { severity: "info", needsReload: false, needsApply: false, noOp: true },
       marketplaces: [
         {
           name: "mp",
@@ -320,7 +322,8 @@ describe("presentReconcileApplied", () => {
       envelope: {
         severity: "error",
         summary: "A plugin operation has failed.",
-        needsReload: false,
+        needsReload: true,
+        needsApply: false,
         noOp: false,
       },
       marketplaces: [
@@ -361,7 +364,8 @@ describe("presentReconcileApplied", () => {
       kind: "reconcile-applied-cascade",
       envelope: {
         severity: "info",
-        needsReload: false,
+        needsReload: true,
+        needsApply: false,
         noOp: false,
         tally: { label: "Reconcile", failures: 0, warnings: 0, success: { count: 1 } },
       },
@@ -438,7 +442,7 @@ describe("presentNotification", () => {
     // assert
     assert.deepStrictEqual(presentation, {
       kind: "cascade",
-      envelope: { severity: "info", needsReload: true, noOp: false },
+      envelope: { severity: "info", needsReload: true, needsApply: false, noOp: false },
       marketplaces: [
         {
           name: "mp",
@@ -467,12 +471,12 @@ describe("presentNotification", () => {
     // assert
     assert.deepStrictEqual(presentation, {
       kind: "cascade",
-      envelope: { severity: "info", needsReload: false, noOp: false },
+      envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
       marketplaces: [],
     } satisfies CascadePresentation);
   });
 
-  test("presents an applied reconcile without a reload", () => {
+  test("presents an applied reconcile with the reload its row stamps", () => {
     // arrange
     const message = {
       kind: "reconcile-applied-cascade",
@@ -500,7 +504,7 @@ describe("presentNotification", () => {
     // assert
     assert.deepStrictEqual(presentation, {
       kind: "reconcile-applied-cascade",
-      envelope: { severity: "info", needsReload: false, noOp: false },
+      envelope: { severity: "info", needsReload: true, needsApply: false, noOp: false },
       marketplaces: [
         {
           name: "mp",
@@ -529,7 +533,7 @@ describe("presentNotification", () => {
     // assert
     assert.deepStrictEqual(presentation, {
       kind: "marketplace-info",
-      envelope: { severity: "info", needsReload: false, noOp: false },
+      envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
       message,
     });
     assert.ok("message" in presentation);
@@ -553,6 +557,7 @@ describe("presentNotification", () => {
         severity: "error",
         summary: "A plugin operation has failed.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
       },
       message,
@@ -574,7 +579,7 @@ describe("presentNotification", () => {
     // assert
     assert.deepStrictEqual(presentation, {
       kind: "marketplace-info",
-      envelope: { severity: "info", needsReload: false, noOp: false },
+      envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
       message: {
         kind: "marketplace-info",
         name: "mp",
@@ -617,7 +622,7 @@ describe("presentNotification", () => {
     // assert
     assert.deepStrictEqual(presentation, {
       kind: "marketplace-info-cascade",
-      envelope: { severity: "info", needsReload: false, noOp: false },
+      envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
       message: {
         kind: "marketplace-info-cascade",
         blocks: [
@@ -654,7 +659,7 @@ describe("presentNotification", () => {
     // assert
     assert.deepStrictEqual(presentation, {
       kind: "plugin-info",
-      envelope: { severity: "info", needsReload: false, noOp: false },
+      envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
       message: {
         kind: "plugin-info",
         marketplaceName: "mp",
@@ -695,7 +700,7 @@ describe("presentNotification", () => {
     // assert
     assert.deepStrictEqual(presentation, {
       kind: "plugin-info-cascade",
-      envelope: { severity: "info", needsReload: false, noOp: false },
+      envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
       message: {
         kind: "plugin-info-cascade",
         blocks: [
@@ -723,6 +728,7 @@ describe("presentNotification", () => {
     // arrange
     const message = {
       kind: "reconcile-pending-empty",
+      command: "pending",
       advisories: ["retained https://user:tok@host/o/r staging"],
       retainedWorkflows: [{ name: "wf" }],
     } satisfies ReconcilePendingEmptyMessage;
@@ -733,9 +739,10 @@ describe("presentNotification", () => {
     // assert
     assert.deepStrictEqual(presentation, {
       kind: "reconcile-pending-empty",
-      envelope: { severity: "info", needsReload: false, noOp: false },
+      envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
       message: {
         kind: "reconcile-pending-empty",
+        command: "pending",
         advisories: ["retained https://***@host/o/r staging"],
         retainedWorkflows: [{ name: "wf" }],
       },
@@ -763,12 +770,12 @@ describe("presentNotification", () => {
     assert.deepStrictEqual(presentations, [
       {
         kind: "marketplace-info-cascade",
-        envelope: { severity: "info", needsReload: false, noOp: false },
+        envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
         message: marketplaces,
       },
       {
         kind: "plugin-info-cascade",
-        envelope: { severity: "info", needsReload: false, noOp: false },
+        envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
         message: plugins,
       },
     ]);
@@ -776,7 +783,10 @@ describe("presentNotification", () => {
 
   test("carries a pending-empty message without advisories by identity", () => {
     // arrange
-    const message = { kind: "reconcile-pending-empty" } satisfies ReconcilePendingEmptyMessage;
+    const message = {
+      kind: "reconcile-pending-empty",
+      command: "apply",
+    } satisfies ReconcilePendingEmptyMessage;
 
     // act
     const presentation = presentNotification(runWithAllLoaded(), message);
@@ -790,6 +800,7 @@ describe("presentNotification", () => {
     // arrange
     const pending = {
       kind: "reconcile-pending-empty",
+      command: "pending",
       advisories: ["note"],
     } satisfies ReconcilePendingEmptyMessage;
     const prune = { kind: "prune-empty", scope: "project" } satisfies PruneEmptyMessage;
@@ -804,12 +815,12 @@ describe("presentNotification", () => {
     assert.deepStrictEqual(presentations, [
       {
         kind: "reconcile-pending-empty",
-        envelope: { severity: "info", needsReload: false, noOp: false },
+        envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
         message: pending,
       },
       {
         kind: "prune-empty",
-        envelope: { severity: "info", needsReload: false, noOp: false },
+        envelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
         message: prune,
       },
     ]);
@@ -847,6 +858,7 @@ describe("presentNotification", () => {
           severity: "error",
           summary: "A marketplace operation has failed.",
           needsReload: false,
+          needsApply: false,
           noOp: false,
         },
         message,
@@ -879,6 +891,7 @@ describe("presentNotification", () => {
         severity: "error",
         summary: "A marketplace operation has failed.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
       },
       message: {
@@ -910,6 +923,7 @@ describe("presentNotification", () => {
         severity: "warning",
         summary: "Prune committed; finalization needs attention.",
         needsReload: true,
+        needsApply: false,
         noOp: false,
       },
       scope: "project",
@@ -932,6 +946,7 @@ describe("presentNotification", () => {
         severity: "warning",
         summary: "Prune committed; finalization needs attention.",
         needsReload: true,
+        needsApply: false,
         noOp: false,
       },
       scope: "user",

@@ -247,7 +247,7 @@ test("adds the canonical marketplace and enables autoupdate on a clean user scop
 test("converges on a second bootstrap without changing the recorded state or the tree", async (t) => {
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "repeat");
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(3);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(4);
   const { gitOps, clonedUrls } = createBootstrapGitOps();
   const completionCache = createCompletionCache();
 
@@ -274,28 +274,29 @@ test("converges on a second bootstrap without changing the recorded state or the
   assert.deepStrictEqual(notifications, [
     { message: "● claude-plugins-official [user] (added)" },
     { message: "● claude-plugins-official [user] <autoupdate>" },
-    // The duplicate-name error is swallowed, so the re-run's only signal is
-    // the idempotent autoupdate row; its benign reason routes to info, which
-    // the renderer emits with no severity argument (UXG-02 / UXG-04).
+    // MPA-01: the re-run reports the add as a no-op, then the idempotent
+    // autoupdate row; both benign reasons route to info, which the renderer
+    // emits with no severity argument (UXG-02 / UXG-04).
+    { message: "● claude-plugins-official [user] (skipped) {already added}" },
     { message: "● claude-plugins-official [user] <autoupdate> {already autoupdate}" },
   ]);
   assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateAfterFirst);
   assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), configAfterFirst);
   assert.deepStrictEqual(treeAfterFirst, bootstrappedScopeTree());
   assert.deepStrictEqual(await retryTree(locations.scopeRoot), treeAfterFirst);
-  // WR-05: the re-run's source matches the recorded one, so the duplicate name
-  // is raised before any clone.
+  // WR-05: the re-run's source matches the recorded one, so it is recognized
+  // before any clone.
   assert.deepStrictEqual(clonedUrls(), [BOOTSTRAP_REMOTE]);
   verifyBoundary();
 });
 
-test("reports an idempotent autoupdate when the marketplace is already bootstrapped", async (t) => {
+test("MPA-01: reports an already added marketplace and an idempotent autoupdate when already bootstrapped", async (t) => {
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "already");
   await seedAddedMarketplace(locations, cwd, true);
   const seededState = await readFile(locations.stateJsonPath, "utf8");
   const seededConfig = await readFile(locations.baseConfigJsonPath, "utf8");
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
   const { gitOps, clonedUrls } = createBootstrapGitOps();
   const completionCache = createCompletionCache();
 
@@ -310,6 +311,7 @@ test("reports an idempotent autoupdate when the marketplace is already bootstrap
 
   // assert
   assert.deepStrictEqual(notifications, [
+    { message: "● claude-plugins-official [user] (skipped) {already added}" },
     { message: "● claude-plugins-official [user] <autoupdate> {already autoupdate}" },
   ]);
   assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), seededState);
@@ -325,7 +327,7 @@ test("flips autoupdate on when the marketplace is added but autoupdate is off", 
   const { cwd, locations } = await createHermeticUserScope(t, "half");
   await seedAddedMarketplace(locations, cwd, false);
   const seededState = await readFile(locations.stateJsonPath, "utf8");
-  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
   const { gitOps, clonedUrls } = createBootstrapGitOps();
   const completionCache = createCompletionCache();
 
@@ -340,6 +342,7 @@ test("flips autoupdate on when the marketplace is added but autoupdate is off", 
 
   // assert
   assert.deepStrictEqual(notifications, [
+    { message: "● claude-plugins-official [user] (skipped) {already added}" },
     { message: "● claude-plugins-official [user] <autoupdate>" },
   ]);
   assert.deepStrictEqual(JSON.parse(await readFile(locations.baseConfigJsonPath, "utf8")), {
@@ -510,5 +513,81 @@ test("propagates a clone failure silently and never reaches the autoupdate step"
   });
   assert.deepStrictEqual(await retryTree(locations.scopeRoot), ["pi-claude-marketplace/"]);
   assert.deepStrictEqual(clonedUrls(), [BOOTSTRAP_REMOTE]);
+  verifyBoundary();
+});
+
+test("renders a failed add as marketplace add does and never reaches the autoupdate step", async (t) => {
+  // arrange
+  const { cwd, locations } = await createHermeticUserScope(t, "missing-source");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const cloneError = Object.assign(new Error("HTTP Error: 404"), {
+    code: "HttpError",
+    data: { statusCode: 404 },
+  });
+  const { gitOps, clonedUrls } = createBootstrapGitOps({ cloneError });
+  const completionCache = createCompletionCache();
+
+  // act
+  await bootstrapClaudePlugin({ completionCache, ctx, run: runWithNothingLoaded(), cwd, gitOps });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A marketplace operation has failed.\n\n" +
+        "⊘ anthropics/claude-plugins-official [user] (failed) {source missing}",
+      severity: "error",
+    },
+  ]);
+  assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+    schemaVersion: 3,
+    marketplaces: {},
+  });
+  assert.deepStrictEqual(await retryTree(locations.scopeRoot), ["pi-claude-marketplace/"]);
+  assert.deepStrictEqual(clonedUrls(), [BOOTSTRAP_REMOTE]);
+  verifyBoundary();
+});
+
+test("MPA-01: refuses a different source under the official name as a duplicate name and never reaches the autoupdate step", async (t) => {
+  // arrange
+  const { cwd, locations } = await createHermeticUserScope(t, "fork");
+  await mkdir(locations.extensionRoot, { recursive: true });
+  const marketplaceRoot = await locations.sourceCloneDir("claude-plugins-official");
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 2,
+    marketplaces: {
+      "claude-plugins-official": {
+        ...addedMarketplaceRecord(cwd, marketplaceRoot),
+        source: {
+          kind: "github",
+          raw: "fork/claude-plugins-official",
+          owner: "fork",
+          repo: "claude-plugins-official",
+        },
+      },
+    },
+  });
+  const seededState = await readFile(locations.stateJsonPath, "utf8");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const { gitOps } = createBootstrapGitOps();
+
+  // act
+  await bootstrapClaudePlugin({
+    completionCache: createCompletionCache(),
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    gitOps,
+  });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A marketplace operation has failed.\n\n⊘ claude-plugins-official [user] (failed) {duplicate name}",
+      severity: "error",
+    },
+  ]);
+  assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), seededState);
   verifyBoundary();
 });

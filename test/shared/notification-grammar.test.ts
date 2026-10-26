@@ -148,6 +148,8 @@ for (const { status, extra, expected } of [
     extra: { reasons: ["already no autoupdate"] },
     expected: "● official [user] <no autoupdate> {already no autoupdate}",
   },
+  { status: "will add", extra: {}, expected: "● official [user] (will add)" },
+  { status: "will remove", extra: {}, expected: "● official [user] (will remove)" },
   { status: undefined, extra: {}, expected: "● official [user]" },
   {
     status: undefined,
@@ -312,12 +314,27 @@ const ROW_CASES = [
     expected: "○ alpha (will uninstall)",
   },
   {
+    plugin: { status: "will uninstall", name: "alpha", version: "1.2.0", reasons: [] },
+    expected: "○ alpha v1.2.0 (will uninstall)",
+  },
+  {
     plugin: { status: "will enable", name: "alpha", scope: "user", reasons: [] },
     expected: "● alpha (will enable)",
   },
   {
     plugin: { status: "will disable", name: "alpha", scope: "user", reasons: [] },
     expected: "◍ alpha (will disable)",
+  },
+  {
+    plugin: {
+      status: "will update",
+      name: "demo",
+      scope: "user",
+      from: "1.0.0",
+      to: "1.1.0",
+      reasons: [],
+    },
+    expected: "● demo v1.0.0 → v1.1.0 (will update)",
   },
   {
     plugin: {
@@ -467,6 +484,36 @@ test("renders the held-update cause line of a skipped row", () => {
   ]);
 });
 
+test("D-10-13: renders the constraint disclosure line under an updated row", () => {
+  // arrange
+  const row = {
+    status: "updated",
+    name: "lib",
+    from: "1.0.0",
+    to: "1.1.0",
+    reasons: ["dependency current copy"],
+    severity: "info",
+    needsReload: true,
+    failure: {
+      cause: {
+        causeChain: ['constrained to the combined range (^1.0.0) -- required by "app@tools"'],
+        truncated: false,
+      },
+      leaks: [],
+      rollbackPartial: [],
+    },
+  } as const satisfies ResolvedRow;
+
+  // act
+  const lines = composePluginLines(row, "project");
+
+  // assert
+  assert.deepStrictEqual(lines, [
+    "  ● lib v1.0.0 → v1.1.0 (updated) {dependency current copy}",
+    '    cause: constrained to the combined range (^1.0.0) -- required by "app@tools"',
+  ]);
+});
+
 for (const { plugin, expectedLines } of [
   {
     plugin: {
@@ -494,6 +541,19 @@ for (const { plugin, expectedLines } of [
       "  ● alpha (partially-upgradable) {lsp}",
       "    summary",
       "    Re-run with --partial to update with the supported components.",
+    ],
+  },
+  {
+    plugin: {
+      status: "partially-upgradable",
+      name: "alpha",
+      reasons: ["unsupported component"],
+      version: "1.0.0",
+      hint: "catalog-partial-update",
+    },
+    expectedLines: [
+      "  ● alpha v1.0.0 (partially-upgradable) {unsupported component}",
+      "    Run update --partial on this plugin to update it with the supported components.",
     ],
   },
   {
@@ -1056,13 +1116,18 @@ for (const { message, reason, expected } of [
   });
 }
 
-test("renders the reconcile-pending-empty body line", () => {
-  // act
-  const rendered = renderReconcilePendingEmpty();
+for (const { command, expected } of [
+  { command: "pending", expected: "Pending: /claude:plugin apply has nothing to change." },
+  { command: "apply", expected: "Apply: nothing to change." },
+] as const) {
+  test(`D-08 / D-14: renders the reconcile-pending-empty body line for ${command}`, () => {
+    // act
+    const rendered = renderReconcilePendingEmpty(command);
 
-  // assert
-  assert.equal(rendered, "Pending: next reload will apply 0 actions.");
-});
+    // assert
+    assert.equal(rendered, expected);
+  });
+}
 
 for (const { scope, expected } of [
   {
@@ -1236,7 +1301,18 @@ for (const { name, version, expected } of [
   { name: "omits an empty version", version: "", expected: "" },
   { name: "renders a semantic version", version: "1.2.3", expected: "v1.2.3" },
   { name: "shortens an exact hash version", version: "hash-0123456789ab", expected: "v#0123456" },
-  { name: "shortens an exact sha version", version: "sha-abcdef012345", expected: "v#abcdef0" },
+  { name: "shortens a legacy sha version", version: "sha-abcdef012345", expected: "v#abcdef0" },
+  { name: "GV-01: shortens a commit version", version: "abcdef012345", expected: "v#abcdef0" },
+  {
+    name: "GV-01: shortens a git-subdir commit version",
+    version: "abcdef012345-3989e95a",
+    expected: "v#abcdef0",
+  },
+  {
+    name: "GV-01: preserves a commit version with a short path hash",
+    version: "abcdef012345-3989e95",
+    expected: "vabcdef012345-3989e95",
+  },
   {
     name: "preserves an eleven-digit hash-like version",
     version: "hash-0123456789a",
@@ -1346,6 +1422,130 @@ test("composeVersionArrow renders complete version bytes on both sides", () => {
   // assert
   assert.equal(arrow, expectedArrow);
 });
+
+test("UPR-02: an updated row with commits names each side's short commit", () => {
+  // arrange
+  const expectedArrow = "  ● ghp v1.0.0 (aaaaaaa) → v1.0.0 (bbbbbbb) (updated)";
+
+  // act
+  const arrow = composePluginLines(
+    {
+      status: "updated",
+      name: "ghp",
+      from: "1.0.0",
+      to: "1.0.0",
+      commits: { from: "a".repeat(40), to: "b".repeat(40) },
+      reasons: [],
+      severity: "info",
+      needsReload: true,
+    },
+    "user",
+  )[0];
+
+  // assert
+  assert.equal(arrow, expectedArrow);
+});
+
+test("NREG-01: an updated row without commits keeps the plain sha arrow", () => {
+  // arrange
+  const expectedArrow = "  ● ghp v#aaaaaaa → v#bbbbbbb (updated)";
+
+  // act
+  const arrow = composePluginLines(
+    {
+      status: "updated",
+      name: "ghp",
+      from: "sha-aaaaaaaaaaaa",
+      to: "sha-bbbbbbbbbbbb",
+      reasons: [],
+      severity: "info",
+      needsReload: true,
+    },
+    "user",
+  )[0];
+
+  // assert
+  assert.equal(arrow, expectedArrow);
+});
+
+const MOVE_ROWS = [
+  {
+    title: "a reinstalled row",
+    row: {
+      status: "reinstalled",
+      name: "ghp",
+      version: "1.1.0",
+      reasons: [],
+      severity: "info",
+      needsReload: true,
+    },
+    glyph: "●",
+    tail: "(reinstalled)",
+  },
+  {
+    title: "a partially-installed row",
+    row: {
+      status: "partially-installed",
+      name: "ghp",
+      version: "1.1.0",
+      reasons: ["unsupported component"],
+      severity: "info",
+      needsReload: true,
+    },
+    glyph: "◉",
+    tail: "(partially-installed) {unsupported component}",
+  },
+  {
+    title: "a failed row",
+    row: {
+      status: "failed",
+      name: "ghp",
+      version: "1.1.0",
+      reasons: ["lock held"],
+      severity: "error",
+    },
+    glyph: "⊘",
+    tail: "(failed) {lock held}",
+  },
+] as const satisfies readonly {
+  readonly title: string;
+  readonly row: ResolvedRow;
+  readonly glyph: string;
+  readonly tail: string;
+}[];
+
+for (const { title, row, glyph, tail } of MOVE_ROWS) {
+  test(`NREG-01: ${title} without from keeps its single version`, () => {
+    // act
+    const line = composePluginLines(row, "user")[0];
+
+    // assert
+    assert.equal(line, `  ${glyph} ghp v1.1.0 ${tail}`);
+  });
+
+  test(`UPR-03: ${title} with from draws the version arrow`, () => {
+    // act
+    const line = composePluginLines({ ...row, from: "1.0.0" }, "user")[0];
+
+    // assert
+    assert.equal(line, `  ${glyph} ghp v1.0.0 → v1.1.0 ${tail}`);
+  });
+
+  test(`UPR-02: ${title} with from and commits names each side's short commit`, () => {
+    // act
+    const line = composePluginLines(
+      {
+        ...row,
+        from: "1.1.0",
+        commits: { from: "a".repeat(40), to: "b".repeat(40) },
+      },
+      "user",
+    )[0];
+
+    // assert
+    assert.equal(line, `  ${glyph} ghp v1.1.0 (aaaaaaa) → v1.1.0 (bbbbbbb) ${tail}`);
+  });
+}
 
 for (const { name, reasons, expected } of [
   {
@@ -1549,7 +1749,7 @@ test("formatEnvelopeArguments returns an info body byte for byte as its only arg
 
   // act
   const notifyArguments = formatEnvelopeArguments(
-    { severity: "info", needsReload: false, noOp: false },
+    { severity: "info", needsReload: false, needsApply: false, noOp: false },
     body,
   );
 
@@ -1564,6 +1764,7 @@ for (const severity of ["warning", "error"] as const) {
       severity,
       summary: "A plugin operation has failed.",
       needsReload: false,
+      needsApply: false,
       noOp: false,
     };
 
@@ -1587,6 +1788,7 @@ for (const { name, envelope, expectedText } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin update", failures: 1, warnings: 1, success: { count: 1 } },
     },
@@ -1597,6 +1799,7 @@ for (const { name, envelope, expectedText } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin import", failures: 2, warnings: 3, success: { count: 4 } },
     },
@@ -1607,6 +1810,7 @@ for (const { name, envelope, expectedText } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin list", failures: 0, warnings: 0, success: { count: 0 } },
     },
@@ -1617,6 +1821,7 @@ for (const { name, envelope, expectedText } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: {
         label: "Plugin update",
@@ -1632,6 +1837,7 @@ for (const { name, envelope, expectedText } of [
     envelope: {
       severity: "info",
       needsReload: false,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin install", failures: 1, warnings: 0 },
     },
@@ -1657,6 +1863,7 @@ for (const { name, envelope, body, expectedArguments } of [
     envelope: {
       severity: "info",
       needsReload: true,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin install", failures: 0, warnings: 0, success: { count: 1 } },
     },
@@ -1665,21 +1872,43 @@ for (const { name, envelope, body, expectedArguments } of [
   },
   {
     name: "leaves one blank line between the body and the trailer without a tally",
-    envelope: { severity: "info", needsReload: true, noOp: false },
+    envelope: { severity: "info", needsReload: true, needsApply: false, noOp: false },
     body: "body",
     expectedArguments: ["body\n\n/reload to pick up changes"],
   },
   {
     name: "puts the no-op headline in the tally slot",
-    envelope: { severity: "info", needsReload: false, noOp: true },
+    envelope: { severity: "info", needsReload: false, needsApply: false, noOp: true },
     body: "body",
     expectedArguments: ["body\n\nPlugin update: nothing to update"],
   },
   {
     name: "renders the no-op headline alone over an empty body",
-    envelope: { severity: "info", needsReload: false, noOp: true },
+    envelope: { severity: "info", needsReload: false, needsApply: false, noOp: true },
     body: "",
     expectedArguments: ["Plugin update: nothing to update"],
+  },
+  {
+    name: "APL-04 / D-14: puts the apply trailer last, one blank line below the tally",
+    envelope: {
+      severity: "info",
+      needsReload: false,
+      needsApply: true,
+      noOp: false,
+      tally: { label: "Reconcile pending", failures: 0, warnings: 0, success: { count: 1 } },
+    },
+    body: "body",
+    expectedArguments: [
+      "body\n\nReconcile pending: 1 success\n\n/claude:plugin apply to make these changes",
+    ],
+  },
+  {
+    name: "APL-04 / D-14: puts the reload trailer before the apply trailer",
+    envelope: { severity: "info", needsReload: true, needsApply: true, noOp: false },
+    body: "body",
+    expectedArguments: [
+      "body\n\n/reload to pick up changes\n\n/claude:plugin apply to make these changes",
+    ],
   },
   {
     name: "prepends the summary over the folded body",
@@ -1687,6 +1916,7 @@ for (const { name, envelope, body, expectedArguments } of [
       severity: "error",
       summary: "A plugin operation has failed.",
       needsReload: true,
+      needsApply: false,
       noOp: false,
       tally: { label: "Plugin install", failures: 1, warnings: 0 },
     },
@@ -1744,6 +1974,21 @@ const RAW_SURFACE_ROWS: {
   "usage-info": {
     surface: { kind: "usage-info", usage: "Usage: /claude:plugin help [marketplace]" },
     expectedArguments: ["Usage: /claude:plugin help [marketplace]", "info"],
+  },
+  "autoapply-status": {
+    surface: {
+      kind: "autoapply-status",
+      enabled: true,
+      source: { scope: "project", file: "claude-plugins.local.json" },
+      files: [{ scope: "project", file: "claude-plugins.local.json", value: true }],
+      set: { scope: "project", file: "claude-plugins.local.json", value: true },
+    },
+    expectedArguments: [
+      "Set autoapply to on in claude-plugins.local.json [project].\n\n" +
+        "Autoapply: on (claude-plugins.local.json [project])\n\n" +
+        "claude-plugins.local.json [project]: on",
+      "info",
+    ],
   },
   diagnostic: {
     surface: { kind: "diagnostic", header: "Warnings", lines: ["first", "second"] },
@@ -1814,6 +2059,28 @@ for (const [kind, { surface, expectedArguments }] of Object.entries(RAW_SURFACE_
     assert.deepStrictEqual(notifyArguments, expectedArguments);
   });
 }
+
+test("AAP-04: formatRawSurface shows the default autoapply and every listed file's own value", () => {
+  // act
+  const notifyArguments = formatRawSurface({
+    kind: "autoapply-status",
+    enabled: false,
+    files: [
+      { scope: "user", file: "claude-plugins.json" },
+      { scope: "user", file: "claude-plugins.local.json", value: false },
+      { scope: "project", file: "claude-plugins.json", value: true },
+    ],
+  });
+
+  // assert
+  assert.deepStrictEqual(notifyArguments, [
+    "Autoapply: off (default)\n\n" +
+      "claude-plugins.json [user]: not set\n" +
+      "claude-plugins.local.json [user]: off\n" +
+      "claude-plugins.json [project]: on",
+    "info",
+  ]);
+});
 
 // RAWS-01 / D-06: nonempty usage joins the message with one blank line.
 // Usage kinds have no no-op. RAWS-02 / D-05: a diagnostic keeps its lines

@@ -190,6 +190,29 @@ Feature: Plugin uninstall
       | /skill:app-skill | A skill of app 1.0.0. |
       | /skill:lib-skill | A skill of lib 1.0.0. |
 
+  Scenario: Uninstalling a dependency whose only dependent is disabled uninstalls it
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin disable app@tools --scope project"
+    When the user runs "/claude:plugin uninstall lib@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons | scope   | version |
+      | tools            | project           | lib@tools | lib  | uninstalled |         | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | app@tools | 1.0.0   | false   |
+    When the user starts a new pi session
+    Then the session offers no skills
+
   Scenario: Uninstalling a dependency that nothing needs uninstalls it
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
@@ -232,7 +255,118 @@ Feature: Plugin uninstall
       | id        |
       | app@tools |
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id        | name | status | reasons          | scope   | leaks | rollback partial | cause chain                                                                    | cause truncated |
+      | tools            | project           | lib@tools | lib  | failed | invalid manifest | project |       |                  | cannot read the dependencies of lib@tools: its marketplace manifest is invalid | false           |
+      | tools            | project           | lib@tools | lib  | failed | invalid manifest | project |       |                  | cannot read the dependencies of lib@tools: its marketplace manifest is invalid | false           |
     Then the session offers these skills:
       | command          | description           |
       | /skill:app-skill | A skill of app 1.0.0. |
       | /skill:lib-skill | A skill of lib 1.0.0. |
+
+  Scenario: Uninstalling with --keep-data keeps the plugin's data directory and the file in it
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the data directory of "demo@fixtures" in the project scope holds the file "notes.txt" with the text "Kept by the user."
+    When the user runs "/claude:plugin uninstall demo@fixtures --scope project --keep-data"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons   | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | uninstalled | data kept | project | 1.0.0   |
+    Then the data directory of "demo@fixtures" in the project scope holds these files:
+      | file      | text              |
+      | notes.txt | Kept by the user. |
+
+  Scenario: Uninstalling a plugin removes its data directory and the file in it
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the data directory of "demo@fixtures" in the project scope holds the file "notes.txt" with the text "Lost on uninstall."
+    When the user runs "/claude:plugin uninstall demo@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | uninstalled |         | project | 1.0.0   |
+    Then the uninstall has removed the data directory of "demo@fixtures" from the project scope
+
+  Scenario: Uninstalling with --prune also uninstalls the dependency that nothing else needs
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    When the user runs "/claude:plugin uninstall app@tools --scope project --prune"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons           | scope   | version |
+      | tools            | project           | app@tools | app  | uninstalled |                   | project | 1.0.0   |
+      | tools            | project           | lib@tools | lib  | uninstalled | dependency pruned | project | 1.0.0   |
+    Then the project scope has no installed plugins
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+    When the user starts a new pi session
+    Then the session offers no skills
+
+  Scenario: Uninstalling with --prune keeps the dependency that another installed plugin still needs
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | app   | 1.0.0   | lib          |
+      | other | 1.0.0   | lib          |
+      | lib   | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin install other@tools --scope project"
+    When the user runs "/claude:plugin uninstall app@tools --scope project --prune"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status      | reasons | scope   | version |
+      | tools            | project           | app@tools | app  | uninstalled |         | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id          | version | enabled |
+      | lib@tools   | 1.0.0   | true    |
+      | other@tools | 1.0.0   | true    |
+    When the user starts a new pi session
+    Then the session offers these skills:
+      | command            | description             |
+      | /skill:lib-skill   | A skill of lib 1.0.0.   |
+      | /skill:other-skill | A skill of other 1.0.0. |
+
+  Scenario: Uninstalling a dependency that a plugin its marketplace no longer lists needs fails as dependents remain
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 1.0.0   |              |
+    When the user runs "/claude:plugin uninstall lib@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status | reasons           | scope   | version | cause chain                                | cause truncated | leaks | rollback partial |
+      | tools            | project           | lib@tools | lib  | failed | dependents remain | project | 1.0.0   | Uninstall app@tools first, then lib@tools. | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | app@tools | 1.0.0   | true    |
+      | lib@tools | 1.0.0   | true    |

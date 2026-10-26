@@ -10,60 +10,30 @@ import {
   isPlainMarkdownFile,
   pathExists,
   readDirEntriesTolerant,
-  removeOrphanIfPresent,
   resolveGitSubdirRoot,
-  rollbackReplacementCommon,
 } from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import {
   FILE_CONTENTS,
   NESTED_CONTENTS,
-  OCCUPIED_CONTENTS,
   registerRemovalOpsContract,
 } from "../platform/removal-ops-contract.ts";
-import { createDelegatingRemovalOps, createRemovalOpsFake } from "../platform/removal-ops-fake.ts";
-
-import type {
-  RollbackReplacementInput,
-  RollbackReplacementLabels,
-} from "../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
-import type { RemovalOpsOperation } from "../platform/removal-ops-fake.ts";
+import { createRemovalOpsFake } from "../platform/removal-ops-fake.ts";
 
 // Builtin-module patching that remains in this file, and why. The removal port
-// carries `rm` and `rename` only, and only for `cleanupStaging` and
-// `rollbackReplacementCommon`, so every fault on those two verbs is injected
-// through the collaborator instead. Four faults have no port to travel
+// carries `cleanupStaging`'s removals, so every fault on them is injected
+// through the collaborator instead. Three faults have no port to travel
 // through:
 //
 //   - `fs.lstat` twice, for `pathExists` and for `isPlainMarkdownFile`.
-//   - `fs.stat` once, for `removeOrphanIfPresent`.
 //   - `fs.readdir` once, for `readDirEntriesTolerant`.
 //
-// D-08-13 leaves those three verbs outside the port's membership, and
-// D-08-A08 keeps `removeOrphanIfPresent` unported even though it calls
-// `fs.rm` twice: the port's obligation names `cleanupStaging`, and widening
-// it to every `fs.rm` in the module is scope nothing authorizes.
-
-const LABELS = {
-  replacement: "replacement test entry",
-  previous: "previous test entry",
-  stagingDir: "test staging directory",
-  backupDir: "test backup directory",
-} satisfies RollbackReplacementLabels;
-
-/** The contract's file-contents probe: a directory or an absent path reads as `null`. */
-async function readTextOrNull(target: string): Promise<string | null> {
-  try {
-    return await fs.readFile(target, "utf8");
-  } catch {
-    return null;
-  }
-}
+// D-08-13 leaves those two verbs outside the port's membership.
 
 /**
  * `createRemovalOps` and `createRemovalOpsFake` answer one shared contract. The
  * fake's half runs in `test/platform/removal-ops-fake.test.ts`; this half drives
  * the real adapter against a per-case temporary root, which is also what covers
- * the adapter's two bindings.
+ * the adapter's binding.
  */
 describe("createRemovalOps", () => {
   registerRemovalOpsContract(async (t) => {
@@ -71,11 +41,9 @@ describe("createRemovalOps", () => {
     t.after(() => fs.rm(root, { recursive: true, force: true, maxRetries: 3 }));
     const treePath = path.join(root, "tree");
     const filePath = path.join(root, "file-a.md");
-    const occupiedPath = path.join(root, "file-b.md");
     const nestedPath = path.join(treePath, "nested-a.md");
     await fs.mkdir(treePath);
     await fs.writeFile(filePath, FILE_CONTENTS);
-    await fs.writeFile(occupiedPath, OCCUPIED_CONTENTS);
     await fs.writeFile(nestedPath, NESTED_CONTENTS);
 
     return {
@@ -83,11 +51,8 @@ describe("createRemovalOps", () => {
       filePath,
       treePath,
       nestedPath,
-      occupiedPath,
       absentPath: path.join(root, "absent"),
-      spareDestination: path.join(root, "spare"),
       present: (target) => pathExists(target),
-      readFile: (target) => readTextOrNull(target),
     };
   });
 });
@@ -220,302 +185,6 @@ describe("pathExists", () => {
       () => pathExists("/blocked"),
       (error) => error === lstatError,
     );
-  });
-});
-
-describe("removeOrphanIfPresent", () => {
-  test("removes a directory in tree mode", async (t) => {
-    // arrange
-    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "fs-orphan-tree-"));
-    t.after(() => fs.rm(directory, { recursive: true, force: true }));
-    const orphanPath = path.join(directory, "orphan");
-    await fs.mkdir(orphanPath);
-    await fs.writeFile(path.join(orphanPath, "content.txt"), "content");
-
-    // act
-    await removeOrphanIfPresent(orphanPath, "tree");
-
-    // assert
-    assert.strictEqual(await pathExists(orphanPath), false);
-  });
-
-  test("removes a regular file in file mode", async (t) => {
-    // arrange
-    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "fs-orphan-file-"));
-    t.after(() => fs.rm(directory, { recursive: true, force: true }));
-    const orphanPath = path.join(directory, "orphan.md");
-    await fs.writeFile(orphanPath, "content");
-
-    // act
-    await removeOrphanIfPresent(orphanPath, "file");
-
-    // assert
-    assert.strictEqual(await pathExists(orphanPath), false);
-  });
-
-  test("keeps a regular file in tree mode", async (t) => {
-    // arrange
-    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "fs-orphan-tree-mismatch-"));
-    t.after(() => fs.rm(directory, { recursive: true, force: true }));
-    const orphanPath = path.join(directory, "orphan.txt");
-    await fs.writeFile(orphanPath, "preserved");
-
-    // act
-    await removeOrphanIfPresent(orphanPath, "tree");
-
-    // assert
-    assert.strictEqual(await fs.readFile(orphanPath, "utf8"), "preserved");
-  });
-
-  test("keeps a directory in file mode", async (t) => {
-    // arrange
-    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "fs-orphan-file-mismatch-"));
-    t.after(() => fs.rm(directory, { recursive: true, force: true }));
-    const orphanPath = path.join(directory, "orphan");
-    await fs.mkdir(orphanPath);
-
-    // act
-    await removeOrphanIfPresent(orphanPath, "file");
-
-    // assert
-    assert.deepStrictEqual(await fs.readdir(orphanPath), []);
-  });
-
-  for (const mode of ["file", "tree"] as const) {
-    test(`accepts a missing target in ${mode} mode`, async (t) => {
-      // arrange
-      const directory = await fs.mkdtemp(path.join(os.tmpdir(), "fs-orphan-missing-"));
-      t.after(() => fs.rm(directory, { recursive: true, force: true }));
-      const orphanPath = path.join(directory, "missing");
-
-      // act
-      await removeOrphanIfPresent(orphanPath, mode);
-
-      // assert
-      assert.strictEqual(await pathExists(orphanPath), false);
-    });
-  }
-
-  test("rethrows an adjacent unexpected stat error", async (t) => {
-    // arrange
-    const statError = Object.assign(new Error("permission denied"), { code: "EACCES" });
-    t.mock.method(fs, "stat", (): Promise<never> => Promise.reject(statError));
-
-    // act & assert
-    await assert.rejects(
-      () => removeOrphanIfPresent("/blocked", "file"),
-      (error) => error === statError,
-    );
-  });
-});
-
-describe("rollbackReplacementCommon", () => {
-  test("returns a frozen empty leak list for empty inputs", async (t) => {
-    // arrange
-    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "fs-rollback-empty-"));
-    t.after(() => fs.rm(directory, { recursive: true, force: true }));
-    const stagingRoot = path.join(directory, "staging");
-    const backupRoot = path.join(directory, "backup");
-    await fs.mkdir(stagingRoot);
-    await fs.mkdir(backupRoot);
-    const input = {
-      ops: createRemovalOps(),
-      renamed: [],
-      backups: [],
-      stagingRoot,
-      backupRoot,
-      removeMode: "file",
-      labels: LABELS,
-    } satisfies RollbackReplacementInput;
-
-    // act
-    const leaks = await rollbackReplacementCommon(input);
-
-    // assert
-    assert.deepStrictEqual(leaks, []);
-    assert.strictEqual(Object.isFrozen(leaks), true);
-    assert.strictEqual(await pathExists(stagingRoot), false);
-    assert.strictEqual(await pathExists(backupRoot), false);
-  });
-
-  test("removes replacements and restores backups", async (t) => {
-    // arrange
-    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "fs-rollback-values-"));
-    t.after(() => fs.rm(directory, { recursive: true, force: true }));
-    const stagingRoot = path.join(directory, "staging");
-    const backupRoot = path.join(directory, "backup");
-    const firstReplacement = path.join(directory, "live-a.txt");
-    const secondReplacement = path.join(directory, "live-b.txt");
-    const firstRestored = path.join(directory, "restored", "a.txt");
-    const secondRestored = path.join(directory, "restored", "b.txt");
-    const firstBackup = path.join(backupRoot, "a.txt");
-    const secondBackup = path.join(backupRoot, "b.txt");
-    await fs.mkdir(stagingRoot);
-    await fs.mkdir(backupRoot);
-    await fs.writeFile(firstReplacement, "new-a");
-    await fs.writeFile(secondReplacement, "new-b");
-    await fs.writeFile(firstBackup, "old-a");
-    await fs.writeFile(secondBackup, "old-b");
-    const input = {
-      ops: createRemovalOps(),
-      renamed: [{ to: firstReplacement }, { to: secondReplacement }],
-      backups: [
-        { name: "same", from: firstRestored, to: firstBackup },
-        { name: "same", from: secondRestored, to: secondBackup },
-      ],
-      stagingRoot,
-      backupRoot,
-      removeMode: "file",
-      labels: LABELS,
-    } satisfies RollbackReplacementInput;
-
-    // act
-    const leaks = await rollbackReplacementCommon(input);
-
-    // assert
-    assert.deepStrictEqual(leaks, []);
-    assert.strictEqual(await pathExists(firstReplacement), false);
-    assert.strictEqual(await pathExists(secondReplacement), false);
-    assert.strictEqual(await fs.readFile(firstRestored, "utf8"), "old-a");
-    assert.strictEqual(await fs.readFile(secondRestored, "utf8"), "old-b");
-    assert.strictEqual(await pathExists(stagingRoot), false);
-    assert.strictEqual(await pathExists(backupRoot), false);
-  });
-
-  test("uses stable reverse input order for equal-name items", async (t) => {
-    // arrange
-    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "fs-rollback-order-"));
-    t.after(() => fs.rm(directory, { recursive: true, force: true }));
-    const stagingRoot = path.join(directory, "staging");
-    const backupRoot = path.join(directory, "backup");
-    const firstReplacement = path.join(directory, "live-a.txt");
-    const secondReplacement = path.join(directory, "live-b.txt");
-    const firstRestored = path.join(directory, "restored", "a.txt");
-    const secondRestored = path.join(directory, "restored", "b.txt");
-    const firstBackup = path.join(backupRoot, "a.txt");
-    const secondBackup = path.join(backupRoot, "b.txt");
-    await fs.mkdir(stagingRoot);
-    await fs.mkdir(backupRoot);
-    await fs.writeFile(firstReplacement, "new-a");
-    await fs.writeFile(secondReplacement, "new-b");
-    await fs.writeFile(firstBackup, "old-a");
-    await fs.writeFile(secondBackup, "old-b");
-    const removal = createDelegatingRemovalOps({
-      boundary: "delegate",
-      delegate: createRemovalOps(),
-    });
-    const expectedOperations = [
-      { verb: "rm", target: secondReplacement, options: { force: true } },
-      { verb: "rm", target: firstReplacement, options: { force: true } },
-      { verb: "rename", from: secondBackup, to: secondRestored },
-      { verb: "rename", from: firstBackup, to: firstRestored },
-      { verb: "rm", target: stagingRoot, options: { recursive: true, force: true } },
-      { verb: "rm", target: backupRoot, options: { recursive: true, force: true } },
-    ] satisfies RemovalOpsOperation[];
-    const input = {
-      ops: removal.removalOps,
-      renamed: [{ to: firstReplacement }, { to: secondReplacement }],
-      backups: [
-        { name: "same", from: firstRestored, to: firstBackup },
-        { name: "same", from: secondRestored, to: secondBackup },
-      ],
-      stagingRoot,
-      backupRoot,
-      removeMode: "file",
-      labels: LABELS,
-    } satisfies RollbackReplacementInput;
-
-    // act
-    const leaks = await rollbackReplacementCommon(input);
-
-    // assert
-    assert.deepStrictEqual(leaks, []);
-    assert.deepStrictEqual(removal.operations, expectedOperations);
-    assert.strictEqual(await fs.readFile(firstRestored, "utf8"), "old-a");
-    assert.strictEqual(await fs.readFile(secondRestored, "utf8"), "old-b");
-  });
-
-  test("removes a replacement tree and appends before-cleanup leaks", async (t) => {
-    // arrange
-    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "fs-rollback-tree-"));
-    t.after(() => fs.rm(directory, { recursive: true, force: true }));
-    const stagingRoot = path.join(directory, "staging");
-    const backupRoot = path.join(directory, "backup");
-    const replacement = path.join(directory, "replacement");
-    await fs.mkdir(stagingRoot);
-    await fs.mkdir(backupRoot);
-    await fs.mkdir(replacement);
-    await fs.writeFile(path.join(replacement, "content.txt"), "content");
-    const input = {
-      ops: createRemovalOps(),
-      renamed: [{ to: replacement }],
-      backups: [],
-      stagingRoot,
-      backupRoot,
-      removeMode: "tree",
-      labels: LABELS,
-      beforeCleanup: () => Promise.resolve(["bridge cleanup leak"]),
-    } satisfies RollbackReplacementInput;
-
-    // act
-    const leaks = await rollbackReplacementCommon(input);
-
-    // assert
-    assert.deepStrictEqual(leaks, ["bridge cleanup leak"]);
-    assert.strictEqual(Object.isFrozen(leaks), true);
-    assert.strictEqual(await pathExists(replacement), false);
-  });
-
-  test("returns every failure leak in execution order", async (t) => {
-    // arrange
-    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "fs-rollback-leaks-"));
-    t.after(() => fs.rm(directory, { recursive: true, force: true }));
-    const replacement = path.join(directory, "replacement.txt");
-    const restored = path.join(directory, "restored.txt");
-    const stagingRoot = path.join(directory, "staging");
-    const backupRoot = path.join(directory, "backup");
-    const backup = path.join(backupRoot, "restored.txt");
-    await fs.mkdir(stagingRoot);
-    await fs.mkdir(backupRoot);
-    await fs.writeFile(replacement, "new");
-    await fs.writeFile(backup, "old");
-    const replacementError = Object.assign(new Error("replacement denied"), { code: "EACCES" });
-    const restoreError = Object.assign(new Error("restore denied"), { code: "EACCES" });
-    const stagingError = Object.assign(new Error("staging denied"), { code: "EACCES" });
-    const backupError = Object.assign(new Error("backup denied"), { code: "EACCES" });
-    const removal = createRemovalOpsFake({
-      boundary: "memory",
-      rmErrors: [
-        [replacement, replacementError],
-        [stagingRoot, stagingError],
-        [backupRoot, backupError],
-      ],
-      renameErrors: [[backup, restoreError]],
-    });
-    const expectedLeaks = [
-      `failed to remove replacement test entry at ${replacement}: replacement denied`,
-      `failed to restore previous test entry same from ${backup} to ${restored}: restore denied`,
-      "bridge cleanup leak",
-      `failed to clean up test staging directory at ${stagingRoot}: staging denied`,
-      `failed to clean up test backup directory at ${backupRoot}: backup denied`,
-    ];
-    const input = {
-      ops: removal.removalOps,
-      renamed: [{ to: replacement }],
-      backups: [{ name: "same", from: restored, to: backup }],
-      stagingRoot,
-      backupRoot,
-      removeMode: "file",
-      labels: LABELS,
-      beforeCleanup: () => Promise.resolve(["bridge cleanup leak"]),
-    } satisfies RollbackReplacementInput;
-
-    // act
-    const leaks = await rollbackReplacementCommon(input);
-
-    // assert
-    assert.deepStrictEqual(leaks, expectedLeaks);
-    assert.strictEqual(Object.isFrozen(leaks), true);
   });
 });
 

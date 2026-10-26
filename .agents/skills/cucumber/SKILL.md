@@ -1,6 +1,6 @@
 ---
 name: cucumber
-description: Rules for the cucumber behavioral tests under features/ -- which files exist and how they are named, how feature files and step definitions are written, the per-scenario world, stand-ins for external services, and how to review the suite. Use when planning, writing, changing, or reviewing behavioral tests or any file under features/.
+description: Rules for the cucumber behavioral tests under features/ -- which files exist and how they are named, how feature files and step definitions are written, the per-scenario world, stand-ins for external services, and how to review the suite. Use when planning or changing user-visible command behavior, and when planning, writing, changing, or reviewing behavioral tests or any file under features/.
 ---
 
 # Cucumber behavioral tests

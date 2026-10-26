@@ -1,4 +1,5 @@
 import { RAW_SURFACE_SEVERITY } from "./notification-resolve.ts";
+import { isPendingPluginRow } from "./notification-types.ts";
 
 import type { HookSummaryEntry } from "./concerns/hooks.ts";
 import type { SerializedCauseChain } from "./errors.ts";
@@ -18,12 +19,15 @@ import type {
   MarketplaceInfoMessage,
   McpMigrationRow,
   McpServerSummaryEntry,
+  PendingPluginStatus,
   PluginInfoComponentsResolved,
   PluginInfoMessage,
   PluginInfoRow,
   PluginStatus,
   RenderedMcpConfigNotice,
   RetainedWorkflowStaging,
+  RevisionMoveFields,
+  VersionCommits,
 } from "./notification-types.ts";
 import type { CASCADE_PAYLOAD_SCHEMA, NOTIFICATION_PAYLOAD_SCHEMA } from "./notification-wire.ts";
 import type { Scope } from "./types.ts";
@@ -196,6 +200,23 @@ function wireRawSurface(
       return { ...envelope, kind: surface.kind, message: surface.message, usage: surface.usage };
     case "usage-info":
       return { ...envelope, kind: surface.kind, usage: surface.usage };
+    case "autoapply-status":
+      return {
+        ...envelope,
+        kind: surface.kind,
+        enabled: surface.enabled,
+        ...(surface.source !== undefined && {
+          source: { scope: surface.source.scope, file: surface.source.file },
+        }),
+        files: surface.files.map((file) => ({
+          scope: file.scope,
+          file: file.file,
+          ...(file.value !== undefined && { value: file.value }),
+        })),
+        ...(surface.set !== undefined && {
+          set: { scope: surface.set.scope, file: surface.set.file, value: surface.set.value },
+        }),
+      };
     case "diagnostic":
       return { ...envelope, kind: surface.kind, header: surface.header, lines: [...surface.lines] };
     case "device-flow-prompt":
@@ -302,6 +323,7 @@ function wireCascade(
     ...wireEnvelope(presentation.envelope, origin),
     ...wireTallyField(presentation.envelope),
     ...noOpField(presentation.envelope.noOp),
+    ...needsApplyField(presentation.envelope.needsApply),
     marketplaces: toWireMarketplaces(presentation.marketplaces),
     ...wireAdvisories(presentation),
   };
@@ -361,6 +383,11 @@ function wireAdvisories(carrier: {
 /** D-04: `noOp` is present only on a no-op cascade envelope. */
 function noOpField(noOp: boolean): { readonly noOp?: true } {
   return noOp ? { noOp: true } : {};
+}
+
+/** APL-04 / D-14: `needsApply` is present only when a pending list holds a change. */
+function needsApplyField(needsApply: boolean): { readonly needsApply?: true } {
+  return needsApply ? { needsApply: true } : {};
 }
 
 function wireTally(tally: ResolvedTally) {
@@ -565,6 +592,33 @@ function wireHookEntry(entry: HookSummaryEntry) {
 }
 
 /**
+ * D-04: the catalogue statuses, whose rows carry no scope; their block names
+ * it. A TOTAL map, so a new status is classified before it reaches the wire.
+ */
+const CATALOGUE_STATUS = {
+  available: true,
+  remote: true,
+  unavailable: true,
+  "partially-available": true,
+  installed: false,
+  updated: false,
+  reinstalled: false,
+  uninstalled: false,
+  disabled: false,
+  upgradable: false,
+  "partially-installed": false,
+  "partially-upgradable": false,
+  failed: false,
+  skipped: false,
+  "manual recovery": false,
+  "will install": false,
+  "will uninstall": false,
+  "will enable": false,
+  "will disable": false,
+  "will update": false,
+} as const satisfies Record<PluginStatus, boolean>;
+
+/**
  * D-04: an install-scoped row carries its own scope, or the block's when it
  * has none. A catalogue row carries no scope; its block names it.
  */
@@ -572,29 +626,7 @@ function wireScope(
   row: { readonly status: PluginStatus; readonly scope?: Scope },
   blockScope: Scope,
 ): { readonly scope?: Scope } {
-  switch (row.status) {
-    case "installed":
-    case "updated":
-    case "reinstalled":
-    case "uninstalled":
-    case "disabled":
-    case "upgradable":
-    case "partially-installed":
-    case "partially-upgradable":
-    case "failed":
-    case "skipped":
-    case "manual recovery":
-    case "will install":
-    case "will uninstall":
-    case "will enable":
-    case "will disable":
-      return { scope: ownScopeOr(row.scope, blockScope) };
-    case "available":
-    case "remote":
-    case "unavailable":
-    case "partially-available":
-      return {};
-  }
+  return CATALOGUE_STATUS[row.status] ? {} : { scope: ownScopeOr(row.scope, blockScope) };
 }
 
 /** The row's own scope, or the block's when the row names none. */
@@ -602,18 +634,47 @@ function ownScopeOr(scope: Scope | undefined, blockScope: Scope): Scope {
   return scope ?? blockScope;
 }
 
-/**
- * D-04: the raw version, or `from` and `to` on an updated row. The groups
- * follow `pluginVersion`: a manual-recovery or pending row carries none.
- */
-function wireVersion(row: ResolvedRow): {
+/** The version fields a row puts on the wire. */
+interface WireVersionFields {
   readonly version?: string;
   readonly from?: string;
   readonly to?: string;
-} {
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
+}
+
+/**
+ * D-04: the raw version, or `from` and `to` on an updated or will-update row.
+ * The groups follow `pluginVersion`: a manual-recovery row and every pending
+ * row but `will uninstall` and `will update` carry none. UPR-03: a reinstalled,
+ * partially installed, or failed row whose revision moved adds `from` beside
+ * its `version`. The switch splits at the pending partition, as
+ * `pluginVersion` does, to stay under the cyclomatic ceiling.
+ */
+function wireVersion(row: ResolvedRow): WireVersionFields {
+  return isPendingPluginRow(row) ? pendingWireVersion(row) : settledWireVersion(row);
+}
+
+function pendingWireVersion(
+  row: Extract<ResolvedRow, { readonly status: PendingPluginStatus }>,
+): WireVersionFields {
+  switch (row.status) {
+    case "will uninstall":
+      return versionField(row.version);
+    case "will update":
+      return { from: row.from, to: row.to, ...commitFields(row.commits) };
+    case "will install":
+    case "will enable":
+    case "will disable":
+      return {};
+  }
+}
+
+function settledWireVersion(
+  row: Exclude<ResolvedRow, { readonly status: PendingPluginStatus }>,
+): WireVersionFields {
   switch (row.status) {
     case "installed":
-    case "reinstalled":
     case "uninstalled":
     case "disabled":
     case "available":
@@ -621,24 +682,39 @@ function wireVersion(row: ResolvedRow): {
     case "unavailable":
     case "partially-available":
     case "upgradable":
-    case "partially-installed":
     case "partially-upgradable":
-    case "failed":
     case "skipped":
       return versionField(row.version);
+    case "reinstalled":
+    case "partially-installed":
+    case "failed":
+      return { ...versionField(row.version), ...moveFields(row) };
     case "updated":
-      return { from: row.from, to: row.to };
+      return { from: row.from, to: row.to, ...commitFields(row.commits) };
     case "manual recovery":
-    case "will install":
-    case "will uninstall":
-    case "will enable":
-    case "will disable":
       return {};
   }
 }
 
 function versionField(version: string | undefined): { readonly version?: string } {
   return version === undefined ? {} : { version };
+}
+
+/** UPR-03: `from` and the commits of a row whose revision moved, absent otherwise. */
+function moveFields(row: RevisionMoveFields): {
+  readonly from?: string;
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
+} {
+  return { ...(row.from === undefined ? {} : { from: row.from }), ...commitFields(row.commits) };
+}
+
+/** UPR-02: the full commits of a same-version move, absent when the row has none. */
+function commitFields(commits: VersionCommits | undefined): {
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
+} {
+  return commits === undefined ? {} : { fromCommit: commits.from, toCommit: commits.to };
 }
 
 /** D-11: the serialized failure detail resolve set on a row. */

@@ -362,20 +362,28 @@ const ALPHA_PROJECT_ROW = "alpha v1.0.0 (installed)";
 const ALPHA_USER_ROW = "alpha v2.0.0 (installed)";
 const SOLO_PROJECT_ROW = "solo v1.0.0 (installed)";
 const SOLO_USER_ROW = "solo v2.0.0 (installed)";
-const DEGRADED_ROW = "degraded (partially-available)";
+const DEGRADED_PROJECT_ROW = "degraded v1.0.0 (partially-available)";
+const DEGRADED_USER_ROW = "degraded v2.0.0 (partially-available)";
 const FAR_ROW = "far (remote)";
 const MISSING_ROW = "missing (unavailable)";
-const SPARE_ROW = "spare (available)";
+const SPARE_PROJECT_ROW = "spare v1.0.0 (available)";
+const SPARE_USER_ROW = "spare v2.0.0 (available)";
 
 const EVERY_MP_PROJECT_ROW = [
   ALPHA_PROJECT_ROW,
-  DEGRADED_ROW,
+  DEGRADED_PROJECT_ROW,
   FAR_ROW,
   MISSING_ROW,
-  SPARE_ROW,
+  SPARE_PROJECT_ROW,
 ] as const;
 
-const EVERY_MP_USER_ROW = [ALPHA_USER_ROW, DEGRADED_ROW, FAR_ROW, MISSING_ROW, SPARE_ROW] as const;
+const EVERY_MP_USER_ROW = [
+  ALPHA_USER_ROW,
+  DEGRADED_USER_ROW,
+  FAR_ROW,
+  MISSING_ROW,
+  SPARE_USER_ROW,
+] as const;
 
 const EVERY_BLOCK: readonly MarketplaceBlock[] = [
   { marketplace: MP_PROJECT, plugins: EVERY_MP_PROJECT_ROW },
@@ -508,8 +516,8 @@ for (const { anchor, args, expectedBlocks, label } of [
     args: AVAILABLE_FLAG,
     label: "filter-available",
     expectedBlocks: [
-      { marketplace: MP_PROJECT, plugins: [SPARE_ROW] },
-      { marketplace: MP_USER, plugins: [SPARE_ROW] },
+      { marketplace: MP_PROJECT, plugins: [SPARE_PROJECT_ROW] },
+      { marketplace: MP_USER, plugins: [SPARE_USER_ROW] },
       { marketplace: OTHER_PROJECT, plugins: [] },
       { marketplace: OTHER_USER, plugins: [] },
     ],
@@ -530,8 +538,8 @@ for (const { anchor, args, expectedBlocks, label } of [
     args: PARTIAL_FLAG,
     label: "filter-partial",
     expectedBlocks: [
-      { marketplace: MP_PROJECT, plugins: [DEGRADED_ROW] },
-      { marketplace: MP_USER, plugins: [DEGRADED_ROW] },
+      { marketplace: MP_PROJECT, plugins: [DEGRADED_PROJECT_ROW] },
+      { marketplace: MP_USER, plugins: [DEGRADED_USER_ROW] },
       { marketplace: OTHER_PROJECT, plugins: [] },
       { marketplace: OTHER_USER, plugins: [] },
     ],
@@ -594,8 +602,8 @@ for (const { args, expectedBlocks, label, summary } of [
     label: "union-two-empty",
     summary: "two filters no plugin in the second marketplace matches",
     expectedBlocks: [
-      { marketplace: MP_PROJECT, plugins: [DEGRADED_ROW, SPARE_ROW] },
-      { marketplace: MP_USER, plugins: [DEGRADED_ROW, SPARE_ROW] },
+      { marketplace: MP_PROJECT, plugins: [DEGRADED_PROJECT_ROW, SPARE_PROJECT_ROW] },
+      { marketplace: MP_USER, plugins: [DEGRADED_USER_ROW, SPARE_USER_ROW] },
       { marketplace: OTHER_PROJECT, plugins: [] },
       { marketplace: OTHER_USER, plugins: [] },
     ],
@@ -777,7 +785,7 @@ for (const { args, label, summary } of [
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: `Unknown option: "--frobnicate".\n\n${LIST_USAGE}`, severity: "error" },
+      { message: `Unknown flag: "--frobnicate".\n\n${LIST_USAGE}`, severity: "error" },
     ]);
     assert.strictEqual(workspace.transportCalls(), 0);
     verifyBoundary();
@@ -810,7 +818,7 @@ for (const { args, label, summary } of [
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: `Unknown option: "--local".\n\n${LIST_USAGE}`, severity: "error" },
+      { message: `Unknown flag: "--local".\n\n${LIST_USAGE}`, severity: "error" },
     ]);
     assert.strictEqual(workspace.transportCalls(), 0);
     verifyBoundary();
@@ -863,7 +871,7 @@ for (const mode of ["json", "rpc"] as const) {
     },
     {
       args: "--bogus",
-      message: 'Unknown option: "--bogus".',
+      message: 'Unknown flag: "--bogus".',
     },
     {
       args: "alpha@official beta@official",

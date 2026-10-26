@@ -106,7 +106,7 @@ describe("resolveEnvelope", () => {
           },
         ],
       },
-      expectedEnvelope: { severity: "info", needsReload: false, noOp: false },
+      expectedEnvelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
     },
     {
       name: "a single warning row resolves to a warning envelope with its summary",
@@ -132,6 +132,7 @@ describe("resolveEnvelope", () => {
         severity: "warning",
         summary: "A plugin operation needs attention.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
       },
     },
@@ -166,6 +167,7 @@ describe("resolveEnvelope", () => {
         severity: "error",
         summary: "Some plugin operations have failed.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
       },
     },
@@ -182,6 +184,7 @@ describe("resolveEnvelope", () => {
         severity: "error",
         summary: "A plugin operation has failed.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
       },
     },
@@ -192,6 +195,7 @@ describe("resolveEnvelope", () => {
         severity: "error",
         summary: "A marketplace operation has failed.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
       },
     },
@@ -204,7 +208,7 @@ describe("resolveEnvelope", () => {
         details: { autoupdate: true },
         source: { sourceKind: "path", absPath: "/marketplaces/official" },
       },
-      expectedEnvelope: { severity: "info", needsReload: false, noOp: false },
+      expectedEnvelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
     },
     {
       name: "a single-target cascade resolves no tally",
@@ -220,7 +224,7 @@ describe("resolveEnvelope", () => {
           },
         ],
       },
-      expectedEnvelope: { severity: "info", needsReload: false, noOp: false },
+      expectedEnvelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
     },
     {
       name: "a plural cascade without an operation label resolves no tally",
@@ -234,12 +238,12 @@ describe("resolveEnvelope", () => {
           },
         ],
       },
-      expectedEnvelope: { severity: "info", needsReload: false, noOp: false },
+      expectedEnvelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
     },
     {
       name: "an empty plural cascade resolves no tally",
       message: { kind: "cascade", cardinality: "plural", label: "Plugin list", marketplaces: [] },
-      expectedEnvelope: { severity: "info", needsReload: false, noOp: false },
+      expectedEnvelope: { severity: "info", needsReload: false, needsApply: false, noOp: false },
     },
     {
       name: "a populated plural cascade with no operation rows resolves zero successes",
@@ -252,6 +256,7 @@ describe("resolveEnvelope", () => {
       expectedEnvelope: {
         severity: "info",
         needsReload: false,
+        needsApply: false,
         noOp: false,
         tally: { label: "Plugin list", failures: 0, warnings: 0, success: { count: 0 } },
       },
@@ -272,6 +277,7 @@ describe("resolveEnvelope", () => {
       expectedEnvelope: {
         severity: "info",
         needsReload: false,
+        needsApply: false,
         noOp: false,
         tally: { label: "Plugin list", failures: 0, warnings: 0, success: { count: 1 } },
       },
@@ -304,6 +310,7 @@ describe("resolveEnvelope", () => {
       expectedEnvelope: {
         severity: "info",
         needsReload: false,
+        needsApply: false,
         noOp: false,
         tally: { label: "Plugin list", failures: 0, warnings: 0, success: { count: 3 } },
       },
@@ -336,6 +343,7 @@ describe("resolveEnvelope", () => {
         severity: "error",
         summary: "A marketplace operation has failed.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
         tally: { label: "Plugin update", failures: 1, warnings: 1, success: { count: 1 } },
       },
@@ -366,6 +374,7 @@ describe("resolveEnvelope", () => {
         severity: "error",
         summary: "A plugin operation has failed.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
         tally: { label: "Plugin install", failures: 1, warnings: 0 },
       },
@@ -382,6 +391,7 @@ describe("resolveEnvelope", () => {
       expectedEnvelope: {
         severity: "info",
         needsReload: false,
+        needsApply: false,
         noOp: false,
         tally: {
           label: "Plugin update",
@@ -418,6 +428,7 @@ describe("resolveEnvelope", () => {
         severity: "error",
         summary: "A plugin operation has failed.",
         needsReload: false,
+        needsApply: false,
         noOp: false,
         tally: { label: "Plugin update", failures: 1, warnings: 0 },
       },
@@ -436,7 +447,7 @@ describe("resolveEnvelope", () => {
           },
         ],
       },
-      expectedEnvelope: { severity: "info", needsReload: true, noOp: false },
+      expectedEnvelope: { severity: "info", needsReload: true, needsApply: false, noOp: false },
     },
     {
       name: "a plugin reload stamp resolves needsReload",
@@ -459,10 +470,39 @@ describe("resolveEnvelope", () => {
           },
         ],
       },
-      expectedEnvelope: { severity: "info", needsReload: true, noOp: false },
+      expectedEnvelope: { severity: "info", needsReload: true, needsApply: false, noOp: false },
     },
     {
-      name: "an applied reconcile resolves its tally without needsReload",
+      name: "APL-04 / D-14: a cascade that sets needsApply resolves needsApply",
+      message: {
+        kind: "cascade",
+        needsApply: true,
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [{ name: "alpha", status: "will install", severity: "info" }],
+          },
+        ],
+      },
+      expectedEnvelope: { severity: "info", needsReload: false, needsApply: true, noOp: false },
+    },
+    {
+      name: "APL-04 / D-14: a kindless cascade that sets needsApply resolves needsApply",
+      message: {
+        needsApply: true,
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [{ name: "alpha", status: "will uninstall", severity: "info" }],
+          },
+        ],
+      },
+      expectedEnvelope: { severity: "info", needsReload: false, needsApply: true, noOp: false },
+    },
+    {
+      name: "an applied reconcile resolves its tally and the reload its row stamps",
       message: {
         kind: "reconcile-applied-cascade",
         cardinality: "plural",
@@ -485,7 +525,8 @@ describe("resolveEnvelope", () => {
       },
       expectedEnvelope: {
         severity: "info",
-        needsReload: false,
+        needsReload: true,
+        needsApply: false,
         noOp: false,
         tally: { label: "Reconcile", failures: 0, warnings: 0, success: { count: 1 } },
       },
@@ -532,7 +573,12 @@ describe("resolveUpdateNoOpEnvelope", () => {
     const envelope = resolveUpdateNoOpEnvelope(message);
 
     // assert
-    assert.deepStrictEqual(envelope, { severity: "info", needsReload: false, noOp: true });
+    assert.deepStrictEqual(envelope, {
+      severity: "info",
+      needsReload: false,
+      needsApply: false,
+      noOp: true,
+    });
   });
 
   test("resolves the severity and summary of a no-op with a warning row", () => {
@@ -563,6 +609,7 @@ describe("resolveUpdateNoOpEnvelope", () => {
       severity: "warning",
       summary: "A plugin operation needs attention.",
       needsReload: false,
+      needsApply: false,
       noOp: true,
     });
   });
@@ -756,6 +803,120 @@ describe("resolveRows", () => {
       assert.deepStrictEqual(resolved[0]!.plugins, [expectedRow]);
     });
   }
+
+  test("D-10-13: resolves the disclosure cause of an updated, a reinstalled, and a partially installed row and still composes their markers", () => {
+    // arrange
+    const disclosure = 'constrained to the combined range (^1.0.0) -- required by "app@tools"';
+    const rows: readonly PluginNotificationMessage[] = [
+      {
+        status: "updated",
+        severity: "info",
+        needsReload: true,
+        name: "lib",
+        from: "1.0.0",
+        to: "1.1.0",
+        dependencies: ["agents"],
+        reasons: ["dependency current copy"],
+        cause: new Error(disclosure),
+      },
+      {
+        status: "reinstalled",
+        severity: "info",
+        needsReload: true,
+        name: "lib",
+        version: "1.0.0",
+        dependencies: ["agents"],
+        reasons: ["dependency current copy"],
+        cause: new Error(disclosure),
+      },
+      {
+        status: "partially-installed",
+        severity: "info",
+        needsReload: true,
+        name: "lib",
+        from: "1.0.0",
+        version: "1.1.0",
+        dependencies: [],
+        reasons: ["lsp"],
+        cause: new Error(disclosure),
+      },
+      {
+        status: "updated",
+        severity: "info",
+        needsReload: true,
+        name: "other",
+        from: "1.0.0",
+        to: "1.1.0",
+        dependencies: [],
+      },
+      {
+        status: "reinstalled",
+        severity: "info",
+        needsReload: true,
+        name: "other",
+        version: "1.0.0",
+        dependencies: [],
+      },
+    ];
+    const failure = {
+      cause: { causeChain: [disclosure], truncated: false },
+      leaks: [],
+      rollbackPartial: [],
+    };
+
+    // act
+    const resolved = resolveRows(marketplaceWith(rows), noneLoaded(), CENTRAL_ROW_POLICY);
+
+    // assert
+    assert.deepStrictEqual(resolved[0]!.plugins, [
+      {
+        status: "updated",
+        severity: "info",
+        needsReload: true,
+        name: "lib",
+        from: "1.0.0",
+        to: "1.1.0",
+        reasons: ["dependency current copy", "requires pi-subagents"],
+        failure,
+      },
+      {
+        status: "reinstalled",
+        severity: "info",
+        needsReload: true,
+        name: "lib",
+        version: "1.0.0",
+        reasons: ["dependency current copy", "requires pi-subagents"],
+        failure,
+      },
+      {
+        status: "partially-installed",
+        severity: "info",
+        needsReload: true,
+        name: "lib",
+        from: "1.0.0",
+        version: "1.1.0",
+        reasons: ["lsp"],
+        failure,
+      },
+      {
+        status: "updated",
+        severity: "info",
+        needsReload: true,
+        name: "other",
+        from: "1.0.0",
+        to: "1.1.0",
+        reasons: [],
+      },
+      {
+        status: "reinstalled",
+        severity: "info",
+        needsReload: true,
+        name: "other",
+        version: "1.0.0",
+        reasons: [],
+      },
+    ]);
+  });
 
   test("reads the leaked paths of a ManualRecoveryError cause", () => {
     // arrange
@@ -1062,6 +1223,15 @@ describe("resolveRows", () => {
         name: "alpha",
         reasons: ["lsp"],
         hint: "partial-update",
+      },
+    },
+    {
+      row: { status: "partially-upgradable", name: "alpha", reasons: ["lsp"], catalogHint: true },
+      expectedRow: {
+        status: "partially-upgradable",
+        name: "alpha",
+        reasons: ["lsp"],
+        hint: "catalog-partial-update",
       },
     },
     {
@@ -2804,6 +2974,7 @@ test("pending policies produce identical complete rows under opposite snapshots"
         { status: "will uninstall", name: "beta" },
         { status: "will enable", name: "gamma" },
         { status: "will disable", name: "delta" },
+        { status: "will update", name: "epsilon", from: "1.0.0", to: "1.1.0" },
       ],
     },
   ] as const;
@@ -2822,13 +2993,14 @@ test("pending policies produce identical complete rows under opposite snapshots"
         { status: "will uninstall", name: "beta", reasons: [] },
         { status: "will enable", name: "gamma", reasons: [] },
         { status: "will disable", name: "delta", reasons: [] },
+        { status: "will update", name: "epsilon", from: "1.0.0", to: "1.1.0", reasons: [] },
       ],
     },
   ];
   assert.deepStrictEqual(loaded, expected);
   assert.deepStrictEqual(absent, expected);
   const expectedText =
-    "● official [user]\n  ● alpha [project] (will partially install)\n  ○ beta (will uninstall)\n  ● gamma (will enable)\n  ◍ delta (will disable)";
+    "● official [user]\n  ● alpha [project] (will partially install)\n  ○ beta (will uninstall)\n  ● gamma (will enable)\n  ◍ delta (will disable)\n  ● epsilon v1.0.0 → v1.1.0 (will update)";
   assert.equal(composeReconcileAppliedBody([loaded[0]!]), expectedText);
   assert.equal(composeReconcileAppliedBody([absent[0]!]), expectedText);
 });

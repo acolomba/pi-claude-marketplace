@@ -6,15 +6,19 @@ import { describe, test } from "node:test";
 
 import {
   findLayerMarketplaceGaps,
+  effectiveAutoapply,
+  loadAutoapplyFiles,
   loadMergedScopeConfig,
   mergeScopeConfigs,
 } from "../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
+import { createHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import type { ScopeConfig } from "../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import type {
   LayerMarketplaceGap,
   MergedConfig,
+  EffectiveAutoapply,
   ScopeLoadOutcome,
 } from "../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 import type { ScopedLocations } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -764,4 +768,143 @@ describe("findLayerMarketplaceGaps", () => {
       assert.deepStrictEqual(gaps, expectedGaps);
     });
   }
+});
+
+/** One config file of an autoapply case: missing, unparseable, without the key, or with it. */
+type AutoapplyFixture = "absent" | "invalid" | "unset" | boolean;
+
+/** Writes `file` at `filePath`, or nothing for an absent one. */
+async function writeAutoapplyFile(filePath: string, file: AutoapplyFixture): Promise<void> {
+  if (file === "absent") {
+    return;
+  }
+
+  await mkdir(path.dirname(filePath), { recursive: true });
+  const bytes = { invalid: "{", unset: "{}" };
+  await writeFile(
+    filePath,
+    typeof file === "boolean" ? JSON.stringify({ autoapply: file }) : bytes[file],
+  );
+}
+
+/** The effective value as `invalid`, or `on`/`off` and the scope and layer that set it. */
+function describeEffective(effective: EffectiveAutoapply): string {
+  if (effective.status === "invalid") {
+    return "invalid";
+  }
+
+  const value = effective.enabled ? "on" : "off";
+  return effective.source === undefined
+    ? value
+    : `${value} from ${effective.source.scope} ${effective.source.layer}`;
+}
+
+// Each case lists the project local, project base, user local, and user base files.
+const autoapplyCases: readonly {
+  readonly name: string;
+  readonly files: readonly [AutoapplyFixture, AutoapplyFixture, AutoapplyFixture, AutoapplyFixture];
+  readonly expected: string;
+}[] = [
+  {
+    name: "is off when no file exists",
+    files: ["absent", "absent", "absent", "absent"],
+    expected: "off",
+  },
+  {
+    name: "is off when no file sets it",
+    files: ["unset", "absent", "unset", "absent"],
+    expected: "off",
+  },
+  {
+    name: "takes the user base config when it alone sets it",
+    files: ["absent", "unset", "absent", true],
+    expected: "on from user base",
+  },
+  {
+    name: "lets the project base config's false override the user configs' true",
+    files: ["absent", false, true, true],
+    expected: "off from project base",
+  },
+  {
+    name: "lets the project local config's true override every other false",
+    files: [true, false, false, false],
+    expected: "on from project local",
+  },
+  {
+    name: "lets the user local config's true override the user base config's false",
+    files: ["absent", "absent", true, false],
+    expected: "on from user local",
+  },
+  {
+    name: "D-03: is invalid when a less specific file is invalid",
+    files: [true, "absent", "absent", "invalid"],
+    expected: "invalid",
+  },
+  {
+    name: "D-03: is invalid when a more specific file is invalid",
+    files: ["invalid", "absent", true, "absent"],
+    expected: "invalid",
+  },
+];
+
+describe("effectiveAutoapply", () => {
+  for (const { name, files, expected } of autoapplyCases) {
+    test(`AAP-02 / D-04: ${name}`, async (t) => {
+      // arrange
+      const { cwd } = await createHermeticEnvironment(t, "config-merge-autoapply-");
+      const project = locationsFor("project", cwd);
+      const user = locationsFor("user", cwd);
+      const [projectLocal, projectBase, userLocal, userBase] = files;
+      await writeAutoapplyFile(project.localConfigJsonPath, projectLocal);
+      await writeAutoapplyFile(project.baseConfigJsonPath, projectBase);
+      await writeAutoapplyFile(user.localConfigJsonPath, userLocal);
+      await writeAutoapplyFile(user.baseConfigJsonPath, userBase);
+
+      // act
+      const effective = effectiveAutoapply(await loadAutoapplyFiles(project, user));
+
+      // assert
+      assert.equal(describeEffective(effective), expected);
+    });
+  }
+});
+
+describe("loadAutoapplyFiles", () => {
+  test("AAP-04: lists the four config files most specific first", async (t) => {
+    // arrange
+    const { cwd } = await createHermeticEnvironment(t, "config-merge-autoapply-files-");
+    const project = locationsFor("project", cwd);
+    const user = locationsFor("user", cwd);
+
+    // act
+    const files = await loadAutoapplyFiles(project, user);
+
+    // assert
+    assert.deepStrictEqual(files, [
+      {
+        scope: "project",
+        layer: "local",
+        filePath: project.localConfigJsonPath,
+        result: { status: "absent" },
+      },
+      {
+        scope: "project",
+        layer: "base",
+        filePath: project.baseConfigJsonPath,
+        result: { status: "absent" },
+      },
+      {
+        scope: "user",
+        layer: "local",
+        filePath: user.localConfigJsonPath,
+        result: { status: "absent" },
+      },
+      {
+        scope: "user",
+        layer: "base",
+        filePath: user.baseConfigJsonPath,
+        result: { status: "absent" },
+      },
+    ]);
+  });
 });

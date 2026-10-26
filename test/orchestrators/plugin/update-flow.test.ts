@@ -51,11 +51,13 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import {
   CleanupContextError,
+  DependencyDeclarationsUnreadableError,
   InvalidGitHubBaseUrlError,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
+  StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
@@ -66,6 +68,8 @@ import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
+
+import { materializeCommitCopyWith } from "./mirror-checkout.ts";
 
 import type { ParsedSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/orchestrators/auth-host.ts";
@@ -401,6 +405,7 @@ function capturingUpdateSeam(gitOps: GitOps): {
       captured.cloneAuth = args.auth;
       return materializeOrRefreshPluginMirror({ ...args, gitOps });
     },
+    materializePluginCommitCopy: (args) => materializeCommitCopyWith(gitOps, args),
   };
   return { seam, captured };
 }
@@ -457,7 +462,7 @@ async function seedGitUpdateMarketplace(opts: {
         marketplaceRoot,
         plugins: {
           gp: {
-            version: `sha-${opts.recordedSha.slice(0, 12)}`,
+            version: opts.versionTag,
             installedAt: "2026-01-01T00:00:00.000Z",
             updatedAt: "2026-01-01T00:00:00.000Z",
             enabled: true,
@@ -701,7 +706,10 @@ export async function seedPathMarketplace(opts: {
 
   const installedPlugins: Record<string, PluginRecord> = {};
   for (const [pluginName, installedVersion] of Object.entries(opts.installedVersions ?? {})) {
-    installedPlugins[pluginName] = makePluginRecord(installedVersion);
+    installedPlugins[pluginName] = {
+      ...makePluginRecord(installedVersion),
+      resolvedSource: path.join(marketplaceRoot, "plugins", pluginName),
+    };
   }
 
   await saveState(locations.extensionRoot, {
@@ -2388,6 +2396,63 @@ test("updateSinglePlugin classifies an unreadable manifest as permission denied"
   });
 });
 
+test("FLR-02: updateSinglePlugin under a held state lock fails as lock held with the lock cause", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-cascade-lock-held-");
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      process.chdir(cwd);
+      const release = await lockfile.lock(locations.extensionRoot, {
+        lockfilePath: locations.stateLockFile,
+        realpath: false,
+      });
+      let outcome: Awaited<ReturnType<PluginUpdateFn>>;
+      try {
+        // act
+        outcome = await updateSinglePlugin("hello", "mp", "project");
+      } finally {
+        await release();
+      }
+
+      // assert
+      assert.ok(outcome.partition === "failed");
+      const { cause, ...failure } = outcome;
+      const lockMessage = `Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`;
+      assert.deepStrictEqual(failure, {
+        partition: "failed",
+        name: "hello",
+        // UPR-03: the lock is hit at the intent mark, after the candidate.
+        fromVersion: "1.0.0",
+        toVersion: "1.0.1",
+        notes: [`${lockMessage}\n\ncause: ${lockMessage} -> Lock file is already being held`],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        reasons: ["lock held"],
+      });
+      assert.ok(cause instanceof StateLockHeldError);
+      assert.deepStrictEqual(
+        [cause.message, cause.scope, cause.lockPath],
+        [lockMessage, "project", locations.stateLockFile],
+      );
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("updateSinglePlugin classifies a plugin removed after preflight as concurrently uninstalled", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-cascade-preflight-uninstalled-");
@@ -2929,7 +2994,7 @@ test("an MCP commit permission failure becomes a rollback partial and retry conv
   });
 });
 
-test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'plugin-uninstall + plugin-install for \"<plugin>\".'", async (testContext) => {
+test("PUP-6 / D-18-10 phase-3 failure: bridge commit throws -> aggregate error tells the user to run reinstall", async (testContext) => {
   // The cleanest way to force a phase-3a failure deterministically is to
   // pre-create an UNWRITEABLE file at the target path where the skills
   // bridge would `rename(staging -> target)`. On most filesystems that
@@ -2995,7 +3060,7 @@ test("PUP-6 phase-3 failure: bridge commit throws -> aggregate error carries 'pl
       const allText = notifications[0]?.message ?? "";
       assert.match(
         allText,
-        /plugin-uninstall \+ plugin-install for "hello"\./,
+        /Run \/claude:plugin reinstall hello@mp to repair it\./,
         `expected RECOVERY_PLUGIN_REINSTALL_PREFIX hint in notification:\n${allText}`,
       );
 
@@ -3167,7 +3232,7 @@ test("WR-01: a CLEANLY-UPDATED predecessor before a phase-3a abort stays visible
         `expected 2 notifications, got ${notifications.length.toString()}: ${notifications.map((n) => n.message).join("\n---\n")}`,
       );
       const failure = notifications.find((n) =>
-        n.message.includes('plugin-uninstall + plugin-install for "zzz".'),
+        n.message.includes("Run /claude:plugin reinstall zzz@mp to repair it."),
       );
       assert.ok(failure !== undefined, "the zzz phase-3a failure notification must be present");
       const cascade = notifications.find((n) =>
@@ -3452,9 +3517,9 @@ test("SEV-03 / D-69-01: prior-state read -- an ALREADY partially-installed plugi
   });
 });
 
-// ─── PUP-1 pl@mp form: not-installed plugin -> partition='skipped' ─────────────
+// ─── PUP-1 pl@mp form: not-installed plugin -> partition='failed' ──────────────
 
-test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not installed)", async () => {
+test("PUP-1 / UPR-04 pl@mp: targeting a plugin not in state -> partition='failed' (not installed)", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-pup1-pl-noinstall-");
     try {
@@ -3477,11 +3542,11 @@ test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not i
 
       const body = notifications[0]?.message ?? "";
       // V2 byte form. Plugin-row `[<scope>]` bracket suppressed by orphan-fold.
-      // D-01: an absent-target update (not installed) is error, severity-only
-      // flip; the `(skipped) {not installed}` per-row grammar is preserved.
+      // UPR-04: an absent-target update fails as not installed, as uninstall's
+      // does.
       assert.equal(
         body,
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not installed}",
       );
       assert.equal(notifications[0]?.severity, "error");
     } finally {
@@ -3492,13 +3557,11 @@ test("PUP-1 pl@mp: targeting a plugin not in state -> partition='skipped' (not i
 
 // ─── PUP-1 pl@mp: not in state AND not in manifest -> partition='failed' ───────
 
-// UXG-08 / D-29-08: `update <plugin>@<mp>` where the plugin is absent from both
-// local state AND the marketplace manifest now classifies as `(failed) {not in
-// manifest}` (matching `install`), not the prior `(skipped) {not installed}`.
-// `preflightUpdate` consults the manifest BEFORE concluding "not installed", so
-// a typo / nonexistent plugin name is distinguished from a real-but-uninstalled
-// plugin.
-test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partition='failed' (not in manifest)", async () => {
+// UPR-04: `update <plugin>@<mp>` checks the install record before the
+// marketplace manifest, as Claude Code does, so a plugin absent from both local
+// state AND the manifest fails as `(failed) {not installed}`, the same row a
+// plugin the manifest still lists renders.
+test("PUP-1 / UPR-04 pl@mp: targeting a plugin not in state AND not in manifest -> partition='failed' (not installed)", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-pup1-pl-nomanifest-");
     try {
@@ -3507,8 +3570,7 @@ test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partit
         marketplaceRoot: path.join(cwd, "mp-src"),
         marketplaceName: "mp",
         // Empty manifest: no entry for "hello", and hello is not installed
-        // (no installedVersions). The manifest check must fire before the
-        // "not installed" guard.
+        // (no installedVersions). The record check fires first.
         manifestPlugins: {},
       });
 
@@ -3524,7 +3586,7 @@ test("PUP-1 pl@mp: targeting a plugin not in state AND not in manifest -> partit
       const body = notifications[0]?.message ?? "";
       assert.equal(
         body,
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not in manifest}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not installed}",
       );
       assert.equal(notifications[0]?.severity, "error");
     } finally {
@@ -3671,9 +3733,9 @@ test("SCOPE-01 @<mp>: marketplace present only in other scope -> scope-qualified
 // The plugin form reaches this via `resolveInstalledPluginTarget` returning the
 // explicit scope blindly, then `enumerateMarketplaceTarget` finding
 // `mp === undefined` for that scope and raising the signal -- the companion of
-// the `@<mp>` form test above (WR-01 gap closure). SEV-04 / D-01: an absent
-// target means the operation was NOT carried out, so the row is `error`.
-test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> (skipped) {not installed, marketplace in project scope}", async () => {
+// the `@<mp>` form test above (WR-01 gap closure). SEV-04 / UPR-04: an absent
+// target means the operation was NOT carried out, so the row is a failure.
+test("SCOPE-01 / UPR-04 <plugin>@<mp>: marketplace present only in other scope -> (failed) {not installed, marketplace in project scope}", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-scope01-plugin-other-");
     try {
@@ -3699,7 +3761,7 @@ test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> (skippe
       assert.equal(notifications[0]?.severity, "error");
       assert.equal(
         notifications[0]?.message,
-        "A plugin operation has failed.\n\n● mp [user]\n  ⊘ hello (skipped) {not installed, marketplace in project scope}",
+        "A plugin operation has failed.\n\n● mp [user]\n  ⊘ hello (failed) {not installed, marketplace in project scope}",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -3710,7 +3772,7 @@ test("SCOPE-01 <plugin>@<mp>: marketplace present only in other scope -> (skippe
 // Covers the resolveInstalledPluginTarget → undefined → ?? resolveInstalledMarketplaceTarget
 // fallback in enumerateMarketplaceTarget. With no explicit scope, resolveInstalledPluginTarget
 // searches both scopes and finds nothing, so the fallback fires to locate the marketplace scope.
-test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback resolution; partition='skipped'", async () => {
+test("PUP-1 / UPR-04 pl@mp: no explicit scope + plugin absent -> marketplace-fallback resolution; partition='failed'", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await createCaseDir("update-pup1-noscope-fallback-");
@@ -3738,11 +3800,11 @@ test("PUP-1 pl@mp: no explicit scope + plugin absent -> marketplace-fallback res
       // assert
       const body = notifications[0]?.message ?? "";
       // V2 byte form mirrors the pl@mp not-installed shape (PUP-1 above).
-      // Plugin-row `[<scope>]` bracket suppressed by orphan-fold. D-01:
-      // absent-target update (not installed) is error, severity-only flip.
+      // Plugin-row `[<scope>]` bracket suppressed by orphan-fold. UPR-04: an
+      // absent-target update fails as not installed.
       assert.equal(
         body,
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not installed}",
       );
       assert.equal(notifications[0]?.severity, "error");
     } finally {
@@ -3865,6 +3927,21 @@ for (const { title, makeFailure, reason } of [
     title: "classifies ENOTDIR marketplace refresh failures",
     makeFailure: () => Object.assign(new Error("missing"), { code: "ENOTDIR" }),
     reason: "source missing",
+  },
+  {
+    title: "classifies EISDIR marketplace refresh failures",
+    makeFailure: () => Object.assign(new Error("is a directory"), { code: "EISDIR" }),
+    reason: "unreadable",
+  },
+  {
+    title: "classifies EIO marketplace refresh failures",
+    makeFailure: () => Object.assign(new Error("input/output error"), { code: "EIO" }),
+    reason: "unreadable",
+  },
+  {
+    title: "classifies EBADF marketplace refresh failures",
+    makeFailure: () => Object.assign(new Error("bad file descriptor"), { code: "EBADF" }),
+    reason: "unreadable",
   },
   {
     title: "classifies stable network errno marketplace refresh failures",
@@ -4434,7 +4511,14 @@ test("CR-01: a later marketplace removed during an earlier refresh aborts before
             "Plugin update: 1 failure",
           severity: "error",
         },
-        { message: "● aaa [project]\n  ⊘ hello v1.0.0 (skipped) {no longer installable}" },
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● aaa [project]\n" +
+            "  ⊘ hello v1.0.0 (failed) {source missing}\n\n" +
+            "Plugin update: 1 failure",
+          severity: "error",
+        },
       ]);
       assert.equal((await loadState(locations.extensionRoot)).marketplaces["zzz"], undefined);
     } finally {
@@ -4530,8 +4614,8 @@ test("swapState-plugin-gone: plugin removed from state between enumerateTargets 
   // gitOps.fetch removes the plugin record from state.json after
   // enumerateTargets has already collected "hello" as a target. When
   // preflightUpdate runs, loadState finds no "hello" in the marketplace
-  // plugins -> returns partition='skipped' (notes: "not installed"). D-01:
-  // the absent target flips that skip to an error row (severity-only).
+  // plugins -> returns partition='failed' (notes: "not installed"), the
+  // absent-target failure (UPR-04).
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-swap-plugin-gone-");
     try {
@@ -4599,13 +4683,12 @@ test("swapState-plugin-gone: plugin removed from state between enumerateTargets 
       });
 
       // preflightUpdate reads modified state -> "hello" not in plugins ->
-      // returns skipped (not installed). D-01: absent target -> error row
-      // (severity-only flip; the `(skipped) {not installed}` token is kept).
+      // returns failed (not installed), an error row (UPR-04).
       assert.ok(notifications.length >= 1, "expected at least one notification");
       const errs = notifications.filter((n) => n.severity === "error");
-      assert.equal(errs.length, 1, "absent-target update is now an error (D-01)");
+      assert.equal(errs.length, 1, "absent-target update is an error (UPR-04)");
       const body = notifications[0]?.message ?? "";
-      assert.match(body, /\(skipped\) \{not installed\}/);
+      assert.match(body, /\(failed\) \{not installed\}/);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -4629,6 +4712,7 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
       await mkdir(locations.extensionRoot, { recursive: true });
       const cloneDir = await locations.sourceCloneDir("official");
       await cp(fixtureMarketplaceDir("valid-marketplace"), cloneDir, { recursive: true });
+      await mkdir(path.join(cloneDir, "plugins", "hello"), { recursive: true });
 
       await saveState(locations.extensionRoot, {
         schemaVersion: 1,
@@ -4694,9 +4778,12 @@ test("swapState-version-advanced: version advanced during fetch -> update runs a
       // No error: version advanced from 0.0.9 to 0.0.10, manifest has 1.0.0.
       // preflightUpdate uses 0.0.10 as fromVersion; withStateGuard finds 0.0.10
       // -> they match -> update proceeds.
-      assert.ok(notifications.length >= 1, "expected at least one notification");
-      const errs = notifications.filter((n) => n.severity === "error");
-      assert.equal(errs.length, 0, `unexpected error: ${JSON.stringify(errs)}`);
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● official [project]\n  ● hello v0.0.10 → v1.0.0 (updated)\n\nPlugin update: 1 updated\n\n/reload to pick up changes",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -4755,7 +4842,7 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
       const allText = notifications.map((n) => n.message).join("\n");
       assert.match(
         allText,
-        /plugin-uninstall \+ plugin-install for "hello"\./,
+        /Run \/claude:plugin reinstall hello@mp to repair it\./,
         `expected RECOVERY_PLUGIN_REINSTALL_PREFIX hint somewhere in:\n${allText}`,
       );
 
@@ -4786,11 +4873,11 @@ test("phase3a-commands-fail: command target occupied by directory -> phase3aFail
 
 // ─── phase 3a agents commit failure ──────────────────────────────────────────
 
-test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAgents throws", async () => {
+test("phase3a-agents-fail: a read-only agents directory -> commitPreparedAgents throws", async () => {
   // commitPreparedAgents calls rename(stagedFile.md, targetFile.md) for each
-  // agent. On Linux, rename(regular_file, existing_directory) fails with
-  // EISDIR. Pre-creating the agent target path as a DIRECTORY forces this.
-  // This exercises runThreePhaseUpdate's phase 3a aggregation.
+  // agent. A read-only agents directory makes that rename fail with EACCES
+  // after the swap's pre-intent target check found the target free. This
+  // exercises runThreePhaseUpdate's phase 3a aggregation.
   //
   // Also pre-create the skills obstacle so the test also verifies that
   // phase 3a continues across multiple bridge failures (D-03 discipline).
@@ -4813,31 +4900,32 @@ test("phase3a-agents-fail: agent target path is a directory -> commitPreparedAge
       await mkdir(locations.skillsTargetDir, { recursive: true });
       await writeFile(path.join(locations.skillsTargetDir, "hello-tool"), "obstacle");
 
-      // Pre-create the agent target path as a DIRECTORY to force agents commit
-      // failure. The generated agent name for "bot" in plugin "hello" is
-      // The generated basename is pi-claude-marketplace-hello-bot.
+      // Make the agents directory read-only to force the agents commit's
+      // rename to fail.
       await mkdir(locations.agentsDir, { recursive: true });
-      await mkdir(path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"), {
-        recursive: true,
-      });
+      await chmod(locations.agentsDir, 0o500);
 
       const { ctx, run, notifications } = makeCtx();
 
       // act
-      await updatePlugins({
-        ctx,
-        run,
-        scope: "project",
-        cwd,
-        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-      });
+      try {
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+      } finally {
+        await chmod(locations.agentsDir, 0o700);
+      }
 
       // assert
       // Both skills and agents commit should fail; recovery hint appears.
       const allText = notifications.map((n) => n.message).join("\n");
       assert.match(
         allText,
-        /plugin-uninstall \+ plugin-install for "hello"\./,
+        /Run \/claude:plugin reinstall hello@mp to repair it\./,
         `expected RECOVERY_PLUGIN_REINSTALL_PREFIX hint somewhere in:\n${allText}`,
       );
 
@@ -4912,7 +5000,7 @@ test("TR-04 matrix: skills-fails-others-succeed", async () => {
 
       assert.equal(notifications.length, 1);
       const allText = notifications[0]?.message ?? "";
-      assert.match(allText, /plugin-uninstall \+ plugin-install for "hello"\./);
+      assert.match(allText, /Run \/claude:plugin reinstall hello@mp to repair it\./);
 
       const after = await loadState(locations.extensionRoot);
       const rec = after.marketplaces["mp"]?.plugins["hello"];
@@ -4971,7 +5059,7 @@ test("TR-04 matrix: commands-fails-others-succeed", async () => {
 
       assert.equal(notifications.length, 1);
       const allText = notifications[0]?.message ?? "";
-      assert.match(allText, /plugin-uninstall \+ plugin-install for "hello"\./);
+      assert.match(allText, /Run \/claude:plugin reinstall hello@mp to repair it\./);
 
       const after = await loadState(locations.extensionRoot);
       const rec = after.marketplaces["mp"]?.plugins["hello"];
@@ -5010,24 +5098,27 @@ test("TR-04 matrix: agents-fails-others-succeed", async () => {
         installedVersions: { hello: "1.0.0" },
       });
 
-      // Force agents commit failure only (DIR at agent file path -> EISDIR).
+      // Force agents commit failure only (read-only agents directory -> the
+      // rename fails with EACCES).
       await mkdir(locations.agentsDir, { recursive: true });
-      await mkdir(path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md"), {
-        recursive: true,
-      });
+      await chmod(locations.agentsDir, 0o500);
 
       const { ctx, run, notifications } = makeCtx();
-      await updatePlugins({
-        ctx,
-        run,
-        scope: "project",
-        cwd,
-        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
-      });
+      try {
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+      } finally {
+        await chmod(locations.agentsDir, 0o700);
+      }
 
       assert.equal(notifications.length, 1);
       const allText = notifications[0]?.message ?? "";
-      assert.match(allText, /plugin-uninstall \+ plugin-install for "hello"\./);
+      assert.match(allText, /Run \/claude:plugin reinstall hello@mp to repair it\./);
 
       const after = await loadState(locations.extensionRoot);
       const rec = after.marketplaces["mp"]?.plugins["hello"];
@@ -5100,7 +5191,7 @@ test("TR-04 retry: partial-success-state-converges-to-new-version", async () => 
 
       assert.equal(notifications.length, 1);
       const call1Text = notifications[0]?.message ?? "";
-      assert.match(call1Text, /plugin-uninstall \+ plugin-install for "hello"\./);
+      assert.match(call1Text, /Run \/claude:plugin reinstall hello@mp to repair it\./);
 
       // Intermediate post-state assertion: partial-success state.
       const mid = await loadState(locations.extensionRoot);
@@ -5242,7 +5333,7 @@ async function updateFileSnapshot(locations: ReturnType<typeof locationsFor>): P
 
 /** The single failed-row notification a refused named update of `plugin` renders. */
 function refusedUpdateNotification(
-  plugin: string,
+  subject: string,
   reason: string,
   cause: string,
 ): { readonly message: string; readonly severity: "error" } {
@@ -5251,7 +5342,7 @@ function refusedUpdateNotification(
       "A plugin operation has failed.",
       "",
       "● mp [project]",
-      `  ⊘ ${plugin} (failed) {${reason}}`,
+      `  ⊘ ${subject} (failed) {${reason}}`,
       `    cause: ${cause}`,
     ].join("\n"),
     severity: "error",
@@ -5605,7 +5696,7 @@ for (const { form, target, rowName, blockName } of [
               "",
               `● ${blockName} [project]`,
               `  ⊘ ${rowName} (failed) {unreadable}`,
-              "    cause: cannot read the dependencies of gone@mp: not declared by its marketplace",
+              "    cause: cannot read the dependencies of gone@mp: not declared by its marketplace, and its installed copy cannot be read",
               "",
               "Plugin update: 1 failure",
             ].join("\n"),
@@ -5620,6 +5711,95 @@ for (const { form, target, rowName, blockName } of [
     });
   });
 }
+
+/**
+ * Install `hello` and `gone` from marketplace `mp` in the project scope, with
+ * `gone` no longer in the marketplace, so the dependency walk cannot read it.
+ */
+async function seedUnreadableSiblingRecord(cwd: string): Promise<ReturnType<typeof locationsFor>> {
+  const locations = locationsFor("project", cwd);
+  await seedPathMarketplace({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+    installedVersions: { hello: "1.0.0", gone: "1.0.0" },
+  });
+  return locations;
+}
+
+test("D-18-17: an update whose dependency walk cannot read another recorded plugin fails as unreadable and names it", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-walk-unreadable-");
+    try {
+      // arrange
+      const locations = await seedUnreadableSiblingRecord(cwd);
+      const filesBefore = await updateFileSnapshot(locations);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      // UPR-03: the walk failed after the preflight found the record, so the
+      // row shows the installed version it left in place.
+      assert.deepStrictEqual(notifications, [
+        refusedUpdateNotification(
+          "hello v1.0.0",
+          "unreadable",
+          "cannot read the dependencies of gone@mp: not declared by its marketplace, and its installed copy cannot be read",
+        ),
+      ]);
+      assert.deepStrictEqual(await updateFileSnapshot(locations), filesBefore);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-18-17: an autoupdate cascade fails a plugin whose dependency walk cannot read another record as unreadable", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-cascade-walk-unreadable-");
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      const locations = await seedUnreadableSiblingRecord(cwd);
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      process.chdir(cwd);
+
+      // act
+      const outcome = await updateSinglePlugin("hello", "mp", "project");
+
+      // assert
+      assert.ok(outcome.partition === "failed");
+      const { cause, ...failure } = outcome;
+      const walkMessage =
+        "cannot read the dependencies of gone@mp: not declared by its marketplace, and its installed copy cannot be read";
+      assert.deepStrictEqual(failure, {
+        partition: "failed",
+        name: "hello",
+        fromVersion: "1.0.0",
+        notes: [`${walkMessage}\n\ncause: ${walkMessage}`],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        reasons: ["unreadable"],
+      });
+      assert.ok(cause instanceof DependencyDeclarationsUnreadableError);
+      assert.deepStrictEqual([cause.declarer, cause.message], ["gone@mp", walkMessage]);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
 
 test("FIX-03: a bare update under a marketplace only the local config declares updates and writes no declaration", async () => {
   await withHermeticHome(async () => {
@@ -5843,6 +6023,54 @@ test("WR-02 / NFR-3: an already-current disabled record does not take the scope 
       } finally {
         await release();
       }
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FLR-01: a held scope lock fails an update that is due as lock held and keeps its cause", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-flr01-lock-held-");
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const { ctx, run, notifications } = makeCtx();
+      const release = await lockfile.lock(locations.extensionRoot, {
+        lockfilePath: locations.stateLockFile,
+        realpath: false,
+      });
+      try {
+        // act
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        });
+      } finally {
+        await release();
+      }
+
+      // assert: the lock is hit at the intent mark, after the candidate, so
+      // the row names the move it attempted (UPR-03).
+      assert.deepStrictEqual(notifications, [
+        refusedUpdateNotification(
+          "hello v1.0.0 → v1.1.0",
+          "lock held",
+          `Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes. -> Lock file is already being held`,
+        ),
+      ]);
+      assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -7431,10 +7659,53 @@ test("FORCE-02: --partial on a candidate that became partially available degrade
       assert.equal(
         notifications[0]?.message,
         "● mp [project]\n" +
-          "  ◉ hello v1.1.0 (partially-installed) {unsupported component}\n" +
+          "  ◉ hello v1.0.0 → v1.1.0 (partially-installed) {unsupported component}\n" +
           "\n" +
           "/reload to pick up changes",
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-18-06: an update --partial of a clean record records the degraded plugin as not installable", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-partial-record-");
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const seeded = await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      await makeCandidateUnsupported(seeded.marketplaceRoot, "hello", "1.1.0");
+      const { ctx, run } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+        partial: true,
+      });
+
+      // assert -- the flag install writes for the same resolution, which
+      // enable, install and backfill read as the partial-consent marker.
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "hello"
+      ];
+      assert.deepStrictEqual(record?.compatibility, {
+        installable: false,
+        notes: ["contains monitors", "contains themes"],
+        supported: ["skills"],
+        unsupported: ["monitors", "themes"],
+      });
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -7775,6 +8046,7 @@ function seamWith(gitOps: GitOps): UpdateCloneCacheSeam {
     materializePluginClone: (args) => materializePluginClone({ ...args, gitOps }),
     materializeOrRefreshPluginMirror: (args) =>
       materializeOrRefreshPluginMirror({ ...args, gitOps }),
+    materializePluginCommitCopy: (args) => materializeCommitCopyWith(gitOps, args),
   };
 }
 
@@ -7838,7 +8110,9 @@ async function seedGitPluginMarketplace(opts: {
     // Copy the fixture tree into the clone root directly (warm cache seed).
     await mkdir(path.dirname(cloneRoot), { recursive: true });
     await cp(opts.fixtureRepoDir, cloneRoot, { recursive: true });
-    const record = makePluginRecord(`sha-${sha.slice(0, 12)}`);
+    // VER-01: a record made by an install of the fixture tree, which
+    // declares `versionTag`.
+    const record = makePluginRecord(opts.versionTag);
     plugins[name] = {
       ...record,
       resolvedSource: cloneRoot,
@@ -7876,7 +8150,7 @@ async function seedGitPluginMarketplace(opts: {
     : { marketplaceRoot, manifestPath, oldCloneRoot };
 }
 
-test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded -> swap; resolvedSha + shaVersion updated, old clone GC'd, new clone present", async () => {
+test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded -> swap; resolvedSha updated at the same declared version, old clone GC'd, new clone present", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await createCaseDir("update-git-pinned-swap-");
@@ -7916,7 +8190,8 @@ test("PURL-06 / D-78-05 pinned sha-change: manifest sha differs from recorded ->
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.ok(record !== undefined, "a state record must survive the swap");
       assert.equal(record.resolvedSha, SHA_NEW, "resolvedSha swaps to the new manifest sha");
-      assert.equal(record.version, `sha-${SHA_NEW.slice(0, 12)}`, "version is shaVersion(new)");
+      // D-16-09: the commit moved, so it is an update at the same declared version.
+      assert.equal(record.version, "9.9.9", "VER-01: version is the declared version");
 
       const newCloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA_NEW));
       assert.equal(record.resolvedSource, newCloneRoot, "resolvedSource points at the new clone");
@@ -8108,7 +8383,7 @@ test("PURL-06 / D-78-05 pinned unchanged: manifest sha equals recorded -> outcom
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.equal(record?.resolvedSha, SHA_OLD, "recorded sha unchanged");
-      assert.equal(record?.version, `sha-${SHA_OLD.slice(0, 12)}`, "version unchanged");
+      assert.equal(record?.version, "9.9.9", "version unchanged");
       // The warm-cache clone was never re-cloned, and the (unchanged) short-
       // circuit did not GC the still-referenced clone.
       assert.equal(gitState.cloneCalls.length, 0, "no clone on an equal-sha (unchanged) update");
@@ -8129,11 +8404,11 @@ test("PURL-06 / D-78-05 pinned unchanged: manifest sha equals recorded -> outcom
   });
 });
 
-test("ENBL-09 / PURL-09: refreshing a DISABLED git-source record moves resolvedSha with the sha-derived version", async () => {
-  // For a git source `toVersion` is shaVersion(resolvedSha), so a refresh that
-  // bumps `version` without `resolvedSha` leaves the record advertising the new
-  // commit while `reinstall` still pins its re-clone to the OLD one -- a silent
-  // revert of the update. The two fields must agree after the refresh.
+test("ENBL-09 / PURL-09: refreshing a DISABLED git-source record moves resolvedSha with its version", async () => {
+  // A refresh that moves the commit without `resolvedSha` leaves the record
+  // naming the new tree while `reinstall` still pins its re-clone to the OLD
+  // commit -- a silent revert of the update. The two fields must agree after
+  // the refresh.
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-git-disabled-refresh-");
     try {
@@ -8183,11 +8458,12 @@ test("ENBL-09 / PURL-09: refreshing a DISABLED git-source record moves resolvedS
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.ok(record !== undefined);
-      assert.equal(record.version, `sha-${SHA_NEW.slice(0, 12)}`, "version is shaVersion(new)");
+      // D-16-09: the commit moved, so it is an update at the same declared version.
+      assert.equal(record.version, "9.9.9", "VER-01: version is the declared version");
       assert.equal(record.resolvedSha, SHA_NEW, "the pin moves with the sha-derived version");
-      assert.equal(
-        record.version,
-        `sha-${(record.resolvedSha ?? "").slice(0, 12)}`,
+      assert.deepEqual(
+        { version: record.version, resolvedSha: record.resolvedSha },
+        { version: "9.9.9", resolvedSha: SHA_NEW },
         "version and resolvedSha must describe the SAME commit after the refresh",
       );
       // The refresh never re-materializes: the record stays disabled and empty.
@@ -8541,11 +8817,15 @@ test("D-10-18: one bulk run resolves two path-source siblings from the same mark
       });
 
       // assert
+      // GV-01: each records its declared 1.0.0 with the tag's commit, and the
+      // tag's semver apart.
       const after = await loadState(locations.extensionRoot);
-      assert.strictEqual(after.marketplaces.mp?.plugins.pathfoo?.version, "1.2.0");
-      assert.strictEqual(after.marketplaces.mp?.plugins.pathfoo?.resolvedSha, oid);
-      assert.strictEqual(after.marketplaces.mp?.plugins.pathbar?.version, "1.2.0");
-      assert.strictEqual(after.marketplaces.mp?.plugins.pathbar?.resolvedSha, oid);
+      const pinned = (["pathfoo", "pathbar"] as const).map((name) => {
+        const record = after.marketplaces.mp?.plugins[name];
+        return [record?.version, record?.resolvedVersion, record?.resolvedSha];
+      });
+      const expected = [`1.0.0-${oid.slice(0, 12)}`, "1.2.0", oid];
+      assert.deepStrictEqual(pinned, [expected, expected]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -8696,7 +8976,13 @@ async function seedConstrainedPathTarget(
         addedFromCwd: cwd,
         manifestPath,
         marketplaceRoot,
-        plugins: { app: makePluginRecord("1.0.0"), pathfoo: makePluginRecord(installedVersion) },
+        plugins: {
+          app: makePluginRecord("1.0.0"),
+          pathfoo: {
+            ...makePluginRecord(installedVersion),
+            resolvedSource: path.join(marketplaceRoot, "plugins", "pathfoo"),
+          },
+        },
       },
     },
   });
@@ -8730,7 +9016,7 @@ test("D-10-13: an up-to-date constrained plugin discloses the range that admits 
           message: [
             "● mp [project]",
             "  ⊘ pathfoo (skipped) {up-to-date}",
-            '    cause: constrained to the combined range (>=1.0.0 <2.0.0-0) -- required by "app@mp"',
+            '    cause: constrained to the combined range (^1.0.0) -- required by "app@mp"',
           ].join("\n"),
         },
       ]);
@@ -8764,10 +9050,14 @@ test("D-10-18: a tag published between two cascade runs is visible to the second
       // assert -- run one listed no tag and fell back to the marketplace's
       // current copy; run two pins the published tag. A memo bound to the
       // binding rather than to the run would serve run one's tag-less
-      // listing again and leave the record at the fallback's 1.0.0.
+      // listing again and leave the record with no tag version. GV-01: the
+      // declared 1.0.0 carries the tag's commit.
       const after = await loadState(locations.extensionRoot);
-      assert.strictEqual(after.marketplaces.mp?.plugins.pathfoo?.version, "1.2.0");
-      assert.strictEqual(after.marketplaces.mp?.plugins.pathfoo?.resolvedSha, oid);
+      const record = after.marketplaces.mp?.plugins.pathfoo;
+      assert.deepStrictEqual(
+        [record?.version, record?.resolvedVersion, record?.resolvedSha],
+        [`1.0.0-${oid.slice(0, 12)}`, "1.2.0", oid],
+      );
     } finally {
       process.chdir(previousCwd);
       await rm(cwd, { recursive: true, force: true });
@@ -8830,7 +9120,7 @@ test("a disabled pin refresh swallows post-commit clone cleanup failure", async 
   });
 });
 
-test("MIRR-01/MIRR-03 unpinned update: refreshes the mirror in place and re-anchors the record to the bare mirror key with the HEAD sha", async () => {
+test("GIT-01 unpinned update: refreshes the mirror in place and re-anchors the record to the per-commit copy at its HEAD sha", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-git-unpinned-swap-");
     try {
@@ -8874,29 +9164,90 @@ test("MIRR-01/MIRR-03 unpinned update: refreshes the mirror in place and re-anch
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.equal(record?.resolvedSha, SHA_NEW, "records the refreshed mirror HEAD sha");
-      assert.equal(record?.version, `sha-${SHA_NEW.slice(0, 12)}`, "version is shaVersion(HEAD)");
+      assert.equal(record?.version, "9.9.9", "VER-01: version is the declared version");
 
-      // The record re-anchors to the BARE mirror key `plugin-clones/<12hex>/`.
+      // GIT-01: the record anchors to the per-commit copy at the mirror HEAD.
       const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
-      assert.equal(record?.resolvedSource, mirrorRoot, "resolvedSource re-anchors to the mirror");
-      assert.match(
-        path.basename(record?.resolvedSource ?? ""),
-        /^[0-9a-f]{12}$/,
-        "resolvedSource segment is a bare 12-hex mirror key",
+      const copyKey = pluginCloneKey(cloneUrl, SHA_NEW);
+      assert.equal(
+        record?.resolvedSource,
+        await locations.pluginCloneDir(copyKey),
+        "resolvedSource anchors to the per-commit copy",
       );
       assert.equal(await pathExists(mirrorRoot), true, "the mirror clone materialized");
       // The old per-sha clone is no longer referenced -> GC sweeps it.
       assert.equal(await pathExists(seeded.oldCloneRoot ?? ""), false, "old per-sha clone GC'd");
 
-      // MIRR-06 derive-not-persist: the post-swap GC leaves ONLY the bare mirror
-      // dir under plugin-clones/ -- no per-sha orphan, and no persisted migration
-      // artifact (refcount file / migration stamp) is written anywhere.
+      // GIT-02 derive-not-persist: the post-swap GC leaves the new copy and the
+      // mirror of its URL, and no persisted migration artifact.
       const { readdir } = await import("node:fs/promises");
       const cloneEntries = (await readdir(locations.pluginClonesDir)).sort();
       assert.deepEqual(
         cloneEntries,
-        [pluginMirrorKey(cloneUrl)],
-        "plugin-clones/ holds only the bare mirror key after re-anchor + sweep (no migration state)",
+        [pluginMirrorKey(cloneUrl), copyKey].sort(),
+        "plugin-clones/ holds the mirror and the new copy after the sweep",
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-18-11: an update moves a record that names the mirror at its HEAD onto the per-commit copy", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-git-mirror-record-");
+    try {
+      // arrange -- a record made before per-commit copies: its root is the
+      // mirror and its sha is the mirror's HEAD.
+      const cloneUrl = "https://example.com/org/repo";
+      const fixtureRepoDir = path.join(cwd, "repo-fixture-new");
+      await seedGitPluginMarketplace({
+        cwd,
+        cloneUrl,
+        fixtureRepoDir,
+        versionTag: "9.9.9",
+        entrySource: { source: "url", url: cloneUrl },
+        recordedSha: SHA_NEW,
+      });
+      const locations = locationsFor("project", cwd);
+      const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+      const before = await loadState(locations.extensionRoot);
+      const seededRecord = before.marketplaces["mp"]?.plugins["gp"];
+      assert.ok(seededRecord !== undefined);
+      seededRecord.resolvedSource = mirrorRoot;
+      await saveState(locations.extensionRoot, before);
+      const { gitOps } = createGitOps({
+        fixtureSourceDir: fixtureRepoDir,
+        head: SHA_NEW,
+        localRefs: { "refs/heads/main": SHA_NEW },
+        remoteRefs: { "refs/remotes/origin/main": SHA_NEW },
+      });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "gp", marketplace: "mp" },
+        cloneCacheSeam: seamWith(gitOps),
+      });
+
+      // assert
+      assert.deepEqual(notifications, [
+        {
+          message: "● mp [project]\n  ● gp v9.9.9 → v9.9.9 (updated)\n\n/reload to pick up changes",
+        },
+      ]);
+      const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
+      assert.deepStrictEqual(
+        { version: record?.version, sha: record?.resolvedSha, root: record?.resolvedSource },
+        {
+          version: "9.9.9",
+          sha: SHA_NEW,
+          root: await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA_NEW)),
+        },
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -8958,7 +9309,7 @@ test("PURL-06 / D-78-01 shared clone NOT GC'd: two git plugins share the old url
   });
 });
 
-test("MIRR-01 / NFR-3 vanished repo: unpinned mirror update whose clone throws -> fails clean; plugin stays on recorded sha, existing REASONS token, no new token", async () => {
+test("MIRR-01 / NFR-3 / SRC-01 vanished repo: unpinned mirror update whose clone throws -> fails with its cause; plugin stays on recorded sha, existing REASONS token, no new token", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-git-vanished-");
     try {
@@ -8998,17 +9349,18 @@ test("MIRR-01 / NFR-3 vanished repo: unpinned mirror update whose clone throws -
       const record = after.marketplaces["mp"]?.plugins["gp"];
       // NFR-3 fail-clean: the plugin STAYS on its recorded sha (no swap).
       assert.equal(record?.resolvedSha, SHA_OLD, "plugin stays on its recorded sha");
-      assert.equal(
-        record?.version,
-        `sha-${SHA_OLD.slice(0, 12)}`,
-        "version stays at the recorded sha",
-      );
+      assert.equal(record?.version, "9.9.9", "version stays at the recorded version");
       // The old clone is untouched (still referenced).
       assert.equal(await pathExists(seeded.oldCloneRoot ?? ""), true, "recorded clone untouched");
       // A failure surfaced through the EXISTING network-unreachable REASON token
       // (no new token); the plugin declined its swap and stayed put.
-      const body = notifications.map((n) => n.message).join("\n");
-      assert.match(body, /\{network unreachable\}/, "existing network-unreachable REASON token");
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {network unreachable}\n    cause: getaddrinfo ENOTFOUND example.com",
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -9119,7 +9471,8 @@ test("PURL-03 pinned git-subdir update: the new clone's subdir anchors the plugi
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.ok(record !== undefined, "a state record survives the swap");
       assert.equal(record.resolvedSha, SHA_NEW, "resolvedSha swaps to the new manifest sha");
-      assert.equal(record.version, `sha-${SHA_NEW.slice(0, 12)}`, "version is shaVersion(new)");
+      // D-16-09: the commit moved, so it is an update at the same declared version.
+      assert.equal(record.version, "9.9.9", "VER-01: version is the declared version");
 
       const newCloneRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA_NEW));
       assert.equal(
@@ -9180,7 +9533,7 @@ test("PURL-03 pinned git-subdir update whose declared path is ABSENT in the new 
   });
 });
 
-test("MIRR-01 unpinned git-subdir update: the refreshed mirror's subdir anchors the pluginRoot and the record re-anchors to the mirror HEAD sha", async () => {
+test("GIT-01 unpinned git-subdir update: the per-commit copy's subdir anchors the pluginRoot at the mirror HEAD sha", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-git-subdir-unpinned-");
     try {
@@ -9216,11 +9569,11 @@ test("MIRR-01 unpinned git-subdir update: the refreshed mirror's subdir anchors 
       const after = await loadState(locations.extensionRoot);
       const record = after.marketplaces["mp"]?.plugins["gp"];
       assert.equal(record?.resolvedSha, SHA_NEW, "records the refreshed mirror HEAD sha");
-      const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
+      const copyRoot = await locations.pluginCloneDir(pluginCloneKey(cloneUrl, SHA_NEW));
       assert.equal(
         record?.resolvedSource,
-        path.join(mirrorRoot, "plugins", "p"),
-        "resolvedSource anchors to the SUBDIR under the mirror root",
+        path.join(copyRoot, "plugins", "p"),
+        "resolvedSource anchors to the SUBDIR under the per-commit copy",
       );
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -9482,8 +9835,8 @@ test("updateSinglePlugin keeps a recorded provider SHA offline without an auth c
     assert.deepEqual(outcome, {
       partition: "unchanged",
       name: "gp",
-      fromVersion: "sha-111111111111",
-      toVersion: "sha-111111111111",
+      fromVersion: "9.9.9",
+      toVersion: "9.9.9",
       declaresAgents: false,
       declaresMcp: false,
       constraint: undefined,
@@ -9612,17 +9965,14 @@ test("NFR-3 device-flow auth failure: a clone throw shaped UserCanceledError cla
         SHA_OLD,
         "plugin stays on its recorded sha",
       );
-      const body = notifications.map((n) => n.message).join("\n");
-      assert.match(
-        body,
-        /\{authentication required\}/,
-        "an auth failure renders the existing authentication-required REASON token",
-      );
-      assert.doesNotMatch(
-        body,
-        /\{no longer installable\}/,
-        "an auth failure must NOT render the lying no-longer-installable reason",
-      );
+      // The bare auth row carries no cause line, as install's does.
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ gp v9.9.9 (failed) {authentication required}",
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -10079,7 +10429,7 @@ test("CR-01: a --partial update that drops a kind AND degrades a component names
         "A plugin operation needs attention.\n" +
           "\n" +
           "● mp [project]\n" +
-          "  ◉ hello v1.1.0 (partially-installed) {malformed skill, unsupported component}\n" +
+          "  ◉ hello v1.0.0 → v1.1.0 (partially-installed) {malformed skill, unsupported component}\n" +
           "\n" +
           "/reload to pick up changes",
       );
@@ -10271,7 +10621,7 @@ test("D-03 fail-continue: a hooks write that cannot land is aggregated, not thro
       assert.match(body, /hooks/, `the failing bridge must be named in:\n${body}`);
       assert.match(
         body,
-        /plugin-uninstall \+ plugin-install for "hello"\./,
+        /Run \/claude:plugin reinstall hello@mp to repair it\./,
         `a phase-3 aggregate must carry the recovery hint in:\n${body}`,
       );
 
@@ -10367,7 +10717,7 @@ test("ST-9: a version that advanced under an in-flight update aborts on the inte
       const body = notifications.map((n) => n.message).join("\n");
       assert.match(
         body,
-        /⊘ gp \(failed\) \{concurrently updated\}/,
+        /⊘ gp v9\.9\.9 \(1111111\) → v9\.9\.9 \(2222222\) \(failed\) \{concurrently updated\}/,
         `the version drift must reach the closed-set reason in:\n${body}`,
       );
       assert.match(body, /was concurrently updated; expected version/, `no cause in:\n${body}`);
@@ -10425,7 +10775,7 @@ test("ST-9: a record uninstalled under an in-flight update aborts instead of res
       const body = notifications.map((n) => n.message).join("\n");
       assert.match(
         body,
-        /⊘ gp \(failed\) \{concurrently uninstalled\}/,
+        /⊘ gp v9\.9\.9 \(1111111\) → v9\.9\.9 \(2222222\) \(failed\) \{concurrently uninstalled\}/,
         `the vanished record must reach the closed-set reason in:\n${body}`,
       );
       assert.match(body, /was concurrently uninstalled/, `no cause in:\n${body}`);
@@ -10617,7 +10967,7 @@ test("a disabled update accepts a concurrent writer that already stored the next
           const state = await loadState(locations.extensionRoot);
           const record = state.marketplaces["mp"]?.plugins["gp"];
           assert.ok(record !== undefined);
-          record.version = "sha-222222222222";
+          record.version = "9.9.9";
           record.resolvedSource = nextCloneRoot;
           record.resolvedSha = SHA_NEW;
           record.compatibility = {
@@ -10634,7 +10984,7 @@ test("a disabled update accepts a concurrent writer that already stored the next
       assert.equal(notifications.length, 1);
       const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
       assert.ok(record !== undefined);
-      assert.equal(record.version, "sha-222222222222");
+      assert.equal(record.version, "9.9.9");
       assert.equal(record.resolvedSource, nextCloneRoot);
       assert.equal(record.resolvedSha, SHA_NEW);
       assert.equal(record.enabled, false);
@@ -11936,7 +12286,7 @@ test("WR-03: a workflows failure reaches the rendered rollback-partial row", asy
       );
       assert.match(
         body,
-        /plugin-uninstall \+ plugin-install for "hello"\./,
+        /Run \/claude:plugin reinstall hello@mp to repair it\./,
         `a phase-3 aggregate must carry the recovery hint in:\n${body}`,
       );
     } finally {
@@ -11956,9 +12306,10 @@ test("owns plugin update flow composition", () => {
   assert.strictEqual(typeof operations.updatePlugins, "function");
   assert.strictEqual(typeof operations.beginPluginUpdateRun, "function");
   assert.strictEqual(typeof operations.beginPluginUpdateRun(), "function");
+  assert.strictEqual(typeof operations.convergePlugin, "function");
 });
 
-test("routes cascade-safe preflight outcomes through the flow owner", async () => {
+test("UPR-04: routes a not-installed preflight failure through the flow owner", async () => {
   await withHermeticHome(async () => {
     // arrange
     const cwd = await createCaseDir("update-flow-preflight-");
@@ -11980,7 +12331,7 @@ test("routes cascade-safe preflight outcomes through the flow owner", async () =
       const outcome = await operations.beginPluginUpdateRun()("present", "mp", "project");
 
       // assert
-      assert.strictEqual(outcome.partition, "skipped");
+      assert.strictEqual(outcome.partition, "failed");
       assert.strictEqual(outcome.name, "present");
       assert.deepStrictEqual(outcome.reasons, ["not installed"]);
     } finally {
@@ -12433,8 +12784,8 @@ test("AFILE-04: an update that fails after its MCP commit still reports the remo
           message:
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
-            "  ⊘ hello (failed) {rollback partial}\n" +
-            `    cause: Plugin "hello" update failed during physical replace. plugin-uninstall + plugin-install for "hello". -> ${refusal}\n` +
+            "  ⊘ hello v1.0.0 → v1.0.1 (failed) {rollback partial}\n" +
+            `    cause: Plugin "hello" failed during physical replace. Run /claude:plugin reinstall hello@mp to repair it. -> ${refusal}\n` +
             "    [workflows] (rollback failed)\n" +
             `      cause: ${refusal}`,
           severity: "error",
@@ -12587,10 +12938,10 @@ test("AFILE-02: updating a plugin with no MCP servers over an unparseable mcp-ad
 
 /**
  * AFILE-04: binds update operations whose next locked state load throws once a
- * save has recorded `hello` at 1.0.1, so the target after `hello` fails before
- * its swap.
+ * save has recorded `hello` at `helloVersion`, so the target after `hello`
+ * fails at its intent mark, after its candidate.
  */
-function failLoadsAfterHelloUpdate(): UpdatePluginsFn {
+function failLoadsAfterHelloUpdate(helloVersion: string): UpdatePluginsFn {
   let helloUpdated = false;
   return createPluginUpdateOperations(
     createHooksRouting(createHooksRuntime(), { readHooksJson }),
@@ -12605,7 +12956,7 @@ function failLoadsAfterHelloUpdate(): UpdatePluginsFn {
       },
       saveState: async (extensionRoot, state) => {
         await saveState(extensionRoot, state);
-        helloUpdated ||= state.marketplaces["mp"]?.plugins["hello"]?.version === "1.0.1";
+        helloUpdated ||= state.marketplaces["mp"]?.plugins["hello"]?.version === helloVersion;
       },
     },
   ).updatePlugins;
@@ -12628,7 +12979,7 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later plugin's failure st
       });
       const locations = locationsFor("project", cwd);
       await writeFile(locations.mcpAdapterJsonPath, COMMENTED_ADAPTER_TEXT);
-      const updateAll = failLoadsAfterHelloUpdate();
+      const updateAll = failLoadsAfterHelloUpdate("1.0.1");
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -12646,7 +12997,7 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later plugin's failure st
           message:
             "A plugin operation has failed.\n\n" +
             "● mp [project]\n" +
-            "  ⊘ zzz (failed) {unreadable manifest}\n" +
+            "  ⊘ zzz v1.0.0 → v1.0.1 (failed) {unreadable manifest}\n" +
             "    cause: state read failed\n\n" +
             "Plugin update: 1 failure",
           severity: "error",
@@ -12661,6 +13012,55 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later plugin's failure st
           severity: "warning",
         },
         PROJECT_COMMENTS_DROPPED_NOTICE,
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("UPR-03: a later target's failure in a bulk update names its own move, not the earlier target's", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-bulk-own-move-");
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "2.0.0" }, zzz: { version: "1.0.1" } },
+        installedVersions: { hello: "1.0.0", zzz: "1.0.0" },
+      });
+      const updateAll = failLoadsAfterHelloUpdate("2.0.0");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updateAll({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n" +
+            "● mp [project]\n" +
+            "  ⊘ zzz v1.0.0 → v1.0.1 (failed) {unreadable manifest}\n" +
+            "    cause: state read failed\n\n" +
+            "Plugin update: 1 failure",
+          severity: "error",
+        },
+        {
+          message:
+            "● mp [project]\n" +
+            "  ● hello v1.0.0 → v2.0.0 (updated)\n\n" +
+            "Plugin update: 1 updated\n\n" +
+            "/reload to pick up changes",
+        },
       ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -12723,3 +13123,568 @@ test("AFILE-04 / CR-01: a bulk update that aborts on a later marketplace sync st
     }
   });
 });
+
+// ─── D-26: the converge entry `apply` drives ────────────────────────────────
+
+function convergeOperations(stateTransaction?: Parameters<typeof createPluginUpdateOperations>[2]) {
+  return createPluginUpdateOperations(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+    stateTransaction,
+  );
+}
+
+test("D-26: convergePlugin moves a path-source plugin to the catalog version in the target's cwd", async () => {
+  await withHermeticHome(async () => {
+    // arrange -- the process cwd is not the project, so only the target's own
+    // `cwd` can locate the project scope.
+    const cwd = await createCaseDir("update-converge-move-");
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      assert.notStrictEqual(process.cwd(), cwd);
+
+      // act
+      const outcome = await convergeOperations().convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: false,
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "updated",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+      });
+      const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+      assert.strictEqual(record?.version, "1.1.0");
+      assert.ok(await pathExists(path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md")));
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("APPLY1-01 / WR-3: convergePlugin collects clones through the target's collector when it names one", async () => {
+  await withHermeticHome(async () => {
+    // arrange -- the record names a commit the path-source candidate drops, so
+    // the move asks for a clone collection.
+    const cwd = await createCaseDir("update-converge-collector-");
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const seeded = await loadState(locations.extensionRoot);
+      const hello = seeded.marketplaces.mp?.plugins.hello;
+      assert.ok(hello !== undefined);
+      hello.resolvedSha = "a".repeat(40);
+      hello.enabled = false;
+      await saveState(locations.extensionRoot, seeded);
+      const collected: string[] = [];
+
+      // act
+      await convergeOperations().convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: false,
+        cleanupClones: (target) => {
+          collected.push(target.pluginClonesDir);
+          return Promise.resolve();
+        },
+      });
+
+      // assert
+      assert.deepStrictEqual(collected, [locations.pluginClonesDir]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-26: convergePlugin answers a move at the recorded revision as unchanged and writes nothing", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-converge-same-");
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const before = await readFile(locations.stateJsonPath, "utf8");
+
+      // act
+      const outcome = await convergeOperations().convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: false,
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "unchanged",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+      });
+      assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), before);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-10 / D-25: convergePlugin with rematerialize re-materializes the recorded revision", async () => {
+  await withHermeticHome(async () => {
+    // arrange -- the catalog offers the recorded version, and a skill the
+    // record names is missing on disk.
+    const cwd = await createCaseDir("update-converge-rematerialize-");
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const skillFile = path.join(locations.skillsTargetDir, "hello-tool", "SKILL.md");
+      await rm(path.join(locations.skillsTargetDir, "hello-tool"), {
+        recursive: true,
+        force: true,
+      });
+
+      // act
+      const outcome = await convergeOperations().convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: true,
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "updated",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+      });
+      assert.ok(await pathExists(skillFile));
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const { partial, expected } of [
+  { partial: false, expected: "declined" },
+  { partial: true, expected: "moved partially" },
+] as const) {
+  test(`D-26 / WCONV-01: a partially available candidate is ${expected} when the target's partial is ${String(partial)}`, async () => {
+    await withHermeticHome(async () => {
+      // arrange
+      const cwd = await createCaseDir("update-converge-partial-");
+      try {
+        const marketplaceRoot = path.join(cwd, "mp-src");
+        await seedPathMarketplace({
+          cwd,
+          marketplaceRoot,
+          marketplaceName: "mp",
+          manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+          installedVersions: { hello: "1.0.0" },
+        });
+        await writeFile(
+          path.join(marketplaceRoot, "plugins", "hello", ".lsp.json"),
+          JSON.stringify({ servers: { ts: { command: "tsserver" } } }),
+        );
+
+        // act
+        const outcome = await convergeOperations().convergePlugin({
+          plugin: "hello",
+          marketplace: "mp",
+          scope: "project",
+          cwd,
+          partial,
+          rematerialize: false,
+        });
+
+        // assert
+        if (partial) {
+          assert.strictEqual(outcome.partition, "updated");
+          assert.deepStrictEqual(
+            outcome.partition === "updated" ? outcome.partialDegrade : undefined,
+            { kinds: ["lspServers"], newlyDegraded: true },
+          );
+        } else {
+          assert.deepStrictEqual(outcome, {
+            partition: "skipped",
+            name: "hello",
+            fromVersion: "1.0.0",
+            notes: ['Plugin "hello" is no longer installable: contains lspServers'],
+            reasons: ["lsp"],
+            partialUpgradable: true,
+            declaresAgents: false,
+            declaresMcp: false,
+            declaresWorkflows: false,
+          });
+        }
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+for (const { rematerialize, offered } of [
+  { rematerialize: false, offered: "2.0.0" },
+  { rematerialize: true, offered: "1.0.0" },
+] as const) {
+  test(`D-26 / T-29-29 / T-29-35: convergePlugin keeps an agent file a user edited and fails the move when rematerialize is ${String(rematerialize)}`, async () => {
+    await withHermeticHome(async () => {
+      // arrange
+      const cwd = await createCaseDir("update-converge-edited-agent-");
+      try {
+        const locations = locationsFor("project", cwd);
+        const marketplaceRoot = path.join(cwd, "mp-src");
+        await seedPathMarketplace({
+          cwd,
+          marketplaceRoot,
+          marketplaceName: "mp",
+          manifestPlugins: { hello: { version: offered, hasSkill: false, hasAgent: true } },
+          installedVersions: { hello: "1.0.0" },
+        });
+        const target = path.join(locations.agentsDir, "pi-claude-marketplace-hello-bot.md");
+        const editedBytes = "---\nname: bot\n---\nEdited by hand.\n";
+        await mkdir(locations.agentsDir, { recursive: true });
+        await writeFile(target, editedBytes);
+        await writeFile(
+          locations.agentsIndexPath,
+          JSON.stringify({
+            schemaVersion: 1,
+            agents: [
+              {
+                plugin: "hello",
+                marketplace: "mp",
+                sourceAgent: "bot",
+                generatedName: "pi-claude-marketplace-hello-bot",
+                sourcePath: path.join(marketplaceRoot, "plugins", "hello", "agents", "bot.md"),
+                targetPath: target,
+                sourceHash: "a".repeat(64),
+                droppedFields: [],
+                droppedTools: [],
+                warnings: [],
+              },
+            ],
+          }),
+        );
+        const state = await loadState(locations.extensionRoot);
+        const record = state.marketplaces.mp?.plugins.hello;
+        assert.ok(record !== undefined);
+        record.resources = {
+          ...record.resources,
+          skills: [],
+          agents: ["pi-claude-marketplace-hello-bot"],
+        };
+        await saveState(locations.extensionRoot, state);
+        const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+
+        // act
+        const outcome = await convergeOperations().convergePlugin({
+          plugin: "hello",
+          marketplace: "mp",
+          scope: "project",
+          cwd,
+          partial: false,
+          rematerialize,
+        });
+
+        // assert
+        assert.strictEqual(outcome.partition, "failed");
+        assert.strictEqual(await readFile(target, "utf8"), editedBytes);
+        assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+test("D-26 / PUP-9: a throw inside convergePlugin becomes a failed outcome naming the attempted move", async () => {
+  await withHermeticHome(async () => {
+    // arrange -- the swap's intent mark is the first save, after the candidate.
+    const cwd = await createCaseDir("update-converge-throw-");
+    try {
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const denied = Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+      const operations = convergeOperations({
+        loadState,
+        saveState: () => Promise.reject(denied),
+      });
+
+      // act
+      const outcome = await operations.convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: false,
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "failed",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        notes: ["EACCES: permission denied\n\ncause: EACCES: permission denied"],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        reasons: ["permission denied"],
+      });
+      const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+      assert.strictEqual(record?.version, "1.0.0");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-13: a source file convergePlugin cannot read fails the move as permission denied", async () => {
+  await withHermeticHome(async () => {
+    // arrange -- the commands bridge names the file and carries the EACCES as
+    // its cause.
+    const cwd = await createCaseDir("update-converge-unreadable-");
+    try {
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot,
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true, hasCommand: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      if (typeof process.getuid === "function" && process.getuid() === 0) {
+        throw new Error("an unreadable file cannot deny root; run this suite as a non-root user");
+      }
+
+      const unreadable = path.join(marketplaceRoot, "plugins", "hello", "commands", "deploy.md");
+      await chmod(unreadable, 0o000);
+
+      // act
+      const outcome = await convergeOperations().convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: false,
+      });
+
+      // assert
+      assert.strictEqual(outcome.partition, "failed");
+      assert.deepStrictEqual(outcome.reasons, ["permission denied"]);
+    } finally {
+      // An unreadable file still unlinks, so the tree removal needs no restore.
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GHB-03: convergePlugin rethrows an invalid base", async (t) => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-converge-invalid-base-");
+    t.after(() => rm(cwd, { recursive: true, force: true }));
+    await seedGitUpdateMarketplace({
+      cwd,
+      cloneUrl: "https://github.com/org/repo",
+      entrySource: { source: "github", repo: "org/repo" },
+      recordedSha: SHA_OLD,
+      versionTag: "9.9.9",
+    });
+    setGitHubBaseUrl(t, "http://mirror.example");
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        convergeOperations().convergePlugin({
+          plugin: "gp",
+          marketplace: "mp",
+          scope: "project",
+          cwd,
+          partial: false,
+          rematerialize: false,
+        }),
+      (error: unknown) => {
+        assert.deepStrictEqual(
+          error,
+          new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+        );
+        return true;
+      },
+    );
+  });
+});
+
+test("UPD-DEP-D1: a named update settles the new version's dependencies in the command's context and reports their rows", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-settles-dependencies-");
+    try {
+      // arrange
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const { ctx, run, notifications } = makeCtx();
+      const settled: unknown[] = [];
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+        undefined,
+        {},
+        (args, prepared, notification) => {
+          settled.push([
+            args.plugin,
+            prepared.toVersion,
+            notification.ctx === ctx,
+            notification.run === run,
+          ]);
+          return Promise.resolve({
+            kind: "settled",
+            rows: [
+              {
+                status: "installed",
+                name: "zcore@mp",
+                dependencies: [],
+                version: "1.0.0",
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          });
+        },
+      );
+
+      // act
+      await operations.updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n  ● zcore@mp v1.0.0 (installed)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.deepStrictEqual(settled, [["hello", "1.0.1", true, true]]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const { label, notified, expected } of [
+  { label: "with the command's context settles", notified: true, expected: ["hello"] },
+  { label: "without a context settles no", notified: false, expected: [] },
+]) {
+  test(`UPD-DEP-D1: an autoupdate run ${label} dependencies`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("autoupdate-settles-dependencies-");
+      const previousCwd = process.cwd();
+      try {
+        // arrange
+        await seedPathMarketplace({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+          installedVersions: { hello: "1.0.0" },
+        });
+        process.chdir(cwd);
+        const { ctx, run } = makeCtx();
+        const settled: string[] = [];
+        const operations = createPluginUpdateOperations(
+          createHooksRouting(createHooksRuntime(), { readHooksJson }),
+          createCompletionCache(),
+          undefined,
+          {},
+          (args) => {
+            settled.push(args.plugin);
+            return Promise.resolve({ kind: "settled", rows: [] });
+          },
+        );
+        const updateOne = operations.beginPluginUpdateRun(notified ? { ctx, run } : undefined);
+
+        // act
+        const outcome = await updateOne("hello", "mp", "project");
+
+        // assert
+        assert.strictEqual(outcome.partition, "updated");
+        assert.deepStrictEqual(settled, expected);
+      } finally {
+        process.chdir(previousCwd);
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}

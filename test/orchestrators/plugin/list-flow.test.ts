@@ -466,7 +466,7 @@ test("PL-1: no flags emit the exact many-row notification for every bucket", asy
           "● mp1 [user]",
           "  ● alpha v1.0.0 (installed)",
           "  ○ beta v2.0.0 (available)",
-          "  ⊘ gamma v3.0.0 (unavailable) {unsupported source}",
+          "  ⊘ gamma v3.0.0 (unavailable) {source missing}",
           "",
           "Plugin list: 3 successes",
         ].join("\n"),
@@ -989,7 +989,7 @@ test("OUT-02: NEITHER `(unavailable)` path acquires the token -- not the structu
       [
         "● mp1 [user]",
         "  ⊘ bad/name v1.0.0 (unavailable) {unreadable}",
-        "  ⊘ gone v1.0.0 (unavailable) {unsupported source}",
+        "  ⊘ gone v1.0.0 (unavailable) {source missing}",
       ].join("\n"),
       out,
     );
@@ -2227,6 +2227,167 @@ test("CR-01 / G-21-01: project-scope plugin under a CLONED user marketplace fold
   });
 });
 
+/**
+ * Seeds the CR-01 fold shape: a user-scope `mp1` with `beta` installed in the
+ * user scope and `gamma` offered, plus a project-scope clone of that record
+ * (same `marketplaceRoot`) with `alpha` installed in the project scope.
+ */
+async function seedFoldedInstallations(home: string, cwd: string): Promise<void> {
+  const userRoot = path.join(home, ".pi", "agent");
+  await seedMarketplace({
+    scope: "user",
+    scopeRoot: userRoot,
+    cwd,
+    mpName: "mp1",
+    manifest: {
+      name: "mp1",
+      plugins: [
+        { name: "alpha", source: "./alpha", version: "1.0.0" },
+        { name: "beta", source: "./beta", version: "1.0.0" },
+        { name: "gamma", source: "./gamma", version: "1.0.0" },
+      ],
+    },
+    installed: { beta: { version: "1.0.0" } },
+    installablePluginDirs: ["alpha", "beta", "gamma"],
+  });
+  const sharedMpRoot = path.join(userRoot, "marketplaces", "mp1");
+  const projectLocations = locationsFor("project", cwd);
+  await mkdir(projectLocations.extensionRoot, { recursive: true });
+  await mergeMarketplaceIntoState(projectLocations.extensionRoot, "mp1", {
+    name: "mp1",
+    scope: "project",
+    source: pathSource("./mp1-src"),
+    addedFromCwd: cwd,
+    manifestPath: path.join(sharedMpRoot, ".claude-plugin", "marketplace.json"),
+    marketplaceRoot: sharedMpRoot,
+    plugins: {
+      alpha: buildInstalledPluginRecord(
+        { version: "1.0.0" },
+        seededResources("alpha", { version: "1.0.0" }),
+      ),
+    },
+  });
+}
+
+test("SC-6 / LST-05: --scope project lists a project clone of a user marketplace under its own header", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedFoldedInstallations(home, cwd);
+    const { ctx, run, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, run, cwd, scope: "project" });
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp1 [project]",
+          "  ● alpha v1.0.0 (installed)",
+          "  ○ beta v1.0.0 (available)",
+          "  ○ gamma v1.0.0 (available)",
+        ].join("\n"),
+      },
+    ]);
+
+    verify(ctx);
+    verify(ui);
+  });
+});
+
+test("SC-6 / LST-05: --scope user offers a plugin installed only in the project scope as available", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedFoldedInstallations(home, cwd);
+    const { ctx, run, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, run, cwd, scope: "user" });
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp1 [user]",
+          "  ○ alpha v1.0.0 (available)",
+          "  ● beta v1.0.0 (installed)",
+          "  ○ gamma v1.0.0 (available)",
+        ].join("\n"),
+      },
+    ]);
+
+    verify(ctx);
+    verify(ui);
+  });
+});
+
+test("SC-6 / LST-05 / PL-6: --scope project keeps the failed header of a project clone whose manifest cannot be read", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedFoldedInstallations(home, cwd);
+    await writeFile(
+      path.join(home, ".pi", "agent", "marketplaces", "mp1", ".claude-plugin", "marketplace.json"),
+      "{ not json",
+      "utf8",
+    );
+    const { ctx, run, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, run, cwd, scope: "project" });
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: "A marketplace operation has failed.\n\n⊘ mp1 [project] (failed)",
+        severity: "error",
+      },
+    ]);
+
+    verify(ctx);
+    verify(ui);
+  });
+});
+
+test("SC-6 / LST-05: --scope project drops a user marketplace with no project installation", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp1",
+      manifest: { name: "mp1", plugins: [{ name: "beta", source: "./beta", version: "1.0.0" }] },
+      installed: { beta: { version: "1.0.0" } },
+      installablePluginDirs: ["beta"],
+    });
+    await seedMarketplace({
+      scope: "project",
+      scopeRoot: path.join(cwd, ".pi"),
+      cwd,
+      mpName: "mp2",
+      manifest: {
+        name: "mp2",
+        plugins: [
+          { name: "alpha", source: "./alpha", version: "1.0.0" },
+          { name: "gamma", source: "./gamma", version: "1.0.0" },
+        ],
+      },
+      installed: { alpha: { version: "1.0.0" } },
+      installablePluginDirs: ["alpha", "gamma"],
+    });
+    const { ctx, run, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, run, cwd, scope: "project" });
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp2 [project]",
+          "  ● alpha v1.0.0 (installed)",
+          "  ○ gamma v1.0.0 (available)",
+        ].join("\n"),
+      },
+    ]);
+
+    verify(ctx);
+    verify(ui);
+  });
+});
+
 // ──────────────────────────────────────────────────────────────────────────
 // PL-3: marketplace narrowing
 // ──────────────────────────────────────────────────────────────────────────
@@ -2269,6 +2430,59 @@ test("PL-3: opts.marketplace narrows to a single marketplace; other marketplaces
     assert.match(out, /off-plug/);
     assert.equal(out.includes("community"), false);
     assert.equal(out.includes("com-plug"), false);
+
+    verify(ctx);
+    verify(ui);
+  });
+});
+
+test("PL-3: a marketplace neither scope records fails as not added", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "official",
+      manifest: { name: "official", plugins: [] },
+    });
+    const { ctx, run, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, run, cwd, marketplace: "nosuch" });
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: "A marketplace operation has failed.\n\n⊘ nosuch (failed) {marketplace not added}",
+        severity: "error",
+      },
+    ]);
+
+    verify(ctx);
+    verify(ui);
+  });
+});
+
+test("PL-3: a marketplace only the other scope records fails as not added to the asked scope", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedMarketplace({
+      scope: "project",
+      scopeRoot: path.join(cwd, ".pi"),
+      cwd,
+      mpName: "official",
+      manifest: { name: "official", plugins: [] },
+    });
+    const { ctx, run, notifications, ui } = makeCtx();
+    // act
+    await listPlugins({ ctx, run, cwd, scope: "user", marketplace: "official" });
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n⊘ official [user] (failed) {marketplace not added to user scope}",
+        severity: "error",
+      },
+    ]);
 
     verify(ctx);
     verify(ui);

@@ -26,6 +26,7 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
               {
                 status: "installed",
                 name: "new-plugin",
+                version: "1.0.0",
                 dependencies: [],
                 severity: "info",
                 needsReload: true,
@@ -40,6 +41,7 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
               {
                 status: "installed",
                 name: "other-plugin",
+                version: "1.0.0",
                 dependencies: [],
                 severity: "info",
                 needsReload: true,
@@ -459,6 +461,66 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
       },
     },
 
+    // REC-05: the check could not read one declarer's dependencies because its
+    // catalog no longer lists it. The plugin keeps loading, so the row is a
+    // warning naming the fault, with the walk's cause line.
+    "reconcile-dependency-declarer-unreadable": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "deploy-kit",
+                reasons: ["not in manifest"],
+                cause: new Error(
+                  "cannot read the dependencies of deploy-kit@mp: not declared by its marketplace, and its installed copy cannot be read",
+                ),
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // REC-05 / DLS-01: an enabled plugin its catalog no longer lists, Pi's
+    // counterpart to upstream's `plugin-not-found` load error. The plugin keeps
+    // loading, so the row is a warning in upstream's words.
+    "reconcile-plugin-not-in-manifest": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "deploy-kit",
+                reasons: ["not in manifest"],
+                cause: new Error('Plugin "deploy-kit" not found in marketplace "mp"'),
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // LOAD-01: the same check, on the arm where the dependency is recorded and
     // enabled at a version outside the declared range. The second token, and a
     // remedy that names the canonical folded range.
@@ -480,7 +542,7 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
                 version: "1.0.0",
                 reasons: ["dependency version unsatisfied"],
                 cause: new Error(
-                  'Update "secrets-vault@mp" to satisfy >=2.0.0 <3.0.0-0, or uninstall "deploy-kit@mp"',
+                  'Update "secrets-vault@mp" to satisfy ^2.0.0, or uninstall "deploy-kit@mp"',
                 ),
                 severity: "warning",
                 needsReload: true,
@@ -598,6 +660,46 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
         ],
       },
     },
+    // GV-01: a missing plugin directory dependency whose listed copy falls
+    // outside the range its installed declarer asks for.
+    "reconcile-dependency-directory-pin-unsatisfied": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "anthropic-plugin-directory",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "secrets-vault",
+                reasons: ["version conflict"],
+                cause: new Error(
+                  '"secrets-vault" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "deploy-kit".',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "disabled",
+                name: "deploy-kit",
+                version: "1.0.0",
+                reasons: ["dependency unsatisfied"],
+                cause: new Error(
+                  'Install "secrets-vault@anthropic-plugin-directory" or uninstall "deploy-kit@anthropic-plugin-directory"',
+                ),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
     "reconcile-dependency-cross-marketplace": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",
@@ -634,6 +736,134 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
                 ),
                 severity: "error",
                 needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-08 / D-26: `apply` moved a recorded plugin to the version its catalog
+    // offers, through the update runner, and the session has not loaded it.
+    "apply-updated": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "updated",
+                name: "demo",
+                scope: "project",
+                from: "1.0.0",
+                to: "1.1.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-12: a move a dependent's range does not admit stays put with the row
+    // `pending` lists for it.
+    "apply-update-held": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "skipped",
+                name: "lib",
+                version: "1.0.0",
+                reasons: ["dependents constrain"],
+                cause: new Error(
+                  'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"',
+                ),
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-12 / D-24: a clean record whose catalog candidate would drop components
+    // stays put with the decline row `pending` lists, and its consent hint.
+    "apply-update-partial-consent": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "partially-upgradable",
+                name: "demo",
+                version: "1.0.0",
+                reasons: ["unsupported component"],
+                catalogHint: true,
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-13: a move that failed to materialize names its closed-set reason and
+    // the move it attempted; the next move still ran.
+    "apply-update-failed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "alpha",
+                version: "1.1.0",
+                from: "1.0.0",
+                reasons: ["permission denied"],
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "updated",
+                name: "beta",
+                scope: "project",
+                from: "1.0.0",
+                to: "1.1.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
               },
             ],
           },

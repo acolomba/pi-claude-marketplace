@@ -490,6 +490,27 @@ Feature: Marketplace remove
       | /skill:beta-skill | A skill of beta 1.0.0. |
       | /skill:lib-skill  | A skill of lib 1.0.0.  |
 
+  Scenario: Removing a marketplace from the base layer goes ahead when only a disabled plugin of the local layer needs one of its plugins
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alpha | 1.0.0   |              |
+      | beta  | 1.0.0   | alpha        |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin marketplace add {home}/marketplaces/tools --scope project --local"
+    Given the user has run "/claude:plugin install alpha@tools --scope project"
+    Given the user has run "/claude:plugin install beta@tools --scope project --local"
+    Given the user has run "/claude:plugin disable beta@tools --scope project --local"
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id          | name  | status      | reasons | scope   |
+      | tools            | project           | removed            | alpha@tools | alpha | uninstalled |         | project |
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+
   Scenario: Removing a marketplace from the base layer fails while a plugin of the local layer still needs one of its plugins
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
@@ -593,6 +614,14 @@ Feature: Marketplace remove
       | id          |
       | alpha@tools |
     When the user starts a new pi session
+    Then the session reports these results:
+      | kind                      | severity | needs reload | summary                             | tally label | tally failures | tally warnings |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+      | reconcile-applied-cascade | warning  | false        | A plugin operation needs attention. | Reconcile   | 0              | 1              |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id        | name | status | reasons          | scope   | leaks | rollback partial | cause chain                                                                    | cause truncated |
+      | tools            | project           | lib@tools | lib  | failed | invalid manifest | project |       |                  | cannot read the dependencies of lib@tools: its marketplace manifest is invalid | false           |
+      | tools            | project           | lib@tools | lib  | failed | invalid manifest | project |       |                  | cannot read the dependencies of lib@tools: its marketplace manifest is invalid | false           |
     Then the session offers these skills:
       | command            | description             |
       | /skill:alpha-skill | A skill of alpha 1.0.0. |
@@ -770,3 +799,60 @@ Feature: Marketplace remove
     Examples:
       | source kind |
       | github      |
+
+  Scenario: Removing a marketplace deletes the clones of the git-source plugins it uninstalls
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the git repository "mono" holds these plugins:
+      | name | version | path         |
+      | subp | 1.0.0   | plugins/subp |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+      | subp | git-subdir  | mono       | true   |
+    Given the marketplace "gits" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@gits --scope project"
+    Given the user has run "/claude:plugin install subp@gits --scope project"
+    When the user runs "/claude:plugin marketplace remove gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id        | name | status      | reasons | scope   |
+      | gits             | project           | removed            | ghp@gits  | ghp  | uninstalled |         | project |
+      | gits             | project           | removed            | subp@gits | subp | uninstalled |         | project |
+    Then the project scope holds no git clones
+    Then the git host receives no request
+
+  Scenario: Removing a marketplace keeps a pinned clone that a plugin of another marketplace still uses
+    Given the git repository "mono" holds these plugins:
+      | name | version | path         |
+      | subp | 1.0.0   | plugins/subp |
+      | subq | 1.0.0   | plugins/subq |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | subp | git-subdir  | mono       | true   |
+    Given the marketplace "others" is published as a dir source
+    Given the marketplace "others" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | subq | git-subdir  | mono       | true   |
+    Given the marketplace "gits" is added to the project scope
+    Given the marketplace "others" is added to the project scope
+    Given the user has run "/claude:plugin install subp@gits --scope project"
+    Given the user has run "/claude:plugin install subq@others --scope project"
+    When the user runs "/claude:plugin marketplace remove gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id        | name | status      | reasons | scope   |
+      | gits             | project           | removed            | subp@gits | subp | uninstalled |         | project |
+    Then the project scope holds these git clones:
+      | clone  | origin                           | revision          |
+      | plugin | https://{git host}/acme/mono.git | {mono revision 1} |
+    Then the git host receives no request

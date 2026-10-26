@@ -12,6 +12,16 @@ import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification
 
 import { seedUnconstrainedTarget } from "./seed-unconstrained-target.ts";
 
+import type { MaterializationPolicy } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
+
+/** `update`'s knobs on the shared runner (D-18-04). */
+const UPDATE_POLICY = {
+  refreshSource: true,
+  skipSameRevision: true,
+  overwrite: false,
+  searchReleaseTags: true,
+} satisfies MaterializationPolicy;
+
 function updated(
   marketplace: string,
   scope: "project" | "user",
@@ -151,6 +161,45 @@ test("D-10-13: the ceiling version discloses its range and holders", () => {
     "● mp [project]",
     "  ⊘ shared-lib (skipped) {up-to-date}",
     '    cause: already the highest version the combined range admits (<=1.5.0) -- required by "alpha@mp"',
+  ].join("\n");
+
+  // act
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "single");
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [{ message: expectedMessage }]);
+  boundary.verifyBoundary();
+});
+
+test("D-10-13: an update a dependent's range admitted names the range on its cause line", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1);
+  const outcomes: readonly UpdateCascadeOutcome[] = [
+    {
+      target: { marketplace: "tools", scope: "project" },
+      outcome: {
+        declaresWorkflows: false,
+        partition: "updated",
+        name: "lib",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: {
+          disclosure: 'constrained to the combined range (^1.0.0) -- required by "app@tools"',
+          fellBackToCurrentCopy: true,
+        },
+      },
+    },
+  ];
+  const expectedMessage = [
+    "● tools [project]",
+    "  ● lib v1.0.0 → v1.1.0 (updated) {dependency current copy}",
+    '    cause: constrained to the combined range (^1.0.0) -- required by "app@tools"',
+    "",
+    "/reload to pick up changes",
   ].join("\n");
 
   // act
@@ -313,16 +362,16 @@ test("renders a partial bulk decline before the exact no-op headline", () => {
   boundary.verifyBoundary();
 });
 
-test("renders an absent targeted result as an exact error without a version", () => {
+test("UPR-04: renders an absent targeted result as an exact failure without a version", () => {
   // arrange
   const boundary = createNotificationBoundary(1);
   const outcomes: readonly UpdateCascadeOutcome[] = [
     {
       target: { marketplace: "mp", scope: "project" },
       outcome: {
-        partition: "skipped",
+        partition: "failed",
         name: "hello",
-        notes: [],
+        notes: ["not installed"],
         reasons: ["not installed"],
         declaresAgents: false,
         declaresMcp: false,
@@ -338,7 +387,74 @@ test("renders an absent targeted result as an exact error without a version", ()
   assert.deepStrictEqual(boundary.notifications, [
     {
       message:
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (skipped) {not installed}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello (failed) {not installed}",
+      severity: "error",
+    },
+  ]);
+  boundary.verifyBoundary();
+});
+
+test("SRC-01 / UPR-03: renders a preflight failure at the installed version", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1);
+  const outcomes: readonly UpdateCascadeOutcome[] = [
+    {
+      target: { marketplace: "mp", scope: "project" },
+      outcome: {
+        partition: "failed",
+        name: "demo",
+        fromVersion: "1.0.0",
+        notes: ["source dir does not exist"],
+        reasons: ["source missing"],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+      },
+    },
+  ];
+
+  // act
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "single");
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ demo v1.0.0 (failed) {source missing}",
+      severity: "error",
+    },
+  ]);
+  boundary.verifyBoundary();
+});
+
+test("renders a failed outcome's cause as its cause line", () => {
+  // arrange
+  const boundary = createNotificationBoundary(1);
+  const outcomes: readonly UpdateCascadeOutcome[] = [
+    {
+      target: { marketplace: "mp", scope: "project" },
+      outcome: {
+        partition: "failed",
+        name: "demo",
+        fromVersion: "1.0.0",
+        notes: ["connect ECONNREFUSED 127.0.0.1:443"],
+        reasons: ["network unreachable"],
+        cause: new Error("connect ECONNREFUSED 127.0.0.1:443"),
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+      },
+    },
+  ];
+
+  // act
+  composeUpdateCascade(boundary.ctx, runWithNothingLoaded(), outcomes, "single");
+
+  // assert
+  assert.deepStrictEqual(boundary.notifications, [
+    {
+      message:
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ demo v1.0.0 (failed) {network unreachable}\n    cause: connect ECONNREFUSED 127.0.0.1:443",
       severity: "error",
     },
   ]);
@@ -653,6 +769,7 @@ test("SC3: an unconstrained plugin renders the same manual cascade rows as befor
   const seed = await seedUnconstrainedTarget("sc3-update-cascade-");
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
   const prepared = await preparePluginUpdate({
+    policy: UPDATE_POLICY,
     plugin: "alpha",
     marketplace: "mp",
     scope: "project",

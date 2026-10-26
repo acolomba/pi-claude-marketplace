@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  appendLeakToError,
   CrossOriginChallengeError,
+  PinnedCommitMissingError,
   StoredCredentialRejectedError,
 } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
+  classifyGitHostFailure,
   classifyGitSourceAccessFailure,
   classifyGitTransportFailure,
   hostHttpFailureFrame,
@@ -338,6 +341,102 @@ for (const { title, createFailure, expectedReason } of [
     assert.strictEqual(reason, expectedReason);
   });
 }
+
+test("leaves a ref the clone on disk does not have unclassified for the host ladder", () => {
+  // arrange
+  const failure = Object.assign(new Error("Could not find HEAD."), {
+    code: "NotFoundError",
+    name: "NotFoundError",
+  });
+
+  // act
+  const reason = classifyGitHostFailure(failure);
+
+  // assert
+  assert.strictEqual(reason, undefined);
+});
+
+for (const { title, createFailure, expectedReason } of [
+  {
+    title: "classifies a pin the fresh clone does not hold as source missing",
+    createFailure: () => new PinnedCommitMissingError("0123abc"),
+    expectedReason: "source missing",
+  },
+  {
+    title: "classifies the host's answer behind a cleanup leak",
+    createFailure: () =>
+      appendLeakToError(
+        Object.assign(new Error("HTTP Error: 404"), {
+          code: "HttpError",
+          data: { statusCode: 404 },
+        }),
+        "staging leaked",
+      ),
+    expectedReason: "source missing",
+  },
+  {
+    title: "classifies a missing pin behind a cleanup leak",
+    createFailure: () =>
+      appendLeakToError(new PinnedCommitMissingError("0123abc"), "staging leaked"),
+    expectedReason: "source missing",
+  },
+] as const) {
+  test(title, () => {
+    // arrange
+    const failure = createFailure();
+
+    // act
+    const reason = classifyGitHostFailure(failure);
+
+    // assert
+    assert.strictEqual(reason, expectedReason);
+  });
+}
+
+test("classifies a transport failure behind a cleanup leak", () => {
+  // arrange
+  const failure = appendLeakToError(
+    Object.assign(new Error("socket hang up"), { code: "ECONNRESET" }),
+    "staging leaked",
+  );
+
+  // act
+  const reason = classifyGitTransportFailure(failure);
+
+  // assert
+  assert.strictEqual(reason, "network unreachable");
+});
+
+test("reads the host HTTP status behind a cleanup leak", () => {
+  // arrange
+  const failure = appendLeakToError(
+    Object.assign(new Error("HTTP Error: 502"), { code: "HttpError", data: { statusCode: 502 } }),
+    "staging leaked",
+  );
+
+  // act
+  const status = hostHttpStatus(failure);
+
+  // assert
+  assert.strictEqual(status, 502);
+});
+
+test("classifies a ref the remote does not have behind a cleanup leak for a source access", () => {
+  // arrange
+  const failure = appendLeakToError(
+    Object.assign(new Error("Could not find stable."), {
+      code: "NotFoundError",
+      name: "NotFoundError",
+    }),
+    "staging leaked",
+  );
+
+  // act
+  const reason = classifyGitSourceAccessFailure(failure);
+
+  // assert
+  assert.strictEqual(reason, "source missing");
+});
 
 for (const { title, createFailure, expectedStatus } of [
   {

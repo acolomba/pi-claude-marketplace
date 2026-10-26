@@ -5671,6 +5671,8 @@ interface DeclaringSeed {
   /** Bare `name` / `name@marketplace` tokens, written to the entry AND the plugin's own manifest. */
   readonly dependencies?: readonly string[];
   readonly enabled?: boolean;
+  /** Marks a disabled record as held down by the load-time check. */
+  readonly dependencyDisabled?: boolean;
   readonly provenance?: PluginRecord["provenance"];
   /** `false` records the plugin in state while its marketplace manifest omits it (D-05-07). */
   readonly listed?: boolean;
@@ -5734,6 +5736,10 @@ async function seedDeclaringScope(
       await writeFile(path.join(skillDir, "SKILL.md"), `---\nname: ${skillName}\n---\nbody\n`);
       const record = makePluginRecord({ skills: [skillName] }, seed.provenance ?? "explicit");
       record.enabled = seed.enabled ?? true;
+      if (seed.dependencyDisabled !== undefined) {
+        record.dependencyDisabled = seed.dependencyDisabled;
+      }
+
       pluginRecords[plugin] = record;
     }
 
@@ -5765,7 +5771,8 @@ async function seedDeclaringMarketplace(
 interface DependentsCase {
   readonly title: string;
   readonly plugins: Readonly<Record<string, DeclaringSeed>>;
-  readonly expectedCause: string;
+  /** The rendered target row, with its cause line when it has one. */
+  readonly expectedRow: string;
   /** The `plugin@marketplace` keys still recorded after the target is removed. */
   readonly remaining: readonly string[];
 }
@@ -5774,7 +5781,9 @@ const DEPENDENTS_CASES: readonly DependentsCase[] = [
   {
     title: "LOAD-03: the uninstall proceeds while one installed plugin declares the target",
     plugins: { helper: { provenance: "dependency" }, app: { dependencies: ["helper"] } },
-    expectedCause: "required by app@mp",
+    expectedRow:
+      "  ○ helper v0.0.1 (uninstalled) {dependents unsatisfied}\n" +
+      "    cause: required by app@mp\n",
     remaining: ["app@mp"],
   },
   {
@@ -5784,18 +5793,20 @@ const DEPENDENTS_CASES: readonly DependentsCase[] = [
       zeta: { dependencies: ["helper@mp"] },
       alpha: { dependencies: ["helper"] },
     },
-    expectedCause: "required by alpha@mp, zeta@mp",
+    expectedRow:
+      "  ○ helper v0.0.1 (uninstalled) {dependents unsatisfied}\n" +
+      "    cause: required by alpha@mp, zeta@mp\n",
     remaining: ["alpha@mp", "zeta@mp"],
   },
   {
-    title: "D-05-04: a DISABLED installed plugin still holds the target",
+    title: "UNI-01: a DISABLED installed plugin is not named as a dependent",
     plugins: { helper: {}, app: { dependencies: ["helper"], enabled: false } },
-    expectedCause: "required by app@mp",
+    expectedRow: "  ○ helper v0.0.1 (uninstalled)\n",
     remaining: ["app@mp"],
   },
 ];
 
-for (const { title, plugins, expectedCause, remaining } of DEPENDENTS_CASES) {
+for (const { title, plugins, expectedRow, remaining } of DEPENDENTS_CASES) {
   test(title, async () => {
     await withHermeticHome(async () => {
       const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-dependents-"));
@@ -5822,11 +5833,7 @@ for (const { title, plugins, expectedCause, remaining } of DEPENDENTS_CASES) {
         assert.equal(outcome, undefined);
         assert.deepStrictEqual(notifications, [
           {
-            message:
-              `● mp [project]\n` +
-              `  ○ helper v0.0.1 (uninstalled) {dependents unsatisfied}\n` +
-              `    cause: ${expectedCause}\n\n` +
-              `/reload to pick up changes`,
+            message: `● mp [project]\n${expectedRow}\n/reload to pick up changes`,
           },
         ]);
         assert.deepStrictEqual(Object.keys(await recordedInventory(locations)).sort(), [
@@ -5854,7 +5861,8 @@ const REFUSAL_CASES: readonly RefusalCase[] = [
     title: "D-05-07: a record its marketplace manifest does not list refuses the uninstall",
     plugins: { helper: {}, other: { listed: false } },
     expectedRow: "⊘ helper v0.0.1 (failed) {unreadable}",
-    expectedCause: "cannot read the dependencies of other@mp: not declared by its marketplace",
+    expectedCause:
+      "cannot read the dependencies of other@mp: not declared by its marketplace, and its installed copy cannot be read",
   },
   {
     title: "D-05-07: a record whose own manifest is present but unreadable refuses the uninstall",
@@ -6039,7 +6047,8 @@ test("D-05-07: the orchestrated unreadable-declarer refusal still returns the ty
         cwd,
       );
       const { ctx, run, notifications } = makeCtx();
-      const cause = "cannot read the dependencies of other@mp: not declared by its marketplace";
+      const cause =
+        "cannot read the dependencies of other@mp: not declared by its marketplace, and its installed copy cannot be read";
 
       // act
       const outcome = await uninstallWithFreshOwner({
@@ -6099,6 +6108,42 @@ for (const { title, plugins, layers, local, expected } of [
     plugins: { helper: { provenance: "dependency" }, app: { dependencies: ["helper"] } },
     layers: { base: LAYER_DECLARING_APP, local: LAYER_DECLARING_APP },
     local: true,
+    expected: {
+      message:
+        "A plugin operation has failed.\n\n● mp [project]\n" +
+        "  ⊘ helper v0.0.1 (failed) {dependents remain}\n" +
+        "    cause: Uninstall app@mp first, then helper@mp.",
+      severity: "error",
+    },
+  },
+  {
+    title: "a dependency a plugin the load-time check held down needs is refused (UNI-01)",
+    plugins: {
+      helper: { provenance: "dependency" },
+      app: { dependencies: ["helper"], enabled: false, dependencyDisabled: true },
+    },
+    layers: { base: LAYER_DECLARING_APP, local: EMPTY_LAYER },
+    local: false,
+    expected: {
+      message:
+        "A plugin operation has failed.\n\n● mp [project]\n" +
+        "  ⊘ helper v0.0.1 (failed) {dependents remain}\n" +
+        "    cause: Uninstall app@mp first, then helper@mp.",
+      severity: "error",
+    },
+  },
+  {
+    title: "a dependency an enabled plugin needs beside a disabled one is refused (UNI-01)",
+    plugins: {
+      helper: { provenance: "dependency" },
+      app: { dependencies: ["helper"] },
+      off: { dependencies: ["helper"], enabled: false },
+    },
+    layers: {
+      base: '{"schemaVersion":1,"plugins":{"app@mp":{},"off@mp":{"enabled":false}}}\n',
+      local: EMPTY_LAYER,
+    },
+    local: false,
     expected: {
       message:
         "A plugin operation has failed.\n\n● mp [project]\n" +
@@ -6183,6 +6228,80 @@ for (const { title, plugins, layers, local, expected } of [
           "mp-helper-skill": true,
         });
         verify(cascade);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+// UNI-01: Claude Code counts only enabled plugins as reverse dependents, so a
+// plugin that only DISABLED plugins need is uninstalled with a plain row,
+// whichever layer declares them and through an undeclared disabled holder.
+const LAYER_DECLARING_DISABLED_APP = '{"schemaVersion":1,"plugins":{"app@mp":{"enabled":false}}}\n';
+
+for (const { title, plugins, layers, local } of [
+  {
+    title: "a dependency only a disabled plugin of the target layer needs",
+    plugins: {
+      helper: { provenance: "dependency" },
+      app: { dependencies: ["helper"], enabled: false },
+    },
+    layers: { base: LAYER_DECLARING_DISABLED_APP, local: EMPTY_LAYER },
+    local: false,
+  },
+  {
+    title: "a --local uninstall of a dependency only a disabled base-layer plugin needs",
+    plugins: {
+      helper: { provenance: "dependency" },
+      app: { dependencies: ["helper"], enabled: false },
+    },
+    layers: { base: LAYER_DECLARING_DISABLED_APP, local: EMPTY_LAYER },
+    local: true,
+  },
+  {
+    title: "a dependency held only through a disabled undeclared dependency",
+    plugins: {
+      helper: { provenance: "dependency" },
+      mid: { provenance: "dependency", dependencies: ["helper"], enabled: false },
+      app: { dependencies: ["mid"] },
+    },
+    layers: { base: LAYER_DECLARING_APP, local: EMPTY_LAYER },
+    local: false,
+  },
+] as const) {
+  test(`UNI-01: ${title} is uninstalled`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-disabled-dependent-"));
+      try {
+        // arrange
+        const locations = locationsFor("project", cwd);
+        await seedDeclaringMarketplace(locations, "mp", plugins, cwd);
+        await writeLayerConfigs(locations, layers);
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        const outcome = await uninstallWithFreshOwner({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "helper",
+          local,
+        });
+
+        // assert
+        assert.strictEqual(outcome, undefined);
+        assert.deepStrictEqual(notifications, [
+          {
+            message:
+              "● mp [project]\n" +
+              "  ○ helper v0.0.1 (uninstalled)\n\n" +
+              "/reload to pick up changes",
+          },
+        ]);
+        assert.ok(!Object.hasOwn(await recordedInventory(locations), "helper@mp"));
       } finally {
         await rm(cwd, { recursive: true, force: true });
       }

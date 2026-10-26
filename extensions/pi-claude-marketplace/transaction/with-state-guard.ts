@@ -33,7 +33,7 @@ import { mkdir } from "node:fs/promises";
 import lockfile from "proper-lockfile";
 
 import { loadState, saveState, type ExtensionState } from "../persistence/state-io.ts";
-import { errorMessage, StateLockHeldError } from "../shared/errors.ts";
+import { errorMessage, StateLockCompromisedError, StateLockHeldError } from "../shared/errors.ts";
 
 import type { ScopedLocations } from "../persistence/locations.ts";
 
@@ -73,9 +73,10 @@ export async function withStateGuard<T>(
   mutate: (state: ExtensionState) => Promise<T> | T,
   deps?: LockedStateTransactionDeps,
 ): Promise<T> {
-  return withScopeLock(locations, async () => {
+  return withScopeLock(locations, async (assertLockHeld) => {
     const fresh = await (deps?.loadState ?? loadState)(locations.extensionRoot);
     const result = await mutate(fresh);
+    assertLockHeld();
     await (deps?.saveState ?? saveState)(locations.extensionRoot, fresh);
     return result;
   });
@@ -91,7 +92,7 @@ export async function withLockedStateTransaction<T>(
   run: (tx: LockedStateTransaction) => Promise<T> | T,
   deps?: LockedStateTransactionDeps,
 ): Promise<T> {
-  return withScopeLock(locations, async () => {
+  return withScopeLock(locations, async (assertLockHeld) => {
     const fresh = await (deps?.loadState ?? loadState)(locations.extensionRoot, {
       persistMigration: deps?.persistMigration ?? true,
     });
@@ -103,6 +104,7 @@ export async function withLockedStateTransaction<T>(
           throw new Error("LockedStateTransaction.save() called more than once.");
         }
 
+        assertLockHeld();
         saved = true;
         await (deps?.saveState ?? saveState)(locations.extensionRoot, fresh);
       },
@@ -111,9 +113,22 @@ export async function withLockedStateTransaction<T>(
   });
 }
 
-async function withScopeLock<T>(locations: ScopedLocations, body: () => Promise<T>): Promise<T> {
+async function withScopeLock<T>(
+  locations: ScopedLocations,
+  body: (assertLockHeld: () => void) => Promise<T>,
+): Promise<T> {
   await mkdir(locations.extensionRoot, { recursive: true });
   return withExistingScopeLock(locations, body);
+}
+
+/** What `body` gave back: its value, or what it threw. */
+type BodyOutcome<T> =
+  { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: unknown };
+
+/** The held scope lock, and the compromise proper-lockfile reported for it, if any. */
+interface HeldScopeLock {
+  readonly release: () => Promise<void>;
+  readonly compromise: () => StateLockCompromisedError | undefined;
 }
 
 /**
@@ -122,14 +137,90 @@ async function withScopeLock<T>(locations: ScopedLocations, body: () => Promise<
  * body, and releases the lock -- chaining release errors into the body error
  * if both fail so neither is dropped. It creates no directory, so acquisition
  * rejects when the scope's extension root does not exist.
+ *
+ * D-06 / NFR-2: a lock proper-lockfile reports compromised while `body` runs
+ * never crashes the process. `body` gets `assertLockHeld`, which throws
+ * StateLockCompromisedError once the lock is lost; the state guards call it
+ * before they save. A body that finishes on a lost lock fails with that error
+ * at release.
  */
 export async function withExistingScopeLock<T>(
   locations: ScopedLocations,
-  body: () => Promise<T>,
+  body: (assertLockHeld: () => void) => Promise<T>,
 ): Promise<T> {
+  const lock = await acquireStateLock(locations);
+  let outcome: BodyOutcome<T>;
+  try {
+    outcome = {
+      ok: true,
+      value: await body(() => {
+        const compromise = lock.compromise();
+        if (compromise !== undefined) {
+          throw compromise;
+        }
+      }),
+    };
+  } catch (err) {
+    outcome = { ok: false, error: err };
+  }
+
+  const settled = await releaseStateLock(lock, outcome);
+  if (!settled.ok) {
+    throw toError(settled.error);
+  }
+
+  return settled.value;
+}
+
+/**
+ * Releases the lock and folds a release failure into `outcome`. A compromised
+ * lock is already released by proper-lockfile, whose release then rejects, so
+ * it is not released again: the compromise fails a body that succeeded, and a
+ * body error stays the error.
+ */
+async function releaseStateLock<T>(
+  lock: HeldScopeLock,
+  outcome: BodyOutcome<T>,
+): Promise<BodyOutcome<T>> {
+  const compromise = lock.compromise();
+  if (compromise !== undefined) {
+    return outcome.ok ? { ok: false, error: compromise } : outcome;
+  }
+
+  try {
+    await lock.release();
+    return outcome;
+  } catch (releaseErr) {
+    if (outcome.ok) {
+      return { ok: false, error: releaseErr };
+    }
+
+    const base = toError(outcome.error);
+    return {
+      ok: false,
+      error: new Error(`${base.message} (lock release also failed: ${errorMessage(releaseErr)})`, {
+        cause: base,
+      }),
+    };
+  }
+}
+
+async function acquireStateLock(locations: ScopedLocations): Promise<HeldScopeLock> {
+  const compromised: { cause?: Error } = {};
   let release: () => Promise<void>;
   try {
-    release = await acquireStateLock(locations);
+    release = await lockfile.lock(locations.extensionRoot, {
+      lockfilePath: locations.stateLockFile,
+      realpath: false,
+      retries: 0,
+      stale: 10_000,
+      update: 2_000,
+      // proper-lockfile's default rethrows from its refresh timer, which
+      // would crash Pi; the compromise is recorded and surfaced instead.
+      onCompromised: (error: Error) => {
+        compromised.cause ??= error;
+      },
+    });
   } catch (err) {
     if (isLockHeldError(err)) {
       throw new StateLockHeldError(locations.scope, locations.stateLockFile, { cause: err });
@@ -138,48 +229,15 @@ export async function withExistingScopeLock<T>(
     throw toError(err);
   }
 
-  let result: T | undefined;
-  let hasPrimaryError = false;
-  let primaryError: unknown;
-  try {
-    result = await body();
-  } catch (err) {
-    hasPrimaryError = true;
-    primaryError = err;
-  } finally {
-    try {
-      await release();
-    } catch (releaseErr) {
-      if (!hasPrimaryError) {
-        hasPrimaryError = true;
-        primaryError = releaseErr;
-      } else {
-        const base =
-          primaryError instanceof Error ? primaryError : new Error(errorMessage(primaryError));
-        primaryError = new Error(
-          `${base.message} (lock release also failed: ${errorMessage(releaseErr)})`,
-          { cause: base },
-        );
-      }
-    }
-  }
-
-  if (hasPrimaryError) {
-    throw toError(primaryError);
-  }
-
-  // `result` is assigned whenever `body()` resolved, the only path that reaches here.
-  return result as T;
-}
-
-function acquireStateLock(locations: ScopedLocations): Promise<() => Promise<void>> {
-  return lockfile.lock(locations.extensionRoot, {
-    lockfilePath: locations.stateLockFile,
-    realpath: false,
-    retries: 0,
-    stale: 10_000,
-    update: 2_000,
-  });
+  return {
+    release,
+    compromise: () =>
+      compromised.cause === undefined
+        ? undefined
+        : new StateLockCompromisedError(locations.scope, locations.stateLockFile, {
+            cause: compromised.cause,
+          }),
+  };
 }
 
 function toError(err: unknown): Error {

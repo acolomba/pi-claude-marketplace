@@ -46,16 +46,26 @@ const COST_LINE =
   "The new names reset what pi-mcp-adapter keeps for each server name: sign in again to servers that use OAuth, and approve project servers again. Until you reload, pi-mcp-adapter can still show the old names.";
 
 async function reload(cwd: string): Promise<NotifyRecord[]> {
-  const { session, notifications } = makeCtx({ kind: "load" });
+  // A command run: a load-origin run is an autoapply load, which keeps the
+  // empty pass silent (AAP-02) where the command reports it.
+  const { session, notifications } = makeCtx();
   await createApplyReconcile({ loadState })({
     ...session,
     cwd,
-    reason: "reload",
     hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
     completionCache: createCompletionCache(),
   });
   return notifications;
 }
+
+/**
+ * APL-01 / D-08: the helper drives the apply operation, which reports a pass
+ * that accumulated no outcome; the migration notice comes first.
+ */
+const APPLY_EMPTY_NOTICE: NotifyRecord = {
+  message: "Apply: nothing to change.",
+  severity: undefined,
+};
 
 const MARKER = { _piClaudeMarketplace: { plugin: "hello", marketplace: "mp" } };
 
@@ -165,11 +175,12 @@ test("AMIG-01: /reload moves an installed plugin's mcp.json entry into mcp-adapt
         ].join("\n"),
         severity: "info",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
   });
 });
 
-test("AMIG-01: after the move another /reload changes no bytes and sends no notice", async () => {
+test("AMIG-01: after the move another /reload changes no bytes and sends no migration notice", async () => {
   await withHermeticEnvironment("mcp-migration-idempotent-", async ({ cwd }) => {
     // arrange
     await seedLegacyMcpInstall(cwd, "project", { command: "node", args: ["v1.js"] });
@@ -181,7 +192,7 @@ test("AMIG-01: after the move another /reload changes no bytes and sends no noti
 
     // assert
     assert.deepStrictEqual(await scopeBytes(cwd), movedBytes);
-    assert.deepStrictEqual(notifications, []);
+    assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
   });
 });
 
@@ -208,6 +219,7 @@ test("AMIG-03: one notice covers both scopes, project rows first", async () => {
         ].join("\n"),
         severity: "info",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
   });
 });
@@ -246,6 +258,7 @@ test("AMIG-01: a migrated plugin whose server declares tool permission rules mat
         ].join("\n"),
         severity: "warning",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
   });
 });
@@ -292,7 +305,7 @@ test("AMIG-04: an mcp.json entry with no owning install record stays and the use
     // assert
     assert.strictEqual(await readFile(locations.mcpJsonPath, "utf8"), legacyBytes);
     await assert.rejects(access(locations.mcpAdapterJsonPath), { code: "ENOENT" });
-    assert.deepStrictEqual(notifications, [UNOWNED_PROJECT_NOTICE]);
+    assert.deepStrictEqual(notifications, [UNOWNED_PROJECT_NOTICE, APPLY_EMPTY_NOTICE]);
   });
 });
 
@@ -315,7 +328,7 @@ test("AMIG-04: a record in the user scope does not own a project mcp.json entry"
       await readFile(locationsFor("project", cwd).mcpJsonPath, "utf8"),
       legacyBytes,
     );
-    assert.deepStrictEqual(notifications, [UNOWNED_PROJECT_NOTICE]);
+    assert.deepStrictEqual(notifications, [UNOWNED_PROJECT_NOTICE, APPLY_EMPTY_NOTICE]);
   });
 });
 
@@ -348,27 +361,32 @@ test("AMIG-04: when claude-plugins.json declares the owner, the reload installs 
       [
         [
           "● mp [project]",
-          "  ● hello (installed) {requires pi-mcp-adapter}",
+          "  ● hello v1.0.0 (installed) {requires pi-mcp-adapter}",
           "",
           "Reconcile: 1 success",
+          "",
+          "/reload to pick up changes",
         ].join("\n"),
       ],
     );
   });
 });
 
-const MANIFEST_SHA = "1111111111111111111111111111111111111111";
 const RECORDED_SHA = "2222222222222222222222222222222222222222";
 
 /**
  * Seeds marketplace `mp` whose `hello` has a `url` source pinned to
- * `MANIFEST_SHA`, a project record of it installed at `RECORDED_SHA`, and its
- * legacy `mcp.json` entry, as a released build left a git plugin installed
- * before a marketplace update moved the pin. Returns the recorded-sha clone
- * directory, which nothing creates.
+ * `RECORDED_SHA`, a project record of it installed at that pin, and its legacy
+ * `mcp.json` entry, as a released build left a git plugin installed. Returns
+ * the recorded-sha clone directory, which nothing creates.
+ *
+ * The catalog keeps the recorded pin: a pin a marketplace update moved is a
+ * catalog move that `apply` clones from the network (D-08, D-11). The
+ * recorded clone rather than the manifest pin is the MCP move's source, which
+ * the reconcile owner suite proves with two different pins.
  */
 async function seedGitPluginRecord(cwd: string): Promise<string> {
-  const source = { source: "url", url: "https://example.test/hello.git", sha: MANIFEST_SHA };
+  const source = { source: "url", url: "https://example.test/hello.git", sha: RECORDED_SHA };
   const parsed = parsePluginSource(source);
   assert.strictEqual(parsed.kind, "url");
   const locations = locationsFor("project", cwd);
@@ -457,6 +475,7 @@ test("AMIG-01: a git plugin left in place on a cold clone cache moves once its r
         ].join("\n"),
         severity: "warning",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
     assert.strictEqual(coldLegacy, legacyBytes);
     assert.deepStrictEqual(warmNotifications, [
@@ -471,6 +490,7 @@ test("AMIG-01: a git plugin left in place on a cold clone cache moves once its r
         ].join("\n"),
         severity: "info",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
     const adapter = JSON.parse(await readFile(locations.mcpAdapterJsonPath, "utf8")) as {
       readonly mcpServers: Readonly<Record<string, { readonly env: unknown }>>;
@@ -527,6 +547,7 @@ test("AMIG-01: /reload removes an undeclared server, drops an unsupported one an
         ].join("\n"),
         severity: "warning",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
     const info = makeCtx();
     await getPluginInfo({
@@ -584,6 +605,7 @@ test("AMIG-01: a plugin whose MCP config is malformed has all its old entries re
         ].join("\n"),
         severity: "warning",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
     const fresh = makeCtx();
     await createInstallOperation(
@@ -624,6 +646,7 @@ test("AMIG-03: an old-name disable stub removed during the move is listed and ma
         ].join("\n"),
         severity: "warning",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
   });
 });
@@ -656,6 +679,7 @@ test("AMIG-01: the reload move of a user-scope plugin removes its old-name disab
         ].join("\n"),
         severity: "warning",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
     assert.deepStrictEqual(JSON.parse(await readFile(projectAdapterPath, "utf8")), {
       mcpServers: { other: { disabled: true } },
@@ -703,6 +727,7 @@ test("AMIG-02: a filesystem refusal between the two writes loses no server and t
         ].join("\n"),
         severity: "warning",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
     assert.deepStrictEqual(finished, [
       {
@@ -716,9 +741,10 @@ test("AMIG-02: a filesystem refusal between the two writes loses no server and t
         ].join("\n"),
         severity: "info",
       },
+      APPLY_EMPTY_NOTICE,
     ]);
     assert.deepStrictEqual(await markedLegacyNames(cwd), []);
-    assert.deepStrictEqual(settled, []);
+    assert.deepStrictEqual(settled, [APPLY_EMPTY_NOTICE]);
     assert.deepStrictEqual(await scopeBytes(cwd), finishedBytes);
   });
 });

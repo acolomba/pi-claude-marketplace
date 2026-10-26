@@ -4,7 +4,15 @@ import path from "node:path";
 import test from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { buildScopeSatisfactionVerdict } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
+import {
+  buildScopeSatisfactionVerdict,
+  judgeFinalScope,
+  releasableDependents,
+  stillHeld,
+  verdictAfterMoves,
+  verdictAfterToggles,
+  verdictWithout,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 import type { MarketplaceManifest } from "../../../extensions/pi-claude-marketplace/domain/manifest.ts";
@@ -32,11 +40,14 @@ interface RecordSeed {
   /** LOAD-02: the check's own marker on a record it disabled. */
   readonly dependencyDisabled?: boolean;
   readonly version?: string;
+  /** GV-01: the release tag version a record at a tag holds. */
+  readonly resolvedVersion?: string;
 }
 
 function pluginRecord(seed: RecordSeed = {}): PluginRecord {
   return {
     version: seed.version ?? "1.0.0",
+    ...(seed.resolvedVersion !== undefined && { resolvedVersion: seed.resolvedVersion }),
     resolvedSource: path.join(SCOPE_ROOT, "plugins", "x"),
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     resources: { workflows: [], skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
@@ -228,15 +239,14 @@ test("reports a recorded version outside its declared range as out-of-range", as
     loadManifest,
   });
 
-  // assert -- the carried range is the CANONICAL fold of what was declared, not
-  // the declared text: one evaluator canonicalizes, and a caret that kept its
-  // shorthand here would mean the row and the comparison read different ranges.
+  // assert -- INR-05: the carried range is the declared text, as the user
+  // wrote it, while the fold still decides the comparison.
   assert.deepStrictEqual(unsatisfiedOf(verdict), [
     {
       dependent: "app@mp",
       dependency: "vault@mp",
       kind: "out-of-range",
-      range: ">=2.0.0 <3.0.0-0",
+      range: "^2.0.0",
     },
   ]);
 });
@@ -244,6 +254,31 @@ test("reports a recorded version outside its declared range as out-of-range", as
 test("reports nothing when the recorded version satisfies the declared range", async () => {
   // arrange
   const mp = marketplaceRecord("mp", { app: {}, vault: { version: "2.3.4" } });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: { dependencies: [{ name: "vault", version: "^2.0.0" }] },
+      vault: {},
+    }),
+  });
+
+  // act
+  const verdict = await buildScopeSatisfactionVerdict({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests(),
+    loadManifest,
+  });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(verdict), []);
+});
+
+test("GV-01: a record at a release tag is measured by the tag's version, not its commit form", async () => {
+  // arrange -- `2.3.4-0123456789ab` is a semver prerelease `^2.0.0` rejects.
+  const mp = marketplaceRecord("mp", {
+    app: {},
+    vault: { version: "2.3.4-0123456789ab", resolvedVersion: "2.3.4" },
+  });
   const loadManifest = manifestLoader({
     [mp.manifestPath]: manifestOf("mp", {
       app: { dependencies: [{ name: "vault", version: "^2.0.0" }] },
@@ -291,7 +326,7 @@ test("reports nothing for a declaration whose constraints are all unconstrained"
   assert.deepStrictEqual(unsatisfiedOf(verdict), []);
 });
 
-test("folds two declarations of one dependency into a single intersected range", async () => {
+test("INR-05: two declarations of one dependency the recorded version fails report both declared ranges", async () => {
   // arrange
   const mp = marketplaceRecord("mp", { app: {}, vault: { version: "2.0.0" } });
   const loadManifest = manifestLoader({
@@ -320,7 +355,7 @@ test("folds two declarations of one dependency into a single intersected range",
       dependent: "app@mp",
       dependency: "vault@mp",
       kind: "out-of-range",
-      range: ">=1.0.0 <1.5.0",
+      range: ">=1.0.0, <1.5.0",
     },
   ]);
 });
@@ -354,7 +389,7 @@ test("reports out-of-range rather than throwing when the declared ranges interse
       dependent: "app@mp",
       dependency: "vault@mp",
       kind: "out-of-range",
-      range: ">=2.0.0 <1.0.0",
+      range: ">=2.0.0, <1.0.0",
     },
   ]);
 });
@@ -381,13 +416,51 @@ test("reports out-of-range rather than unconstrained when the fold trips an inpu
     loadManifest,
   });
 
-  // assert -- a cap trip must never read as "no constraint" (T-06-10).
-  const entries = unsatisfiedOf(verdict);
-  assert.deepStrictEqual(
-    entries.map(({ dependent, dependency, kind }) => ({ dependent, dependency, kind })),
-    [{ dependent: "app@mp", dependency: "vault@mp", kind: "out-of-range" }],
-  );
-  assert.equal(entries[0]?.range, Array.from({ length: 70 }, () => declared).join(" "));
+  // assert -- a cap trip must never read as "no constraint" (T-06-10), and the
+  // joined declared ranges are bounded once (T-06-05).
+  const joined = Array.from({ length: 70 }, () => declared).join(", ");
+  assert.deepStrictEqual(unsatisfiedOf(verdict), [
+    {
+      dependent: "app@mp",
+      dependency: "vault@mp",
+      kind: "out-of-range",
+      range: `${joined.slice(0, 200)}... (+4068 chars)`,
+    },
+  ]);
+});
+
+test("INR-05 / T-06-05: declared ranges too long to render are bounded once", async () => {
+  // arrange -- four 59-character declarations join to 242 characters and fold
+  // to a range the recorded version fails.
+  const declared = ">=1.0.0 <9.9.9 >=1.0.1 <9.9.8 >=1.0.2 <9.9.7 >=1.0.3 <9.9.6";
+  const mp = marketplaceRecord("mp", { app: {}, vault: { version: "1.0.0" } });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: {
+        dependencies: Array.from({ length: 4 }, () => ({ name: "vault", version: declared })),
+      },
+      vault: {},
+    }),
+  });
+
+  // act
+  const verdict = await buildScopeSatisfactionVerdict({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests(),
+    loadManifest,
+  });
+
+  // assert
+  const joined = Array.from({ length: 4 }, () => declared).join(", ");
+  assert.deepStrictEqual(unsatisfiedOf(verdict), [
+    {
+      dependent: "app@mp",
+      dependency: "vault@mp",
+      kind: "out-of-range",
+      range: `${joined.slice(0, 200)}... (+42 chars)`,
+    },
+  ]);
 });
 
 test("reports nothing for a scope with no recorded marketplace", async () => {
@@ -625,4 +698,367 @@ test("returns identical results for two walks over one snapshot", async () => {
     { dependent: "app@mp", dependency: "helper@mp", kind: "disabled" },
   ]);
   assert.deepStrictEqual(unsatisfiedOf(second), unsatisfiedOf(first));
+});
+
+/** `app` declares `vault`; `vault` is recorded with `seed`, and `kit` declares nothing. */
+function toggledScope(vault: RecordSeed): {
+  readonly options: Parameters<typeof verdictAfterToggles>[0];
+} {
+  const mp = marketplaceRecord("mp", { app: {}, kit: {}, vault });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["vault"] }, kit: {}, vault: {} }),
+  });
+  return {
+    options: { state: stateOf(mp), locations: LOCATIONS, reader: ownManifests(), loadManifest },
+  };
+}
+
+const VAULT = { marketplace: "mp", plugin: "vault" } as const;
+const KIT = { marketplace: "mp", plugin: "kit" } as const;
+
+test("D-08 / D-21: a record the plan disables is a disabled dependency of its dependents", async () => {
+  // arrange -- the check's marker on a record the config now disables reads as the user's choice
+  const { options } = toggledScope({ dependencyDisabled: true });
+  const verdict = await buildScopeSatisfactionVerdict(options);
+
+  // act
+  const toggled = await verdictAfterToggles(options, verdict, { enable: [KIT], disable: [VAULT] });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(verdict), []);
+  assert.deepStrictEqual(unsatisfiedOf(toggled), [
+    { dependent: "app@mp", dependency: "vault@mp", kind: "disabled" },
+  ]);
+});
+
+test("D-08 / D-21: a record the plan enables satisfies its dependents again", async () => {
+  // arrange
+  const { options } = toggledScope({ enabled: false });
+  const verdict = await buildScopeSatisfactionVerdict(options);
+
+  // act
+  const toggled = await verdictAfterToggles(options, verdict, { enable: [VAULT], disable: [] });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(verdict), [
+    { dependent: "app@mp", dependency: "vault@mp", kind: "disabled" },
+  ]);
+  assert.deepStrictEqual(unsatisfiedOf(toggled), []);
+});
+
+test("D-08: a plan that toggles nothing keeps the verdict it was planned with", async () => {
+  // arrange
+  const { options } = toggledScope({ enabled: false });
+  const verdict = await buildScopeSatisfactionVerdict(options);
+
+  // act
+  const toggled = await verdictAfterToggles(options, verdict, { enable: [], disable: [] });
+
+  // assert
+  assert.equal(toggled, verdict);
+});
+
+test("D-05-07: a verdict whose walk failed is kept, whatever the plan toggles", async () => {
+  // arrange
+  const { options } = toggledScope({});
+  const failed: ScopeSatisfactionVerdict = {
+    ok: false,
+    declarer: "app@mp",
+    reason: "invalid manifest",
+    cause: new Error("cannot read the dependencies of app@mp"),
+  };
+
+  // act
+  const toggled = await verdictAfterToggles(options, failed, { enable: [], disable: [VAULT] });
+
+  // assert
+  assert.equal(toggled, failed);
+});
+
+const FAILED_WALK: ScopeSatisfactionVerdict = {
+  ok: false,
+  declarer: "app@mp",
+  reason: "invalid manifest",
+  cause: new Error("cannot read the dependencies of app@mp"),
+};
+
+test("APPLY1-01: releases a dependent held for an out-of-range dependency or one this verdict holds", () => {
+  // arrange: `app` waits on `lib`'s range, `top` waits on the held `app`.
+  const state = stateOf(marketplaceRecord("mp", { app: {}, lib: {}, top: {} }));
+  const verdict: ScopeSatisfactionVerdict = {
+    ok: true,
+    unsatisfied: [
+      { dependent: "app@mp", dependency: "lib@mp", kind: "out-of-range", range: "^2.0.0" },
+      { dependent: "top@mp", dependency: "app@mp", kind: "disabled" },
+    ],
+  };
+
+  // act
+  const released = releasableDependents(verdict, state);
+
+  // assert
+  assert.deepEqual([...released], ["app@mp", "top@mp"]);
+});
+
+test("APPLY1-01: keeps a dependent held for a missing dependency or one the user disabled", () => {
+  // arrange: `off` is disabled by the user, so no move brings it back.
+  const state = stateOf(marketplaceRecord("mp", { app: {}, off: { enabled: false }, top: {} }));
+  const verdict: ScopeSatisfactionVerdict = {
+    ok: true,
+    unsatisfied: [
+      { dependent: "app@mp", dependency: "vault@mp", kind: "missing" },
+      { dependent: "top@mp", dependency: "off@mp", kind: "disabled" },
+    ],
+  };
+
+  // act
+  const released = releasableDependents(verdict, state);
+
+  // assert
+  assert.deepEqual([...released], []);
+});
+
+test("APPLY1-01: keeps a dependent held when the dependency it names as held is disabled by the user too", () => {
+  // arrange: `off` is held by this verdict AND disabled by the user.
+  const state = stateOf(marketplaceRecord("mp", { off: { enabled: false }, top: {} }));
+  const verdict: ScopeSatisfactionVerdict = {
+    ok: true,
+    unsatisfied: [
+      { dependent: "off@mp", dependency: "lib@mp", kind: "out-of-range", range: "^2.0.0" },
+      { dependent: "top@mp", dependency: "off@mp", kind: "disabled" },
+    ],
+  };
+
+  // act
+  const released = releasableDependents(verdict, state);
+
+  // assert
+  assert.deepEqual([...released], ["off@mp"]);
+});
+
+test("APPLY1-01: a failed walk releases nothing and keeps every released dependent held", () => {
+  // arrange
+  const state = stateOf(marketplaceRecord("mp", { app: {} }));
+  const released = new Set(["app@mp"]);
+
+  // act
+  const releasable = releasableDependents(FAILED_WALK, state);
+  const held = stillHeld(FAILED_WALK, released);
+  const without = verdictWithout(FAILED_WALK, released);
+
+  // assert
+  assert.deepEqual([...releasable], []);
+  assert.deepEqual([...held], ["app@mp"]);
+  assert.equal(without, FAILED_WALK);
+});
+
+test("APPLY1-01: a verdict without the released dependents drops their entries and the holds they caused", () => {
+  // arrange
+  const verdict: ScopeSatisfactionVerdict = {
+    ok: true,
+    unsatisfied: [
+      { dependent: "app@mp", dependency: "lib@mp", kind: "out-of-range", range: "^2.0.0" },
+      { dependent: "top@mp", dependency: "app@mp", kind: "disabled" },
+      { dependent: "solo@mp", dependency: "vault@mp", kind: "missing" },
+    ],
+  };
+
+  // act
+  const without = verdictWithout(verdict, new Set(["app@mp"]));
+  const held = stillHeld(verdict, new Set(["app@mp", "free@mp"]));
+
+  // assert
+  assert.deepEqual(unsatisfiedOf(without), [
+    { dependent: "solo@mp", dependency: "vault@mp", kind: "missing" },
+  ]);
+  assert.deepEqual([...held], ["app@mp"]);
+});
+
+test("APPLY1-01: the verdict after moves measures each moved record at the version it lands on", async () => {
+  // arrange: `app` needs lib ^2.0.0; the move takes `lib` to 2.0.0, and a
+  // move for a record the scope does not hold changes nothing.
+  const mp = marketplaceRecord("mp", { app: {}, lib: {} });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: { dependencies: [{ name: "lib", version: "^2.0.0" }] },
+      lib: {},
+    }),
+  });
+  const options = {
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    loadManifest,
+    reader: ownManifests(),
+  };
+
+  // act
+  const before = await verdictAfterMoves(options, { enable: [], disable: [] }, []);
+  const after = await verdictAfterMoves(options, { enable: [], disable: [] }, [
+    { marketplace: "mp", plugin: "lib", toVersion: "2.0.0" },
+    { marketplace: "mp", plugin: "ghost", toVersion: "9.0.0" },
+    { marketplace: "elsewhere", plugin: "lib", toVersion: "9.0.0" },
+  ]);
+
+  // assert
+  assert.deepEqual(unsatisfiedOf(before), [
+    { dependent: "app@mp", dependency: "lib@mp", kind: "out-of-range", range: "^2.0.0" },
+  ]);
+  assert.deepEqual(unsatisfiedOf(after), []);
+});
+
+test("APPLY1-01 / GV-01: a record at a release tag is measured at the version a move lands on", async () => {
+  // arrange: `lib` sits at the tag 2.0.0, which `app`'s ^2.0.0 admits; the
+  // move lands it at the catalog's 3.0.0, which it does not.
+  const mp = marketplaceRecord("mp", {
+    app: {},
+    lib: { version: "2.0.0-0123456789ab", resolvedVersion: "2.0.0" },
+  });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: { dependencies: [{ name: "lib", version: "^2.0.0" }] },
+      lib: {},
+    }),
+  });
+  const options = {
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    loadManifest,
+    reader: ownManifests(),
+  };
+
+  // act
+  const after = await verdictAfterMoves(options, { enable: [], disable: [] }, [
+    { marketplace: "mp", plugin: "lib", toVersion: "3.0.0" },
+  ]);
+
+  // assert
+  assert.deepEqual(unsatisfiedOf(after), [
+    { dependent: "app@mp", dependency: "lib@mp", kind: "out-of-range", range: "^2.0.0" },
+  ]);
+});
+
+test("APPLY1-01: the final judgement reads a held-down record as disabled and holds what declares it", async () => {
+  // arrange: `lib` is disabled with the marker; the load-time verdict would
+  // read it as enabled (LOAD-02), the final judgement does not.
+  const mp = marketplaceRecord("mp", {
+    app: {},
+    lib: { enabled: false, dependencyDisabled: true },
+  });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["lib"] }, lib: {} }),
+  });
+  const options = {
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    loadManifest,
+    reader: ownManifests(),
+  };
+
+  // act
+  const load = await buildScopeSatisfactionVerdict(options);
+  const final = await judgeFinalScope({
+    ...options,
+    installedDeclarations: () => Promise.resolve(undefined),
+  });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(load), []);
+  assert.deepStrictEqual(unsatisfiedOf(final), [
+    { dependent: "app@mp", dependency: "lib@mp", kind: "disabled" },
+  ]);
+});
+
+test("APPLY1-01 / D-12a: the final judgement adds what an installed copy declares to the catalog's", async () => {
+  // arrange: the catalog declares `lib` with no range; the installed copy of
+  // `app` declares lib ^1.0.0, which lib 2.0.0 does not meet.
+  const mp = marketplaceRecord("mp", { app: {}, lib: { version: "2.0.0" } });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["lib"] }, lib: {} }),
+  });
+
+  // act
+  const final = await judgeFinalScope({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    loadManifest,
+    reader: ownManifests(),
+    installedDeclarations: (_marketplace, record) =>
+      Promise.resolve(
+        record.version === "1.0.0"
+          ? [{ name: "lib", marketplace: "mp", version: "^1.0.0" }]
+          : undefined,
+      ),
+  });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(final), [
+    { dependent: "app@mp", dependency: "lib@mp", kind: "out-of-range", range: "^1.0.0" },
+  ]);
+});
+
+test("APPLY1-01 / D-05-07: a final judgement whose walk fails answers the walk's failure", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", { app: {} });
+  const loadManifest = manifestLoader({ [mp.manifestPath]: new Error("EACCES") });
+
+  // act
+  const final = await judgeFinalScope({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    loadManifest,
+    reader: ownManifests(),
+    installedDeclarations: () => Promise.resolve(undefined),
+  });
+
+  // assert
+  assert.equal(final.ok, false);
+});
+
+test("APPLY1-01: a seeded declaration holds its dependent from the start, and the walk holds what declares it", async () => {
+  // arrange: `host` declares `app`; the seed holds `app`.
+  const mp = marketplaceRecord("mp", { app: {}, host: {} });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: {}, host: { dependencies: ["app"] } }),
+  });
+  const seed = { dependent: "app@mp", dependency: "lib@mp", kind: "out-of-range" } as const;
+
+  // act
+  const verdict = await buildScopeSatisfactionVerdict({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    loadManifest,
+    reader: ownManifests(),
+    seeded: [seed],
+  });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(verdict), [
+    seed,
+    { dependent: "host@mp", dependency: "app@mp", kind: "disabled" },
+  ]);
+});
+
+test("APPLY1-01 / D-21: the final judgement counts a dependency the same apply installs as met", async () => {
+  // arrange: `app` declares `vault`, which the scope does not record.
+  const mp = marketplaceRecord("mp", { app: {} });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["vault"] } }),
+  });
+  const options = {
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    loadManifest,
+    reader: ownManifests(),
+    installedDeclarations: () => Promise.resolve(undefined),
+  };
+
+  // act
+  const unscheduled = await judgeFinalScope(options);
+  const scheduled = await judgeFinalScope({ ...options, scheduled: new Set(["vault@mp"]) });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(unscheduled), [
+    { dependent: "app@mp", dependency: "vault@mp", kind: "missing" },
+  ]);
+  assert.deepStrictEqual(unsatisfiedOf(scheduled), []);
 });

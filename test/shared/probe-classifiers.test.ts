@@ -78,9 +78,20 @@ describe("narrowResolverNotes", () => {
     assert.deepStrictEqual(reasons, ["lsp"]);
   });
 
+  test("SRC-01: classifies a missing source directory as source missing", () => {
+    // arrange
+    const notes = ["source dir does not exist: /mp/plugins/ghost"];
+
+    // act
+    const reasons = narrowResolverNotes(notes);
+
+    // assert
+    assert.deepStrictEqual(reasons, ["source missing"]);
+  });
+
   test("classifies an unmatched note as unsupported source", () => {
     // arrange
-    const notes = ["source dir does not exist"];
+    const notes = ["unsupported source kind: npm"];
 
     // act
     const reasons = narrowResolverNotes(notes);
@@ -252,7 +263,7 @@ describe("narrowResolverNotes", () => {
   test("preserves the first-seen order of distinct classifications", () => {
     // arrange
     const notes = [
-      "source dir does not exist",
+      "unsupported source kind: npm",
       "unsupported hooks: regex matcher detected",
       "contains lspServers",
       'malformed mcp reference: file not found: "x.mcp.json"',

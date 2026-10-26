@@ -19,7 +19,6 @@ import {
   makeRecordedShaPresenceProbe,
   probeManifestEntry,
   probeUpgradeCandidate,
-  readMirrorHeadSha,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/git-source-probe.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { PathContainmentError } from "../../../extensions/pi-claude-marketplace/shared/path-containment.ts";
@@ -304,13 +303,32 @@ describe("makePresenceProbe", () => {
 });
 
 describe("makeRecordedShaPresenceProbe", () => {
-  test("AMIG-01: an unpinned source reads a present mirror before the recorded-sha clone", async (testContext) => {
+  test("GIT-01: an unpinned source reads the recorded-sha copy, not a mirror that moved on", async (testContext) => {
     // arrange
     const { locations } = await freshLocations(testContext);
     const cloneUrl = "https://example.com/recorded-plugin";
     const mirrorDir = await mirrorDirectory(locations, cloneUrl);
     await writeDetachedHead(mirrorDir, SHA_B);
-    await cloneDirectory(locations, cloneUrl, SHA_A);
+    const cloneDir = await cloneDirectory(locations, cloneUrl, SHA_A);
+    const source: UrlSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
+
+    // act
+    const result = await makeRecordedShaPresenceProbe(locations, SHA_A)(source);
+
+    // assert
+    assert.deepStrictEqual(result, {
+      kind: "materialized",
+      pluginRoot: cloneDir,
+      resolvedSha: SHA_A,
+    });
+  });
+
+  test("GIT-01: an unpinned source with no copy reads a mirror still at the recorded sha", async (testContext) => {
+    // arrange
+    const { locations } = await freshLocations(testContext);
+    const cloneUrl = "https://example.com/recorded-plugin";
+    const mirrorDir = await mirrorDirectory(locations, cloneUrl);
+    await writeDetachedHead(mirrorDir, SHA_A);
     const source: UrlSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
 
     // act
@@ -320,8 +338,22 @@ describe("makeRecordedShaPresenceProbe", () => {
     assert.deepStrictEqual(result, {
       kind: "materialized",
       pluginRoot: mirrorDir,
-      resolvedSha: SHA_B,
+      resolvedSha: SHA_A,
     });
+  });
+
+  test("GIT-01: an unpinned source with no copy and a moved mirror is not-cached", async (testContext) => {
+    // arrange
+    const { locations } = await freshLocations(testContext);
+    const cloneUrl = "https://example.com/recorded-plugin";
+    await writeDetachedHead(await mirrorDirectory(locations, cloneUrl), SHA_B);
+    const source: UrlSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
+
+    // act
+    const result = await makeRecordedShaPresenceProbe(locations, SHA_A)(source);
+
+    // assert
+    assert.deepStrictEqual(result, { kind: "not-cached" });
   });
 
   test("AMIG-01: an unpinned source with no mirror reads the recorded-sha clone", async (testContext) => {
@@ -382,7 +414,7 @@ describe("makeRecordedShaPresenceProbe", () => {
     const { locations, marketplaceRoot } = await freshLocations(testContext);
     const cloneUrl = "https://example.com/recorded-plugin";
     const mirrorDir = await locations.pluginCloneDir(pluginMirrorKey(cloneUrl));
-    await cloneDirectory(locations, cloneUrl, SHA_A);
+    await mkdir(path.dirname(mirrorDir), { recursive: true });
     await symlink(marketplaceRoot, mirrorDir);
     const source: UrlSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
 
@@ -853,16 +885,35 @@ describe("probeUpgradeCandidate", () => {
   });
 });
 
-describe("readMirrorHeadSha", () => {
+/** A mirror the unpinned presence probe reads, and that read's HEAD sha. */
+async function mirrorHeadFixture(testContext: TestContext): Promise<{
+  readonly mirrorDir: string;
+  readonly read: () => Promise<string>;
+}> {
+  const { locations } = await freshLocations(testContext);
+  const cloneUrl = "https://example.com/head-plugin";
+  const mirrorDir = await mirrorDirectory(locations, cloneUrl);
+  const source: UrlSource = { kind: "url", raw: cloneUrl, url: cloneUrl };
+  return {
+    mirrorDir,
+    read: async () => {
+      const result = await makePresenceProbe(locations)(source);
+      assert.ok(result.kind === "materialized");
+      return result.resolvedSha;
+    },
+  };
+}
+
+describe("the unpinned presence probe's mirror HEAD read", () => {
   test("propagates an absent HEAD error", async (testContext) => {
     // arrange
-    const mirrorDir = await freshDirectory(testContext, "mirror-head-absent-");
+    const { mirrorDir, read } = await mirrorHeadFixture(testContext);
     await mkdir(path.join(mirrorDir, ".git"), { recursive: true });
     let failure: unknown;
 
     // act
     try {
-      await readMirrorHeadSha(mirrorDir);
+      await read();
     } catch (error) {
       failure = error;
     }
@@ -874,14 +925,14 @@ describe("readMirrorHeadSha", () => {
 
   test("propagates an absent packed-refs error", async (testContext) => {
     // arrange
-    const mirrorDir = await freshDirectory(testContext, "mirror-head-packed-absent-");
+    const { mirrorDir, read } = await mirrorHeadFixture(testContext);
     await mkdir(path.join(mirrorDir, ".git"), { recursive: true });
     await writeFile(path.join(mirrorDir, ".git", "HEAD"), "ref: refs/heads/main\n");
     let failure: unknown;
 
     // act
     try {
-      await readMirrorHeadSha(mirrorDir);
+      await read();
     } catch (error) {
       failure = error;
     }
@@ -893,7 +944,7 @@ describe("readMirrorHeadSha", () => {
 
   test("propagates an unreadable loose ref", async (testContext) => {
     // arrange
-    const mirrorDir = await freshDirectory(testContext, "mirror-head-unreadable-");
+    const { mirrorDir, read } = await mirrorHeadFixture(testContext);
     const looseRef = path.join(mirrorDir, ".git", "refs", "heads", "main");
     await mkdir(looseRef, { recursive: true });
     await writeFile(path.join(mirrorDir, ".git", "HEAD"), "ref: refs/heads/main\n");
@@ -901,7 +952,7 @@ describe("readMirrorHeadSha", () => {
 
     // act
     try {
-      await readMirrorHeadSha(mirrorDir);
+      await read();
     } catch (error) {
       failure = error;
     }
@@ -912,11 +963,11 @@ describe("readMirrorHeadSha", () => {
 
   test("returns a detached HEAD value verbatim after trimming", async (testContext) => {
     // arrange
-    const mirrorDir = await freshDirectory(testContext, "mirror-head-detached-");
+    const { mirrorDir, read } = await mirrorHeadFixture(testContext);
     await writeDetachedHead(mirrorDir, SHA_A);
 
     // act
-    const result = await readMirrorHeadSha(mirrorDir);
+    const result = await read();
 
     // assert
     assert.equal(result, SHA_A);
@@ -924,11 +975,11 @@ describe("readMirrorHeadSha", () => {
 
   test("returns a malformed detached HEAD value without validation", async (testContext) => {
     // arrange
-    const mirrorDir = await freshDirectory(testContext, "mirror-head-malformed-");
+    const { mirrorDir, read } = await mirrorHeadFixture(testContext);
     await writeDetachedHead(mirrorDir, "not-a-sha");
 
     // act
-    const result = await readMirrorHeadSha(mirrorDir);
+    const result = await read();
 
     // assert
     assert.equal(result, "not-a-sha");
@@ -936,11 +987,11 @@ describe("readMirrorHeadSha", () => {
 
   test("returns a loose symbolic ref after trimming", async (testContext) => {
     // arrange
-    const mirrorDir = await freshDirectory(testContext, "mirror-head-loose-");
+    const { mirrorDir, read } = await mirrorHeadFixture(testContext);
     await writeLooseHead(mirrorDir, "refs/heads/main", SHA_A);
 
     // act
-    const result = await readMirrorHeadSha(mirrorDir);
+    const result = await read();
 
     // assert
     assert.equal(result, SHA_A);
@@ -948,7 +999,7 @@ describe("readMirrorHeadSha", () => {
 
   test("returns a packed symbolic ref while ignoring comments and peeled refs", async (testContext) => {
     // arrange
-    const mirrorDir = await freshDirectory(testContext, "mirror-head-packed-");
+    const { mirrorDir, read } = await mirrorHeadFixture(testContext);
     const gitDir = path.join(mirrorDir, ".git");
     await mkdir(gitDir, { recursive: true });
     await writeFile(path.join(gitDir, "HEAD"), "ref: refs/heads/main\n");
@@ -964,7 +1015,7 @@ describe("readMirrorHeadSha", () => {
     );
 
     // act
-    const result = await readMirrorHeadSha(mirrorDir);
+    const result = await read();
 
     // assert
     assert.equal(result, SHA_B);
@@ -972,7 +1023,7 @@ describe("readMirrorHeadSha", () => {
 
   test("throws the exact no-sha error when packed refs omit HEAD", async (testContext) => {
     // arrange
-    const mirrorDir = await freshDirectory(testContext, "mirror-head-no-sha-");
+    const { mirrorDir, read } = await mirrorHeadFixture(testContext);
     const gitDir = path.join(mirrorDir, ".git");
     await mkdir(gitDir, { recursive: true });
     await writeFile(path.join(gitDir, "HEAD"), "ref: refs/heads/main\n");
@@ -984,7 +1035,7 @@ describe("readMirrorHeadSha", () => {
 
     // act
     try {
-      await readMirrorHeadSha(mirrorDir);
+      await read();
     } catch (error) {
       failure = error;
     }

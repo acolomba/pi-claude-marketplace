@@ -16,12 +16,14 @@ import {
 import { pluginCloneKey } from "../../../extensions/pi-claude-marketplace/domain/clone-key.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
+  createConvergeOperation,
   createDependencyInstallOperation,
   createEnableOperation,
   createInstallOperation,
   createPruneOperation,
   createReinstallOperation,
   createUninstallOperation,
+  createUpdateOperations,
   fetchPlugins,
   getPluginInfo,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
@@ -40,6 +42,7 @@ import type { EnableDisableHooksRouting } from "../../../extensions/pi-claude-ma
 import type { InstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-disable-cascade.ts";
 import type { ReinstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import type { UninstallHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
+import type { UpdateHooksRouting } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-cascade.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   ExtensionContext,
@@ -652,6 +655,30 @@ test("constructs the reinstall operation without using its owners or starting as
   verify(completionCache);
 });
 
+test("constructs the converge operation without using its owners or starting asynchronous work", (t) => {
+  // arrange
+  const hooksRouting = mock<UpdateHooksRouting>({ exactParams: true, name: "hooks routing" });
+  const completionCache = mock<CompletionCache>({ exactParams: true, name: "completion cache" });
+  const startedResourceTypes: string[] = [];
+  const resources = createHook({
+    init: (_asyncId, type) => {
+      startedResourceTypes.push(type);
+    },
+  });
+  t.after(() => resources.disable());
+
+  // act
+  resources.enable();
+  const convergePlugin = createConvergeOperation(hooksRouting, completionCache);
+  resources.disable();
+
+  // assert
+  assert.strictEqual(typeof convergePlugin, "function");
+  assert.deepStrictEqual(startedResourceTypes, []);
+  verify(hooksRouting);
+  verify(completionCache);
+});
+
 /**
  * Install the seeded hooks-declaring plugin through the composed install
  * operation and hand back the live lifecycle owners the enable and uninstall
@@ -804,12 +831,12 @@ test("uninstallPlugin removes the record, the staged artifacts and the routes", 
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PRL-02 / D-68-02: the composed reinstall operation runs against the real
-// prepare, replace, rollback, finalize and state-lock bindings this module
-// holds. Re-materializing an edited source in place -- the replaced bytes on
-// disk, the replaced handler in the routing table, and the recorded version
-// left where it was because reinstall never upgrades -- is an effect of those
-// concrete bindings, so replacing any one of them with a no-op is visible here.
+// PRL-02: the composed reinstall operation runs the shared runner that update
+// uses, with the real bridge and state-lock bindings. Re-materializing an
+// edited source in place -- the replaced bytes on disk and the replaced handler
+// in the routing table -- is an effect of those concrete bindings, so replacing
+// any one of them with a no-op is visible here. The version stays 0.0.1
+// because the marketplace still offers 0.0.1 (D-18-08).
 // ─────────────────────────────────────────────────────────────────────────────
 
 test("reinstallPlugin replaces the staged artifacts in place and re-routes the plugin", async (t) => {
@@ -847,7 +874,7 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
     marketplace: "mp",
     scope: "project",
     version: "0.0.1",
-    resourcesChanged: false,
+    fromVersion: "0.0.1",
     stagedAgentNames: [],
     stagedMcpServerNames: [],
     declaresAgents: false,
@@ -855,8 +882,9 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
     declaresWorkflows: false,
   });
 
-  // The whole record is pinned: D-68-02 forbids an upgrade, so `version` and
-  // the complete `resources` inventory survive the replacement unchanged.
+  // The whole record is pinned: `version` is the 0.0.1 the marketplace still
+  // offers (D-18-08), `installedAt` and `provenance` carry forward from the old
+  // record (D-18-09), and the complete `resources` inventory is unchanged.
   const afterState = await loadState(locations.extensionRoot);
   assert.deepStrictEqual(afterState.marketplaces["mp"]?.plugins["p1"], {
     version: "0.0.1",
@@ -890,6 +918,124 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
   assert.equal(bucket.length, 1);
   assert.equal(bucket[0]?.pluginId, "p1");
   assert.equal(bucket[0]?.handlerDecl["command"], "echo goodbye");
+});
+
+test("D-26: convergePlugin moves the plugin to the catalog version in place and re-routes it", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: Date.UTC(2026, 0, 1) });
+  const { cwd, runtime, hooksRouting, locations } = await installHooksDeclaringPlugin(
+    t,
+    "converge-operation-",
+  );
+  const convergePlugin = createConvergeOperation(hooksRouting, createCompletionCache());
+  const pluginRoot = path.join(cwd, "mp-src", "plugins", "p1");
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "p1", version: "0.0.2" }),
+  );
+  await writeFile(
+    path.join(pluginRoot, "hooks", "hooks.json"),
+    JSON.stringify({
+      PreToolUse: [{ matcher: "", hooks: [{ type: "command", command: "echo goodbye" }] }],
+    }),
+  );
+
+  // act
+  const outcome = await convergePlugin({
+    plugin: "p1",
+    marketplace: "mp",
+    scope: "project",
+    cwd,
+    partial: false,
+    rematerialize: false,
+  });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "updated",
+    name: "p1",
+    fromVersion: "0.0.1",
+    toVersion: "0.0.2",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+  });
+  const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["p1"];
+  assert.strictEqual(record?.version, "0.0.2");
+  const bucket = runtime.getRoutingBucket("PreToolUse");
+  assert.equal(bucket.length, 1);
+  assert.equal(bucket[0]?.handlerDecl["command"], "echo goodbye");
+});
+
+test("constructs the update operations without using their owners or starting asynchronous work", (t) => {
+  // arrange
+  const hooksRouting = mock<UpdateHooksRouting>({ exactParams: true, name: "hooks routing" });
+  const completionCache = mock<CompletionCache>({ exactParams: true, name: "completion cache" });
+  const startedResourceTypes: string[] = [];
+  const resources = createHook({
+    init: (_asyncId, type) => {
+      startedResourceTypes.push(type);
+    },
+  });
+  t.after(() => resources.disable());
+
+  // act
+  resources.enable();
+  const operations = createUpdateOperations(hooksRouting, completionCache);
+  resources.disable();
+
+  // assert
+  assert.deepStrictEqual(Object.keys(operations), [
+    "updatePlugins",
+    "beginPluginUpdateRun",
+    "convergePlugin",
+  ]);
+  assert.deepStrictEqual(startedResourceTypes, []);
+  verify(hooksRouting);
+  verify(completionCache);
+});
+
+test("UPD-DEP-D1: the composed update refuses a new version whose dependency no marketplace offers", async (t) => {
+  // arrange
+  const { cwd, locations, hooksRouting } = await installHooksDeclaringPlugin(
+    t,
+    "update-operation-dependencies-",
+  );
+  const { updatePlugins } = createUpdateOperations(hooksRouting, createCompletionCache());
+  await writeFile(
+    path.join(cwd, "mp-src", "plugins", "p1", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "p1", version: "0.0.2", dependencies: ["absent"] }),
+  );
+  const { ctx, run, notifications } = makeCtx();
+
+  // act
+  await updatePlugins({
+    ctx,
+    run,
+    scope: "project",
+    cwd,
+    target: { kind: "plugin", plugin: "p1", marketplace: "mp" },
+  });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● mp [project]",
+        "  ⊘ p1 v0.0.1 (failed) {dependency failed}",
+        "  ⊘ absent@mp (failed) {not in manifest}",
+        '    cause: Dependency "absent@mp" is not declared by its marketplace.',
+      ].join("\n"),
+      severity: "error",
+    },
+  ]);
+  const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["p1"];
+  assert.strictEqual(record?.version, "0.0.1");
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -145,7 +145,7 @@ type PiRegistrar = Omit<ExtensionAPI, "registerTool"> & {
 };
 
 const EXPECTED_TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|marketplace|help> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
@@ -156,6 +156,8 @@ const EXPECTED_TOP_LEVEL_USAGE =
   "  list [<marketplace>] [--scope user|project]   (alias: ls)\n" +
   "  info <plugin>@<marketplace> [--scope user|project]\n" +
   "  pending [--scope user|project]\n" +
+  "  apply [--scope user|project]\n" +
+  "  autoapply [on|off] [--scope user|project] [--local]\n" +
   "  enable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  import [--scope user|project]\n" +
@@ -351,7 +353,7 @@ async function seedPrunableScope(scope: Scope, cwd: string): Promise<ExtensionSt
 
 /**
  * The injected dependency bag. The git operations are a memory-boundary fake and
- * the two orchestrator entrypoints refuse to run: no case here dispatches a
+ * the three orchestrator entrypoints refuse to run: no case here dispatches a
  * subcommand that reaches them, so a call is a defect rather than a fixture gap.
  */
 function createEdgeDeps(
@@ -366,6 +368,9 @@ function createEdgeDeps(
     gitOps: selectedGitOps,
     beginPluginUpdateRun: () => (): Promise<PluginUpdateOutcome> => {
       throw new Error("the registration glue must not run a plugin update");
+    },
+    applyReconcile: (): Promise<void> => {
+      throw new Error("the registration glue must not run a reconcile apply");
     },
     importClaudeSettings:
       importClaudeSettings ??
@@ -1414,7 +1419,7 @@ for (const mode of ["json", "rpc"] as const) {
     {
       args: "help marketplace extra",
       commandId: "plugin help",
-      message: 'Unknown help topic: "marketplace extra".',
+      message: "Too many arguments.",
       usage: "Usage: /claude:plugin help [marketplace]",
     },
     {
@@ -3143,24 +3148,6 @@ describe("registerClaudeMarketplaceTools", () => {
 });
 
 /**
- * A verb's diagnostic for one rejection kind: a fixed sentence, or one derived
- * from the token that was rejected when the verb echoes it back.
- */
-type ArgumentDiagnostic = string | ((invalid: string) => string);
-
-function diagnosticFor(
-  stated: ArgumentDiagnostic | undefined,
-  shared: string,
-  invalid: string,
-): string {
-  if (stated === undefined) {
-    return shared;
-  }
-
-  return typeof stated === "string" ? stated : stated(invalid);
-}
-
-/**
  * Verbs that reject `--scope` itself, so the empty-scope rejection below has no
  * valid spelling to exercise on them.
  */
@@ -3173,14 +3160,12 @@ const COMMAND_ARGUMENT_CASES = [
     operand: "",
     usage: "bootstrap",
     surplus: "bootstrap takes no arguments.",
-    unknown: "bootstrap takes no arguments.",
   },
   {
     verb: "install",
     operand: "alpha@official",
     usage:
       "install <plugin>@<marketplace> [--scope user|project] [--map-model] [--partial] [--local]",
-    surplus: "install requires exactly one <plugin>@<marketplace> argument.",
   },
   {
     verb: "uninstall",
@@ -3216,19 +3201,26 @@ const COMMAND_ARGUMENT_CASES = [
     operand: "official",
     usage:
       "list [<marketplace>] [--installed] [--available] [--unavailable] [--partial] [--remote] [--scope user|project]",
-    unknown: 'Unknown option: "--bogus".',
   },
   {
     verb: "info",
     operand: "alpha@official",
     usage: "info <plugin>@<marketplace> [--fetch] [--scope user|project]",
-    surplus: "info requires exactly one <plugin>@<marketplace> argument.",
   },
   {
     verb: "pending",
     operand: "",
     usage: "pending [--scope user|project]",
-    unknown: 'Unknown option: "--bogus".',
+  },
+  {
+    verb: "apply",
+    operand: "",
+    usage: "apply [--scope user|project]",
+  },
+  {
+    verb: "autoapply",
+    operand: "on",
+    usage: "autoapply [on|off] [--scope user|project] [--local]",
   },
   {
     verb: "enable",
@@ -3245,30 +3237,24 @@ const COMMAND_ARGUMENT_CASES = [
     operand: "",
     usage: "import [--scope user|project]",
     surplus: "import does not accept positional arguments.",
-    unknown: "import does not accept positional arguments.",
   },
   {
     verb: "browse",
     operand: "",
     usage: "browse",
     surplus: "browse takes no arguments.",
-    unknown: "browse takes no arguments.",
   },
   {
-    // `help` reads whatever follows as a topic name rather than parsing it, so
-    // the rejected token is echoed back and every kind gets its own sentence.
+    // `help` takes one topic, so a token after a valid topic is surplus.
     verb: "help",
-    operand: "",
+    operand: "marketplace",
     usage: "help [marketplace]",
-    surplus: (invalid: string) => `Unknown help topic: "${invalid}".`,
-    unknown: (invalid: string) => `Unknown help topic: "${invalid}".`,
   },
   {
     verb: "marketplace help",
     operand: "",
     usage: "marketplace help",
     surplus: "marketplace help takes no arguments.",
-    unknown: "marketplace help takes no arguments.",
   },
   {
     verb: "marketplace add",
@@ -3327,22 +3313,22 @@ for (const { verb, aliases = [], operand, usage, surplus, unknown } of COMMAND_A
       {
         kind: "unknown flag",
         invalid: "--bogus",
-        diagnostic: diagnosticFor(unknown, 'Unknown flag: "--bogus".', "--bogus"),
+        diagnostic: unknown ?? 'Unknown flag: "--bogus".',
       },
       {
         kind: "surplus positional",
         invalid: "surplus",
-        diagnostic: diagnosticFor(surplus, "Too many arguments.", "surplus"),
+        diagnostic: surplus ?? "Too many arguments.",
       },
       {
         kind: "empty double-quoted surplus",
         invalid: '""',
-        diagnostic: diagnosticFor(surplus, "Too many arguments.", '""'),
+        diagnostic: surplus ?? "Too many arguments.",
       },
       {
         kind: "empty single-quoted surplus",
         invalid: "''",
-        diagnostic: diagnosticFor(surplus, "Too many arguments.", "''"),
+        diagnostic: surplus ?? "Too many arguments.",
       },
     ]) {
       test(`registered ${spelling} rejects ${kind} before reading runtime context`, async (t) => {

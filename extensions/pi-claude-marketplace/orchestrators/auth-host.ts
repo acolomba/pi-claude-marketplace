@@ -180,7 +180,10 @@ export function buildAuthForHost(args: {
   const { host, credentialOps, ctx, run, deviceFlowHttp, authMemo } = args;
 
   const provider = findProviderForHost(host);
-  if (provider === undefined) {
+  // AAP-02 / D-13: a run no command opened, such as an autoapply load, gets no
+  // interactive Device Flow, as the autoupdate cascade gets none (D-3-04). A
+  // credential miss then fails that row instead of holding the load.
+  if (provider === undefined || run.origin.kind !== "command") {
     return buildStoredCredentialAuth(host, credentialOps);
   }
 

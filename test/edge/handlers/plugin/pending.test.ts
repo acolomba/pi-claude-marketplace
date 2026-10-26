@@ -1,8 +1,8 @@
 // Owner for edge/handlers/plugin/pending.ts (MOD-09).
 //
 // This shim accepts NO positional argument and one optional scope flag. It
-// opens with the shared `withParsedArgs` prelude over `parseArgs`, then runs its
-// own guard over the recovered positional tokens. The guard's promise is that it
+// opens with the shared `withScopeOnlyArgs` prelude, which parses through
+// `parseArgs` and then guards the recovered positional tokens. The guard's promise is that it
 // reads the FIRST positional's SHAPE and picks one of two sentences from it, so
 // the discriminating proof is a pair of cases that differ only in that shape.
 //
@@ -11,18 +11,12 @@
 //   * ZERO positionals is the accepted arity, and ONE is rejected. There is no
 //     arity one BELOW zero, so only the surplus half of the arity obligation has
 //     a target here;
-//   * a first positional opening with the long-flag prefix is rejected with the
-//     unknown-OPTION sentence, and any other first positional with the
-//     too-many-arguments sentence. The two sentences are hand-authored, never
-//     carried across from a sibling: the rejecting siblings do not agree on the
-//     wording, and this shim uses the unknown-OPTION form where the fetch and
-//     info shims use the unknown-FLAG form;
-//   * the shape test reads only the FIRST positional. A long-flag-shaped token
-//     driven SECOND, behind an ordinary first, takes the too-many-arguments
-//     sentence;
+//   * any positional opening with the long-flag prefix, in any position, is
+//     rejected with the unknown-flag sentence before the arity check, and a
+//     surplus with no such token takes the too-many-arguments sentence;
 //   * the scope-target flag is REJECTED. This module never reaches
 //     `extractLocalFlag`, so the token survives `parseArgs` as an ordinary
-//     positional, opens with `--`, and lands in the unknown-option channel --
+//     positional, opens with `--`, and lands in the unknown-flag channel --
 //     alone, and beside a scope flag, which is the mutually-exclusive-selector
 //     case.
 //
@@ -190,8 +184,9 @@ async function seedBothScopes(workspace: HermeticWorkspace): Promise<void> {
   );
 }
 
-const PROJECT_BLOCK = "● mp [project]\n  ● p-proj (will install)";
-const USER_BLOCK = "● mp [user]\n  ● p-user (will install)";
+// D-20: neither scope records `mp`, so each block previews its add.
+const PROJECT_BLOCK = "● mp [project] (will add)\n  ● p-proj (will install)";
+const USER_BLOCK = "● mp [user] (will add)\n  ● p-user (will install)";
 
 // ---------------------------------------------------------------------------
 // The accepted arity of ZERO positionals, and the scope member. The omitted row
@@ -203,19 +198,19 @@ const USER_BLOCK = "● mp [user]\n  ● p-user (will install)";
 for (const { args, expectedMessage, label, summary } of [
   {
     args: "",
-    expectedMessage: `${PROJECT_BLOCK}\n\n${USER_BLOCK}\n\nReconcile pending: 2 successes`,
+    expectedMessage: `${PROJECT_BLOCK}\n\n${USER_BLOCK}\n\nReconcile pending: 4 successes\n\n/claude:plugin apply to make these changes`,
     label: "scope-omitted",
     summary: "for both scopes, project first, when no scope flag is supplied",
   },
   {
     args: "--scope user",
-    expectedMessage: `${USER_BLOCK}\n\nReconcile pending: 1 success`,
+    expectedMessage: `${USER_BLOCK}\n\nReconcile pending: 2 successes\n\n/claude:plugin apply to make these changes`,
     label: "scope-user",
     summary: "for the user scope alone when a user scope flag is supplied",
   },
   {
     args: "--scope project",
-    expectedMessage: `${PROJECT_BLOCK}\n\nReconcile pending: 1 success`,
+    expectedMessage: `${PROJECT_BLOCK}\n\nReconcile pending: 2 successes\n\n/claude:plugin apply to make these changes`,
     label: "scope-project",
     summary: "for the project scope alone when a project scope flag is supplied",
   },
@@ -309,7 +304,7 @@ test("previews a planned install of a cold git source without opening a connecti
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [project]\n  ● far (will install)\n  ● near (will install)\n\nReconcile pending: 2 successes",
+        "● mp [project]\n  ● far (will install)\n  ● near (will install)\n\nReconcile pending: 2 successes\n\n/claude:plugin apply to make these changes",
     },
   ]);
   assert.deepStrictEqual(await bothTreeListings(workspace), expectedListings);
@@ -330,11 +325,6 @@ for (const { args, label, summary } of [
     args: "--scope user surplus",
     label: "arity-one-with-scope",
     summary: "a surplus token beside a scope flag",
-  },
-  {
-    args: "surplus --frobnicate",
-    label: "arity-flag-shaped-second",
-    summary: "a long-flag-shaped token driven behind an ordinary one",
   },
 ]) {
   test(`rejects ${summary} with the too-many-arguments sentence and never reaches the pending workflow (MSG-NC-2)`, async (t) => {
@@ -357,9 +347,8 @@ for (const { args, label, summary } of [
 }
 
 // ---------------------------------------------------------------------------
-// One above the accepted arity, first positional long-flag-shaped. This pair is
-// the discriminating proof for the shape test: it differs from the family above
-// only in the shape of the FIRST token, and it takes the other sentence.
+// A long-flag-shaped token in any position. These differ from the family above
+// only in the shape of one token, and they take the other sentence.
 // ---------------------------------------------------------------------------
 
 for (const { args, label, offendingToken, summary } of [
@@ -374,6 +363,12 @@ for (const { args, label, offendingToken, summary } of [
     label: "unknown-then-ordinary",
     offendingToken: "--frobnicate",
     summary: "driven ahead of an ordinary token",
+  },
+  {
+    args: "surplus --frobnicate",
+    label: "ordinary-then-unknown",
+    offendingToken: "--frobnicate",
+    summary: "driven after an ordinary token",
   },
   {
     args: "--scope user --frobnicate",
@@ -406,7 +401,7 @@ for (const { args, label, offendingToken, summary } of [
 
     // assert
     assert.deepStrictEqual(notifications, [
-      { message: `Unknown option: "${offendingToken}".\n\n${PENDING_USAGE}`, severity: "error" },
+      { message: `Unknown flag: "${offendingToken}".\n\n${PENDING_USAGE}`, severity: "error" },
     ]);
     assert.strictEqual(workspace.transportCalls(), 0);
     verifyBoundary();
@@ -459,7 +454,7 @@ for (const mode of ["json", "rpc"] as const) {
     },
     {
       args: "--bogus",
-      message: 'Unknown option: "--bogus".',
+      message: 'Unknown flag: "--bogus".',
     },
     {
       args: "alpha@official beta@official",

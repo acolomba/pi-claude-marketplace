@@ -30,13 +30,14 @@
 import assert from "node:assert/strict";
 import { createHook } from "node:async_hooks";
 import * as fs from "node:fs";
-import { mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, stat, symlink, writeFile } from "node:fs/promises";
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { devNull } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import * as git from "isomorphic-git";
+import lockfile from "proper-lockfile";
 import { mock, verify, when } from "strong-mock";
 
 import {
@@ -738,6 +739,91 @@ test("INFO-02: single-scope available (path source) renders `○ ... (available)
         "    Bar plugin; not installed.",
         "    skills: s1",
       ].join("\n"),
+    );
+  });
+});
+
+test("VER-02: an available path plugin shows the version its plugin.json declares over the entry's", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "bar", source: "./bar", version: "0.5.0", skills: "skills" }],
+      },
+      installablePluginDirs: ["bar"],
+      componentDirs: { bar: ["skills/s1"] },
+    });
+    await mkdir(path.join(mpRoot, "bar", ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(mpRoot, "bar", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "bar", version: "0.6.0" }),
+    );
+
+    const { ctx, run, notifications } = makeCtx();
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "bar", scope: "user", cwd });
+    // assert
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user] <no autoupdate>", "  ○ bar v0.6.0 (available)", "    skills: s1"].join("\n"),
+    );
+  });
+});
+
+test("VER-02: a partially available path plugin shows the version its plugin.json declares", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const mpRoot = await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "bar", source: "./bar", version: "0.5.0", lspServers: { bar: {} } }],
+      },
+      installablePluginDirs: ["bar"],
+    });
+    await mkdir(path.join(mpRoot, "bar", ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(mpRoot, "bar", ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "bar", version: "0.6.0" }),
+    );
+
+    const { ctx, run, notifications } = makeCtx();
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "bar", scope: "user", cwd });
+    // assert
+    assert.match(
+      notifications[0]!.message,
+      /^ {2}\S+ bar v0\.6\.0 \(partially-available\) \{lsp\}$/m,
+    );
+  });
+});
+
+test("SRC-01 / VER-02: a path plugin whose directory is missing reads source missing at the entry version", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "ghost", source: "./ghost", version: "1.0.0" }] },
+    });
+
+    const { ctx, run, notifications } = makeCtx();
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "ghost", scope: "user", cwd });
+    // assert
+    assert.equal(
+      notifications[0]!.message,
+      ["● mp [user] <no autoupdate>", "  ⊘ ghost v1.0.0 (unavailable) {source missing}"].join("\n"),
     );
   });
 });
@@ -6236,7 +6322,7 @@ test("FTCH-03 / D-78-04: info --fetch on an installed git plugin with a missing 
   });
 });
 
-test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source materializes AND refreshes the mirror (probeUnpinned arm)", async () => {
+test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source clones the mirror once (probeUnpinned arm)", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
     const userRoot = path.join(home, ".pi", "agent");
@@ -6288,14 +6374,14 @@ test("FTCH-03 / MIRR-02: info --fetch on an UNPINNED not-installed source materi
       credentialOps,
     });
 
-    // Cold mirror: materialized once, then refreshed in place (MIRR-02 -- the
-    // mirror refresh IS the consented fetch on the unpinned arm). D-2-01: the
-    // COLD mirror clone sends the wire url, `.git` and all; the mirror dir is
-    // keyed on the suffix-less identity.
+    // Cold mirror: the first clone IS the consented fetch on the unpinned arm,
+    // so it is not refreshed again right away (MIRR-02). D-2-01: the COLD
+    // mirror clone sends the wire url, `.git` and all; the mirror dir is keyed
+    // on the suffix-less identity.
     // assert
     assert.equal(gitState.cloneCalls.length, 1);
     assert.equal(gitState.cloneCalls[0]?.url, "https://example.com/repo.git");
-    assert.ok(gitState.fetchCalls.length >= 1, "the fetch hook refreshed the mirror (MIRR-02)");
+    assert.equal(gitState.fetchCalls.length, 0, "a fresh clone is not fetched again (MIRR-02)");
     assert.equal(notifications.length, 1);
     const msg = notifications[0]!.message;
     assert.match(msg, /○ gplug v1\.0\.0 \(available\)/, msg);
@@ -8489,10 +8575,10 @@ test("a warm installable git plugin folds a component read failure to remote exa
   });
 });
 
-test("an explicit fetch whose second materialization fails folds the warm resolver error", async () => {
+test("an explicit fetch whose fetched tree cannot be read folds the warm resolver error", async () => {
   // arrange
   await withHermeticHome(async ({ home, cwd }) => {
-    const cloneUrl = "https://example.com/second-fetch-fails";
+    const cloneUrl = "https://example.com/fetched-tree-unreadable";
     await seedPathMarketplace({
       scope: "user",
       scopeRoot: path.join(home, ".pi", "agent"),
@@ -8525,15 +8611,11 @@ test("an explicit fetch whose second materialization fails folds the warm resolv
       materializePluginClone() {
         return Promise.reject(new Error("pinned materialization was not expected"));
       },
-      materializeOrRefreshPluginMirror() {
+      async materializeOrRefreshPluginMirror() {
         materializations += 1;
-        if (materializations === 2) {
-          return Promise.reject(
-            Object.assign(new Error("mirror became unreadable"), { code: "EACCES" }),
-          );
-        }
-
-        return Promise.resolve({ pluginRoot: mirrorDir, resolvedSha: "a".repeat(40) });
+        // The fetch leaves a manifest the resolver cannot read.
+        await chmod(path.join(mirrorDir, ".claude-plugin", "plugin.json"), 0o000);
+        return { pluginRoot: mirrorDir, resolvedSha: "a".repeat(40) };
       },
     };
     const { ctx, run, notifications } = makeCtx();
@@ -8551,7 +8633,7 @@ test("an explicit fetch whose second materialization fails folds the warm resolv
     });
 
     // assert
-    assert.equal(materializations, 2);
+    assert.equal(materializations, 1);
     assert.deepEqual(notifications, [
       {
         message:
@@ -9405,6 +9487,43 @@ test("D-01-32: a WARM git clone's plugin.json supplies the dependency list, not 
   });
 });
 
+test("D-77-01: a WARM git clone whose entry declares no version shows the clone's commit", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/repo";
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: path.join(home, ".pi", "agent"),
+      cwd,
+      mpName: "mp",
+      manifest: { name: "mp", plugins: [{ name: "gplug", source: cloneUrl }] },
+    });
+    await seedWarmMirror({
+      scope: "user",
+      cwd,
+      cloneUrl,
+      pluginJson: { name: "gplug" },
+      componentDirs: ["skills/warm-skill"],
+    });
+    const mirrorDir = await locationsFor("user", cwd).pluginCloneDir(pluginMirrorKey(cloneUrl));
+    const head = await git.resolveRef({ fs, dir: mirrorDir, ref: "HEAD" });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "gplug", scope: "user", cwd });
+
+    // assert
+    assert.deepEqual(
+      notifications.map(({ message }) => message),
+      [
+        "● mp [user] <no autoupdate>\n" +
+          `  ○ gplug v#${head.slice(0, 7)} (available)\n` +
+          "    skills: warm-skill",
+      ],
+    );
+  });
+});
+
 test("D-01-32 / NFR-5: a COLD git source renders the entry's list and creates no clone directory", async () => {
   await withHermeticHome(async ({ home, cwd }) => {
     // arrange
@@ -10025,5 +10144,102 @@ test("WGATE-01: a gate note takes its place among the other advisories, in direc
         ].join("\n"),
       },
     ]);
+  });
+});
+
+test("GIT-03: `info --fetch` of a not-installed git plugin under a held state lock fails as lock held", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
+      },
+    });
+    const locations = locationsFor("user", cwd);
+    const seam: InfoCloneCacheSeam = {
+      resolvePluginPin: () => assert.fail("a held lock never resolves a pin"),
+      materializePluginClone: () => assert.fail("a held lock never clones"),
+      materializeOrRefreshPluginMirror: () => assert.fail("a held lock never refreshes the mirror"),
+    };
+    const release = await lockfile.lock(locations.extensionRoot, {
+      lockfilePath: locations.stateLockFile,
+      realpath: false,
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    try {
+      await getPluginInfo({
+        ctx,
+        run,
+        marketplace: "mp",
+        plugin: "gplug",
+        scope: "user",
+        cwd,
+        fetch: true,
+        cloneCacheSeam: seam,
+      });
+    } finally {
+      await release();
+    }
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /gplug v1\.0\.0 \(failed\) \{lock held\}/);
+  });
+});
+
+test("GIT-03: `info --fetch` of an installed git plugin under a held state lock fails as lock held", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
+      },
+      installed: { gplug: { version: "1.0.0" } },
+    });
+    const locations = locationsFor("user", cwd);
+    const seam: InfoCloneCacheSeam = {
+      resolvePluginPin: () => assert.fail("a held lock never resolves a pin"),
+      materializePluginClone: () => assert.fail("a held lock never clones"),
+      materializeOrRefreshPluginMirror: () => assert.fail("a held lock never refreshes the mirror"),
+    };
+    const release = await lockfile.lock(locations.extensionRoot, {
+      lockfilePath: locations.stateLockFile,
+      realpath: false,
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    try {
+      await getPluginInfo({
+        ctx,
+        run,
+        marketplace: "mp",
+        plugin: "gplug",
+        scope: "user",
+        cwd,
+        fetch: true,
+        cloneCacheSeam: seam,
+      });
+    } finally {
+      await release();
+    }
+
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.match(notifications[0]!.message, /gplug v1\.0\.0 \(failed\) \{lock held\}/);
   });
 });

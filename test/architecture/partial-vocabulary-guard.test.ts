@@ -517,7 +517,8 @@ test("D-75-01 guard: overwrite `force: true` semantics survive (rm / writeRef / 
   const gitForce = filesContaining("force", EXT_SOURCES).filter((f) =>
     f.endsWith("platform/git.ts"),
   );
-  // The agents-staging overwrite gate (`AgentStageOptions.force` -> `options?.force`).
+  // The agents commit's overwrite gate (`commitPreparedAgents`'s `force` option, read as
+  // `options?.force`; RINST-01, D-18-15).
   const stageForce = filesContaining("options?.force", EXT_SOURCES).filter((f) =>
     f.endsWith("bridges/agents/stage.ts"),
   );

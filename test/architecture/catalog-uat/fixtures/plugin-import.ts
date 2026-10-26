@@ -21,6 +21,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "official-plugin",
                 dependencies: [],
                 severity: "info",
@@ -35,6 +36,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "official-plugin",
                 dependencies: [],
                 severity: "info",
@@ -49,6 +51,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "local-plugin",
                 dependencies: [],
                 severity: "info",
@@ -63,6 +66,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "local-plugin",
                 dependencies: [],
                 severity: "info",
@@ -88,6 +92,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "github-plugin",
                 dependencies: [],
                 severity: "info",
@@ -102,6 +107,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "github-plugin",
                 dependencies: [],
                 severity: "info",
@@ -126,6 +132,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "official-plugin",
                 dependencies: [],
                 severity: "info",
@@ -140,6 +147,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "local-plugin",
                 dependencies: [],
                 severity: "info",
@@ -154,6 +162,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "github-plugin",
                 dependencies: [],
                 severity: "info",
@@ -178,6 +187,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 severity: "info",
                 needsReload: true,
                 name: "agent-only-plugin",
@@ -185,6 +195,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
               },
               {
                 status: "installed",
+                version: "1.0.0",
                 severity: "info",
                 needsReload: true,
                 name: "dual-plugin",
@@ -209,6 +220,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "alpha",
                 dependencies: [],
                 severity: "info",
@@ -223,6 +235,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "beta",
                 dependencies: [],
                 severity: "info",
@@ -248,6 +261,7 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
             plugins: [
               {
                 status: "installed",
+                version: "1.0.0",
                 name: "before",
                 dependencies: [],
                 severity: "info",
@@ -262,6 +276,98 @@ export const PLUGIN_IMPORT_FIXTURES: FixtureMap = {
                 name: "hello",
                 reasons: ["dependency failed"],
                 cause: new Error('Dependency "missing@mp" is not declared by its marketplace.'),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // UPD-DEP-D1 / WR-N5: the dependency an install moved first reports its
+    // own row after the plugin's, by its full key.
+    "import-dependency-moved": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Import",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "user",
+            status: "skipped",
+            reasons: ["already added"],
+            plugins: [
+              {
+                status: "installed",
+                version: "1.0.0",
+                name: "app",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "updated",
+                name: "lib@mp",
+                from: "1.0.0",
+                to: "2.0.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "repeat-import-skips": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Import",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "fixtures",
+            scope: "user",
+            status: "skipped",
+            reasons: ["already added"],
+            plugins: [
+              {
+                status: "skipped",
+                name: "demo",
+                reasons: ["already installed"],
+                severity: "info",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    "lock-held": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        label: "Import",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "fixtures",
+            scope: "user",
+            status: "failed",
+            severity: "error",
+            plugins: [
+              {
+                status: "failed",
+                name: "fixtures",
+                reasons: ["lock held"],
+                cause: new Error(
+                  "Another pi-claude-marketplace operation is in progress for user scope (~/.pi/agent/pi-claude-marketplace/.state-lock). Retry after it completes.",
+                  { cause: new Error("Lock file is already being held") },
+                ),
                 severity: "error",
                 needsReload: false,
               },

@@ -764,12 +764,12 @@ const versionCases = [
     marketplace: "unavailable-mp",
     title: "carries the declared version of an unavailable row",
     plugin: { name: "alpha", manifestVersion: "3.0.0", pluginTree: false },
-    line: "  [unavailable] alpha  3.0.0  (unsupported source)",
+    line: "  [unavailable] alpha  3.0.0  (source missing)",
     row: {
       status: "unavailable",
       name: "alpha",
       id: "alpha@unavailable-mp",
-      reasons: ["unsupported source"],
+      reasons: ["source missing"],
       version: "3.0.0",
     },
   },
@@ -777,12 +777,12 @@ const versionCases = [
     marketplace: "unversioned-unavailable-mp",
     title: "omits the version of an unavailable row that declares none",
     plugin: { name: "alpha", pluginTree: false },
-    line: "  [unavailable] alpha  (unsupported source)",
+    line: "  [unavailable] alpha  (source missing)",
     row: {
       status: "unavailable",
       name: "alpha",
       id: "alpha@unversioned-unavailable-mp",
-      reasons: ["unsupported source"],
+      reasons: ["source missing"],
     },
   },
 ] as const satisfies readonly VersionCase[];
@@ -834,7 +834,7 @@ const unavailableRow = {
   status: "unavailable",
   name: "charlie",
   id: "charlie@mixed-mp",
-  reasons: ["unsupported source"],
+  reasons: ["source missing"],
   version: "3.0.0",
 } as const satisfies ExpectedPluginRow;
 
@@ -856,7 +856,7 @@ const partiallyAvailableRow = {
 
 const INSTALLED_LINE = "  [installed] alpha  1.0.0";
 const AVAILABLE_LINE = "  [available] bravo  2.0.0";
-const UNAVAILABLE_LINE = "  [unavailable] charlie  3.0.0  (unsupported source)";
+const UNAVAILABLE_LINE = "  [unavailable] charlie  3.0.0  (source missing)";
 const REMOTE_LINE = "  [available] delta  4.0.0";
 const PARTIALLY_AVAILABLE_LINE = "  [unavailable] echo  5.0.0  (lsp)";
 

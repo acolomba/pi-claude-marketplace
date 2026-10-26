@@ -2814,7 +2814,7 @@ test("ENBL-19: an enable/disable/enable round trip succeeds -- the retained inve
 // ENBL-07: enable on a DISABLED PARTIAL record
 // ──────────────────────────────────────────────────────────────────────────
 
-test("ENBL-07: enable on a disabled PARTIAL re-materializes through the partial gate, restoring the CURRENT manifest's supported set (D-68-02 repair/promotion stance)", async () => {
+test("ENBL-07: enable on a disabled PARTIAL re-materializes through the partial gate, restoring the CURRENT manifest's supported set (BFILL-01 / D-18-06 partial-capable stance)", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const { statePath } = await seedRealDisabledMarketplace(home, {
@@ -3108,6 +3108,100 @@ test("WR-06 / NREG-01: a re-enable that staged neither agents nor MCP servers re
         "",
         "/reload to pick up changes",
       ].join("\n"),
+    );
+  });
+});
+
+test("DLS-01 / ATTR-08: enable on a delisted root whose installed copy declares a missing dependency refuses as not found", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+      unsupportedKind: "lspServers",
+      omitFromManifest: true,
+    });
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: { mp: { plugins: Record<string, { resolvedSource: string }> } };
+    };
+    const copy = state.marketplaces.mp.plugins["foo-plugin"]!.resolvedSource;
+    await mkdir(path.join(copy, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(copy, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "foo-plugin", dependencies: ["missing@mp"] }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo-plugin",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      notifications.map((notification) => notification.message),
+      [
+        [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user]",
+          "  ⊘ foo-plugin v1.2.3 (failed)",
+          '    cause: Plugin "foo-plugin" not found in marketplace "mp".',
+        ].join("\n"),
+      ],
+    );
+  });
+});
+
+test("WR-03 / ATTR-08: enable on a delisted root whose installed copy is gone still refuses as not found, not as unreadable", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo-plugin",
+      version: "1.2.3",
+      unsupportedKind: "lspServers",
+      omitFromManifest: true,
+    });
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: { mp: { plugins: Record<string, { resolvedSource: string }> } };
+    };
+    await rm(state.marketplaces.mp.plugins["foo-plugin"]!.resolvedSource, {
+      recursive: true,
+      force: true,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo-plugin",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      notifications.map((notification) => notification.message),
+      [
+        [
+          "A plugin operation has failed.",
+          "",
+          "● mp [user]",
+          "  ⊘ foo-plugin v1.2.3 (failed)",
+          '    cause: Plugin "foo-plugin" not found in marketplace "mp".',
+        ].join("\n"),
+      ],
     );
   });
 });
@@ -4936,6 +5030,58 @@ test("a held project lock returns lock-held in orchestrated mode and succeeds af
   });
 });
 
+test("FLR-01: a held project lock fails a standalone disable as lock held with its cause and changes nothing", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await writeUserState(home, {
+      cwd,
+      disabled: false,
+      marketplaceName: "mp",
+      pluginName: "foo",
+      scope: "project",
+    });
+    const locations = locationsFor("project", cwd);
+    const beforeState = await readFile(statePath, "utf8");
+    const release = await lockfile.lock(locations.extensionRoot, {
+      lockfilePath: locations.stateLockFile,
+      realpath: false,
+      retries: 0,
+      stale: 10_000,
+      update: 2_000,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    try {
+      await setPluginEnabled({
+        ctx,
+        cwd,
+        enable: false,
+        marketplace: "mp",
+        run: runWithNothingLoaded(),
+        plugin: "foo",
+        scope: "project",
+      });
+    } finally {
+      await release();
+    }
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n" +
+          "● mp [project]\n" +
+          "  ⊘ foo (failed) {lock held}\n" +
+          "    cause: Another pi-claude-marketplace operation is in progress for project scope " +
+          `(${locations.stateLockFile}). Retry after it completes. -> Lock file is already being held`,
+        severity: "error",
+      },
+    ]);
+    assert.strictEqual(await readFile(statePath, "utf8"), beforeState);
+  });
+});
+
 test("a config-write failure leaves the state bytes unchanged and a standalone retry succeeds", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
@@ -5701,7 +5847,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
       plugins: { "foo@mp": { enabled: true } },
       schemaVersion: 1,
     });
-    assert.deepStrictEqual(firstReload.notifications, []);
+    assert.deepStrictEqual(firstReload.notifications, [{ message: "Apply: nothing to change." }]);
     assert.deepStrictEqual(afterFirstReload, afterEnable);
     assert.deepStrictEqual(afterUpdate, {
       enabled: true,
@@ -5710,7 +5856,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable of a BASE-declared plugi
       version: "2.0.0",
     });
     assert.deepStrictEqual(afterReinstall, afterUpdate);
-    assert.deepStrictEqual(secondReload.notifications, []);
+    assert.deepStrictEqual(secondReload.notifications, [{ message: "Apply: nothing to change." }]);
     assert.deepStrictEqual(afterSecondReload, afterUpdate);
     assert.equal(enableContext.notifications.length, 1);
     assert.equal(updateContext.notifications.length, 1);
@@ -5841,7 +5987,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable with --local of a plugin
       schemaVersion: 1,
     });
     assert.equal(baseExistsAfterEnable, false);
-    assert.deepStrictEqual(firstReload.notifications, []);
+    assert.deepStrictEqual(firstReload.notifications, [{ message: "Apply: nothing to change." }]);
     assert.deepStrictEqual(afterFirstReload, afterEnable);
     // FIX-02: the local config declares every record, so the reload writes no
     // base config.
@@ -5857,7 +6003,7 @@ test("DFEN-07 / D-103-10 / D-103-11: an explicit enable with --local of a plugin
     assert.equal(baseExistsAfterUpdate, false);
     assert.deepStrictEqual(afterReinstall, afterUpdate);
     assert.equal(baseExistsAfterReinstall, false);
-    assert.deepStrictEqual(secondReload.notifications, []);
+    assert.deepStrictEqual(secondReload.notifications, [{ message: "Apply: nothing to change." }]);
     assert.deepStrictEqual(afterSecondReload, afterUpdate);
     assert.equal(enableContext.notifications.length, 1);
     assert.equal(updateContext.notifications.length, 1);
@@ -6446,7 +6592,7 @@ test("EDEP-01: a diamond shares its member once", async () => {
   });
 });
 
-test("EDEP-01: a not-installed declared dependency reports {not installed} and does not refuse the root", async () => {
+test("EDEP-01: a declared dependency that is not installed refuses the enable and writes nothing", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange
     const { statePath } = await seedEdepGraph(home, [
@@ -6457,6 +6603,7 @@ test("EDEP-01: a not-installed declared dependency reports {not installed} and d
         enabled: false,
       },
     ]);
+    const mtimeBefore = (await stat(statePath)).mtimeMs;
     const { ctx, notifications } = makeCtx(cwd);
 
     // act
@@ -6475,17 +6622,89 @@ test("EDEP-01: a not-installed declared dependency reports {not installed} and d
     assert.equal(
       notifications[0]!.message,
       [
-        "A plugin operation needs attention.",
+        "A plugin operation has failed.",
         "",
         "● official [user]",
-        "  ● a v1.0.0 (installed)",
-        "  ⊘ formatter@tools (skipped) {not installed}",
-        "",
-        "/reload to pick up changes",
+        "  ⊘ a (failed) {dependency unsatisfied}",
+        "    cause: Install formatter@tools first, then enable a@official.",
       ].join("\n"),
     );
-    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
-    assert.equal(state.marketplaces.official!.plugins.a!.enabled, true);
+    assert.equal((await stat(statePath)).mtimeMs, mtimeBefore);
+  });
+});
+
+test("EDEP-01: a missing dependency two edges away refuses the enable and leaves its disabled declarer off", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
+      {
+        name: "b",
+        version: "1.0.0",
+        dependencies: [{ name: "formatter", marketplace: "tools" }],
+        enabled: false,
+      },
+    ]);
+    const before = await readFile(statePath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(
+      notifications[0]?.message,
+      [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        "  ⊘ a (failed) {dependency unsatisfied}",
+        "    cause: Install formatter@tools first, then enable a@official.",
+      ].join("\n"),
+    );
+    assert.equal(await readFile(statePath, "utf8"), before);
+  });
+});
+
+test("EDEP-01: an enabled root with a missing dependency is skipped as already enabled", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEdepGraph(home, [
+      {
+        name: "a",
+        version: "1.0.0",
+        dependencies: [{ name: "formatter", marketplace: "tools" }],
+        enabled: true,
+      },
+    ]);
+    const before = await readFile(statePath, "utf8");
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "a",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.equal(
+      notifications[0]?.message,
+      ["● official [user]", "  ⊘ a (skipped) {already enabled}"].join("\n"),
+    );
+    assert.equal(await readFile(statePath, "utf8"), before);
   });
 });
 
@@ -6620,17 +6839,27 @@ test("EDEP-01: an unreadable declarer refuses the enable with no absolute path l
       { name: "a", version: "1.0.0", dependencies: [{ name: "b" }], enabled: false },
       { name: "b", version: "1.0.0", enabled: false },
     ]);
-    // Break "b"'s own manifest read AND remove it from the marketplace
-    // entry so D-01-07's fallback also misses, forcing the declarer read to
-    // fail closed (D-05-07).
+    // Delist "b" AND delete its installed copy, so neither the
+    // marketplace nor the copy (DLS-01) can state its declarations and the
+    // declarer read fails closed (D-05-07).
     const state = JSON.parse(await readFile(statePath, "utf8")) as {
-      marketplaces: { official: { manifestPath: string; marketplaceRoot: string } };
+      marketplaces: {
+        official: {
+          manifestPath: string;
+          marketplaceRoot: string;
+          plugins: Record<string, { resolvedSource: string }>;
+        };
+      };
     };
     const manifest = JSON.parse(
       await readFile(state.marketplaces.official.manifestPath, "utf8"),
     ) as { plugins: { name: string }[] };
     manifest.plugins = manifest.plugins.filter((entry) => entry.name !== "b");
     await writeFile(state.marketplaces.official.manifestPath, JSON.stringify(manifest), "utf8");
+    await rm(state.marketplaces.official.plugins["b"]!.resolvedSource, {
+      recursive: true,
+      force: true,
+    });
     const mtimeBefore = (await stat(statePath)).mtimeMs;
     const { ctx, notifications } = makeCtx(cwd);
 
@@ -6654,7 +6883,7 @@ test("EDEP-01: an unreadable declarer refuses the enable with no absolute path l
         "",
         "● official [user]",
         "  ⊘ a (failed) {unreadable}",
-        "    cause: cannot read the dependencies of b@official: not declared by its marketplace",
+        "    cause: cannot read the dependencies of b@official: not declared by its marketplace, and its installed copy cannot be read",
       ].join("\n"),
     );
     assert.equal((await stat(statePath)).mtimeMs, mtimeBefore);
@@ -7895,17 +8124,27 @@ test("EDEP-02: an unreadable declarer refuses the disable with no absolute path 
       { name: "shared-lib", version: "1.0.0", enabled: true },
       { name: "other", version: "1.0.0", enabled: true },
     ]);
-    // Break "other"'s own manifest read AND remove it from the marketplace
-    // entry so D-01-07's fallback also misses, forcing the declarer read to
-    // fail closed (D-05-07).
+    // Delist "other" AND delete its installed copy, so neither the
+    // marketplace nor the copy (DLS-01) can state its declarations and the
+    // declarer read fails closed (D-05-07).
     const state = JSON.parse(await readFile(statePath, "utf8")) as {
-      marketplaces: { official: { manifestPath: string; marketplaceRoot: string } };
+      marketplaces: {
+        official: {
+          manifestPath: string;
+          marketplaceRoot: string;
+          plugins: Record<string, { resolvedSource: string }>;
+        };
+      };
     };
     const manifest = JSON.parse(
       await readFile(state.marketplaces.official.manifestPath, "utf8"),
     ) as { plugins: { name: string }[] };
     manifest.plugins = manifest.plugins.filter((entry) => entry.name !== "other");
     await writeFile(state.marketplaces.official.manifestPath, JSON.stringify(manifest), "utf8");
+    await rm(state.marketplaces.official.plugins["other"]!.resolvedSource, {
+      recursive: true,
+      force: true,
+    });
     let saveCalls = 0;
     const transaction: EnableDisableTransaction = {
       ...REAL_ENABLE_DISABLE_TRANSACTION,
@@ -7948,7 +8187,7 @@ test("EDEP-02: an unreadable declarer refuses the disable with no absolute path 
         "",
         "● official [user]",
         "  ⊘ shared-lib (failed) {unreadable}",
-        "    cause: cannot read the dependencies of other@official: not declared by its marketplace",
+        "    cause: cannot read the dependencies of other@official: not declared by its marketplace, and its installed copy cannot be read",
       ].join("\n"),
     );
     assert.equal(saveCalls, 0);
@@ -8709,5 +8948,99 @@ test("AFILE-04: an orchestrated enable returns the notice on its outcome and sen
       mcpConfigNotices: [{ kind: "comments-dropped", scope: "user", file: "mcp-adapter.json" }],
     });
     assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("GIT-01: enable re-materializes the commit the record names", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const recordedSha = "1".repeat(40);
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: Record<string, { plugins: Record<string, Record<string, unknown>> }>;
+    };
+    const record = state.marketplaces["mp"]?.plugins["foo"];
+    assert.ok(record !== undefined);
+    record["resolvedSha"] = recordedSha;
+    await writeFile(statePath, JSON.stringify(state), "utf8");
+    const pins: (string | undefined)[] = [];
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      runInstallLedger(_state, _locations, options) {
+        pins.push(options.sourcePinOverride);
+        return Promise.reject(new Error("stop after the pin is read"));
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      run: runWithNothingLoaded(),
+      plugin: "foo",
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(pins, [recordedSha]);
+  });
+});
+
+test("GIT-01 / GV-01: enable keeps the release tag version the record holds", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const recordedSha = "1".repeat(40);
+    const state = JSON.parse(await readFile(statePath, "utf8")) as {
+      marketplaces: Record<string, { plugins: Record<string, Record<string, unknown>> }>;
+    };
+    const record = state.marketplaces["mp"]?.plugins["foo"];
+    assert.ok(record !== undefined);
+    record["version"] = "1.2.3-111111111111";
+    record["resolvedSha"] = recordedSha;
+    record["resolvedVersion"] = "1.2.3";
+    await writeFile(statePath, JSON.stringify(state), "utf8");
+    const pins: (string | undefined)[][] = [];
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      runInstallLedger(_state, _locations, options) {
+        pins.push([options.pinVersionOverride, options.sourcePinOverride, options.resolvedVersion]);
+        return Promise.reject(new Error("stop after the pin is read"));
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    await setPluginEnabledForOwner({
+      ctx,
+      cwd,
+      enable: true,
+      marketplace: "mp",
+      run: runWithNothingLoaded(),
+      plugin: "foo",
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(pins, [["1.2.3-111111111111", recordedSha, "1.2.3"]]);
   });
 });

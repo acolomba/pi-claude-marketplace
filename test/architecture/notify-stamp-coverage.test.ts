@@ -94,6 +94,16 @@ function appliedOutcomes(): readonly PerEntryOutcome[] {
       scope: "user",
     },
     {
+      cause: new Error(
+        "cannot read the dependencies of stale-plugin@fresh-mp: not declared by its marketplace, and its installed copy cannot be read",
+      ),
+      kind: "plugin-declarer-unreadable",
+      marketplace: "fresh-mp",
+      plugin: "stale-plugin",
+      reason: "not in manifest",
+      scope: "user",
+    },
+    {
       cause: new Error('Install "secrets-vault@fresh-mp" or uninstall "held-plugin@fresh-mp"'),
       kind: "plugin-dependency-disabled",
       marketplace: "fresh-mp",
@@ -210,6 +220,7 @@ test("GATE-01/D-06: applied projection stamps every failed row", () => {
     { name: "stuck-plugin", needsReload: false, severity: "error", status: "failed" },
     { name: "wedged-plugin", needsReload: false, severity: "error", status: "failed" },
     { name: "pinned-plugin", needsReload: false, severity: "error", status: "failed" },
+    { name: "stale-plugin", needsReload: false, severity: "warning", status: "failed" },
   ]);
 });
 

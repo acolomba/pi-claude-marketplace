@@ -78,7 +78,7 @@ import { deleteMarketplaceConfigEntryWithCascade } from "../../persistence/confi
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState, type ExtensionState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { errorMessage, MarketplaceNotFoundError } from "../../shared/errors.ts";
+import { errorMessage, MarketplaceNotFoundError, StateLockHeldError } from "../../shared/errors.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
@@ -97,7 +97,7 @@ import {
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
 import { garbageCollectPluginClones } from "../plugin/clone-gc.ts";
-import { buildScopeDeclarationIndex } from "../plugin/dependency-index.ts";
+import { buildScopeDeclarationIndex, withoutDisabledHolders } from "../plugin/dependency-index.ts";
 
 import { composeHeldRemovalCause, REMOVE_CONTEXT, type RemoveRowMsg } from "./remove.messaging.ts";
 import {
@@ -759,7 +759,9 @@ class HeldRemovalStop extends Error {
  * before anything changes, as `disable` refuses (`{dependents remain}`): the
  * user uninstalls the dependents first, or removes the marketplace from the
  * other file too. The full remove applies no such rule, because it removes the
- * marketplace from the scope.
+ * marketplace from the scope. MPR-01: the caller passes the index without its
+ * disabled holders, so a disabled dependent does not refuse the remove, as it
+ * does not refuse a named uninstall.
  */
 function refuseHeldRemovals(
   plan: RemovePlan,
@@ -904,7 +906,11 @@ async function runRemoveLockBody(args: {
     locations,
     read: opts.declarationIndex ?? buildScopeDeclarationIndex,
   });
-  refuseHeldRemovals(plan, index, opts.name);
+  refuseHeldRemovals(
+    plan,
+    index === undefined ? undefined : withoutDisabledHolders(index, tx.state as ExtensionState),
+    opts.name,
+  );
 
   // D-02: per-plugin cascade loop (MR-3 continuation across failures).
   const removal = {
@@ -1095,6 +1101,59 @@ function surfaceMarketplaceFailure(args: {
   }
 
   return { status: "failed", reason, error, cause: errorMessage(error) };
+}
+
+/**
+ * The failed outcome of a remove whose state transaction threw: each stop the
+ * lock body raised, the CFG-03 sentinel, and a held state lock (FLR-02)
+ * becomes its row. Any other throw leaves through
+ * `rethrowWithMcpConfigNotices`.
+ */
+function surfaceRemoveStop(
+  err: unknown,
+  args: {
+    readonly opts: RemoveMarketplaceOptions;
+    readonly orchestrated: boolean;
+    readonly scope: Scope;
+    readonly configBasename: string;
+    readonly cfgInvalidSentinel: Error;
+    readonly mcpConfigNotices: readonly McpConfigNotice[];
+  },
+): RemoveMarketplaceOutcome {
+  const { opts, orchestrated, scope } = args;
+  if (err instanceof LayerGateStop) {
+    return surfaceLayerGateStop(opts, scope, err.verdict);
+  }
+
+  if (err instanceof HeldRemovalStop) {
+    return surfaceHeldRemovals(opts, scope, err.held);
+  }
+
+  if (err instanceof DeclarationIndexStop) {
+    return surfaceMarketplaceFailure({
+      opts,
+      orchestrated,
+      scope,
+      reason: "unreadable",
+      error: err.unreadable,
+    });
+  }
+
+  if (err instanceof StateLockHeldError) {
+    return surfaceMarketplaceFailure({
+      opts,
+      orchestrated,
+      scope,
+      reason: "lock held",
+      error: err,
+    });
+  }
+
+  if (err !== args.cfgInvalidSentinel) {
+    rethrowWithMcpConfigNotices(err, opts, orchestrated, args.mcpConfigNotices);
+  }
+
+  return surfaceCfgInvalid({ opts, orchestrated, configBasename: args.configBasename, scope });
 }
 
 /**
@@ -1292,33 +1351,13 @@ async function runRemoveOutcome(
       opts.stateTransaction,
     );
   } catch (err) {
-    if (err instanceof LayerGateStop) {
-      return surfaceLayerGateStop(opts, resolved.scope, err.verdict);
-    }
-
-    if (err instanceof HeldRemovalStop) {
-      return surfaceHeldRemovals(opts, resolved.scope, err.held);
-    }
-
-    if (err instanceof DeclarationIndexStop) {
-      return surfaceMarketplaceFailure({
-        opts,
-        orchestrated,
-        scope: resolved.scope,
-        reason: "unreadable",
-        error: err.unreadable,
-      });
-    }
-
-    if (err !== cfgInvalidSentinel) {
-      rethrowWithMcpConfigNotices(err, opts, orchestrated, mcpConfigNotices);
-    }
-
-    return surfaceCfgInvalid({
+    return surfaceRemoveStop(err, {
       opts,
       orchestrated,
-      configBasename,
       scope: resolved.scope,
+      configBasename,
+      cfgInvalidSentinel,
+      mcpConfigNotices,
     });
   }
 

@@ -46,6 +46,15 @@ Every file is organized by vertical function: the user-facing function it is abo
 
 `npm run check:features` checks the file families and the names that this file describes.
 
+## Parallel work
+
+When behavioral coverage is split into streams of work that run in parallel, each file has one owner:
+
+- The foundation work lands first and owns every shared file: `features/support/**`, `features/lib/**`, `cucumber.json`, `scripts/check-features.mjs`, this skill, the shared step modules (`command`, `config`, `session`, `mcp-configuration`, `git-host`, and the scope and settings modules), and every topic module.
+- Each stream adds only its own feature files and its own verb step modules. It never edits a foundation file or a file of another stream.
+- A stream that needs a step the foundation did not provide defines it in its own verb module, with text that names its verb (D-08). When a second stream needs the same step, the step moves to a topic module in a follow-up commit of its own, never into the other stream's module.
+- The plugin topic modules live under `features/step_definitions/plugin/` and never take a verb name. These module names belong to the streams that own those verbs: `install`, `uninstall`, `enable`, `disable`, `update`, `reinstall`, `list`, `info`, `pending`, `reconcile`, `fetch`, `prune`, `import`, `bootstrap`, `browse`, `help`, `git-source`, `rollback`, and `state-lock` under `plugin/`, and `remove` under `marketplace/`.
+
 ## Boundaries
 
 - The `.steps.ts` suffix is mandatory for step modules, and only step modules use it: `cucumber.json` loads step modules by that suffix, so it is also how a reader tells which files register steps. A step module lives under `features/step_definitions/` only.

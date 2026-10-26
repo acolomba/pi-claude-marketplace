@@ -77,11 +77,11 @@ export type UnsupportedReason =
   "unsupported hooks" | "lsp" | "unsupported source" | "unsupported component" | "unsupported mcp";
 
 /**
- * MCPR-03 / D-02: the return-type envelope for `narrowResolverNotes`. It widens
- * `UnsupportedReason` with the failure-class `malformed mcp` token. The
- * sibling typed-kind helpers never emit `malformed mcp`.
+ * MCPR-03 / D-02 / SRC-01: the return-type envelope for `narrowResolverNotes`.
+ * It widens `UnsupportedReason` with the failure-class `malformed mcp` and
+ * `source missing` tokens. The sibling typed-kind helpers never emit either.
  */
-export type ResolverNoteReason = UnsupportedReason | "malformed mcp";
+export type ResolverNoteReason = UnsupportedReason | "malformed mcp" | "source missing";
 
 /**
  * Narrow resolver `notes` strings to closed-set REASONS members.
@@ -119,13 +119,22 @@ export function narrowResolverNotes(notes: readonly string[]): readonly Resolver
 }
 
 /**
+ * SRC-01: the prefix of `domain/plugin-resolver.ts`'s note for a plugin
+ * directory that does not exist. Install's resolver-reason classifier matches
+ * the same prefix, so both surfaces read `source missing`.
+ */
+export const SOURCE_DIR_MISSING_NOTE = "source dir does not exist";
+
+/**
  * Classify a single resolver note into exactly one closed-set bucket. The arm
  * order is significant -- the `malformed mcp reference` and `malformed mcp
  * server ` arms match their FULL prefixes BEFORE the permissive catch-all
  * (MCPR-03 / D-02 / ANAME-07): a bare `malformed mcp` match would also match
  * the inline `malformed mcpServers` note and silently reroute it away from
- * `unsupported source`. Any note matching no
- * specific arm falls through to the permissive `unsupported source` bucket.
+ * `unsupported source`. The `source dir does not exist` prefix arm (SRC-01)
+ * also runs before the `lspServers` substring arm, because the note embeds the
+ * plugin path. Any note matching no specific arm falls through to the
+ * permissive `unsupported source` bucket.
  */
 function classifyResolverNote(note: string): ResolverNoteReason {
   const isHooksNote =
@@ -147,6 +156,12 @@ function classifyResolverNote(note: string): ResolverNoteReason {
   // `malformed mcpServers` note in its own bucket (ANAME-07).
   if (note.startsWith("malformed mcp reference") || note.startsWith("malformed mcp server ")) {
     return "malformed mcp";
+  }
+
+  // SRC-01: the resolver's note for a plugin directory that is not on disk. It
+  // embeds the plugin path, so it too must run before the `lspServers` arm.
+  if (note.startsWith(SOURCE_DIR_MISSING_NOTE)) {
+    return "source missing";
   }
 
   if (note.includes("lspServers")) {

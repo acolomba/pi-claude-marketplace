@@ -1,6 +1,7 @@
 /**
- * @fileoverview Steps that publish local marketplaces by source kind and add
- * them to a scope, shared by every marketplace verb.
+ * @fileoverview Steps that publish local marketplaces by source kind, or as
+ * Claude Code's official marketplace on the git host, and add them to a
+ * scope, shared by every marketplace verb.
  *
  * A scenario publishes a marketplace once, naming its source kind, and that
  * step offers no plugins. Stating the plugins it offers, with or without the
@@ -10,7 +11,8 @@
  */
 
 import assert from "node:assert/strict";
-import { rm } from "node:fs/promises";
+import { rm, stat } from "node:fs/promises";
+import path from "node:path";
 
 import { type DataTable, Given } from "@cucumber/cucumber";
 
@@ -26,6 +28,8 @@ import {
   invalidateManifest,
   publishExternalMarketplace,
   publishMarketplace,
+  publishOfficialMarketplace,
+  removePublishedPlugin,
   republishMarketplace,
   requireFreeRoot,
   rewritePublishedManifest,
@@ -58,6 +62,22 @@ Given(
 );
 
 Given(
+  "the marketplace {string} is published as the official marketplace",
+  async function (this: ScenarioWorld, name: string) {
+    if (this.publishedMarketplace(name) !== undefined) {
+      assert.fail(`the marketplace ${name} is already published in this scenario`);
+    }
+
+    this.onRelease(() =>
+      rm(path.join(this.marketplacesRoot, name), { recursive: true, force: true }),
+    );
+    const published = await publishOfficialMarketplace(this.publicationSites, name);
+    this.recordPublished(name, published);
+    assert.strictEqual((await stat(published.bareRepository)).isDirectory(), true);
+  },
+);
+
+Given(
   "the marketplace {string} is published as an external manifest",
   async function (this: ScenarioWorld, name: string) {
     assert.strictEqual(this.publishedMarketplace(name), undefined);
@@ -78,6 +98,15 @@ Given(
   "the marketplace {string} offers these plugins with dependencies:",
   async function (this: ScenarioWorld, name: string, table: DataTable) {
     await offer(this, name, readOfferedPluginsWithDependencies(table));
+  },
+);
+
+Given(
+  "the marketplace {string} no longer holds the files of the plugin {string}",
+  async function (this: ScenarioWorld, name: string, plugin: string) {
+    const published = this.requirePublished(name);
+    await removePublishedPlugin(published, plugin);
+    await assert.rejects(stat(path.join(published.root, "plugins", plugin)), { code: "ENOENT" });
   },
 );
 
@@ -125,5 +154,27 @@ Given(
   "the manifest of the marketplace {string} has become invalid",
   async function (this: ScenarioWorld, name: string) {
     await invalidateManifest(name, this.requirePublished(name), "schema-invalid");
+  },
+);
+
+Given(
+  "the manifest of the marketplace {string} is no longer valid json",
+  async function (this: ScenarioWorld, name: string) {
+    await invalidateManifest(name, this.requirePublished(name), "malformed");
+  },
+);
+
+Given(
+  "the marketplace {string} source is repaired with a changed valid manifest",
+  async function (this: ScenarioWorld, name: string) {
+    await rewritePublishedManifest(
+      this.requirePublished(name),
+      JSON.stringify({
+        name,
+        owner: { name: "features" },
+        plugins: [],
+        description: "Repaired marketplace",
+      }),
+    );
   },
 );

@@ -11,8 +11,10 @@ import {
   PROMOTED_ROW_REASONS,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install.messaging.ts";
 import {
+  appendLeakToError,
   InstallMarketplaceAddError,
   PluginShapeError,
+  StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { composePluginLines } from "../../../extensions/pi-claude-marketplace/shared/notification-grammar.ts";
 import { resolveRows } from "../../../extensions/pi-claude-marketplace/shared/notification-resolve.ts";
@@ -444,6 +446,39 @@ describe("composeInstallFailureMessage", () => {
     });
   });
 
+  test("INR-02: keeps the cause of an authentication failure whose cleanup leaked", () => {
+    // arrange
+    const failure = appendLeakToError(
+      Object.assign(new Error("HTTP 401 for private clone"), {
+        code: "HttpError",
+        data: { statusCode: 401 },
+      }),
+      "plugin clone staging left behind",
+    );
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "user",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["authentication required"],
+      scope: "user",
+      cause: failure,
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
   test("classifies a cancelled authentication flow without exposing its cause", () => {
     // arrange
     const failure = Object.assign(new Error("device flow cancelled"), {
@@ -472,9 +507,72 @@ describe("composeInstallFailureMessage", () => {
     });
   });
 
-  test("keeps a network errno failure on the generic runtime cause path", () => {
+  test("INS-06: classifies a git host 404 as source missing and keeps its cause", () => {
     // arrange
-    const failure = Object.assign(new Error("network unreachable"), { code: "ENETUNREACH" });
+    const failure = Object.assign(new Error("HTTP Error: 404 Not Found"), {
+      code: "HttpError",
+      data: { statusCode: 404 },
+    });
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["source missing"],
+      scope: "project",
+      cause: failure,
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("INS-06: classifies a git host server error as network error and keeps its cause", () => {
+    // arrange
+    const failure = Object.assign(new Error("HTTP Error: 503 Service Unavailable"), {
+      code: "HttpError",
+      data: { statusCode: 503 },
+    });
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["network error"],
+      scope: "project",
+      cause: failure,
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("INS-06: leaves a ref the clone on disk lacks unclassified and keeps its cause", () => {
+    // arrange
+    const failure = Object.assign(new Error("Could not find HEAD."), {
+      code: "NotFoundError",
+      name: "NotFoundError",
+    });
 
     // act
     const message = composeInstallFailureMessage({
@@ -492,6 +590,33 @@ describe("composeInstallFailureMessage", () => {
       status: "failed",
       name: "helper",
       reasons: [],
+      scope: "project",
+      cause: failure,
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("INS-06: classifies a network errno failure as network unreachable and keeps its cause", () => {
+    // arrange
+    const failure = Object.assign(new Error("socket hang up"), { code: "ECONNRESET" });
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["network unreachable"],
       scope: "project",
       cause: failure,
       severity: "error",
@@ -549,6 +674,35 @@ describe("composeInstallFailureMessage", () => {
       reasons: [],
       version: "6.0.0",
       scope: "project",
+      severity: "error",
+      needsReload: false,
+    });
+  });
+
+  test("FLR-01: a held state lock fails the row as lock held and keeps its cause chain", () => {
+    // arrange
+    const failure = new StateLockHeldError("project", "/scope/.state-lock", {
+      cause: new Error("Lock file is already being held"),
+    });
+
+    // act
+    const message = composeInstallFailureMessage({
+      err: failure,
+      plugin: "helper",
+      scope: "project",
+      version: undefined,
+      rolledBackPartial: false,
+      rollbackPartials: [],
+      entityErrorRow: undefined,
+    });
+
+    // assert
+    assert.deepStrictEqual(message, {
+      status: "failed",
+      name: "helper",
+      reasons: ["lock held"],
+      scope: "project",
+      cause: failure,
       severity: "error",
       needsReload: false,
     });
@@ -963,9 +1117,20 @@ describe("resolver reason narrowing through the install failure row", () => {
     assert.deepStrictEqual(narrowedReasons, ["unsupported mcp"]);
   });
 
+  test("SRC-01: maps a missing source directory note to source missing", () => {
+    // arrange
+    const reasons = ["source dir does not exist: /mp/plugins/ghost"];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["source missing"]);
+  });
+
   test("maps a source note to unsupported source", () => {
     // arrange
-    const reasons = ["source directory does not exist"];
+    const reasons = ["unsupported source kind: npm"];
 
     // act
     const narrowedReasons = installFailureReasons(reasons);
@@ -1037,6 +1202,23 @@ describe("classifyInstallFailure", () => {
       status: "failed",
       error: failure,
       cause: "formatted cause",
+    });
+  });
+
+  test("REC-06: carries the rollback partials of the failed install", () => {
+    // arrange
+    const failure = new Error("failed to stage skill a-fmt: EACCES");
+    const partials = [{ phase: "skills" as const, msg: "EACCES removing a-fmt" }];
+
+    // act
+    const outcome = classifyInstallFailure(failure, "formatted cause", partials);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      error: failure,
+      cause: "formatted cause",
+      rollbackPartials: partials,
     });
   });
 

@@ -25,7 +25,7 @@ void ({
   name: "scoped-plugin",
   // @ts-expect-error unavailable import rows never carry a plugin scope
   scope: "user",
-  reasons: ["no longer installable"],
+  reasons: ["unsupported hooks"],
   severity: "warning",
   needsReload: false,
 } satisfies ImportMsg);
@@ -34,7 +34,14 @@ test("exports the complete import command context", () => {
   // arrange
   const expectedContext = {
     Messaging: { label: "Import" },
-    rowPolicyStatuses: ["installed", "skipped", "failed", "unavailable"],
+    rowPolicyStatuses: [
+      "installed",
+      "partially-installed",
+      "skipped",
+      "failed",
+      "unavailable",
+      "updated",
+    ],
   };
 
   // act
@@ -219,7 +226,7 @@ test("renders an unavailable row without a scope bracket", () => {
     status: "unavailable",
     name: "eta-plugin",
     version: "4.0.0",
-    reasons: ["no longer installable"],
+    reasons: ["unsupported hooks"],
     severity: "warning",
     needsReload: false,
   } satisfies ResolvedRow<ImportMsg>;
@@ -227,11 +234,11 @@ test("renders an unavailable row without a scope bracket", () => {
     status: "unavailable",
     name: "eta-plugin",
     version: "4.0.0",
-    reasons: ["no longer installable"],
+    reasons: ["unsupported hooks"],
     severity: "warning",
     needsReload: false,
   };
-  const expectedRow = "⊘ eta-plugin v4.0.0 (unavailable) {no longer installable}";
+  const expectedRow = "⊘ eta-plugin v4.0.0 (unavailable) {unsupported hooks}";
 
   // act
   const row = composePluginLines(message, "project")[0]!.slice(2);
@@ -242,6 +249,25 @@ test("renders an unavailable row without a scope bracket", () => {
   assert.strictEqual(row, expectedRow);
 });
 
+test("renders a partially installed row with its dropped kind", () => {
+  // arrange
+  const message = {
+    status: "partially-installed",
+    name: "theta-plugin",
+    version: "1.0.0",
+    reasons: ["unsupported component"],
+    severity: "info",
+    needsReload: true,
+  } satisfies ResolvedRow<ImportMsg>;
+  const expectedRow = "◉ theta-plugin v1.0.0 (partially-installed) {unsupported component}";
+
+  // act
+  const row = composePluginLines(message, "project")[0]!.slice(2);
+
+  // assert
+  assert.strictEqual(row, expectedRow);
+});
+
 test("IMPORT_CONTEXT declares complete row policies", () => {
   // act
   const policies = IMPORT_CONTEXT.rowPolicies;
@@ -249,8 +275,10 @@ test("IMPORT_CONTEXT declares complete row policies", () => {
   // assert
   assert.deepStrictEqual(policies, {
     installed: { markers: true, contentReasons: true },
+    "partially-installed": { markers: true, contentReasons: true },
     skipped: { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
     unavailable: { markers: false, contentReasons: true },
+    updated: { markers: true, contentReasons: true },
   });
 });

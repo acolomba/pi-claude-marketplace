@@ -384,7 +384,7 @@ test("install and uninstall failures share error severity without a reload trail
   verify(uninstall.ui);
 });
 
-test("reinstall and update absent-target skips share error severity without a reload trailer", () => {
+test("UPR-04: reinstall and update absent-target failures share error severity without a reload trailer", () => {
   // arrange
   const reinstall = createWireHarness("reinstall");
   const update = createWireHarness("update");
@@ -400,7 +400,7 @@ test("reinstall and update absent-target skips share error severity without a re
         scope: "project",
         plugins: [
           {
-            status: "skipped",
+            status: "failed",
             name: "zeta",
             reasons: ["not installed"],
             severity: "error",
@@ -422,7 +422,7 @@ test("reinstall and update absent-target skips share error severity without a re
         scope: "project",
         plugins: [
           {
-            status: "skipped",
+            status: "failed",
             name: "zeta",
             reasons: ["not installed"],
             severity: "error",

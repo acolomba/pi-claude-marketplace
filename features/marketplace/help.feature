@@ -19,14 +19,20 @@ Feature: Marketplace help
       | needs reload | false                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
       | usage        | Usage: /claude:plugin marketplace <add\|remove\|rm\|list\|ls\|info\|update\|autoupdate\|noautoupdate> ...\n  add <source> [--scope user\|project] [--local]\n  remove <name> [--scope user\|project] [--local]   (alias: rm)\n  list [--scope user\|project]                      (alias: ls)\n  info <name> [--scope user\|project]\n  update [<name>] [--scope user\|project]\n  autoupdate [<name>] [--scope user\|project] [--local]\n  noautoupdate [<name>] [--scope user\|project] [--local] |
 
-  Scenario: Marketplace help with an argument is rejected
-    When the user runs "/claude:plugin marketplace help extra"
+  Scenario Outline: Marketplace help rejects <rejected>
+    When the user runs "/claude:plugin marketplace help <arguments>"
     Then the result has these fields:
       | kind         | usage-error                            |
       | severity     | error                                  |
       | needs reload | false                                  |
-      | message      | marketplace help takes no arguments.   |
+      | message      | <message>                              |
       | usage        | Usage: /claude:plugin marketplace help |
+
+    Examples:
+      | rejected                    | arguments     | message                              |
+      | an argument                 | extra         | marketplace help takes no arguments. |
+      | a flag                      | --bogus       | Unknown flag: "--bogus".             |
+      | a flag after an argument    | extra --bogus | Unknown flag: "--bogus".             |
 
   Scenario: A marketplace command without a subcommand shows the marketplace usage with a reason
     When the user runs "/claude:plugin marketplace"

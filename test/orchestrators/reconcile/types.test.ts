@@ -191,32 +191,6 @@ void ({
   rows: [],
   notices: [],
 } satisfies McpMigrationInput);
-// D-09-13: the host's resources_discover reason.
-void ({
-  ctx: extensionContext,
-  run: runWithNothingLoaded(),
-  cwd: "/work/project",
-  completionCache,
-  hooksRouting,
-  reason: "reload",
-} satisfies ApplyReconcileOptions);
-void ({
-  ctx: extensionContext,
-  run: runWithNothingLoaded(),
-  cwd: "/work/project",
-  completionCache,
-  hooksRouting,
-  reason: "startup",
-} satisfies ApplyReconcileOptions);
-void ({
-  ctx: extensionContext,
-  run: runWithNothingLoaded(),
-  cwd: "/work/project",
-  completionCache,
-  hooksRouting,
-  // @ts-expect-error reason is closed to the host's own "startup" | "reload" set
-  reason: "manual",
-} satisfies ApplyReconcileOptions);
 
 const extensionState = {
   schemaVersion: 2,
@@ -225,7 +199,6 @@ const extensionState = {
 void ({
   plan: undefined,
   invalidOutcomes: [],
-  stateExisted: false,
 } satisfies ScopeReadResult);
 void ({
   plan: emptyReconcilePlan("project"),
@@ -239,7 +212,6 @@ void ({
     },
   ],
   state: extensionState,
-  stateExisted: true,
 } satisfies ScopeReadResult);
 
 void ({
@@ -443,11 +415,6 @@ void ({
 } satisfies ApplyReconcileOptions);
 void ({
   plan: undefined,
-  invalidOutcomes: [],
-  // @ts-expect-error scope reads always state whether state.json existed
-} satisfies ScopeReadResult);
-void ({
-  plan: undefined,
   invalidOutcomes: [
     {
       // @ts-expect-error invalid outcomes use the closed per-entry discriminants
@@ -457,13 +424,11 @@ void ({
       plugin: "formatter",
     },
   ],
-  stateExisted: true,
 } satisfies ScopeReadResult);
 void ({
   plan: undefined,
   invalidOutcomes: [],
   state: undefined,
-  stateExisted: false,
   // @ts-expect-error exact optional properties reject an explicitly undefined state
 } satisfies ScopeReadResult);
 

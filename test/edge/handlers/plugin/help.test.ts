@@ -76,6 +76,27 @@ test("help with unknown topic emits usage error at error severity", async () => 
   verifyBoundary();
 });
 
+for (const { args, message } of [
+  { args: "--bogus", message: 'Unknown flag: "--bogus".' },
+  { args: "marketplace --bogus", message: 'Unknown flag: "--bogus".' },
+  { args: "marketplace extra", message: "Too many arguments." },
+]) {
+  test(`help rejects ${args} with the shared argument sentence`, async () => {
+    // arrange
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const helpHandler = makeHelpHandler();
+
+    // act
+    await helpHandler(args, ctx, runWithNothingLoaded());
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: `${message}\n\nUsage: /claude:plugin help [marketplace]`, severity: "error" },
+    ]);
+    verifyBoundary();
+  });
+}
+
 for (const mode of ["json", "rpc"] as const) {
   for (const { topic, usage } of [
     { topic: "", usage: TOP_LEVEL_USAGE },

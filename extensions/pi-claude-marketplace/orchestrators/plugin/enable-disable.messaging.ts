@@ -9,7 +9,7 @@ import {
   type PluginSkippedMessage,
   type ContentReason,
 } from "../../shared/notification-types.ts";
-import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import { narrowUnsupportedKinds, SOURCE_DIR_MISSING_NOTE } from "../../shared/probe-classifiers.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -70,9 +70,8 @@ export type EnableCascadeMemberRow = PluginInstalledMessage | PluginSkippedMessa
  * comparator's scope half is inert here by construction, exactly as it is
  * for the install cascade's block.
  *
- * A one-element sort is a no-op, so a root that declares no dependencies (or
- * whose every member fails classification, `members: []`) composes to
- * exactly `[rootRow]`.
+ * A one-element sort is a no-op, so a root that declares no dependencies
+ * (`members: []`) composes to exactly `[rootRow]`.
  */
 export function composeEnableCascadeRows(args: {
   readonly scope: Scope;
@@ -110,6 +109,19 @@ export const DISABLE_CONTEXT = {
  */
 export function composeDisableRefusalCause(target: string, dependents: readonly string[]): string {
   return `Disable ${renderDependentKeys(dependents)} first, then ${target}.`;
+}
+
+/**
+ * The enable refusal's instruction when a dependency in the target's closure
+ * is not installed, in the same D-08-01 form as `composeDisableRefusalCause`:
+ * install the missing dependencies first, then enable the target. Upstream
+ * refuses the same enable as `dependency_missing`.
+ */
+export function composeEnableMissingDependencyCause(
+  target: string,
+  missing: readonly string[],
+): string {
+  return `Install ${renderDependentKeys(missing)} first, then enable ${target}.`;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -183,7 +195,7 @@ export function narrowEnableFailure(cause: Error): readonly ContentReason[] {
   if (
     cause instanceof PluginShapeError &&
     cause.shape.kind === "not-installable" &&
-    cause.shape.reasons.some((reason) => reason.startsWith("source dir does not exist"))
+    cause.shape.reasons.some((reason) => reason.startsWith(SOURCE_DIR_MISSING_NOTE))
   ) {
     return ["source missing"];
   }

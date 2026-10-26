@@ -104,7 +104,10 @@ import {
   readHooksJson,
 } from "../../../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { makeReinstallHandler as makeReinstallHandlerWithOperation } from "../../../../extensions/pi-claude-marketplace/edge/handlers/plugin/reinstall.ts";
-import { createNodeReinstallPlugins } from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
+import {
+  createNodeReinstallPlugins,
+  createReinstallPlugin,
+} from "../../../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
 import { createCompletionCache } from "../../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { createHermeticEnvironment } from "../../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../../shared/notification-run-seeds.ts";
@@ -121,8 +124,10 @@ import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/
 function makeReinstallHandler(): ReturnType<typeof makeReinstallHandlerWithOperation> {
   return makeReinstallHandlerWithOperation(
     createNodeReinstallPlugins(
-      createHooksRouting(createHooksRuntime(), { readHooksJson }),
-      createCompletionCache(),
+      createReinstallPlugin(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+      ),
     ),
   );
 }
@@ -413,8 +418,10 @@ test("re-materialises only the named plugin when a plugin reference is supplied 
     reads: 1,
   });
   const reinstallPlugins = createNodeReinstallPlugins(
-    createHooksRouting(createHooksRuntime(), { readHooksJson }),
-    createCompletionCache(),
+    createReinstallPlugin(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      createCompletionCache(),
+    ),
   );
   const reinstallPluginsSpy = t.mock.fn(reinstallPlugins);
 
@@ -631,7 +638,7 @@ test("honours a scope flag and the scope-target flag driven together (WB-02)", a
 // resolver answers first and the row renders offline.
 // ---------------------------------------------------------------------------
 
-test("answers a cold git source from the no-network resolver without opening a connection (NFR-5)", async (t) => {
+test("D-18-04 / NFR-5 / SRC-01: a cold git source is a cache miss, so reinstall tries to clone it and fails the plugin with the clone's cause when the clone fails", async (t) => {
   // arrange
   const workspace = await createHermeticWorkspace(t, "cold-git-source");
   const marketplaceRoot = path.join(workspace.cwd, "mp-src");
@@ -670,12 +677,12 @@ test("answers a cold git source from the no-network resolver without opening a c
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ far (failed) {source mismatch}",
+        "A plugin operation has failed.\n\n● mp [project]\n  ⊘ far v1.0.0 (failed)\n    cause: reinstall must not open a network connection",
       severity: "error",
     },
   ]);
   assert.deepStrictEqual(await readFootprint(workspace), NOTHING_REINSTALLED);
-  assert.strictEqual(workspace.transportCalls(), 0);
+  assert.strictEqual(workspace.transportCalls(), 1);
   verifyBoundary();
 });
 

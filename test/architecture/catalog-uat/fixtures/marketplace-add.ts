@@ -30,6 +30,24 @@ export const MARKETPLACE_ADD_FIXTURES: FixtureMap = {
       },
     },
 
+    // MPA-01: a same-source re-add changes nothing and stays info.
+    "already-added": {
+      pi: piWithBothLoaded(),
+      message: {
+        label: "Marketplace add",
+        cardinality: "single",
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            status: "skipped",
+            reasons: ["already added"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+
     "failure-unreachable": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",

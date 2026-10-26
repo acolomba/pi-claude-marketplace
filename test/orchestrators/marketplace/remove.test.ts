@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
 
+import lockfile from "proper-lockfile";
 import { mock, verify, when } from "strong-mock";
 
 import {
@@ -43,7 +44,10 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
-import { MarketplaceNotFoundError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  MarketplaceNotFoundError,
+  StateLockHeldError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
@@ -2479,6 +2483,37 @@ for (const { holder, title } of [
   });
 }
 
+test("MPR-01: a layer remove is not refused by a disabled plugin that declares the removed plugin", async (testContext) => {
+  // arrange
+  const disabledBeta: PluginRecord = { ...pluginRecord(), enabled: false };
+  const { cwd, locations } = await dependencyCase(
+    testContext,
+    { base: ALPHA_DECLARED, local: BETA_DECLARED },
+    { alpha: pluginRecord(), beta: disabledBeta },
+  );
+  const calls: string[] = [];
+  const notification = notificationBoundary(1);
+
+  // act
+  await removeToolsWith(cwd, notification, {
+    cascade: recordingCascade(calls),
+    declarationIndex: syntheticIndex({ "alpha@tools": [], "beta@tools": ["alpha@tools"] }),
+  });
+
+  // assert
+  assert.deepStrictEqual(calls, ["alpha"]);
+  assert.deepStrictEqual(notification.calls, [
+    {
+      message: "● tools [project] (removed)\n  ○ alpha (uninstalled)\n\n/reload to pick up changes",
+    },
+  ]);
+  assert.deepStrictEqual(
+    await loadState(locations.extensionRoot),
+    toolsState(cwd, pathSource("./tools"), { beta: disabledBeta }),
+  );
+  notification.verifyInteractions();
+});
+
 test("LAYER-03: a layer remove keeps a dependency record its target layer declares while a staying plugin needs it", async (testContext) => {
   // arrange
   const baseDeclaresLib =
@@ -2587,10 +2622,15 @@ test("LAYER-03: a full remove keeps a dependency another marketplace's plugin ne
 });
 
 const UNREADABLE_CAUSE =
-  "cannot read the dependencies of alpha@tools: not declared by its marketplace";
+  "cannot read the dependencies of alpha@tools: not declared by its marketplace, and its installed copy cannot be read";
 
 const unreadableIndex: typeof buildScopeDeclarationIndex = () =>
-  Promise.resolve({ ok: false, declarer: "alpha@tools", cause: new Error(UNREADABLE_CAUSE) });
+  Promise.resolve({
+    ok: false,
+    declarer: "alpha@tools",
+    reason: "not in manifest",
+    cause: new Error(UNREADABLE_CAUSE),
+  });
 
 for (const { mode, orchestrated, expectedCalls } of [
   { mode: "a standalone", orchestrated: false, expectedCalls: 1 },
@@ -2635,6 +2675,79 @@ for (const { mode, orchestrated, expectedCalls } of [
     notification.verifyInteractions();
   });
 }
+
+/** Runs `act` while this process holds the scope's real state lock. */
+async function whileLockHeld<T>(locations: ScopedLocations, act: () => Promise<T>): Promise<T> {
+  const release = await lockfile.lock(locations.extensionRoot, {
+    lockfilePath: locations.stateLockFile,
+    realpath: false,
+  });
+  try {
+    return await act();
+  } finally {
+    await release();
+  }
+}
+
+function lockHeldCause(locations: ScopedLocations): string {
+  return `Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`;
+}
+
+test("FLR-02: a standalone remove under a held state lock reports lock held and changes nothing", async (testContext) => {
+  // arrange
+  const { cwd, locations, bytesOnDisk } = await layerCase(testContext, { base: TOOLS_DECLARED });
+  const expectedBytes = await bytesOnDisk();
+  const notification = notificationBoundary(1);
+
+  // act
+  const outcome = await whileLockHeld(locations, () =>
+    removeToolsWith(cwd, notification, {
+      cascade: unreachableCascade,
+      declarationIndex: unbuildableIndex,
+    }),
+  );
+
+  // assert
+  assert.strictEqual(outcome, undefined);
+  assert.deepStrictEqual(notification.calls, [
+    {
+      message: `Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) {lock held}\n    cause: ${lockHeldCause(locations)} -> Lock file is already being held`,
+      severity: "error",
+    },
+  ]);
+  assert.deepStrictEqual(await bytesOnDisk(), expectedBytes);
+  notification.verifyInteractions();
+});
+
+test("FLR-02: an orchestrated remove under a held state lock returns lock held and changes nothing", async (testContext) => {
+  // arrange
+  const { cwd, locations, bytesOnDisk } = await layerCase(testContext, { base: TOOLS_DECLARED });
+  const expectedBytes = await bytesOnDisk();
+  const notification = notificationBoundary(0);
+
+  // act
+  const outcome = await whileLockHeld(locations, () =>
+    removeToolsWith(cwd, notification, {
+      cascade: unreachableCascade,
+      declarationIndex: unbuildableIndex,
+      orchestrated: true,
+    }),
+  );
+
+  // assert
+  assert.ok(outcome?.status === "failed");
+  const { error, ...failure } = outcome;
+  assert.deepStrictEqual(failure, {
+    status: "failed",
+    reason: "lock held",
+    cause: lockHeldCause(locations),
+  });
+  assert.ok(error instanceof StateLockHeldError);
+  assert.deepStrictEqual([error.scope, error.lockPath], ["project", locations.stateLockFile]);
+  assert.deepStrictEqual(notification.calls, []);
+  assert.deepStrictEqual(await bytesOnDisk(), expectedBytes);
+  notification.verifyInteractions();
+});
 
 test("D-09: a marketplace holding no dependency record is removed without reading any declaration", async (testContext) => {
   // arrange
