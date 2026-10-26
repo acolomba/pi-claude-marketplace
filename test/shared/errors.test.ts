@@ -45,6 +45,7 @@ import {
   rethrowInvalidGitHubBaseUrl,
   serializeCauseChain,
   StaleSourceCloneError,
+  StateLockCompromisedError,
   StateLockHeldError,
   StoredCredentialRejectedError,
   TooManyRedirectsError,
@@ -1521,6 +1522,39 @@ describe("StateLockHeldError", () => {
         message:
           "Another pi-claude-marketplace operation is in progress for project scope (/scope/.state-lock). Retry after it completes.",
         scope: "project",
+        lockPath: "/scope/.state-lock",
+        cause,
+      },
+    );
+  });
+});
+
+describe("StateLockCompromisedError", () => {
+  test("exposes the complete lost-lock failure and cause", () => {
+    // arrange
+    const cause = Object.assign(new Error("Unable to update lock within the stale threshold"), {
+      code: "ECOMPROMISED",
+    });
+
+    // act
+    const error = new StateLockCompromisedError("user", "/scope/.state-lock", { cause });
+
+    // assert
+    assert.ok(error instanceof StateLockCompromisedError);
+    assert.ok(error instanceof Error);
+    assert.deepStrictEqual(
+      {
+        name: error.name,
+        message: error.message,
+        scope: error.scope,
+        lockPath: error.lockPath,
+        cause: error.cause,
+      },
+      {
+        name: "StateLockCompromisedError",
+        message:
+          "The user scope state lock (/scope/.state-lock) was lost before the operation finished. Run the command again.",
+        scope: "user",
         lockPath: "/scope/.state-lock",
         cause,
       },

@@ -896,6 +896,29 @@ export class StateLockHeldError extends Error {
 }
 
 /**
+ * D-06 / NFR-2: the scope's state lock was lost while an operation held it.
+ *
+ * proper-lockfile reports a compromised lock (its mtime refresh failed, or
+ * another process took the lock) from a timer. `transaction/with-state-guard.ts`
+ * records it there and throws this error at the operation's next save, or when
+ * it releases the lock, so a lost lock never leads to a `state.json` write.
+ * `cause` carries proper-lockfile's `ECOMPROMISED` error.
+ */
+export class StateLockCompromisedError extends Error {
+  readonly scope: "user" | "project";
+  readonly lockPath: string;
+  constructor(scope: "user" | "project", lockPath: string, options?: ErrorOptions) {
+    super(
+      `The ${scope} scope state lock (${lockPath}) was lost before the operation finished. Run the command again.`,
+      options,
+    );
+    this.name = "StateLockCompromisedError";
+    this.scope = scope;
+    this.lockPath = lockPath;
+  }
+}
+
+/**
  * PUP-6 aggregate phase-3 failure for plugin update.
  *
  * Wraps the heterogeneous-undo phase-3a failures from update-swap.ts's

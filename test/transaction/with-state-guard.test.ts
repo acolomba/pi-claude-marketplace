@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 import lockfile from "proper-lockfile";
 
@@ -12,7 +12,10 @@ import {
   saveState,
   type ExtensionState,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
-import { StateLockHeldError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  StateLockCompromisedError,
+  StateLockHeldError,
+} from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   withExistingScopeLock,
   withLockedStateTransaction,
@@ -956,4 +959,163 @@ test("holds the existing scope lock around a body without reading state, and cre
     },
     { heldInside: true, missingRoot: "ENOENT", entries: ["present"] },
   );
+});
+
+/** Locks through a stub that hands the test the lock's `onCompromised` callback. */
+function stubLockReportingCompromise(t: TestContext): {
+  readonly compromise: (error: Error) => unknown;
+  readonly releaseAttempts: () => number;
+} {
+  let onCompromised: ((error: Error) => unknown) | undefined;
+  let releaseAttempts = 0;
+  t.mock.method(lockfile, "lock", (_file: string, options: lockfile.LockOptions) => {
+    onCompromised = options.onCompromised;
+    return Promise.resolve(() => {
+      releaseAttempts += 1;
+      return Promise.resolve();
+    });
+  });
+  return {
+    compromise: (error) => {
+      assert.ok(onCompromised !== undefined);
+      return onCompromised(error);
+    },
+    releaseAttempts: () => releaseAttempts,
+  };
+}
+
+function compromiseError(message: string): Error {
+  return Object.assign(new Error(message), { code: "ECOMPROMISED" });
+}
+
+test("D-06 a lock compromised during an explicit transaction refuses its save and is not released again", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "state-guard-compromised-save-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const locations = locationsFor("project", directory);
+  const lock = stubLockReportingCompromise(t);
+  const firstCompromise = compromiseError("Unable to update lock within the stale threshold");
+  const timerOutcomes: unknown[] = [];
+  let saveAttempts = 0;
+  const dependencies = {
+    loadState: (): Promise<ExtensionState> =>
+      Promise.resolve({ schemaVersion: 2, marketplaces: {} }),
+    saveState: (): Promise<void> => {
+      saveAttempts += 1;
+      return Promise.resolve();
+    },
+  } satisfies LockedStateTransactionDeps;
+
+  // act
+  const thrownError = await captureThrown(() =>
+    withLockedStateTransaction(
+      locations,
+      async (transaction) => {
+        timerOutcomes.push(lock.compromise(firstCompromise));
+        timerOutcomes.push(lock.compromise(compromiseError("lock file removed")));
+        await transaction.save();
+      },
+      dependencies,
+    ),
+  );
+
+  // assert
+  assert.deepStrictEqual(timerOutcomes, [undefined, undefined]);
+  assert.ok(thrownError instanceof StateLockCompromisedError);
+  assert.deepStrictEqual(
+    { scope: thrownError.scope, lockPath: thrownError.lockPath, cause: thrownError.cause },
+    { scope: "project", lockPath: locations.stateLockFile, cause: firstCompromise },
+  );
+  assert.deepStrictEqual(
+    { saveAttempts, releaseAttempts: lock.releaseAttempts() },
+    { saveAttempts: 0, releaseAttempts: 0 },
+  );
+  assert.strictEqual(await readOptionalStateBytes(locations.stateJsonPath), undefined);
+});
+
+test("D-06 a state guard whose lock is compromised during its callback does not save", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "state-guard-compromised-guard-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const locations = locationsFor("user", directory);
+  const lock = stubLockReportingCompromise(t);
+  const compromise = compromiseError("lock file removed");
+  let saveAttempts = 0;
+  const dependencies = {
+    loadState: (): Promise<ExtensionState> =>
+      Promise.resolve({ schemaVersion: 2, marketplaces: {} }),
+    saveState: (): Promise<void> => {
+      saveAttempts += 1;
+      return Promise.resolve();
+    },
+  } satisfies LockedStateTransactionDeps;
+
+  // act
+  const thrownError = await captureThrown(() =>
+    withStateGuard(
+      locations,
+      (state) => {
+        lock.compromise(compromise);
+        state.lastReconciledExtensionVersion = "must-not-be-saved";
+      },
+      dependencies,
+    ),
+  );
+
+  // assert
+  assert.ok(thrownError instanceof StateLockCompromisedError);
+  assert.deepStrictEqual(
+    { scope: thrownError.scope, lockPath: thrownError.lockPath, cause: thrownError.cause },
+    { scope: "user", lockPath: locations.stateLockFile, cause: compromise },
+  );
+  assert.deepStrictEqual(
+    { saveAttempts, releaseAttempts: lock.releaseAttempts() },
+    { saveAttempts: 0, releaseAttempts: 0 },
+  );
+});
+
+test("D-06 a body that finishes on a compromised lock fails at release", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "state-guard-compromised-release-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const locations = locationsFor("project", directory);
+  const lock = stubLockReportingCompromise(t);
+  const compromise = compromiseError("Unable to update lock within the stale threshold");
+
+  // act
+  const thrownError = await captureThrown(() =>
+    withExistingScopeLock(locations, () => {
+      lock.compromise(compromise);
+      return Promise.resolve("body complete");
+    }),
+  );
+
+  // assert
+  assert.ok(thrownError instanceof StateLockCompromisedError);
+  assert.deepStrictEqual(
+    { scope: thrownError.scope, lockPath: thrownError.lockPath, cause: thrownError.cause },
+    { scope: "project", lockPath: locations.stateLockFile, cause: compromise },
+  );
+  assert.strictEqual(lock.releaseAttempts(), 0);
+});
+
+test("D-06 a body error on a compromised lock propagates by identity", async (t) => {
+  // arrange
+  const directory = await mkdtemp(path.join(tmpdir(), "state-guard-compromised-body-error-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const locations = locationsFor("project", directory);
+  const lock = stubLockReportingCompromise(t);
+  const bodyError = new Error("clone failed");
+
+  // act
+  const thrownError = await captureThrown(() =>
+    withExistingScopeLock(locations, () => {
+      lock.compromise(compromiseError("lock file removed"));
+      return Promise.reject(bodyError);
+    }),
+  );
+
+  // assert
+  assert.strictEqual(thrownError, bodyError);
+  assert.strictEqual(lock.releaseAttempts(), 0);
 });

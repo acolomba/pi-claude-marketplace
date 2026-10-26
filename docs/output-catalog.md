@@ -772,6 +772,8 @@ A plugin operation has failed.
 
 `failed` plugin variant carrying `cause?: Error`. The cause-chain trailer renders at 4-space indent below the plugin row (D-16-08). Multi-link causes use `->` between links (depth-bounded to 5 per MSG-CC-1). Severity: `error`. No reload-hint (no state-changing status; failed alone does not trigger).
 
+A command whose scope state lock is lost while it runs (another process removed or took the lock, or its refresh failed) fails the same way instead of crashing Pi. Its cause reads `The <scope> scope state lock (<lock path>) was lost before the operation finished. Run the command again.`, and the command does not save `state.json` after the loss (D-06).
+
 ### Failure with rollback-partial children
 
 <!-- catalog-state: failure-rollback-partial -->
