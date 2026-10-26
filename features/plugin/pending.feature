@@ -399,3 +399,34 @@ Feature: Plugin pending
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id        | name | status       | reasons | scope   |
       | tools            | project           | app@tools | app  | will disable |         | project |
+
+  Scenario: Pending lists the move of a plugin whose new version needs a plugin a config declares, not its disable
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   |              |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | tools       | widget | true    |
+      | tools       | zcore  |         |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | needs apply         | true              |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 2                 |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status       | reasons | scope   | from  | to    |
+      | tools            | project           | zcore@tools  | zcore  | will install |         | project |       |       |
+      | tools            | project           | widget@tools | widget | will update  |         | project | 1.0.0 | 1.1.0 |

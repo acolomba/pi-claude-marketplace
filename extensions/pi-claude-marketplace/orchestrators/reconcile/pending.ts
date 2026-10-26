@@ -309,14 +309,14 @@ function releasedDependents(
 }
 
 /**
- * D-21 / D-09-07: the toggle buckets `apply` drives after its dependency
- * installs land. `apply` reads the scope again after such an install and takes
- * the fresh plan's enable, disable and dependency-disable buckets, so a
- * dependent whose missing dependency it just installed stays up, or comes back
- * up. `pending` installs nothing, so it removes from the verdict each dependent
- * the planned installs satisfy and plans again. The other buckets stay the
- * first plan's, as in `apply`, which also reads again only when it installs a
- * dependency.
+ * D-21 / D-09-07: the toggle buckets `apply` drives after its installs land.
+ * `apply` reads the scope again after it installs a plugin or a missing
+ * dependency and takes the fresh plan's enable, disable and dependency-disable
+ * buckets, so a dependent whose missing dependency it just installed stays up,
+ * or comes back up. `pending` installs nothing, so it removes from the verdict
+ * each dependent the planned installs satisfy and plans again. The other
+ * buckets stay the first plan's, as in `apply`, which also reads again only
+ * when it installs something.
  */
 function withPlannedInstallsLanded(
   plan: ReconcilePlan,
@@ -324,9 +324,10 @@ function withPlannedInstallsLanded(
   state: ExtensionState,
   replan: (verdict: ScopeSatisfactionVerdict) => ReconcilePlan,
 ): ReconcilePlan {
-  // The planner fills no dependency install from a failed walk, so the second
-  // test only narrows the verdict.
-  if (plan.pluginsToDependencyInstall.length === 0 || !verdict.ok) {
+  if (
+    (plan.pluginsToInstall.length === 0 && plan.pluginsToDependencyInstall.length === 0) ||
+    !verdict.ok
+  ) {
     return plan;
   }
 

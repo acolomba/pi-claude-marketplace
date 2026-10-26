@@ -28,7 +28,8 @@
 //     plugin's missing declared dependency on every apply, because `apply` is
 //     the explicit command that changes state (D-02 supersedes D-09-13). It
 //     drives the SAME cascade `installPlugin` drives, rooted at each missing
-//     dependency instead of at a user-typed plugin. When it materialized or found already-recorded at
+//     dependency instead of at a user-typed plugin. When it, or the install
+//     step before it, materialized or found already-recorded at
 //     least one key, D-09-07's `refreshTogglePlan` re-runs the read pass for
 //     this scope and substitutes ONLY the fresh plan's `pluginsToEnable`,
 //     `pluginsToDisable` and `pluginsToDependencyDisable` before the toggle
@@ -494,13 +495,17 @@ function movedDependencyOutcomes(
  * install that fails on it after leaving a rollback partial or an MCP config
  * rewrite (AFILE-04) returns its failed outcome instead: the pass continues
  * past that plugin, and a later target that reads the base ends it.
+ *
+ * Returns whether any install landed: the read pass judged the scope without
+ * it, so its toggle buckets are stale (D-09-07).
  */
 async function applyPluginInstalls(
   opts: ApplyReconcileOptions,
   plan: ReconcilePlan,
   outcomes: PerEntryOutcome[],
-): Promise<void> {
+): Promise<boolean> {
   const installPlugin = createInstallOperation(opts.hooksRouting, opts.completionCache);
+  let installed = false;
   for (const op of plan.pluginsToInstall) {
     // eslint-disable-next-line no-await-in-loop -- each install locks the scope (retries: 0)
     const result = await installPlugin({
@@ -532,6 +537,7 @@ async function applyPluginInstalls(
     // UPD-DEP-D1: the dependencies the install moved into range first report
     // as the catalog moves they are, so `apply` lists every change it made.
     outcomes.push(...movedDependencyOutcomes(op.scope, result.movedDependencies ?? []));
+    installed ||= result.status === "installed";
 
     if (result.status === "installed" && result.landedDisabled === true) {
       // DFEN-04: the install ran whole and then unstaged, because the
@@ -619,6 +625,8 @@ async function applyPluginInstalls(
       });
     }
   }
+
+  return installed;
 }
 
 /**
@@ -723,10 +731,11 @@ async function applyDependencyInstalls(
 }
 
 /**
- * D-09-07: after `applyDependencyInstalls` materialized or found already
- * present at least one key, the round-1 read pass's toggle buckets predate
- * that change -- its `pluginsToDependencyDisable` still holds a dependent this
- * step just satisfied and its `pluginsToEnable` still excludes it (D-06-03).
+ * D-09-07: after `applyPluginInstalls` installed a plugin, or
+ * `applyDependencyInstalls` materialized or found already present at least one
+ * key, the round-1 read pass's toggle buckets predate that change -- its
+ * `pluginsToDependencyDisable` still holds a dependent these steps just
+ * satisfied and its `pluginsToEnable` still excludes it (D-06-03).
  * Re-running `readPassForScope` for this scope and taking ONLY
  * `pluginsToEnable`, `pluginsToDisable` and `pluginsToDependencyDisable` from
  * the fresh plan is what lets a marker-held dependent come back up in the
@@ -1088,24 +1097,25 @@ async function applyToggleSteps(
  *      eligible dependent, ROOTED AT THE DEPENDENCY -- on every apply (D-02).
  *      A config-declared install from step 4 that already claimed this key
  *      answers idempotently (D-09-06).
- *   5a. D-09-07: when step 5 materialized or found already-present at least
- *      one key, re-run the read pass for this scope and take ONLY
+ *   5a. D-09-07: when step 4 installed a plugin, or step 5 materialized or
+ *      found already-present at least one key, re-run the read pass for this
+ *      scope and take ONLY
  *      `pluginsToEnable`, `pluginsToDisable` and `pluginsToDependencyDisable`
  *      from the fresh plan -- the round-1 plan's own uninstall / remove / add
  *      / install buckets and its source-mismatch rows are never re-driven.
- *      This is what lets a dependent step 5 just satisfied stay up (or come
- *      back up) in the SAME reload instead of the next one; step 5 finding
- *      nothing to do leaves the round-1 plan standing and costs nothing extra.
+ *      This is what lets a dependent steps 4 and 5 just satisfied stay up (or
+ *      come back up) in the SAME reload instead of the next one; steps 4 and
+ *      5 installing nothing leave the round-1 plan standing and cost nothing
+ *      extra.
  *   6. enable plugins newly declared enabled (round-1 or 5a's replacement).
  *   7. disable plugins newly declared disabled (round-1 or 5a's replacement).
  *   8. disable plugins the load-time check holds down (LOAD-01, round-1 or
  *      5a's replacement). It runs AFTER both toggle steps so a record the
  *      config already disabled in step 7 answers this step idempotently and
  *      is left unstamped (D-06-02). WR-05: a plugin INSTALLED by step 4 is
- *      not held down on this pass. The bucket is built in the read pass from
- *      a verdict computed over the pre-install snapshot, where that plugin
- *      has no record and is therefore no declarer; step 5a's re-plan (when it
- *      ran) or the next pass holds it down.
+ *      not held down by the round-1 bucket, which the read pass built from a
+ *      verdict over the pre-install snapshot, where that plugin has no record
+ *      and is therefore no declarer; step 5a's re-plan holds it down.
  *   9. source-mismatch / dangling rows (report-only), ALWAYS from the
  *      round-1 plan (D-09-07) -- folded last.
  */
@@ -1119,9 +1129,10 @@ async function applyPlan(
   await applyPluginUninstalls(opts, plan, outcomes);
   await applyMarketplaceRemoves(opts, plan, outcomes);
   await applyMarketplaceAdds(opts, plan, outcomes);
-  await applyPluginInstalls(opts, plan, outcomes);
+  const installed = await applyPluginInstalls(opts, plan, outcomes);
   const satisfied = await applyDependencyInstalls(opts, plan, outcomes);
-  const toggles = satisfied ? await refreshTogglePlan(reader, opts, round1, outcomes) : round1;
+  const toggles =
+    installed || satisfied ? await refreshTogglePlan(reader, opts, round1, outcomes) : round1;
   await applyToggleSteps(opts, toggles.plan, outcomes);
   outcomes.push(...sourceMismatchOutcomes(plan));
   return toggles.deferredEnables;

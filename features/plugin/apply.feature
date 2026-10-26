@@ -1136,3 +1136,42 @@ Feature: Plugin apply
       | id        | version | enabled |
       | app@tools | 1.0.0   | true    |
       | lib@tools | 2.0.0   | true    |
+
+  Scenario: Apply moves a plugin whose new version needs a plugin a config declares, after it installs that plugin
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   |              |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    Given a config in scope project and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | tools       | widget | true    |
+      | tools       | zcore  |         |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | true                      |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 2                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status    | reasons | scope   | version | from  | to    |
+      | tools            | project           | zcore@tools  | zcore  | installed |         | project | 1.0.0   |       |       |
+      | tools            | project           | widget@tools | widget | updated   |         | project |         | 1.0.0 | 1.1.0 |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.1.0   | true    |
+      | zcore@tools  | 1.0.0   | true    |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |

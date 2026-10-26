@@ -948,6 +948,18 @@ const dependencyRows = [
     expected: pendingList(["● vault (will install)"]),
   },
   {
+    condition: "a recorded plugin whose missing dependency a config declares",
+    seed: {
+      offered: { app: { version: "1.0.0", dependencies: ["vault"] }, vault: { version: "1.0.0" } },
+      recorded: { app: { version: "1.0.0" } },
+      declared: [
+        { key: "app@tools", enabled: true },
+        { key: "vault@tools", enabled: true },
+      ],
+    },
+    expected: pendingList(["● vault (will install)"]),
+  },
+  {
     condition: "a chain whose last link misses a dependency the install brings",
     seed: {
       offered: {
