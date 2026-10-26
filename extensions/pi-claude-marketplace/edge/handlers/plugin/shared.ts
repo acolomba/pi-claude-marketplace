@@ -11,6 +11,7 @@ import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
 import { parseArgs } from "../../args.ts";
 import { passThroughFlagNames } from "../../flag-catalog.ts";
+import { rejectUnknownFlag } from "../shared.ts";
 
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
 import type { NotificationRun } from "../../../shared/notification-run.ts";
@@ -26,16 +27,82 @@ export interface ParsedPluginMarketplaceRef extends PluginMarketplaceRef {
   readonly scope?: Scope;
 }
 
-export function splitPluginMarketplaceRef(ref: string): PluginMarketplaceRef | undefined {
+function splitPluginMarketplaceRef(ref: string): PluginMarketplaceRef | undefined {
   const atIdx = ref.indexOf("@");
-  if (atIdx <= 0 || atIdx === ref.length - 1) {
+  if (atIdx < 0) {
     return undefined;
   }
 
-  return {
-    plugin: ref.slice(0, atIdx),
-    marketplace: ref.slice(atIdx + 1),
-  };
+  const plugin = ref.slice(0, atIdx);
+  const marketplace = ref.slice(atIdx + 1);
+  if (plugin.trim() === "" || marketplace.trim() === "") {
+    return undefined;
+  }
+
+  return { plugin, marketplace };
+}
+
+/**
+ * Splits the one `<plugin>@<marketplace>` reference of a verb that takes no
+ * other form, or notifies the usage error and returns `undefined`. A reference
+ * that is empty or blank as a whole names the plugin name; any other reference
+ * that does not split into two non-blank halves is invalid (PI-1, USE-07).
+ */
+export function parsePluginRef(
+  ref: string,
+  ctx: ExtensionCommandContext,
+  run: NotificationRun,
+  usage: string,
+): PluginMarketplaceRef | undefined {
+  if (ref.trim() === "") {
+    notifyUsageError(ctx, run, { message: "Plugin name must not be empty.", usage });
+    return undefined;
+  }
+
+  const split = splitPluginMarketplaceRef(ref);
+  if (split === undefined) {
+    notifyUsageError(ctx, run, {
+      message: `Invalid <plugin>@<marketplace> ref: "${ref}".`,
+      usage,
+    });
+  }
+
+  return split;
+}
+
+export type PluginCommandTarget =
+  | { readonly kind: "all" }
+  | { readonly kind: "marketplace"; readonly marketplace: string }
+  | { readonly kind: "plugin"; readonly plugin: string; readonly marketplace: string };
+
+/**
+ * Maps the optional target of `update`, `fetch`, and `reinstall`, or notifies
+ * the usage error and returns `undefined`. No reference is every plugin,
+ * `@<marketplace>` one marketplace, and `<plugin>@<marketplace>` one plugin. An
+ * `@` with an empty or blank name names the marketplace name (D-81-01, USE-07).
+ */
+export function parsePluginTarget(
+  ref: string | undefined,
+  ctx: ExtensionCommandContext,
+  run: NotificationRun,
+  usage: string,
+): PluginCommandTarget | undefined {
+  if (ref === undefined) {
+    return { kind: "all" };
+  }
+
+  if (ref.startsWith("@")) {
+    const marketplace = ref.slice(1);
+    if (marketplace.trim() === "") {
+      notifyUsageError(ctx, run, { message: "Marketplace name must not be empty.", usage });
+      return undefined;
+    }
+
+    return { kind: "marketplace", marketplace };
+  }
+
+  const split = parsePluginRef(ref, ctx, run, usage);
+  return split === undefined ? undefined : { kind: "plugin", ...split };
 }
 
 interface ParsedPositionalsResult {
@@ -146,7 +213,7 @@ export function parseRequiredPluginMarketplaceRef(
   const parsed = parseCommandArgs(
     args,
     {
-      positional: [{ name: "ref" }] as const,
+      positional: [{ name: "ref", label: "Plugin name" }] as const,
       usage,
     },
     (message) => {
@@ -162,13 +229,8 @@ export function parseRequiredPluginMarketplaceRef(
     return undefined;
   }
 
-  const ref = splitPluginMarketplaceRef(parsed.ref);
+  const ref = parsePluginRef(parsed.ref, ctx, run, usage);
   if (ref === undefined) {
-    // PI-1 invalid `<plugin>@<marketplace>` token -- USAGE error per MSG-NC-2.
-    notifyUsageError(ctx, run, {
-      message: `Invalid <plugin>@<marketplace> ref: "${parsed.ref}".`,
-      usage,
-    });
     return undefined;
   }
 
@@ -207,4 +269,32 @@ export function withParsedArgs<P>(
 
     await operation(parsed, ctx, run);
   };
+}
+
+/**
+ * D-07: the prelude of a verb whose only argument is `--scope` (`pending`,
+ * `apply`). After `withParsedArgs`, a token that opens with `--` is an unknown
+ * flag, and any other positional is one too many. Only then does `operation`
+ * run, with the parsed scope (`undefined` when no flag narrows the command).
+ */
+export function withScopeOnlyArgs(
+  usage: string,
+  operation: (
+    scope: Scope | undefined,
+    ctx: ExtensionCommandContext,
+    run: NotificationRun,
+  ) => Promise<void>,
+): SubcommandHandler {
+  return withParsedArgs(parseArgs, usage, async (parsed, ctx, run): Promise<void> => {
+    if (rejectUnknownFlag(parsed.positional, { ctx, run, usage })) {
+      return;
+    }
+
+    if (parsed.positional.length > 0) {
+      notifyUsageError(ctx, run, { message: "Too many arguments.", usage });
+      return;
+    }
+
+    await operation(parsed.scope, ctx, run);
+  });
 }

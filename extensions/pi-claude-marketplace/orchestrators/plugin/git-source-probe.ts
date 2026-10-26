@@ -54,7 +54,7 @@ export type ManifestEntry = MarketplaceManifest["plugins"][number];
  * Uses only `node:fs/promises` readFile -- it NEVER spawns git nor imports the
  * git seam, so read surfaces (list / completion) stay network-free (NFR-5).
  */
-export async function readMirrorHeadSha(mirrorDir: string): Promise<string> {
+async function readMirrorHeadSha(mirrorDir: string): Promise<string> {
   const gitDir = path.join(mirrorDir, ".git");
   const head = (await readFile(path.join(gitDir, "HEAD"), "utf8")).trim();
 
@@ -205,15 +205,16 @@ export function makePresenceProbe(
 }
 
 /**
- * AMIG-01 / NFR-5: reinstall's source choice (`reinstall-clone-probe.ts`) with
- * `not-cached` in place of the clone, so the reload migration stays offline.
- * An unpinned source reads a present URL-keyed mirror first. A mirror whose
- * HEAD cannot be read falls through to the clone, as reinstall does
- * (D-08-05); any other mirror failure, such as a containment refusal
- * (NFR-10), propagates, as it does in reinstall. The clone is keyed on the
- * install record's sha, never the manifest's `source.sha`, which can differ
- * from it after a marketplace update. Every read is a path check or a file
- * read: it never creates a directory and never spawns git.
+ * AMIG-01 / NFR-5: the reload migration's source choice, with `not-cached` in
+ * place of a clone, so the migration stays offline.
+ * It reads the per-commit copy at the install record's sha (GIT-01), never
+ * the manifest's `source.sha`, which can differ from it after a marketplace
+ * update. A record made before unpinned installs had their own copy names the
+ * URL-keyed mirror instead, so an unpinned source with no copy reads a present
+ * mirror whose HEAD is the recorded sha. A mirror whose HEAD cannot be read
+ * counts as moved (D-08-05); any other mirror failure, such as a containment
+ * refusal (NFR-10), propagates. Every read is a path check or a file read: it
+ * never creates a directory and never spawns git.
  */
 export function makeRecordedShaPresenceProbe(
   locations: ScopedLocations,
@@ -221,11 +222,14 @@ export function makeRecordedShaPresenceProbe(
 ): (source: GitBackedSource) => Promise<GitPluginRootResult> {
   return async (source): Promise<GitPluginRootResult> => {
     const cloneUrl = canonicalCloneUrl(source);
-    const mirror =
-      source.sha === undefined
-        ? await probeMirror(locations, source, cloneUrl, readUsableMirrorSha)
-        : undefined;
-    return mirror ?? probeShaClone(locations, source, cloneUrl, recordedSha);
+    const copy = await probeShaClone(locations, source, cloneUrl, recordedSha);
+    if (copy.kind !== "not-cached" || source.sha !== undefined) {
+      return copy;
+    }
+
+    const readRecordedHead = async (mirrorDir: string): Promise<string | undefined> =>
+      (await readUsableMirrorSha(mirrorDir)) === recordedSha ? recordedSha : undefined;
+    return (await probeMirror(locations, source, cloneUrl, readRecordedHead)) ?? copy;
   };
 }
 

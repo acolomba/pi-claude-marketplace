@@ -16,12 +16,9 @@ import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
 import { extractLocalFlag } from "../shared.ts";
 
-import { splitPluginMarketplaceRef } from "./shared.ts";
+import { parsePluginTarget } from "./shared.ts";
 
 import type { ReinstallPluginsFn } from "../../../orchestrators/plugin/reinstall-flow.ts";
-import type { ReinstallPluginsTarget } from "../../../orchestrators/plugin/reinstall-targets.ts";
-import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
-import type { NotificationRun } from "../../../shared/notification-run.ts";
 import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE =
@@ -51,7 +48,7 @@ export function makeReinstallHandler(reinstallPlugins: ReinstallPluginsFn): Subc
       return;
     }
 
-    const target = parseTarget(refs[0], ctx, run);
+    const target = parsePluginTarget(refs[0], ctx, run, USAGE);
     if (target === undefined) {
       return;
     }
@@ -65,29 +62,4 @@ export function makeReinstallHandler(reinstallPlugins: ReinstallPluginsFn): Subc
       ...(localFlag.local && { local: true }),
     });
   };
-}
-
-function parseTarget(
-  ref: string | undefined,
-  ctx: ExtensionCommandContext,
-  run: NotificationRun,
-): ReinstallPluginsTarget | undefined {
-  if (ref === undefined) {
-    return { kind: "all" };
-  }
-
-  if (ref.startsWith("@") && ref.length > 1) {
-    return { kind: "marketplace", marketplace: ref.slice(1) };
-  }
-
-  const pluginRef = splitPluginMarketplaceRef(ref);
-  if (pluginRef === undefined) {
-    notifyUsageError(ctx, run, {
-      message: `Invalid <plugin>@<marketplace> ref: "${ref}".`,
-      usage: USAGE,
-    });
-    return undefined;
-  }
-
-  return { kind: "plugin", plugin: pluginRef.plugin, marketplace: pluginRef.marketplace };
 }

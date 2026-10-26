@@ -125,7 +125,7 @@ export function mcpConfigNoticeLine(notice: RenderedMcpConfigNotice): string {
 /**
  * AFILE-04: one notice section as text: its summary line, a blank line, then
  * one line per notice. The host UI prepends the `Warning:` label to the
- * summary line. `tests/architecture/mcp-config-notices.test.ts` locks the
+ * summary line. `test/architecture/mcp-config-notices.test.ts` locks the
  * bytes against the catalog blocks in `docs/output-catalog.md`.
  */
 export function composeMcpConfigNoticesText(
@@ -231,7 +231,7 @@ function mcpMigrationSummary(moved: number, left: number): string {
  * removed rows with their reason, the rows left in `mcp.json`, the cost line
  * when a row moved, and every notice line. `rows` arrive sorted moved, then
  * removed, then left, and `notices` in section order.
- * `tests/architecture/mcp-migration-notice.test.ts` locks the bytes against
+ * `test/architecture/mcp-migration-notice.test.ts` locks the bytes against
  * the catalog blocks in `docs/output-catalog.md`.
  */
 export function composeMcpMigrationText(

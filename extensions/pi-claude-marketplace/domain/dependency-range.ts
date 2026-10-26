@@ -253,7 +253,7 @@ export function isUnconstrainedRange(range: string): boolean {
  * range.
  *
  * D-03-04: a recorded version with no real semver form -- this project's
- * PI-7 content-hash (`hash-<12hex>`) or git-sha (`sha-<12hex>`) fallback --
+ * PI-7 content-hash (`hash-<12hex>`) or git commit (`<12hex>`, GV-01) fallback --
  * runs through the SAME normalization ladder as any other candidate, with no
  * guard for those forms. The accepted risk is plain: coercion on a hexadecimal
  * string can extract a misleading digit run and produce a version that
@@ -265,6 +265,15 @@ export function isUnconstrainedRange(range: string): boolean {
 export function recordedVersionSatisfies(recorded: string, range: string): boolean {
   const normalized = valid(recorded) ?? coerce(recorded)?.version;
   return normalized !== undefined && satisfies(normalized, range);
+}
+
+/**
+ * WR-1: the range that admits every version but `version`, or `undefined`
+ * when `version` has no semver form a range can name.
+ */
+export function excludingRange(version: string): string | undefined {
+  const exact = valid(version);
+  return exact === null ? undefined : `<${exact} || >${exact}`;
 }
 
 /**
@@ -280,4 +289,13 @@ export function renderConstraintRange(range: string): string {
 
   const dropped = range.length - MAX_RENDERED_RANGE_CHARS;
   return `${range.slice(0, MAX_RENDERED_RANGE_CHARS)}... (+${dropped} chars)`;
+}
+
+/**
+ * INR-05: a dependency's declared ranges as a cause line shows them, joined
+ * with `, ` as Claude Code joins them, so a `||` range keeps its meaning, and
+ * bounded once like any other rendered range.
+ */
+export function renderDeclaredRanges(ranges: readonly string[]): string {
+  return renderConstraintRange(ranges.join(", "));
 }

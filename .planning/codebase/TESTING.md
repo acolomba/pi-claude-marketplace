@@ -4,7 +4,7 @@ last_mapped_at: 2026-10-05
 ---
 # Testing Patterns
 
-**Analysis Date:** 2026-10-05
+**Analysis Date:** 2026-10-25
 
 ## Test Framework
 
@@ -18,14 +18,14 @@ last_mapped_at: 2026-10-05
 **Run Commands:**
 
 ```bash
-npm test                 # tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts plus tests/index.test.ts
-npm run test:unpaired    # tests/architecture/**/*.test.ts plus tests/{domain,platform}/**/*-fake.test.ts (the tests with no source pair)
+npm test                 # test/{architecture,bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts plus test/index.test.ts
+npm run test:unpaired    # test/architecture/**/*.test.ts plus test/{domain,platform}/**/*-fake.test.ts (the tests with no source pair)
 npm run test:modules     # the paired module suites only (no architecture)
 npm run test:coverage:direct -- <paths>   # one or more pairs, each run alone
 npm run test:coverage:direct:commit       # --staged: pairs of the staged files; every pair when shared test support, package.json, package-lock.json, tsconfig.json, scripts/test-coverage-direct.mjs, or scripts/test-reporter.mjs is staged
 npm run check:commit     # pre-commit gate: check:static && test:unpaired && test:coverage:direct:commit
-npm run test:integration # scripts/install-test-peers.mjs, then tests/integration/**/*.test.ts
-npm run test:e2e         # tests/e2e/**/*.test.ts (PI_CM_E2E_REF=pinned)
+npm run test:integration # scripts/install-test-peers.mjs, then test/integration/**/*.test.ts
+npm run test:e2e         # test/e2e/**/*.test.ts (PI_CM_E2E_REF=pinned)
 npm run test:coverage    # rm -rf coverage, then direct coverage for every pair, then integration and e2e under --experimental-test-coverage, emits coverage/{direct,integration,e2e}.lcov
 npm run check            # check:static (typecheck, lint, lint:workflows, fallow, format:check, test:corresponding, in parallel) && test:unpaired && test:integration && test:coverage:direct:all (no e2e)
 ```
@@ -36,12 +36,12 @@ Every `node --test` script and each direct-coverage pair run use `scripts/test-r
 
 ## Test File Organization
 
-**Location:** separate `tests/` tree, not co-located with source. Mirrors the `extensions/pi-claude-marketplace/` layer structure one-to-one.
+**Location:** separate `test/` tree, not co-located with source. Mirrors the `extensions/pi-claude-marketplace/` layer structure one-to-one.
 
-**Verified directory listing of `tests/` (2026-10-05):**
+**Verified directory listing of `test/` (2026-10-05):**
 
 ```
-tests/
+test/
 ├── architecture/     # architectural boundary/gate tests (grep/AST-scan the source tree)
 ├── bridges/
 ├── domain/
@@ -58,13 +58,13 @@ tests/
 └── index.test.ts     # top-level suite for the extension factory; named as its own glob argument
 ```
 
-There is **no `tests/docs` directory** — do not reference one. `tests/fixtures/` and `tests/live-uat/` hold zero `.test.ts` suites; `live-uat/*.mjs` are standalone command-line drivers, each invoked directly with `node tests/live-uat/<file>.mjs`, never imported by any module (each carries a `fallow-ignore-file unused-file` marker for that reason).
+There is **no `test/docs` directory** — do not reference one. `test/fixtures/` and `test/live-uat/` hold zero `.test.ts` suites; `live-uat/*.mjs` are standalone command-line drivers, each invoked directly with `node test/live-uat/<file>.mjs`, never imported by any module (each carries a `fallow-ignore-file unused-file` marker for that reason).
 
 **Verified counts (2026-10-05):**
-- 343 total `.test.ts` files under `tests/` (49 in `tests/architecture/`)
-- 321 of those fall under the `npm test` glob (`architecture,bridges,domain,edge,orchestrators,persistence,platform,shared,transaction`, plus the separately-named `tests/index.test.ts`)
-- 16 under `tests/integration/`
-- 6 under `tests/e2e/`
+- 343 total `.test.ts` files under `test/` (49 in `test/architecture/`)
+- 321 of those fall under the `npm test` glob (`architecture,bridges,domain,edge,orchestrators,persistence,platform,shared,transaction`, plus the separately-named `test/index.test.ts`)
+- 16 under `test/integration/`
+- 6 under `test/e2e/`
 
 321 + 16 + 6 = 343, so the three scripts partition the suite with nothing left over.
 
@@ -111,14 +111,14 @@ Alongside it, each side-effecting port owns a reusable `*-fake.ts` module co-loc
 
 | port | fake | shared contract | run against production by |
 |---|---|---|---|
-| `CredentialOps` | `tests/platform/credential-ops-fake.ts` | `tests/platform/credential-ops-contract.ts` | `tests/platform/git-credential.test.ts` |
-| `GitOps` | `tests/platform/git-ops-fake.ts` | `tests/platform/git-ops-contract.ts` | `tests/platform/git.test.ts` |
-| `RemovalOps` | `tests/platform/removal-ops-fake.ts` | `tests/platform/removal-ops-contract.ts` | `tests/shared/fs-utils.test.ts` |
-| `DeviceFlowHttp` | `tests/domain/device-flow-fake.ts` | `tests/domain/device-flow-contract.ts` | `tests/domain/github-auth.test.ts` |
+| `CredentialOps` | `test/platform/credential-ops-fake.ts` | `test/platform/credential-ops-contract.ts` | `test/platform/git-credential.test.ts` |
+| `GitOps` | `test/platform/git-ops-fake.ts` | `test/platform/git-ops-contract.ts` | `test/platform/git.test.ts` |
+| `RemovalOps` | `test/platform/removal-ops-fake.ts` | `test/platform/removal-ops-contract.ts` | `test/shared/fs-utils.test.ts` |
+| `DeviceFlowHttp` | `test/domain/device-flow-fake.ts` | `test/domain/device-flow-contract.ts` | `test/domain/github-auth.test.ts` |
 
-`tests/platform/credential-process-fake.ts` is a lower-level double for the credential subprocess and carries no contract suite. The contract modules export a `register*Contract(factory)` function called twice — once with the production implementation, once with the fake — so a fake that drifts from the real port fails the same cases the real one passes.
+`test/platform/credential-process-fake.ts` is a lower-level double for the credential subprocess and carries no contract suite. The contract modules export a `register*Contract(factory)` function called twice — once with the production implementation, once with the fake — so a fake that drifts from the real port fails the same cases the real one passes.
 
-**Patterns** (`tests/platform/credential-ops-fake.ts`, mirroring `tests/platform/git-ops-fake.ts`):
+**Patterns** (`test/platform/credential-ops-fake.ts`, mirroring `test/platform/git-ops-fake.ts`):
 
 ```typescript
 export interface CredentialOpsFakeOptions {
@@ -143,10 +143,10 @@ export interface CredentialOpsFake {
 - Failure injection is opt-in per operation via `*Error?: Error` option fields (`fillError`, `approveError`, `rejectError`, `cloneError`, `fetchError`, `checkoutError`, `resolveRemoteRefError`), so a test can exercise its own try/catch around one specific seam
 
 **What to Mock:**
-- External subprocess/network/credential-store boundaries: `git` operations (`GitOps`), OS credential helper subprocess calls (`CredentialOps`), device-flow HTTP calls (`DeviceFlowHttp`), and destructive filesystem removal/rename (`RemovalOps`, injected as a port)
+- External subprocess/network/credential-store boundaries: `git` operations (`GitOps`), OS credential helper subprocess calls (`CredentialOps`), device-flow HTTP calls (`DeviceFlowHttp`), and destructive filesystem removal (`RemovalOps`, injected as a port)
 
 **What NOT to Mock:**
-- The filesystem for state/config I/O — tests use real `mkdtemp` temp directories throughout, never an in-memory fs layer. `withHermeticHome` wrappers do exist and are **not** a counter-example: they delegate to `tests/platform/hermetic-environment.ts`, which `mkdtemp`s a real root and repoints `HOME` and `PI_CODING_AGENT_DIR` at real directories inside it, then restores both and removes the tree. It relocates the filesystem rather than interposing a fake one. The name is per-suite rather than shared — 15 local definitions, of which only `tests/orchestrators/plugin/update-flow.test.ts` exports one and only `tests/orchestrators/plugin/update-swap.test.ts` imports it; `createHermeticEnvironment(t, prefix)` is the variant that registers cleanup via `t.after`
+- The filesystem for state/config I/O — tests use real `mkdtemp` temp directories throughout, never an in-memory fs layer. `withHermeticHome` wrappers do exist and are **not** a counter-example: they delegate to `test/platform/hermetic-environment.ts`, which `mkdtemp`s a real root and repoints `HOME` and `PI_CODING_AGENT_DIR` at real directories inside it, then restores both and removes the tree. It relocates the filesystem rather than interposing a fake one. The name is per-suite rather than shared — 15 local definitions, of which only `test/orchestrators/plugin/update-flow.test.ts` exports one and only `test/orchestrators/plugin/update-swap.test.ts` imports it; `createHermeticEnvironment(t, prefix)` is the variant that registers cleanup via `t.after`
 - Production modules under test — dependency injection is used instead of module-mocking/monkey-patching; see CONVENTIONS.md's "Dependency injection over test-only seams" for the underlying principle (`bridges/hooks/routing-state.ts` is the non-test worked example of the same discipline)
 
 **Public-interface testing philosophy:** tests are written against a module's exported public interface, not against internals reached by exporting them solely "for test." When testing a unit is hard through its public surface, that difficulty is treated as signal that an inner concern wants to be extracted into its own module (with its own public interface) — not a reason to widen the original module's exports to satisfy a test. Passing a dependency (e.g. `spawn`, `gitOps`, `credentialOps`) into a function as a parameter is the sanctioned way to make that dependency testable, because it becomes part of the function's real public interface rather than a back door; a module-global `_setSpawnForTest`-style seam is the anti-pattern this guards against.
@@ -154,15 +154,15 @@ export interface CredentialOpsFake {
 ## Fixtures and Factories
 
 **Test Data:**
-- Static JSON/data fixtures live under `tests/fixtures/` (e.g. `tests/fixtures/hookify-hooks.json`, `tests/fixtures/hooks-notification-only.json`, `tests/fixtures/ralph-wiggum-hooks.json`), plus nested fixture directories like `tests/fixtures/bad-imports/` and `tests/fixtures/import-command/`
-- Programmatic seed helpers, e.g. `tests/edge/handlers/marketplace-seed.ts`, build in-memory or on-disk marketplace/plugin structures for a test to install/reconcile against
+- Static JSON/data fixtures live under `test/fixtures/` (e.g. `test/fixtures/hookify-hooks.json`, `test/fixtures/hooks-notification-only.json`, `test/fixtures/ralph-wiggum-hooks.json`), plus nested fixture directories like `test/fixtures/bad-imports/` and `test/fixtures/import-command/`
+- Programmatic seed helpers, e.g. `test/edge/handlers/marketplace-seed.ts`, build in-memory or on-disk marketplace/plugin structures for a test to install/reconcile against
 
 **Location:**
-- `tests/fixtures/` for static data. There is **no single shared helper directory** — support modules sit beside the concern they serve: `tests/edge/handlers/marketplace-seed.ts`, `tests/architecture/source-scan.ts` (`stripComments`/`assertNoForbiddenSurface`, the scan mechanics the architecture gates run on), `tests/platform/hermetic-environment.ts`, and the `*-fake.ts`/`*-contract.ts` pairs listed under Mocking. A support module that needs its own tests gets them in the same directory.
+- `test/fixtures/` for static data. There is **no single shared helper directory** — support modules sit beside the concern they serve: `test/edge/handlers/marketplace-seed.ts`, `test/architecture/source-scan.ts` (`stripComments`/`assertNoForbiddenSurface`, the scan mechanics the architecture gates run on), `test/platform/hermetic-environment.ts`, and the `*-fake.ts`/`*-contract.ts` pairs listed under Mocking. A support module that needs its own tests gets them in the same directory.
 
 ## Coverage
 
-**Requirements:** There is no whole-suite unit coverage run. `npm run check` gates `test:coverage:direct:all` (`scripts/test-coverage-direct.mjs --all --lcov coverage/direct.lcov`): each source-test pair (`extensions/pi-claude-marketplace/<path>.ts` to `tests/<path>.test.ts`, checked by `test:corresponding` / `scripts/check-corresponding-tests.mjs`; `tests/{architecture,e2e,integration}` are non-corresponding roots) runs alone and must reach 100% lines, functions, and branches of its own source. The merged per-pair records form `coverage/direct.lcov`, the only report SonarCloud reads. The pre-commit `check:commit` runs `test:coverage:direct:commit`, which measures only the pairs of staged files and escalates to every pair when a non-`.test.ts` file under `tests/`, `package.json`, `package-lock.json`, `tsconfig.json`, or either test script is staged. Tests with no source pair (`tests/architecture/**`, the `*-fake.test.ts` supplements) run through `test:unpaired`, in both `check` and `check:commit`. `coverage/integration.lcov` and `coverage/e2e.lcov` are partial-surface reports kept out of Sonar.
+**Requirements:** There is no whole-suite unit coverage run. `npm run check` gates `test:coverage:direct:all` (`scripts/test-coverage-direct.mjs --all --lcov coverage/direct.lcov`): each source-test pair (`extensions/pi-claude-marketplace/<path>.ts` to `test/<path>.test.ts`, checked by `test:corresponding` / `scripts/check-corresponding-tests.mjs`; `test/{architecture,e2e,integration}` are non-corresponding roots) runs alone and must reach 100% lines, functions, and branches of its own source. The merged per-pair records form `coverage/direct.lcov`, the only report SonarCloud reads. The pre-commit `check:commit` runs `test:coverage:direct:commit`, which measures only the pairs of staged files and escalates to every pair when a non-`.test.ts` file under `test/`, `package.json`, `package-lock.json`, `tsconfig.json`, or either test script is staged. Tests with no source pair (`test/architecture/**`, the `*-fake.test.ts` supplements) run through `test:unpaired`, in both `check` and `check:commit`. `coverage/integration.lcov` and `coverage/e2e.lcov` are partial-surface reports kept out of Sonar.
 
 **View Coverage:**
 
@@ -179,19 +179,19 @@ npm run test:coverage:direct:all   # direct.lcov only, the gated report
 ## Test Types
 
 **Unit Tests:**
-- The bulk of `tests/{bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/` — exercise a single module's exported functions against real temp-directory filesystem state, with external boundaries supplied either as `strong-mock` doubles or as the concern-owned `*-fake.ts` ports
+- The bulk of `test/{bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/` — exercise a single module's exported functions against real temp-directory filesystem state, with external boundaries supplied either as `strong-mock` doubles or as the concern-owned `*-fake.ts` ports
 
 **Architecture Tests:**
-- `tests/architecture/` — a distinct category from unit tests: source-tree grep/AST scans (`tests/architecture/source-scan.ts`'s `assertNoForbiddenSurface`, `stripComments`) that assert structural invariants hold across the whole codebase, e.g. `tests/architecture/reconcile-planner-purity.test.ts` (DIFF-01: the reconcile planner's comment-stripped source names no `node:fs`, `platform/git`, `gitOps`, `notify`, save, or lock surface) and `tests/architecture/no-shell-out.test.ts` (D-21 / MA-7: only the whitelisted files may import `node:child_process`). The D-v1.0-01-11 ledger-import and NFR-5 network-free rules are not tests: they are ESLint rules (BLOCK C and BLOCK F in `eslint.config.js`) that `npm run lint` reports at the offending line.
+- `test/architecture/` — a distinct category from unit tests: source-tree grep/AST scans (`test/architecture/source-scan.ts`'s `assertNoForbiddenSurface`, `stripComments`) that assert structural invariants hold across the whole codebase, e.g. `test/architecture/reconcile-planner-purity.test.ts` (DIFF-01: the reconcile planner's comment-stripped source names no `node:fs`, `platform/git`, `gitOps`, `notify`, save, or lock surface) and `test/architecture/no-shell-out.test.ts` (D-21 / MA-7: only the whitelisted files may import `node:child_process`). The D-v1.0-01-11 ledger-import and NFR-5 network-free rules are not tests: they are ESLint rules (BLOCK C and BLOCK F in `eslint.config.js`) that `npm run lint` reports at the offending line.
 
 **Integration Tests:**
-- `tests/integration/` (16 files, `npm run test:integration`) — exercise multiple layers together (e.g. full install/uninstall ledgers against real temp-directory scope roots) without a live network dependency
+- `test/integration/` (16 files, `npm run test:integration`) — exercise multiple layers together (e.g. full install/uninstall ledgers against real temp-directory scope roots) without a live network dependency
 
 **E2E Tests:**
-- `tests/e2e/` (6 files, `npm run test:e2e`) — exercise the extension against a real upstream ref, selected via `PI_CM_E2E_REF` (`pinned` or `main`); run with `--experimental-test-coverage` under `test:coverage:e2e`
+- `test/e2e/` (6 files, `npm run test:e2e`) — exercise the extension against a real upstream ref, selected via `PI_CM_E2E_REF` (`pinned` or `main`); run with `--experimental-test-coverage` under `test:coverage:e2e`
 
 **Live UAT (not a `.test.ts` category):**
-- `tests/live-uat/*.mjs` — standalone, human-invoked scripted drivers (e.g. `manifest-absence-canary.mjs`, `stop-canary.mjs`) that exercise the extension against a live Pi process end-to-end; run manually via `node tests/live-uat/<file>.mjs`, never picked up by any `npm test*` script or import graph
+- `test/live-uat/*.mjs` — standalone, human-invoked scripted drivers (e.g. `manifest-absence-canary.mjs`, `stop-canary.mjs`) that exercise the extension against a live Pi process end-to-end; run manually via `node test/live-uat/<file>.mjs`, never picked up by any `npm test*` script or import graph
 
 ## Common Patterns
 
@@ -215,4 +215,4 @@ test("concurrent writes serialize cleanly (NFR-1 -- write-file-atomic queue)", a
 
 ---
 
-*Testing analysis: 2026-10-05*
+*Testing analysis: 2026-10-25*

@@ -1,7 +1,7 @@
 // edge/handlers/marketplace/list.ts
 //
-// Thin-shim factory for
-// `/claude:plugin marketplace <list|ls> [--scope user|project]`.
+// Thin-shim factory for `marketplace list`; its usage line comes from
+// `marketplaceUsage("list")`.
 // Also reached via the `ls` alias through edge/router.ts.
 //
 // `makeMarketplaceListHandler()` returns a handler that passes the command's
@@ -15,10 +15,11 @@
 import { listMarketplaces } from "../../../orchestrators/marketplace/list.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
+import { marketplaceUsage } from "../../router.ts";
 
 import type { SubcommandHandler } from "../../router.ts";
 
-const USAGE = "Usage: /claude:plugin marketplace <list|ls> [--scope user|project]";
+const USAGE = marketplaceUsage("list");
 
 export function makeMarketplaceListHandler(): SubcommandHandler {
   return async (args, ctx, run): Promise<void> => {

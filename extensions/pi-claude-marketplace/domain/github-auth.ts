@@ -24,7 +24,7 @@
  *   - D-32-06: AUTH-09 discipline -- only user_code and verification_uri
  *     cross `onDeviceCode`; access_token / cred.* / r.accessToken MUST NEVER
  *     reach it or a new Error(...) interpolation. Enforced by
- *     tests/architecture/no-credential-leak.test.ts.
+ *     test/architecture/no-credential-leak.test.ts.
  *
  * The GITHUB_PROVIDER.clientId in domain/auth-registry.ts is the registered
  * pi-claude-marketplace GitHub OAuth App's public client_id (Device Flow
@@ -35,7 +35,7 @@
  * repositories; covers AUTH-01's "private GitHub marketplace" requirement).
  *
  * AUTH-09 discipline (mechanical lock): the
- * tests/architecture/no-credential-leak.test.ts gate scans THIS file for
+ * test/architecture/no-credential-leak.test.ts gate scans THIS file for
  * `new Error(...)` calls that interpolate access_token / accessToken /
  * cred.<field> / r.accessToken. It also requires at least one `onDeviceCode`
  * call and allows only the exact form that passes `verificationUri` and
@@ -142,7 +142,7 @@ export type DeviceFlowResult = { ok: true; cred: GitCredentials } | { ok: false;
  * issued yet at this point in the flow (this is the pre-token device-code
  * request), so the body's `error` / `error_description` fields are safe to
  * surface -- AUTH-09. The generic new-Error(...) scan in
- * tests/architecture/no-credential-leak.test.ts cannot see through the
+ * test/architecture/no-credential-leak.test.ts cannot see through the
  * describeDeviceCodeErrorBody(res) call at requestCodeImpl's `new
  * Error(...)` site -- a lexical scan only ever sees `res.status` and a
  * function-call expression there. A dedicated test scans THIS function's
@@ -287,7 +287,7 @@ async function pollTokenImpl(
  * Build the real fetch-backed DeviceFlowHttp for a provider. The URLs are
  * captured in closures so the PUBLIC requestCode/pollToken signatures stay
  * (clientId, scope) / (clientId, deviceCode, intervalSec) -- the mock seam in
- * tests/domain/device-flow-fake.ts needs no change.
+ * test/domain/device-flow-fake.ts needs no change.
  */
 function makeDeviceFlowHttp(deviceCodeUrl: string, tokenUrl: string): DeviceFlowHttp {
   return {

@@ -4,6 +4,8 @@ import { buildCloneAuth } from "../auth-host.ts";
 import {
   materializeOrRefreshPluginMirror,
   materializePluginClone,
+  materializePluginCommitCopy,
+  materializeUnpinnedSource,
   resolveGitPluginRootWithSubdir,
   resolvePluginPin,
 } from "./clone-cache.ts";
@@ -20,6 +22,7 @@ export interface InstallCloneCacheSeam {
   readonly resolvePluginPin: typeof resolvePluginPin;
   readonly materializePluginClone: typeof materializePluginClone;
   readonly materializeOrRefreshPluginMirror: typeof materializeOrRefreshPluginMirror;
+  readonly materializePluginCommitCopy: typeof materializePluginCommitCopy;
 }
 
 /** Inputs required to materialize and classify one install clone. */
@@ -40,6 +43,7 @@ const REAL_INSTALL_CLONE_CACHE_SEAM: InstallCloneCacheSeam = {
   resolvePluginPin,
   materializePluginClone,
   materializeOrRefreshPluginMirror,
+  materializePluginCommitCopy,
 };
 
 /**
@@ -56,24 +60,18 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
   const seam = options.seam ?? REAL_INSTALL_CLONE_CACHE_SEAM;
   const { source, locations } = options;
   const cloneUrl = canonicalCloneUrl(source);
-  const auth = buildCloneAuth(cloneUrl, source.kind, options.auth);
 
   if (source.sha === undefined) {
-    const materialized = await seam.materializeOrRefreshPluginMirror({
+    // GIT-01 / GIT-04: install already holds the scope's state lock, so the
+    // mirror step and the copy run under it (GIT-03).
+    const result = await materializeUnpinnedSource(seam, {
       locations,
-      cloneUrl,
-      networkUrl: networkCloneUrl(source),
-      ...(source.ref !== undefined && { ref: source.ref }),
-      auth,
-    });
-    const result = await resolveGitPluginRootWithSubdir(
       source,
-      materialized.pluginRoot,
-      materialized.resolvedSha,
-    );
+      auth: buildCloneAuth(cloneUrl, source.kind, options.auth),
+    });
     return {
       result,
-      resolvedSha: result.kind === "materialized" ? materialized.resolvedSha : undefined,
+      resolvedSha: result.kind === "materialized" ? result.resolvedSha : undefined,
     };
   }
 
@@ -84,7 +82,7 @@ export async function probeInstallClone(options: InstallCloneProbeOptions): Prom
     networkUrl: networkCloneUrl(source),
     pin: pin.pin,
     ...(pin.ref !== undefined && { ref: pin.ref }),
-    auth,
+    resolveAuth: () => buildCloneAuth(cloneUrl, source.kind, options.auth),
   });
   const result = await resolveGitPluginRootWithSubdir(source, cloneRoot, pin.pin);
   return { result, resolvedSha: result.kind === "materialized" ? pin.pin : undefined };

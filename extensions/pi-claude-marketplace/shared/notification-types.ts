@@ -121,7 +121,9 @@ export type Reason =
   // a reason is one to three lowercase words and this set is a literal tuple,
   // so no token can interpolate an identifier. Its subject is the DEPENDENT
   // the load-time check just disabled, never the dependency an install cascade
-  // row is about.
+  // row is about. `enable` reuses it on the failed row of the plugin it refused
+  // to enable because a dependency is not installed, upstream's
+  // `dependency_missing`: the subject is again the dependent.
   | "dependency unsatisfied"
   // LOAD-01: the same load-time check, on the arm where the dependency IS
   // recorded and enabled but its recorded version falls outside the declared
@@ -237,7 +239,58 @@ export type Reason =
   // A typed kind, not a note, as `unsupported hooks` is: the aggregate token
   // rides the row, and each server with its blocking feature rides the info
   // breakdown.
-  | "unsupported mcp";
+  | "unsupported mcp"
+  // FIX-03 / D-MF-02: the command would write a plugin declaration into the
+  // base layer while only the local layer declares the plugin's marketplace,
+  // so a teammate who reads the base config could not resolve it. The refusal
+  // rides a `failed` row, and the remedy, running the command again with
+  // `--local`, rides the cause line. `dangling reference` cannot carry it:
+  // there the merged configuration lacks the marketplace, and here it declares
+  // it, in the per-machine local layer only.
+  | "marketplace in local layer only"
+  // LAYER-02 / D-MF-03: a command run with `--local` names a marketplace that
+  // only the base layer declares. The refusal rides a `failed` row, and the
+  // remedy, running the command again without `--local`, rides the cause line.
+  | "marketplace in base layer only"
+  // LAYER-04 / D-MF-03: a named plugin command without `--local` targets the
+  // base layer, and only the local layer declares the plugin. The refusal
+  // rides a `failed` row, and the remedy, running the command again with
+  // `--local`, rides the cause line.
+  | "plugin in local layer only"
+  // LAYER-04 / D-MF-03: the mirror refusal: a named plugin command with
+  // `--local` targets the local layer, and only the base layer declares the
+  // plugin. The remedy, running the command again without `--local`, rides the
+  // cause line.
+  | "plugin in base layer only"
+  // LAYER-05 / D-MF-03: an install into one layer of a plugin the other layer
+  // declares and the scope already installed. The install adds the declaration
+  // to the target layer and installs nothing; the token names the other layer.
+  | "already installed in base layer"
+  | "already installed in local layer"
+  // LAYER-05 / D-MF-03: an uninstall from one layer of a plugin the other layer
+  // still declares. The uninstall drops the target layer's declaration and
+  // uninstalls nothing; the token names the other layer, and the remedy rides
+  // the cause line.
+  | "still installed in base layer"
+  | "still installed in local layer"
+  // LAYER-04 / D-MF-03: an enable or disable without `--local` targets the
+  // base layer, and the local layer sets `enabled` to the opposite value.
+  // The local value wins the field merge, so the write would be undone at the
+  // next load. The refusal rides a `failed` row, and the remedy, running the
+  // command again with `--local`, rides the cause line.
+  | "disabled in local layer"
+  | "enabled in local layer"
+  // UPD-11 / ADD-10: the git host answered a marketplace refresh or add clone
+  // with an HTTP status other than the 401/403 auth challenge (and, for add,
+  // the 404/410 `source missing` answers), so the host was reached and it
+  // refused. `network unreachable` stays for connection failures. A token
+  // cannot interpolate, so the status and the URL ride the row's cause line.
+  | "network error"
+  // IMP-06: import found a settings marketplace the scope already records
+  // with the same source, so nothing changed. Claude Code's own `marketplace
+  // add` says "already added; nothing changed" for this case. It rides a
+  // `skipped` marketplace header and is idempotent, so the cascade stays info.
+  | "already added";
 
 /** Reasons that describe a content row rather than marketplace absence. */
 export type ContentReason = Exclude<
@@ -271,6 +324,9 @@ export type StatusToken =
   | "will uninstall"
   | "will enable"
   | "will disable"
+  | "will update"
+  | "will add"
+  | "will remove"
   | "disabled"
   | "partially-installed"
   | "partially-upgradable"
@@ -296,6 +352,7 @@ export type PluginStatus =
   | "will uninstall"
   | "will enable"
   | "will disable"
+  | "will update"
   | "disabled"
   | "partially-installed"
   | "partially-upgradable"
@@ -313,7 +370,9 @@ export type MarketplaceStatus =
   | "failed"
   | "autoupdate enabled"
   | "autoupdate disabled"
-  | "skipped";
+  | "skipped"
+  | "will add"
+  | "will remove";
 
 /** Marketplace details shown by list and info messages. */
 export interface MarketplaceDetails {
@@ -353,25 +412,60 @@ export interface PluginInstalledMessage extends TransitionMessageBase {
   readonly description?: string;
 }
 
+/**
+ * UPR-02: the commit on each side of a move whose version did not change. Both
+ * are full commit shas; the text form shortens each to 7 hex characters and
+ * the wire carries them whole. Both sides travel together or the whole
+ * sub-object is absent, so no row can draw a half-annotated arrow.
+ */
+export interface VersionCommits {
+  readonly from: string;
+  readonly to: string;
+}
+
 /** Updated plugin row. */
 export interface PluginUpdatedMessage extends TransitionMessageBase {
   readonly status: "updated";
   readonly name: string;
   readonly from: string;
   readonly to: string;
+  /** UPR-02: present only when the producer decided the arrow names commits. */
+  readonly commits?: VersionCommits;
   readonly dependencies: readonly Dependency[];
   readonly scope?: Scope;
   readonly reasons?: readonly ContentReason[];
+  /**
+   * D-10-13 / D-10-17a: the constraint gate's disclosure, when a dependent's
+   * range chose what landed. It rides the cause chain because the sentence
+   * interpolates plugin identifiers, and the cause chain is the only channel
+   * in this grammar that legally interpolates one, as on the held `skipped`
+   * row. An unconstrained update omits it.
+   */
+  readonly cause?: Error;
+}
+
+/**
+ * UPR-03: the move a `reinstalled`, `partially-installed`, or `failed` row
+ * can show. `version` keeps its meaning on those rows (the version installed
+ * or attempted); `from` is the version the move started at, present only when
+ * the producer knows both sides and the revision moved, and `commits` follows
+ * the `updated` row's rule (UPR-02).
+ */
+export interface RevisionMoveFields {
+  readonly from?: string;
+  readonly commits?: VersionCommits;
 }
 
 /** Reinstalled plugin row. */
-export interface PluginReinstalledMessage extends TransitionMessageBase {
+export interface PluginReinstalledMessage extends TransitionMessageBase, RevisionMoveFields {
   readonly status: "reinstalled";
   readonly name: string;
   readonly dependencies: readonly Dependency[];
   readonly version?: string;
   readonly scope?: Scope;
   readonly reasons?: readonly ContentReason[];
+  /** D-10-13 / D-18-07: the constraint gate's disclosure, as on `PluginUpdatedMessage`. */
+  readonly cause?: Error;
 }
 
 /**
@@ -490,7 +584,7 @@ export interface PluginUpgradableMessage extends MessageBase {
 }
 
 /** Partially installed plugin row. */
-export interface PluginPartiallyInstalledMessage extends MessageBase {
+export interface PluginPartiallyInstalledMessage extends MessageBase, RevisionMoveFields {
   readonly status: "partially-installed";
   readonly name: string;
   readonly reasons: readonly ContentReason[];
@@ -498,6 +592,8 @@ export interface PluginPartiallyInstalledMessage extends MessageBase {
   readonly version?: string;
   readonly scope?: Scope;
   readonly description?: string;
+  /** D-10-13: the constraint gate's disclosure on a partial update, as on `PluginUpdatedMessage`. */
+  readonly cause?: Error;
 }
 
 /** Partially upgradable plugin row. */
@@ -509,10 +605,17 @@ export interface PluginPartiallyUpgradableMessage extends MessageBase {
   readonly scope?: Scope;
   readonly description?: string;
   readonly partialHint?: boolean;
+  /**
+   * D-24: the catalog decline's hint, set only by the convergence planner's
+   * row in `pending`, the load and `apply`. It names the per-plugin `update
+   * --partial` command, because the command that holds the row takes no
+   * `--partial`. A producer never sets both this and `partialHint`.
+   */
+  readonly catalogHint?: boolean;
 }
 
 /** Failed plugin row. */
-export interface PluginFailedMessage extends MessageBase {
+export interface PluginFailedMessage extends MessageBase, RevisionMoveFields {
   readonly status: "failed";
   readonly severity: "error" | "warning";
   readonly name: string;
@@ -525,6 +628,12 @@ export interface PluginFailedMessage extends MessageBase {
     readonly phase: string;
     readonly cause?: Error;
   }[];
+  /**
+   * ADD-10: the row's subject is a marketplace, or the source a failed
+   * `marketplace add` was typed with, not a plugin, so its JSON id is its name
+   * alone.
+   */
+  readonly marketplaceSubject?: true;
 }
 
 /** Skipped plugin row. */
@@ -537,7 +646,9 @@ export interface PluginSkippedMessage extends MessageBase {
 }
 
 /**
- * The one `skipped` row that carries a cause trailer: update's.
+ * A `skipped` row that carries a cause trailer: update's, and reinstall's,
+ * which runs the same constraint gate (D-18-07). Uninstall's
+ * `PluginUninstallSkippedMessage` is the other one.
  *
  * UPDT-02 / D-10-11: the held-update remedy names the constraining plugins
  * and marks which of them are currently disabled, and D-10-13's ceiling
@@ -556,6 +667,16 @@ export interface PluginSkippedMessage extends MessageBase {
  * rows at the dispatcher type today.
  */
 export interface PluginUpdateSkippedMessage extends PluginSkippedMessage {
+  readonly cause?: Error;
+}
+
+/**
+ * LAYER-05: uninstall's `skipped` row, for a plugin the other layer still
+ * declares. The cause line carries the remedy: run the command again with or
+ * without `--local`. It is a sibling of `PluginUpdateSkippedMessage` for the
+ * same reason that variant exists: the base row has no cause slot.
+ */
+export interface PluginUninstallSkippedMessage extends PluginSkippedMessage {
   readonly cause?: Error;
 }
 
@@ -581,6 +702,7 @@ export interface PluginWillInstallMessage extends MessageBase {
 export interface PluginWillUninstallMessage extends MessageBase {
   readonly status: "will uninstall";
   readonly name: string;
+  readonly version?: string;
   readonly scope?: Scope;
   readonly reasons?: readonly ContentReason[];
 }
@@ -599,6 +721,22 @@ export interface PluginWillDisableMessage extends MessageBase {
   readonly scope?: Scope;
 }
 
+/**
+ * D-14: the pending-tense catalog move -- a recorded plugin whose catalog
+ * candidate differs from its record (D-10). It renders with the `updated`
+ * row's `v<from> → v<to>` arrow; a growth-only move has equal versions
+ * (D-18-11), and `commits` follows the `updated` row's rule (UPR-02).
+ */
+export interface PluginWillUpdateMessage extends MessageBase {
+  readonly status: "will update";
+  readonly name: string;
+  readonly from: string;
+  readonly to: string;
+  readonly commits?: VersionCommits;
+  readonly scope?: Scope;
+  readonly reasons?: readonly ContentReason[];
+}
+
 /** Complete discriminated union of plugin notification rows. */
 export type PluginNotificationMessage =
   | PluginInstalledMessage
@@ -613,11 +751,13 @@ export type PluginNotificationMessage =
   | PluginFailedMessage
   | PluginSkippedMessage
   | PluginUpdateSkippedMessage
+  | PluginUninstallSkippedMessage
   | PluginManualRecoveryMessage
   | PluginWillInstallMessage
   | PluginWillUninstallMessage
   | PluginWillEnableMessage
   | PluginWillDisableMessage
+  | PluginWillUpdateMessage
   | PluginDisabledMessage
   | PluginPartiallyInstalledMessage
   | PluginPartiallyUpgradableMessage;
@@ -646,6 +786,7 @@ const SCOPE_BEARING_LIST_STATUS: Record<PluginNotificationMessage["status"], boo
   "will uninstall": false,
   "will enable": false,
   "will disable": false,
+  "will update": false,
 };
 
 /** Narrows a plugin row to the list variants that permit an explicit scope. */
@@ -676,17 +817,82 @@ export function pluginScopeOrFallback(
 }
 
 /**
+ * D-14: the pending-tense plugin statuses, as a TOTAL map over the status
+ * union. A switch that names all twenty statuses exceeds the cyclomatic
+ * ceiling, so the exhaustive switches over the union split at this partition:
+ * a new status is a compile error here until it is placed, and then a compile
+ * error in the half of each split switch it joins.
+ */
+const PENDING_PLUGIN_STATUS = {
+  "will install": true,
+  "will uninstall": true,
+  "will enable": true,
+  "will disable": true,
+  "will update": true,
+  installed: false,
+  updated: false,
+  reinstalled: false,
+  uninstalled: false,
+  available: false,
+  unavailable: false,
+  upgradable: false,
+  failed: false,
+  skipped: false,
+  "manual recovery": false,
+  disabled: false,
+  "partially-installed": false,
+  "partially-upgradable": false,
+  "partially-available": false,
+  remote: false,
+} as const satisfies Record<PluginNotificationMessage["status"], boolean>;
+
+/** The statuses the map above marks pending, read back off that map. */
+export type PendingPluginStatus = {
+  [K in PluginNotificationMessage["status"]]: (typeof PENDING_PLUGIN_STATUS)[K] extends true
+    ? K
+    : never;
+}[PluginNotificationMessage["status"]];
+
+/** Narrows a plugin row to the pending-tense variants. */
+export function isPendingPluginRow<R extends { readonly status: PluginStatus }>(
+  row: R,
+): row is Extract<R, { readonly status: PendingPluginStatus }> {
+  return PENDING_PLUGIN_STATUS[row.status];
+}
+
+/**
  * Read `row.version` off a plugin notification row. D-15-04: every list-surface
- * variant carries the same optional `version?` slot, so every arm returns the
- * same field and the switch computes nothing.
+ * variant carries the same optional `version?` slot, so most arms return the
+ * same field.
  *
- * D-116-14: the switch stays anyway, and must not be collapsed into a single
- * expression. Its job is the missing-arm gate -- `noImplicitReturns` makes the
- * end of this function reachable the moment a list-surface status goes unnamed,
- * so a status added to the row union is a compile error here rather than a row
- * that silently loses its version.
+ * D-116-14: the switches stay anyway, and must not be collapsed into a single
+ * expression. Their job is the missing-arm gate -- `noImplicitReturns` makes the
+ * end of a half reachable the moment a status goes unnamed, so a status added
+ * to the row union is a compile error here rather than a row that silently
+ * loses its version.
  */
 export function pluginVersion(row: PluginNotificationMessage): string | undefined {
+  return isPendingPluginRow(row) ? pendingRowVersion(row) : settledRowVersion(row);
+}
+
+function pendingRowVersion(
+  row: Extract<PluginNotificationMessage, { readonly status: PendingPluginStatus }>,
+): string | undefined {
+  switch (row.status) {
+    case "will uninstall":
+      return row.version;
+    case "will update":
+      return row.to;
+    case "will install":
+    case "will enable":
+    case "will disable":
+      return undefined;
+  }
+}
+
+function settledRowVersion(
+  row: Exclude<PluginNotificationMessage, { readonly status: PendingPluginStatus }>,
+): string | undefined {
   switch (row.status) {
     case "installed":
     case "reinstalled":
@@ -705,10 +911,6 @@ export function pluginVersion(row: PluginNotificationMessage): string | undefine
     case "updated":
       return row.to;
     case "manual recovery":
-    case "will install":
-    case "will uninstall":
-    case "will enable":
-    case "will disable":
       return undefined;
   }
 }
@@ -758,6 +960,22 @@ export interface MpSkipped extends MpCommon {
   readonly reasons?: readonly ContentReason[];
 }
 
+/**
+ * D-20: pending-tense header for a marketplace a config declares and the scope
+ * has not added, which `apply` will add.
+ */
+export interface MpWillAdd extends MpCommon {
+  readonly status: "will add";
+}
+
+/**
+ * D-20: pending-tense header for a recorded marketplace no config declares,
+ * which `apply` will remove together with its plugins.
+ */
+export interface MpWillRemove extends MpCommon {
+  readonly status: "will remove";
+}
+
 /** Statusless marketplace inventory row. */
 export interface MpList extends MpCommon {
   readonly status?: undefined;
@@ -773,6 +991,8 @@ export type MarketplaceNotificationMessage =
   | MpAutoupdateEnabled
   | MpAutoupdateDisabled
   | MpSkipped
+  | MpWillAdd
+  | MpWillRemove
   | MpList;
 
 /**
@@ -823,6 +1043,11 @@ export interface CascadeNotificationMessage {
    */
   readonly advisories?: readonly string[];
   readonly retainedWorkflows?: readonly RetainedWorkflowStaging[];
+  /**
+   * APL-04 / D-14: set only by the `pending` composer, when its list holds a
+   * change `/claude:plugin apply` would make. It selects the apply trailer.
+   */
+  readonly needsApply?: true;
 }
 
 /** Marketplace information message. */
@@ -1000,6 +1225,12 @@ export interface PluginInfoCascadeMessage {
 /** Empty reconcile-pending advisory. */
 export interface ReconcilePendingEmptyMessage {
   readonly kind: "reconcile-pending-empty";
+  /**
+   * D-08 / D-14: the command that found nothing to change. The text strategy
+   * reads it to pick the wording; the JSON payload does not carry it, because
+   * `origin.commandId` already names the command.
+   */
+  readonly command: "pending" | "apply";
   /**
    * WR-06: the same free-text advisory body lines the cascade arm declares, on
    * the same terms -- caller-ordered, rendered verbatim, no token, no row. The
@@ -1395,6 +1626,31 @@ export interface UsageInfoSurface {
   readonly usage: string;
 }
 
+/** AAP-04: a config file that can set `autoapply`, named by scope and basename. */
+export interface AutoapplyConfigFile {
+  readonly scope: Scope;
+  readonly file: "claude-plugins.json" | "claude-plugins.local.json";
+}
+
+/** AAP-04: one config file's own `autoapply` value; no `value` means not set. */
+export interface AutoapplyFileValue extends AutoapplyConfigFile {
+  readonly value?: boolean;
+}
+
+/**
+ * AAP-04 / AAP-D2: what `/claude:plugin autoapply` shows. `enabled` and
+ * `source` are the effective value and the file that set it (no `source`
+ * means the default, off); `files` are the files the command lists; `set` is
+ * the write a set form made.
+ */
+export interface AutoapplyStatusSurface {
+  readonly kind: "autoapply-status";
+  readonly enabled: boolean;
+  readonly source?: AutoapplyConfigFile;
+  readonly files: readonly AutoapplyFileValue[];
+  readonly set?: AutoapplyConfigFile & { readonly value: boolean };
+}
+
 /**
  * RAWS-02 / D-05: an out-of-band warning block. The producer composes the
  * header and redacts the lines; the text strategy joins them. The kind belongs
@@ -1457,6 +1713,7 @@ export interface DeviceFlowPromptSurface extends DeviceFlowPrompt {
 export type RawSurface =
   | UsageErrorSurface
   | UsageInfoSurface
+  | AutoapplyStatusSurface
   | DiagnosticSurface
   | DeviceFlowPromptSurface
   | McpConfigNoticesSurface

@@ -1,12 +1,17 @@
 import {
   type ContentReason,
   type PluginFailedMessage,
+  type PluginInstalledMessage,
   type PluginPartiallyInstalledMessage,
   type PluginUpdateSkippedMessage,
   type PluginUpdatedMessage,
 } from "../../shared/notification-types.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
-import { constraintCauseFor, updatedRowFromOutcome } from "../plugin/update-row.ts";
+import {
+  constraintCauseFor,
+  revisionVersionSlot,
+  updatedRowFromOutcome,
+} from "../plugin/update-row.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -16,8 +21,9 @@ import type {
   PluginUpdateSkippedOutcome,
 } from "../types.ts";
 
-type UpdateRowStatus = "updated" | "partially-installed" | "skipped" | "failed";
+type UpdateRowStatus = "updated" | "partially-installed" | "skipped" | "failed" | "installed";
 export type UpdateRowMsg =
+  | PluginInstalledMessage
   | PluginUpdatedMessage
   | PluginPartiallyInstalledMessage
   | PluginUpdateSkippedMessage
@@ -31,6 +37,8 @@ export const UPDATE_CONTEXT = {
     "partially-installed": { markers: true, contentReasons: true },
     skipped: { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
+    // UPD-DEP-D1: a dependency an autoupdate installed or enabled for a new version.
+    installed: { markers: true, contentReasons: true },
   },
 } as const satisfies CommandContext<UpdateRowStatus>;
 
@@ -162,11 +170,17 @@ export function outcomeToCascadePluginMessage(
         status: "failed",
         name: outcome.name,
         scope,
-        reasons: [narrowFailReason(outcome)],
-        // The per-plugin cause-chain trailer. `outcome.cause` is populated by
-        // the cascadeAutoupdates catch where the raw thrown Error is in scope;
-        // failed outcomes produced by plugin/update.ts (no err in scope) leave
-        // this undefined and the renderer simply omits the trailer.
+        // UPR-03: the move a failure after the candidate attempted, or the
+        // installed version alone, or nothing when the outcome knows none.
+        ...revisionVersionSlot(outcome),
+        // A failure no ladder classifies carries an empty reason list and its
+        // cause, so the outcome's own reasons win, an empty list included.
+        reasons: outcome.reasons ?? [narrowFailReason(outcome)],
+        // The per-plugin cause-chain trailer. `outcome.cause` is set by the
+        // cascadeAutoupdates catch, where the raw thrown Error is in scope, and
+        // by the preflight for a source it could not read or fetch; every
+        // other failed outcome leaves it undefined and the renderer omits the
+        // trailer.
         ...(outcome.cause !== undefined && { cause: outcome.cause }),
         // D-03/D-06: a failed update -> error, no reload.
         severity: "error",
@@ -174,6 +188,25 @@ export function outcomeToCascadePluginMessage(
       };
   }
 }
+
+type NoteReason = readonly [readonly string[], ContentReason];
+
+/**
+ * Notes-fallback substrings for a `skipped` outcome, checked in order. Each
+ * pairs the substrings that name one reason with that reason.
+ */
+const SKIP_NOTE_REASONS: readonly NoteReason[] = [
+  [["not in manifest", "not found in marketplace"], "not in manifest"],
+  [["source mismatch"], "source mismatch"],
+  [["no longer installable"], "no longer installable"],
+];
+
+/** Notes-fallback substrings for a `failed` outcome, checked in order. */
+const FAIL_NOTE_REASONS: readonly NoteReason[] = [
+  [["not in manifest", "not found in marketplace"], "not in manifest"],
+  [["rollback partial"], "rollback partial"],
+  [["invalid manifest", "unparseable"], "invalid manifest"],
+];
 
 /**
  * Narrow a `skipped` outcome to a closed-set Reason.
@@ -185,81 +218,33 @@ export function outcomeToCascadePluginMessage(
  * can be deleted.
  */
 function narrowSkipReason(outcome: PluginUpdateSkippedOutcome): ContentReason {
-  const firstReason = outcome.reasons[0];
-  if (firstReason !== undefined) {
-    return firstReason;
-  }
-
-  // Fallback: substring parse of `notes`. Retained for backward
-  // compatibility with notes-only outcome fixtures.
-  //
-  // WR-06: a `partition: "skipped"` outcome with no reasons AND no notes
-  // is a producer-contract violation -- the previous code masked it as
-  // `"up-to-date"` (a SUCCESS reason), so the operator read
-  // `skipped {up-to-date}` and assumed nothing was wrong while in fact
-  // the producer failed to populate its outcome. Map empty-notes to
-  // `"unreadable manifest"` instead so the brace surfaces a real failure
-  // classification rather than a false success claim (mirrors the
-  // narrowFailReason symmetric fallback below).
-  const notes = outcome.notes;
-  if (notes.length === 0) {
-    return "unreadable manifest";
-  }
-
-  const text = notes.join(" ").toLowerCase();
-  if (text.includes("not in manifest") || text.includes("not found in marketplace")) {
-    return "not in manifest";
-  }
-
-  if (text.includes("source mismatch")) {
-    return "source mismatch";
-  }
-
-  if (text.includes("no longer installable")) {
-    return "no longer installable";
-  }
-
-  // WR-06: no-substring-match -> SAME treatment as empty-notes; do not
-  // mask the unknown-class skip as `"up-to-date"`.
-  return "unreadable manifest";
+  return outcome.reasons[0] ?? reasonFromNotes(outcome.notes, SKIP_NOTE_REASONS);
 }
 
 /**
- * Narrow a `failed` outcome to a closed-set Reason.
- *
- * Prefer pre-narrowed `outcome.reasons[0]` over notes parsing (same rationale
- * as `narrowSkipReason` above). The fallback is `"unreadable manifest"`
- * because most update failures bubble up from manifest re-reads.
+ * Narrow a `failed` outcome that carries no reasons to a closed-set Reason,
+ * from its notes (same rationale as `narrowSkipReason` above).
  */
 function narrowFailReason(outcome: PluginUpdateFailedOutcome): ContentReason {
-  const firstReason = outcome.reasons?.[0];
-  if (firstReason !== undefined) {
-    return firstReason;
-  }
+  return reasonFromNotes(outcome.notes, FAIL_NOTE_REASONS);
+}
 
-  // Fallback: substring parse of `notes`. Retained for backward
-  // compatibility with notes-only outcome fixtures.
-  const notes = outcome.notes;
-  if (notes.length === 0) {
-    return "unreadable manifest";
-  }
-
+/**
+ * Substring parse of `notes`, retained for backward compatibility with
+ * notes-only outcome fixtures. Returns the reason of the first entry whose
+ * substring the notes contain.
+ *
+ * WR-06: empty notes, or notes that match nothing, map to
+ * `"unreadable manifest"`. A `skipped` outcome with neither reasons nor
+ * matching notes is a producer-contract violation, and mapping it to
+ * `"up-to-date"` (a SUCCESS reason) would tell the operator nothing was
+ * wrong. Most update failures also bubble up from manifest re-reads.
+ */
+function reasonFromNotes(
+  notes: readonly string[],
+  noteReasons: readonly NoteReason[],
+): ContentReason {
   const text = notes.join(" ").toLowerCase();
-  if (text.includes("not in manifest") || text.includes("not found in marketplace")) {
-    return "not in manifest";
-  }
-
-  if (text.includes("rollback partial")) {
-    return "rollback partial";
-  }
-
-  if (text.includes("invalid manifest") || text.includes("unparseable")) {
-    return "invalid manifest";
-  }
-
-  if (text.includes("unreadable")) {
-    return "unreadable manifest";
-  }
-
-  return "unreadable manifest";
+  const match = noteReasons.find(([needles]) => needles.some((needle) => text.includes(needle)));
+  return match?.[1] ?? "unreadable manifest";
 }

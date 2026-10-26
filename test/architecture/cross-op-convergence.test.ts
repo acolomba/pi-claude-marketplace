@@ -1,0 +1,334 @@
+// test/architecture/cross-op-convergence.test.ts
+//
+// SC#1 cross-op convergence byte-identity matrix (Class-C-closed proof).
+//
+// The audit's Class C finding was that the "marketplace absent in the target
+// scope" precondition rendered DIFFERENT user-facing rows across ops (some
+// converged on the dedicated `{marketplace not added}` form, some threw raw). Every op
+// now lands on the SINGLE dedicated `MarketplaceNotAddedMessage` variant
+// + the ONE shared renderer
+// (`renderMarketplaceNotAdded`). This test PROVES no op slipped its own row in.
+//
+// MECHANISM (WR-01 strengthening): rather than feeding one shared payload to the
+// renderer 8 times (which would only prove renderer determinism), this test
+// INVOKES EACH REAL ORCHESTRATOR against a MISSING marketplace in a hermetic
+// HOME + tmp cwd (no state seeded -> the marketplace is absent in both scopes),
+// captures the bytes + severity the orchestrator actually emitted through
+// `ctx.ui.notify`, and asserts EVERY op's emission is byte-IDENTICAL to the
+// canonical `⊘ <name> [scope?] (failed) {marketplace not added}` row AND identical to every
+// other op's emission. This is the load-bearing capstone SC#1 lock: a future
+// regression that gave one ORCHESTRATOR a divergent payload kind (e.g. a
+// synthetic `(failed)` cascade row, or a raw throw) would break this gate even
+// though each op's own orchestrator test might not catch the cross-op drift.
+//
+// CANONICAL ROWS (two):
+//   - explicit-scope: `⊘ ghost-mp [project] (failed) {marketplace not added}`
+//   - bare/bracketless: `⊘ ghost-mp (failed) {marketplace not added}`
+// Both at severity "error", one emission per invocation (IL-2).
+//
+// SCOPE-BRACKET ASYMMETRY: `install` ALWAYS carries a resolved scope, so it is
+// the only op with NO bracketless bare form. Every other op, autoupdate
+// included, keeps one. The explicit-scope matrix includes every op; the
+// bracketless-bare matrix excludes install only.
+//
+// NO network: every op is invoked against an empty hermetic state. The
+// not-added precondition short-circuits BEFORE any clone/fetch (NFR-5 by
+// construction); marketplace-update injects a mock gitOps that would record any
+// stray call, but the pre-guard miss returns before it is reached.
+
+import assert from "node:assert/strict";
+import test from "node:test";
+
+import {
+  createHooksRouting,
+  createHooksRuntime,
+  readHooksJson,
+} from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
+import { setMarketplaceAutoupdate } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/autoupdate.ts";
+import { removeMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/remove.ts";
+import { updateMarketplace } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts";
+import {
+  createInstallOperation,
+  createUninstallOperation,
+  getPluginInfo,
+} from "../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
+import {
+  createNodeReinstallPlugins,
+  createReinstallPlugin,
+} from "../../extensions/pi-claude-marketplace/orchestrators/plugin/reinstall-flow.ts";
+import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
+import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { createGitOpsFake } from "../platform/git-ops-fake.ts";
+import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
+import { noStatusSnapshot } from "../platform/mcp-status-seed.ts";
+import { runWithNothingLoaded } from "../shared/notification-run-seeds.ts";
+
+import type { NotificationContext } from "../../extensions/pi-claude-marketplace/platform/pi-api.ts";
+import type { NotificationRun } from "../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+
+// ---------------------------------------------------------------------------
+// Hermetic harness -- mirrors the per-op orchestrator test idiom
+// (makeCtx + withHermeticEnvironment). No seeded state -> the marketplace is absent in
+// BOTH scopes, which drives every op onto the converged `{marketplace not added}` row.
+// ---------------------------------------------------------------------------
+
+interface NotifyRecord {
+  readonly message: string;
+  readonly severity?: string;
+}
+
+function createGitOps() {
+  return createGitOpsFake({ boundary: "memory" });
+}
+
+function createUpdatePlugins() {
+  return createPluginUpdateOperations(
+    createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    createCompletionCache(),
+  ).updatePlugins;
+}
+
+function createReinstallPlugins() {
+  return createNodeReinstallPlugins(
+    createReinstallPlugin(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      createCompletionCache(),
+    ),
+  );
+}
+
+function makeCtx(): {
+  ctx: NotificationContext;
+  notifications: NotifyRecord[];
+} {
+  const notifications: NotifyRecord[] = [];
+  const ctx = {
+    mode: "tui",
+    ui: {
+      notify: (m: string, s?: string): void => {
+        notifications.push(s === undefined ? { message: m } : { message: m, severity: s });
+      },
+    },
+  };
+  return { ctx, notifications };
+}
+
+const NAME = "ghost-mp";
+const CANONICAL_EXPLICIT =
+  "A marketplace operation has failed.\n\n⊘ ghost-mp [project] (failed) {marketplace not added}";
+const CANONICAL_BARE =
+  "A marketplace operation has failed.\n\n⊘ ghost-mp (failed) {marketplace not added}";
+
+interface Emission {
+  readonly body: string;
+  readonly severity: string | undefined;
+  readonly callCount: number;
+}
+
+/**
+ * Invoke a real orchestrator against a missing marketplace and return its sole
+ * notify emission. Each invoker is the EXACT call shape copied from that op's
+ * own orchestrator test file. `mode` selects the explicit-scope vs bare-form
+ * invocation (install has no bare form). Every op renders from the command's
+ * run.
+ */
+type Invoker = (env: {
+  ctx: NotificationContext;
+  run: NotificationRun;
+  cwd: string;
+  mode: "explicit" | "bare";
+}) => Promise<void>;
+
+const INVOKERS: Record<string, Invoker> = {
+  // marketplace info (the canonical model). info.test.ts (f)/(g).
+  info: async ({ ctx, run, cwd, mode }) => {
+    await getPluginInfo({
+      ctx,
+      run,
+      mcpStatus: noStatusSnapshot(),
+      marketplace: NAME,
+      plugin: "ghost",
+      cwd,
+      ...(mode === "explicit" && { scope: "project" as const }),
+    });
+  },
+  // install ALWAYS carries a resolved scope -> explicit only. install-flow.test.ts M1.
+  install: async ({ ctx, run, cwd }) => {
+    await createInstallOperation(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      createCompletionCache(),
+    )({ ctx, run, scope: "project", cwd, marketplace: NAME, plugin: "anything" });
+  },
+  // uninstall. uninstall.test.ts ATTR-04 / D-03.
+  uninstall: async ({ ctx, run, cwd, mode }) => {
+    await createUninstallOperation(
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      createCompletionCache(),
+    )({
+      ctx,
+      run,
+      cwd,
+      marketplace: NAME,
+      plugin: "ghost",
+      ...(mode === "explicit" && { scope: "project" as const }),
+    });
+  },
+  // reinstall (marketplace target). reinstall-flow.test.ts ATTR-03.
+  reinstall: async ({ ctx, run, cwd, mode }) => {
+    await createReinstallPlugins()({
+      ctx,
+      run,
+      cwd,
+      target: { kind: "marketplace", marketplace: NAME },
+      ...(mode === "explicit" && { scope: "project" as const }),
+    });
+  },
+  // plugin update (marketplace target). update-flow.test.ts ATTR-02.
+  "update (plugin)": async ({ ctx, run, cwd, mode }) => {
+    await createUpdatePlugins()({
+      ctx,
+      run,
+      cwd,
+      target: { kind: "marketplace", marketplace: NAME },
+      ...(mode === "explicit" && { scope: "project" as const }),
+    });
+  },
+  // marketplace remove. remove.test.ts ATTR-06 S3/S4.
+  "marketplace remove": async ({ ctx, run, cwd, mode }) => {
+    await removeMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: NAME,
+      cwd,
+      ...(mode === "explicit" && { scope: "project" as const }),
+    });
+  },
+  // autoupdate flip. autoupdate.test.ts ATTR-05.
+  autoupdate: async ({ ctx, run, cwd, mode }) => {
+    await setMarketplaceAutoupdate({
+      ctx,
+      run,
+      name: NAME,
+      enable: true,
+      cwd,
+      ...(mode === "explicit" && { scope: "project" as const }),
+    });
+  },
+  // marketplace update -- converged via the cross-op gate. A mock gitOps is
+  // injected so a (regression) stray network call would be recorded; the
+  // pre-guard miss short-circuits before it is reached (NFR-5). update-flow.test.ts
+  // SC#1.
+  "marketplace update": async ({ ctx, run, cwd, mode }) => {
+    const { gitOps } = createGitOps();
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: NAME,
+      cwd,
+      gitOps,
+      ...(mode === "explicit" && { scope: "project" as const }),
+    });
+  },
+};
+
+async function captureOp(op: string, mode: "explicit" | "bare"): Promise<Emission> {
+  return withHermeticEnvironment("xop-", async ({ cwd }) => {
+    const { ctx, notifications } = makeCtx();
+    const invoke = INVOKERS[op];
+    assert.ok(invoke !== undefined, `no invoker registered for op "${op}"`);
+    await invoke({ ctx, run: runWithNothingLoaded(), cwd, mode });
+    const first = notifications[0];
+    return {
+      body: first?.message ?? "",
+      severity: first?.severity,
+      callCount: notifications.length,
+    };
+  });
+}
+
+// Every converged op INVOKED in explicit-scope form (install included).
+const OPS_EXPLICIT_SCOPE = [
+  "info",
+  "install",
+  "uninstall",
+  "reinstall",
+  "update (plugin)",
+  "marketplace remove",
+  "autoupdate",
+  "marketplace update",
+] as const;
+
+// Ops that support a truly BRACKETLESS bare form (absent from BOTH scopes, no
+// requested scope to report). Install is the only op left out: it always
+// carries a resolved scope (the edge defaults it), so it has no bracketless
+// variant.
+const OPS_BARE = [
+  "info",
+  "uninstall",
+  "reinstall",
+  "update (plugin)",
+  "marketplace remove",
+  "autoupdate",
+  "marketplace update",
+] as const;
+
+// Each op is compared with the same canonical literal, so equality with it is
+// equality with every other op's bytes: the cross-op convergence invariant.
+for (const op of OPS_EXPLICIT_SCOPE) {
+  test(`SC#1 cross-op convergence: ${op} emits the explicit-scope {marketplace not added} row once at error severity`, async () => {
+    // act
+    const emission = await captureOp(op, "explicit");
+
+    // assert
+    assert.deepStrictEqual(emission, {
+      body: CANONICAL_EXPLICIT,
+      severity: "error",
+      callCount: 1,
+    });
+  });
+}
+
+for (const op of OPS_BARE) {
+  test(`SC#1 cross-op convergence: ${op} emits the bare {marketplace not added} row once at error severity`, async () => {
+    // act
+    const emission = await captureOp(op, "bare");
+
+    // assert
+    assert.deepStrictEqual(emission, {
+      body: CANONICAL_BARE,
+      severity: "error",
+      callCount: 1,
+    });
+  });
+}
+
+test("SC#1 cross-op convergence: the explicit-scope and bare canonical rows stay distinct byte forms", () => {
+  // arrange
+  const canonicalRows = [CANONICAL_EXPLICIT, CANONICAL_BARE];
+
+  // act
+  const distinctRows = new Set(canonicalRows);
+
+  // assert
+  assert.strictEqual(
+    distinctRows.size,
+    canonicalRows.length,
+    "explicit-scope and bare rows must remain distinct byte forms",
+  );
+});
+
+// CR-01: a missing/removed marketplace must NEVER surface the network-reason
+// default on ANY op (NFR-5 / ATTR-10). marketplace update was the residual
+// offender (TOCTOU raw throw -> `?? network unreachable`).
+for (const op of OPS_EXPLICIT_SCOPE) {
+  test(`SC#1 cross-op convergence: ${op} never emits the lying {network unreachable} on a missing marketplace (CR-01)`, async () => {
+    // act
+    const emission = await captureOp(op, "explicit");
+
+    // assert
+    assert.doesNotMatch(emission.body, /\{network unreachable\}/);
+    assert.match(emission.body, /\{marketplace not added\}/);
+  });
+}

@@ -1,27 +1,27 @@
 import {
+  CleanupContextError,
   composeErrorWithCauseChain,
+  DependencyDeclarationsUnreadableError,
   findManualRecoveryError,
+  LayerConfigUnreadableError,
   ManualRecoveryError,
+  PluginInBaseLayerOnlyError,
+  PluginInLocalLayerOnlyError,
   PluginShapeError,
+  PluginUpdateConcurrencyError,
   StateLockHeldError,
 } from "../../shared/errors.ts";
-import { ownValue, setOwn } from "../../shared/own-key.ts";
+import { ownValue } from "../../shared/own-key.ts";
 
-import { retiresWorkflowCommand } from "./shared.ts";
-
-import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
-import type { ExtensionState, PluginInstallRecord } from "../../persistence/state-io.ts";
-import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
+import type { UpdatePhase3Failure, UpdateRunOutcome } from "./update-swap.ts";
 import type { ContentReason } from "../../shared/notification-types.ts";
-import type { DegradeKind } from "../../shared/notify-reasons.ts";
 import type { Scope } from "../../shared/types.ts";
 import type {
   ReinstallFailedOutcome,
   ReinstallPluginOutcome,
-  ReinstallReinstalledOutcome,
   ReinstallSkippedOutcome,
+  RevisionMove,
 } from "../types.ts";
-import type { ReinstallPreparedHandles } from "./reinstall-replace.ts";
 
 /** Identity shared by every composed reinstall outcome. */
 export interface ReinstallOutcomeTarget {
@@ -30,68 +30,151 @@ export interface ReinstallOutcomeTarget {
   readonly scope: Scope;
 }
 
-export interface RecordReinstalledOutcomeInput extends ReinstallOutcomeTarget {
-  readonly partition: "reinstalled";
-  readonly state: ExtensionState;
-  readonly oldRecord: PluginInstallRecord;
-  readonly installable: MaterializablePlugin;
-  readonly handles: ReinstallPreparedHandles;
-  readonly hookEntries: readonly HookSummaryEntry[] | undefined;
-  /**
-   * Whether the reinstalled entry is a git-backed source (url / git-subdir /
-   * github). Only a git source's reinstall re-pins to its OLD recorded sha
-   * (PURL-07); a `path` source re-resolves through the marketplace's current
-   * checkout instead, so carrying its old `resolvedSha` forward would name a
-   * commit the fresh `resolvedSource` no longer sits at.
-   */
-  readonly isGitSource: boolean;
-  /**
-   * WLIF-01 / T-112-15: the envelope names the workflows commit REPORTED
-   * placing, never the prepared staged names -- a commit can stage three and
-   * place two, and a record that overstates what is on disk is what the next
-   * removal walks.
-   */
-  readonly placedWorkflowNames: readonly string[];
-}
-
 export interface RecordSkippedOutcomeInput extends ReinstallOutcomeTarget {
   readonly partition: "skipped";
-  readonly reason: "not installed" | "already disabled";
+  readonly reason: "already disabled";
+}
+
+/** UPR-04: a target the scope does not record fails, as uninstall's does. */
+export interface RecordNotInstalledOutcomeInput extends ReinstallOutcomeTarget {
+  readonly partition: "failed";
+  readonly reason: "not installed";
 }
 
 export interface RecordFailedOutcomeInput extends ReinstallOutcomeTarget {
   readonly partition: "failed";
   readonly error: unknown;
+  /**
+   * UPR-03: what the shared runner reported before the failure was thrown:
+   * the installed version, or the whole move once it derived a candidate.
+   */
+  readonly move?: Partial<RevisionMove>;
 }
 
 export type RecordReinstallOutcomeInput =
-  RecordReinstalledOutcomeInput | RecordSkippedOutcomeInput | RecordFailedOutcomeInput;
+  RecordSkippedOutcomeInput | RecordNotInstalledOutcomeInput | RecordFailedOutcomeInput;
 
-/** Persist a successful reinstall or compose an exact non-success outcome. */
-export function recordReinstallOutcome(
-  input: RecordReinstalledOutcomeInput,
-): ReinstallReinstalledOutcome;
+/** Compose an exact skipped or failed reinstall outcome. */
 export function recordReinstallOutcome(input: RecordSkippedOutcomeInput): ReinstallSkippedOutcome;
-export function recordReinstallOutcome(input: RecordFailedOutcomeInput): ReinstallFailedOutcome;
+export function recordReinstallOutcome(
+  input: RecordNotInstalledOutcomeInput | RecordFailedOutcomeInput,
+): ReinstallFailedOutcome;
 export function recordReinstallOutcome(input: RecordReinstallOutcomeInput): ReinstallPluginOutcome {
   switch (input.partition) {
     case "skipped":
       return skippedOutcome(input);
     case "failed":
-      return failedOutcome(input);
-    case "reinstalled":
-      return recordReinstalledOutcome(input);
+      return "error" in input ? failedOutcome(input) : notInstalledOutcome(input);
   }
 }
 
-/** Map typed reinstall failures without inventing a closed-set reason. */
+/** The phase-3 aggregate the shared swap reported through its direct-mode callback. */
+export interface ReinstallPhaseFailure {
+  readonly error: Error;
+  readonly failures: readonly UpdatePhase3Failure[];
+}
+
+/**
+ * Projects the shared runner's outcome onto reinstall's. A swapped candidate
+ * is `reinstalled` at the version the runner derived (D-18-08), and carries
+ * the version and commit it moved from (UPR-02, UPR-03); every verdict the
+ * runner reached without swapping keeps its notes and typed reasons.
+ */
+export function reinstallOutcomeFromRun(
+  target: ReinstallOutcomeTarget,
+  run: UpdateRunOutcome,
+  phaseFailure: ReinstallPhaseFailure | undefined,
+): ReinstallPluginOutcome {
+  const identity = { name: target.name, marketplace: target.marketplace, scope: target.scope };
+  switch (run.partition) {
+    case "updated":
+      return {
+        partition: "reinstalled",
+        ...identity,
+        version: run.toVersion,
+        fromVersion: run.fromVersion,
+        ...knownCommits(run),
+        stagedAgentNames: run.stagedAgentNames,
+        stagedMcpServerNames: run.stagedMcpServerNames,
+        declaresAgents: run.declaresAgents,
+        declaresMcp: run.declaresMcp,
+        declaresWorkflows: run.declaresWorkflows,
+        ...(run.degradedKinds !== undefined && { degradedKinds: run.degradedKinds }),
+        ...(run.staleWorkflowCommand === true && { staleWorkflowCommand: true }),
+        ...(run.partialDegrade !== undefined && { partialDegrade: run.partialDegrade }),
+        ...(run.constraint !== undefined && { constraint: run.constraint }),
+      };
+    case "unchanged":
+      // Reinstall's policy never reaches `unchanged`: it skips the same-revision
+      // short-circuit, and a record disabled after reinstall read it comes back
+      // as an `already disabled` skip (D-18-05). The arm keeps the switch
+      // exhaustive and answers the same skip.
+      return { partition: "skipped", ...identity, notes: ["already disabled"] };
+    case "skipped":
+      return { partition: "skipped", ...identity, notes: run.notes, reasons: run.reasons };
+    case "failed":
+      return {
+        partition: "failed",
+        ...identity,
+        // UPR-03: a commit or finalize failure names the move it attempted.
+        ...knownMove(run),
+        notes: run.notes,
+        reasons: run.reasons,
+        // SRC-01: a preflight failure carries the error behind it; a phase-3
+        // failure's own error wins.
+        ...(run.cause !== undefined && { cause: run.cause }),
+        ...(phaseFailure !== undefined && {
+          cause: phaseFailure.error,
+          rollbackPartial: phaseFailure.failures.map((f) => ({ phase: f.phase, cause: f.cause })),
+        }),
+        // AFILE-04: a later bridge or the finalize failed after the MCP commit
+        // rewrote the file, which the swap does not restore.
+        ...(run.mcpConfigNotices !== undefined && { mcpConfigNotices: run.mcpConfigNotices }),
+      };
+  }
+}
+
+/** The sides of a move that are known; an unknown side's key stays absent (NREG-01). */
+function knownMove(move: Partial<RevisionMove>): Partial<RevisionMove> {
+  return {
+    ...(move.fromVersion !== undefined && { fromVersion: move.fromVersion }),
+    ...(move.toVersion !== undefined && { toVersion: move.toVersion }),
+    ...knownCommits(move),
+  };
+}
+
+function knownCommits(
+  move: Partial<RevisionMove>,
+): Pick<Partial<RevisionMove>, "fromCommit" | "toCommit"> {
+  return {
+    ...(move.fromCommit !== undefined && { fromCommit: move.fromCommit }),
+    ...(move.toCommit !== undefined && { toCommit: move.toCommit }),
+  };
+}
+
+/**
+ * Map typed reinstall failures without inventing a closed-set reason. A
+ * `CleanupContextError` is read through to the failure it wraps.
+ */
 export function reinstallReasonsFromError(error: unknown): readonly ContentReason[] | undefined {
+  const primary = error instanceof CleanupContextError ? error.primary : error;
+  const typed = typedReinstallReason(primary);
+  if (typed !== undefined) {
+    return [typed];
+  }
+
+  const errno = errnoReinstallReason(primary);
+  return errno === undefined ? undefined : [errno];
+}
+
+/** The reason a typed reinstall failure names, by the failure's class. */
+function typedReinstallReason(error: unknown): ContentReason | undefined {
   if (error instanceof PluginShapeError) {
-    return ["source mismatch"] as const;
+    return "source mismatch";
   }
 
   if (error instanceof ManualRecoveryError) {
-    return ["rollback partial"] as const;
+    return "rollback partial";
   }
 
   // A held per-scope state lock is another operation in progress, not an
@@ -101,21 +184,77 @@ export function reinstallReasonsFromError(error: unknown): readonly ContentReaso
   // from the same closed set depending on which layer caught it. `lock held`
   // is the one word that tells the operator to retry.
   if (error instanceof StateLockHeldError) {
-    return ["lock held"] as const;
+    return "lock held";
   }
 
-  if (error instanceof Error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "EACCES" || code === "EPERM") {
-      return ["permission denied"] as const;
-    }
-
-    if (code === "ENOENT" || code === "ENOTDIR") {
-      return ["source missing"] as const;
-    }
+  if (error instanceof PluginUpdateConcurrencyError) {
+    return error.kind === "plugin-updated" ? "concurrently updated" : "concurrently uninstalled";
   }
 
-  return undefined;
+  if (isLayerRefusal(error)) {
+    return layerRefusalReason(error);
+  }
+
+  return error instanceof DependencyDeclarationsUnreadableError ? "unreadable" : undefined;
+}
+
+/** The reason each filesystem errno code a reinstall can meet names. */
+const ERRNO_REASONS: Readonly<Record<string, ContentReason>> = {
+  EACCES: "permission denied",
+  EPERM: "permission denied",
+  ENOENT: "source missing",
+  ENOTDIR: "source missing",
+};
+
+/** The reason a filesystem failure names, by its errno code. */
+function errnoReinstallReason(error: unknown): ContentReason | undefined {
+  const code = error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined;
+  return code === undefined ? undefined : ownValue(ERRNO_REASONS, code);
+}
+
+/**
+ * LAYER-04 / CFG-03: the refusals of a named reinstall's layer check. A
+ * marketplace manifest that failed to parse is not one of them: its message
+ * carries parser text from a cloned repository, which never reaches a cause
+ * line.
+ */
+type LayerRefusal =
+  PluginInLocalLayerOnlyError | PluginInBaseLayerOnlyError | LayerConfigUnreadableError;
+
+function isLayerRefusal(error: unknown): error is LayerRefusal {
+  return (
+    error instanceof PluginInLocalLayerOnlyError ||
+    error instanceof PluginInBaseLayerOnlyError ||
+    error instanceof LayerConfigUnreadableError
+  );
+}
+
+/**
+ * The failures whose message is safe as a rendered cause line: a layer
+ * refusal, a held state lock, which names the lock file as the uninstall row
+ * does (D-01), and an unreadable dependency walk, whose message is the walk's
+ * path-free cause line (D-18-17).
+ */
+function isRenderedCause(
+  error: unknown,
+): error is LayerRefusal | StateLockHeldError | DependencyDeclarationsUnreadableError {
+  return (
+    isLayerRefusal(error) ||
+    error instanceof StateLockHeldError ||
+    error instanceof DependencyDeclarationsUnreadableError
+  );
+}
+
+function layerRefusalReason(error: LayerRefusal): ContentReason {
+  if (error instanceof PluginInLocalLayerOnlyError) {
+    return "plugin in local layer only";
+  }
+
+  if (error instanceof PluginInBaseLayerOnlyError) {
+    return "plugin in base layer only";
+  }
+
+  return "invalid manifest";
 }
 
 function skippedOutcome(input: RecordSkippedOutcomeInput): ReinstallSkippedOutcome {
@@ -128,134 +267,31 @@ function skippedOutcome(input: RecordSkippedOutcomeInput): ReinstallSkippedOutco
   };
 }
 
-function failedOutcome(input: RecordFailedOutcomeInput): ReinstallFailedOutcome {
-  const message = composeErrorWithCauseChain(input.error);
-  const typedReasons = reinstallReasonsFromError(input.error);
-  const isManualRecovery = findManualRecoveryError(input.error) !== undefined;
+function notInstalledOutcome(input: RecordNotInstalledOutcomeInput): ReinstallFailedOutcome {
   return {
     partition: "failed",
     name: input.name,
     marketplace: input.marketplace,
     scope: input.scope,
-    notes: [message],
-    ...(isManualRecovery && { failureClass: "manual-recovery" as const }),
-    ...(typedReasons !== undefined && { reasons: typedReasons }),
+    notes: [input.reason],
+    reasons: [input.reason],
   };
 }
 
-function recordReinstalledOutcome(
-  input: RecordReinstalledOutcomeInput,
-): ReinstallReinstalledOutcome {
-  const marketplace = ownValue(input.state.marketplaces, input.marketplace);
-  if (marketplace === undefined || ownValue(marketplace.plugins, input.name) === undefined) {
-    throw new Error(
-      `Plugin "${input.name}" was concurrently removed from marketplace "${input.marketplace}".`,
-    );
-  }
-
-  const resources = resourcesFromHandles(
-    input.handles,
-    input.placedWorkflowNames,
-    input.name,
-    input.installable,
-  );
-  setOwn(marketplace.plugins, input.name, {
-    version: input.oldRecord.version,
-    resolvedSource: input.installable.pluginRoot,
-    ...(input.isGitSource &&
-      input.oldRecord.resolvedSha !== undefined && {
-        resolvedSha: input.oldRecord.resolvedSha,
-      }),
-    compatibility: {
-      installable: input.installable.state === "installable",
-      notes: [...input.installable.notes],
-      supported: [...input.installable.supported],
-      unsupported: [...input.installable.unsupported],
-    },
-    resources,
-    ...(input.hookEntries !== undefined && { hookEntries: [...input.hookEntries] }),
-    enabled: true,
-    // LOAD-02: `dependencyDisabled` is DELIBERATELY not named here, exactly as
-    // it is not named at the install ledger's state phase. This literal rebuilds
-    // the record from `oldRecord` field by field, so the field's absence is what
-    // clears the load-time check's marker on a plugin that is live again. Do not
-    // carry it forward from `oldRecord`: a stale marker on a re-materialized
-    // record would read as a hold the check still owns. The rollback path is the
-    // deliberate opposite -- it restores a `clonePluginRecord` snapshot, which
-    // PRESERVES the marker, because a restore puts the record back as it was.
-    // D-04-01: a reinstall replaces the artifacts, not the reason the plugin
-    // is here -- the old record's provenance carries forward with installedAt.
-    // D-04-07 names `install` alone as the verb that promotes a dependency the
-    // user then asks for by name; `reinstall <dependency>` also names it and
-    // deliberately does NOT promote, so the ratchet's boundary is the verb.
-    provenance: input.oldRecord.provenance,
-    installedAt: input.oldRecord.installedAt,
-    updatedAt: new Date().toISOString(),
-  });
-
-  // WR-06: `[]` stated HERE rather than defaulted, because the reasoning that
-  // makes it safe is local to this site: this projection feeds only
-  // `stagedAgentNames`, `stagedMcpServerNames`, `declaresAgents`,
-  // `declaresMcp`, and `resourcesChanged`, none of which reads `workflows`,
-  // so an empty workflow inventory here is inert.
-  const outcomeResources = resourcesFromHandles(input.handles, []);
-  const degradedKinds = Array.from(
-    new Set<DegradeKind>([
-      ...(input.handles.skills.result.degraded.length > 0 ? (["skill"] as const) : []),
-      ...(input.handles.commands.result.degraded.length > 0 ? (["command"] as const) : []),
-    ]),
-  );
+function failedOutcome(input: RecordFailedOutcomeInput): ReinstallFailedOutcome {
+  const message = composeErrorWithCauseChain(input.error);
+  const typedReasons = reinstallReasonsFromError(input.error);
+  const isManualRecovery = findManualRecoveryError(input.error) !== undefined;
+  const primary = input.error instanceof CleanupContextError ? input.error.primary : input.error;
   return {
-    partition: "reinstalled",
+    partition: "failed",
     name: input.name,
     marketplace: input.marketplace,
     scope: input.scope,
-    version: input.oldRecord.version,
-    stagedAgentNames: outcomeResources.agents,
-    stagedMcpServerNames: outcomeResources.mcpServers,
-    declaresAgents: outcomeResources.agents.length > 0,
-    declaresMcp: outcomeResources.mcpServers.length > 0,
-    declaresWorkflows: resources.workflows.length > 0,
-    resourcesChanged: resourcesChanged(input.oldRecord.resources, outcomeResources),
-    ...(degradedKinds.length > 0 && { degradedKinds }),
-    // WLIF-06: the record's PRE-reinstall inventory minus what the replace
-    // step reported placing. A source that dropped or renamed a workflow
-    // leaves the old generated name in that difference, and the command it
-    // registered stays live until a reload.
-    ...(retiresWorkflowCommand(input.oldRecord.resources.workflows, input.placedWorkflowNames) && {
-      staleWorkflowCommand: true,
-    }),
+    ...knownMove(input.move ?? {}),
+    notes: [message],
+    ...(isManualRecovery && { failureClass: "manual-recovery" as const }),
+    ...(typedReasons !== undefined && { reasons: typedReasons }),
+    ...(isRenderedCause(primary) && { cause: primary }),
   };
-}
-
-function resourcesFromHandles(
-  handles: ReinstallPreparedHandles,
-  placedWorkflowNames: readonly string[],
-  plugin?: string,
-  installable?: MaterializablePlugin,
-): PluginInstallRecord["resources"] {
-  return {
-    skills: handles.skills.result.recorded.map((record) => record.generatedName),
-    prompts: handles.commands.result.recorded.map((record) => record.generatedName),
-    agents: handles.agents.result.recorded.map((record) => record.generatedName),
-    mcpServers: handles.mcp.result.recorded.map((record) => record.generatedName),
-    hooks: plugin !== undefined && installable?.hooksConfigPath !== undefined ? [plugin] : [],
-    workflows: [...placedWorkflowNames],
-  };
-}
-
-function resourcesChanged(
-  oldResources: PluginInstallRecord["resources"],
-  next: PluginInstallRecord["resources"],
-): boolean {
-  return (
-    next.skills.length > 0 ||
-    next.prompts.length > 0 ||
-    next.agents.length > 0 ||
-    next.mcpServers.length > 0 ||
-    oldResources.skills.length > 0 ||
-    oldResources.prompts.length > 0 ||
-    oldResources.agents.length > 0 ||
-    oldResources.mcpServers.length > 0
-  );
 }

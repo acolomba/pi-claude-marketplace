@@ -42,6 +42,7 @@ import type {
   CommandRunState,
 } from "./notification-run.ts";
 import type {
+  AutoapplyStatusSurface,
   CascadeNotificationMessage,
   DeviceFlowPrompt,
   HookSurface,
@@ -75,9 +76,8 @@ function isStructuredOutcome(presentation: NotificationPresentation): boolean {
     case "reconcile-pending-empty":
     case "prune-empty":
     case "prune-committed-warning":
-      return true;
     case "reconcile-applied-cascade":
-      return false;
+      return true;
   }
 }
 
@@ -85,6 +85,7 @@ function isRawOutcome(presentation: ResolvedRawSurface | CommandErrorPresentatio
   switch (presentation.kind) {
     case "usage-error":
     case "usage-info":
+    case "autoapply-status":
     case "internal-error":
       return true;
     case "diagnostic":
@@ -263,7 +264,7 @@ export function notifyPluginPathSkipped(
  * caller's message and usage block (RAWS-01, D-06). The text strategy joins
  * them with one blank line when usage is nonempty, at `error` severity (SNM-13); that blank
  * line is part of the user contract, and
- * `tests/shared/notification-dispatch.test.ts` asserts it byte-for-byte (the
+ * `test/shared/notification-dispatch.test.ts` asserts it byte-for-byte (the
  * SNM-13 case).
  */
 export function notifyUsageError(
@@ -292,6 +293,15 @@ export function notifyUsageInfo(
   usage: string,
 ): void {
   emitPresentation(ctx, run, resolveRawSurface({ kind: "usage-info", usage }));
+}
+
+/** AAP-04: sends what `/claude:plugin autoapply` shows, or what its set form wrote. */
+export function notifyAutoapplyStatus(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  surface: AutoapplyStatusSurface,
+): void {
+  emitPresentation(ctx, run, resolveRawSurface(surface));
 }
 
 /**
@@ -430,7 +440,7 @@ export function notifyAsyncRewakeSummary(
  * first line ("Stop hook override cap reached.") and, after a `\n\n`
  * separator, a detail block naming the plugin and the cap. The host UI prepends
  * the `Warning:` label to the summary line. The byte form is locked by
- * `tests/architecture/hooks-cap-notify.test.ts` against the
+ * `test/architecture/hooks-cap-notify.test.ts` against the
  * `stop-override-cap` block in `docs/output-catalog.md`.
  */
 export function notifyStopHookOverrideCap(
@@ -532,7 +542,7 @@ function formatPresentationBody(presentation: NotificationPresentation): string 
       return renderMarketplaceNotAdded(presentation.message, presentation.reason);
     case "reconcile-pending-empty":
       return foldAdvisories(
-        renderReconcilePendingEmpty(),
+        renderReconcilePendingEmpty(presentation.message.command),
         presentation.message.advisories,
         presentation.message.retainedWorkflows,
       );

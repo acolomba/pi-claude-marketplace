@@ -17,5 +17,5 @@
     "strict": true,
     "target": "ES2022"
   },
-  "include": ["extensions/**/*.ts", "tests/**/*.ts"]
+  "include": ["extensions/**/*.ts", "test/**/*.ts", "features/**/*.ts"]
 }

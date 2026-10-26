@@ -20,7 +20,8 @@
 //
 // The enumeration is MANIFEST-driven (D-81 fetchable-set): the fetchable set
 // comes from `loadMarketplaceManifest`, NOT installed state. A per-plugin
-// failure never aborts the sweep (it is captured as a `(failed)` row), and an
+// failure never aborts the sweep (it is captured as a `(failed)` row), except
+// an invalid GitHub base override, which fails the whole command (GHB-03). An
 // unreadable marketplace manifest degrades to a per-marketplace `(failed)`
 // block. fetch persists NO state (derive-not-persist): the only fs write is
 // the clone seam's, which lives in clone-cache.ts.
@@ -31,7 +32,11 @@ import { parsePluginSource } from "../../domain/source.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
-import { errorMessage } from "../../shared/errors.ts";
+import {
+  errorMessage,
+  rethrowInvalidGitHubBaseUrl,
+  StateLockHeldError,
+} from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
@@ -44,6 +49,7 @@ import {
   narrowResolverNotes,
   narrowUnsupportedKinds,
 } from "../../shared/probe-classifiers.ts";
+import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
 
 import {
@@ -162,9 +168,9 @@ export function createFetchPlugins(
     };
 
     for (const target of targets) {
-      // NEVER-throws per-plugin (mirrors updateSinglePlugin): a thrown fetch is
-      // captured as a `(failed)` row and the sweep continues to the remaining
-      // plugins.
+      // A thrown fetch is captured as a `(failed)` row and the sweep continues
+      // to the remaining plugins. Only an invalid GitHub base override escapes
+      // and ends the sweep (GHB-03).
       // eslint-disable-next-line no-await-in-loop -- the shared `authMemo` runs the device flow once per host
       const row = await fetchOne(target, {
         ctx,
@@ -325,9 +331,10 @@ interface FetchOneDeps {
 }
 
 /**
- * Fetch a single manifest entry. NEVER throws: a thrown materialize is captured
- * as a `(failed)` row via the closed-set REASONS narrowing so the bulk sweep is
- * failure-tolerant.
+ * Fetch a single manifest entry. A thrown materialize is captured as a
+ * `(failed)` row via the closed-set REASONS narrowing, so the bulk sweep
+ * tolerates every per-plugin failure except an invalid GitHub base override,
+ * which this function rethrows to fail the command (GHB-03).
  *
  * Flow:
  *   (1) Non-git source (path / npm / unknown): a no-op -- render
@@ -336,8 +343,8 @@ interface FetchOneDeps {
  *       clone is already `materialized` is a no-op -> `(skipped) {up-to-date}`,
  *       no network. Otherwise (remote-cold OR any unpinned) run the materialize:
  *       pinned arm -> resolvePluginPin + materializePluginClone; unpinned arm ->
- *       canonicalCloneUrl + materializeOrRefreshPluginMirror (always refreshes;
- *       the refresh IS the consented fetch).
+ *       canonicalCloneUrl + materializeOrRefreshPluginMirror (a cold mirror is
+ *       cloned, a warm one refreshed; either IS the consented fetch).
  *   (3) After the seam returns, derive the row FRESH from `probeManifestEntry`
  *       against the now-warm tree (never a pre-materialize probe).
  */
@@ -366,8 +373,13 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
       }
     }
 
-    // (3) Materialize through the clone-cache seam (the consented fetch).
-    await materializeThroughSeam(gitSource, deps, locations);
+    // (3) Materialize through the clone-cache seam (the consented fetch). A
+    // mirror refresh runs under the scope's state lock so no install copies
+    // from a mirror mid-refresh (GIT-03); a held lock fails the row `lock
+    // held`. A pinned clone is immutable and never touches the mirror.
+    await (gitSource.sha === undefined
+      ? withExistingScopeLock(locations, () => materializeThroughSeam(gitSource, deps, locations))
+      : materializeThroughSeam(gitSource, deps, locations));
 
     // Derive the post-fetch row FRESH against the now-warm tree.
     const marketplaceContext = {
@@ -376,6 +388,7 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
     };
     return await freshRow(entry, marketplaceContext, locations, deps.status);
   } catch (err) {
+    rethrowInvalidGitHubBaseUrl(err);
     return failedRow(entry, err);
   }
 }
@@ -407,14 +420,13 @@ async function materializeThroughSeam(
   }
 
   const { cloneUrl, pin, ref } = await deps.seam.resolvePluginPin({ source: gitSource });
-  const auth = buildCloneAuth(cloneUrl, gitSource.kind, deps);
   await deps.seam.materializePluginClone({
     locations,
     cloneUrl,
     networkUrl: networkCloneUrl(gitSource),
     pin,
     ...(ref !== undefined && { ref }),
-    auth,
+    resolveAuth: () => buildCloneAuth(cloneUrl, gitSource.kind, deps),
   });
 }
 
@@ -557,12 +569,18 @@ function failedRow(entry: ManifestEntry, err: unknown): FetchMsg {
 /**
  * Narrow a git-materialize throw into an EXISTING closed-set REASON -- no new
  * token. The shared `classifyGitTransportFailure` ladder handles the
- * isomorphic-git `HttpError` (401/403 -> auth), `UserCanceledError` (the auth
- * flow terminated unsuccessfully), and network-errno arms; fetch adds the fs
- * errno arms of `reasonsFromTypedError` and folds any non-recognized throw to
- * `source missing` (the fail-clean default -- the tree could not be produced).
+ * `StoredCredentialRejectedError` (a stored credential the host refused), the
+ * isomorphic-git `HttpError` (401/403 -> auth), `UserCanceledError` (a helper
+ * miss, or a device flow that failed or whose credential the host refused), and
+ * network-errno arms; fetch adds the fs errno arms of `reasonsFromTypedError`
+ * and folds any non-recognized throw to `source missing` (the fail-clean
+ * default -- the tree could not be produced).
  */
 function narrowFetchFailure(err: unknown): ContentReason {
+  if (err instanceof StateLockHeldError) {
+    return "lock held";
+  }
+
   const transport = classifyGitTransportFailure(err);
   if (transport !== undefined) {
     return transport;

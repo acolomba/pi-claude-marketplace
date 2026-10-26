@@ -42,6 +42,6 @@ Pick one and document the choice at the gate derivation:
    the persisted flag.
 
 Either way: a new catalog state in `docs/output-catalog.md` under
-`## /claude:plugin enable`, its fixture in `tests/architecture/
+`## /claude:plugin enable`, its fixture in `test/architecture/
 catalog-uat.test.ts`, and a row assertion in
-`tests/orchestrators/plugin/enable-disable.test.ts`.
+`test/orchestrators/plugin/enable-disable.test.ts`.

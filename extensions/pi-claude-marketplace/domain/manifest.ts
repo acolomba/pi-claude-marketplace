@@ -40,13 +40,20 @@ const MARKETPLACE_SCHEMA = Type.Object({
 
 export type MarketplaceManifest = Type.Static<typeof MARKETPLACE_SCHEMA>;
 
+/** Two read-only views of one validated manifest load. */
+export interface MarketplaceManifestDocument {
+  readonly manifest: Readonly<MarketplaceManifest>;
+  /** Complete parsed JSON before invalid dependency entries are normalized. */
+  readonly comparisonJson: string;
+}
+
 /** JIT-compiled validator (D-07). Call its `Check` (or coercing `Parse`) method. */
 const MARKETPLACE_VALIDATOR = Compile(MARKETPLACE_SCHEMA);
 
 /**
  * Isolates invalid dependency declarations before validating the marketplace.
  * The stub's `source` sub-object is the shape `info.ts`'s
- * `isUnsupportedEntrySource` check and `tests/architecture/partial-vocabulary-guard.test.ts`
+ * `isUnsupportedEntrySource` check and `test/architecture/partial-vocabulary-guard.test.ts`
  * both pin. The stub keeps the entry's own `dependencies` value: the resolver
  * parses it again and reports the parse failure as the entry's defect, so no
  * synthetic marker is needed and a real entry cannot be mistaken for a stub.
@@ -97,13 +104,15 @@ function normalizeDependencyEntries(raw: unknown): unknown {
  * NFR-8 / D-14: the sole marketplace.json read+parse+validate. This is the ONLY
  * marketplace.json file read in the repo (CACHE-06) and the injected loader
  * behind the cache. Valid entries retain the RAW JSON.parse value (WR-01),
- * including key order and extra fields (`update.ts` JSON.stringifys it;
- * `info.ts` reads `parsed.description`). Invalid dependency entries become
- * unsupported stubs, or are dropped when unnamed, as in Claude Code. Keep this
- * focused on path-based reads only: no cache state, invalidation, or
+ * including key order and extra fields (`info.ts` reads `parsed.description`).
+ * The comparison text preserves every parsed field. Invalid dependency entries
+ * become unsupported stubs, or are dropped when unnamed, as in Claude Code.
+ * Keep this focused on path-based reads only: no cache state, invalidation, or
  * caller-specific error wrapping belongs here.
  */
-async function loadMarketplaceManifestUncached(manifestPath: string): Promise<MarketplaceManifest> {
+async function loadMarketplaceManifestUncached(
+  manifestPath: string,
+): Promise<MarketplaceManifestDocument> {
   const raw = await readFile(manifestPath, "utf8");
 
   // D-48-B: malformed JSON throws SyntaxError from JSON.parse; re-throw it as a
@@ -121,6 +130,7 @@ async function loadMarketplaceManifestUncached(manifestPath: string): Promise<Ma
     );
   }
 
+  const comparisonJson = JSON.stringify(parsed);
   parsed = normalizeDependencyEntries(parsed);
   if (!MARKETPLACE_VALIDATOR.Check(parsed)) {
     const validationErrors = MARKETPLACE_VALIDATOR.Errors(parsed);
@@ -131,7 +141,7 @@ async function loadMarketplaceManifestUncached(manifestPath: string): Promise<Ma
     throw new InvalidMarketplaceManifestError(`marketplace.json schema invalid: ${detail}`);
   }
 
-  return parsed;
+  return { manifest: parsed, comparisonJson };
 }
 
 /**
@@ -151,5 +161,13 @@ const manifestCache = createManifestCache(loadMarketplaceManifestUncached);
  * treat it as READ-ONLY (D-03; mutation would corrupt every later cache hit).
  */
 export async function loadMarketplaceManifest(manifestPath: string): Promise<MarketplaceManifest> {
-  return manifestCache.load(manifestPath) as Promise<MarketplaceManifest>;
+  return (await loadMarketplaceManifestDocument(manifestPath)).manifest;
+}
+
+/** Returns the cached resolver view and complete comparison text from the same read. */
+export function loadMarketplaceManifestDocument(
+  manifestPath: string,
+): Promise<MarketplaceManifestDocument> {
+  // The cache retains the document returned by its sole loader without changing it.
+  return manifestCache.load(manifestPath) as Promise<MarketplaceManifestDocument>;
 }

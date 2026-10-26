@@ -83,16 +83,14 @@ function ensureMarketplacePaths(
  * Gating policy (D-13 ORDERING RAIL): this helper is invoked from
  * `migrateLegacyMarketplaceRecords` ONLY when the caller passed
  * `scrubAutoupdate: true` -- the caller (loadState) derives that flag from
- * the on-disk existence of the scope's `configJsonPath`, preserving the
+ * the on-disk existence of the scope's `baseConfigJsonPath`, preserving the
  * legacy `autoupdate` intent on the FIRST load (pre-config-migration) so
  * the first-run migration can capture it before the field is destroyed.
  * Subsequent loads (after `claude-plugins.json` has been materialized) see
  * the config file and scrub.
  *
- * D-13 is implemented via Mechanism A (existsSync-gated). The alternative
- * (Mechanism B: pre-read legacy autoupdate via a separate entry point) is
- * documented in research as equally valid; Mechanism A is the simpler
- * diff and the locked choice.
+ * D-13 gates the scrub on the config file's existence rather than on a
+ * separate entry point that pre-reads the legacy `autoupdate` field.
  */
 function ensureNoLegacyAutoupdate(mp: Record<string, unknown>): boolean {
   if (mp.autoupdate === undefined) {
@@ -103,7 +101,15 @@ function ensureNoLegacyAutoupdate(mp: Record<string, unknown>): boolean {
   return true;
 }
 
-function ensurePluginResources(mp: Record<string, unknown>): boolean {
+/**
+ * Apply `fill` to every object-shaped plugin record of a marketplace record and
+ * return whether any call changed one. Non-object `plugins` maps and records are
+ * left for STATE_VALIDATOR.Check to reject.
+ */
+function fillEachPluginRecord(
+  mp: Record<string, unknown>,
+  fill: (pl: Record<string, unknown>) => boolean,
+): boolean {
   const plugins = mp.plugins;
   if (typeof plugins !== "object" || plugins === null || Array.isArray(plugins)) {
     return false;
@@ -115,10 +121,14 @@ function ensurePluginResources(mp: Record<string, unknown>): boolean {
       continue;
     }
 
-    mutated = ensureOneRecordResources(plRaw as Record<string, unknown>) || mutated;
+    mutated = fill(plRaw as Record<string, unknown>) || mutated;
   }
 
   return mutated;
+}
+
+function ensurePluginResources(mp: Record<string, unknown>): boolean {
+  return fillEachPluginRecord(mp, ensureOneRecordResources);
 }
 
 /**
@@ -153,8 +163,6 @@ function ensureOneRecordResources(pl: Record<string, unknown>): boolean {
 
 /**
  * ENBL-02: fill `enabled: true` on every plugin record that lacks the field.
- * Mirrors `ensurePluginResources` -- same iteration pattern, same
- * mutated-flag discipline.
  *
  * `enabled: true` is the additive default for any record predating the
  * field. This intentionally over-fills the one legacy shape it cannot
@@ -166,34 +174,22 @@ function ensureOneRecordResources(pl: Record<string, unknown>): boolean {
  * STATE_VALIDATOR.Check so the newly-required ENBL-02 field is present.
  */
 function ensurePluginEnabled(mp: Record<string, unknown>): boolean {
-  const plugins = mp.plugins;
-  if (typeof plugins !== "object" || plugins === null || Array.isArray(plugins)) {
-    return false;
-  }
-
-  let mutated = false;
-  for (const plRaw of Object.values(plugins as Record<string, unknown>)) {
-    if (typeof plRaw !== "object" || plRaw === null || Array.isArray(plRaw)) {
-      continue;
-    }
-
-    const pl = plRaw as Record<string, unknown>;
+  return fillEachPluginRecord(mp, (pl) => {
     // Only an ABSENT field is filled. A present-but-non-boolean value
     // (e.g. null) is intentionally left untouched for STATE_VALIDATOR.Check
     // to reject with an actionable error rather than being silently coerced.
-    if (pl.enabled === undefined) {
-      pl.enabled = true;
-      mutated = true;
+    if (pl.enabled !== undefined) {
+      return false;
     }
-  }
 
-  return mutated;
+    pl.enabled = true;
+    return true;
+  });
 }
 
 /**
  * D-04-03: fill `provenance: "explicit"` on every plugin record that lacks the
- * field. Mirrors `ensurePluginEnabled` -- same iteration pattern, same
- * mutated-flag discipline.
+ * field.
  *
  * `"explicit"` is the truthful default for any record predating the field: no
  * released build ran a dependency cascade, so every record one wrote is a
@@ -205,28 +201,17 @@ function ensurePluginEnabled(mp: Record<string, unknown>): boolean {
  * STATE_VALIDATOR.Check so the newly-required field is present.
  */
 function ensurePluginProvenance(mp: Record<string, unknown>): boolean {
-  const plugins = mp.plugins;
-  if (typeof plugins !== "object" || plugins === null || Array.isArray(plugins)) {
-    return false;
-  }
-
-  let mutated = false;
-  for (const plRaw of Object.values(plugins as Record<string, unknown>)) {
-    if (typeof plRaw !== "object" || plRaw === null || Array.isArray(plRaw)) {
-      continue;
-    }
-
-    const pl = plRaw as Record<string, unknown>;
+  return fillEachPluginRecord(mp, (pl) => {
     // Only an ABSENT field is filled. A present-but-wrong value is
     // intentionally left untouched for STATE_VALIDATOR.Check to reject with
     // an actionable error rather than being silently coerced.
-    if (pl.provenance === undefined) {
-      pl.provenance = "explicit";
-      mutated = true;
+    if (pl.provenance !== undefined) {
+      return false;
     }
-  }
 
-  return mutated;
+    pl.provenance = "explicit";
+    return true;
+  });
 }
 
 /**

@@ -9,11 +9,11 @@ source: 97-REVIEW.md WR-04
 `classifyPluginState` (`orchestrators/plugin/plugin-state-classifier.ts`)
 collapses every disabled record to `installed`, which by design keeps it out of
 the `update --partial` candidate set (pinned by
-`tests/orchestrators/edge-deps.test.ts`).
+`test/orchestrators/edge-deps.test.ts`).
 
 But `update`'s disabled-record short-circuit is only reachable WITH `--partial`
 when the candidate resolves `partially-available` — the ENBL-09 suite header in
-`tests/orchestrators/plugin/update.test.ts` states this and pins it. So
+`test/orchestrators/plugin/update.test.ts` states this and pins it. So
 refreshing a disabled partial's pin requires typing a command the completion
 provider will never offer. Per WR-02 (carried separately) that same command is
 the prerequisite for a successful `enable` of such a record.
@@ -39,4 +39,4 @@ Decide between:
 
 Document the choice at the short-circuit in
 `orchestrators/plugin/update.ts` and update the bucket pins in
-`tests/orchestrators/edge-deps.test.ts` plus the ENBL-09 suite header.
+`test/orchestrators/edge-deps.test.ts` plus the ENBL-09 suite header.

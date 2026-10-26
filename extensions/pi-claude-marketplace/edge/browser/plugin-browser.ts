@@ -107,109 +107,101 @@ function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-function statusTag(status: PluginNotificationMessage["status"]): string {
-  switch (status) {
-    case "installed":
-      return "[installed]";
-    case "upgradable":
-      return "[upgradable]";
-    case "available":
-      return "[available]";
-    case "remote":
-      return "[remote]";
-    case "partially-available":
-    case "partially-installed":
-    case "partially-upgradable":
-      return "[partial]";
-    case "unavailable":
-      return "[unavailable]";
-    case "disabled":
-      return "[disabled]";
-    case "updated":
-    case "reinstalled":
-    case "uninstalled":
-    case "failed":
-    case "skipped":
-    case "manual recovery":
-    case "will install":
-    case "will uninstall":
-    case "will enable":
-    case "will disable":
-      return "";
-  }
-}
+type RowStatus = PluginNotificationMessage["status"];
 
-function statusDescription(status: PluginNotificationMessage["status"]): string {
-  switch (status) {
-    case "installed":
-      return "installed";
-    case "upgradable":
-      return "update available";
-    case "available":
-      return "not installed";
-    case "remote":
-      return "not fetched";
-    case "partially-available":
-      return "partially installable";
-    case "partially-installed":
-      return "partially installed";
-    case "partially-upgradable":
-      return "partial update available";
-    case "unavailable":
-      return "not installable";
-    case "disabled":
-      return "disabled";
-    case "updated":
-    case "reinstalled":
-    case "uninstalled":
-    case "failed":
-    case "skipped":
-    case "manual recovery":
-    case "will install":
-    case "will uninstall":
-    case "will enable":
-    case "will disable":
-      return "";
-  }
-}
+// D-15: each status table is a TOTAL map over the status union, so a new
+// status fails to compile until every table classifies it. A switch naming all
+// twenty statuses would exceed the cyclomatic ceiling.
+const STATUS_TAG = {
+  installed: "[installed]",
+  upgradable: "[upgradable]",
+  available: "[available]",
+  remote: "[remote]",
+  "partially-available": "[partial]",
+  "partially-installed": "[partial]",
+  "partially-upgradable": "[partial]",
+  unavailable: "[unavailable]",
+  disabled: "[disabled]",
+  updated: "",
+  reinstalled: "",
+  uninstalled: "",
+  failed: "",
+  skipped: "",
+  "manual recovery": "",
+  "will install": "",
+  "will uninstall": "",
+  "will enable": "",
+  "will disable": "",
+  "will update": "",
+} as const satisfies Record<RowStatus, string>;
+
+const STATUS_DESCRIPTION = {
+  installed: "installed",
+  upgradable: "update available",
+  available: "not installed",
+  remote: "not fetched",
+  "partially-available": "partially installable",
+  "partially-installed": "partially installed",
+  "partially-upgradable": "partial update available",
+  unavailable: "not installable",
+  disabled: "disabled",
+  updated: "",
+  reinstalled: "",
+  uninstalled: "",
+  failed: "",
+  skipped: "",
+  "manual recovery": "",
+  "will install": "",
+  "will uninstall": "",
+  "will enable": "",
+  "will disable": "",
+  "will update": "",
+} as const satisfies Record<RowStatus, string>;
+
+const INSTALL_ACTIONS: readonly PickerAction[] = ["install"];
+const INSTALLED_ACTIONS: readonly PickerAction[] = ["uninstall", "disable"];
+const DISABLED_ACTIONS: readonly PickerAction[] = ["enable"];
+const NO_ACTIONS: readonly PickerAction[] = [];
 
 /**
- * Actions offered for a plugin, filtered by its list-surface status. `info`
- * is always available; install/uninstall/enable/disable are gated by what the
+ * The actions offered ahead of `info`, by list-surface status. `info` is
+ * always available; install/uninstall/enable/disable are gated by what the
  * status makes meaningful (matches the typed subcommands' preconditions).
  */
-function availableActions(status: PluginNotificationMessage["status"]): readonly PickerAction[] {
-  const actions: PickerAction[] = ["info"];
-  switch (status) {
-    case "available":
-    case "remote":
-    case "partially-available":
-      actions.unshift("install");
-      break;
-    case "installed":
-    case "upgradable":
-    case "partially-installed":
-    case "partially-upgradable":
-      actions.unshift("uninstall", "disable");
-      break;
-    case "disabled":
-      actions.unshift("enable");
-      break;
-    case "unavailable":
-    case "updated":
-    case "reinstalled":
-    case "uninstalled":
-    case "failed":
-    case "skipped":
-    case "manual recovery":
-    case "will install":
-    case "will uninstall":
-    case "will enable":
-    case "will disable":
-      break;
-  }
+const STATUS_ACTIONS = {
+  available: INSTALL_ACTIONS,
+  remote: INSTALL_ACTIONS,
+  "partially-available": INSTALL_ACTIONS,
+  installed: INSTALLED_ACTIONS,
+  upgradable: INSTALLED_ACTIONS,
+  "partially-installed": INSTALLED_ACTIONS,
+  "partially-upgradable": INSTALLED_ACTIONS,
+  disabled: DISABLED_ACTIONS,
+  unavailable: NO_ACTIONS,
+  updated: NO_ACTIONS,
+  reinstalled: NO_ACTIONS,
+  uninstalled: NO_ACTIONS,
+  failed: NO_ACTIONS,
+  skipped: NO_ACTIONS,
+  "manual recovery": NO_ACTIONS,
+  "will install": NO_ACTIONS,
+  "will uninstall": NO_ACTIONS,
+  "will enable": NO_ACTIONS,
+  "will disable": NO_ACTIONS,
+  "will update": NO_ACTIONS,
+} as const satisfies Record<RowStatus, readonly PickerAction[]>;
 
-  return actions;
+function statusTag(status: RowStatus): string {
+  return STATUS_TAG[status];
+}
+
+function statusDescription(status: RowStatus): string {
+  return STATUS_DESCRIPTION[status];
+}
+
+/** Actions offered for a plugin, filtered by its list-surface status. */
+function availableActions(status: RowStatus): readonly PickerAction[] {
+  return [...STATUS_ACTIONS[status], "info"];
 }
 
 function makeSelectListTheme(theme: Theme): SelectListTheme {
@@ -420,6 +412,7 @@ export class PluginBrowser {
     }));
     const list = new SelectList(items, Math.min(items.length, MAX_VISIBLE), this.listTheme());
     list.onSelect = (item) => {
+      // Every item value above comes from `availableActions`.
       const action = item.value as PickerAction;
       if (action === "install") {
         this.showInstallScope(mp, plugin);
@@ -450,17 +443,19 @@ export class PluginBrowser {
         value: "project-local",
         label: "Project local (Recommended)",
         description:
-          "Install locally in .pi/claude-plugins.local.json (gitignored, this repo only)",
+          "Install in the local config (.pi/claude-plugins.local.json, gitignored, this repo only)",
       },
       {
         value: "project",
         label: "Project",
-        description: "Install in .pi/claude-plugins.json (committed, shared across repo)",
+        description:
+          "Install in the base config (.pi/claude-plugins.json, for all collaborators on this repo)",
       },
       {
         value: "user",
         label: "User (global)",
-        description: "Install globally in ~/.pi/agent/claude-plugins.json (all projects)",
+        description:
+          "Install in the user scope's base config (~/.pi/agent/claude-plugins.json, all projects)",
       },
     ];
     const list = new SelectList(items, items.length, this.listTheme());

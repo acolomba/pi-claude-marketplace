@@ -5,7 +5,7 @@
 //
 // Pattern: mirrors `edge/handlers/marketplace/info.ts` (read-only orchestrator
 // dispatch with a single optional `--scope` flag, no positionals).
-// The shim:
+// The shim, through the shared `withScopeOnlyArgs` prelude:
 //   1. parses raw args via `parseArgs` (validates --scope shape);
 //   2. rejects any positional argument (pending takes none) and any unknown flag;
 //   3. delegates to `pendingReconcile({ ctx, run, cwd, scope? })` with the
@@ -16,10 +16,8 @@
 // guard.
 
 import { pendingReconcile } from "../../../orchestrators/reconcile/pending.ts";
-import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
-import { parseArgs } from "../../args.ts";
 
-import { withParsedArgs } from "./shared.ts";
+import { withScopeOnlyArgs } from "./shared.ts";
 
 import type { SubcommandHandler } from "../../router.ts";
 
@@ -31,26 +29,12 @@ const USAGE = "Usage: /claude:plugin pending [--scope user|project]";
  * `pluginsToInstall` deps need threading.
  */
 export function makePendingHandler(): SubcommandHandler {
-  return withParsedArgs(parseArgs, USAGE, async (parsed, ctx, run): Promise<void> => {
-    // `pending` takes NO positional arguments. Any non-flag token (or an
-    // unknown long flag passed through parseArgs as a positional) is a
-    // usage error.
-    const [first] = parsed.positional;
-    if (first !== undefined) {
-      if (first.startsWith("--")) {
-        notifyUsageError(ctx, run, { message: `Unknown option: "${first}".`, usage: USAGE });
-      } else {
-        notifyUsageError(ctx, run, { message: "Too many arguments.", usage: USAGE });
-      }
-
-      return;
-    }
-
+  return withScopeOnlyArgs(USAGE, async (scope, ctx, run): Promise<void> => {
     await pendingReconcile({
       ctx,
       run,
       cwd: ctx.cwd,
-      ...(parsed.scope !== undefined && { scope: parsed.scope }),
+      ...(scope !== undefined && { scope }),
     });
   });
 }

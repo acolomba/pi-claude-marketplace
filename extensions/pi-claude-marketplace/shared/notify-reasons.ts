@@ -42,10 +42,16 @@ import type { SoftDepStatus } from "../platform/pi-api.ts";
 const IDEMPOTENT_REASONS = [
   "up-to-date",
   "already installed",
+  // IMP-06: import found the marketplace recorded with the same source.
+  "already added",
   "already autoupdate",
   "already no autoupdate",
   "already enabled",
   "already disabled",
+  // LAYER-05: the target layer gained the declaration of a plugin the scope
+  // had already installed.
+  "already installed in base layer",
+  "already installed in local layer",
 ] as const;
 type IdempotentReason = (typeof IDEMPOTENT_REASONS)[number];
 
@@ -122,6 +128,8 @@ export type FailureReason =
   | "permission denied"
   | "source missing"
   | "network unreachable"
+  // UPD-11: the git host answered with an HTTP status other than 401/403.
+  | "network error"
   // D-76-08: HTTP auth challenge (401/403) on a marketplace clone. A distinct
   // failure-class member -- truthful attribution keeps it out of `network
   // unreachable`.
@@ -152,7 +160,19 @@ export type FailureReason =
   // reusing `source mismatch`.
   | "dangling reference"
   | "concurrently uninstalled"
-  | "concurrently updated";
+  | "concurrently updated"
+  // FIX-03: the operation was refused before anything was written. Install,
+  // enable, disable, update, and reinstall all refuse with it, so it lives in
+  // the shared failure group rather than as a command-private reason.
+  | "marketplace in local layer only"
+  // LAYER-02: the mirror refusal of the same layer rule, shared by
+  // `marketplace remove`, `autoupdate`, and `noautoupdate`.
+  | "marketplace in base layer only"
+  // LAYER-04: a named plugin command refuses when its target layer does not
+  // declare the plugin and the other layer does. Uninstall, enable, disable,
+  // update, and reinstall share both refusals.
+  | "plugin in local layer only"
+  | "plugin in base layer only";
 
 /**
  * D-102-06: author-declared install-time state -- a fact the plugin's OWN
@@ -360,13 +380,18 @@ type CommandPrivateReason =
   | "marketplace not added to user scope"
   | "marketplace not added to project scope"
   | "orphan rewake"
-  // EDEP-02: disable's refusal marker, owned by
-  // `orchestrators/plugin/enable-disable.ts`. An installed and ENABLED
-  // plugin in the same scope still declares the target, so the disable is
-  // refused and nothing is written; the dependent keys ride the cause line.
-  // It is the one member of this group that rides a `failed` row -- the
-  // command was NOT carried out, unlike its `dependents unsatisfied`
-  // neighbour above.
+  // Other plugins still need the target, so the command changed nothing; the
+  // plugins that need it ride the cause line. Three owners stamp it:
+  // - EDEP-02: `orchestrators/plugin/enable-disable.ts` refuses a disable
+  //   while an installed and ENABLED plugin in the scope declares the target.
+  // - LAYER-03: `orchestrators/marketplace/remove.ts` refuses a remove from
+  //   one layer while plugins that stay still need a plugin it would remove.
+  // - LAYER-08: `orchestrators/plugin/uninstall.ts` refuses an uninstall of a
+  //   plugin no layer declares while a plugin of the target layer needs it,
+  //   and skips it while only plugins of the other layer need it.
+  // The refusals ride a `failed` row and uninstall's skip rides a `skipped`
+  // row at warning. Unlike its `dependents unsatisfied` neighbour above, the
+  // command was not carried out.
   | "dependents remain"
   // MISS-01 / D-09-09: reload's marker for a missing declared dependency the
   // dependency-install step materialized, owned by
@@ -389,9 +414,23 @@ type CommandPrivateReason =
   // a shared topic group. Like the cross-scope pair above, it IS a
   // `ContentReason`.
   | "stale workflow command"
-  // WCONV-03: the load-time convergence marker. The reconcile backfill
-  // projection places it on both arms of a re-materialized record's row, so a
-  // user can attribute new commands to a reload they did not initiate. Owned by
-  // that one projection rather than shared across topic groups, so it is named
-  // here for the proof. Like its neighbour above, it IS a `ContentReason`.
-  | "components now supported";
+  // WCONV-03: the convergence marker. `apply`'s growth move places it on both
+  // arms of a re-materialized record's row, and first on a grown revision
+  // move's row, so a user can tell a promotion from a fresh install. Owned by
+  // the reconcile projection rather than shared across topic groups, so it is
+  // named here for the proof. Like its neighbour above, it IS a `ContentReason`.
+  | "components now supported"
+  // LAYER-05 / D-MF-03: uninstall's no-op marker, owned by
+  // `orchestrators/plugin/uninstall.messaging.ts`. The other layer still
+  // declares the plugin, so the uninstall dropped only the target layer's
+  // declaration. It rides a `skipped` row at warning, because the plugin the
+  // user asked to uninstall stays installed.
+  | "still installed in base layer"
+  | "still installed in local layer"
+  // LAYER-04 / D-MF-03: enable's and disable's refusal markers, owned by
+  // `orchestrators/plugin/enable-disable.ts`. A command without `--local`
+  // would write a flag that the local layer's opposite `enabled` overrides at
+  // the next load, so nothing is written. They ride a `failed` row: the
+  // command was not carried out.
+  | "disabled in local layer"
+  | "enabled in local layer";
