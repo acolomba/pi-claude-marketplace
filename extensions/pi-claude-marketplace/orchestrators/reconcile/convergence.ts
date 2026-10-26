@@ -25,7 +25,7 @@ import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
-import { shaVersion } from "../../domain/version.ts";
+import { declaredVersionWithPin, shaVersion } from "../../domain/version.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
@@ -293,13 +293,14 @@ async function pathOffer(
   entry: PluginEntry,
   candidate: ListCandidate,
   record: PluginRecord,
+  marketplaceName: string,
 ): Promise<Offer | undefined> {
   if (candidate.kind === "cold" || candidate.resolved.state === "unavailable") {
     return undefined;
   }
 
   const resolved = candidate.resolved;
-  const toVersion = await resolvePluginVersion(entry, resolved);
+  const toVersion = await resolvePluginVersion(entry, resolved, marketplaceName);
   const pluginRoot = resolved.pluginRoot;
   return {
     toVersion,
@@ -321,17 +322,22 @@ function coldGitOffer(
   source: GitBackedSource,
   entry: PluginEntry,
   record: PluginRecord,
+  marketplaceName: string,
 ): Offer | undefined {
+  const declared =
+    entry.version === undefined
+      ? undefined
+      : declaredVersionWithPin(entry.version, source, marketplaceName);
   if (source.sha !== undefined && source.sha !== record.resolvedSha) {
     return {
-      toVersion: entry.version ?? shaVersion(source.sha),
+      toVersion: declared ?? shaVersion(source.sha, source),
       toCommit: source.sha,
       revisionChanged: true,
     };
   }
 
-  if (entry.version !== undefined && entry.version !== record.version) {
-    return { toVersion: entry.version, revisionChanged: true };
+  if (declared !== undefined && declared !== record.version) {
+    return { toVersion: declared, revisionChanged: true };
   }
 
   return undefined;
@@ -347,9 +353,10 @@ async function gitOffer(
   entry: PluginEntry,
   candidate: ListCandidate,
   record: PluginRecord,
+  marketplaceName: string,
 ): Promise<Offer | undefined> {
   if (candidate.kind === "cold" || candidate.resolvedSha === undefined) {
-    return coldGitOffer(source, entry, record);
+    return coldGitOffer(source, entry, record, marketplaceName);
   }
 
   if (candidate.resolved.state === "unavailable") {
@@ -357,7 +364,7 @@ async function gitOffer(
   }
 
   const { resolved, resolvedSha } = candidate;
-  const toVersion = await resolvePluginVersion(entry, resolved, resolvedSha);
+  const toVersion = await resolvePluginVersion(entry, resolved, marketplaceName, resolvedSha);
   return {
     toVersion,
     toCommit: resolvedSha,
@@ -394,8 +401,8 @@ async function recordMove(
   );
   const source = gitSourceOf(entry.source);
   const offer = await (source === undefined
-    ? pathOffer(entry, candidate, record)
-    : gitOffer(source, entry, candidate, record));
+    ? pathOffer(entry, candidate, record, mp.name)
+    : gitOffer(source, entry, candidate, record, mp.name));
   if (offer === undefined) {
     return undefined;
   }

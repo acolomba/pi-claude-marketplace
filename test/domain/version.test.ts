@@ -6,8 +6,12 @@ import { describe, test, type TestContext } from "node:test";
 
 import {
   computeHashVersion,
+  declaredVersionWithPin,
+  isSameVersion,
   shaVersion,
 } from "../../extensions/pi-claude-marketplace/domain/version.ts";
+
+import type { ParsedSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 
 async function createVersionSandbox(t: TestContext): Promise<string> {
   const directory = await mkdtemp(path.join(tmpdir(), "plugin-version-"));
@@ -181,15 +185,127 @@ describe("computeHashVersion", () => {
   });
 });
 
-describe("shaVersion", () => {
-  test("uses the first 12 characters of the resolved commit SHA", () => {
-    // arrange
-    const fullSha = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
+const FULL_SHA = "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2";
+const PIN = "0123456789abcdef0123456789abcdef01234567";
 
+function githubSource(sha?: string): ParsedSource {
+  return {
+    kind: "github",
+    raw: "acme/tools",
+    owner: "acme",
+    repo: "tools",
+    ...(sha !== undefined && { sha }),
+  };
+}
+
+function subdirSource(subdir: string): ParsedSource {
+  return {
+    kind: "git-subdir",
+    raw: "https://h/acme/mono.git",
+    url: "https://h/acme/mono.git",
+    path: subdir,
+  };
+}
+
+describe("shaVersion", () => {
+  test("GV-01: uses the first 12 characters of the resolved commit SHA", () => {
     // act
-    const version = shaVersion(fullSha);
+    const version = shaVersion(FULL_SHA, githubSource());
 
     // assert
-    assert.strictEqual(version, "sha-a1b2c3d4e5f6");
+    assert.strictEqual(version, "a1b2c3d4e5f6");
+  });
+
+  test("GV-01: appends the first 8 hex of the SHA-256 of a git-subdir path", () => {
+    // act
+    const version = shaVersion(FULL_SHA, subdirSource("plugins/subp"));
+
+    // assert
+    assert.strictEqual(version, "a1b2c3d4e5f6-3989e95a");
+  });
+
+  test("GV-01: normalizes the git-subdir path the way Claude Code does", () => {
+    // act
+    const versions = ["./plugins/subp", "plugins/subp//", "plugins\\subp"].map((subdir) =>
+      shaVersion(FULL_SHA, subdirSource(subdir)),
+    );
+
+    // assert
+    assert.deepStrictEqual(versions, [
+      "a1b2c3d4e5f6-3989e95a",
+      "a1b2c3d4e5f6-3989e95a",
+      "a1b2c3d4e5f6-3989e95a",
+    ]);
+  });
+});
+
+describe("declaredVersionWithPin", () => {
+  test("GV-01: a pinned plugin of the plugin directory carries its pin", () => {
+    // act
+    const version = declaredVersionWithPin(
+      "1.0.0",
+      githubSource(PIN),
+      "anthropic-plugin-directory",
+    );
+
+    // assert
+    assert.strictEqual(version, "1.0.0-0123456789ab");
+  });
+
+  test("GV-01: a version that already ends in the pin keeps one copy", () => {
+    // act
+    const version = declaredVersionWithPin(
+      "1.0.0-0123456789ab",
+      githubSource(PIN),
+      "anthropic-plugin-directory",
+    );
+
+    // assert
+    assert.strictEqual(version, "1.0.0-0123456789ab");
+  });
+
+  test("GV-01: the declared version stands for any other marketplace, an unpinned or a path source", () => {
+    // act
+    const versions = [
+      declaredVersionWithPin("1.0.0", githubSource(PIN), "tools"),
+      declaredVersionWithPin("1.0.0", githubSource(), "anthropic-plugin-directory"),
+      declaredVersionWithPin(
+        "1.0.0",
+        { kind: "path", raw: "./p", logical: "./p" },
+        "anthropic-plugin-directory",
+      ),
+    ];
+
+    // assert
+    assert.deepStrictEqual(versions, ["1.0.0", "1.0.0", "1.0.0"]);
+  });
+});
+
+describe("isSameVersion", () => {
+  test("GV-02: equal versions are the same", () => {
+    assert.strictEqual(isSameVersion("1.0.0", "1.0.0"), true);
+  });
+
+  test("GV-02: a legacy sha- version is the commit version it names", () => {
+    // act
+    const verdicts = [
+      isSameVersion("sha-a1b2c3d4e5f6", "a1b2c3d4e5f6"),
+      isSameVersion("sha-a1b2c3d4e5f6", "a1b2c3d4e5f6-3989e95a"),
+    ];
+
+    // assert
+    assert.deepStrictEqual(verdicts, [true, true]);
+  });
+
+  test("GV-02: a legacy sha- version of another commit, or any other version, differs", () => {
+    // act
+    const verdicts = [
+      isSameVersion("sha-a1b2c3d4e5f6", "0123456789ab"),
+      isSameVersion("sha-a1b2c3d4e5f6", "1.0.0"),
+      isSameVersion("1.0.0", "a1b2c3d4e5f6"),
+    ];
+
+    // assert
+    assert.deepStrictEqual(verdicts, [false, false, false]);
   });
 });

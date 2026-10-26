@@ -253,7 +253,7 @@ export function isUnconstrainedRange(range: string): boolean {
  * range.
  *
  * D-03-04: a recorded version with no real semver form -- this project's
- * PI-7 content-hash (`hash-<12hex>`) or git-sha (`sha-<12hex>`) fallback --
+ * PI-7 content-hash (`hash-<12hex>`) or git commit (`<12hex>`, GV-01) fallback --
  * runs through the SAME normalization ladder as any other candidate, with no
  * guard for those forms. The accepted risk is plain: coercion on a hexadecimal
  * string can extract a misleading digit run and produce a version that

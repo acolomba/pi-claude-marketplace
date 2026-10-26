@@ -240,8 +240,7 @@ Then(
     const clones = (await readGitClones(extensionRoot(this, scope))).map((clone) => ({
       clone: clone.clone,
       origin: projectTokens("origin", clone.origin, this.tokens),
-      revision:
-        clone.pin === undefined ? "" : projectTokens("revision", `sha-${clone.pin}`, this.tokens),
+      revision: clone.pin === undefined ? "" : projectTokens("revision", clone.pin, this.tokens),
     }));
     const rows = clones
       .sort(

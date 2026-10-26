@@ -17,7 +17,13 @@ import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
-import { computeHashVersion, shaVersion } from "../../domain/version.ts";
+import { parsePluginSource } from "../../domain/source.ts";
+import {
+  computeHashVersion,
+  declaredVersionWithPin,
+  isSameVersion,
+  shaVersion,
+} from "../../domain/version.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import {
   writeBatchedConfigEntries,
@@ -1265,11 +1271,12 @@ export async function resolveDeclaredPluginVersion(
 /**
  * PI-7 / PUP-3 / SNM-34 / VER-01 version precedence, highest first:
  *   1. The declared version (`resolveDeclaredPluginVersion`: plugin.json,
- *      then the marketplace entry).
- *   2. `sha-<12hex>` of `resolvedSha`, the commit a git source installs
- *      (D-16-08, superseding D-77-01's sha-replaces-the-ladder rule). Claude
- *      Code orders a git plugin's version the same way: manifest, catalog
- *      entry, then the commit.
+ *      then the marketplace entry), with the commit pin a plugin of the
+ *      `anthropic-plugin-directory` marketplace carries (GV-01).
+ *   2. The commit of `resolvedSha`, the commit a git source installs, as
+ *      `shaVersion` spells it (D-16-08, GV-01). Claude Code orders a git
+ *      plugin's version the same way: manifest, catalog entry, then the
+ *      commit.
  *   3. The PI-7 `computeHashVersion` content hash, as a last resort.
  *
  * The plugin.json read is re-done here independently (D-23-02): the NFR-7
@@ -1279,15 +1286,17 @@ export async function resolveDeclaredPluginVersion(
 export async function resolvePluginVersion(
   entry: PluginEntry,
   installable: MaterializablePlugin,
+  marketplaceName: string,
   resolvedSha?: string,
 ): Promise<string> {
+  const source = parsePluginSource(entry.source);
   const declared = await resolveDeclaredPluginVersion(entry, installable.pluginRoot);
   if (declared !== undefined) {
-    return declared;
+    return declaredVersionWithPin(declared, source, marketplaceName);
   }
 
   if (resolvedSha !== undefined) {
-    return shaVersion(resolvedSha);
+    return shaVersion(resolvedSha, source);
   }
 
   return computeHashVersion(installable.pluginRoot);
@@ -1309,7 +1318,7 @@ export function isSameRevision(
   toVersion: string,
   resolvedSha: string | undefined,
 ): boolean {
-  return toVersion === record.version && resolvedSha === record.resolvedSha;
+  return isSameVersion(record.version, toVersion) && resolvedSha === record.resolvedSha;
 }
 
 /**

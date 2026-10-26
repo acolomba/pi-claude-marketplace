@@ -310,7 +310,7 @@ test("resolves a warm git mirror into an available row", async (testContext) => 
   // assert
   // VER-01: a warm tree that declares no version shows its commit.
   assert.deepStrictEqual(row, {
-    message: { status: "available", name: "warm-plugin", version: `sha-${head.slice(0, 12)}` },
+    message: { status: "available", name: "warm-plugin", version: head.slice(0, 12) },
     bucket: "available",
   });
 });

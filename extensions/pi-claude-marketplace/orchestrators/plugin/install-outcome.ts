@@ -444,13 +444,15 @@ type InstallLedgerContextResult =
  *      reuses the caller-supplied pin verbatim so the recorded `version`
  *      survives across a disable/enable cycle.
  *   2. otherwise `resolvePluginVersion`: the declared version (plugin.json,
- *      then the marketplace entry), then `sha-<12hex>` for a git source (url /
- *      git-subdir / github) whose clone probe captured the commit, then the
+ *      then the marketplace entry, with GV-01's directory pin), then the
+ *      commit for a git source (url / git-subdir / github) whose clone probe
+ *      captured it, spelled as `shaVersion` spells it (GV-01), then the
  *      content hash (D-16-08). The full sha is recorded apart (D-77-02).
  */
 async function deriveInstallVersion(args: {
   entry: PluginEntry;
   installable: MaterializablePlugin;
+  marketplaceName: string;
   resolvedSha: string | undefined;
   pinVersionOverride: string | undefined;
 }): Promise<string> {
@@ -463,6 +465,7 @@ async function deriveInstallVersion(args: {
   return resolvePluginVersion(
     args.entry,
     args.installable,
+    args.marketplaceName,
     isGitSource ? args.resolvedSha : undefined,
   );
 }
@@ -949,6 +952,7 @@ async function runInstallLedgerBody(
   const version = await deriveInstallVersion({
     entry,
     installable,
+    marketplaceName: marketplace,
     resolvedSha,
     pinVersionOverride: opts.pinVersionOverride,
   });

@@ -125,7 +125,7 @@ export class ScenarioWorld extends World {
       agentDir: run.sandbox.agentDir,
       gitHost: run.gitHost.address,
       scenarioStartedAt: this.startedAt,
-      revisions: this.revisionTokens("revision", (sha) => `sha-${sha.slice(0, 12)}`),
+      revisions: this.revisionTokens("revision", (sha) => sha.slice(0, 12)),
       commits: this.revisionTokens("commit", (sha) => sha),
     };
   }

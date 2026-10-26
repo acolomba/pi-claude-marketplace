@@ -1301,7 +1301,18 @@ for (const { name, version, expected } of [
   { name: "omits an empty version", version: "", expected: "" },
   { name: "renders a semantic version", version: "1.2.3", expected: "v1.2.3" },
   { name: "shortens an exact hash version", version: "hash-0123456789ab", expected: "v#0123456" },
-  { name: "shortens an exact sha version", version: "sha-abcdef012345", expected: "v#abcdef0" },
+  { name: "shortens a legacy sha version", version: "sha-abcdef012345", expected: "v#abcdef0" },
+  { name: "GV-01: shortens a commit version", version: "abcdef012345", expected: "v#abcdef0" },
+  {
+    name: "GV-01: shortens a git-subdir commit version",
+    version: "abcdef012345-3989e95a",
+    expected: "v#abcdef0",
+  },
+  {
+    name: "GV-01: preserves a commit version with a short path hash",
+    version: "abcdef012345-3989e95",
+    expected: "vabcdef012345-3989e95",
+  },
   {
     name: "preserves an eleven-digit hash-like version",
     version: "hash-0123456789a",

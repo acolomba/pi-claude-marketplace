@@ -1,3 +1,5 @@
+import { parsePluginSource } from "../../domain/source.ts";
+import { declaredVersionWithPin, isSameVersion } from "../../domain/version.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
@@ -68,13 +70,20 @@ function disabledReasonsField(notInManifest: boolean): Pick<PluginDisabledMessag
   return notInManifest ? { reasons: ["not in manifest"] } : {};
 }
 
+/** GV-01: the entry's version as an install would record it, pin included. */
+function catalogVersion(entry: ManifestPluginEntry, marketplaceName: string): string | undefined {
+  return entry.version === undefined
+    ? undefined
+    : declaredVersionWithPin(entry.version, parsePluginSource(entry.source), marketplaceName);
+}
+
 /**
  * PL-5 / VER-01 / VER-02: whether a newer candidate exists, decided by the one
  * version rule rather than the entry alone. The candidate version is the one
- * the offline derivation gives the tree, else the entry's when no candidate
- * resolves (a cold git source, a throw, or a tree with no version). The
- * resolved verdict travels only when the row is upgradable; a cold candidate
- * or a throw carries none (the CR-01 "could not assert" degrade).
+ * the offline derivation gives the tree, else the entry's, with GV-01's pin,
+ * when no candidate resolves (a cold git source, a throw, or a tree with no
+ * version). The resolved verdict travels only when the row is upgradable; a
+ * cold candidate or a throw carries none (the CR-01 "could not assert" degrade).
  */
 async function upgradeCandidate(
   manifestEntry: ManifestPluginEntry,
@@ -86,8 +95,8 @@ async function upgradeCandidate(
     locationsFor(options.pluginScope, options.cwd),
   ).catch((): undefined => undefined);
   const resolved = candidate?.kind === "resolved" ? candidate : undefined;
-  const version = resolved?.version ?? manifestEntry.version;
-  if (version === undefined || version === options.record.version) {
+  const version = resolved?.version ?? catalogVersion(manifestEntry, options.marketplaceName);
+  if (version === undefined || isSameVersion(options.record.version, version)) {
     return { upgradable: false };
   }
 

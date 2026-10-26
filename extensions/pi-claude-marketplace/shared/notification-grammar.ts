@@ -322,30 +322,27 @@ function formatHashVersionForDisplay(v: string): string {
 }
 
 /**
- * Anchored-exact predicate for a persisted git-source `sha-<12hex>` version
- * string. Matches EXACTLY `sha-` + 12 lowercase-hex chars -- the shape
- * produced by `domain/version.ts::shaVersion`. Local to the renderer tier
- * (shared/ must not import domain/), mirroring `looksLikeHashVersion` above.
+ * Anchored-exact match for a persisted git-source commit version: the
+ * `<12hex>` Claude Code records, with the `-<8hex>` path hash of a
+ * `git-subdir` source (GV-01), or the `sha-<12hex>` a record written before
+ * GV-01 holds. The shape `domain/version.ts::shaVersion` produces, kept local
+ * to the renderer tier (shared/ must not import domain/), mirroring
+ * `looksLikeHashVersion` above. Group 1 is the commit.
  */
-const SHA_VERSION_DISPLAY_RE = /^sha-[0-9a-f]{12}$/;
-function looksLikeShaVersion(v: string): boolean {
-  return SHA_VERSION_DISPLAY_RE.test(v);
-}
+const SHA_VERSION_DISPLAY_RE = /^(?:sha-)?([0-9a-f]{12})(?:-[0-9a-f]{8})?$/;
 
 /**
- * D-77-01 / PURL-09: render a persisted git-source `sha-<12hex>` version to the
- * same compact git-style short SHA as the hash-version arm: `sha-2ea95f857031`
- * -> `#2ea95f8` (the `sha-` prefix stripped, the first 7 of the 12 hex chars
- * kept). Returns WITHOUT the `v` prefix -- `renderVersion` prepends it, yielding
- * `v#2ea95f8`. A non-sha string passes through UNCHANGED so hash-versions and
- * SemVer are untouched. Renderer-only: persistence stays `sha-<12hex>`.
+ * PURL-09 / GV-01: render a persisted git-source commit version to the same
+ * compact git-style short SHA as the hash-version arm: `2ea95f857031`,
+ * `2ea95f857031-3989e95a`, and `sha-2ea95f857031` all render `#2ea95f8` (the
+ * first 7 of the commit's 12 hex chars). Returns WITHOUT the `v` prefix --
+ * `renderVersion` prepends it, yielding `v#2ea95f8`. A non-sha string passes
+ * through UNCHANGED so hash-versions and SemVer are untouched. Renderer-only:
+ * persistence keeps the recorded form.
  */
 function formatShaVersionForDisplay(v: string): string {
-  if (!looksLikeShaVersion(v)) {
-    return v;
-  }
-
-  return `#${v.slice("sha-".length, "sha-".length + 7)}`;
+  const commit = SHA_VERSION_DISPLAY_RE.exec(v)?.[1];
+  return commit === undefined ? v : `#${commit.slice(0, 7)}`;
 }
 
 /**
@@ -353,7 +350,7 @@ function formatShaVersionForDisplay(v: string): string {
  * undefined or empty so the join discipline collapses the slot cleanly.
  * Routes the token through `formatHashVersionForDisplay` then
  * `formatShaVersionForDisplay` so a persisted PI-7 `hash-<12hex>` OR a
- * git-source `sha-<12hex>` (D-77-01 / PURL-09) renders as `v#<7hex>`, while a
+ * git-source commit version (PURL-09 / GV-01) renders as `v#<7hex>`, while a
  * SemVer passes through to `v<version>` (SNM-35). Each formatter is a no-op on
  * a string the other owns, so the order is irrelevant. Single canonical
  * implementation.

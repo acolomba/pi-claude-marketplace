@@ -2463,11 +2463,12 @@ describe("resolvePluginVersion", () => {
       const version = await resolvePluginVersion(
         entry,
         installable,
+        "mp",
         "0123456789abcdef0123456789abcdef01234567",
       );
 
       // assert
-      assert.equal(version, "sha-0123456789ab");
+      assert.equal(version, "0123456789ab");
     });
   });
 
@@ -2483,6 +2484,7 @@ describe("resolvePluginVersion", () => {
       const version = await resolvePluginVersion(
         entry,
         installable,
+        "mp",
         "0123456789abcdef0123456789abcdef01234567",
       );
 
@@ -2504,7 +2506,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.equal(version, "2.0.0");
@@ -2524,7 +2526,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.equal(version, "1.0.0");
@@ -2544,7 +2546,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.equal(version, "1.0.0");
@@ -2566,7 +2568,7 @@ describe("resolvePluginVersion", () => {
         const installable = makeMaterializablePlugin(pluginRoot);
 
         // act
-        const version = await resolvePluginVersion(entry, installable);
+        const version = await resolvePluginVersion(entry, installable, "mp");
 
         // assert
         assert.equal(version, "1.0.0");
@@ -2584,7 +2586,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.equal(version, "1.0.0");
@@ -2603,7 +2605,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.strictEqual(version, "1.0.0");
@@ -2621,7 +2623,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.strictEqual(version, "9.9.9");
@@ -2637,7 +2639,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.equal(version, "hash-e3b0c44298fc");
@@ -2654,7 +2656,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.equal(version, "2.0.0");
@@ -2675,7 +2677,7 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.equal(version, "2.0.0");
@@ -2695,10 +2697,60 @@ describe("resolvePluginVersion", () => {
       const installable = makeMaterializablePlugin(pluginRoot);
 
       // act
-      const version = await resolvePluginVersion(entry, installable);
+      const version = await resolvePluginVersion(entry, installable, "mp");
 
       // assert
       assert.equal(version, "1.0.0");
+    });
+  });
+
+  test("GV-01: a git-subdir commit names the version with its path hash", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(pluginRoot, { recursive: true });
+      const entry = {
+        name: "alpha",
+        source: { source: "git-subdir", url: "https://h/acme/mono.git", path: "plugins/subp" },
+      } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
+
+      // act
+      const version = await resolvePluginVersion(
+        entry,
+        installable,
+        "mp",
+        "0123456789abcdef0123456789abcdef01234567",
+      );
+
+      // assert
+      assert.equal(version, "0123456789ab-3989e95a");
+    });
+  });
+
+  test("GV-01: a pinned plugin of the plugin directory records its pin", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(pluginRoot, { recursive: true });
+      const sha = "0123456789abcdef0123456789abcdef01234567";
+      const entry = {
+        name: "alpha",
+        source: { source: "github", repo: "acme/alpha", sha },
+        version: "1.0.0",
+      } satisfies PluginEntry;
+      const installable = makeMaterializablePlugin(pluginRoot);
+
+      // act
+      const version = await resolvePluginVersion(
+        entry,
+        installable,
+        "anthropic-plugin-directory",
+        sha,
+      );
+
+      // assert
+      assert.equal(version, "1.0.0-0123456789ab");
     });
   });
 });
@@ -2706,6 +2758,7 @@ describe("resolvePluginVersion", () => {
 describe("isSameRevision", () => {
   const cases: readonly {
     readonly title: string;
+    readonly recordVersion?: string;
     readonly recordSha?: string;
     readonly toVersion: string;
     readonly resolvedSha?: string;
@@ -2729,6 +2782,14 @@ describe("isSameRevision", () => {
       expected: false,
     },
     {
+      title: "GV-02: a legacy sha- version at the same commit is the same revision",
+      recordVersion: "sha-aaaaaaaaaaaa",
+      recordSha: "a".repeat(40),
+      toVersion: "aaaaaaaaaaaa",
+      resolvedSha: "a".repeat(40),
+      expected: true,
+    },
+    {
       title: "D-16-09: a sha on one side only is a new revision",
       toVersion: "1.2.3",
       resolvedSha: "b".repeat(40),
@@ -2736,11 +2797,12 @@ describe("isSameRevision", () => {
     },
   ];
 
-  for (const { title, recordSha, toVersion, resolvedSha, expected } of cases) {
+  for (const { title, recordVersion, recordSha, toVersion, resolvedSha, expected } of cases) {
     test(title, () => {
       // arrange
       const record = {
         ...makePluginRecord({}),
+        ...(recordVersion !== undefined && { version: recordVersion }),
         ...(recordSha !== undefined && { resolvedSha: recordSha }),
       };
 

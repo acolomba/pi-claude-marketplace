@@ -117,7 +117,7 @@ function optionalString(obj: Record<string, unknown>, key: string): string | und
 }
 
 /**
- * Clone-key / sha-version invariant (domain/clone-key.ts, domain/version.ts):
+ * Clone-key / commit-version invariant (domain/clone-key.ts, domain/version.ts):
  * a git source's `sha` must be the FULL 40-hex commit sha -- `pluginCloneKey`
  * and `shaVersion` slice its first 12 chars unchecked.
  */
@@ -129,8 +129,8 @@ const FULL_SHA_RE = /^[0-9a-f]{40}$/i;
  * sources from smuggling the fields through the spread). `ref` is freeform (any
  * branch/tag name); `sha` must satisfy FULL_SHA_RE or it is DROPPED so the
  * source degrades to unpinned rather than mis-keying the clone cache or
- * emitting a `sha-<12hex>` version that fails SHA_VERSION_RE. A valid sha is
- * lowercased for the same reason (SHA_VERSION_RE is lowercase-only).
+ * emitting a commit version (GV-01) that is not 12 hex characters. A valid sha
+ * is lowercased for the same reason: the renderer reads lowercase hex only.
  */
 function withOptionalSourceFields<T extends GitHubSource | UrlSource | GitSubdirSource>(
   source: T,

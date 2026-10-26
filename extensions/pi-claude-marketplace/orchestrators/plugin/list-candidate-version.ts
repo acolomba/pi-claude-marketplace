@@ -6,7 +6,7 @@
 
 import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
-import { shaVersion } from "../../domain/version.ts";
+import { declaredVersionWithPin, shaVersion } from "../../domain/version.ts";
 
 import { makePresenceProbe } from "./git-source-probe.ts";
 import { resolveDeclaredPluginVersion } from "./shared.ts";
@@ -75,10 +75,12 @@ export async function resolveListCandidate(
     return { kind: "resolved", resolved };
   }
 
-  // VER-01: the version an install of the warm tree records -- the declared
-  // version (plugin.json, then the entry), else its commit.
+  // VER-01 / GV-01: the version an install of the warm tree records -- the
+  // declared version (plugin.json, then the entry), else its commit.
+  const declared = await resolveDeclaredPluginVersion(manifestEntry, presence.pluginRoot);
   const version =
-    (await resolveDeclaredPluginVersion(manifestEntry, presence.pluginRoot)) ??
-    shaVersion(presence.resolvedSha);
+    declared === undefined
+      ? shaVersion(presence.resolvedSha, parsedSource)
+      : declaredVersionWithPin(declared, parsedSource, marketplaceContext.marketplaceName);
   return { kind: "resolved", resolved, version, resolvedSha: presence.resolvedSha };
 }

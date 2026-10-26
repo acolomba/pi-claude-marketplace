@@ -379,6 +379,7 @@ function makeUpdateCloneProbe(
 async function deriveUpdateToVersion(
   entry: PluginEntry,
   installable: MaterializablePlugin,
+  marketplaceName: string,
   resolvedSha: string | undefined,
   pinnedVersion: string | undefined,
 ): Promise<string> {
@@ -389,6 +390,7 @@ async function deriveUpdateToVersion(
   return resolvePluginVersion(
     entry,
     installable,
+    marketplaceName,
     isGitSourceEntry(entry) ? resolvedSha : undefined,
   );
 }
@@ -1051,6 +1053,7 @@ export async function preparePluginUpdate(
   const toVersion = await deriveUpdateToVersion(
     triaged.entry,
     candidate,
+    options.marketplace,
     resolvedSha,
     pin?.version,
   );

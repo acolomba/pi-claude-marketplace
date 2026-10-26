@@ -10,10 +10,12 @@
  * (D-03).
  * `{scenario time}` stands for any timestamp inside the scenario's window,
  * from the world's construction to the check (D-05). A revision token such as
- * `{ghp revision 1}` stands for the `sha-<12 hex>` version of a revision a
- * scenario published to a git plugin repository, and a commit token such as
+ * `{ghp revision 1}` stands for the first 12 hex digits of the commit of a
+ * revision a scenario published to a git plugin repository, the version Claude
+ * Code records for a git plugin that declares none, and a commit token such as
  * `{ghp commit 1}` for that revision's full 40-hex commit; commit dates change
- * every run, so the sha does too.
+ * every run, so the sha does too. A commit starts with its revision's digits,
+ * so a result is projected through the commit tokens first.
  */
 
 /** The values the tokens stand for in one scenario. */
@@ -73,8 +75,8 @@ export function expandTokens(text: string, tokens: RunTokens): string {
  * `lastUpdatedAt` inside the scenario's window becomes `{scenario time}`;
  * otherwise every occurrence of a sandbox directory becomes its token, every
  * occurrence of the git host's address becomes `{git host}`, every
- * occurrence of a revision's version becomes its revision token, and every
- * occurrence of a revision's commit becomes its commit token.
+ * occurrence of a revision's commit becomes its commit token, and every
+ * remaining occurrence of a revision's 12 digits becomes its revision token.
  */
 export function projectTokens(key: string, value: string, tokens: RunTokens): string {
   if (key === "lastUpdatedAt" && isScenarioTime(value, tokens.scenarioStartedAt)) {
@@ -86,7 +88,7 @@ export function projectTokens(key: string, value: string, tokens: RunTokens): st
     .replaceAll(tokens.projectDir, PROJECT_DIR_TOKEN)
     .replaceAll(tokens.agentDir, AGENT_DIR_TOKEN)
     .replaceAll(tokens.gitHost, GIT_HOST_TOKEN);
-  for (const [token, standsFor] of [...tokens.revisions, ...tokens.commits]) {
+  for (const [token, standsFor] of [...tokens.commits, ...tokens.revisions]) {
     projected = projected.replaceAll(standsFor, token);
   }
 

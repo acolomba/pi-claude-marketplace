@@ -687,7 +687,7 @@ Our behavior is per verb:
 | `reinstall`                      | On cache miss only                 | Installs the version the marketplace offers now. Reads a present mirror's HEAD offline and does no refresh                             |
 | `uninstall`, `enable`, `disable` | Never, and a gate enforces it      | Disable zeroes resources but keeps the record. Enable replays the ledger with `pinVersionOverride`, so a cycle cannot bump the version |
 
-Our version strings are `hash-<12hex>`, a SHA-256 over a deterministic walk with symlinks skipped and BOM and CRLF normalized, or `sha-<12hex>` for a git source. The ladder runs from `pinVersionOverride`, to the git `resolvedSha`, to `plugin.json.version`, to the manifest entry version, to the content hash.
+Our version strings are `hash-<12hex>`, a SHA-256 over a deterministic walk with symlinks skipped and BOM and CRLF normalized, or the commit's first 12 hex characters for a git source, as Claude Code records it (GV-01). The ladder runs from `pinVersionOverride`, to the git `resolvedSha`, to `plugin.json.version`, to the manifest entry version, to the content hash.
 
 Our autoupdate is opt-in and off by default, and it lives in `claude-plugins.json` rather than in state. There is no timer, no interval, and no session-start update run. The flag is consumed only by `marketplace update`. When autoupdate is off, change detection is a conservative manifest content compare with `JSON.stringify` before and after.
 

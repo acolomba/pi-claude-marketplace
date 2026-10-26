@@ -361,7 +361,7 @@ Feature: Plugin git source
       | plugin | https://{git host}/acme/urlp.git | {urlp revision 1} |
     Then the git-source plugin "urlp" installed in the project scope runs revision 1 of its repository
 
-  Scenario: A git-source plugin that declares no version is shown by its commit
+  Scenario: A git-source plugin that declares no version records the first 12 hex digits of its commit
     Given the git repository "ghp" holds these plugins:
       | name | version | path |
       | ghp  | 1.0.0   |      |
@@ -395,3 +395,55 @@ Feature: Plugin git source
       | plugin status                  | installed        |
       | plugin version                 | {ghp revision 2} |
       | severity                       | info             |
+
+  Scenario: A git-subdir plugin that declares no version records its commit and a hash of its path
+    Given the git repository "mono" holds these plugins:
+      | name | version | path         |
+      | subp | 1.0.0   | plugins/subp |
+    Given the git-source plugin "subp" of the git repository "mono" declares no version
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | subp | git-subdir  | mono       | false  |
+    Given the marketplace "gits" is added to the project scope
+    When the user runs "/claude:plugin install subp@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status    | reasons | scope   | version                    |
+      | gits             | project           | subp@gits | subp | installed |         | project | {mono revision 2}-3989e95a |
+
+  Scenario: A pinned plugin of the anthropic-plugin-directory marketplace records its version with its pin
+    Given the git repository "dirp" holds these plugins:
+      | name | version | path |
+      | dirp | 1.0.0   |      |
+    Given the marketplace "anthropic-plugin-directory" is published as a dir source
+    Given the marketplace "anthropic-plugin-directory" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | dirp | github      | dirp       | true   |
+    Given the marketplace "anthropic-plugin-directory" is added to the project scope
+    When the user runs "/claude:plugin install dirp@anthropic-plugin-directory --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name           | marketplace scope | id                              | name | status    | reasons | scope   | version                 |
+      | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp | installed |         | project | 1.0.0-{dirp revision 1} |
+
+  Scenario: A pinned plugin of the anthropic-plugin-directory marketplace lists as installed, not upgradable
+    Given the git repository "dirp" holds these plugins:
+      | name | version | path |
+      | dirp | 1.0.0   |      |
+    Given the marketplace "anthropic-plugin-directory" is published as a dir source
+    Given the marketplace "anthropic-plugin-directory" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | dirp | github      | dirp       | true   |
+    Given the marketplace "anthropic-plugin-directory" is added to the project scope
+    Given the user has run "/claude:plugin install dirp@anthropic-plugin-directory --scope project"
+    When the user runs "/claude:plugin list --scope project"
+    Then the result lists these plugins:
+      | marketplace name           | marketplace scope | id                              | name | status    | reasons | scope   | version                 |
+      | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp | installed |         | project | 1.0.0-{dirp revision 1} |

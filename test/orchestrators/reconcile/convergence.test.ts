@@ -453,9 +453,9 @@ const COLD_MOVES: readonly {
     move: { toVersion: "2.0.0", toCommit: PINNED_COMMIT },
   },
   {
-    title: "a changed commit pin with no declared version moves to the pin's sha version",
+    title: "a changed commit pin with no declared version moves to the pin's 12-hex commit",
     entry: { source: { source: "url", url: DEMO_URL, sha: PINNED_COMMIT } },
-    move: { toVersion: "sha-bbbbbbbbbbbb", toCommit: PINNED_COMMIT },
+    move: { toVersion: "bbbbbbbbbbbb", toCommit: PINNED_COMMIT },
   },
   {
     title: "an unpinned entry that declares another version moves to it",

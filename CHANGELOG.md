@@ -18,6 +18,7 @@
   - `apply` no longer disables a plugin whose new version needs a plugin that the same `apply` installs from a config. `pending` lists the move instead.
   - An install refuses a disabled dependency from another marketplace with `{cross-marketplace}` unless the plugin's marketplace allows that marketplace, as Claude Code does.
   - A state lock that another process takes or removes during a long command no longer crashes Pi. The command fails and saves no installation record after the loss.
+  - Git plugins now record the version Claude Code records: the commit's first 12 characters without `sha-`, plus a path hash for `git-subdir` and the pin for pinned `anthropic-plugin-directory` plugins.
 
 - Internal: a new worktree session now runs `scripts/init.sh` once when it starts, also in the Claude desktop app. (#273)
 

@@ -521,7 +521,7 @@ test("VER-01: an undeclared git plugin whose warm mirror moved to a new commit l
   );
   await advanceWarmMirror(mirrorDirectory);
   const entry: ManifestPluginEntry = { name: "warm-plugin", source: WARM_URL };
-  const recordedVersion = `sha-${head.slice(0, 12)}`;
+  const recordedVersion = head.slice(0, 12);
 
   // act
   const row = await composeInstalledListRow({
@@ -542,7 +542,7 @@ test("VER-01: an undeclared git plugin whose warm mirror moved to a new commit l
   });
 });
 
-test("VER-01: an undeclared git plugin whose warm mirror is at the recorded commit lists as installed", async (testContext) => {
+test("GV-02: an undeclared git plugin recorded as sha- at its warm mirror's commit lists as installed", async (testContext) => {
   // arrange
   const composeInstalledListRow = await loadComposeInstalledListRow();
   const environment = await installedEnvironment(testContext);
@@ -568,6 +568,66 @@ test("VER-01: an undeclared git plugin whose warm mirror is at the recorded comm
     name: "warm-plugin",
     dependencies: [],
     version: recordedVersion,
+    severity: "info",
+    needsReload: false,
+  });
+});
+
+test("a git plugin with no mirror and no entry version lists as installed", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const entry: ManifestPluginEntry = { name: "cold-plugin", source: WARM_URL };
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    pluginName: "cold-plugin",
+    pluginScope: "project",
+    marketplaceScope: "project",
+    record: pluginRecord({ version: "0123456789ab" }),
+    lookup: { kind: "declared", entry },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "installed",
+    name: "cold-plugin",
+    dependencies: [],
+    version: "0123456789ab",
+    severity: "info",
+    needsReload: false,
+  });
+});
+
+test("GV-01: a pinned plugin directory entry with no mirror matches its record's pinned version", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const pin = "0123456789abcdef0123456789abcdef01234567";
+  const entry: ManifestPluginEntry = {
+    name: "cold-plugin",
+    source: { source: "url", url: WARM_URL, sha: pin },
+    version: "1.0.0",
+  };
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    marketplaceName: "anthropic-plugin-directory",
+    pluginName: "cold-plugin",
+    pluginScope: "project",
+    marketplaceScope: "project",
+    record: pluginRecord({ version: "1.0.0-0123456789ab" }),
+    lookup: { kind: "declared", entry },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "installed",
+    name: "cold-plugin",
+    dependencies: [],
+    version: "1.0.0-0123456789ab",
     severity: "info",
     needsReload: false,
   });

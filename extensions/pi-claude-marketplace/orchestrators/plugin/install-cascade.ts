@@ -56,8 +56,8 @@
 //
 // D-03-04 is accepted here rather than guarded. An already-installed member's
 // RECORDED version goes through `recordedVersionSatisfies`' normalization
-// ladder with no special case for this project's `hash-<12hex>` and
-// `sha-<12hex>` forms, which have no upstream equivalent. The consequence is
+// ladder with no special case for this project's `hash-<12hex>` form, which
+// has no upstream equivalent, or the git commit form (GV-01). The consequence is
 // plain: coercion can extract a misleading digit run from one of those strings
 // and produce a version that unpredictably satisfies or fails a range, and a
 // form that normalizes to nothing satisfies no range at all. The risk is taken
@@ -269,7 +269,7 @@ export interface ResolvedCascadeMember extends ClosureMember {
      * The semver the selected tag carries, recorded as the member's version.
      *
      * RESV-05 reads a recorded version back against the constraint on the next
-     * install. A git-materialized install otherwise records `sha-<12hex>`, which
+     * install. A git-materialized install otherwise records its commit, which
      * `recordedVersionSatisfies`' normalization ladder either rejects outright or
      * coerces into an arbitrary digit run (D-03-04) -- so the run that pinned the
      * tag would fail its own constraint the second time it ran. The tag's own

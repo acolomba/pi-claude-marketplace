@@ -39,7 +39,7 @@
 //     marketplace records are walked.
 //   - PL-5 upgradable: STRING comparison of the record's version against
 //     the candidate version the one version rule derives offline
-//     (plugin.json, then the entry, then the tree's `sha-` version for an
+//     (plugin.json, then the entry, then the tree's commit version for an
 //     undeclared git plugin), falling back to the entry version when no
 //     candidate resolves (VER-01, VER-02). NOT semver.
 //   - PL-6 manifest soft-fail: per-marketplace manifest load failure

@@ -412,7 +412,7 @@ function buildInstallLedgerOptions(
      * The version to record for THIS member: the semver its selected tag
      * carries (RESV-03 / RESV-05), or the caller's `pinVersionOverride` when
      * the member IS the plugin the caller named. It overrides the git-source
-     * `sha-<12hex>` branch, which is the form RESV-05 cannot read back.
+     * commit branch (GV-01), which is the form RESV-05 cannot read back.
      */
     pinVersion?: string;
     /** D-04-01: whether THIS member is the plugin the caller named. */
@@ -2309,7 +2309,7 @@ async function installPluginWithTransaction(
           // entry names.
           //
           // RESV-05: recording the tag's semver rather than the git-source
-          // `sha-<12hex>` is what makes the pin readable back. The next install
+          // commit is what makes the pin readable back. The next install
           // that constrains this dependency checks the RECORDED version against
           // the range, and a sha form either satisfies nothing or coerces to an
           // arbitrary digit run (D-03-04) -- so without the semver a repeat of

@@ -35,6 +35,8 @@
 //     writes the TC-8 `_loadError` poison row (returning [] to callers).
 
 import { loadMarketplaceManifest } from "../domain/manifest.ts";
+import { parsePluginSource } from "../domain/source.ts";
+import { declaredVersionWithPin } from "../domain/version.ts";
 import { locationsFor } from "../persistence/locations.ts";
 import { loadState } from "../persistence/state-io.ts";
 import { ManifestSoftFailError } from "../shared/completion-cache.ts";
@@ -122,7 +124,12 @@ async function classifyInstalledPluginRow(
   locations: ScopedLocations,
 ): Promise<PluginIndexRow> {
   const upgradable =
-    manifestEntry?.version !== undefined && manifestEntry.version !== installed.version;
+    manifestEntry?.version !== undefined &&
+    declaredVersionWithPin(
+      manifestEntry.version,
+      parsePluginSource(manifestEntry.source),
+      marketplaceContext.marketplaceName,
+    ) !== installed.version;
 
   // PURL-08 / D-78-04 / CR-01: the shared probe injects the fs-only presence
   // probe so a git-source upgrade candidate resolves against the WARM clone

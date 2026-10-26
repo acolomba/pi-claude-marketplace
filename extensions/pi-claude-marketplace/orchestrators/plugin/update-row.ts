@@ -205,8 +205,9 @@ export function updatedRowFromOutcome(
  *  - a path source records no commit, so its row never names one;
  *  - a switch between a git and a path source, or a record written before
  *    commits were recorded, has a commit on one side only and names none;
- *  - equal `sha-` versions come from one commit prefix, and different ones
- *    already differ in the version, so a `sha-` row never names a second sha.
+ *  - equal commit versions come from one commit prefix, and different ones
+ *    already differ in the version, so a commit-version row never names a
+ *    second sha.
  */
 export function revisionCommits(move: RevisionMove): VersionCommits | undefined {
   const { fromVersion, toVersion, fromCommit, toCommit } = move;

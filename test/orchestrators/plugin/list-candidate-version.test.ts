@@ -214,7 +214,7 @@ test("VER-01: a warm git tree whose plugin.json declares no version takes the en
   });
 });
 
-test("VER-01: a warm git tree that declares no version anywhere takes its commit's sha version", async (testContext) => {
+test("VER-01: a warm git tree that declares no version anywhere takes its 12-hex commit", async (testContext) => {
   // arrange
   const environment = await candidateEnvironment(testContext);
   const canonicalUrl = "https://example.com/warm-plugin";
@@ -234,7 +234,7 @@ test("VER-01: a warm git tree that declares no version anywhere takes its commit
   assert.deepStrictEqual(candidate, {
     kind: "resolved",
     resolved: installableVerdict("warm-plugin", mirrorDirectory),
-    version: `sha-${head.slice(0, 12)}`,
+    version: head.slice(0, 12),
     resolvedSha: head,
   });
 });

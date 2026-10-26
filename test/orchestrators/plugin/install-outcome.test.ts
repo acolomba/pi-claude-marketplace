@@ -2137,7 +2137,7 @@ test("PURL-09 / VER-01 / D-77-02: a git-source install takes its root from the c
   assert.equal(record?.resolvedSha, RESOLVED_SHA);
 });
 
-test("VER-01: a git-source install that declares no version records sha-<12hex>", async (t) => {
+test("GV-01: a git-source install that declares no version records its 12-hex commit", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-git-unversioned-");
   const seeded = await seedPlugin(environment.cwd, {
@@ -2166,7 +2166,7 @@ test("VER-01: a git-source install that declares no version records sha-<12hex>"
 
   // assert
   assert.ok(ledgerOutcome.kind === "installed");
-  assert.equal(ledgerOutcome.summary.version, "sha-0123456789ab");
+  assert.equal(ledgerOutcome.summary.version, "0123456789ab");
   assert.equal(seeded.state.marketplaces.marketplace?.plugins.empty?.resolvedSha, RESOLVED_SHA);
 });
 
