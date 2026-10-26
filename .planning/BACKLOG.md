@@ -22,6 +22,8 @@ Candidate directions for later brainstorming:
 
 Workaround today: run `/claude:plugin pending` before reloading, or `list` after.
 
+Lifecycle-coverage (2026-10-25): since APL-03 a load prints the pending block when the configuration and the records differ, so that block is now also lost on `/reload`. The lifecycle-coverage milestone audit lists a manual check of it in a live Pi as owed.
+
 ## ~~REASON-01: unify malformed-input failures under a "malformed X" reason family~~ -- CLOSED
 
 Closed 2026-09-11 by the `refine-unit-tests` milestone. Disposition:
@@ -3542,32 +3544,19 @@ preview is read as "what the config says", but it is not what the row claims.
 
 ## STALE-DECLARER-01: one unreadable declarer aborts the whole scope's dependency check
 
-Surfaced by the Phase 6 code review (`06-REVIEW.md` WR-03, 2026-09-19) and
-re-declined on the same reasoning across both fix iterations. In
-`orchestrators/plugin/dependency-index.ts::readRecordDeclarations`, a record
-whose plugin `lookupDeclaredPlugin` can no longer resolve in its marketplace
-manifest -- for example, a plugin dropped from `marketplace.json` after it was
-installed -- is treated as `kind: "absent"`, an unreadable declarer.
-`buildScopeDeclarationDetail` returns on the FIRST record that hits this, so
-one stale record turns off the LOAD-01 load-time check for every other plugin
-in the scope and renders `⊘ <plugin> (failed) {unreadable}` at error severity
-on every reload, for a condition that has nothing to do with that plugin.
+Surfaced by the Phase 6 code review (`06-REVIEW.md` WR-03, 2026-09-19). Rewritten 2026-10-26 after lifecycle-coverage phases 17 and 28 changed the row and narrowed the cause.
 
-Left unfixed because the remedy is not scoped to LOAD-01:
-`readRecordDeclarations` is the same function `buildScopeDeclarationIndex`
-calls for `uninstall`'s dependents guard (Phase 5, D-05-07's fail-closed
-posture). Loosening the abort-on-first-unreadable behavior here would silently
-change what counts as a "declarer" for that guard too, letting an uninstall
-proceed past a dependent it should have blocked. Two existing tests pin the
-current behavior as intentional for that reason.
+The dependency walk still stops at the first record whose declarations it cannot read. `buildScopeDeclarationDetail` and `buildScopeDeclarationIndex` in `orchestrators/plugin/dependency-index.ts` both return on the first failed `readRecordDeclarations`. So one broken record turns off the load-time dependency check (LOAD-01) for every other plugin in the scope, and it makes `update`, `reinstall`, and the other walk callers refuse with `{unreadable}` (D-17).
 
-Scope when picked up: decide whether the fail-closed unit should stay the
-whole scope, or narrow to per-record (skip the one unreadable declarer and
-keep checking the rest, only surfacing `{unreadable}` for that plugin's own
-row). Any change must be evaluated against both call sites --
-`buildScopeDeclarationDetail` (LOAD-01) and `buildScopeDeclarationIndex`
-(uninstall's dependents guard) -- and the two tests that currently encode
-D-05-07 as intentional will need to move with it, not just be deleted.
+What changed since the first text:
+
+- Delisted plugins no longer trip the walk. DLS-01 (phase 28, DLS-D1) reads a plugin that its marketplace no longer lists from its installed copy. Only a record whose installed copy is also gone fails closed (`features/plugin/reconcile.feature:157`).
+- The row is no longer `⊘ <plugin> (failed) {unreadable}` at error. Since REC-05 (phase 17, D-10, D-11) every new session prints a `(failed)` row at warning severity with the narrowed token and a cause, for example `{unparseable}` and "cannot read the dependencies of demo@fixtures: its marketplace manifest is invalid" (`features/plugin/reconcile.feature:126-155`). The plugin keeps working.
+- What still fails closed for the whole scope: a marketplace manifest that does not load (missing, unreadable, invalid JSON), and a delisted record with no installed copy. `28-CONTEXT.md` keeps both out of scope on purpose.
+
+Decision: keep the whole-scope fail-closed unit, or narrow it to one record (skip the unreadable declarer, keep checking the rest, and report `{unreadable}` only on that plugin's row).
+
+Recommendation (lifecycle-coverage triage, 2026-10-26): keep fail-closed. The same reader feeds `uninstall`'s dependents guard (D-05-07) and the other callers in `orchestrators/plugin/{uninstall,prune,enable-disable,constraint-fold,update-constraint-gate}.ts`, `orchestrators/marketplace/remove.ts`, and `orchestrators/reconcile/{dependency-verdict,convergence,read-pass}.ts`. A per-record walk would let an uninstall go past a dependent it cannot see. The project rule is to refuse on corrupt data, not to skip it. If the user picks the per-record walk instead, judge it against every caller above, and move the tests that pin D-05-07 with it.
 
 ## MISS-MPADD-01: marketplace add and post-install activation do not resolve missing dependencies
 
@@ -4056,9 +4045,9 @@ two ways: bound the manifest `version` string at parse time (a
 `VERSION_PATTERN`-style allowlist), or accept it under T-29-21, since the
 same strings already render in the `will update` / `updated` version slots.
 
-## APPLYTHROW-01: an apply pass that throws drops the rows it already collected
+## ~~APPLYTHROW-01: an apply pass that throws drops the rows it already collected~~ -- CLOSED
 
-**Resolved 2026-10-25** (quick task 261025-j40): `applyReconcileWithReader` now reports the collected scope passes, the post-commit warnings, and the MCP config notices before it rethrows. Scenarios: "Apply that an invalid GitHub base address stops reports the install it made before stopping" (`features/plugin/apply.feature`) and "An autoapply session that an invalid GitHub base address stops reports the install it made before stopping" (`features/plugin/autoapply.feature`); the MCP move is covered by a unit test.
+**CLOSED 2026-10-25** by `20ee9b25` (quick task 261025-j40), confirmed against the code on 2026-10-26 (`orchestrators/reconcile/apply.ts:1776-1780`). Disposition: fixed. `applyReconcileWithReader` now reports the collected scope passes, the post-commit warnings, and the MCP config notices before it rethrows. Scenarios: "Apply that an invalid GitHub base address stops reports the install it made before stopping" (`features/plugin/apply.feature`) and "An autoapply session that an invalid GitHub base address stops reports the install it made before stopping" (`features/plugin/autoapply.feature`); the MCP move is covered by a unit test.
 
 Found by the phase 30 code review (round 2, WR-01), accepted open. When the
 apply step throws mid-pass (GHB-03: an invalid
@@ -4070,3 +4059,163 @@ read-only rerun finds nothing left to move. `/claude:plugin apply` behaves the
 same today. Fix: report the collected scope passes (`notifyScopePasses`)
 before rethrowing, and test an install plus an MCP move that commit before the
 throw.
+
+## DBLEMIT-01: every load row prints twice in a new session
+
+Found in lifecycle-coverage phase 17 (notes line 151), still open at 0d04bfa6. Pi's RPC `new_session` binds the extension twice, so `resources_discover` runs twice and every row a load reports appears two times. The cucumber scenarios pin the doubled rows, for example the two identical `reconcile-applied-cascade` results in `features/plugin/reconcile.feature:132-140`. Since APL-03 a load prints the whole pending block whenever the configuration and the records differ, and the stale-declarer warning (STALE-DECLARER-01) prints in every session, so the user sees the duplicates often.
+
+Decision: report it to Pi, add a dedupe in the extension, or accept it. Claude Code is not involved: the cause is in the Pi host.
+
+Recommendation (triage, 2026-10-26): report the double load to Pi with a minimal reproduction (one extension that counts its `resources_discover` calls in a new RPC session). Do not add an extension-side dedupe first. A dedupe hides a host bug and needs state that lives across two bindings. When Pi fixes it, change the doubled rows in the scenarios.
+
+## IMPNAME-01: `import` fails `{duplicate name}` for a marketplace recorded under another name
+
+Found in lifecycle-coverage phase 19 (notes line 169, deferred there). `planMarketplaceSourcesForRefs` in `orchestrators/import/marketplaces.ts:98-129` plans each marketplace by its settings name only. If the scope already records the same source under a different name, the add fails with `{duplicate name}`. No scenario covers it.
+
+Decision: adopt the recorded name for the settings key, keep an alias from the settings name to the recorded name, or refuse with a clear remedy. Claude Code keys `extraKnownMarketplaces` by name, but its behavior for this case is not verified.
+
+Scope when picked up: research upstream first with `.agents/skills/claude-code-compat-research` (what Claude Code does when a settings marketplace names a source it already knows under another name). Then decide, and add a scenario under `features/plugin/import.feature`.
+
+## IMPEXTRA-01: `import` adds an `extraKnownMarketplaces` entry only when an enabled plugin uses it
+
+Found in lifecycle-coverage phase 13 (notes line 296). `planMarketplaceSourcesForRefs` (`orchestrators/import/marketplaces.ts:98-129`) walks the enabled plugin references only. An `extraKnownMarketplaces` entry that no enabled plugin references is never added.
+
+Decision: add every listed marketplace, or only the referenced ones. Claude Code is believed to register every listed extra marketplace (it offers them when the user trusts the folder), but this is not verified.
+
+Scope when picked up: research upstream first with `.agents/skills/claude-code-compat-research`. If upstream adds every entry, match it (the parity rule in AGENTS.md) and add an import scenario for an unreferenced entry. If it does not, record the finding here and close.
+
+## CLOSUREROW-01: a failed install closure gives no row to the members that resolved
+
+Found in lifecycle-coverage phase 3 review (IN-02, notes line 287). `03-REVIEW-FIX.md:25` left it to the orchestrator, and no decision recorded it. When one member of a dependency closure fails, the result lists the root and the failing member, but no row for the members that resolved. In `features/plugin/install-dependencies.feature:84-87` the rows are `app` and `base`, and `lib` has none. `:139-142` has no row for `mid`.
+
+Decision: give each resolved member a row (for example `(failed) {dependency failed}`, or a skipped row), or record the omission as a decision. Claude Code's output for this case is not checked.
+
+Recommendation (triage, 2026-10-26): give resolved closure members a row. INS-01 says the install reports each member, and today the user cannot tell from the result that `lib` was part of the plan. Check the upstream wording with `.agents/skills/claude-code-compat-research` before choosing the token, and add the rows to the two scenarios.
+
+## ENDEPS-01: the enable closure reads dependencies from the catalog, not from the installed plugin
+
+Found in lifecycle-coverage phase 2 (notes line 293). The enable cascade gets each member's declarations through `readRecordDeclarations` (`orchestrators/plugin/dependency-index.ts:249-262`, called from `enable-disable.ts`). It reads the marketplace's current manifest and uses the installed copy only for a plugin the marketplace no longer lists (DLS-01). Claude Code reads the installed `plugin.json`. No scenario covers a catalog whose declarations differ from the installed copy. No divergence ID covers it.
+
+Decision: match upstream, or record a divergence ID.
+
+Recommendation (triage, 2026-10-26): match upstream. Read the declarations of an installed record from its installed copy, as DLS-D1 already does for a delisted plugin. Add an enable scenario where the marketplace changed a plugin's dependencies after the install. Check the effect on the other `readRecordDeclarations` callers (see STALE-DECLARER-01) before changing the shared reader.
+
+## CLONEGC-01: clone cleanup runs after the state lock is released
+
+Lifecycle-coverage phase 26 review WR-03 (deferred, pre-existing, `26-REVIEW-FIX.md:34`, notes line 499). `uninstall`, the update swap, `marketplace remove`, and `apply` call `garbageCollectPluginClones` after the guard releases the lock (`orchestrators/plugin/uninstall.ts:1155`, `orchestrators/marketplace/remove.ts:1238`, `orchestrators/reconcile/apply.ts:1479`). The cleanup can delete a mirror that a locked `fetch`, `info --fetch`, or `install` is using, or a fresh copy between update's preflight and its swap.
+
+Fix: run the clone cleanup under the lock. Add a unit test with a second operation that holds the lock while the cleanup runs.
+
+## TAGCOPY-01: a marketplace-tag-pinned update copies the marketplace git data without the lock
+
+Lifecycle-coverage phase 26 review WR-05 (deferred, `26-REVIEW-FIX.md:39`, notes line 500). When `update` materializes a path plugin pinned to a marketplace tag, it copies the marketplace `.git` with no state lock held. A concurrent `marketplace update` can change that directory during the copy.
+
+Fix: take the lock for the copy, or copy from a snapshot that no other command writes.
+
+## FETCHROW-01: `fetch` and `info --fetch` read their result row after the lock is released
+
+Lifecycle-coverage phase 26 review WR-06 (deferred, `26-REVIEW-FIX.md:41`, notes line 501). `fetchOne` (`orchestrators/plugin/fetch.ts`) refreshes the mirror under `withExistingScopeLock`, then reads the mirror tree for its row after it releases the lock. Another command can change the mirror in between, so the row can show a revision other than the one fetched. Display only: nothing is written from that read.
+
+Fix: read the row data inside the lock.
+
+## INTENTMS-01: two update intent marks in the same millisecond write the same stamp
+
+Lifecycle-coverage phase 18 review WR-04 residual risk (`18-REVIEW-FIX.md:66`, notes line 492). The ST-9 concurrency check in `orchestrators/plugin/update-swap.ts` compares the record's `updatedAt` with the stamp the run read. Two processes that mark the same plugin inside one millisecond write the same `updatedAt`, so the check can miss the other run.
+
+Fix: make the intent mark unique (for example a random token beside the timestamp) and compare that. Low probability.
+
+## AGIDX-01: a forced agents commit removes an index row the user named by hand
+
+Lifecycle-coverage phase 18 known gap (`18-01-SUMMARY.md:46`, MILESTONE-AUDIT tech debt, notes line 492). `commitPreparedAgents` with `force` (reinstall, RINST-01) replaces this plugin's preserved agent files and drops their rows from `agents-index.json`. A row that the user added by hand for a file inside the agents directory is removed with them.
+
+Fix: drop only the rows the plugin's own staging produced, and add a unit case in `test/bridges/agents/stage.test.ts` with a hand-named row.
+
+## CASCREASON-01: the autoupdate cascade falls back to `{not in manifest}` for an unclassified error
+
+Lifecycle-coverage milestone audit, tech debt (cross-phase integration check). `reasonsFromTypedError` in `orchestrators/plugin/update-flow.ts:777-810` maps the typed errors and errno codes, then returns `["not in manifest"]` for every other error. It also skips the git-host classification. The direct update path falls back to `{unreadable manifest}` instead. So in the autoupdate cascade the token can mean a real catalog drop or an unclassified crash, the same fault IMP-09 fixed for import (`orchestrators/import/execute.ts:219-224`). The audit found no concrete flow that reaches the fallback with a classifiable cause.
+
+Fix: classify git-host failures the way the direct path does, and use the direct path's fallback (or a bare `(failed)` with the cause, as IMP-09 does). Unit-test the fallback arm.
+
+## ENTRYVER-01: `fetch`, completion, and `browse` show the marketplace entry version
+
+Lifecycle-coverage milestone audit, tech debt. VER-01 and VER-02 give `install`, `list`, and `info` one version rule (the declared version, `plugin.json` before the marketplace entry, then `sha-<12hex>`). Three surfaces still print the entry's `version` field:
+
+- `orchestrators/plugin/fetch.ts:440` and `:565` (the `fetch` rows);
+- `orchestrators/edge-deps.ts:172` (tab completion data);
+- `edge/browser/plugin-browser.ts:376` (the `browse` description).
+
+So `fetch` and `browse` can show a version that `list` and `info` do not. Fix: route the three through the same version helper as `list`, and add a `fetch` scenario for a plugin whose `plugin.json` and entry disagree.
+
+## LCHARN-01: cucumber harness hardening left by lifecycle-coverage
+
+Small fixes to the step library and the harness under `features/`. None changes product behavior.
+
+- Network guard (phase 1 WR-06, notes lines 41 and 369): nothing fails a scenario when Pi connects to a host other than 127.0.0.1. Only `PI_OFFLINE=1` (`test/e2e/_rpc.ts:190`), `--offline`, the GitHub base-URL override, and the NFR-5 lint rule limit it. A real guard needs a socket-wrapping preload through `NODE_OPTIONS` in `test/e2e/_rpc.ts` (shared with e2e), a report channel per scenario, and a plan for `git credential` child processes, which the preload does not cover. `01-VERIFICATION.md:205,211`.
+- Phase 1 review IN-03..IN-06 (notes line 375): `features/lib/git-clones.ts:84-100` ("holds no git clones") ignores `sources-staging/` and `sources/` folders without `.git`; `features/step_definitions/plugin/installation.steps.ts:213-235` lists data directories with `isFile` only, so empty folders and symlinks are not seen; `features/lib/run-tokens.ts:58-69` passes an unknown run token through unexpanded instead of throwing; `.agents/skills/cucumber/rules/world-and-stand-ins.md:14` says the "serves … again" Given can follow a When, which `rules/features.md:41` forbids.
+- The installation-record step projects no `{<repo> revision N}` tokens, so a git version cannot be stated through it, and `holds these git clones:` prints an empty revision for an unpinned mirror (`features/step_definitions/plugin/installation.steps.ts:202-210`, `:244`; notes line 401).
+- The install-retry seed in `features/plugin/install-rollback.feature:37-54` uses two `When` steps (notes line 405).
+- `features/plugin/list.feature:74-626` copies one 42-line fixture into 10 scenarios. Move them to `list-filters.feature` with a `Background:` (phase 9 WR-03, notes line 394).
+- Flake: `test/edge/handlers/plugin/browse.test.ts:449` and `:511` wait a fixed 50 ms. One run failed under heavy load (notes line 425). Wait on the event instead.
+
+## LCTEST-01: behavioral and unit test gaps left by lifecycle-coverage
+
+Each item is behavior that works today but that no scenario (or no unit case) proves. A regression in one of them passes every gate.
+
+Cucumber scenarios:
+
+- No scenario has a `, `-joined range on an `update` cause line. Only unit tests cover it (milestone audit, phase 25; notes lines 53 and 508). Add one to `features/plugin/update-dependencies.feature`.
+- No post-swap update failure is exercised. The path is not rolled back by design (update-swap D-03, `rollback partial` plus the reinstall hint), and only `update-flow.test.ts` and `update-swap.test.ts` reach it (notes line 386).
+- Already-enabled root plus a missing dependency (skipped, not refused, phase 2 D-09) has no scenario in `features/plugin/enable.feature` (notes line 389).
+- No `list` scenario shows a `partially-upgradable` row (`orchestrators/plugin/list.messaging.ts:37`, notes line 396).
+- The prune keep-dependency scenario (`features/plugin/prune.feature:84-101`) does not check that `claude-plugins.json` still declares the kept plugin (notes line 384).
+- `apply` failed-install scenario (`features/plugin/apply.feature:134`) could also carry an uninstall and a disable in the same edit (REC-04, notes line 397).
+- Bare `fetch` that continues after one failure has no scenario. Only the `@<marketplace>` form does (`features/plugin/fetch.feature:124`, notes line 399).
+- `features/marketplace/usage-errors.feature` has no rows for the `rm` and `ls` aliases (notes line 407).
+- The url-source invalid-JSON failed add (`features/marketplace/failed-add.feature:79-97`) has no record check and no retry (phase 15 WR-03, notes line 418).
+- Autoapply at load uses stored credentials only, with no Device Flow (D-13). Unit tests only (notes line 546).
+- The migration before a base-file set is unit-tested only, because the harness cannot record an installed plugin without `install` writing the base configuration (notes line 547).
+- The dependency closure of a tag update that lands (CR-04) is unit-tested only, because the step library cannot give a tagged revision dependencies (notes line 554).
+- Phase 29 review IN-03: the "nothing to change" `apply` scenario does not prove that `apply` writes nothing (`29-REVIEW-DISPOSITION.md`, notes line 537).
+
+Unit tests:
+
+- The import re-enable arm with `{rollback partial}` (`orchestrators/import/execute.ts:1197`) has no case. Only the root-install case exists (`test/orchestrators/import/execute.test.ts:1555`; phase 27 WR-02, notes line 56).
+- Phase 21 WR-06 (notes line 69): the MPA-01 standalone skip test (`test/orchestrators/marketplace/add.test.ts:1274`) does not check the completion cache, and the project-scope tokens and the update raw-error cascade arm have no case.
+
+## LCCODE-01: dead, duplicated, and loosely typed code left by lifecycle-coverage
+
+Cleanups with no user-visible effect.
+
+- Dead code: `createDelegatingRemovalOps` (`test/platform/removal-ops-fake.ts:179`, no importer) and `CheckoutOptions.force` (`platform/git.ts:109`, set only by `test/platform/git.test.ts:380`). Phase 26, notes line 503.
+- Unread field: the `no-matching-tag` outcome's `range` (`orchestrators/plugin/install-cascade.ts:803-810` returns the declared range, and the probe's own `range` at `dependency-tag-probe.ts:66` and `release-tag.ts:112` is never read). Phase 27 IN-01.
+- Undeclared field: the failed arm of `InstallMissingDependencyOutcome` (`orchestrators/plugin/install-flow.ts:2943-2952`) has no `rollbackPartials`, but the object is spread from `handleCaughtInstallFailure`, which sets it. Phase 27 IN-03.
+- Optional fields that can drop a value without an error: `InstallPluginOutcome.version` is optional (`orchestrators/types.ts:722`, phase 13 WR-03), and `buildReconcilePendingNotification` defaults `recordedVersions` to an empty map (`orchestrators/reconcile/notify.ts:698`), so a new caller that omits it loses the `will uninstall` versions (milestone audit).
+- Duplicates: the `marketplace-not-added` row builder (`orchestrators/plugin/list-flow.ts:803`, `plugin/info.ts:3150`, `marketplace/info.ts:141`); the two "enabled declarers" filters (`orchestrators/plugin/enable-disable.ts:1567-1574` inline, `withoutDisabledHolders` in `dependency-index.ts:387`, phase 23 IN-02); the lock-holding test helpers (`whileLockHeld` and `lockHeldCause` in `test/orchestrators/marketplace/{add,remove}.test.ts`, `holdStateLock` in `mcp-migration.test.ts`, inline `lockfile.lock` in 7 test files, phase 15 IN-01).
+- `marketplace add`'s no-op returns `status: "added"` internally (`orchestrators/marketplace/add.ts:1091`, phase 21 IN-02). The standalone path discards it.
+- The import enable outcome carries the companion facts twice, as `declaresAgents/Mcp/Workflows` and as `enableSignals` (`orchestrators/import/execute.ts:1185-1192`, phase 24 IN-03).
+- `rejectUnknownFlag` lives in `edge/handlers/shared.ts:170`, but only plugin handlers call it (phase 14 IN-05).
+- `test/orchestrators/marketplace/add.test.ts:3063` pins the `instanceof` prototype read count (`prototypeReads, 6`). A count-free double needs a design (phase 15 IN-04).
+- The IMP-09 comment sits above the REC-06 test (`test/orchestrators/import/execute.test.ts:1552-1555`, phase 27 IN-04).
+- Two template literals in `orchestrators/plugin/update-preflight.ts:795` and `:887` pass 100 columns (phase 25).
+
+## LCORCH-01: small orchestrator gaps left by lifecycle-coverage
+
+Each item changes what a user sees or what a command does in an edge case. None was judged worth its own entry.
+
+- `marketplace add` outcome classification (phase 21): `unparseable` is both the malformed-manifest token (`narrowProbeError`, `orchestrators/marketplace/add.ts:316-321`) and the orchestrated catch-all (`add.ts:946-956`), so `apply` and `import` cannot tell a broken manifest from a crash (WR-05). `already added` checks state and configuration only, not that the clone still exists (`redeclareRecordedSource`, `add.ts:479-516`), so a deleted clone reads as added and is not repaired. `errorAddReason` (`add.ts:334-347`) maps ENOENT and ENOTDIR only, so EISDIR on a standalone add is a raw exception, while `list` and `info` say `unreadable` (`marketplace/shared.ts:866-869`).
+- Rollback-partial detail (phase 27, deferred D-06, WR-01, WR-04): `import` shows `{rollback partial}` without install's per-phase child rows, and passes only a boolean `rolledBackPartial` (`orchestrators/import/execute.ts:1074`, `:1197`). In an import cascade a dependency's partial rollback stays `{dependency failed}` on the root, so the user is not told files may remain. Reconcile's failed-install row shows no rollback-partial token.
+- `update` shows no MCP notices for the dependencies it installs (update-dependencies quick tasks, notes line 555).
+- Reinstall regressions from the update/reinstall merge (phase 18): the reinstall outcome arms in `orchestrators/types.ts` lost `resourcesChanged`, and the completion cache is dropped twice per reinstall (`update-swap.ts:1632`, `reinstall-flow.ts:454`). User effect not verified.
+- Reinstall of a tag ref refreshes over the network even with a warm mirror, because `resolveFetchedRefOffline` (`orchestrators/plugin/clone-cache.ts:519-535`) resolves only `refs/remotes/origin/<ref>` (phase 18 CR-02). NFR-5 allows it, since the plugin is not sha-pinned. It needs an offline tag-resolve helper.
+- Installed-copy containment for a delisted plugin accepts the marketplace clone or `plugin-clones/` whatever the source kind, and follows symlinks (`orchestrators/plugin/dependency-declaration-read.ts:346-358`, phase 28 IN-03). An NFR-10 hardening.
+
+## LCDOC-01: docs and CHANGELOG gaps left by lifecycle-coverage
+
+- `CHANGELOG.md` `[Unreleased]` (combined in `f6e1f13f`) does not tell users about these behavior changes (notes lines 320, 330, 338, 420):
+  - install, enable, disable, update, reinstall, `marketplace add`, and `marketplace remove` now fail as `lock held` with the lock's cause (phase 15);
+  - a surplus argument now reads `Too many arguments.` and an unknown flag `Unknown flag: "<flag>".` across `list`, `ls`, `pending`, `import`, `bootstrap`, `browse`, and `help`, and a failed `bootstrap` renders the `marketplace add` failed row (phase 14);
+  - `list <marketplace>` fails as not added for an unknown marketplace, and `--scope` shows a block per scope (phase 9). Also check the phase 5, 10, and 13 product fixes.
+- `list` docs lag the phase 9 behavior: `docs/prd/pi-claude-marketplace-prd.md:355` (PL-3) is unchanged, and `docs/output-catalog.md` has no `list <unknown marketplace>` state. `features/plugin/list.feature:627-652` pins the behavior.
+- Stale comments and docs from before APL-D1 (phase 29 review IN-02): `orchestrators/reconcile/dependency-verdict.ts:37` says the walk "disables it on the next reload", and `docs/output-catalog.md:2557` describes a "Load-time install failed" state, but a load changes nothing now. The other deferred phase 29 info items (IN-01, IN-04, IN-05, IN-07, IN-08, IN-09 in `29-REVIEW-DISPOSITION.md`) were not re-checked. IN-07 and IN-09 may be superseded by APPLY1-D1.
+- Phase 18 behaviors with no Key Decision row in `.planning/PROJECT.md`: `update --partial` records the plugin as not installable (consented partial), an occupied agent name fails before the intent mark, and the recovery hint `Run /claude:plugin reinstall <p>@<m> to repair it.` The hint and the order are documented in `docs/output-catalog.md:1932-1937`. Record IDs if the user wants them.
+- Six feature files have a four-line description, where `.agents/skills/cucumber/rules/features.md:27` allows two or three: `features/plugin/{cross-scope-install,autoapply,git-source-update,reconcile,update-dependencies,update-rollback}.feature`.
