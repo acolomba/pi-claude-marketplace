@@ -68,6 +68,10 @@ function updatedRow(name: string): UpdateDependencyRow {
   };
 }
 
+function pinRefreshRow(name: string): UpdateDependencyRow {
+  return { ...updatedRow(name), reasons: ["already disabled"], needsReload: false };
+}
+
 function failedRow(name: string, cause: Error): UpdateDependencyRow {
   return { status: "failed", name, version: "1.0.0", reasons: [], cause, severity: "error" };
 }
@@ -227,6 +231,70 @@ describe("runDependencySteps", () => {
     // assert
     assert.deepStrictEqual(ran, { ok: false, landed: [], cause: thrown });
     assert.deepStrictEqual(ports.calls, ["materialize helper@mp"]);
+  });
+
+  test("WR-2: a disabled dependency's re-enable takes the place of its pin refresh", async () => {
+    // arrange
+    const ddd: PlannedDependencyMove = {
+      request: { ...LIB, key: "ddd@mp", name: "ddd" },
+      version: "2.0.0",
+    };
+    const reEnable: PlannedCascadeMember = {
+      kind: "re-enable",
+      member: { ...HELPER.member, key: "ddd@mp", name: "ddd" },
+    };
+    const ports = stepPorts({
+      move: (move) => Promise.resolve({ landed: true, rows: [pinRefreshRow(move.request.key)] }),
+    });
+
+    // act
+    const ran = await runDependencySteps(
+      [
+        { kind: "move", move: ddd },
+        { kind: "materialize", members: [reEnable] },
+      ],
+      ports,
+    );
+
+    // assert
+    assert.deepStrictEqual(ran, { ok: true, landed: [moved(installedRow("ddd@mp"))] });
+  });
+
+  test("WR-2 / GHB-03: an invalid GitHub base override after a pin refresh landed is the move's failure", async () => {
+    // arrange
+    const invalid = new InvalidGitHubBaseUrlError(
+      "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+      "scheme",
+    );
+    const ddd: PlannedDependencyMove = {
+      request: { ...LIB, key: "ddd@mp", name: "ddd" },
+      version: "2.0.0",
+    };
+    const ports = stepPorts({
+      move: (move) =>
+        move.request.key === "ddd@mp"
+          ? Promise.resolve({ landed: true, rows: [pinRefreshRow("ddd@mp")] })
+          : Promise.reject(invalid),
+    });
+
+    // act
+    const ran = await runDependencySteps(
+      [
+        { kind: "move", move: ddd },
+        { kind: "move", move: LIB_MOVE },
+      ],
+      ports,
+    );
+
+    // assert
+    assert.ok(!ran.ok);
+    assert.deepStrictEqual(
+      ran.landed.map((entry) => [entry.key, entry.row.status]),
+      [
+        ["ddd@mp", "updated"],
+        ["lib@mp", "failed"],
+      ],
+    );
   });
 
   test("GHB-03: an invalid GitHub base override before any change landed fails the command", async () => {

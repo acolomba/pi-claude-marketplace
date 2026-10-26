@@ -14,6 +14,7 @@ import {
   freshDependencyMoveMemos,
   judgeDependencyMove,
   runDependencyMove,
+  supersedePinRefreshes,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
@@ -195,6 +196,37 @@ describe("judgeDependencyMove", () => {
     });
   });
 
+  test("WR-1: refuses a move whose only candidate is a version the plan ruled out", async (t) => {
+    // arrange
+    const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "2.0.0" });
+
+    // act
+    const judgement = await judgeDependencyMove(request({ excludedVersions: ["2.0.0"] }), context);
+
+    // assert
+    assert.deepStrictEqual(judgement.ok, false);
+  });
+
+  test("WR-1: refuses a ruled-out version no range can name", async (t) => {
+    // arrange
+    const { context } = await seedDependency(t, { recorded: "1.0.0", offered: "release-7" });
+
+    // act
+    const judgement = await judgeDependencyMove(
+      request({
+        requesters: [{ key: "widget@mp", ranges: [">=2.0.0"] }],
+        excludedVersions: ["release-7"],
+      }),
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(judgement, {
+      ok: false,
+      cause: "version release-7 was ruled out by the plan",
+    });
+  });
+
   test("refuses a move whose new version's names another plugin already owns", async (t) => {
     // arrange
     const { context, pluginRoot } = await seedDependency(t, {
@@ -356,7 +388,7 @@ describe("runDependencyMove", () => {
     assert.strictEqual(await readFile(context.locations.stateJsonPath, "utf8"), stateBefore);
   });
 
-  test("moves a disabled dependency's pin and reports no row for it", async (t) => {
+  test("WR-2: moves a disabled dependency's pin and reports the move as already disabled", async (t) => {
     // arrange
     const { context } = await seedDependency(t, {
       recorded: "1.0.0",
@@ -368,7 +400,21 @@ describe("runDependencyMove", () => {
     const run = await runDependencyMove(move("2.0.0"), context);
 
     // assert
-    assert.deepStrictEqual(run, { landed: true, rows: [] });
+    assert.deepStrictEqual(run, {
+      landed: true,
+      rows: [
+        {
+          status: "updated",
+          name: "zcore@mp",
+          from: "1.0.0",
+          to: "2.0.0",
+          dependencies: [],
+          reasons: ["already disabled"],
+          severity: "info",
+          needsReload: false,
+        },
+      ],
+    });
     const state = await loadState(context.locations.extensionRoot);
     assert.deepStrictEqual(
       [
@@ -454,6 +500,54 @@ describe("runDependencyMove", () => {
       }),
       diskFull,
     );
+  });
+});
+
+describe("supersedePinRefreshes", () => {
+  const refresh = {
+    row: {
+      status: "updated",
+      name: "ddd@mp",
+      from: "1.0.0",
+      to: "2.0.0",
+      dependencies: [],
+      reasons: ["already disabled"],
+      severity: "info",
+      needsReload: false,
+    },
+  } as const;
+  const moved = {
+    row: {
+      status: "updated",
+      name: "aaa@mp",
+      from: "1.0.0",
+      to: "2.0.0",
+      dependencies: [],
+      severity: "info",
+      needsReload: true,
+    },
+  } as const;
+  const failed = {
+    row: { status: "failed", name: "zzz@mp", reasons: [], severity: "error" },
+  } as const;
+
+  test("WR-2: drops the pin refresh of a dependency a later row reports", () => {
+    // act
+    const kept = supersedePinRefreshes(
+      [refresh, moved, failed],
+      new Set(["ddd@mp", "aaa@mp", "zzz@mp"]),
+    );
+
+    // assert
+    assert.deepStrictEqual(kept, [moved, failed]);
+  });
+
+  test("WR-2: keeps the pin refresh of a dependency no later row reports", () => {
+    // act
+    const kept = supersedePinRefreshes([refresh, moved], new Set(["aaa@mp"]));
+
+    // assert
+    assert.deepStrictEqual(kept, [refresh, moved]);
   });
 });
 

@@ -18402,6 +18402,45 @@ for (const orchestrated of [false, true]) {
   });
 }
 
+test("WR-3: an orchestrated install after a dependency plan reports each dependency it installed with the plugin", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({ aaa: { version: "1.0.0" } });
+    await installed(owner, cwd, "aaa");
+    await publishCatalog(marketplaceRoot, {
+      app: { version: "1.0.0", dependencies: ["aaa@^2.0.0", "ggg"] },
+      aaa: { version: "2.0.0" },
+      ggg: { version: "1.0.0" },
+    });
+    const { ctx, run } = makeCtx();
+
+    // act
+    const outcome = await owner.installPlugin({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "app",
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      outcome.status === "installed" && [
+        outcome.movedDependencies?.map((entry) => [entry.key, entry.row.status]),
+        outcome.dependencyInstalls?.map((entry) => [
+          entry.key,
+          entry.name,
+          entry.marketplace,
+          entry.row.status,
+        ]),
+      ],
+      [[["aaa@mp", "updated"]], [["ggg@mp", "ggg", "mp", "installed"]]],
+    );
+  });
+});
+
 test("UPD-DEP-D1 / MISS-01: an install whose later step installs missing dependencies moves a dependency without installing what its new version needs", async () => {
   await withHermeticHome(async (owner) => {
     // arrange

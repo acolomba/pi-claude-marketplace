@@ -589,3 +589,40 @@ Feature: Plugin import
       | id           | version | enabled |
       | aaa@fixtures | 1.0.0   | true    |
       | zzz@fixtures | 2.0.0   | true    |
+
+  Scenario: Importing a plugin whose install moves a dependency lists every dependency the install added
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | aaa  | 1.0.0   |              |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install aaa@fixtures --scope user"
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies   |
+      | app  | 1.0.0   | aaa@^2.0.0,ggg |
+      | aaa  | 2.0.0   | fff            |
+      | fff  | 1.0.0   |                |
+      | ggg  | 1.0.0   |                |
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "app@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id           | name         | status    | reasons                 | scope | version | from  | to    | cause chain                                                              | cause truncated | leaks | rollback partial |
+      | fixtures         | user              | skipped            | already added       | app@fixtures | app          | installed |                         | user  | 1.0.0   |       |       |                                                                          |                 |       |                  |
+      | fixtures         | user              | skipped            | already added       | fff@fixtures | fff@fixtures | installed |                         | user  | 1.0.0   |       |       |                                                                          |                 |       |                  |
+      | fixtures         | user              | skipped            | already added       | aaa@fixtures | aaa@fixtures | updated   | dependency current copy | user  |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@fixtures" | false           |       |                  |
+      | fixtures         | user              | skipped            | already added       | ggg@fixtures | ggg@fixtures | installed |                         | user  | 1.0.0   |       |       |                                                                          |                 |       |                  |
+    Then the installation record of the user scope holds these plugins:
+      | id           | version | enabled |
+      | aaa@fixtures | 2.0.0   | true    |
+      | app@fixtures | 1.0.0   | true    |
+      | fff@fixtures | 1.0.0   | true    |
+      | ggg@fixtures | 1.0.0   | true    |

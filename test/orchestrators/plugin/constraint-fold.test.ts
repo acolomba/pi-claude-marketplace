@@ -159,6 +159,30 @@ describe("foldDeclaredConstraint", () => {
     });
   });
 
+  test("WR-1: a version the plan ruled out narrows the range and no cause line names it", () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>();
+
+    // act
+    const verdict = foldDeclaredConstraint(
+      declarations,
+      stateOf({ mp: {} }),
+      "target",
+      "mp",
+      [{ key: "app@mp", ranges: ["^2.0.0"] }],
+      ["2.0.0", "release-7"],
+    );
+
+    // assert
+    assert.deepStrictEqual(verdict, {
+      kind: "admits",
+      range: ">=2.0.0 <3.0.0-0 >2.0.0",
+      holders: [{ key: "app@mp", range: "^2.0.0", disabled: false }],
+      fellBackToCurrentCopy: false,
+      disclosure: 'constrained to the combined range (^2.0.0) -- required by "app@mp"',
+    });
+  });
+
   test("IN-N2: a range two holders declare, and a holder with two ranges, are named once", () => {
     // arrange
     const declarations = new Map<string, readonly AddressedDependency[]>();

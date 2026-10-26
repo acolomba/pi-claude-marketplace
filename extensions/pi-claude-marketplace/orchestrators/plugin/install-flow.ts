@@ -55,9 +55,10 @@ import {
   freshDependencyMoveMemos,
   judgeDependencyMove,
   runDependencyMove,
+  supersedePinRefreshes,
 } from "./dependency-move.ts";
 import { planDependencyGraph } from "./dependency-plan.ts";
-import { runDependencySteps, settleDependencies } from "./dependency-settle.ts";
+import { movedFromRow, runDependencySteps, settleDependencies } from "./dependency-settle.ts";
 import {
   CASCADE_CONTEXT,
   cascadeFailureCause,
@@ -121,7 +122,7 @@ import type {
 import type { DependencyMoveContext, DependencyMoveMemos } from "./dependency-move.ts";
 import type { DependencyPlan, DependencyPlanPorts } from "./dependency-plan.ts";
 import type { DependencyStepPorts, SettleCascadeRun } from "./dependency-settle.ts";
-import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
+import type { CascadeFailureSubject, CascadeInstalledRow } from "./install-cascade.messaging.ts";
 import type {
   CascadeMarketplaceTagProbe,
   CascadeMemberOutcome,
@@ -1813,6 +1814,40 @@ function movedRows(moved: readonly MovedDependency[] | undefined): readonly Upda
   return (moved ?? []).map((entry) => entry.row);
 }
 
+/**
+ * WR-2: the changes a dependency plan's steps landed, without the pin
+ * refresh of a dependency the run after them re-enabled, which reports it.
+ */
+function landedMoves(
+  moved: readonly MovedDependency[] | undefined,
+  members: readonly CascadeInstalledRow[],
+): readonly MovedDependency[] | undefined {
+  return moved === undefined
+    ? undefined
+    : supersedePinRefreshes(moved, new Set(members.map((member) => member.key)));
+}
+
+/**
+ * WR-3: every dependency the run after a dependency plan installed or
+ * re-enabled with the plugin, so an orchestrated caller lists each change
+ * the install made. Present only after a plan, and only when one landed.
+ */
+function dependencyInstallsMember(
+  moved: readonly MovedDependency[] | undefined,
+  members: readonly CascadeInstalledRow[],
+  rootKey: string,
+  softDeps: SoftDepStatus,
+): { readonly dependencyInstalls?: readonly MovedDependency[] } {
+  if (moved === undefined) {
+    return {};
+  }
+
+  const installs = members
+    .filter((member) => member.key !== rootKey)
+    .map((member) => movedFromRow(composeCascadeMemberRow(member, softDeps)));
+  return installs.length === 0 ? {} : { dependencyInstalls: installs };
+}
+
 /** UPD-DEP-D1: the outcome member naming the moves, present only when one landed (NREG-01). */
 function movedMember(moved: readonly MovedDependency[] | undefined): {
   readonly movedDependencies?: readonly MovedDependency[];
@@ -2740,6 +2775,7 @@ async function installPluginWithTransaction(
 
     case "installed": {
       const { installCtx, landedDisabled } = outcome;
+      const landed = landedMoves(moved, outcome.members);
       const postCommitWarnings = await collectPostCommitWarnings(
         installCtx,
         completionCache,
@@ -2798,7 +2834,7 @@ async function installPluginWithTransaction(
                 installed: outcome.members,
                 alreadyInstalled: outcome.alreadyInstalled,
                 probe: softDepProbe,
-                ...(moved !== undefined && { moved: moved.map((entry) => entry.row) }),
+                ...(landed !== undefined && { moved: landed.map((entry) => entry.row) }),
               }),
             },
           ],
@@ -2819,7 +2855,8 @@ async function installPluginWithTransaction(
         orchestrated,
         {
           ...installedPluginOutcome(installCtx, postCommitWarnings, landedDisabled),
-          ...movedMember(moved),
+          ...movedMember(landed),
+          ...dependencyInstallsMember(moved, outcome.members, rootKey, run.softDeps),
         },
         outcome.mcpConfigNotices,
       );

@@ -645,6 +645,14 @@ export type CascadeResolutionFailure = Extract<
   { readonly kind: "closure-failed" | "constraint-failed" }
 >;
 
+/**
+ * UPD-DEP-D1 / WR-1: a graph walk that failed, with every plugin whose
+ * declarations the failure involves: the members of a cycle, the plugin that
+ * named a dependency it could not reach, or the plugins that declare the
+ * dependency whose ranges failed. A transport failure involves none.
+ */
+export type GraphWalkFailure = CascadeResolutionFailure & { readonly declarers: readonly string[] };
+
 /** UPD-DEP-D1: the arm a cascade reaches when recorded dependencies must move first. */
 export type CascadePlan = Extract<InstallCascadeResult, { readonly kind: "planned" }>;
 
@@ -1654,6 +1662,24 @@ function requestersOf(declared: DeclaredEdges, key: string): GraphRequester[] {
   return requesters;
 }
 
+/** WR-1: the plugins whose declarations a failed walk involves (`GraphWalkFailure`). */
+function failureDeclarers(failure: CascadeResolutionFailure, declared: DeclaredEdges): string[] {
+  const declarersOf = (key: string): string[] =>
+    requestersOf(declared, key).map((requester) => requester.key);
+  if (failure.kind === "constraint-failed") {
+    return failure.failure.kind === "tag-listing-failed" ? [] : declarersOf(failure.failure.key);
+  }
+
+  const closure = failure.failure;
+  if (closure.reason === "cycle") {
+    return [...closure.chain];
+  }
+
+  return closure.reason === "unusable-declaration"
+    ? [closure.key, ...declarersOf(closure.key)]
+    : [closure.requiredBy];
+}
+
 /** One graph node: fresh, or what the snapshot records. */
 function graphNode(
   options: InstallCascadeOptions,
@@ -1687,7 +1713,7 @@ function graphNode(
  */
 export async function walkDependencyGraph(
   options: InstallCascadeOptions,
-): Promise<DependencyGraph | CascadeResolutionFailure> {
+): Promise<DependencyGraph | GraphWalkFailure> {
   const declared: DeclaredEdges = new Map();
   const resolved = await resolveCascade(
     {
@@ -1710,7 +1736,7 @@ export async function walkDependencyGraph(
     true,
   );
   if (resolved.kind !== "resolved") {
-    return resolved;
+    return { ...resolved, declarers: failureDeclarers(resolved, declared) };
   }
 
   const dependsOn = (key: string): readonly string[] => [

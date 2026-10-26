@@ -1053,7 +1053,7 @@ async function installOnePlannedPlugin(
   // AFILE-04: both arms carry notices; a failed install can still have
   // rewritten the MCP config through a dependency that committed first.
   result.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
-  pushDependencyChanges(result, plugin, outcome.movedDependencies ?? []);
+  pushDependencyChanges(result, plugin, outcome);
 
   // CR-01: a third `InstallPluginOutcome` arm must become a compile error here,
   // not get counted as a successful install in the cascade totals. The
@@ -1100,16 +1100,21 @@ async function installOnePlannedPlugin(
 }
 
 /**
- * UPD-DEP-D1 / WR-N5: every dependency change an install reported, success
- * or failure, as a row beside the plugin's own. A change that landed changed
- * resources, as the plugin's own install does.
+ * UPD-DEP-D1 / WR-N5 / WR-3: every dependency change an install reported,
+ * success or failure, as a row beside the plugin's own: each move, then each
+ * dependency the install after a plan added with the plugin. A change that
+ * landed changed resources, as the plugin's own install does.
  */
 function pushDependencyChanges(
   result: MutableImportResult,
   plugin: PlannedPlugin,
-  moved: readonly MovedDependency[],
+  outcome: InstallPluginOutcome,
 ): void {
-  for (const entry of moved) {
+  const changes: readonly MovedDependency[] = [
+    ...(outcome.movedDependencies ?? []),
+    ...(outcome.status === "installed" ? (outcome.dependencyInstalls ?? []) : []),
+  ];
+  for (const entry of changes) {
     result.dependencyChanges.push({
       scope: plugin.scope,
       marketplace: plugin.ref.marketplace,

@@ -999,6 +999,8 @@ The SAME `version conflict` token as the row above, over a different subject: th
 
 `helper` declares `formatter@tools` at a range its installed copy falls outside. The install moves `formatter` first, through `update`'s own path: the highest release tag the range allows, else the marketplace's version, with `helper`'s range folded in beside every other installed plugin's that declares `formatter`, so the move never breaks another dependent. The moved dependency reports its `(updated)` row in place of the `(skipped) {already installed}` row. `update` and the autoupdate cascade do the same for the dependencies of the version they move a plugin to, and they also install a missing dependency and enable a disabled one, as an install does.
 
+A disabled dependency moves while it stays disabled, and the install then turns it back on at the new version, so its one row is the `{already installed, dependency enabled}` row at that version. When a later step fails before that, the failure block lists the move as `● ddd@tools v1.0.0 → v2.0.0 (updated) {already disabled}`, because the record already changed; the row needs no reload. An installed dependency that a moved dependency's new version needs, and that its range already admits, gets the `(skipped) {already installed}` row, as a dependency of the plugin the user named does.
+
 ### Dependency cascade -- constraints too complex to combine (RESV-03)
 
 <!-- catalog-state: dependency-constraint-too-complex -->
@@ -2568,7 +2570,7 @@ Import: 3 successes
 /reload to pick up changes
 ```
 
-`app@mp` needs `lib` at a range its installed copy falls outside, so the install moves `lib` first, as a standalone `install` does. Each dependency an install changed gets its own row after the plugin's rows, named by its full key: installed, enabled, moved, or the one that failed. A failed install lists the changes that landed before it failed, beside its own `{dependency failed}` row.
+`app@mp` needs `lib` at a range its installed copy falls outside, so the install moves `lib` first, as a standalone `install` does. Each dependency an install changed gets its own row after the plugin's rows, named by its full key: installed, enabled, moved, or the one that failed. Once an install moved a dependency, that covers every dependency it installed or enabled, including those that landed together with the plugin and not for a move. A failed install lists the changes that landed before it failed, beside its own `{dependency failed}` row.
 
 ### A repeat import skips what the scope already holds (IMP-06)
 

@@ -68,6 +68,8 @@ export interface UpdateConstraintOptions {
   readonly marketplaceTagMemo?: Map<string, readonly ReleaseTagCandidate[]>;
   /** UPD-DEP-D1: the plugins whose ranges the move must also satisfy. */
   readonly requesters?: readonly ConstraintRequester[];
+  /** WR-1: the versions a dependency plan ruled out for the move. */
+  readonly excludedVersions?: readonly string[] | undefined;
   readonly auth: {
     readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
     readonly credentialOps: CredentialOps;

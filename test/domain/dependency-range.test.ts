@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 
 import {
+  excludingRange,
   intersectDependencyRanges,
   isUnconstrainedRange,
   recordedVersionSatisfies,
@@ -306,6 +307,32 @@ describe("isUnconstrainedRange", () => {
       assert.equal(unconstrained, expected);
     });
   }
+});
+
+describe("excludingRange", () => {
+  test("WR-1 a semver version is excluded by a range that admits every other version", () => {
+    // act
+    const range = excludingRange("2.0.0");
+
+    // assert
+    assert.deepStrictEqual(
+      [
+        range,
+        ["1.9.0", "2.0.0", "2.0.1"].map((version) =>
+          recordedVersionSatisfies(version, range ?? ""),
+        ),
+      ],
+      ["<2.0.0 || >2.0.0", [true, false, true]],
+    );
+  });
+
+  test("WR-1 a version with no semver form has no range", () => {
+    // act
+    const range = excludingRange("sha-0123456789ab");
+
+    // assert
+    assert.strictEqual(range, undefined);
+  });
 });
 
 describe("renderDeclaredRanges", () => {

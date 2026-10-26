@@ -26,7 +26,7 @@
 
 import { DependencyCascadeError, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 
-import { failedMoveRow } from "./dependency-move.ts";
+import { failedMoveRow, supersedePinRefreshes } from "./dependency-move.ts";
 import { renderRequestedRanges } from "./dependency-plan.ts";
 
 import type { DependencyMoveRun } from "./dependency-move.ts";
@@ -92,7 +92,7 @@ function failedMoveError(request: DependencyMoveRequest): DependencyCascadeError
 }
 
 /** A row a step reports, which names its dependency by `<plugin>@<marketplace>`. */
-function movedFromRow(row: UpdateDependencyRow): MovedDependency {
+export function movedFromRow(row: UpdateDependencyRow): MovedDependency {
   const at = row.name.lastIndexOf("@");
   return {
     key: row.name,
@@ -128,6 +128,8 @@ async function runStep(step: DependencyPlanStep, ports: DependencyStepPorts): Pr
 /**
  * Makes the plan's steps in order. A step that fails stops the rest. A move
  * that throws fails as one that did not land, its row carrying what it threw.
+ * WR-2: a disabled dependency's pin refresh is a landed change until its
+ * re-enable reports the dependency again.
  * GHB-03: an invalid GitHub base override before anything landed fails the
  * command; after a change landed, the failure row reports it with the
  * changes.
@@ -136,7 +138,7 @@ export async function runDependencySteps(
   steps: readonly DependencyPlanStep[],
   ports: DependencyStepPorts,
 ): Promise<DependencyStepsResult> {
-  const landed: MovedDependency[] = [];
+  let landed: MovedDependency[] = [];
   for (const step of steps) {
     let run: StepRun;
     try {
@@ -158,7 +160,10 @@ export async function runDependencySteps(
       };
     }
 
-    landed.push(...run.rows.map(movedFromRow));
+    landed = [
+      ...supersedePinRefreshes(landed, new Set(run.rows.map((row) => row.name))),
+      ...run.rows.map(movedFromRow),
+    ];
     if (run.failure !== undefined) {
       return { ok: false, landed, cause: run.failure };
     }

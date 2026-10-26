@@ -13,9 +13,16 @@
 // declares for it. A version chosen for a moved plugin changes what that
 // plugin declares, so the plan walks the graph again with every moved plugin
 // read from the version it moves to, and chooses again. It stops when no
-// choice changes. A plugin no version satisfies, a walk that fails, or
-// choices that do not settle within `MAX_PLAN_ROUNDS` refuse the operation.
-// Then each fresh plugin is previewed with the install's own preflight.
+// choice changes.
+//
+// A moved plugin's version is a tentative pick. When a conflict involves the
+// declarations of a tentative pick (a walk that fails, or a plugin no
+// version satisfies), the plan rules that version out for that plugin and
+// judges it again, highest first, then walks on. It refuses only when no
+// pick the conflict involves has a version left, or when the choices repeat
+// a state they were in before. Every pick and every ruled-out version comes
+// from a finite catalog, so the search ends. Then each fresh plugin is
+// previewed with the install's own preflight.
 //
 // The answer is the steps that carry the plan out, in dependency order: each
 // move at exactly the version the plan chose, the fresh installs and
@@ -35,19 +42,13 @@ import type {
   DependencyGraph,
   DependencyGraphNode,
   GraphRequester,
+  GraphWalkFailure,
   PlannedCascadeMember,
   PlannedClosure,
   RecordedGraphNode,
   ResolvedCascadeMember,
 } from "./install-cascade.ts";
 import type { PreparedPluginUpdate } from "./update-preflight.ts";
-
-/**
- * How many times the plan walks the graph before it gives up. Each walk
- * after the first follows a changed choice; a graph whose choices keep
- * changing has no answer the plan can find.
- */
-const MAX_PLAN_ROUNDS = 8;
 
 /** One recorded dependency the plan moves, and every plugin of the graph that asks for it. */
 export interface DependencyMoveRequest {
@@ -57,6 +58,12 @@ export interface DependencyMoveRequest {
   readonly recordedVersion: string;
   /** Each plugin that asks for the dependency and its ranges, folded in place of its record. */
   readonly requesters: readonly GraphRequester[];
+  /**
+   * WR-1: the versions the plan ruled out for this dependency, because a
+   * conflict involved what they declare. The move takes the highest version
+   * left.
+   */
+  readonly excludedVersions?: readonly string[];
 }
 
 /** One move the plan holds, at the version the plan chose for it. */
@@ -83,11 +90,10 @@ export interface DependencyPlanPorts<P extends PlannedCandidate = PreparedPlugin
   readonly judge: (request: DependencyMoveRequest) => Promise<PlanJudgement<P>>;
   /**
    * Walks the whole graph with no write, reading each key of `moving` from
-   * the candidate its move lands.
+   * the candidate its move lands. A failure names the plugins whose
+   * declarations it involves.
    */
-  readonly walk: (
-    moving: ReadonlyMap<string, P>,
-  ) => Promise<DependencyGraph | CascadeResolutionFailure>;
+  readonly walk: (moving: ReadonlyMap<string, P>) => Promise<DependencyGraph | GraphWalkFailure>;
   /** Throws what installing `member` would throw, with no write. */
   readonly preview: (member: ResolvedCascadeMember) => Promise<void>;
 }
@@ -162,7 +168,10 @@ function satisfiesAll(version: string, ranges: readonly string[]): boolean {
 }
 
 /** The move request of a recorded node the graph's ranges reject, or `undefined`. */
-function outOfRangeRequest(node: RecordedGraphNode): DependencyMoveRequest | undefined {
+function outOfRangeRequest(
+  node: RecordedGraphNode,
+  excluded: readonly string[],
+): DependencyMoveRequest | undefined {
   const ranges = node.requesters.flatMap((requester) => requester.ranges);
   if (node.version === undefined || satisfiesAll(node.version, ranges)) {
     return undefined;
@@ -174,39 +183,114 @@ function outOfRangeRequest(node: RecordedGraphNode): DependencyMoveRequest | und
     marketplace: node.member.marketplace,
     recordedVersion: node.version,
     requesters: node.requesters,
+    ...(excluded.length > 0 && { excludedVersions: excluded }),
   };
+}
+
+/**
+ * What one plan search remembers across rounds: each verdict by the request
+ * it judged, the versions ruled out for each dependency, and the conflict
+ * that ruled out the last of them.
+ */
+interface PlanSearch<P extends PlannedCandidate> {
+  readonly ports: DependencyPlanPorts<P>;
+  readonly verdicts: Map<string, Promise<PlanJudgement<P>>>;
+  readonly excluded: Map<string, readonly string[]>;
+  readonly ruledOutBy: Map<string, Refusal>;
+}
+
+/** Each request is judged once. */
+function judge<P extends PlannedCandidate>(
+  search: PlanSearch<P>,
+  request: DependencyMoveRequest,
+): Promise<PlanJudgement<P>> {
+  const signature = JSON.stringify([
+    request.key,
+    request.requesters,
+    request.excludedVersions ?? [],
+  ]);
+  const verdict = search.verdicts.get(signature) ?? search.ports.judge(request);
+  search.verdicts.set(signature, verdict);
+  return verdict;
+}
+
+/** A conflict, and the plugins whose declarations it involves. */
+interface Conflict {
+  readonly refusal: Refusal;
+  readonly involved: readonly string[];
 }
 
 /**
  * Chooses the version of every recorded plugin of one walk: kept when every
  * range admits it, else the move `update` would make for the combined range.
- * Each request is judged once per set of requesters.
+ * A dependency that cannot move is a conflict among the plugins that ask for
+ * it; when a conflict already ruled out its versions, that conflict is the
+ * refusal.
  */
 async function chooseMoves<P extends PlannedCandidate>(
   graph: DependencyGraph,
-  ports: DependencyPlanPorts<P>,
-  verdicts: Map<string, Promise<PlanJudgement<P>>>,
-): Promise<Map<string, Choice<P>> | Refusal> {
+  search: PlanSearch<P>,
+): Promise<Map<string, Choice<P>> | Conflict> {
   const choices = new Map<string, Choice<P>>();
   for (const node of graph.nodes) {
-    const request = node.kind === "recorded" ? outOfRangeRequest(node) : undefined;
+    const request =
+      node.kind === "recorded"
+        ? outOfRangeRequest(node, search.excluded.get(node.member.key) ?? [])
+        : undefined;
     if (request === undefined) {
       continue;
     }
 
-    const signature = JSON.stringify([request.key, request.requesters]);
-    const verdict = verdicts.get(signature) ?? ports.judge(request);
-    verdicts.set(signature, verdict);
-    // eslint-disable-next-line no-await-in-loop -- the first plugin that cannot move ends the plan
-    const judged = await verdict;
+    // eslint-disable-next-line no-await-in-loop -- the first plugin that cannot move ends the round
+    const judged = await judge(search, request);
     if (!judged.ok) {
-      return unmovable(request, judged.cause);
+      return {
+        refusal: search.ruledOutBy.get(request.key) ?? unmovable(request, judged.cause),
+        involved: request.requesters.map((requester) => requester.key),
+      };
     }
 
     choices.set(request.key, { request, prepared: judged.prepared });
   }
 
   return choices;
+}
+
+/** A round that changed a choice, so the plan walks again. */
+interface Again<P extends PlannedCandidate> {
+  readonly ok: "again";
+  readonly moving: Map<string, Choice<P>>;
+  readonly changed: Choice<P>;
+}
+
+/**
+ * WR-1: rules out the version of the first tentative pick the conflict
+ * involves that still has a version left, and takes that version instead.
+ * The conflict refuses the plan only when no involved pick has one.
+ */
+async function ruleOut<P extends PlannedCandidate>(
+  search: PlanSearch<P>,
+  moving: ReadonlyMap<string, Choice<P>>,
+  conflict: Conflict,
+): Promise<Again<P> | Refusal> {
+  for (const [key, choice] of moving) {
+    if (!conflict.involved.includes(key)) {
+      continue;
+    }
+
+    const excludedVersions = [...(search.excluded.get(key) ?? []), choice.prepared.toVersion];
+    const request = { ...choice.request, excludedVersions };
+    // eslint-disable-next-line no-await-in-loop -- picks are tried one at a time, in walk order
+    const judged = await judge(search, request);
+    if (judged.ok) {
+      search.excluded.set(key, excludedVersions);
+      search.ruledOutBy.set(key, conflict.refusal);
+      const changed = { request, prepared: judged.prepared };
+      return { ok: "again", moving: new Map(moving).set(key, changed), changed };
+    }
+  }
+
+  return conflict.refusal;
 }
 
 /**
@@ -226,43 +310,83 @@ function changedChoice<P extends PlannedCandidate>(
   return [...before].find(([key]) => !after.has(key))?.[1];
 }
 
-/** The graph the choices settle on, with the choices, or the refusal. */
+function byKey(left: readonly [string, unknown], right: readonly [string, unknown]): number {
+  return left[0].localeCompare(right[0]);
+}
+
+/** One round's choices with every ruled-out version, so a repeated state shows. */
+function stateOf<P extends PlannedCandidate>(
+  search: PlanSearch<P>,
+  moving: ReadonlyMap<string, Choice<P>>,
+): string {
+  return JSON.stringify([
+    [...moving].map(([key, choice]) => [key, choice.prepared.toVersion] as const).sort(byKey),
+    [...search.excluded].sort(byKey),
+  ]);
+}
+
+interface Settled<P extends PlannedCandidate> {
+  readonly ok: true;
+  readonly graph: DependencyGraph;
+  readonly moves: Map<string, Choice<P>>;
+}
+
+/** One round: the settled graph, the next round's choices, or the refusal. */
+async function round<P extends PlannedCandidate>(
+  search: PlanSearch<P>,
+  moving: ReadonlyMap<string, Choice<P>>,
+): Promise<Settled<P> | Again<P> | Refusal> {
+  const graph = await search.ports.walk(
+    new Map([...moving].map(([key, choice]) => [key, choice.prepared])),
+  );
+  if (graph.kind !== "graph") {
+    return ruleOut(search, moving, { refusal: walkRefusal(graph), involved: graph.declarers });
+  }
+
+  const chosen = await chooseMoves(graph, search);
+  if (!(chosen instanceof Map)) {
+    return ruleOut(search, moving, chosen);
+  }
+
+  const changed = changedChoice(moving, chosen);
+  return changed === undefined
+    ? { ok: true, graph, moves: chosen }
+    : { ok: "again", moving: chosen, changed };
+}
+
+/**
+ * The graph the choices settle on, with the choices, or the refusal. WR-4:
+ * a chain of any depth settles; only choices that come back to a state
+ * they were in before refuse, since they would repeat forever.
+ */
 async function settleChoices<P extends PlannedCandidate>(
   ports: DependencyPlanPorts<P>,
-): Promise<
-  | { readonly ok: true; readonly graph: DependencyGraph; readonly moves: Map<string, Choice<P>> }
-  | Refusal
-> {
-  const verdicts = new Map<string, Promise<PlanJudgement<P>>>();
+): Promise<Settled<P> | Refusal> {
+  const search: PlanSearch<P> = {
+    ports,
+    verdicts: new Map(),
+    excluded: new Map(),
+    ruledOutBy: new Map(),
+  };
   let moving = new Map<string, Choice<P>>();
-  for (let round = 1; ; round++) {
+  const seen = new Set([stateOf(search, moving)]);
+  for (;;) {
     // eslint-disable-next-line no-await-in-loop -- each walk reads the choices the last one settled
-    const graph = await ports.walk(
-      new Map([...moving].map(([key, choice]) => [key, choice.prepared])),
-    );
-    if (graph.kind !== "graph") {
-      return walkRefusal(graph);
-    }
-
-    // eslint-disable-next-line no-await-in-loop -- each walk reads the choices the last one settled
-    const next = await chooseMoves(graph, ports, verdicts);
-    if (!(next instanceof Map)) {
+    const next = await round(search, moving);
+    if (next.ok !== "again") {
       return next;
     }
 
-    const changed = changedChoice(moving, next);
-    if (changed === undefined) {
-      return { ok: true, graph, moves: next };
-    }
-
-    if (round === MAX_PLAN_ROUNDS) {
+    const state = stateOf(search, next.moving);
+    if (seen.has(state)) {
       return unmovable(
-        changed.request,
+        next.changed.request,
         "its version does not settle: each version chosen for it changes what the other dependencies need",
       );
     }
 
-    moving = next;
+    seen.add(state);
+    moving = next.moving;
   }
 }
 
@@ -392,7 +516,9 @@ function schedule<P extends PlannedCandidate>(
         ...(graph.root === undefined ? [] : [{ kind: "install" as const, member: graph.root }]),
       ],
       alreadyInstalled: graph.nodes.flatMap((node) =>
-        node.kind === "recorded" && !node.walked && fromRoot.has(node.member.key)
+        node.kind === "recorded" &&
+        !node.walked &&
+        (!options.deferMoveDependencies || fromRoot.has(node.member.key))
           ? [node.member]
           : [],
       ),

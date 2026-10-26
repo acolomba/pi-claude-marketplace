@@ -17,15 +17,14 @@ import path from "node:path";
 
 import { publishGitRepository, pushGitRepository } from "./git-marketplace.ts";
 import { runGit } from "./hermetic-git.ts";
-import { requireColumns, writePluginFiles } from "./path-marketplace.ts";
+import { readDependencyCell, requireColumns, writePluginFiles } from "./path-marketplace.ts";
 
+import type { OfferedPlugin } from "./path-marketplace.ts";
 import type { GitRepositoryHost } from "./published-marketplace.ts";
 import type { DataTable } from "@cucumber/cucumber";
 
 /** One plugin a git repository holds, at `path` inside it; an empty path is the root. */
-export interface RepositoryPlugin {
-  readonly name: string;
-  readonly version: string;
+export interface RepositoryPlugin extends OfferedPlugin {
   readonly path: string;
 }
 
@@ -76,20 +75,33 @@ export interface GitPluginEntry {
   readonly source: GitPluginSource;
 }
 
+const REPOSITORY_COLUMNS = ["name", "version", "path"] as const;
+
 /**
- * Reads a `| name | version | path |` table, throwing on a missing or unknown
- * column, on a path that is absolute or climbs out with `..`, and on two
- * plugins at one path.
+ * Reads a `| name | version | path |` table, or one with a last
+ * `dependencies` column that `readDependencyCell` reads, throwing on a
+ * missing or unknown column, on a path that is absolute or climbs out with
+ * `..`, and on two plugins at one path.
  */
 export function readRepositoryPlugins(table: DataTable): RepositoryPlugin[] {
-  requireColumns(table, ["name", "version", "path"]);
+  const declaresDependencies = table.raw()[0]?.length === REPOSITORY_COLUMNS.length + 1;
+  requireColumns(
+    table,
+    declaresDependencies ? [...REPOSITORY_COLUMNS, "dependencies"] : REPOSITORY_COLUMNS,
+  );
   const plugins = table.hashes().map((row) => {
     const pluginPath = String(row.path);
     if (path.posix.isAbsolute(pluginPath) || pluginPath.split("/").includes("..")) {
       throw new Error(`the plugin path ${pluginPath} is not a path inside the repository`);
     }
 
-    return { name: String(row.name), version: String(row.version), path: pluginPath };
+    const dependencies = declaresDependencies ? readDependencyCell(String(row.dependencies)) : [];
+    return {
+      name: String(row.name),
+      version: String(row.version),
+      path: pluginPath,
+      ...(dependencies.length > 0 && { dependencies }),
+    };
   });
   const paths = plugins.map((plugin) => plugin.path);
   if (new Set(paths).size !== paths.length) {

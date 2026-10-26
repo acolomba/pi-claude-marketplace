@@ -268,6 +268,15 @@ export function recordedVersionSatisfies(recorded: string, range: string): boole
 }
 
 /**
+ * WR-1: the range that admits every version but `version`, or `undefined`
+ * when `version` has no semver form a range can name.
+ */
+export function excludingRange(version: string): string | undefined {
+  const exact = valid(version);
+  return exact === null ? undefined : `<${exact} || >${exact}`;
+}
+
+/**
  * Bounds a range for a user-visible reason, marking how much was dropped.
  *
  * An intersected range is synthesized rather than declared, so it carries no

@@ -239,6 +239,8 @@ export interface ThreePhaseArgsBase {
   readonly requesters?: NonNullable<PreparePluginUpdateOptions["requesters"]>;
   /** UPD-DEP-D1: the version the dependency plan chose (`PreparePluginUpdateOptions`). */
   readonly expectVersion?: string;
+  /** WR-1: the versions the dependency plan ruled out (`PreparePluginUpdateOptions`). */
+  readonly excludedVersions?: PreparePluginUpdateOptions["excludedVersions"];
   /**
    * UPD-DEP-D1: settles the dependency closure of the version the update
    * moves to before the swap, under a policy that resolves it. Absent, the

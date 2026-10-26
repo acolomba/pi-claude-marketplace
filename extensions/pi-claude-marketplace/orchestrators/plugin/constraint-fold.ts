@@ -19,6 +19,7 @@
 // there, and calling `semver` directly from this leaf would bypass both.
 
 import {
+  excludingRange,
   intersectDependencyRanges,
   isUnconstrainedRange,
   recordedVersionSatisfies,
@@ -297,7 +298,9 @@ export function transportHeld(
  *
  * `state` is the ONE scope document the declarations were walked over, so
  * the holders are scope-local by construction (D-10-07). Each requester's
- * ranges stand in for its record's declarations (UPD-DEP-D1).
+ * ranges stand in for its record's declarations (UPD-DEP-D1). WR-1: each
+ * version a dependency plan ruled out narrows the fold without a holder, so
+ * no cause line names it.
  */
 export function foldDeclaredConstraint(
   declarations: ReadonlyMap<string, readonly AddressedDependency[]>,
@@ -305,12 +308,16 @@ export function foldDeclaredConstraint(
   plugin: string,
   marketplace: string,
   requesters: readonly ConstraintRequester[] = [],
+  excludedVersions: readonly string[] = [],
 ): UpdateConstraintVerdict {
   const holders = collectHolders(declarations, state, recordKey(plugin, marketplace), requesters);
   // A declaration HOLDS the key whatever it names, but only a declared RANGE
   // constrains a version: a holder with no `range` stays in `holders` for
   // the cause line and is left out of the fold below.
-  const ranges = holders.flatMap((holder) => (holder.range === undefined ? [] : [holder.range]));
+  const ranges = [
+    ...holders.flatMap((holder) => (holder.range === undefined ? [] : [holder.range])),
+    ...excludedVersions.flatMap((version) => excludingRange(version) ?? []),
+  ];
   const fold = intersectDependencyRanges(ranges);
   if (!fold.ok) {
     return { kind: "held", cause: describeConstraint(holders, { arm: fold.reason }) };
@@ -375,6 +382,8 @@ export interface CatalogConstraintOptions {
   readonly seam?: CatalogConstraintSeam;
   /** UPD-DEP-D1: the plugins whose ranges the move must also satisfy. */
   readonly requesters?: readonly ConstraintRequester[];
+  /** WR-1: the versions a dependency plan ruled out for the move. */
+  readonly excludedVersions?: readonly string[] | undefined;
 }
 
 const REAL_CATALOG_CONSTRAINT_SEAM: CatalogConstraintSeam = Object.freeze({
@@ -411,5 +420,6 @@ export async function evaluateCatalogConstraint(
     options.plugin,
     options.marketplace,
     options.requesters,
+    options.excludedVersions,
   );
 }

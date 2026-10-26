@@ -2540,7 +2540,7 @@ test("reports no changed resources when every install left the Pi resource set a
   verifyBoundary();
 });
 
-test("UPD-DEP-D1 / WR-N5: lists every dependency change an install made beside its row", async (t) => {
+test("UPD-DEP-D1 / WR-N5 / WR-3: lists every dependency change an install made beside its row", async (t) => {
   // arrange
   const { cwd } = await createHermeticScopes(t, "dependency-changes");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -2578,6 +2578,21 @@ test("UPD-DEP-D1 / WR-N5: lists every dependency change an install made beside i
               },
             },
           ],
+          dependencyInstalls: [
+            {
+              key: "ggg@mp",
+              name: "ggg",
+              marketplace: "mp",
+              row: {
+                status: "installed",
+                name: "ggg@mp",
+                version: "1.0.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            },
+          ],
         }),
       loadSettings: () =>
         Promise.resolve(
@@ -2597,8 +2612,9 @@ test("UPD-DEP-D1 / WR-N5: lists every dependency change an install made beside i
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [user] (added)\n  ● plugin (installed)\n  ● lib@mp v1.0.0 → v2.0.0 (updated)\n\n" +
-        "Import: 3 successes\n\n" +
+        "● mp [user] (added)\n  ● plugin (installed)\n  ● lib@mp v1.0.0 → v2.0.0 (updated)\n" +
+        "  ● ggg@mp v1.0.0 (installed)\n\n" +
+        "Import: 4 successes\n\n" +
         "/reload to pick up changes",
     },
   ]);

@@ -127,6 +127,7 @@ function moveArgs(
     constraintTagMemo: context.constraintTagMemo,
     constraintMarketplaceTagMemo: context.constraintMarketplaceTagMemo,
     requesters: request.requesters,
+    excludedVersions: request.excludedVersions,
     ...(context.partial !== undefined && { partial: context.partial }),
     ...(context.mapModel !== undefined && { mapModel: context.mapModel }),
     ...(context.notification !== undefined && { preflightNotification: context.notification }),
@@ -175,6 +176,12 @@ export async function judgeDependencyMove(
       return { ok: false, cause: refusalCause(prepared) };
     }
 
+    // WR-1: a version with no semver form escapes the range that rules the
+    // others out, so the plan's own list decides.
+    if (request.excludedVersions?.includes(prepared.toVersion) === true) {
+      return { ok: false, cause: `version ${prepared.toVersion} was ruled out by the plan` };
+    }
+
     await assertUpdateNamesFree(args, prepared);
     return { ok: true, prepared };
   } catch (err) {
@@ -201,13 +208,16 @@ function moveLanded(outcome: UpdateRunOutcome): boolean {
 /**
  * The row a move reports, named by the dependency's full key as cascade rows
  * are: the update row of a move that landed, a failed row with what the update
- * found for one that did not, nothing for a disabled record's pin refresh.
+ * found for one that did not. WR-2: a disabled record's pin refresh changed
+ * the record too, so it reports the move as `{already disabled}`; the
+ * re-enable after it takes its place (`supersedePinRefreshes`).
  */
 function moveRow(
   context: DependencyMoveContext,
-  request: DependencyMoveRequest,
+  move: PlannedDependencyMove,
   outcome: UpdateRunOutcome,
 ): UpdateDependencyRow | undefined {
+  const { request } = move;
   if (outcome.partition === "updated") {
     const row = updatedRowFromOutcome(outcome, context.scope, {
       updated: companionSeverity(outcome, context.softDeps),
@@ -216,8 +226,21 @@ function moveRow(
     return { ...row, name: request.key };
   }
 
-  if (outcome.partition === "unchanged" || moveLanded(outcome)) {
+  if (outcome.partition === "unchanged") {
     return undefined;
+  }
+
+  if (moveLanded(outcome)) {
+    return {
+      status: "updated",
+      name: request.key,
+      from: request.recordedVersion,
+      to: move.version,
+      dependencies: [],
+      reasons: ["already disabled"],
+      severity: "info",
+      needsReload: false,
+    };
   }
 
   const thrown = outcome.partition === "failed" ? outcome.cause : undefined;
@@ -229,6 +252,23 @@ function moveRow(
     cause: thrown ?? new Error(refusalCause(outcome)),
     severity: "error",
   };
+}
+
+/** WR-2: whether `row` reports a disabled dependency's pin refresh. */
+function isPinRefresh(row: UpdateDependencyRow): boolean {
+  return row.status === "updated" && row.reasons?.includes("already disabled") === true;
+}
+
+/**
+ * WR-2: `rows` without the pin refresh of each dependency `later` reports
+ * again, so a dependency moved while disabled and then re-enabled reports
+ * one row, its re-enable.
+ */
+export function supersedePinRefreshes<T extends { readonly row: UpdateDependencyRow }>(
+  rows: readonly T[],
+  later: ReadonlySet<string>,
+): T[] {
+  return rows.filter((entry) => !(isPinRefresh(entry.row) && later.has(entry.row.name)));
 }
 
 /**
@@ -245,7 +285,7 @@ export async function runDependencyMove(
     { ...moveArgs(context, move.request), expectVersion: move.version },
     { ...context.policy, refreshSource: false },
   );
-  const row = moveRow(context, move.request, outcome);
+  const row = moveRow(context, move, outcome);
   return { landed: moveLanded(outcome), rows: row === undefined ? [] : [row] };
 }
 

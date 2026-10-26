@@ -4227,6 +4227,81 @@ test("UPD-DEP-D1: a recorded root's cascade whose closure fails reports the walk
   );
 });
 
+test("WR-1: a failed graph walk names the plugins whose declarations the failure involves", async (t) => {
+  // arrange: four walks of `app`, each failing a different way.
+  const environment = await createHermeticEnvironment(t, "install-cascade-walk-declarers-");
+  const state = await seedMarketplace(environment.cwd, ["app", "bar", "baz"], {
+    gitSourced: ["baz"],
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const base = {
+    state,
+    locations,
+    rootKey: `app@${MARKETPLACE}`,
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set<string>(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  };
+  const walk = async (
+    lookup: ClosureLookup,
+    tagProbe?: CascadeTagProbe,
+  ): Promise<readonly [string, readonly string[]]> => {
+    const walked = await walkDependencyGraph({
+      ...base,
+      lookup,
+      ...(tagProbe !== undefined && { tagProbe }),
+    });
+    return walked.kind === "graph" ? ["graph", []] : [walked.kind, walked.declarers];
+  };
+
+  // act
+  const answers = [
+    await walk(
+      catalog({
+        [`app@${MARKETPLACE}`]: [{ name: "bar", version: "^1.0.0" }, { name: "baz" }],
+        [`baz@${MARKETPLACE}`]: [{ name: "bar", version: "^2.0.0" }],
+        [`bar@${MARKETPLACE}`]: [],
+      }),
+    ),
+    await walk(
+      catalog({
+        [`app@${MARKETPLACE}`]: [{ name: "baz", version: "^1.0.0" }],
+        [`baz@${MARKETPLACE}`]: [],
+      }),
+      tagProbeAnswering(
+        {
+          kind: "tag-listing-failed",
+          cause: new Error("unreachable"),
+          classification: undefined,
+        },
+        [],
+      ),
+    ),
+    await walk(
+      catalog({
+        [`app@${MARKETPLACE}`]: [{ name: "bar" }],
+        [`bar@${MARKETPLACE}`]: [{ name: "app" }],
+      }),
+    ),
+    await walk((subject) =>
+      Promise.resolve<ClosureLookupResult>(
+        subject.key === `app@${MARKETPLACE}`
+          ? { kind: "found", dependencies: [{ name: "bar" }] }
+          : { kind: "unusable", detail: "unreadable manifest" },
+      ),
+    ),
+  ];
+
+  // assert
+  assert.deepStrictEqual(answers, [
+    ["constraint-failed", [`app@${MARKETPLACE}`, `baz@${MARKETPLACE}`]],
+    ["constraint-failed", []],
+    ["closure-failed", [`app@${MARKETPLACE}`, `bar@${MARKETPLACE}`, `app@${MARKETPLACE}`]],
+    ["closure-failed", [`bar@${MARKETPLACE}`, `app@${MARKETPLACE}`]],
+  ]);
+});
+
 test("UPD-DEP-D1: a recorded root's cascade whose member fails reports it failed", async (t) => {
   // arrange: the injected scheduler fails the phase array.
   const environment = await createHermeticEnvironment(t, "install-cascade-root-member-");

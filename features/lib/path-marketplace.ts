@@ -59,19 +59,26 @@ function readDependencyElement(element: string): string | RangedDependency {
 }
 
 /**
+ * Reads a `dependencies` cell: a comma-separated list of elements such as
+ * `lib`, `lib@tools`, `lib@^2.0.0` or `lib (>=2.0.0)`; an empty cell means
+ * none.
+ */
+export function readDependencyCell(cell: string): (string | RangedDependency)[] {
+  return cell
+    .split(",")
+    .map((element) => element.trim())
+    .filter((element) => element !== "")
+    .map(readDependencyElement);
+}
+
+/**
  * Reads a `| name | version | dependencies |` table, throwing on a missing or
- * unknown column. The `dependencies` cell is a comma-separated list of
- * elements such as `lib`, `lib@tools`, `lib@^2.0.0` or `lib (>=2.0.0)`; an
- * empty cell means none.
+ * unknown column. The `dependencies` cell is read by `readDependencyCell`.
  */
 export function readOfferedPluginsWithDependencies(table: DataTable): OfferedPlugin[] {
   requireColumns(table, ["name", "version", "dependencies"]);
   return table.hashes().map((row) => {
-    const dependencies = String(row.dependencies)
-      .split(",")
-      .map((element) => element.trim())
-      .filter((element) => element !== "")
-      .map(readDependencyElement);
+    const dependencies = readDependencyCell(String(row.dependencies));
     return {
       name: String(row.name),
       version: String(row.version),

@@ -760,6 +760,13 @@ export type InstallPluginOutcome =
        * Omitted when nothing moved (NREG-01).
        */
       readonly movedDependencies?: readonly MovedDependency[];
+      /**
+       * UPD-DEP-D1 / WR-3: the dependencies an install after a dependency
+       * plan installed or re-enabled together with the plugin, so `import`
+       * lists every change the install made. Omitted when the install needed
+       * no plan or landed none (NREG-01).
+       */
+      readonly dependencyInstalls?: readonly MovedDependency[];
     } & Omit<LedgerDegradationSignals, "stagedAgents" | "stagedMcpServers" | "stagedWorkflows">)
   | {
       /**

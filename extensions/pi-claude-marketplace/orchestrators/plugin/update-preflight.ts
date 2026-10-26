@@ -225,6 +225,12 @@ export interface PreparePluginUpdateOptions {
    */
   readonly expectVersion?: string;
   /**
+   * UPD-DEP-D1 / WR-1: the versions a dependency plan ruled out for this
+   * move. The constraint gate folds them out of the range, so the move takes
+   * the highest version left.
+   */
+  readonly excludedVersions?: readonly string[] | undefined;
+  /**
    * UPD-DEP-D1: decide the candidate and write nothing, so a caller can judge
    * every dependency move before it makes the first one. A disabled record's
    * pin refresh is the one write the preflight makes, and it is skipped.
@@ -941,6 +947,7 @@ function constraintGateOptions(
   return {
     ...base,
     ...(options.requesters !== undefined && { requesters: options.requesters }),
+    excludedVersions: options.excludedVersions,
     ...(options.constraintTagMemo !== undefined && { tagMemo: options.constraintTagMemo }),
     ...(options.constraintMarketplaceTagMemo !== undefined && {
       marketplaceTagMemo: options.constraintMarketplaceTagMemo,
