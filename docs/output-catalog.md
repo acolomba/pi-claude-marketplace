@@ -1080,7 +1080,7 @@ Some plugin operations have failed.
   ⊘ helper (failed) {dependency failed}
 ```
 
-The target marketplace is added, but the root marketplace has not granted permission to install a new dependency from it. The failed dependency row identifies its declarer, target marketplace, and policy root. Its cause offers both remedies: install the named dependency manually first, or edit the root marketplace's `allowCrossMarketplaceDependenciesOn` list. The requesting plugin has its own failed row. Severity is `error`; neither row requests reload because the refusal happens before materialization.
+The target marketplace is added, but the root marketplace has not granted permission to install a new dependency from it. A dependency the target scope records but has disabled gets the same row, as in Claude Code: only an enabled dependency is exempt. The failed dependency row identifies its declarer, target marketplace, and policy root. Its cause offers both remedies: install the named dependency manually first, or edit the root marketplace's `allowCrossMarketplaceDependenciesOn` list. The requesting plugin has its own failed row. Severity is `error`; neither row requests reload because the refusal happens before materialization.
 
 ### Dependency cascade -- the dependency is not in its marketplace (RESV-01)
 

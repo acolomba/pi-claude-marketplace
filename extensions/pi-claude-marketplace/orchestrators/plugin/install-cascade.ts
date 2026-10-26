@@ -1478,18 +1478,19 @@ async function resolveCascade(
   // as the dependent. D-09-04's `treatDisabledAsWall` is the one input that
   // reverses this: the walk stops at a disabled key exactly as it stops at a
   // live one. UPD-DEP-D1: a recorded key a plan moves is read through too.
-  const walls =
-    options.treatDisabledAsWall === true
-      ? options.installedKeys
-      : liveInstalledKeys(options.state, options.installedKeys);
+  const live = liveInstalledKeys(options.state, options.installedKeys);
+  const walls = options.treatDisabledAsWall === true ? options.installedKeys : live;
   const closure = await resolveDependencyClosure({
     rootKey: options.rootKey,
     lookup: options.lookup,
     installedKeys: new Set([...walls].filter((key) => !readThrough.has(key))),
     knownMarketplaces: options.knownMarketplaces,
+    // XMKT-02: only an enabled record is exempt from the root's allowlist, as
+    // in Claude Code, so a disabled foreign dependency this install would
+    // enable again needs the root marketplace's permission.
     installPolicy: {
       allowedMarketplaces: options.rootAllowedMarketplaces,
-      recordedKeys: options.installedKeys,
+      recordedKeys: live,
     },
   });
   if (!closure.ok) {

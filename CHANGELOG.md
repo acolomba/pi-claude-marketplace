@@ -16,6 +16,7 @@
   - The first clone of an unpinned git source no longer fetches again. An install that the git host refuses fails as `{source missing}`, `{network error}`, or `{network unreachable}`.
   - When `apply` installs a plugin, its `(installed)` row shows the version, as `install` does.
   - `apply` no longer disables a plugin whose new version needs a plugin that the same `apply` installs from a config. `pending` lists the move instead.
+  - An install refuses a disabled dependency from another marketplace with `{cross-marketplace}` unless the plugin's marketplace allows that marketplace, as Claude Code does.
   - A state lock that another process takes or removes during a long command no longer crashes Pi. The command fails and saves no installation record after the loss.
 
 - Internal: a new worktree session now runs `scripts/init.sh` once when it starts, also in the Claude desktop app. (#273)

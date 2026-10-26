@@ -906,3 +906,30 @@ Feature: Plugin install dependencies
       | aaa@tools | 2.0.0   | true    |
       | app@tools | 1.0.0   | true    |
       | kkk@tools | 1.0.0   | true    |
+
+  Scenario: Installing a plugin whose disabled dependency comes from a marketplace its own marketplace does not allow fails as cross-marketplace and keeps the dependency disabled
+    Given the marketplace "other" is published as a dir source
+    Given the marketplace "other" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 1.0.0   |              |
+    Given the marketplace "other" is added to the project scope
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@other    |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install lib@other --scope project"
+    Given the user has run "/claude:plugin disable lib@other --scope project"
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status | reasons           | scope   | cause chain                                                                                                                                                                                                                                                                  | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed | dependency failed | project |                                                                                                                                                                                                                                                                              |                 |       |                  |
+      | tools            | project           | lib@other | lib@other | failed | cross-marketplace | project | Dependency "lib@other", declared by "app@tools", is from marketplace "other", which root marketplace "tools" does not allow. Install "lib@other" manually first, or add "other" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "tools". | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | lib@other | 1.0.0   | false   |

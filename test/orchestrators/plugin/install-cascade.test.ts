@@ -2764,7 +2764,7 @@ test("EDEP-03 a disabled dependency declaring a plugin its marketplace does not 
   assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
 });
 
-test("XMKT-02 a recorded disabled foreign member cannot grant its new child permission", async (t) => {
+test("XMKT-02 a recorded disabled foreign dependency needs the root marketplace's permission", async (t) => {
   const environment = await createHermeticEnvironment(
     t,
     "install-cascade-disabled-foreign-policy-",
@@ -2807,15 +2807,50 @@ test("XMKT-02 a recorded disabled foreign member cannot grant its new child perm
     failure: {
       ok: false,
       reason: "cross-marketplace",
-      key: "new-leaf@gamma",
-      requiredBy: "bar@beta",
-      marketplace: "gamma",
+      key: "bar@beta",
+      requiredBy: `foo@${MARKETPLACE}`,
+      marketplace: "beta",
       rootMarketplace: MARKETPLACE,
     },
   });
   assert.deepStrictEqual(seen, []);
   assert.strictEqual(JSON.stringify(state), before);
   assert.deepStrictEqual(await retryTree(locations.scopeRoot), treeBefore);
+});
+
+test("XMKT-02 a recorded enabled foreign dependency needs no permission and stays a wall", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-cascade-enabled-foreign-");
+  const { state } = await seedOneDisabledDependency(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+  const rootRecord = state.marketplaces[MARKETPLACE];
+  assert.ok(rootRecord !== undefined);
+  const bar = rootRecord.plugins.bar;
+  assert.ok(bar !== undefined);
+  bar.enabled = true;
+  state.marketplaces.beta = { ...rootRecord, name: "beta", plugins: { bar } };
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", marketplace: "beta" }],
+      "bar@beta": [{ name: "new-leaf", marketplace: "gamma" }],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set(),
+    installedKeys: new Set(["bar@beta"]),
+    knownMarketplaces: new Set([MARKETPLACE, "beta", "gamma"]),
+  });
+
+  // assert
+  assert.ok(cascade.kind === "installed");
+  assert.deepStrictEqual(
+    cascade.members.map((member) => member.key),
+    [`foo@${MARKETPLACE}`],
+  );
 });
 
 test("a requested plugin that is recorded and disabled is refused by its own ledger, not re-enabled as a member", async (t) => {
