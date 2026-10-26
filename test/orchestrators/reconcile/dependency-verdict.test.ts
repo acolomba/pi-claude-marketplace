@@ -40,11 +40,14 @@ interface RecordSeed {
   /** LOAD-02: the check's own marker on a record it disabled. */
   readonly dependencyDisabled?: boolean;
   readonly version?: string;
+  /** GV-01: the release tag version a record at a tag holds. */
+  readonly resolvedVersion?: string;
 }
 
 function pluginRecord(seed: RecordSeed = {}): PluginRecord {
   return {
     version: seed.version ?? "1.0.0",
+    ...(seed.resolvedVersion !== undefined && { resolvedVersion: seed.resolvedVersion }),
     resolvedSource: path.join(SCOPE_ROOT, "plugins", "x"),
     compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
     resources: { workflows: [], skills: [], prompts: [], agents: [], mcpServers: [], hooks: [] },
@@ -251,6 +254,31 @@ test("reports a recorded version outside its declared range as out-of-range", as
 test("reports nothing when the recorded version satisfies the declared range", async () => {
   // arrange
   const mp = marketplaceRecord("mp", { app: {}, vault: { version: "2.3.4" } });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: { dependencies: [{ name: "vault", version: "^2.0.0" }] },
+      vault: {},
+    }),
+  });
+
+  // act
+  const verdict = await buildScopeSatisfactionVerdict({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests(),
+    loadManifest,
+  });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(verdict), []);
+});
+
+test("GV-01: a record at a release tag is measured by the tag's version, not its commit form", async () => {
+  // arrange -- `2.3.4-0123456789ab` is a semver prerelease `^2.0.0` rejects.
+  const mp = marketplaceRecord("mp", {
+    app: {},
+    vault: { version: "2.3.4-0123456789ab", resolvedVersion: "2.3.4" },
+  });
   const loadManifest = manifestLoader({
     [mp.manifestPath]: manifestOf("mp", {
       app: { dependencies: [{ name: "vault", version: "^2.0.0" }] },
@@ -876,6 +904,37 @@ test("APPLY1-01: the verdict after moves measures each moved record at the versi
     { dependent: "app@mp", dependency: "lib@mp", kind: "out-of-range", range: "^2.0.0" },
   ]);
   assert.deepEqual(unsatisfiedOf(after), []);
+});
+
+test("APPLY1-01 / GV-01: a record at a release tag is measured at the version a move lands on", async () => {
+  // arrange: `lib` sits at the tag 2.0.0, which `app`'s ^2.0.0 admits; the
+  // move lands it at the catalog's 3.0.0, which it does not.
+  const mp = marketplaceRecord("mp", {
+    app: {},
+    lib: { version: "2.0.0-0123456789ab", resolvedVersion: "2.0.0" },
+  });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", {
+      app: { dependencies: [{ name: "lib", version: "^2.0.0" }] },
+      lib: {},
+    }),
+  });
+  const options = {
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    loadManifest,
+    reader: ownManifests(),
+  };
+
+  // act
+  const after = await verdictAfterMoves(options, { enable: [], disable: [] }, [
+    { marketplace: "mp", plugin: "lib", toVersion: "3.0.0" },
+  ]);
+
+  // assert
+  assert.deepEqual(unsatisfiedOf(after), [
+    { dependent: "app@mp", dependency: "lib@mp", kind: "out-of-range", range: "^2.0.0" },
+  ]);
 });
 
 test("APPLY1-01: the final judgement reads a held-down record as disabled and holds what declares it", async () => {

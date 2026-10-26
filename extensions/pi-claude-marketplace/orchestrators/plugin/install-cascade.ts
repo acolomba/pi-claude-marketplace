@@ -99,7 +99,11 @@ import {
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
-import { isRecordedButDisabled, toDisabledRecord } from "../../persistence/state-io.ts";
+import {
+  isRecordedButDisabled,
+  rangeVersionOf,
+  toDisabledRecord,
+} from "../../persistence/state-io.ts";
 import { DependencyCascadeError } from "../../shared/errors.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
@@ -619,6 +623,8 @@ export interface RecordedGraphNode {
   /** The keys this node's declarations name; empty when the walk stopped at it. */
   readonly dependsOn: readonly string[];
   readonly version: string | undefined;
+  /** GV-01: the release tag's semver the record keeps, which ranges read. */
+  readonly resolvedVersion?: string;
   readonly disabled: boolean;
   readonly walked: boolean;
 }
@@ -921,12 +927,18 @@ async function resolveOneMember(
 /**
  * The version the locked snapshot records for a member, if it records one.
  *
- * Read in one place so the RESV-05 constraint check and the RESV-06 skipped-row
- * projection cannot answer the same question differently -- a row reporting a
- * version the check never saw would be the worst of both.
+ * Read from the one record the RESV-05 constraint check reads, so the RESV-06
+ * skipped-row projection and that check cannot answer about different
+ * records. The check reads the record's range version (GV-01); the row shows
+ * the version it records.
  */
 function recordedVersionOf(state: ExtensionState, member: ClosureMember): string | undefined {
-  return ownValue(ownValue(state.marketplaces, member.marketplace)?.plugins, member.name)?.version;
+  return recordOf(state, member)?.version;
+}
+
+/** The record the locked snapshot holds for a member, if any. */
+function recordOf(state: ExtensionState, member: ClosureMember): PluginInstallRecord | undefined {
+  return ownValue(ownValue(state.marketplaces, member.marketplace)?.plugins, member.name);
 }
 
 /**
@@ -1010,19 +1022,20 @@ function checkInstalledMember(
     return toIntersectionFailure(member.key, member.ranges, intersected);
   }
 
-  const recorded = recordedVersionOf(state, member);
+  const recorded = recordOf(state, member);
   if (isUnconstrainedRange(intersected.range) || recorded === undefined) {
     return undefined;
   }
 
-  return recordedVersionSatisfies(recorded, intersected.range)
+  // GV-01: a record at a release tag is read by the tag's semver.
+  return recordedVersionSatisfies(rangeVersionOf(recorded), intersected.range)
     ? undefined
     : {
         kind: "range-conflict",
         why: "installed-unsatisfied",
         key: member.key,
         range: renderDeclaredRanges(member.ranges),
-        recordedVersion: recorded,
+        recordedVersion: recorded.version,
       };
 }
 
@@ -1319,6 +1332,7 @@ function buildReEnableMemberPhase(
         {
           ...options.ledgerOptionsFor(member),
           pinVersionOverride: record.version,
+          ...(record.resolvedVersion !== undefined && { resolvedVersion: record.resolvedVersion }),
           allowExistingRecord: true,
           partial: !record.compatibility.installable,
         },
@@ -1694,11 +1708,13 @@ function graphNode(
     return { kind: "fresh", member: resolved, ...facts };
   }
 
+  const record = recordOf(options.state, member);
   return {
     kind: "recorded",
     member,
     ...facts,
-    version: recordedVersionOf(options.state, member),
+    version: record?.version,
+    ...(record?.resolvedVersion !== undefined && { resolvedVersion: record.resolvedVersion }),
     disabled: disabledRecordOf(options.state, options.rootKey, member) !== undefined,
     walked,
   };

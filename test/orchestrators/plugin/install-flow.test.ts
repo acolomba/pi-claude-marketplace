@@ -8568,6 +8568,44 @@ test("D-04-07: installing a disabled dependency by name promotes it, re-material
   });
 });
 
+test("D-04-07 / GV-01: a promoted dependency keeps the release tag version its record holds", async () => {
+  await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-tag-"));
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      const { ctx, run } = await seedDependencyInstalled(cwd, installPlugin);
+      await disableSeededDependency(cwd, hooksRouting, { ctx, run });
+      const state = await loadState(locations.extensionRoot);
+      const dependency = state.marketplaces["mp"]?.plugins["some-other-plugin"];
+      assert.ok(dependency !== undefined);
+      dependency.resolvedVersion = "0.0.1";
+      await saveState(locations.extensionRoot, state);
+
+      // act
+      await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "some-other-plugin",
+      });
+
+      // assert
+      const promoted = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins[
+        "some-other-plugin"
+      ];
+      assert.deepStrictEqual(
+        [promoted?.provenance, promoted?.enabled, promoted?.resolvedVersion],
+        ["explicit", true, "0.0.1"],
+      );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("D-04-07: a --local promotion of a disabled dependency writes the enable path's own declaration to the local config", async () => {
   await withHermeticHome(async ({ hooksRouting, installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-d0407-disabled-local-"));
@@ -11235,7 +11273,7 @@ async function seedGitSourceMarketplace(opts: {
   await saveState(locations.extensionRoot, state);
 }
 
-test("RESV-03/RESV-05: a tag-pinned dependency records the tag's own version, and a later constraint reads it back", async () => {
+test("RESV-03/RESV-05/GV-01: a tag-pinned dependency records the tag's commit and semver, and a later constraint reads the semver back", async () => {
   await withHermeticHome(async ({ installPlugin }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-resv03-repin-"));
     try {
@@ -11278,17 +11316,21 @@ test("RESV-03/RESV-05: a tag-pinned dependency records the tag's own version, an
           }),
       });
 
-      // assert: the checkout addresses the tag's commit, and the recorded
-      // version is the SEMVER that tag carries -- the value the constraint
-      // machinery reads back. The git-source `sha-<12hex>` form would coerce to
-      // an arbitrary digit run instead (this fixture's coerces to 1.0.0), so
-      // recording it would make the dependency fail the very range it just
-      // satisfied.
+      // assert: the checkout addresses the tag's commit. The recorded version
+      // is the declared one with the tag's commit appended, as Claude Code
+      // records it, and `resolvedVersion` is the SEMVER that tag carries --
+      // the value the constraint machinery reads back. The commit form is a
+      // semver prerelease that `^9.0.0` rejects, so reading it would make the
+      // dependency fail the very range it just satisfied.
       assert.equal(outcome.status, "installed");
       assert.equal(gitState.checkoutCalls.length, 1, "one checkout, at the selected tag");
       assert.equal(gitState.checkoutCalls[0]?.ref, GIT_SOURCE_SHA);
       const after = await loadState(locationsFor("project", cwd).extensionRoot);
-      assert.equal(after.marketplaces["mp"]?.plugins["gp"]?.version, "9.9.9");
+      const recorded = after.marketplaces["mp"]?.plugins["gp"];
+      assert.deepStrictEqual(
+        [recorded?.version, recorded?.resolvedVersion],
+        [`9.9.9-${GIT_SOURCE_SHA.slice(0, 12)}`, "9.9.9"],
+      );
 
       // act: a second plugin constraining the same dependency at the same range.
       // RESV-05 checks the RECORDED version and makes no tag query at all, so
@@ -16094,7 +16136,7 @@ test("D-09-05: a satisfiable root range reaches the marketplace tag probe throug
   });
 });
 
-test("D-09-05: a pinned git-source root records the tag's own version through the shared ledger options", async () => {
+test("D-09-05: a pinned git-source root records the tag's commit and semver through the shared ledger options", async () => {
   await withHermeticHome(async ({ installMissingDependency }) => {
     const cwd = await mkdtemp(path.join(tmpdir(), "install-missing-dep-git-pin-"));
     try {
@@ -16139,8 +16181,11 @@ test("D-09-05: a pinned git-source root records the tag's own version through th
       assert.equal(gitState.checkoutCalls.length, 1, "one checkout, at the selected tag");
       assert.equal(gitState.checkoutCalls[0]?.ref, GIT_SOURCE_SHA);
       const after = await loadState(locations.extensionRoot);
-      assert.equal(after.marketplaces["mp"]?.plugins["gp"]?.version, "9.9.9");
-      assert.equal(after.marketplaces["mp"]?.plugins["gp"]?.provenance, "dependency");
+      const recorded = after.marketplaces["mp"]?.plugins["gp"];
+      assert.deepStrictEqual(
+        [recorded?.version, recorded?.resolvedVersion, recorded?.provenance],
+        [`9.9.9-${GIT_SOURCE_SHA.slice(0, 12)}`, "9.9.9", "dependency"],
+      );
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

@@ -55,17 +55,49 @@ export async function computeHashVersion(pluginRoot: string): Promise<string> {
  * recorded apart (D-77-02).
  */
 export function shaVersion(fullSha: string, source: ParsedSource): string {
+  return commitVersion(fullSha, source.kind === "git-subdir" ? source.path : undefined);
+}
+
+/**
+ * GV-01: the version Claude Code records for a plugin that declares none and
+ * installs at the release tag a dependency's version range selected:
+ * `shaVersion` of the tag's commit. A `path` source installs at a tag of its
+ * marketplace's repository, and Claude Code reads it as a `git-subdir` source
+ * of that repository: its path loses one leading `./` (or is a lone `.`), and
+ * a path left empty names the repository root, which hashes no path.
+ */
+export function tagShaVersion(tagCommit: string, source: ParsedSource): string {
+  if (source.kind !== "path") {
+    return shaVersion(tagCommit, source);
+  }
+
+  const subdir = source.raw.replace(/^\.(?:\/|$)/, "");
+  return commitVersion(tagCommit, subdir === "" ? undefined : subdir);
+}
+
+/** A commit's 12 characters, with the hash of a subdirectory path when there is one. */
+function commitVersion(fullSha: string, subdirPath: string | undefined): string {
   const commit = fullSha.slice(0, HASH_TRUNC);
-  if (source.kind !== "git-subdir") {
+  if (subdirPath === undefined) {
     return commit;
   }
 
-  let subdir = source.path.replaceAll("\\", "/").replace(/^\.\//, "");
+  let subdir = subdirPath.replaceAll("\\", "/").replace(/^\.\//, "");
   while (subdir.endsWith("/")) {
     subdir = subdir.slice(0, -1);
   }
 
   return `${commit}-${createHash("sha256").update(subdir).digest("hex").slice(0, SUBDIR_HASH_TRUNC)}`;
+}
+
+/**
+ * GV-01: the version Claude Code records for a plugin that declares one and
+ * installs at the release tag a dependency's version range selected: `-` and
+ * the first 12 characters of the tag's commit appended, once.
+ */
+export function withTagCommit(version: string, tagCommit: string): string {
+  const suffix = `-${tagCommit.slice(0, HASH_TRUNC)}`;
+  return version.endsWith(suffix) ? version : `${version}${suffix}`;
 }
 
 /**
@@ -83,8 +115,7 @@ export function declaredVersionWithPin(
     return declared;
   }
 
-  const suffix = `-${pin.slice(0, HASH_TRUNC)}`;
-  return declared.endsWith(suffix) ? declared : `${declared}${suffix}`;
+  return withTagCommit(declared, pin);
 }
 
 /** The commit a git source is pinned to; other sources carry no pin. */
@@ -106,9 +137,20 @@ function sourcePin(source: ParsedSource): string | undefined {
  * before GV-01 holds `sha-<12hex>` where the same commit now derives
  * `<12hex>` (or `<12hex>-<8hex>` for a `git-subdir` source); both name one
  * commit, so the old form is the same version and an update moves nothing.
+ *
+ * GV-01: a record installed at a release tag holds the candidate's declared
+ * version with its commit appended (`withTagCommit`), which names the same
+ * version when `recordedCommit`, the commit the record holds, is that commit.
  */
-export function isSameVersion(recorded: string, candidate: string): boolean {
-  if (recorded === candidate) {
+export function isSameVersion(
+  recorded: string,
+  candidate: string,
+  recordedCommit?: string,
+): boolean {
+  if (
+    recorded === candidate ||
+    (recordedCommit !== undefined && recorded === withTagCommit(candidate, recordedCommit))
+  ) {
     return true;
   }
 

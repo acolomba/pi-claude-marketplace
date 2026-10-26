@@ -25,8 +25,8 @@ import { PLUGIN_ENTRY_VALIDATOR } from "../../domain/components/plugin.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { parsePluginSource } from "../../domain/source.ts";
-import { declaredVersionWithPin, shaVersion } from "../../domain/version.ts";
-import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+import { declaredVersionWithPin, isSameVersion, shaVersion } from "../../domain/version.ts";
+import { atCatalogVersion, isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import { errorMessage } from "../../shared/errors.ts";
 import { ownValue } from "../../shared/own-key.ts";
@@ -336,7 +336,7 @@ function coldGitOffer(
     };
   }
 
-  if (declared !== undefined && declared !== record.version) {
+  if (declared !== undefined && !isSameVersion(record.version, declared, record.resolvedSha)) {
     return { toVersion: declared, revisionChanged: true };
   }
 
@@ -824,7 +824,7 @@ async function judgePlannedScope(
       return record;
     }
 
-    const landed = { ...record, version };
+    const landed = atCatalogVersion(record, version);
     movedRecords.add(landed);
     return landed;
   });

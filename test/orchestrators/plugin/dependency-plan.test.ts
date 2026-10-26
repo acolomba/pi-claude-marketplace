@@ -116,6 +116,8 @@ function ports(world: {
   readonly walks: Readonly<Record<string, DependencyGraph | GraphWalkFailure>>;
   readonly versions?: (request: DependencyMoveRequest) => string | undefined;
   readonly preview?: (member: ResolvedCascadeMember) => Promise<void>;
+  /** GV-01: each version lands at a release tag, its commit appended. */
+  readonly tagged?: boolean;
 }): DependencyPlanPorts<PlannedCandidate> & { readonly calls: Calls } {
   const calls: Calls = { walks: [], judged: [], previewed: [] };
   return {
@@ -133,7 +135,7 @@ function ports(world: {
       return Promise.resolve<PlanJudgement<PlannedCandidate>>(
         version === undefined || judged.excludedVersions?.includes(version) === true
           ? { ok: false, cause: "version 1.5.0 falls outside the range" }
-          : { ok: true, prepared: { toVersion: version } },
+          : { ok: true, prepared: landedAt(version, world.tagged === true) },
       );
     },
     preview: (previewed) => {
@@ -141,6 +143,15 @@ function ports(world: {
       return world.preview?.(previewed) ?? Promise.resolve();
     },
   };
+}
+
+const TAG_COMMIT = "0123456789ab";
+
+/** The candidate a judge lands, at a release tag when `tagged` (GV-01). */
+function landedAt(version: string, tagged: boolean): PlannedCandidate {
+  return tagged
+    ? { toVersion: `${version}-${TAG_COMMIT}`, resolvedVersion: version }
+    : { toVersion: version };
 }
 
 function refusal(key: string, range: string, moveRefusal: string) {
@@ -509,6 +520,54 @@ describe("planDependencyGraph", () => {
       },
     });
     assert.deepStrictEqual(bound.calls.walks, ["", "yyy@mp=3.0.0", "yyy@mp=2.0.0"]);
+  });
+
+  test("WR-1 / GV-01: rules out a pick at a release tag by the tag's version", async () => {
+    // arrange
+    const asked: readonly GraphRequester[] = [
+      { key: "app@mp", ranges: [">=2.0.0"] },
+      { key: "fff@mp", ranges: ["~2.0.0"] },
+    ];
+    const bound = ports({
+      walks: {
+        "": graph([wall("yyy", "1.0.0", [{ key: "app@mp", ranges: [">=2.0.0"] }])], ["yyy@mp"]),
+        [`yyy@mp=3.0.0-${TAG_COMMIT}`]: contradiction(["app@mp", "yyy@mp"]),
+        [`yyy@mp=2.0.0-${TAG_COMMIT}`]: graph(
+          [walked("yyy", asked), fresh("fff", ["yyy@mp"])],
+          ["yyy@mp", "fff@mp"],
+        ),
+      },
+      versions: (judged) => (judged.excludedVersions === undefined ? "3.0.0" : "2.0.0"),
+      tagged: true,
+    });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
+
+    // assert
+    assert.ok(plan.ok);
+    assert.deepStrictEqual(plan.steps, [
+      {
+        kind: "move",
+        move: { request: request("yyy", asked, ["3.0.0"]), version: `2.0.0-${TAG_COMMIT}` },
+      },
+    ]);
+  });
+
+  test("GV-01: keeps a recorded dependency whose release tag version every range admits", async () => {
+    // arrange: the recorded commit form is a prerelease `^2.0.0` rejects.
+    const atTag: RecordedGraphNode = {
+      ...wall("lib", `2.1.0-${TAG_COMMIT}`, APP_ASKS_2),
+      resolvedVersion: "2.1.0",
+    };
+    const bound = ports({ walks: { "": graph([atTag], ["lib@mp"]) } });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
+
+    // assert
+    assert.ok(plan.ok);
+    assert.deepStrictEqual([plan.steps, bound.calls.judged], [[], []]);
   });
 
   test("WR-1: rules out the pick whose range leaves a dependency no version, and settles without it", async () => {

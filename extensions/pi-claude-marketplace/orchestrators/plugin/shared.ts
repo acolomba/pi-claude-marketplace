@@ -23,6 +23,8 @@ import {
   declaredVersionWithPin,
   isSameVersion,
   shaVersion,
+  tagShaVersion,
+  withTagCommit,
 } from "../../domain/version.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import {
@@ -30,7 +32,7 @@ import {
   writePluginConfigEntry,
 } from "../../persistence/config-write-back.ts";
 import { locationsFor } from "../../persistence/locations.ts";
-import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
+import { isRecordedButDisabled, loadState, rangeVersionOf } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   CrossPluginConflictError,
@@ -1303,6 +1305,25 @@ export async function resolvePluginVersion(
 }
 
 /**
+ * GV-01: the version Claude Code records for a plugin installed at the release
+ * tag a dependency's version range selected. A declared version (with GV-01's
+ * directory pin) gets the tag commit's first 12 characters appended; with none
+ * declared, the version is the tag commit's, as `tagShaVersion` spells it.
+ */
+export async function resolveTagPinnedPluginVersion(
+  entry: PluginEntry,
+  installable: MaterializablePlugin,
+  marketplaceName: string,
+  tagCommit: string,
+): Promise<string> {
+  const source = parsePluginSource(entry.source);
+  const declared = await resolveDeclaredPluginVersion(entry, installable.pluginRoot);
+  return declared === undefined
+    ? tagShaVersion(tagCommit, source)
+    : withTagCommit(declaredVersionWithPin(declared, source, marketplaceName), tagCommit);
+}
+
+/**
  * D-16-09: whether an update candidate is the revision the record holds. A
  * source that moved to a new commit is a new revision even when its declared
  * version did not change, because the stored sha is the revision; a switch
@@ -1317,8 +1338,18 @@ export function isSameRevision(
   record: PluginInstallRecord,
   toVersion: string,
   resolvedSha: string | undefined,
+  resolvedVersion?: string,
 ): boolean {
-  return isSameVersion(record.version, toVersion) && resolvedSha === record.resolvedSha;
+  if (resolvedSha !== record.resolvedSha) {
+    return false;
+  }
+
+  // GV-01 / GV-02: at a release tag a range selected, the revision is the tag:
+  // Claude Code's check reads the record's tag version and commit. A record
+  // written before GV-01 holds the tag's semver as its version.
+  return resolvedVersion === undefined
+    ? isSameVersion(record.version, toVersion, record.resolvedSha)
+    : rangeVersionOf(record) === resolvedVersion;
 }
 
 /**
@@ -1332,10 +1363,11 @@ export function isRecordedCandidate(
     readonly toVersion: string;
     readonly resolvedSha: string | undefined;
     readonly pluginRoot: string;
+    readonly resolvedVersion?: string | undefined;
   },
 ): boolean {
   return (
-    isSameRevision(record, candidate.toVersion, candidate.resolvedSha) &&
+    isSameRevision(record, candidate.toVersion, candidate.resolvedSha, candidate.resolvedVersion) &&
     candidate.pluginRoot === record.resolvedSource
   );
 }

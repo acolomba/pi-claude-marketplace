@@ -24,6 +24,7 @@ import { errorMessage, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.t
 import { companionSeverity } from "../../shared/notify-reasons.ts";
 import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 
+import { plannedRangeVersion } from "./dependency-plan.ts";
 import { materializeLatestVersion } from "./materialize-latest.ts";
 import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-preflight.ts";
 import { updatedRowFromOutcome } from "./update-row.ts";
@@ -178,7 +179,7 @@ export async function judgeDependencyMove(
 
     // WR-1: a version with no semver form escapes the range that rules the
     // others out, so the plan's own list decides.
-    if (request.excludedVersions?.includes(prepared.toVersion) === true) {
+    if (request.excludedVersions?.includes(plannedRangeVersion(prepared)) === true) {
       return { ok: false, cause: `version ${prepared.toVersion} was ruled out by the plan` };
     }
 

@@ -97,6 +97,12 @@ const PLUGIN_INSTALL_RECORD_SCHEMA = Type.Object({
   // path/github-name installs omit it. Reinstall uses THIS full sha as its
   // re-clone checkout pin; clone GC presence-checks it to derive live keys.
   resolvedSha: Type.Optional(Type.String()),
+  // GV-01: the semver of the release tag a dependency's version range selected,
+  // which Claude Code records as `resolvedVersion` beside a `version` that
+  // carries the tag's commit. OPTIONAL and additive -- NO schemaVersion bump
+  // (the resolvedSha precedent). Absent when no range selected a tag, and on a
+  // record written before GV-01, whose `version` is the tag's semver itself.
+  resolvedVersion: Type.Optional(Type.String()),
   // D-100-01 / ENBL-10: the supported hook entries the install materialized.
   // OPTIONAL and additive -- NO schemaVersion bump (the resolvedSha
   // precedent), so a legacy record without it loads unchanged and absence
@@ -232,6 +238,32 @@ export function toDisabledRecord<R extends PluginInstallRecord["resources"]>(
  */
 export function isRecordedButDisabled(record: { readonly enabled: boolean }): boolean {
   return !record.enabled;
+}
+
+/**
+ * GV-01: the version a dependency's version range reads for a record -- the
+ * tag's semver when a range selected one, as Claude Code reads
+ * `resolvedVersion` first, else the recorded version.
+ */
+export function rangeVersionOf(record: {
+  readonly version: string;
+  readonly resolvedVersion?: string;
+}): string {
+  return record.resolvedVersion ?? record.version;
+}
+
+/**
+ * GV-01: a record as a move to a catalog `version` leaves it. No release tag
+ * selected that version, so the record keeps no tag version for a range to
+ * read.
+ */
+export function atCatalogVersion(
+  record: PluginInstallRecord,
+  version: string,
+): PluginInstallRecord {
+  const moved = { ...record, version };
+  delete moved.resolvedVersion;
+  return moved;
 }
 
 /**

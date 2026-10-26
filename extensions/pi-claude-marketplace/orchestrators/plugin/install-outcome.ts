@@ -149,6 +149,7 @@ import {
   removePluginRecord,
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
+  resolveTagPinnedPluginVersion,
   type LedgerDegradationSignals,
 } from "./shared.ts";
 
@@ -197,6 +198,14 @@ export interface InstallLedgerOptions {
    * tags -- the entry still decides which repository is read.
    */
   readonly sourcePinOverride?: string;
+  /**
+   * GV-01: the semver of the release tag a dependency's version range
+   * selected, which the record keeps as `resolvedVersion` and dependency
+   * ranges read. With `sourcePinOverride` at that tag's commit, the recorded
+   * version carries the commit (`resolveTagPinnedPluginVersion`). A caller
+   * re-materializing a kept record passes the record's own value back.
+   */
+  readonly resolvedVersion?: string;
   /**
    * D-04-01: how THIS member got here -- `"explicit"` for the plugin the user
    * named, `"dependency"` for a member its closure pulled in. The install
@@ -359,6 +368,8 @@ interface InstallLedgerContext {
   // resolver's ResolvedPlugin schema cannot carry it, so it flows through this
   // side-channel into the state record). Undefined for path/non-git sources.
   readonly resolvedSha?: string;
+  /** GV-01: the release tag's semver, when a dependency's range selected one. */
+  readonly resolvedVersion?: string;
   readonly pluginDataDir: string;
   // Prep handles populated by each phase.do before that phase's commit.
   // Each phase.undo reads the matching handle to call the bridge unstage*
@@ -443,7 +454,9 @@ type InstallLedgerContextResult =
  *   1. `pinVersionOverride` (D-54-01 / ENBL-02): an enable re-materialization
  *      reuses the caller-supplied pin verbatim so the recorded `version`
  *      survives across a disable/enable cycle.
- *   2. otherwise `resolvePluginVersion`: the declared version (plugin.json,
+ *   2. GV-01: at the release tag a dependency's range selected, the version
+ *      Claude Code records there, which carries the tag's commit.
+ *   3. otherwise `resolvePluginVersion`: the declared version (plugin.json,
  *      then the marketplace entry, with GV-01's directory pin), then the
  *      commit for a git source (url / git-subdir / github) whose clone probe
  *      captured it, spelled as `shaVersion` spells it (GV-01), then the
@@ -455,9 +468,19 @@ async function deriveInstallVersion(args: {
   marketplaceName: string;
   resolvedSha: string | undefined;
   pinVersionOverride: string | undefined;
+  resolvedVersion: string | undefined;
 }): Promise<string> {
   if (args.pinVersionOverride !== undefined) {
     return args.pinVersionOverride;
+  }
+
+  if (args.resolvedVersion !== undefined && args.resolvedSha !== undefined) {
+    return resolveTagPinnedPluginVersion(
+      args.entry,
+      args.installable,
+      args.marketplaceName,
+      args.resolvedSha,
+    );
   }
 
   const kind = parsePluginSource(args.entry.source).kind;
@@ -955,6 +978,7 @@ async function runInstallLedgerBody(
     marketplaceName: marketplace,
     resolvedSha,
     pinVersionOverride: opts.pinVersionOverride,
+    resolvedVersion: opts.resolvedVersion,
   });
 
   // Resolve the per-plugin data dir up front; the bridges receive it
@@ -977,6 +1001,7 @@ async function runInstallLedgerBody(
     // D-77-02: git-source installs carry the full 40-hex resolved sha; path /
     // github-name sources leave it undefined (no key => omitted from the record).
     ...(resolvedSha !== undefined && { resolvedSha }),
+    ...(opts.resolvedVersion !== undefined && { resolvedVersion: opts.resolvedVersion }),
     pluginDataDir,
     hooksFileWritten: false,
     stagedSkillNames: [],
@@ -1376,6 +1401,8 @@ async function runInstallLedgerBody(
         // above); an unconstrained `path` or a github-name install still omits
         // it.
         ...(c.resolvedSha !== undefined && { resolvedSha: c.resolvedSha }),
+        // GV-01: the tag's semver, which dependency ranges read.
+        ...(c.resolvedVersion !== undefined && { resolvedVersion: c.resolvedVersion }),
         // D-100-01 / ENBL-10: describe the hooks the install materialized, so
         // a later `info` need not read the config back off disk. Omitted when
         // the plugin declares no hooks config -- there is nothing to describe.

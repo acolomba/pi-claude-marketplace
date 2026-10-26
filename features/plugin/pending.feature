@@ -127,6 +127,32 @@ Feature: Plugin pending
       | marketplace name | marketplace scope | id        | name | status  | reasons              | scope   | version | cause chain                                                                                    | cause truncated | leaks | rollback partial |
       | tools            | project           | lib@tools | lib  | skipped | dependents constrain | project | 1.0.0   | version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@tools" | false           |       |                  |
 
+  Scenario: Pending reports nothing for a dependency recorded at its release tag with the tag's commit
+    Given the git repository "lib" holds these plugins:
+      | name | version | path |
+      | lib  | 1.0.0   |      |
+    Given the git repository "lib" has a revision only the tag "lib--v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | lib  | 2.0.0   |      |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^2.0.0   |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | lib  | url         | lib        | false  |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version                | enabled |
+      | app@tools | 1.0.0                  | true    |
+      | lib@tools | 2.0.0-{lib revision 2} | true    |
+
   Scenario: Pending lists the moves of a plugin and the newer dependency it needs, shipped together, as apply makes them
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

@@ -311,13 +311,74 @@ Feature: Plugin install dependencies
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name      | status    | reasons | scope   | version | from  | to    | cause chain                                                                               | cause truncated | leaks | rollback partial |
-      | tools            | project           | app@tools | app       | installed |         | project | 1.0.0   |       |       |                                                                                           |                 |       |                  |
-      | tools            | project           | lib@tools | lib@tools | updated   |         | project |         | 1.0.0 | 2.0.0 | already the highest version the combined range admits (^2.0.0) -- required by "app@tools" | false           |       |                  |
+      | marketplace name | marketplace scope | id        | name      | status    | reasons | scope   | version | from  | to                     | cause chain                                                                               | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | installed |         | project | 1.0.0   |       |                        |                                                                                           |                 |       |                  |
+      | tools            | project           | lib@tools | lib@tools | updated   |         | project |         | 1.0.0 | 2.0.0-{lib revision 2} | already the highest version the combined range admits (^2.0.0) -- required by "app@tools" | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
-      | id        | version | enabled |
-      | app@tools | 1.0.0   | true    |
-      | lib@tools | 2.0.0   | true    |
+      | id        | version                | enabled |
+      | app@tools | 1.0.0                  | true    |
+      | lib@tools | 2.0.0-{lib revision 2} | true    |
+
+  Scenario: Installing a plugin records a git-source dependency installed at a release tag with the tag's commit
+    Given the git repository "lib" holds these plugins:
+      | name | version | path |
+      | lib  | 1.0.0   |      |
+    Given the git repository "lib" has a revision only the tag "lib--v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | lib  | 2.0.0   |      |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^2.0.0   |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | lib  | url         | lib        | false  |
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status    | reasons | scope   | version                |
+      | tools            | project           | app@tools | app       | installed |         | project | 1.0.0                  |
+      | tools            | project           | lib@tools | lib@tools | installed |         | project | 2.0.0-{lib revision 2} |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version                | enabled |
+      | app@tools | 1.0.0                  | true    |
+      | lib@tools | 2.0.0-{lib revision 2} | true    |
+
+  Scenario: Installing a second plugin that asks for a dependency's range leaves the dependency recorded at its release tag in place
+    Given the git repository "lib" holds these plugins:
+      | name | version | path |
+      | lib  | 1.0.0   |      |
+    Given the git repository "lib" has a revision only the tag "lib--v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | lib  | 2.0.0   |      |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^2.0.0   |
+      | ext  | 1.0.0   | lib (~2.0.0) |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | lib  | url         | lib        | false  |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    When the user runs "/claude:plugin install ext@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status    | reasons           | scope   | version                |
+      | tools            | project           | ext@tools | ext       | installed |                   | project | 1.0.0                  |
+      | tools            | project           | lib@tools | lib@tools | skipped   | already installed | project | 2.0.0-{lib revision 2} |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version                | enabled |
+      | app@tools | 1.0.0                  | true    |
+      | ext@tools | 1.0.0                  | true    |
+      | lib@tools | 2.0.0-{lib revision 2} | true    |
 
   Scenario: Installing a plugin whose first dependency's move also moves its second dependency moves each once
     Given the marketplace "tools" is published as a dir source
@@ -476,15 +537,15 @@ Feature: Plugin install dependencies
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name      | status    | reasons                 | scope   | version | from  | to    | cause chain                                                                                                     | cause truncated | leaks | rollback partial |
-      | tools            | project           | aaa@tools | aaa@tools | updated   | dependency current copy | project |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@tools"                                           | false           |       |                  |
-      | tools            | project           | app@tools | app       | installed |                         | project | 1.0.0   |       |       |                                                                                                                 |                 |       |                  |
-      | tools            | project           | zzz@tools | zzz@tools | updated   |                         | project |         | 1.0.0 | 2.0.0 | already the highest version the combined range admits (>=2.0.0, ^2.0.0) -- required by "aaa@tools", "app@tools" | false           |       |                  |
+      | marketplace name | marketplace scope | id        | name      | status    | reasons                 | scope   | version | from  | to                     | cause chain                                                                                                     | cause truncated | leaks | rollback partial |
+      | tools            | project           | aaa@tools | aaa@tools | updated   | dependency current copy | project |         | 1.0.0 | 2.0.0                  | constrained to the combined range (^2.0.0) -- required by "app@tools"                                           | false           |       |                  |
+      | tools            | project           | app@tools | app       | installed |                         | project | 1.0.0   |       |                        |                                                                                                                 |                 |       |                  |
+      | tools            | project           | zzz@tools | zzz@tools | updated   |                         | project |         | 1.0.0 | 2.0.0-{zzz revision 2} | already the highest version the combined range admits (>=2.0.0, ^2.0.0) -- required by "aaa@tools", "app@tools" | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
-      | id        | version | enabled |
-      | aaa@tools | 2.0.0   | true    |
-      | app@tools | 1.0.0   | true    |
-      | zzz@tools | 2.0.0   | true    |
+      | id        | version                | enabled |
+      | aaa@tools | 2.0.0                  | true    |
+      | app@tools | 1.0.0                  | true    |
+      | zzz@tools | 2.0.0-{zzz revision 2} | true    |
 
   Scenario: Installing a plugin whose installed dependency no release moves into range keeps the mirror a fetch warmed
     Given the git repository "xx" holds these plugins:
@@ -655,17 +716,17 @@ Feature: Plugin install dependencies
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name      | status    | reasons                 | scope   | version | from  | to    | cause chain                                                                                                    | cause truncated | leaks | rollback partial |
-      | tools            | project           | aaa@tools | aaa@tools | updated   | dependency current copy | project |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@tools"                                          | false           |       |                  |
-      | tools            | project           | app@tools | app       | installed |                         | project | 1.0.0   |       |       |                                                                                                                |                 |       |                  |
-      | tools            | project           | bbb@tools | bbb@tools | updated   |                         | project |         | 1.0.0 | 1.4.0 | already the highest version the combined range admits (^1.2.0, <1.5.0) -- required by "app@tools", "fff@tools" | false           |       |                  |
-      | tools            | project           | fff@tools | fff@tools | installed |                         | project | 1.0.0   |       |       |                                                                                                                |                 |       |                  |
+      | marketplace name | marketplace scope | id        | name      | status    | reasons                 | scope   | version | from  | to                     | cause chain                                                                                                    | cause truncated | leaks | rollback partial |
+      | tools            | project           | aaa@tools | aaa@tools | updated   | dependency current copy | project |         | 1.0.0 | 2.0.0                  | constrained to the combined range (^2.0.0) -- required by "app@tools"                                          | false           |       |                  |
+      | tools            | project           | app@tools | app       | installed |                         | project | 1.0.0   |       |                        |                                                                                                                |                 |       |                  |
+      | tools            | project           | bbb@tools | bbb@tools | updated   |                         | project |         | 1.0.0 | 1.4.0-{bbb revision 2} | already the highest version the combined range admits (^1.2.0, <1.5.0) -- required by "app@tools", "fff@tools" | false           |       |                  |
+      | tools            | project           | fff@tools | fff@tools | installed |                         | project | 1.0.0   |       |                        |                                                                                                                |                 |       |                  |
     Then the installation record of the project scope holds these plugins:
-      | id        | version | enabled |
-      | aaa@tools | 2.0.0   | true    |
-      | app@tools | 1.0.0   | true    |
-      | bbb@tools | 1.4.0   | true    |
-      | fff@tools | 1.0.0   | true    |
+      | id        | version                | enabled |
+      | aaa@tools | 2.0.0                  | true    |
+      | app@tools | 1.0.0                  | true    |
+      | bbb@tools | 1.4.0-{bbb revision 2} | true    |
+      | fff@tools | 1.0.0                  | true    |
 
   Scenario: Installing a plugin whose moved dependency also needs a disabled dependency the plugin moves moves and enables that dependency once
     Given the marketplace "tools" is published as a dir source
@@ -766,19 +827,19 @@ Feature: Plugin install dependencies
       | severity     | info    |
       | needs reload | true    |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name      | status    | reasons                 | scope   | version | from  | to    | cause chain                                                                                                     | cause truncated | leaks | rollback partial |
-      | tools            | project           | app@tools | app       | installed |                         | project | 1.0.0   |       |       |                                                                                                                 |                 |       |                  |
-      | tools            | project           | fff@tools | fff@tools | installed |                         | project | 1.0.0   |       |       |                                                                                                                 |                 |       |                  |
-      | tools            | project           | mmm@tools | mmm@tools | updated   | dependency current copy | project |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@tools"                                           | false           |       |                  |
-      | tools            | project           | xxx@tools | xxx@tools | skipped   | already installed       | project | 2.0.0   |       |       |                                                                                                                 |                 |       |                  |
-      | tools            | project           | yyy@tools | yyy@tools | updated   |                         | project |         | 1.0.0 | 2.0.0 | already the highest version the combined range admits (>=2.0.0, ~2.0.0) -- required by "app@tools", "fff@tools" | false           |       |                  |
+      | marketplace name | marketplace scope | id        | name      | status    | reasons                 | scope   | version | from  | to                     | cause chain                                                                                                     | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | installed |                         | project | 1.0.0   |       |                        |                                                                                                                 |                 |       |                  |
+      | tools            | project           | fff@tools | fff@tools | installed |                         | project | 1.0.0   |       |                        |                                                                                                                 |                 |       |                  |
+      | tools            | project           | mmm@tools | mmm@tools | updated   | dependency current copy | project |         | 1.0.0 | 2.0.0                  | constrained to the combined range (^2.0.0) -- required by "app@tools"                                           | false           |       |                  |
+      | tools            | project           | xxx@tools | xxx@tools | skipped   | already installed       | project | 2.0.0   |       |                        |                                                                                                                 |                 |       |                  |
+      | tools            | project           | yyy@tools | yyy@tools | updated   |                         | project |         | 1.0.0 | 2.0.0-{yyy revision 2} | already the highest version the combined range admits (>=2.0.0, ~2.0.0) -- required by "app@tools", "fff@tools" | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
-      | id        | version | enabled |
-      | app@tools | 1.0.0   | true    |
-      | fff@tools | 1.0.0   | true    |
-      | mmm@tools | 2.0.0   | true    |
-      | xxx@tools | 2.0.0   | true    |
-      | yyy@tools | 2.0.0   | true    |
+      | id        | version                | enabled |
+      | app@tools | 1.0.0                  | true    |
+      | fff@tools | 1.0.0                  | true    |
+      | mmm@tools | 2.0.0                  | true    |
+      | xxx@tools | 2.0.0                  | true    |
+      | yyy@tools | 2.0.0-{yyy revision 2} | true    |
 
   Scenario: Installing a plugin whose installed dependencies form a chain of nine moves moves every link of the chain
     Given the marketplace "tools" is published as a dir source

@@ -2911,6 +2911,32 @@ test("EDEP-03 a re-enabled dependency keeps its provenance at dependency", async
   assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar?.provenance, "dependency");
 });
 
+test("EDEP-03 / GV-01: a re-enabled dependency keeps the release tag version its record holds", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-cascade-reenable-tag-");
+  const { state } = await seedOneDisabledDependency(environment.cwd);
+  const bar = state.marketplaces[MARKETPLACE]?.plugins.bar;
+  assert.ok(bar !== undefined, "the fixture records the disabled dependency");
+  bar.resolvedVersion = "0.0.1";
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  const enabled = state.marketplaces[MARKETPLACE]?.plugins.bar;
+  assert.deepStrictEqual([enabled?.enabled, enabled?.resolvedVersion], [true, "0.0.1"]);
+});
+
 test("EDEP-03 re-enabling a dependency writes no entry into either config file", async (t) => {
   // arrange: `install-cascade.ts` and `install-outcome.ts` expose no config-write
   // seam at all, so this proves the guarantee the way it can be observed here --
@@ -3565,6 +3591,40 @@ for (const { label, declared, recorded } of [
     );
   });
 }
+
+test("RESV-05 / GV-01: an already-installed dependency recorded at a release tag answers by the tag's semver", async (t) => {
+  // arrange: the recorded version carries the tag's commit, a semver
+  // prerelease that `^1.0.0` rejects; the tag's semver satisfies it.
+  const environment = await createHermeticEnvironment(t, "install-cascade-installed-tag-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"], {
+    preinstalled: ["bar"],
+    gitSourced: ["bar"],
+    recordedVersions: { bar: "1.4.0-0123456789ab" },
+  });
+  const bar = state.marketplaces[MARKETPLACE]?.plugins.bar;
+  assert.ok(bar !== undefined, "the fixture records the installed dependency");
+  bar.resolvedVersion = "1.4.0";
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^1.0.0" }] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    seam: recordingLedgerSeam(environment.cwd, locations, []),
+  });
+
+  // assert: the row shows the version the record holds.
+  assert.strictEqual(cascade.kind, "installed");
+  assert.deepStrictEqual(cascade.alreadyInstalled, [
+    { key: `bar@${MARKETPLACE}`, version: "1.4.0-0123456789ab" },
+  ]);
+});
 
 for (const { label, declared, recorded, expectedRange } of [
   {
@@ -4399,6 +4459,45 @@ test("UPD-DEP-D1: a graph walk reads through a disabled recorded member and name
       requesters: [{ key: `foo@${MARKETPLACE}`, ranges: ["*"] }],
       dependsOn: [],
       version: "0.0.1",
+      disabled: true,
+      walked: true,
+    },
+  ]);
+});
+
+test("UPD-DEP-D1 / GV-01: a graph walk names the release tag version a recorded member holds", async (t) => {
+  // arrange: `foo` is recorded and declares the disabled `bar`, recorded at a tag.
+  const environment = await createHermeticEnvironment(t, "install-cascade-plan-tag-");
+  const { state } = await seedOneDisabledDependency(environment.cwd);
+  const bar = state.marketplaces[MARKETPLACE]?.plugins.bar;
+  assert.ok(bar !== undefined, "the fixture records the disabled dependency");
+  bar.resolvedVersion = "0.0.1";
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const graph = await walkDependencyGraph({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "*" }],
+      [`bar@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set([`bar@${MARKETPLACE}`, `baz@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.deepStrictEqual(graph.kind === "graph" && graph.nodes, [
+    {
+      kind: "recorded",
+      member: { ...closureMember("bar", ["*"]), requiredBy: `foo@${MARKETPLACE}` },
+      requesters: [{ key: `foo@${MARKETPLACE}`, ranges: ["*"] }],
+      dependsOn: [],
+      version: "0.0.1",
+      resolvedVersion: "0.0.1",
       disabled: true,
       walked: true,
     },

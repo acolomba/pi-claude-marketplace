@@ -52,7 +52,11 @@ import {
   recordedVersionSatisfies,
   renderDeclaredRanges,
 } from "../../domain/dependency-range.ts";
-import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+import {
+  atCatalogVersion,
+  isRecordedButDisabled,
+  rangeVersionOf,
+} from "../../persistence/state-io.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { buildScopeDeclarationDetail, readRecordDeclarations } from "../plugin/dependency-index.ts";
 
@@ -126,6 +130,7 @@ export type ScopeSatisfactionVerdict =
  */
 interface RecordedPlugin {
   readonly disabled: boolean;
+  /** The version a declared range reads: the release tag's semver, if any (GV-01). */
   readonly version: string;
 }
 
@@ -158,7 +163,7 @@ function recordedPlugins(state: ExtensionState): ReadonlyMap<string, RecordedPlu
     for (const [name, record] of Object.entries(marketplace.plugins)) {
       recorded.set(`${name}@${marketplace.name}`, {
         disabled: isDisabledIndependently(record),
-        version: record.version,
+        version: rangeVersionOf(record),
       });
     }
   }
@@ -502,7 +507,7 @@ export async function verdictAfterMoves(
     if (mp !== undefined && record !== undefined) {
       marketplaces[move.marketplace] = {
         ...mp,
-        plugins: { ...mp.plugins, [move.plugin]: { ...record, version: move.toVersion } },
+        plugins: { ...mp.plugins, [move.plugin]: atCatalogVersion(record, move.toVersion) },
       };
     }
   }
@@ -559,7 +564,10 @@ export async function judgeFinalScope(
   for (const marketplace of Object.values(options.state.marketplaces)) {
     for (const [name, record] of Object.entries(marketplace.plugins)) {
       const key = `${name}@${marketplace.name}`;
-      recorded.set(key, { disabled: isRecordedButDisabled(record), version: record.version });
+      recorded.set(key, {
+        disabled: isRecordedButDisabled(record),
+        version: rangeVersionOf(record),
+      });
       if (isRecordedButDisabled(record)) {
         continue;
       }

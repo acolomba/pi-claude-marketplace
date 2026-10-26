@@ -850,6 +850,14 @@ function applyAllSuccessRecordFields(sRecord: PluginStateRecord, preflight: Plug
   } else {
     sRecord.resolvedSha = resolvedSha;
   }
+
+  // GV-01: the tag's semver when the dependents' range selected a tag, else
+  // none, as Claude Code writes `resolvedVersion` on an update.
+  if (preflight.resolvedVersion === undefined) {
+    delete sRecord.resolvedVersion;
+  } else {
+    sRecord.resolvedVersion = preflight.resolvedVersion;
+  }
 }
 
 /**

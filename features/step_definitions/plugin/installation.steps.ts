@@ -205,7 +205,11 @@ Then(
     const recorded = await recordedPlugins(extensionRoot(this, scope));
     const rows = [...recorded]
       .sort((left, right) => left.id.localeCompare(right.id))
-      .map((plugin) => [plugin.id, plugin.version, String(plugin.enabled)]);
+      .map((plugin) => [
+        plugin.id,
+        projectTokens("version", plugin.version, this.tokens),
+        String(plugin.enabled),
+      ]);
     assert.deepStrictEqual([["id", "version", "enabled"], ...rows], table.raw());
   },
 );

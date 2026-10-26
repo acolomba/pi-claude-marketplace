@@ -391,12 +391,13 @@ type InstallLedgerCallerOptions = Pick<
  * The auth trio must be shared or a member would authenticate differently from
  * the tag query that selected its pin (AUTH-09).
  *
- * Per-member, necessarily: `sourcePin` and `pinVersion`. Both are facts about
- * ONE member -- the commit its constraint selected and the semver the selected
- * tag carries -- so both arrive on `core` and neither is read off `opts`.
- * `pinVersionOverride` in particular takes absolute precedence in
- * `deriveInstallVersion`, so copying the caller's own onto every member would
- * record every dependency under the requesting plugin's version string.
+ * Per-member, necessarily: `sourcePin`, `resolvedVersion` and `pinVersion`.
+ * The first two are facts about ONE member -- the commit its constraint
+ * selected and the semver the selected tag carries -- so they arrive on `core`
+ * and are never read off `opts`. `pinVersionOverride` takes absolute
+ * precedence in `deriveInstallVersion`, so copying the caller's own onto
+ * every member would record every dependency under the requesting plugin's
+ * version string.
  */
 function buildInstallLedgerOptions(
   opts: InstallLedgerCallerOptions,
@@ -409,11 +410,12 @@ function buildInstallLedgerOptions(
     /** RESV-03: the commit a cascade member's version constraint selected. */
     sourcePin?: string;
     /**
-     * The version to record for THIS member: the semver its selected tag
-     * carries (RESV-03 / RESV-05), or the caller's `pinVersionOverride` when
-     * the member IS the plugin the caller named. It overrides the git-source
-     * commit branch (GV-01), which is the form RESV-05 cannot read back.
+     * RESV-05 / GV-01: the semver THIS member's selected tag carries, recorded
+     * beside a version that carries the tag's commit, as Claude Code records
+     * it. Dependency ranges read it back.
      */
+    resolvedVersion?: string;
+    /** The caller's `pinVersionOverride`, for the member the caller named. */
     pinVersion?: string;
     /** D-04-01: whether THIS member is the plugin the caller named. */
     provenance?: PluginInstallRecord["provenance"];
@@ -433,6 +435,7 @@ function buildInstallLedgerOptions(
     marketplace: core.marketplace,
     plugin: core.plugin,
     ...(core.sourcePin !== undefined && { sourcePinOverride: core.sourcePin }),
+    ...(core.resolvedVersion !== undefined && { resolvedVersion: core.resolvedVersion }),
     ...(core.provenance !== undefined && { provenance: core.provenance }),
     ...(opts.mapModel !== undefined && { mapModel: opts.mapModel }),
     ...(opts.partial !== undefined && { partial: opts.partial }),
@@ -982,7 +985,7 @@ async function sharedCascadeOptions(args: {
  * exists to satisfy a declaration -- the reload's missing-dependency install
  * and an update's new closure (UPD-DEP-D1). RESV-03: a member whose
  * constraint selected a release tag installs that tag's commit and records
- * its semver.
+ * its semver as `resolvedVersion` (GV-01).
  */
 function dependencyLedgerOptions(
   opts: InstallLedgerCallerOptions,
@@ -995,8 +998,10 @@ function dependencyLedgerOptions(
       cwd: core.cwd,
       marketplace: member.marketplace,
       plugin: member.name,
-      ...(member.pin !== undefined && { sourcePin: member.pin.oid }),
-      ...(member.pin?.version !== undefined && { pinVersion: member.pin.version }),
+      ...(member.pin !== undefined && {
+        sourcePin: member.pin.oid,
+        resolvedVersion: member.pin.version,
+      }),
       provenance: "dependency",
       marketplaceAdd: core.adds.marketplaceAdd,
       addedMarketplaces: core.adds.addedMarketplaces,
@@ -1580,6 +1585,7 @@ async function materializePromotedRecord(
       marketplace: opts.marketplace,
       plugin: opts.plugin,
       pinVersionOverride: record.version,
+      ...(record.resolvedVersion !== undefined && { resolvedVersion: record.resolvedVersion }),
       allowExistingRecord: true,
       partial: !record.compatibility.installable,
       removalOps: createRemovalOps(),
@@ -2308,27 +2314,32 @@ async function installPluginWithTransaction(
           // member carries neither and installs from the ref its marketplace
           // entry names.
           //
-          // RESV-05: recording the tag's semver rather than the git-source
-          // commit is what makes the pin readable back. The next install
-          // that constrains this dependency checks the RECORDED version against
-          // the range, and a sha form either satisfies nothing or coerces to an
-          // arbitrary digit run (D-03-04) -- so without the semver a repeat of
-          // the same command fails the constraint it had just satisfied.
+          // RESV-05 / GV-01: the tag's semver is recorded as `resolvedVersion`
+          // beside the version Claude Code records there, which carries the
+          // tag's commit. The next install that constrains this dependency
+          // checks `resolvedVersion` against the range: the commit form either
+          // satisfies nothing or coerces to an arbitrary digit run (D-03-04),
+          // so without the semver a repeat of the same command fails the
+          // constraint it had just satisfied.
           //
           // The caller's own `pinVersionOverride` reaches the plugin the caller
-          // NAMED and no other member. It takes absolute precedence in
-          // `deriveInstallVersion`, so copying it onto every member would record
-          // each dependency under the requesting plugin's version string.
+          // NAMED and no other member, and only when no tag pins it. It takes
+          // absolute precedence in `deriveInstallVersion`, so copying it onto
+          // every member would record each dependency under the requesting
+          // plugin's version string.
           ledgerOptionsFor: (member) => {
             const isRoot = member.key === rootKey;
             const pinVersion =
-              member.pin?.version ?? (isRoot ? opts.pinVersionOverride : undefined);
+              member.pin === undefined && isRoot ? opts.pinVersionOverride : undefined;
             return buildInstallLedgerOptions(opts, env, {
               scope,
               cwd,
               marketplace: member.marketplace,
               plugin: member.name,
-              ...(member.pin !== undefined && { sourcePin: member.pin.oid }),
+              ...(member.pin !== undefined && {
+                sourcePin: member.pin.oid,
+                resolvedVersion: member.pin.version,
+              }),
               ...(pinVersion !== undefined && { pinVersion }),
               // D-04-01: the root is the one member the closure walk never
               // skips, so the key comparison alone decides provenance -- per

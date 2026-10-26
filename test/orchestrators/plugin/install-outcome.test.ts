@@ -2279,7 +2279,7 @@ test("the callback reaches the real clone probe through the ledger's own cache, 
   assert.deepStrictEqual(deviceFlow.calls.requestCode, []);
 });
 
-test("TAGS-01/03 (D-07-06/07): a pinned path-source install records the tag's own semver and its commit oid", async (t) => {
+test("TAGS-01/03 (D-07-06/07) / GV-01: a pinned path-source install records the tag's commit, its semver and its oid", async (t) => {
   // arrange: the entry names a default path source (no gitSource), the shape
   // a marketplace-relative dependency declares. The cascade would set both
   // overrides together from ONE member.pin -- this drives the ledger the same
@@ -2302,7 +2302,7 @@ test("TAGS-01/03 (D-07-06/07): a pinned path-source install records the tag's ow
     removalOps: createRemovalOps(),
     env: {},
     sourcePinOverride: RESOLVED_SHA,
-    pinVersionOverride: "2.1.0",
+    resolvedVersion: "2.1.0",
     pathPinProbe: (options) => {
       probed.push(options);
       return Promise.resolve({
@@ -2316,11 +2316,14 @@ test("TAGS-01/03 (D-07-06/07): a pinned path-source install records the tag's ow
   // assert
   assert.ok(ledgerOutcome.kind === "installed");
   assert.equal(ledgerOutcome.summary.resolved.pluginRoot, seeded.pluginRoot);
-  // RESV-05: the tag's own semver, never a git-source sha-<12hex> form.
-  assert.equal(ledgerOutcome.summary.version, "2.1.0");
+  // GV-01: the declared version with the tag's commit, as Claude Code records
+  // it, and RESV-05's tag semver apart, which the ranges read.
+  assert.equal(ledgerOutcome.summary.version, "0.0.1-0123456789ab");
   const record = seeded.state.marketplaces.marketplace?.plugins.empty;
-  assert.equal(record?.version, "2.1.0");
-  assert.equal(record?.resolvedSha, RESOLVED_SHA);
+  assert.deepStrictEqual(
+    [record?.version, record?.resolvedVersion, record?.resolvedSha],
+    ["0.0.1-0123456789ab", "2.1.0", RESOLVED_SHA],
+  );
   assert.deepStrictEqual(probed, [
     {
       locations,

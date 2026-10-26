@@ -9,6 +9,8 @@ import {
   declaredVersionWithPin,
   isSameVersion,
   shaVersion,
+  tagShaVersion,
+  withTagCommit,
 } from "../../extensions/pi-claude-marketplace/domain/version.ts";
 
 import type { ParsedSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -239,6 +241,51 @@ describe("shaVersion", () => {
   });
 });
 
+function pathSource(raw: string): ParsedSource {
+  return { kind: "path", raw, logical: raw };
+}
+
+describe("tagShaVersion", () => {
+  test("GV-01: a git source at a release tag records the tag commit as shaVersion does", () => {
+    // act
+    const versions = [
+      tagShaVersion(FULL_SHA, githubSource()),
+      tagShaVersion(FULL_SHA, subdirSource("plugins/subp")),
+    ];
+
+    // assert
+    assert.deepStrictEqual(versions, ["a1b2c3d4e5f6", "a1b2c3d4e5f6-3989e95a"]);
+  });
+
+  test("GV-01: a path source at a release tag hashes its path as a git-subdir source", () => {
+    // act
+    const versions = ["./plugins/subp", "plugins/subp/"].map((raw) =>
+      tagShaVersion(FULL_SHA, pathSource(raw)),
+    );
+
+    // assert
+    assert.deepStrictEqual(versions, ["a1b2c3d4e5f6-3989e95a", "a1b2c3d4e5f6-3989e95a"]);
+  });
+
+  test("GV-01: a path source at the repository root records the bare commit", () => {
+    // act
+    const versions = [".", "./"].map((raw) => tagShaVersion(FULL_SHA, pathSource(raw)));
+
+    // assert
+    assert.deepStrictEqual(versions, ["a1b2c3d4e5f6", "a1b2c3d4e5f6"]);
+  });
+});
+
+describe("withTagCommit", () => {
+  test("GV-01: appends a dash and the first 12 characters of the tag commit", () => {
+    assert.strictEqual(withTagCommit("2.0.0", FULL_SHA), "2.0.0-a1b2c3d4e5f6");
+  });
+
+  test("GV-01: a version that already ends in the commit keeps one copy", () => {
+    assert.strictEqual(withTagCommit("2.0.0-a1b2c3d4e5f6", FULL_SHA), "2.0.0-a1b2c3d4e5f6");
+  });
+});
+
 describe("declaredVersionWithPin", () => {
   test("GV-01: a pinned plugin of the plugin directory carries its pin", () => {
     // act
@@ -307,5 +354,29 @@ describe("isSameVersion", () => {
 
     // assert
     assert.deepStrictEqual(verdicts, [false, false, false]);
+  });
+
+  test("GV-01: a version with the recorded commit appended is the version it extends", () => {
+    // act
+    const verdicts = [
+      isSameVersion("2.0.0-a1b2c3d4e5f6", "2.0.0", FULL_SHA),
+      isSameVersion("2.0.0-a1b2c3d4e5f6", "2.0.0-a1b2c3d4e5f6", FULL_SHA),
+    ];
+
+    // assert
+    assert.deepStrictEqual(verdicts, [true, true]);
+  });
+
+  test("GV-01: a commit suffix of another commit, another version, or no recorded commit differs", () => {
+    // act
+    const verdicts = [
+      isSameVersion("2.0.0-a1b2c3d4e5f6", "2.0.0", PIN),
+      isSameVersion("2.0.0-a1b2c3d4e5f6", "2.1.0", FULL_SHA),
+      isSameVersion("2.0.0-a1b2c3d4e5f6", "2.0.0"),
+      isSameVersion("2.0.0", "2.0.0-a1b2c3d4e5f6", FULL_SHA),
+    ];
+
+    // assert
+    assert.deepStrictEqual(verdicts, [false, false, false, false]);
   });
 });

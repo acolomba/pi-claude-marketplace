@@ -507,6 +507,25 @@ for (const { title, entry } of COLD_STAYS) {
   });
 }
 
+test("D-11 / GV-01: with no cached tree, a record at a release tag of the entry's declared version is not a move", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "git-cold-tag");
+  const state = await stageGitDemo(fixture, {
+    source: { source: "github", repo: "acme/demo" },
+    version: "1.0.0",
+  });
+  const record = state.marketplaces["tools"]?.plugins["demo"];
+  assert.ok(record !== undefined);
+  record.version = `1.0.0-${RECORDED_COMMIT.slice(0, 12)}`;
+  record.resolvedVersion = "1.0.0";
+
+  // act
+  const plan = await planConvergence({ scope: "project", state, locations: fixture.locations });
+
+  // assert
+  assert.deepStrictEqual(plan, { moves: [], holds: [], declines: [] });
+});
+
 test("D-11: a cached clone that lacks the plugin's subdirectory is judged by the entry alone", async (t) => {
   // arrange
   const fixture = await createFixture(t, "git-missing-subdir");

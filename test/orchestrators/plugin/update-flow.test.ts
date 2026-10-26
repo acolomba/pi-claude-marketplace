@@ -8817,11 +8817,15 @@ test("D-10-18: one bulk run resolves two path-source siblings from the same mark
       });
 
       // assert
+      // GV-01: each records its declared 1.0.0 with the tag's commit, and the
+      // tag's semver apart.
       const after = await loadState(locations.extensionRoot);
-      assert.strictEqual(after.marketplaces.mp?.plugins.pathfoo?.version, "1.2.0");
-      assert.strictEqual(after.marketplaces.mp?.plugins.pathfoo?.resolvedSha, oid);
-      assert.strictEqual(after.marketplaces.mp?.plugins.pathbar?.version, "1.2.0");
-      assert.strictEqual(after.marketplaces.mp?.plugins.pathbar?.resolvedSha, oid);
+      const pinned = (["pathfoo", "pathbar"] as const).map((name) => {
+        const record = after.marketplaces.mp?.plugins[name];
+        return [record?.version, record?.resolvedVersion, record?.resolvedSha];
+      });
+      const expected = [`1.0.0-${oid.slice(0, 12)}`, "1.2.0", oid];
+      assert.deepStrictEqual(pinned, [expected, expected]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -9046,10 +9050,14 @@ test("D-10-18: a tag published between two cascade runs is visible to the second
       // assert -- run one listed no tag and fell back to the marketplace's
       // current copy; run two pins the published tag. A memo bound to the
       // binding rather than to the run would serve run one's tag-less
-      // listing again and leave the record at the fallback's 1.0.0.
+      // listing again and leave the record with no tag version. GV-01: the
+      // declared 1.0.0 carries the tag's commit.
       const after = await loadState(locations.extensionRoot);
-      assert.strictEqual(after.marketplaces.mp?.plugins.pathfoo?.version, "1.2.0");
-      assert.strictEqual(after.marketplaces.mp?.plugins.pathfoo?.resolvedSha, oid);
+      const record = after.marketplaces.mp?.plugins.pathfoo;
+      assert.deepStrictEqual(
+        [record?.version, record?.resolvedVersion, record?.resolvedSha],
+        [`1.0.0-${oid.slice(0, 12)}`, "1.2.0", oid],
+      );
     } finally {
       process.chdir(previousCwd);
       await rm(cwd, { recursive: true, force: true });

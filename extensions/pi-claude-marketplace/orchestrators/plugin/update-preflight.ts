@@ -42,7 +42,12 @@ import {
   resolvePluginPin,
 } from "./clone-cache.ts";
 import { admitResolvedVersion, evaluateCatalogConstraint } from "./constraint-fold.ts";
-import { isRecordedCandidate, isSameRevision, resolvePluginVersion } from "./shared.ts";
+import {
+  isRecordedCandidate,
+  isSameRevision,
+  resolvePluginVersion,
+  resolveTagPinnedPluginVersion,
+} from "./shared.ts";
 import { evaluateUpdateConstraint } from "./update-constraint-gate.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
@@ -111,6 +116,12 @@ export interface PreparedPluginUpdate {
   readonly fromVersion: string;
   readonly toVersion: string;
   readonly resolvedSha?: string;
+  /**
+   * GV-01: the semver of the release tag the dependents' combined range
+   * selected, recorded beside a `toVersion` that carries the tag's commit and
+   * read by dependency ranges; absent when no tag pins the candidate.
+   */
+  readonly resolvedVersion?: string;
   /**
    * D-10-17a: the constraint gate's disclosure, carried from the verdict this
    * preflight already evaluated. REQUIRED-BUT-NULLABLE (never `constraint?:`),
@@ -368,23 +379,22 @@ function makeUpdateCloneProbe(
 }
 
 /**
- * A tag-pinned update records the version the TAG names, for both source
- * kinds -- never a value derived from the resolved sha, and never the
- * marketplace-entry / manifest fallback `resolvePluginVersion` reads. This is
- * the ONLY way `deriveUpdateToVersion` can tell "pinned to a release tag"
- * apart from "refreshed to the branch head" or "resolved a `path` source's
- * current copy": a resolved sha is present either way, so the pin's own
- * version has to travel alongside it rather than being re-derived from it.
+ * GV-01: a tag-pinned update records the version Claude Code records at the
+ * tag, for both source kinds: the declared version with the tag's commit
+ * appended, else the commit's own version. The pin itself is what tells
+ * "pinned to a release tag" apart from "refreshed to the branch head" or
+ * "resolved a `path` source's current copy": a resolved sha is present either
+ * way, so the pin travels alongside it rather than being re-derived from it.
  */
 async function deriveUpdateToVersion(
   entry: PluginEntry,
   installable: MaterializablePlugin,
   marketplaceName: string,
   resolvedSha: string | undefined,
-  pinnedVersion: string | undefined,
+  pin: UpdateTagPin | undefined,
 ): Promise<string> {
-  if (pinnedVersion !== undefined) {
-    return pinnedVersion;
+  if (pin !== undefined) {
+    return resolveTagPinnedPluginVersion(entry, installable, marketplaceName, pin.oid);
   }
 
   return resolvePluginVersion(
@@ -679,12 +689,14 @@ function disabledPinProjection(
   version: string,
   resolvedSource: string,
   resolvedSha: string | undefined,
+  resolvedVersion: string | undefined,
   compatibility: PluginStateRecord["compatibility"],
 ): string {
   return JSON.stringify([
     version,
     resolvedSource,
     resolvedSha ?? null,
+    resolvedVersion ?? null,
     compatibility.installable,
     [...compatibility.notes],
     [...compatibility.supported],
@@ -711,6 +723,7 @@ function nextDisabledPin(preflight: PreparedPluginUpdate): {
       preflight.toVersion,
       preflight.installable.pluginRoot,
       preflight.resolvedSha,
+      preflight.resolvedVersion,
       compatibility,
     ),
   };
@@ -722,6 +735,7 @@ function disabledRefreshWouldWrite(preflight: PreparedPluginUpdate): boolean {
     preflight.record.version,
     preflight.record.resolvedSource,
     preflight.record.resolvedSha,
+    preflight.record.resolvedVersion,
     preflight.record.compatibility,
   );
   return next.projection !== current;
@@ -747,6 +761,7 @@ async function refreshDisabledRecord(
         record.version,
         record.resolvedSource,
         record.resolvedSha,
+        record.resolvedVersion,
         record.compatibility,
       );
       if (next.projection === current) {
@@ -762,6 +777,12 @@ async function refreshDisabledRecord(
         delete record.resolvedSha;
       } else {
         record.resolvedSha = preflight.resolvedSha;
+      }
+
+      if (preflight.resolvedVersion === undefined) {
+        delete record.resolvedVersion;
+      } else {
+        record.resolvedVersion = preflight.resolvedVersion;
       }
 
       record.compatibility = next.compatibility;
@@ -799,7 +820,14 @@ async function refreshDisabledPluginUpdate(
     }
   }
 
-  if (isSameRevision(preflight.record, preflight.toVersion, preflight.resolvedSha)) {
+  if (
+    isSameRevision(
+      preflight.record,
+      preflight.toVersion,
+      preflight.resolvedSha,
+      preflight.resolvedVersion,
+    )
+  ) {
     return {
       partition: "unchanged",
       name: options.plugin,
@@ -1055,7 +1083,7 @@ export async function preparePluginUpdate(
     candidate,
     options.marketplace,
     resolvedSha,
-    pin?.version,
+    pin,
   );
 
   const stageTwoHold = postFetchGuard(
@@ -1075,6 +1103,7 @@ export async function preparePluginUpdate(
       toVersion,
       resolvedSha,
       pluginRoot: candidate.pluginRoot,
+      resolvedVersion: pin?.version,
     })
   ) {
     return {
@@ -1103,6 +1132,7 @@ export async function preparePluginUpdate(
     // back to the verdict this preflight already evaluated.
     constraint: constraintFromVerdict(verdict),
     ...(resolvedSha !== undefined && { resolvedSha }),
+    ...(pin !== undefined && { resolvedVersion: pin.version }),
   };
   return isRecordedButDisabled(triaged.record) && options.judgeOnly !== true
     ? finishDisabledPreflight(options, prepared, constraintFromVerdict(verdict))

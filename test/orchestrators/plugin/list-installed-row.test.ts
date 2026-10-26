@@ -28,6 +28,8 @@ interface PluginRecordOverrides {
   readonly compatibility?: PluginInstallRecord["compatibility"];
   readonly enabled?: boolean;
   readonly resources?: PluginInstallRecord["resources"];
+  readonly resolvedSha?: string;
+  readonly resolvedVersion?: string;
   readonly version?: string;
 }
 
@@ -628,6 +630,38 @@ test("GV-01: a pinned plugin directory entry with no mirror matches its record's
     name: "cold-plugin",
     dependencies: [],
     version: "1.0.0-0123456789ab",
+    severity: "info",
+    needsReload: false,
+  });
+});
+
+test("GV-01: a git plugin recorded at a release tag with no mirror matches its entry version", async (testContext) => {
+  // arrange
+  const composeInstalledListRow = await loadComposeInstalledListRow();
+  const environment = await installedEnvironment(testContext);
+  const tagCommit = "0123456789abcdef0123456789abcdef01234567";
+  const entry: ManifestPluginEntry = { name: "cold-plugin", source: WARM_URL, version: "2.0.0" };
+
+  // act
+  const row = await composeInstalledListRow({
+    ...environment,
+    pluginName: "cold-plugin",
+    pluginScope: "project",
+    marketplaceScope: "project",
+    record: pluginRecord({
+      version: "2.0.0-0123456789ab",
+      resolvedSha: tagCommit,
+      resolvedVersion: "2.0.0",
+    }),
+    lookup: { kind: "declared", entry },
+  });
+
+  // assert
+  assert.deepStrictEqual(row, {
+    status: "installed",
+    name: "cold-plugin",
+    dependencies: [],
+    version: "2.0.0-0123456789ab",
     severity: "info",
     needsReload: false,
   });

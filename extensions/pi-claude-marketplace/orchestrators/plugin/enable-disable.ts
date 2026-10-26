@@ -919,10 +919,18 @@ async function unstageBackToDisabled(
  * mirror's fresher HEAD or a newer tag; only update and reinstall move it. A
  * record that stores no commit has nothing to pin.
  */
-function recordedSourcePin(record: { readonly resolvedSha?: string }): {
+function recordedSourcePin(record: {
+  readonly resolvedSha?: string;
+  readonly resolvedVersion?: string;
+}): {
   readonly sourcePinOverride?: string;
+  readonly resolvedVersion?: string;
 } {
-  return record.resolvedSha === undefined ? {} : { sourcePinOverride: record.resolvedSha };
+  return {
+    ...(record.resolvedSha !== undefined && { sourcePinOverride: record.resolvedSha }),
+    // GV-01: the tag's semver a range selected, kept beside the kept version.
+    ...(record.resolvedVersion !== undefined && { resolvedVersion: record.resolvedVersion }),
+  };
 }
 
 /**

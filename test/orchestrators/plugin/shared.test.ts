@@ -35,6 +35,7 @@ import {
   resolveInstalledPluginTarget,
   resolveInstallMarketplaceSource,
   resolvePluginVersion,
+  resolveTagPinnedPluginVersion,
   retiresWorkflowCommand,
   splitStagingWarnings,
   surfaceDiscoveryWarnings,
@@ -2755,13 +2756,64 @@ describe("resolvePluginVersion", () => {
   });
 });
 
+describe("resolveTagPinnedPluginVersion", () => {
+  const tagCommit = "0123456789abcdef0123456789abcdef01234567";
+
+  test("GV-01: a declared version carries the tag commit", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(pluginRoot, { recursive: true });
+      const entry = {
+        name: "alpha",
+        source: { source: "url", url: "https://example.com/alpha.git" },
+        version: "2.0.0",
+      } satisfies PluginEntry;
+
+      // act
+      const version = await resolveTagPinnedPluginVersion(
+        entry,
+        makeMaterializablePlugin(pluginRoot),
+        "mp",
+        tagCommit,
+      );
+
+      // assert
+      assert.equal(version, "2.0.0-0123456789ab");
+    });
+  });
+
+  test("GV-01: with no declared version, a path source records the tag commit and its path hash", async () => {
+    // arrange
+    await withTempScopes(async ({ root }) => {
+      const pluginRoot = path.join(root, "alpha");
+      await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+      await writeFile(path.join(pluginRoot, ".claude-plugin", "plugin.json"), "{}");
+      const entry = { name: "alpha", source: "./plugins/subp" } satisfies PluginEntry;
+
+      // act
+      const version = await resolveTagPinnedPluginVersion(
+        entry,
+        makeMaterializablePlugin(pluginRoot),
+        "mp",
+        tagCommit,
+      );
+
+      // assert
+      assert.equal(version, "0123456789ab-3989e95a");
+    });
+  });
+});
+
 describe("isSameRevision", () => {
   const cases: readonly {
     readonly title: string;
     readonly recordVersion?: string;
     readonly recordSha?: string;
+    readonly recordResolvedVersion?: string;
     readonly toVersion: string;
     readonly resolvedSha?: string;
+    readonly resolvedVersion?: string;
     readonly expected: boolean;
   }[] = [
     {
@@ -2795,19 +2847,78 @@ describe("isSameRevision", () => {
       resolvedSha: "b".repeat(40),
       expected: false,
     },
+    {
+      title: "GV-01: a record at a release tag is the unpinned candidate of the same commit",
+      recordVersion: "1.2.3-aaaaaaaaaaaa",
+      recordSha: "a".repeat(40),
+      recordResolvedVersion: "1.2.3",
+      toVersion: "1.2.3",
+      resolvedSha: "a".repeat(40),
+      expected: true,
+    },
+    {
+      title: "GV-01: at a release tag, the same tag version and commit are the same revision",
+      recordVersion: "1.2.3-aaaaaaaaaaaa",
+      recordSha: "a".repeat(40),
+      recordResolvedVersion: "1.2.3",
+      toVersion: "1.2.3-aaaaaaaaaaaa",
+      resolvedSha: "a".repeat(40),
+      resolvedVersion: "1.2.3",
+      expected: true,
+    },
+    {
+      title:
+        "GV-02: at a release tag, a record holding the tag's semver as its version is the same revision",
+      recordVersion: "1.2.3",
+      recordSha: "a".repeat(40),
+      toVersion: "1.2.3-aaaaaaaaaaaa",
+      resolvedSha: "a".repeat(40),
+      resolvedVersion: "1.2.3",
+      expected: true,
+    },
+    {
+      title: "GV-01: at a release tag, another tag version at the same commit is a new revision",
+      recordVersion: "1.2.3-aaaaaaaaaaaa",
+      recordSha: "a".repeat(40),
+      recordResolvedVersion: "1.2.3",
+      toVersion: "1.2.3-aaaaaaaaaaaa",
+      resolvedSha: "a".repeat(40),
+      resolvedVersion: "1.2.4",
+      expected: false,
+    },
+    {
+      title: "GV-01: at a release tag, another commit is a new revision",
+      recordVersion: "1.2.3-aaaaaaaaaaaa",
+      recordSha: "a".repeat(40),
+      recordResolvedVersion: "1.2.3",
+      toVersion: "1.2.3-bbbbbbbbbbbb",
+      resolvedSha: "b".repeat(40),
+      resolvedVersion: "1.2.3",
+      expected: false,
+    },
   ];
 
-  for (const { title, recordVersion, recordSha, toVersion, resolvedSha, expected } of cases) {
+  for (const {
+    title,
+    recordVersion,
+    recordSha,
+    recordResolvedVersion,
+    toVersion,
+    resolvedSha,
+    resolvedVersion,
+    expected,
+  } of cases) {
     test(title, () => {
       // arrange
       const record = {
         ...makePluginRecord({}),
         ...(recordVersion !== undefined && { version: recordVersion }),
         ...(recordSha !== undefined && { resolvedSha: recordSha }),
+        ...(recordResolvedVersion !== undefined && { resolvedVersion: recordResolvedVersion }),
       };
 
       // act
-      const same = isSameRevision(record, toVersion, resolvedSha);
+      const same = isSameRevision(record, toVersion, resolvedSha, resolvedVersion);
 
       // assert
       assert.equal(same, expected);

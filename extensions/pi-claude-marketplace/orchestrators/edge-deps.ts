@@ -36,7 +36,7 @@
 
 import { loadMarketplaceManifest } from "../domain/manifest.ts";
 import { parsePluginSource } from "../domain/source.ts";
-import { declaredVersionWithPin } from "../domain/version.ts";
+import { declaredVersionWithPin, isSameVersion } from "../domain/version.ts";
 import { locationsFor } from "../persistence/locations.ts";
 import { loadState } from "../persistence/state-io.ts";
 import { ManifestSoftFailError } from "../shared/completion-cache.ts";
@@ -125,11 +125,15 @@ async function classifyInstalledPluginRow(
 ): Promise<PluginIndexRow> {
   const upgradable =
     manifestEntry?.version !== undefined &&
-    declaredVersionWithPin(
-      manifestEntry.version,
-      parsePluginSource(manifestEntry.source),
-      marketplaceContext.marketplaceName,
-    ) !== installed.version;
+    !isSameVersion(
+      installed.version,
+      declaredVersionWithPin(
+        manifestEntry.version,
+        parsePluginSource(manifestEntry.source),
+        marketplaceContext.marketplaceName,
+      ),
+      installed.resolvedSha,
+    );
 
   // PURL-08 / D-78-04 / CR-01: the shared probe injects the fs-only presence
   // probe so a git-source upgrade candidate resolves against the WARM clone

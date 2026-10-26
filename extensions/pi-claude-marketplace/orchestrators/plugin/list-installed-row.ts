@@ -96,7 +96,10 @@ async function upgradeCandidate(
   ).catch((): undefined => undefined);
   const resolved = candidate?.kind === "resolved" ? candidate : undefined;
   const version = resolved?.version ?? catalogVersion(manifestEntry, options.marketplaceName);
-  if (version === undefined || isSameVersion(options.record.version, version)) {
+  if (
+    version === undefined ||
+    isSameVersion(options.record.version, version, options.record.resolvedSha)
+  ) {
     return { upgradable: false };
   }
 

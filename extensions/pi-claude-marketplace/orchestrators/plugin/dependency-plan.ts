@@ -72,9 +72,18 @@ export interface PlannedDependencyMove {
   readonly version: string;
 }
 
-/** A move's candidate: the plan reads only the version it lands. */
+/**
+ * A move's candidate: the plan reads only the version it lands, and the
+ * release tag's semver a range reads in its place (GV-01).
+ */
 export interface PlannedCandidate {
   readonly toVersion: string;
+  readonly resolvedVersion?: string;
+}
+
+/** GV-01: the version a range reads for a candidate. */
+export function plannedRangeVersion(candidate: PlannedCandidate): string {
+  return candidate.resolvedVersion ?? candidate.toVersion;
 }
 
 /** One move's verdict, over the candidate type the ports carry. */
@@ -173,7 +182,7 @@ function outOfRangeRequest(
   excluded: readonly string[],
 ): DependencyMoveRequest | undefined {
   const ranges = node.requesters.flatMap((requester) => requester.ranges);
-  if (node.version === undefined || satisfiesAll(node.version, ranges)) {
+  if (node.version === undefined || satisfiesAll(node.resolvedVersion ?? node.version, ranges)) {
     return undefined;
   }
 
@@ -278,7 +287,10 @@ async function ruleOut<P extends PlannedCandidate>(
       continue;
     }
 
-    const excludedVersions = [...(search.excluded.get(key) ?? []), choice.prepared.toVersion];
+    const excludedVersions = [
+      ...(search.excluded.get(key) ?? []),
+      plannedRangeVersion(choice.prepared),
+    ];
     const request = { ...choice.request, excludedVersions };
     // eslint-disable-next-line no-await-in-loop -- picks are tried one at a time, in walk order
     const judged = await judge(search, request);

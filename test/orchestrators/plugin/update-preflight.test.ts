@@ -455,7 +455,7 @@ test("UPDT-01: a pinned verdict skips the post-fetch guard entirely", async (t) 
 
   // assert -- proceeds to a prepared update rather than a stage-two hold.
   assert.ok(!("partition" in outcome));
-  assert.strictEqual(outcome.toVersion, "9.9.9");
+  assert.deepStrictEqual([outcome.toVersion, outcome.resolvedVersion], ["9.9.9-pin-oid", "9.9.9"]);
 });
 
 test("UPDT-01: a no-tag repository is still gated by the post-fetch guard", async (t) => {
@@ -749,6 +749,34 @@ test("WR-01: refreshing a disabled path-source pin drops a stale resolvedSha the
   assert.strictEqual(Object.hasOwn(refreshed, "resolvedSha"), false);
 });
 
+test("GV-01: refreshing a disabled pin at a release tag records the tag's commit and semver", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0", false), version: "1.2.0" });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const pinOid = "path-tag-oid";
+  const pathPinProbe: PreparePluginUpdateOptions["pathPinProbe"] = () =>
+    Promise.resolve({ kind: "materialized", pluginRoot: seed.pluginRoot, resolvedSha: pinOid });
+  const constraintGate: PreparePluginUpdateOptions["constraintGate"] = () =>
+    Promise.resolve({
+      kind: "admits",
+      range: "^1.0.0",
+      holders: [],
+      pin: { oid: pinOid, version: "1.2.0" },
+      fellBackToCurrentCopy: false,
+      disclosure: "already the highest version the combined range admits",
+    });
+
+  // act
+  await prepare(seed, { constraintGate, pathPinProbe });
+
+  // assert
+  const refreshed = (await loadState(seed.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.deepStrictEqual(
+    [refreshed?.version, refreshed?.resolvedVersion, refreshed?.resolvedSha],
+    ["1.2.0-path-tag-oid", "1.2.0", pinOid],
+  );
+});
+
 test("WR-02: clears a stale resolvedSha even when nothing else about the disabled pin changed", async (t) => {
   // arrange: version, resolvedSource and compatibility all already match what
   // this refresh would produce -- the stale sha is the ONLY thing that
@@ -905,13 +933,14 @@ test("prepares pinned and unpinned URL clones with their exact resolved sha", as
   assert.strictEqual(unpinnedPrepared.toVersion, "2.0.0");
 });
 
-test("UPDT-01: a tag-pinned update records the tag's version, not a sha", async (t) => {
+test("UPDT-01 / GV-01: a tag-pinned update records the declared version with the tag's commit, and the tag's semver apart", async (t) => {
   // arrange -- the pin comes from the constraint gate's `admits` verdict,
   // distinct from an entry source that already carries its own `sha`.
   const pinnedSha = "5555555555555555555555555555555555555555";
   const seed = await seedUpdate({
     installed: pluginRecord("1.0.0"),
     source: { source: "url", url: "https://example.com/tagged" },
+    version: "1.2.0",
   });
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
   const cloneCacheSeam: UpdateCloneCacheSeam = {
@@ -934,12 +963,13 @@ test("UPDT-01: a tag-pinned update records the tag's version, not a sha", async 
   // act
   const prepared = await prepare(seed, { cloneCacheSeam, constraintGate });
 
-  // assert -- the pin's own version reached `toVersion`, not a sha- derived
-  // pseudo-version, even though the RIGHT commit resolved (`resolvedSha`).
+  // assert -- `toVersion` is the version Claude Code records at the tag, and
+  // the tag's own semver travels apart as `resolvedVersion` for the ranges.
   assert.ok(!("partition" in prepared));
-  assert.strictEqual(prepared.resolvedSha, pinnedSha);
-  assert.strictEqual(prepared.toVersion, "1.2.0");
-  assert.doesNotMatch(prepared.toVersion, /^sha-/);
+  assert.deepStrictEqual(
+    [prepared.resolvedSha, prepared.toVersion, prepared.resolvedVersion],
+    [pinnedSha, "1.2.0-555555555555", "1.2.0"],
+  );
 });
 
 test("D-10-20: a constraint pin overrides the entry's own declared sha", async (t) => {
@@ -952,6 +982,7 @@ test("D-10-20: a constraint pin overrides the entry's own declared sha", async (
   const seed = await seedUpdate({
     installed: pluginRecord("1.0.0"),
     source: { source: "url", url: "https://example.com/tagged", sha: entrySha },
+    version: "1.2.0",
   });
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
   const resolvedSources: GitBackedSource[] = [];
@@ -988,11 +1019,69 @@ test("D-10-20: a constraint pin overrides the entry's own declared sha", async (
   );
   assert.ok(!("partition" in prepared));
   assert.strictEqual(prepared.resolvedSha, tagOid);
-  assert.strictEqual(prepared.toVersion, "1.2.0");
+  assert.strictEqual(prepared.toVersion, "1.2.0-888888888888");
 });
 
-test("UPDT-01: a second update of a tag-pinned plugin is unchanged", async (t) => {
-  // arrange -- the record already holds the pin's own version and commit.
+test("UPDT-01 / GV-01: a second update of a tag-pinned plugin is unchanged", async (t) => {
+  // arrange -- the record already holds the version Claude Code records at
+  // the pin, the pin's commit, and the tag's semver.
+  const pinnedSha = "6666666666666666666666666666666666666666";
+  const seed = await seedUpdate({
+    installed: (pluginRoot) => ({
+      ...pluginRecord("1.2.0-666666666666"),
+      resolvedSource: pluginRoot,
+      resolvedSha: pinnedSha,
+      resolvedVersion: "1.2.0",
+    }),
+    source: { source: "url", url: "https://example.com/tagged" },
+    version: "1.2.0",
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const cloneCacheSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: () =>
+      Promise.resolve({ cloneUrl: "https://example.com/tagged", pin: pinnedSha }),
+    materializePluginClone: () => Promise.resolve(seed.pluginRoot),
+    materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
+  };
+  const constraintGate: PreparePluginUpdateOptions["constraintGate"] = () =>
+    Promise.resolve({
+      kind: "admits",
+      range: "^1.0.0",
+      holders: [],
+      pin: { oid: pinnedSha, version: "1.2.0" },
+      fellBackToCurrentCopy: false,
+      disclosure: "already the highest version the combined range admits",
+    });
+  const before = await readFile(seed.locations.stateJsonPath, "utf8");
+
+  // act
+  const outcome = await prepare(seed, { cloneCacheSeam, constraintGate });
+  const after = await readFile(seed.locations.stateJsonPath, "utf8");
+
+  // assert -- the same tag is selected on the second run, `toVersion` equals
+  // the recorded version, and no record is written.
+  assert.deepStrictEqual(outcome, {
+    partition: "unchanged",
+    name: "hello",
+    fromVersion: "1.2.0-666666666666",
+    toVersion: "1.2.0-666666666666",
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    // D-10-13: the pinned verdict's own disclosure, read from the SAME
+    // `verdict` local -- present even though nothing changed on disk.
+    constraint: {
+      disclosure: "already the highest version the combined range admits",
+      fellBackToCurrentCopy: false,
+    },
+  });
+  assert.strictEqual(after, before);
+});
+
+test("GV-02: a tag-pinned record written before GV-01 is unchanged at the same tag and commit", async (t) => {
+  // arrange -- a record written before GV-01 holds the tag's semver as its
+  // version and no `resolvedVersion`.
   const pinnedSha = "6666666666666666666666666666666666666666";
   const seed = await seedUpdate({
     installed: (pluginRoot) => ({
@@ -1001,6 +1090,7 @@ test("UPDT-01: a second update of a tag-pinned plugin is unchanged", async (t) =
       resolvedSha: pinnedSha,
     }),
     source: { source: "url", url: "https://example.com/tagged" },
+    version: "1.2.0",
   });
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
   const cloneCacheSeam: UpdateCloneCacheSeam = {
@@ -1031,7 +1121,7 @@ test("UPDT-01: a second update of a tag-pinned plugin is unchanged", async (t) =
     partition: "unchanged",
     name: "hello",
     fromVersion: "1.2.0",
-    toVersion: "1.2.0",
+    toVersion: "1.2.0-666666666666",
     declaresAgents: false,
     declaresMcp: false,
     declaresWorkflows: false,
@@ -1047,7 +1137,7 @@ test("UPDT-01: a second update of a tag-pinned plugin is unchanged", async (t) =
 
 test("UPDT-01: a path-source pin materializes through the marketplace's own tag clone", async (t) => {
   // arrange
-  const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), version: "1.2.0" });
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
   const pinOid = "path-tag-oid";
   const calls: Parameters<NonNullable<PreparePluginUpdateOptions["pathPinProbe"]>>[0][] = [];
@@ -1077,7 +1167,7 @@ test("UPDT-01: a path-source pin materializes through the marketplace's own tag 
   // pin's own oid as `tagOid`; never a re-derived marketplace URL.
   assert.ok(!("partition" in prepared));
   assert.strictEqual(prepared.resolvedSha, pinOid);
-  assert.strictEqual(prepared.toVersion, "1.2.0");
+  assert.strictEqual(prepared.toVersion, "1.2.0-path-tag-oid");
   assert.strictEqual(calls.length, 1);
   assert.strictEqual(calls[0]?.tagOid, pinOid);
   assert.strictEqual(calls[0]?.marketplaceRoot, path.join(seed.cwd, "marketplace"));
@@ -1091,7 +1181,7 @@ test("UPDT-01: without an injected pathPinProbe, a path-source pin uses the real
   // git repository, matching what a marketplace root actually is in
   // production (the same shape `install-cascade.test.ts`'s own equivalent
   // fixture uses).
-  const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), version: "1.2.0" });
   t.after(() => rm(seed.cwd, { force: true, recursive: true }));
   const marketplaceRoot = path.join(seed.cwd, "marketplace");
   await git.init({ fs, dir: marketplaceRoot, defaultBranch: "main" });
@@ -1121,7 +1211,7 @@ test("UPDT-01: without an injected pathPinProbe, a path-source pin uses the real
   // assert
   assert.ok(!("partition" in prepared));
   assert.strictEqual(prepared.resolvedSha, oid);
-  assert.strictEqual(prepared.toVersion, "1.2.0");
+  assert.strictEqual(prepared.toVersion, `1.2.0-${oid.slice(0, 12)}`);
 });
 
 test("D-10-17: an unconstrained update supplies no path pin to the resolver", async (t) => {

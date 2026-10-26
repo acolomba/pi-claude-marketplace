@@ -7,12 +7,14 @@ import { setTimeout as delay } from "node:timers/promises";
 
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
+  atCatalogVersion,
   DEFAULT_STATE,
   type DisabledPluginRecord,
   type ExtensionState,
   type PluginInstallRecord,
   isRecordedButDisabled,
   loadState,
+  rangeVersionOf,
   saveState,
   toDisabledRecord,
 } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -89,6 +91,40 @@ for (const { enabled, expectedDisabled } of [
     assert.strictEqual(disabled, expectedDisabled);
   });
 }
+
+test("GV-01: a range reads the release tag version a record holds, else its version", () => {
+  // act
+  const versions = [
+    rangeVersionOf({ version: "2.0.0-0123456789ab", resolvedVersion: "2.0.0" }),
+    rangeVersionOf({ version: "2.0.0" }),
+  ];
+
+  // assert
+  assert.deepStrictEqual(versions, ["2.0.0", "2.0.0"]);
+});
+
+test("GV-01: a record moved to a catalog version keeps no release tag version", () => {
+  // arrange
+  const record: PluginInstallRecord = {
+    version: "2.0.0-0123456789ab",
+    resolvedVersion: "2.0.0",
+    resolvedSource: "/plugin",
+    compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+    resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+    enabled: true,
+    provenance: "dependency",
+    installedAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
+  };
+
+  // act
+  const moved = atCatalogVersion(record, "3.0.0");
+
+  // assert
+  const { resolvedVersion: _tagVersion, ...expected } = { ...record, version: "3.0.0" };
+  assert.deepStrictEqual(moved, expected);
+  assert.strictEqual(record.resolvedVersion, "2.0.0");
+});
 
 test("disables a plugin while preserving its complete inventory", () => {
   // arrange
