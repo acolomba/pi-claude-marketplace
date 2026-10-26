@@ -14,7 +14,7 @@
 // flags via `notifyUsageError`.
 
 import { createEnableOperation } from "../../../orchestrators/plugin/operations.ts";
-import { errorMessage } from "../../../shared/errors.ts";
+import { errorMessage, rethrowInvalidGitHubBaseUrl } from "../../../shared/errors.ts";
 import { notify } from "../../../shared/notification-dispatch.ts";
 // Shared scanner; see edge/handlers/shared.ts.
 import { extractLocalFlag } from "../shared.ts";
@@ -61,10 +61,14 @@ export function makeEnableDisableHandler(
         ...(localFlag.local && { local: true }),
       });
     } catch (err) {
+      rethrowInvalidGitHubBaseUrl(err);
       // C1 defense-in-depth: the orchestrator's "never re-throws" contract
       // wraps every loadState + transaction call internally, but a defect or
       // injected throw escaping here must still surface through notify() per
       // IL-2 -- never as a raw process.stderr trace with no user-visible row.
+      // GHB-03: an invalid GitHub base override is the one exception. The
+      // operation rethrows it, and so does this catch, so it fails the command
+      // instead of becoming an `{unreadable}` row.
       const scope = parsed.scope ?? "user";
       const cause = err instanceof Error ? err : new Error(errorMessage(err));
       notify(ctx, run, {

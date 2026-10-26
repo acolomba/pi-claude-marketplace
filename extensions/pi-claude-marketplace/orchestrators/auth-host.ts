@@ -17,6 +17,11 @@
  *     `buildStoredCredentialAuth`, so a credential already in the user's
  *     helper still authenticates and a miss cancels (GAUTH-04).
  *
+ * GitHub bundles come from `buildGitHubAuth`. While
+ * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` is set, it binds the override host
+ * with a stored credential and no Device Flow (GHB-02); unset, it binds
+ * github.com through `buildAuthForHost`.
+ *
  * `buildAuthForHost` requires a notification context because the Device Flow
  * renders a user code through it. A caller with none -- the autoupdate cascade
  * -- asks for `buildStoredCredentialAuth` directly (D-3-04).
@@ -28,16 +33,18 @@
  * under BLOCK F in `eslint.config.js`. It imports the provider registry
  * (domain), the Device Flow engine (domain), the device-flow prompt helper
  * (shared), the auth-callback seam types (platform/git-auth-callbacks.ts), and
- * the credential surface (platform/git-credential.ts).
+ * the credential surface (platform/git-credential.ts), and the GitHub base
+ * seam (shared/github-base-url.ts).
  *
  * AUTH-09: no credential field is ever interpolated into an Error/notify here;
- * enforced by tests/architecture/no-credential-leak.test.ts (PROV-05).
+ * enforced by test/architecture/no-credential-leak.test.ts (PROV-05).
  */
 
 import { findProviderForHost } from "../domain/auth-registry.ts";
 import { initiateDeviceFlow } from "../domain/github-auth.ts";
 import { NODE_CREDENTIAL_SPAWN, createCredentialOps } from "../platform/git-credential.ts";
 import { DeviceFlowUnavailableError } from "../shared/errors.ts";
+import { GITHUB_HOST, gitHubOverrideHost, gitHubWireUrl } from "../shared/github-base-url.ts";
 import { notifyDeviceFlowPrompt } from "../shared/notification-dispatch.ts";
 
 import type { DeviceFlowHttp } from "../domain/github-auth.ts";
@@ -74,28 +81,23 @@ export const DEFAULT_CREDENTIAL_OPS: CredentialOps = createCredentialOps({
 });
 
 /**
- * D-77-06: the bare host of every `github` source. Named so a caller whose kind
- * is statically `github` can read it directly instead of handing
- * `hostFromCloneUrl` a url that arm does not read.
- */
-export const GITHUB_HOST = "github.com";
-
-/**
- * Extract the bare host from a clone URL per source kind.
+ * Extract the host a clone URL's credential is bound to, per source kind.
  *
  * A `github` source canonicalizes to `https://github.com/<owner>/<repo>` (see
- * domain/source.ts), so it always resolves to `GITHUB_HOST` without a URL parse
- * and `cloneUrl` is unread on that arm. Every other kind parses
- * `new URL(cloneUrl).host` -- which INCLUDES the port (e.g.
- * `gitlab.example.com:8443`) so a future enterprise-host provider match stays
- * forward-consistent.
+ * domain/source.ts), so it resolves to the override host when
+ * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` is set and to `GITHUB_HOST`
+ * otherwise, without a URL parse; `cloneUrl` is unread on that arm (GHB-02).
+ * Every other kind parses the host of the URL actually sent, which INCLUDES the
+ * port (e.g. `gitlab.example.com:8443`). A git-subdir url on
+ * `https://github.com/` is sent to the base, so it binds the override host
+ * (D-09); a url source never has that prefix, so it never reads the variable.
  */
 export function hostFromCloneUrl(cloneUrl: string, kind: "github" | "url" | "git-subdir"): string {
   if (kind === "github") {
-    return GITHUB_HOST;
+    return gitHubOverrideHost() ?? GITHUB_HOST;
   }
 
-  return new URL(cloneUrl).host;
+  return new URL(gitHubWireUrl(cloneUrl)).host;
 }
 
 /**
@@ -178,7 +180,10 @@ export function buildAuthForHost(args: {
   const { host, credentialOps, ctx, run, deviceFlowHttp, authMemo } = args;
 
   const provider = findProviderForHost(host);
-  if (provider === undefined) {
+  // AAP-02 / D-13: a run no command opened, such as an autoapply load, gets no
+  // interactive Device Flow, as the autoupdate cascade gets none (D-3-04). A
+  // credential miss then fails that row instead of holding the load.
+  if (provider === undefined || run.origin.kind !== "command") {
     return buildStoredCredentialAuth(host, credentialOps);
   }
 
@@ -210,6 +215,29 @@ export function buildAuthForHost(args: {
 }
 
 /**
+ * GHB-02 / D-79-05: build the auth bundle for a GitHub source. While
+ * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` is set, it is a stored-credential
+ * bundle bound to the override host, built without a provider lookup, so no
+ * Device Flow runs even when that host is github.com or gitlab.com. Unset, it
+ * is `buildAuthForHost`'s bundle for github.com. An invalid value throws
+ * `InvalidGitHubBaseUrlError`.
+ */
+export function buildGitHubAuth(args: {
+  credentialOps: CredentialOps;
+  ctx: NotificationContext;
+  run: NotificationRun;
+  deviceFlowHttp?: DeviceFlowHttp;
+  authMemo?: Map<string, AuthAttemptResult>;
+}): GitAuthBundle {
+  const overrideHost = gitHubOverrideHost();
+  if (overrideHost !== undefined) {
+    return buildStoredCredentialAuth(overrideHost, args.credentialOps);
+  }
+
+  return buildAuthForHost({ ...args, host: GITHUB_HOST });
+}
+
+/**
  * PROV-03 / T-79-09 / D-81-05 / GAUTH-03: build the host-keyed auth bundle for
  * a resolved clone url.
  *
@@ -224,6 +252,9 @@ export function buildAuthForHost(args: {
  * sites needs its own copy of this logic. The autoupdate cascade has no
  * notification context, so its update probe calls `buildStoredCredentialAuth`
  * instead (D-3-04).
+ *
+ * A github source, and a git-subdir url the GitHub base rewrites, get
+ * `buildGitHubAuth`'s bundle (GHB-02, D-09).
  */
 export function buildCloneAuth(
   cloneUrl: string,
@@ -236,12 +267,16 @@ export function buildCloneAuth(
     readonly authMemo?: Map<string, AuthAttemptResult>;
   },
 ): GitAuthBundle {
-  return buildAuthForHost({
-    host: hostFromCloneUrl(cloneUrl, kind),
+  const authArgs = {
     credentialOps: auth.credentialOps,
     ctx: auth.ctx,
     run: auth.run,
     ...(auth.deviceFlowHttp !== undefined && { deviceFlowHttp: auth.deviceFlowHttp }),
     ...(auth.authMemo !== undefined && { authMemo: auth.authMemo }),
-  });
+  };
+  if (kind === "github" || gitHubWireUrl(cloneUrl) !== cloneUrl) {
+    return buildGitHubAuth(authArgs);
+  }
+
+  return buildAuthForHost({ ...authArgs, host: hostFromCloneUrl(cloneUrl, kind) });
 }

@@ -15,7 +15,7 @@
   "boundaries": {
     "coverage": {
       "requireAllFiles": true,
-      "allowUnmatched": ["eslint.config.js", "scripts/**", "tests/**", "demos/**"]
+      "allowUnmatched": ["eslint.config.js", "scripts/**", "test/**", "features/**", "demos/**"]
     },
     "zones": [
       {
@@ -146,9 +146,6 @@
       }
     ]
   },
-  "duplicates": {
-    "threshold": 3
-  },
   "includeEntryExports": true,
   "rules": {
     "private-type-leaks": "error",
@@ -159,6 +156,7 @@
     "dev-dependencies-in-production": "error",
     "stale-suppressions": "error",
     "require-suppression-reason": "error",
+    "added-suppression": "off",
     "policy-violation": "error"
   }
 }

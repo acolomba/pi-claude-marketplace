@@ -23,6 +23,7 @@ npm install
 # skills
 npx --yes skills@latest add blader/humanizer -a universal claude-code -y
 npx --yes skills@latest add AminBlg/SimpleEnglish -a universal claude-code -y
+npx --yes skills@latest add humanlayer/skills --skill show-me -a universal claude-code -y
 
 # gsd
 npx --yes @opengsd/gsd-core@latest --install --local --claude --codex --force-statusline
@@ -49,3 +50,6 @@ npx fallow agent install --harness claude --harness codex --without hooks --with
 
 # normalize AGENTS.md
 pre-commit run --files AGENTS.md || true
+
+# init-session.sh keys on this marker
+touch node_modules/.init-done

@@ -31,7 +31,7 @@ Esta extensión instala complementos desde los mercados de complementos de Claud
 
 Los complementos que contienen componentes no compatibles pueden instalarse parcialmente. Un complemento instalado parcialmente puede no funcionar según lo previsto.
 
-El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como `/plugin` de Claude Code. Una configuración de estado deseado en los archivos `[~/].pi/agent/claude-plugins[.local].json` hace que las instalaciones de complementos sean automáticas y repetibles. Puedes compartir estos archivos entre máquinas o miembros del equipo.
+El comando `/claude:plugin` gestiona los mercados y complementos de Claude, como `/plugin` de Claude Code. Las configuraciones de estado deseado en `[~/].pi/agent/claude-plugins[.local].json` hacen que las instalaciones de complementos sean automáticas y repetibles. Puedes compartir estas configuraciones entre máquinas o miembros del equipo.
 
 ## Requisitos previos
 
@@ -152,48 +152,81 @@ Instala un complemento parcialmente disponible. Coloca `--partial` primero para 
 
 ## Archivos de configuración
 
-Cada ámbito almacena su configuración declarativa de mercados y complementos en `claude-plugins.json`, bajo la raíz del ámbito.
+Cada ámbito declara sus mercados y complementos en dos capas: la capa base y la capa local. El archivo de una capa es su configuración. La configuración base, `claude-plugins.json`, está bajo la raíz del ámbito.
 
 | Ámbito    | Ruta del archivo                  |
 | --------- | --------------------------------- |
 | `user`    | `~/.pi/agent/claude-plugins.json` |
 | `project` | `<cwd>/.pi/claude-plugins.json`   |
 
-Estos archivos son el registro definitivo de los mercados y complementos instalados. Pi aplica su contenido al cargar la extensión (`/reload`).
+Las configuraciones de un ámbito son el estado deseado de sus mercados y complementos. El catálogo de un mercado es la lista de complementos y versiones que ofrece. Una sesión nueva o `/reload` no cambia tus complementos instalados, salvo que actives la [aplicación automática](#aplicaci%C3%B3n-autom%C3%A1tica). Solo lista los cambios que necesitan tus configuraciones y los catálogos de los mercados.
+
+Para ver esos cambios, ejecuta `/claude:plugin pending`. Para hacerlos, ejecuta `/claude:plugin apply`. Después ejecuta `/reload` para que Pi cargue el resultado.
+
+```text
+/claude:plugin pending
+/claude:plugin apply
+/reload
+```
 
 Que Pi aplique los componentes de un complemento declarado depende de la clave opcional `enabled` de la entrada y del valor predeterminado de instalación que declara el autor del complemento. Para más información, consulta [Activación de complementos](docs/plugin-enablement.md).
 
-### Archivos de configuración local
+### Aplicación automática
 
-Cada ámbito también puede tener un archivo `claude-plugins.local.json` junto al archivo base.
+Para que cada sesión nueva y cada `/reload` apliquen tus configuraciones, activa `autoapply`:
+
+```text
+/claude:plugin autoapply on
+```
+
+Esto pone la clave de primer nivel `autoapply` de una configuración en `true`. Como `enable`, escribe la configuración base del usuario salvo que añadas `--scope project` o `--local`. `/claude:plugin autoapply off` pone la clave en `false`. Ejecuta `/claude:plugin autoapply` sin valor para ver el valor en vigor, la configuración que lo fija y el valor propio de cada configuración. Con `--scope` o `--local`, solo lista esas configuraciones. Fijar el valor no ejecuta `apply`: la carga siguiente lee el valor nuevo. También puedes editar la clave a mano:
+
+```json
+{
+  "autoapply": true,
+  "plugins": { "context7-plugin@context7-marketplace": {} }
+}
+```
+
+El valor predeterminado es `false`. Cuando `autoapply` está activada, la carga ejecuta `/claude:plugin apply` en los dos ámbitos antes de que Pi busque habilidades y prompts. Así, los complementos que instala están listos en la misma sesión. La carga puede clonar repositorios desde la red, como hace `apply`. Un cambio que falla aparece como una fila fallida y sigue en `pending`. La carga siguiente lo intenta otra vez.
+
+Cualquier configuración puede fijar `autoapply`. Gana la configuración más específica que la fija, en este orden: la configuración local del proyecto, la configuración base del proyecto, la configuración local del usuario y la configuración base del usuario. Si una configuración no es válida, por ejemplo porque `autoapply` no es `true` ni `false`, la carga no aplica nada e informa de esa configuración.
+
+Una configuración de usuario no puede desactivar el `autoapply` de un proyecto, porque las configuraciones del proyecto son más específicas. Para desactivarlo en tu máquina, pon `"autoapply": false` en la configuración local del proyecto. Una carga nunca te pide iniciar sesión. Si un clon necesita una credencial que no guardaste, su fila falla, y después `/claude:plugin apply` puede pedirte que inicies sesión.
+
+> [!WARNING]
+> La configuración base de un proyecto suele estar en el control de versiones. Si fija `autoapply` en `true`, iniciar `pi` en ese proyecto instala sus complementos, incluidos sus hooks y servidores MCP, sin preguntar. Lee `.pi/claude-plugins.json` antes de iniciar `pi` en un proyecto que clonaste. Claude Code no tiene este ajuste: no instala un complemento que solo activa la configuración de un proyecto, y tú lo instalas con un comando.
+
+### La configuración local
+
+La configuración local, `claude-plugins.local.json`, está junto a la configuración base.
 
 | Ámbito    | Ruta del archivo                        |
 | --------- | --------------------------------------- |
 | `user`    | `~/.pi/agent/claude-plugins.local.json` |
 | `project` | `<cwd>/.pi/claude-plugins.local.json`   |
 
-El archivo local anula las entradas individuales del archivo base. Una entrada en `claude-plugins.local.json` reemplaza por completo la entrada con la misma clave en `claude-plugins.json`.
-
-Pasa `--local` a cualquier comando de modificación para dirigirse únicamente al archivo local.
+La configuración local anula entradas de la configuración base. Para escribir en la configuración local, agrega `--local`:
 
 ```text
+/claude:plugin marketplace add upstash/context7 --local
 /claude:plugin install context7-plugin@context7-marketplace --local
 /claude:plugin marketplace autoupdate context7-marketplace --local
 ```
 
 ### Convención de Gitignore
 
-En el ámbito del proyecto, confirma (`commit`) `claude-plugins.json`. Así, tus colaboradores instalan los mismos mercados y complementos. Mantén `claude-plugins.local.json` fuera del control de versiones. Agrega esta línea al `.gitignore` de tu proyecto:
+En el ámbito del proyecto, confirma (`commit`) la configuración base, `claude-plugins.json`. Así, tus colaboradores instalan los mismos mercados y complementos. Mantén la configuración local, `claude-plugins.local.json`, fuera del control de versiones. Agrega esta línea al `.gitignore` de tu proyecto:
 
 ```text
 .pi/claude-plugins.local.json
 ```
 
-Los archivos de ámbito de usuario se encuentran en tu directorio de inicio. Son personales y nunca se comparten.
+Las configuraciones de ámbito de usuario se encuentran en tu directorio de inicio. Son personales y nunca se comparten.
 
 ## Referencia de comandos
 
-Esta extensión replica el comando `/plugin` de Claude Code. Usa `/claude:plugin` en Pi para operaciones de mercado y complementos. Después de instalar, desinstalar, actualizar o reinstalar complementos, ejecuta `/reload`. Así, Pi detecta los recursos modificados.
+Esta extensión replica el comando `/plugin` de Claude Code. Usa `/claude:plugin` en Pi para operaciones de mercado y complementos. Después de instalar, desinstalar, actualizar o reinstalar complementos, ejecuta `/reload`. Así, Pi detecta los recursos modificados. Si editas una configuración a mano, ejecuta `/claude:plugin apply` antes de `/reload`.
 
 ### Mercado
 
@@ -252,7 +285,7 @@ Actualiza un mercado. Si omites el nombre, el comando actualiza todos los mercad
 /claude:plugin marketplace update
 ```
 
-Elimina un mercado y todos los complementos instalados desde él.
+Elimina un mercado y desinstala sus complementos. Una dependencia que otro complemento todavía necesita sigue instalada.
 
 ```text
 /claude:plugin marketplace remove context7-marketplace
@@ -310,7 +343,7 @@ Instala en el ámbito del proyecto en lugar del ámbito de usuario.
 /claude:plugin install context7-plugin@context7-marketplace --scope project
 ```
 
-Un complemento puede declarar los otros complementos que necesita. La instalación también los agrega, en el mismo ámbito y en el mismo archivo de configuración. Para más información, consulta [Resolución de dependencias](docs/dependency-resolution.md).
+Un complemento puede declarar los otros complementos que necesita. La instalación también los agrega, en el mismo ámbito. Para más información, consulta [Resolución de dependencias](docs/dependency-resolution.md).
 
 Actualiza un complemento instalado, todos los complementos instalados de un mercado, o todos los complementos instalados.
 

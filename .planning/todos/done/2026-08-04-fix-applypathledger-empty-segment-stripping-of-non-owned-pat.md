@@ -5,7 +5,7 @@ area: general
 severity: major
 files:
   - extensions/pi-claude-marketplace/shared/session-env.ts:90-96
-  - tests/shared/session-env.test.ts
+  - test/shared/session-env.test.ts
 ---
 
 ## Problem
@@ -34,4 +34,4 @@ Either preserve empty segments through the split/filter/join round-trip
 keep the drop but promote it to an explicit, documented, and tested
 hardening decision. While in the seam, consider rejecting
 delimiter-containing bin dirs in `asAbsolutePluginRoot` to close IN-01.
-Pin whichever contract is chosen in tests/shared/session-env.test.ts.
+Pin whichever contract is chosen in test/shared/session-env.test.ts.

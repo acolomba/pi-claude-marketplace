@@ -288,16 +288,17 @@ interface DisplacedMove {
  * The previous targets are NOT unlinked. A bare unlink is unrecoverable: the
  * rollback below can only reverse renames, so a commit that failed after the
  * removals would leave the saved directory holding neither the previous
- * envelopes nor the new ones. Every sibling bridge moves previous content
- * aside for the same reason (`shared/fs-utils.ts::rollbackReplacementCommon`).
+ * envelopes nor the new ones. The skills, commands, and agents commits
+ * unlink their previous targets instead; a failure after those removals is
+ * reported as `rollback partial`, and running the command again repairs it
+ * (D-18-10).
  *
  * CR-01: `displaced` is OWNED BY THE CALLER and mutated in place, so a move
  * already made is visible to the rollback even when a LATER name throws. A
  * local list returned by value is lost on that throw, which leaves the caller
  * believing nothing was displaced -- it then skips the restore loop and lets
  * the staging cleanup delete the only surviving copy of every envelope moved
- * before the failure. The sibling commands bridge declares its `backups` in the
- * same caller-owned position for the same reason.
+ * before the failure.
  *
  * ENOENT-tolerant: a previous name with no file behind it (a prior install
  * that never finished its commit) is simply not displaced.

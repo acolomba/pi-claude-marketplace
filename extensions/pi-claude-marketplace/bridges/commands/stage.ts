@@ -1,8 +1,6 @@
 // bridges/commands/stage.ts
 //
-// CommandsBridge: prepare/commit/abort, plus replacement exports:
-// replacePreparedCommands, rollbackCommandsReplacement,
-// finalizeCommandsReplacement.
+// CommandsBridge: prepare/commit/abort.
 //
 // There is no RN-6 collision gate here. `discoverPluginCommands` returns the
 // values of a Map keyed on the generated name, so its output is duplicate-free
@@ -43,14 +41,8 @@ import {
   appendLeaks,
   errorMessage,
   isErrnoException,
-  ManualRecoveryError,
 } from "../../shared/errors.ts";
-import {
-  cleanupStaging,
-  pathExists,
-  removeOrphanIfPresent,
-  rollbackReplacementCommon,
-} from "../../shared/fs-utils.ts";
+import { cleanupStaging } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 import { substituteClaudeVars } from "../../shared/vars.ts";
 
@@ -58,23 +50,11 @@ import { discoverPluginCommands } from "./discover.ts";
 
 import type {
   CommandDegradeRecord,
-  CommandsReplacement,
   PreparedCommandsStaging,
   StageCommandsInput,
   StagedCommandRecord,
 } from "./types.ts";
 import type { RemovalOps } from "../../shared/fs-utils.ts";
-
-type CommandsReplacementInternals = Readonly<{
-  backupRoot: string;
-  backups: readonly { name: string; from: string; to: string }[];
-  renamed: readonly { to: string }[];
-}>;
-
-const commandsReplacementInternals = new WeakMap<
-  Extract<CommandsReplacement, { kind: "replaced" }>,
-  CommandsReplacementInternals
->();
 
 /**
  * CMD-01 / D-86-07: neutralize an unparseable command source by stripping the
@@ -176,6 +156,7 @@ export async function prepareStageCommands(
   // D-07: discover returns { discovered, warnings }. warnings carry
   // duplicate-generated-name first-wins skips across multiple
   // componentPaths.commands entries.
+  // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
   const { discovered, warnings: discoverWarnings } = await discoverPluginCommands({
     pluginName,
     resolved,
@@ -291,6 +272,7 @@ export async function prepareStageCommands(
     targetPath: path.join(locations.promptsTargetDir, command.generatedName + ".md"),
   }));
 
+  // fallow-ignore-next-line code-duplication -- reviewed: the commands and skills bridges keep the same shape on purpose, and the fallow boundary zones forbid one bridge from importing the other
   return {
     kind: "staged",
     locations,
@@ -399,162 +381,4 @@ export async function abortPreparedCommands(
   }
 
   return cleanupStaging(ops, prepared.stagingRoot, "commands staging directory");
-}
-
-/**
- * Reinstall-safe replacement helper. Unlike commitPreparedCommands, this
- * backs up previous plugin-owned prompt files before staged renames so a
- * later orchestrator failure can restore the old install.
- */
-export async function replacePreparedCommands(
-  ops: RemovalOps,
-  prepared: PreparedCommandsStaging,
-): Promise<CommandsReplacement> {
-  if (prepared.kind === "noop") {
-    return { kind: "noop", prepared };
-  }
-
-  const backupRoot = path.join(prepared.locations.commandsStagingDir, `backup-${randomUUID()}`);
-  await mkdir(backupRoot, { recursive: true });
-  await assertPathInside(prepared.locations.commandsStagingDir, backupRoot, "commands backup root");
-
-  const backups: { name: string; from: string; to: string }[] = [];
-  const renamed: { to: string }[] = [];
-
-  try {
-    for (const name of prepared._previousNames) {
-      assertSafeName(name, "previous command name");
-      const target = path.join(prepared.locations.promptsTargetDir, name + ".md");
-      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
-      await assertPathInside(prepared.locations.promptsTargetDir, target, "previous command file");
-      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
-      if (!(await pathExists(target))) {
-        continue;
-      }
-
-      const backup = path.join(backupRoot, name + ".md");
-      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
-      await assertPathInside(backupRoot, backup, "commands backup file");
-      // eslint-disable-next-line no-await-in-loop -- rollback restores only the backups already recorded
-      await rename(target, backup);
-      backups.push({ name, from: target, to: backup });
-    }
-
-    // TR-06: 3-arm policy at the rename loop. ownedNames is the basename
-    // membership set derived from state.json (via _previousNames). When a
-    // pre-existing target shares an owned basename, it is treated as an
-    // orphan from a prior partial install and pre-removed via the
-    // kind-strict helper. Foreign content (basename NOT in ownedNames)
-    // still triggers the existing PI-6 "non-previous content" rejection
-    // verbatim. Command targets are .md files -> mode "file".
-    const ownedNames = new Set<string>(prepared._previousNames);
-    await mkdir(prepared.locations.promptsTargetDir, { recursive: true });
-    for (const pair of prepared._renamePairs) {
-      const targetName = path.basename(pair.to, ".md");
-      if (ownedNames.has(targetName)) {
-        // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
-        await removeOrphanIfPresent(pair.to, "file");
-        // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
-      } else if (await pathExists(pair.to)) {
-        throw new Error(`Cannot replace command target with non-previous content at ${pair.to}`);
-      }
-
-      // fallow-ignore-next-line code-duplication -- reviewed: the commands, agents, and skills bridges keep the same TR-01/TR-05 commit-and-rollback shape on purpose, so each rollback contract stays beside the commit it protects
-      // eslint-disable-next-line no-await-in-loop -- rollback undoes only the renames already recorded
-      await rename(pair.from, pair.to);
-      renamed.push({ to: pair.to });
-    }
-  } catch (err) {
-    const leaks = await rollbackCommandsReplacementInternal(
-      ops,
-      prepared,
-      renamed,
-      backups,
-      backupRoot,
-    );
-    if (leaks.length > 0) {
-      throw new ManualRecoveryError(errorMessage(err), leaks, { cause: err });
-    }
-
-    throw err;
-  }
-
-  const replacement: Extract<CommandsReplacement, { kind: "replaced" }> = {
-    kind: "replaced",
-    prepared,
-  };
-  commandsReplacementInternals.set(replacement, {
-    backupRoot,
-    backups: Object.freeze(backups),
-    renamed: Object.freeze(renamed),
-  });
-  return replacement;
-}
-
-export async function rollbackCommandsReplacement(
-  ops: RemovalOps,
-  replacement: CommandsReplacement,
-): Promise<readonly string[]> {
-  if (replacement.kind === "noop") {
-    return Object.freeze([]);
-  }
-
-  const internals = requireCommandsReplacementInternals(replacement);
-  return rollbackCommandsReplacementInternal(
-    ops,
-    replacement.prepared,
-    internals.renamed,
-    internals.backups,
-    internals.backupRoot,
-  );
-}
-
-export async function finalizeCommandsReplacement(
-  ops: RemovalOps,
-  replacement: CommandsReplacement,
-): Promise<readonly string[]> {
-  if (replacement.kind === "noop") {
-    return Object.freeze([]);
-  }
-
-  const internals = requireCommandsReplacementInternals(replacement);
-  const leaks = [
-    await cleanupStaging(ops, internals.backupRoot, "commands replacement backup directory"),
-    await cleanupStaging(ops, replacement.prepared.stagingRoot, "commands staging directory"),
-  ].filter((leak): leak is string => leak !== undefined);
-  return Object.freeze(leaks);
-}
-
-function requireCommandsReplacementInternals(
-  replacement: Extract<CommandsReplacement, { kind: "replaced" }>,
-): CommandsReplacementInternals {
-  const internals = commandsReplacementInternals.get(replacement);
-  if (internals === undefined) {
-    throw new Error("Unknown commands replacement handle.");
-  }
-
-  return internals;
-}
-
-async function rollbackCommandsReplacementInternal(
-  ops: RemovalOps,
-  prepared: Extract<PreparedCommandsStaging, { kind: "staged" }>,
-  renamed: readonly { to: string }[],
-  backups: readonly { name: string; from: string; to: string }[],
-  backupRoot: string,
-): Promise<readonly string[]> {
-  return rollbackReplacementCommon({
-    ops,
-    renamed,
-    backups,
-    stagingRoot: prepared.stagingRoot,
-    backupRoot,
-    removeMode: "file",
-    labels: {
-      replacement: "replacement command file",
-      previous: "previous command file",
-      stagingDir: "commands staging directory",
-      backupDir: "commands replacement backup directory",
-    },
-  });
 }

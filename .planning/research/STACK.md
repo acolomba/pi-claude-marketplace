@@ -1,167 +1,198 @@
-# Stack Research -- mcp-4 (Pi 1.0 baseline, pi-mcp-adapter 5 delivery)
+# Stack Research
 
-**Domain:** Pi extension; host and companion-extension version floors, devDependency refresh
-**Researched:** 2026-10-01
-**Confidence:** HIGH. Every version below was read from the npm registry on 2026-10-01. Every compatibility claim was run against the unpacked tarballs or in a scratch copy of HEAD (`8b6ac3bc`) with the new versions installed. Nothing was taken from web prose.
+**Domain:** Cucumber behavioral suite for `/claude:plugin marketplace`, with a loopback HTTPS git stand-in and a `GITHUB_BASE_URL` clone-base override (milestone `marketplace-features`)
+**Researched:** 2026-10-15
+**Confidence:** HIGH for the codebase facts, CI tool availability, and the cert-trust mechanics (all checked against code or run locally). MEDIUM for the `git http-backend` CGI details that its docs leave unstated.
 
-## Bottom Line
+## Bottom line
 
-- **Pi 1.0.0 is a drop-in for production code.** `extensions/` typechecks clean against `@earendil-works/pi-coding-agent@1.0.0`. The only breaks are 23 type errors in four test files, and the test-file hunks of features/mcp `74162ca6` fix them exactly.
-- **Results on Pi 1.0.0 with those hunks applied:** `tsc` exit 0, unit 8529/8529, integration 67/67, e2e 14/14.
-- **No new runtime dependency.** The bridge writes adapter JSON with the existing `typebox` + `write-file-atomic` stack. It reads live status through Pi's `pi.events` bus on a string channel. It never imports `pi-mcp-adapter`.
-- **Hold TypeScript at `^6.0.3`.** `typescript@7.0.2` is npm `latest`, but it cannot be adopted. See What NOT to Use. "Bump all devDependencies to latest" must carry this one exception.
-- **`typescript-eslint` 8.71.0 adds one lint error.** Its new `no-unsafe-enum-assignment` rule, now in `strictTypeChecked`, fires once at `shared/notify-context.ts:345:30`. That is a string-keyed computed access with no enum involved. The message names an empty enum (`expected enum .`), so this looks like a false positive in a brand-new rule. Plan a task for it.
-- **The pi-mcp-adapter 5.0 `pi-ai` peer gap does not reach Pi users.** `pi install` passes `--legacy-peer-deps`, and Pi 1.0's shrinkwrap nests `pi-ai`. The gap is a hard `ERESOLVE` (not a warning) only when `@earendil-works/pi-ai@1.x` sits at top level beside the adapter. Record it as an upstream gap, as PROJECT.md says.
+You do not need any new npm package. The milestone needs four things that already exist: the `git` CLI (it runs `git http-backend` and builds fixture repos), the `openssl` CLI (it makes a certificate at run time), `node:https`, and the `isomorphic-git` the extension already pins. All four are on `ubuntu-latest` and on dev machines.
+
+The production change (D-MF-01) is one environment read, used in one function: `networkCloneUrl` in `domain/clone-key.ts`. The work is mostly about where **not** to apply it: the clone-key identity, the auth host, and the displayed source.
+
+One finding goes back to the user as a question, because it was not known when D-MF-01 was decided. The name `GITHUB_BASE_URL` is already used by the Terraform GitHub provider, where it holds the **API** URL (`https://api.github.com/`). See "Open question" below.
 
 ## Recommended Stack
 
-### Core Technologies (host and companions)
+### Core Technologies
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| `@earendil-works/pi-coding-agent` | peer `>=1.0.0`, dev `^1.0.0` (lock 1.0.0, published 2026-10-01) | Extension host API | Milestone baseline. Verified: production code compiles and all suites pass on 1.0.0. The API delta from 0.87.1 is additive for every symbol `platform/pi-api.ts` re-exports (see the API Delta section). |
-| `@earendil-works/pi-tui` | peer `*` (unchanged), dev `^1.0.0` | `AutocompleteProvider` type | Keep the top-level dev copy in lockstep with the copy Pi's shrinkwrap nests (`pi-tui ^1.0.0`). Today it already drifts (top-level 0.87.0 vs nested 0.87.1). The only import is a type, so drift is harmless, but lockstep removes the question. |
-| `pi-subagents` | optional peer `>=0.74.0` (published 2026-09-30) | Agent-artifact soft dependency | 0.74.0 still ships compiled `src/agents/{skills,frontmatter}.js`. Both peer integration tests (with `5b1d8ef6`/`dac3a245`/`69e0870a` applied, floor constant `0.74.0`) **passed 2/2 against 0.74.0**. Its own peers (`pi-coding-agent *`, `pi-ai >=0.86.1`, all optional) accept Pi 1.0. |
-| `pi-mcp-adapter` | **add** optional peer `>=5.0.0` (published 2026-10-02T00:12Z) | MCP soft dependency | 5.0 is the first adapter that coexists with Pi >= 0.99. It turns off `builtin:mcp` (writes `"-builtin:mcp"` to user `settings.json`) and owns `/mcp`. It reads both `mcp-adapter.json` and Pi's `mcp.json`. It maps `directTools: "search"` to Pi deferred tools that `tool_search` finds. It publishes `pi-mcp-adapter/status/v1` snapshots. Declaring an optional peer matches the `pi-subagents` precedent and gives tests a machine-readable floor. npm never auto-installs optional peers, and the declaration adds no lockfile package entry, so D-98-10 ("companions never in package.json dependencies or the lock") holds. **Decision for the user:** optional peer plus README, or README only ("documented"). |
-| `@quintinshaw/pi-dynamic-workflows` | 3.13.1 (published 2026-09-29), `scripts/pi.sh` pin only | Workflow engine canaries | Peers unchanged (`pi-coding-agent >=0.80.8`, `pi-tui >=0.80.6`). The 3.13.0 -> 3.13.1 diff adds `installHostCreateAgentSession()` ("Use the host Pi SDK to create children so its ModelRuntime protocol matches") and preserves terminal provider errors. That fixes the same class as the documented "children received no tools" mismatch, so it is the right version to re-grade on Pi 1.0. The tarball layout (`extensions/workflow.ts`) is unchanged, so `pi.sh` paths stay valid. |
+| `git` CLI (`git http-backend`) | system; 2.55.0 on `ubuntu-latest` (runner image 20261004) and on the Fedora dev box | Smart-HTTP server behind the `node:https` CGI wrapper; also builds the fixture repos | Upstream's own server, so the wire protocol is the real one. It is already on every runner and dev machine. Ubuntu/Debian ship it in the `git` package at `/usr/lib/git-core/git-http-backend`, Fedora in `git-core` at `/usr/libexec/git-core/` (checked). Spawn it as `git http-backend` so you never look up `--exec-path`. Spike of 2026-10-15 and the any-git-host UATs of 2026-09-28 proved isomorphic-git clone and fetch through it. |
+| `openssl` CLI | system; 3.0.13 on `ubuntu-latest`; OpenSSL 4.0.3 on the dev box | Makes a self-signed certificate per worker at run time | Preinstalled everywhere the suite runs, no dependency, about 20 ms per cert (measured). Node's `crypto` can parse X.509 but cannot create it, so a pure-Node option needs a library. |
+| `node:https` + `node:child_process` | Node 24 (CI) / `^22.22.2 \|\| ^24.15.0 \|\| >=26.0.0` | The roughly 25-line CGI wrapper; it records requests and can be armed to answer 401/404/5xx or to drop the connection | It is in the stdlib. The rule-pack bans on `node:https` (`no-network-modules`) cover `extensions/pi-claude-marketplace/**` only. `features/` is outside that scope. |
+| `NODE_EXTRA_CA_CERTS` | Node built-in | Makes the Pi child trust the stand-in's certificate | Checked locally on Node 26.11.1. A Node child with no variable fails with `DEPTH_ZERO_SELF_SIGNED_CERT`. The same child with `NODE_EXTRA_CA_CERTS=<cert.pem>` connects. The `openssl req -x509` default adds `basicConstraints=critical,CA:TRUE`, so the leaf also works as its own trust anchor. Node reads the variable **once at process start**. |
+| `@cucumber/cucumber` | 13.3.0 (already installed; latest on npm) | Runner | No change. |
+| `isomorphic-git` | 1.42.3 installed (`^1.42.3`); 1.44.2 is latest | Client under test | Do **not** bump it in this milestone. A bump would change the code under test while the suite that should catch the change is still being built. |
 
-### Supporting Libraries (runtime, no additions)
-
-| Library | Version | Purpose | When to Use |
-|---------|---------|---------|-------------|
-| `typebox` | `^1.3.34` (already latest) | Schema for the bridge's `mcp-adapter.json` server entry (`directTools`, naming, env fields) | Model the adapter-native entry the same way `domain/components/*.ts` models plugin `.mcp.json`. Pi 1.0 pins typebox 1.3.27 internally; the `typebox: *` peer covers it. |
-| `write-file-atomic` | `^8.0.0` (latest) | NFR-1 atomic write of `<scopeRoot>/mcp-adapter.json` | Reuse `shared/atomic-json.ts` unchanged. The migration from `mcp.json` is two atomic writes under the existing scope lock. |
-| `proper-lockfile` | `^4.1.2` (latest) | Scope lock around the `mcp.json` -> `mcp-adapter.json` move | Unchanged. |
-| Pi `pi.events` (`EventBus.on(channel, handler) => unsubscribe`) | Pi 1.0 API | Live adapter status for `/claude:plugin info` | Subscribe at extension load to the string literal `"pi-mcp-adapter/status/v1"` (snapshot `version: 1`; per-server `status` is `connected`, `cached`, `failed`, `needs-auth`, `not-connected`, `blocked`, or `disabled`). The adapter only *pushes*: an initial snapshot after init, then one per change, then an empty one at shutdown. There is no request channel for status. `pi-mcp-adapter:runtime-snapshot:v1` returns runtime-registered *definitions*, not status. So `info` must read a last-snapshot cell that the extension caches, in the same way `bridges/hooks/routing-state.ts` holds process-lifetime state. |
-| Pi `pi.getSettings()` | new in 0.99, present in 1.0 | Adapter-only detection | Returns merged settings, including `extensions`, so `-builtin:mcp` / `builtin:mcp` is readable without parsing `settings.json`. Optional aid. The existing probe (tool named `mcp` OR `sourceInfo.source` contains `pi-mcp-adapter`) already ignores the built-in: Pi 1.0's built-in registers tools `mcp__<server>__<tool>` and the `/mcp` *command*, never a tool named `mcp`. |
-
-Keep `isomorphic-git` (lock 1.42.2, latest 1.42.6), `acorn` (8.18.0), and `semver` (7.8.5) as they are. Lock refreshes inside their caret ranges are fine but are not milestone scope.
-
-### Development Tools (devDependency targets)
-
-| Tool | Current range (locked) | Target | Notes |
-|------|------------------------|--------|-------|
-| `@earendil-works/pi-coding-agent` | `^0.87.1` (0.87.1) | `^1.0.0` | See Core. |
-| `@earendil-works/pi-tui` | `^0.87.0` (0.87.0) | `^1.0.0` | See Core. |
-| `typescript-eslint` | `^8.70.1` (8.70.1) | `^8.71.0` | 1 new error from `@typescript-eslint/no-unsafe-enum-assignment` (see Bottom Line). Fix it in code, or turn the rule off in `eslint.config.js` with an inline justification, before the bump lands. Peer `typescript >=4.8.4 <6.1.0`. |
-| `eslint-plugin-sonarjs` | `^4.0.3` (4.2.1) | `^4.2.2` | No new findings (19 warnings, all pre-existing unused `no-await-in-loop` disables, same as baseline). |
-| `fallow` | `^3.27.0` (3.27.0) | `^3.31.0` | `npm run fallow` exit 0. `test:architecture` 456/456, so the `schema_version` pins (health 9, dead-code 8) did not move; only the review-brief schema changed (10 -> 11, unused here). **Also bump `.github/workflows/lint.yml`** from `bd8fca5a... # v3.28.0` to `71369f80d099e25726ad04382f15aef14a251abc # v3.31.0` (peeled commit of tag v3.31.0, same convention). fallow 3.31 needs Node >= 22; CI uses Node 24. |
-| `prettier` | `^3.8.3` (3.9.6) | `^3.9.9` | `format:check` clean, so no reformat churn. |
-| `globals` | `^17.6.0` (17.12.0) | `^17.13.0` | No effect. |
-| `eslint-plugin-import-x` | `^4.16.2` (4.17.1) | `^4.17.1` | Range floor only; already locked. |
-| `@eslint/js` 10.0.1, `@stylistic/eslint-plugin` 5.10.0, `@types/proper-lockfile` 4.1.4, `@types/semver` 7.8.0, `@types/write-file-atomic` 4.0.3, `eslint` 10.11.0, `strong-mock` 9.2.2, `typebox` 1.3.34 | -- | unchanged | Already latest. |
-| `typescript` | `^6.0.3` (6.0.3) | **hold `^6.0.3`** | 6.0.3 is the newest 6.x. See What NOT to Use. |
-
-With all of the above applied in scratch: `tsc` exit 0, `test:architecture` 456/456, `test:analyzers` 285/285, `fallow` exit 0, `format:check` clean, `eslint` 1 error (the typescript-eslint rule).
-
-## Installation
+### The certificate command (verified on OpenSSL 4.0.3; every flag also exists in 3.0.x)
 
 ```bash
-# Host floor (devDependencies), plus manual peerDependencies edits (see below)
-npm install -D @earendil-works/pi-coding-agent@^1.0.0 @earendil-works/pi-tui@^1.0.0
-
-# Tooling refresh -- NOT typescript
-npm install -D typescript-eslint@^8.71.0 eslint-plugin-sonarjs@^4.2.2 fallow@^3.31.0 \
-  prettier@^3.9.9 globals@^17.13.0 eslint-plugin-import-x@^4.17.1
+openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes \
+  -keyout key.pem -out cert.pem -days 1 \
+  -subj /CN=127.0.0.1 -addext subjectAltName=IP:127.0.0.1
 ```
 
-Edit by hand in `package.json` (and the mirrored lock root):
-`peerDependencies["@earendil-works/pi-coding-agent"] = ">=1.0.0"`, `["pi-subagents"] = ">=0.74.0"`, and (if accepted) `["pi-mcp-adapter"] = ">=5.0.0"` with `peerDependenciesMeta["pi-mcp-adapter"] = { "optional": true }`.
-In `scripts/pi.sh` `pi_cm_pins`: `pi-mcp-adapter@5.0.0`, `pi-subagents@0.74.0`, `@quintinshaw/pi-dynamic-workflows@3.13.1` (it already installs with `--legacy-peer-deps`).
+- `-nodes`, not `-noenc`. `-noenc` is missing from OpenSSL 1.1 and LibreSSL (macOS). `-nodes` still works on 4.0 (checked).
+- Use an **IP SAN for `127.0.0.1`**, and put `127.0.0.1` in every URL. Do not use `localhost`. Node resolves `localhost` in OS order and can try `::1` first, while the server listens on `127.0.0.1`.
+- EC P-256 is faster than RSA, and every client here accepts it.
+- `-days 1` is enough, because each run makes a new cert.
 
-## Re-applying features/mcp Work at the 1.0.0 Floor
+### Supporting Libraries
 
-All five commits `git apply --check` cleanly onto HEAD, applied in order. What has to change:
+None. Each candidate below fails the dependency policy, or makes CI less likely to work:
 
-| Commit | Apply as-is? | Change for the 1.0.0 floor |
-|--------|--------------|-----------------------------|
-| `74162ca6` build: require Pi 0.99.2 | **Test hunks: yes, verbatim.** These are `exposure: "direct"` on the 3 `ToolInfo` fixtures (`workflows-marker-coverage`, `list-flow`, `reinstall.messaging`) and `ExtensionContext` -> `ExtensionToolContext` in `tests/edge/handlers/tools.test.ts`. Re-measured on 1.0.0: before = 23 errors in exactly those 4 files, after = `tsc` exit 0. **Do NOT reuse the `package.json`/`package-lock.json` hunks.** They were cut against a `^0.86.1`/`^0.85.0` base; HEAD is now `^0.87.1`/`^0.87.0`. | `0.99.2` -> `1.0.0` in `package.json` (peer + both devDeps), `tests/architecture/peer-floor.test.ts` title + assertion (FLOOR-01), `tests/architecture/workflows-doc-pins.test.ts` header comment, `docs/workflows-compatibility.md` (`>=1.0.0`, "Install Pi 1.0.0", engine 3.13.0 -> 3.13.1 once re-graded). pi-subagents floor `>=0.73.1` -> `>=0.74.0`. Regenerate the lock with `npm install`; never hand-merge the old lock hunk. **Contracts pins:** HEAD carries only TWO `types.d.ts` pins (the `reason` pin `74162ca6` edited no longer exists on main). Set `pi-api.ts:100:3 ResourcesDiscoverEvent.type` `406:5 -> 525:5` and `pi-api.ts:108:3 ResourcesDiscoverResult.themePaths` `414:5 -> 533:5`. Verified: 1.0.0 places them on the same lines as 0.99.2, and `lint:type-members` exits 0 with these two edits. |
-| `5b1d8ef6` load compiled pi-subagents modules | Yes | None. 0.74.0 keeps `src/agents/skills.js` and `src/agents/frontmatter.js`. |
-| `dac3a245` fail on a broken peer | Yes | None. |
-| `69e0870a` gate on the D-19 floor | Yes, then edit | `const PI_SUBAGENTS_FLOOR = "0.73.1"` -> `"0.74.0"` in both integration files, and the commit-message/comment wording "0.73.1". Verified 2/2 pass against 0.74.0 via `PI_SUBAGENTS_ROOT=<prefix>/lib/node_modules/pi-subagents`. Locally they **skip** because the global install is 0.47.1, and CI has no global peer. Prove the floor with `PI_SUBAGENTS_ROOT`, not with a green default run. |
-| `4f82096f` Stop canary on Pi 0.99.2 | Yes, then edit and re-run | `stop-canary.mjs` precondition and messages `0.99.2` -> `1.0.0`. The README "Observed result (2026-10-01, pi 0.99.2)" is evidence for 0.99.2, not 1.0.0: re-run on 1.0.0 and record that run instead of keeping the 0.99.2 one. The commit adds `.planning/spikes/028-pi-099-builtin-mcp/openai-stub-server.mjs`. That directory does not exist on this branch, and it names the abandoned milestone. Recommend renaming the spike dir (or relocating to `tests/live-uat/`, checking fallow `unused-file`/dupes) and fixing the README paths. The headless cap-loop rewrite ("since Pi 0.87 ...") remains true on 1.0 (no settle/run changes in the 0.99-1.0 changelog). |
+| Considered | Version | Verdict |
+|------------|---------|---------|
+| `selfsigned` | 5.5.0 | **Do not add.** It now depends on `@peculiar/x509` plus `pkijs`, which is about 20 transitive packages (`@peculiar/asn1-*` x8, `tsyringe`, `asn1js`, `pvtsutils`, `bytestreamjs`, `@noble/hashes`, ...). It only replaces one `openssl` call that every target machine can already run. |
 
-Other `0.86.1` floor mentions to update, outside those commits: `README.md:38`, `README.es.md:38`, `AGENTS.md:61` (Pi API constraint), the PROJECT.md Constraints "Pi API" bullet, `tests/live-uat/README.md:211,239`, `tests/live-uat/stop-canary.mjs:226,228`.
+### Development Tools
 
-## Pi 0.87.1 -> 1.0.0 API Delta (symbols this extension imports)
+| Tool | Purpose | Notes |
+|------|---------|-------|
+| `npm run test:cucumber` | Runs the suite | Already in `npm run check` and in the CI `behavioral` job (`ubuntu-latest`, Node 24, 10-minute timeout, `npm ci --ignore-scripts`). That job needs no new setup step, because `git` and `openssl` are on the image. It is **not** in `check:commit`, so commits that touch `features/` rely on `npm run check` at the GSD gates and on the CI job. |
+| `tsc` / ESLint / fallow | Gate `features/**` | `tsconfig.json` includes `features/**/*.ts`. `npm run lint` covers `features`. fallow's `allowUnmatched` lists `features/**`, and `fallow dupes` (threshold 3) still reads it. If the git wrapper's spawn-and-collect code looks like `tests/e2e/_rpc.ts`, fallow can flag it as a clone. |
 
-Imports: `getAgentDir`, `parseFrontmatter`, `DynamicBorder` (runtime), plus types `AgentEndEvent`, `AgentSettledEvent`, `BeforeAgentStartEvent(Result)`, `ExtensionAPI`, `ExtensionCommandContext`, `ExtensionContext`, `InputEvent(Result)`, `Session{BeforeCompact,Compact,Shutdown,Start}Event`, `Theme`, `ToolCall{Event,EventResult}`, `ToolResultEvent` (all from `platform/pi-api.ts`), and `AutocompleteProvider` from pi-tui.
+## Integration Points
 
-| Change | Breaking for us? | Evidence |
-|--------|------------------|----------|
-| `ToolInfo` gains **required** `exposure: ToolExposure` (`"direct" \| "model-only" \| "codemode" \| "deferred" \| "hidden"`), optional `namespace`, `annotations` | Tests only (fixtures that build `ToolInfo` literals). Production only *reads* `getAllTools()`. | 6 of the 23 errors |
-| Tool `execute(..., ctx)` is typed `ExtensionToolContext` (= `ExtensionContext` + `tools`, `executeTool`) | Tests only (`tools.test.ts` passes a mocked `ExtensionContext`) | 17 of the 23 errors |
-| `ExtensionAPI` additions: `getSettings`, `getMcpServers`, `registerMcpServer`, `unregisterMcpServer`, `registerVirtualModel`, `unregisterVirtualModel`; **no removals** | No | Member diff of `types.d.ts` |
-| `ExtensionContext`, `ExtensionCommandContext`, `ExtensionUIContext`, all imported event interfaces | No member added or removed | Member diff |
-| `resources_discover` event/result shape | Unchanged; only line numbers moved (406 -> 525, 414 -> 533) | `lint:type-members` |
-| Built-in extensions renamed `builtin:<name>` (`builtin:mcp`); `--no-extensions` disables built-ins | Relevant to adapter-only detection, not to imports | Pi CHANGELOG 0.99.0 |
-| Built-in MCP tool names normalize `-` -> `_` (`mcp__my_server__x`) | Built-in only. The adapter has its own naming. Keep it in mind for `plugin:<plugin>:<server>` normalization research. | Pi CHANGELOG 0.99.2 |
-| `engines.node >=22.19.0` | Not new (0.87.1 already declared it) | registry |
+### 1. The Pi child environment (`tests/e2e/_rpc.ts:166-173`)
 
-## pi-mcp-adapter 5.0 `@earendil-works/pi-ai` Peer Gap (measured, npm 11.19.1)
+`childEnvironment()` builds an allowlist from scratch: `HOME`, `PI_CODING_AGENT_DIR`, `PI_OFFLINE`, `PATH`. Widen it with an **explicit, typed extra-env option** on `startRpcPi`/`RpcSandbox`. Do not spread `process.env`. The cucumber run passes:
 
-Adapter 5.0.0 declares optional peer `pi-ai: "^0.84.1 || ^0.85.0 || ^0.86.0 || ^0.87.0 || ^0.99.0"`. That range excludes 1.0.0, which every Pi 1.0 install carries.
+| Variable | Value | Why |
+|----------|-------|-----|
+| `NODE_EXTRA_CA_CERTS` | **absolute** path to the worker's `cert.pem` | A relative path resolves against the child's cwd. A missing file only prints a warning, and every later clone fails as `DEPTH_ZERO_SELF_SIGNED_CERT`. `shared/git-failure-classifiers.ts` does not map that error to a reason. |
+| `GITHUB_BASE_URL` | `https://127.0.0.1:<port>[/<prefix>]` | D-MF-01. |
+| `GIT_CONFIG_NOSYSTEM` | `1` | On a 401, the extension spawns `git credential fill` with the child env (`platform/git-credential.ts:152`). `HOME` already isolates the global config. `/etc/gitconfig` can still name a credential helper (libsecret, GCM) on a dev box, and the suite must not query the real keychain. |
 
-| Scenario | Result |
+`PI_OFFLINE`/`--offline` does not affect the extension's isomorphic-git traffic. Pi reads it in `model-runtime`, `package-manager`, `version-check`, and `tools-manager` only.
+
+**Ordering constraint.** Pi reads both variables only when it starts. The worker's Pi is started once in `BeforeAll` (`features/support/pi-process.ts`), and `Before()` restarts it with the same sandbox when a scenario leaves it busy. So the git stand-in must already be listening, and its cert must exist, **before** `PiProcess.start`. It must also outlive every Pi restart. Do not rely on cucumber's `BeforeAll` order across two support files. Make the stand-in part of the run's one module-level state (a field of `PiRun`, started in the same `BeforeAll`, reset in `Before()`, stopped in `AfterAll` after Pi). This also keeps to the cucumber rule that the slow process is the run's **only** module-level state.
+
+### 2. The `git http-backend` CGI environment (worker side)
+
+Build the CGI child env as an allowlist as well. Never use `...process.env`:
+
+| Variable | Source |
 |----------|--------|
-| `pi install npm:pi-mcp-adapter` (Pi 1.0 `getNpmInstallArgs`: `npm install <spec> --prefix <root> --legacy-peer-deps`; pnpm/bun get equivalent peer-off flags) | No warning, no error: peers are not evaluated |
-| `scripts/pi.sh` (`npm install --prefix ... --legacy-peer-deps`) | No warning |
-| Plain project: `pi-coding-agent@1.0.0` + `pi-mcp-adapter@5.0.0` | Clean (`exit 0`). Pi's `npm-shrinkwrap.json` nests `pi-ai@1.0.0` under `pi-coding-agent/node_modules`, so the adapter's optional peer is simply absent. |
-| Plain project with top-level `pi-ai@1.0.0` + adapter 5.0.0 | **Hard `ERESOLVE`** (`Conflicting peer dependency: @earendil-works/pi-ai@0.99.2`), exit 1, even without `--strict-peer-deps`; needs `--legacy-peer-deps`/`--force` |
+| `GIT_PROJECT_ROOT` | worker's repo root (emptied per scenario) |
+| `GIT_HTTP_EXPORT_ALL` | `1` (no `git-daemon-export-ok` files) |
+| `PATH_INFO`, `REQUEST_METHOD`, `QUERY_STRING`, `CONTENT_TYPE` | from the request |
+| `CONTENT_LENGTH` | **always set it**: buffer the request body and set its byte length. isomorphic-git's node client usually sends a Buffer with `content-length` (via `simple-get`). Its fallback path streams chunked. The http-backend docs do not say how an unset `CONTENT_LENGTH` behaves, so do not depend on it (MEDIUM). |
+| `HTTP_CONTENT_ENCODING` | pass it through if present. isomorphic-git does not gzip request bodies, but real `git` does. |
+| `GIT_PROTOCOL` | copy the `Git-Protocol` request header. http-backend copies `HTTP_GIT_PROTOCOL` itself (git-scm docs), and an explicit `GIT_PROTOCOL` wins. Marketplace add/update use clone + fetch (protocol v1: `GET info/refs` + `POST git-upload-pack`, per the 02-UAT wire log). `resolveRemoteRef`/`listRemoteTags` send `Git-Protocol: version=2` (`platform/git.ts:459,541`) only on plugin paths, which this milestone excludes. Passing the header through costs one line and keeps v2 working if a scenario reaches it. |
+| `HOME` (temp), `GIT_CONFIG_NOSYSTEM=1`, `PATH` | keeps the developer's `~/.gitconfig` (for example `commit.gpgsign`, hooks, `init.defaultBranch`) out of both the server and the fixture builds |
 
-Consequences: (1) record it as an upstream gap in docs; do not work around it. (2) Never add `pi-mcp-adapter` to this repo's devDependencies (it would also pull the MCP SDK, the `@napi-rs/keyring` native module, and quickjs into `npm ci`). (3) An optional *peer* declaration is safe, because npm does not install optional peers.
+Parse the CGI response yourself: a header block, then `Status:` (default 200), then the body.
+
+**Why an allowlist and not inherit-and-override:** a run started from inside a git hook inherits `GIT_DIR`/`GIT_INDEX_FILE`/`GIT_WORK_TREE`. Then the fixture `git commit` calls would write to **this repository**.
+
+### 3. Fixture repos (git CLI, same isolated env)
+
+- Make each fixture with `git -c init.defaultBranch=main init`. Set author and committer through `GIT_AUTHOR_NAME/EMAIL` and `GIT_COMMITTER_NAME/EMAIL` in the env, so the run never touches config.
+- To "publish an update", commit into the working repo that http-backend serves. Two ways: give the working tree a `--separate-git-dir` under `GIT_PROJECT_ROOT`, or point `PATH_INFO` at `<repo>/.git`.
+- Layout: serve GitHub-shaped repos under a prefix (`/github/<owner>/<repo>.git`) and plain https-URL repos at the path the user types (`/<name>` or `/<name>.git`). This lets one server and one port cover both source kinds. `networkCloneUrl` appends `.git` on the github arm only and keeps the user's `.git` choice on the url arm (D-2-01/D-2-03), so the server has to answer exactly the path each form produces.
+
+### 4. `GITHUB_BASE_URL` in production (D-MF-01)
+
+**Where it plugs in: one place.** In `domain/clone-key.ts::networkCloneUrl`, the `github` arm:
+
+```ts
+case "github":
+  return ensureGitSuffix(`${githubCloneBase()}/${source.owner}/${source.repo}`);
+```
+
+`githubCloneBase()` returns the trimmed override, or `https://github.com` when the variable is unset or empty. Both wire consumers already go through `networkCloneUrl`: `orchestrators/marketplace/add.ts:866` (clone) and `orchestrators/plugin/dependency-tag-probe.ts:159` (tag listing). `marketplace update` fetches `origin` from the clone's own config (`refreshGitHubClone`, `orchestrators/marketplace/shared.ts:259`), so it reaches the stand-in without any further change.
+
+**Where it must NOT plug in:**
+
+| Site | Keep as is | Why |
+|------|------------|-----|
+| `canonicalCloneUrl` (`clone-key.ts:81-85`) | `https://github.com/<o>/<r>` | It is the cache-key and dedup identity that `pluginCloneKey`/`pluginMirrorKey` hash, and the identity recorded in state. If it read the environment, `plugin-clones/` keys and record identity would depend on an env var. Its own doc comment already keeps it separate from the wire form. |
+| `formatSourceForDisplay` (`domain/source.ts:762`) | `https://github.com/...` | Output must stay the same whether the variable is set or not. So scenarios assert the github.com form the user sees, and the override stays invisible. |
+| `GITHUB_HOST` / `hostFromCloneUrl` (`orchestrators/auth-host.ts:81-99`), `update.ts:397-400`, `add.ts:974` | `github.com` | See the auth consequence below. |
+| `auth-registry.ts` Device Flow URLs | `https://github.com/login/...` | Device Flow is out of scope. Its endpoints must never be redirected by a clone-base variable. |
+
+**Auth consequence (check it in the plan; it is intended):** with the override set, a github source's auth bundle stays bound to `github.com`, while the request goes to `127.0.0.1:<port>`. `buildAuthCallbacks.onAuth` (`platform/git-auth-callbacks.ts:178`) sees the host mismatch and returns `{ cancel: true }` **before** it consults the credential helper or Device Flow. So a 401 on a GitHub-shaped stand-in can never reach github.com, a keychain, or a Device Flow prompt. That is the safety property you want. The cost: such a scenario sees "authentication required" through the mismatch guard, not the production path (helper, then Device Flow). **Do not write auth scenarios for github sources.** Cover 401 on the https-URL source, whose host matches the bundle, so the real `git credential fill` path runs.
+
+**Leftover-clone consequence:** `originMatchesSource` (`clone-key.ts:117-128`, called from `add.ts:807`) compares the clone's `origin` with `canonicalCloneUrl(source)`. With the override set, a GitHub clone's origin is `https://127.0.0.1:<port>/.../<r>.git`, which parses as `url` kind and never matches `https://github.com/<o>/<r>`. So a "leftover clone is reused" scenario on a github source would fail as `{stale clone}`. Write leftover-clone scenarios on the https-URL source, or make `originMatchesSource` aware of the override (a larger production change, not part of D-MF-01).
+
+**Lint and gate constraints on reading the environment:**
+
+- No ESLint rule and no rule-pack rule bans `process.env`. BLOCK F (`eslint.config.js:361-391`) bans `platform/git` imports and the `gitOps`/`DEFAULT_GIT_OPS`/`refreshGitHubClone` names in non-seam `orchestrators/` and `domain/` modules. The rule pack bans stdio, console, notify, Pi peer, isomorphic-git, proper-lockfile, write-file-atomic, network modules, and `fetch`. Precedents for reading the environment: `platform/workflow-home.ts:36`, `shared/debug-log.ts:23`.
+- **Naming trap:** BLOCK F's `no-restricted-imports` pattern is the **unanchored regex `platform/git`**. A helper named `platform/github-*.ts` or `platform/git-*.ts`, imported from `domain/clone-key.ts` (not a `NETWORK_SEAM`), fails lint. Put the reader in `shared/` (domain may import `shared` and `platform` under fallow's zones), or give a `platform/` file a name that does not start with `git`.
+- Read the variable **per call**, not at module load, as `workflow-home.ts` does. Then a unit test can set it and restore it with `t.after()`. Accept only an `https:` URL: `onAuth` rejects anything else anyway, and `http://` is a refused form. Strip trailing slashes, and allow a path prefix.
+- A new source file needs a paired test with 100% direct coverage (`test:corresponding` and `test:coverage:direct:all`). If you put the reader in an existing paired module, there is no new pair to keep.
+
+### 5. isomorphic-git behaviors the stand-in must accommodate
+
+| Behavior | Where | What it means for the stand-in |
+|----------|-------|--------------------------------|
+| A custom redirect follower; credentials stay on the original origin | `platform/git.ts:201-360` (cap 10; POST 301/302 becomes GET; 303/307/308 keep the method; cross-origin hops drop auth headers) | Not in the listed arming modes. A redirect mode would be an easy add later; the any-git-host UAT already covered it by hand. |
+| Clone and fetch use protocol v1 | isomorphic-git | http-backend's default; nothing to set. |
+| `listServerRefs` uses protocol v2 | `platform/git.ts:459,541` | Plugin paths only; pass `Git-Protocol` through (see §2). |
+| Status mapping | `shared/git-failure-classifiers.ts` | 404 maps to `{source missing}`; 5xx and `ECONNRESET`/`ECONNREFUSED` map to `{network unreachable}`; 401/403 and `UserCanceledError` map to auth required. "Drop the connection" = `socket.destroy()` gives `ECONNRESET`. A TLS trust failure maps to no reason, so it looks like a wiring bug. Assert that the run's first scenario reaches the stand-in. |
+| Credential lookup on a 401 | `git credential fill` with `GIT_TERMINAL_PROMPT=0`, `GCM_INTERACTIVE=never`, host-keyed with no `path=` line | With the sandbox HOME and `GIT_CONFIG_NOSYSTEM=1`, the lookup misses quickly and the clone cancels cleanly. A "private marketplace authenticates" scenario can write `credential.helper=store` and `~/.git-credentials` into the sandbox HOME (user-owned files). Then the stand-in checks Basic auth. |
 
 ## Alternatives Considered
 
 | Recommended | Alternative | When to Use Alternative |
 |-------------|-------------|-------------------------|
-| Subscribe to `pi-mcp-adapter/status/v1` with a string literal and a locally typed snapshot (typebox-validated at the boundary) | `import { MCP_STATUS_EVENT, type McpStatusSnapshot } from "pi-mcp-adapter"` | Never in `extensions/`: the adapter is a soft dependency and may be absent, so a static import breaks load (RH-4, "never blocks install"). |
-| Hold `typescript@^6.0.3` | `typescript@^7.0.2` | When typescript-eslint publishes a release whose peer admits 7.x, and when `scripts/check-*.mjs` plus the two tests that import `typescript` move to TS 7's `typescript/unstable/*` API or a pinned `@typescript/typescript6` shim. That is a separate milestone. |
-| Optional peer `pi-mcp-adapter >=5.0.0` + README | README-only floor | If the user reads D-98-10 as covering peers too. Then add a doc-pin test instead of FLOOR-style lock checks. |
-| Pi `pi.getSettings()` for built-in state | Reading `~/.pi/agent/settings.json` directly | Never. `getSettings()` returns the merged, override-applied view. |
+| `openssl` CLI at run time | `selfsigned@5.5.0` | Only if a supported dev platform lacks `openssl`. Today none does (Linux runners, Fedora, macOS LibreSSL, where the command above works with `-nodes`). |
+| `openssl` CLI at run time | A cert and key checked in as a fixture | Never. The key expires, so the suite breaks on a date. A committed private key also invites scanner noise. The TruffleHog hook runs `filesystem --results=verified`, so an unverifiable key would not fail it today, but GitHub secret scanning or a later hook change could flag it. Run-time generation costs about 20 ms. |
+| Override in `networkCloneUrl` only | Override in `canonicalCloneUrl` | Never. It would make the cache keys and the recorded identity depend on the environment. |
+| Auth host stays `github.com` | Derive the auth host from `GITHUB_BASE_URL` | Only if github-source auth scenarios become a requirement. The bundle would then bind to the stand-in host with no provider, which makes the github path behave like the url path and **still** never exercises Device Flow. More production surface for no extra coverage. |
+| `git http-backend` behind our `node:https` CGI wrapper | git-http-mock-server / mockttp / node-git-server / msw / nock / dugite | Decided: not re-litigated. |
 
 ## What NOT to Use
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| `typescript@7.0.2` (npm `latest` since 2026-07-08) | `typescript-eslint@8.71.0` peers `typescript <6.1.0`. TS 7's package `exports["."]` is only `./lib/version.cjs`, with no classic compiler API (`ts.createProgram`, AST walkers). `scripts/check-changed.mjs`, `check-corresponding-tests.mjs`, `test-coverage-direct.mjs`, `check-unused-type-members.{contracts,model,operations,flow}.mjs`, `tests/domain/components/hook-events.test.ts`, and `tests/persistence/config-write-back.test.ts` all import `typescript`. | `typescript@^6.0.3` |
-| `pi.registerMcpServer()` / Pi built-in MCP | The milestone forbids it. Adapter 5 also treats runtime-registered servers as proxy-only (it ignores `direct`/`deferred`), so `directTools: "search"` would be lost. | Write marked entries into `<scopeRoot>/mcp-adapter.json`. |
-| Writing Pi-native `exposure: "deferred"` into `mcp.json` to get search | Adapter 5 does map it to `directTools: "search"`, but `mcp.json` drops every adapter-only field (`settings`, overrides). On Pi 0.84-0.87 adapters it is not read at all. It also leaves entries that a re-enabled built-in would connect. | `mcp-adapter.json` (adapter-native, reaches every adapter field) |
-| `pi-mcp-adapter` as a devDependency | `ERESOLVE` risk above, heavy native deps, and it breaks the D-98-10 pin policy | Unpacked tarballs for research, `scripts/pi.sh` for live runs |
-| `@earendil-works/pi-mcp` (Pi's MCP package, a 1.0 dependency of pi-coding-agent) | Built-in MCP internals, not an extension contract | Nothing; the adapter owns MCP |
+| `selfsigned`, `node-forge`, `@peculiar/x509` | About 20 transitive packages for one cert; a new supply-chain surface in a repo whose dependency list is deliberately short | `openssl req -x509 ...` via `execFile` |
+| `localhost` in stand-in URLs or certs | IPv6-first resolution can give `ECONNREFUSED`, and the SAN must match | `127.0.0.1` everywhere, IP SAN |
+| `-noenc` in the openssl command | Missing from LibreSSL and OpenSSL 1.1 | `-nodes` |
+| `...process.env` in the http-backend or fixture-git child env | Leaks `GIT_DIR`/`GIT_INDEX_FILE` from hooks and the user's gitconfig (gpgsign, hooks) | An explicit allowlist with a temp `HOME` and `GIT_CONFIG_NOSYSTEM=1` |
+| `...process.env` in the Pi child env | Leaks provider credentials (the reason `_rpc.ts` is an allowlist) | Add the three named variables only |
+| An `isomorphic-git` upgrade in this milestone | Changes the code under test while the suite is still being built | Keep `^1.42.3`; bump later, under the new suite |
+| A per-scenario stand-in server | Pi reads `GITHUB_BASE_URL`/`NODE_EXTRA_CA_CERTS` only at start, and the port would change under a running Pi | One server per worker run, emptied and disarmed in `Before()` |
+| `http://` stand-in | `http://` is a refused source form, and `onAuth` requires `https:` | HTTPS only |
 
 ## Stack Patterns by Variant
 
-**If `pi-mcp-adapter` is absent:**
-- Install still stages `mcp-adapter.json` entries and emits `{requires pi-mcp}`. Pi 1.0's built-in MCP does not read `mcp-adapter.json`, so nothing connects. That is the correct outcome under "adapter-only detection".
+**If the scenario uses an https git URL source:**
+- Serve it at the exact path the user types (with or without `.git`).
+- 401 scenarios go here, because the auth host matches the bundle host and the real helper path runs.
 
-**If the user re-enables `builtin:mcp` while the adapter is installed:**
-- Adapter 5 still owns `/mcp`, and Pi leaves the built-in out when another extension registers it. Status still comes only from `pi-mcp-adapter/status/v1`.
+**If the scenario uses a GitHub source (`owner/repo` or `https://github.com/o/r`):**
+- Serve it at `<GITHUB_BASE_URL path>/<owner>/<repo>.git`.
+- Assert the github.com display form. No auth scenarios, and no leftover-clone scenarios (see §4).
+
+**If the scenario uses a local directory or a direct `marketplace.json` path:**
+- No stand-in. Reuse `features/lib/path-marketplace.ts`. These are path sources, which never touch the network (NFR-5).
 
 ## Version Compatibility
 
 | Package A | Compatible With | Notes |
 |-----------|-----------------|-------|
-| `pi-claude-marketplace` (this) | `pi-coding-agent@1.0.0`, `pi-tui@1.0.0` | Verified: tsc, unit 8529/8529, integration 67/67, e2e 14/14 (Pi runtime smoke, `resources_discover`, soft-dep install) |
-| `pi-subagents@0.74.0` | Pi 1.0 | Peers all optional; `pi-ai >=0.86.1` |
-| `pi-mcp-adapter@5.0.0` | Pi 1.0 (runtime) | npm peer metadata stops at `pi-ai ^0.99.0` (gap above). `engines.node >=20`. |
-| `@quintinshaw/pi-dynamic-workflows@3.13.1` | Pi `>=0.80.8` per metadata | Pi 1.0 needs a live re-grade (canary) before the docs claim it |
-| `typescript-eslint@8.71.0` | `typescript >=4.8.4 <6.1.0`, `eslint ^8.57 \|\| ^9 \|\| ^10` | Blocks TS 7 |
-| `fallow@3.31.0` | Node >= 22 | Dev and CI only |
-| `write-file-atomic@8.0.0` | Node `^22.22.2 \|\| ^24.15.0 \|\| >=26` | Already true today |
+| `isomorphic-git@1.42.3` | `git http-backend` 2.55.0 | Spike of 2026-10-15 plus the 2026-09-28 UATs (clone, fetch, verbatim path, Basic auth, redirects). |
+| OpenSSL 3.0.13 (runner) / 4.0.3 (dev) | Node 24 / 26 bundled OpenSSL | The cert command works on both; Node trusts it via `NODE_EXTRA_CA_CERTS` (checked on Node 26.11.1). |
+| `ubuntu-latest` | Moves to Ubuntu 26.04 in November 2026 | Newer git/OpenSSL; the flags above are stable across 3.x and 4.x. Nothing pins Ubuntu 24.04 in particular. |
 
-**Open question (NFR-4, user decision, not milestone scope by default):** `engines.node` still says `>=20.19.0`. Pi itself (`>=22.19.0`) and the runtime dependency `write-file-atomic@8` (`^22.22.2 || ^24.15.0 || >=26`) already make that unreachable. Raising the floor touches NFR-4 and needs an explicit decision.
+## Open question (for the user, not decided here)
+
+**The name `GITHUB_BASE_URL` collides with an established meaning.** The Terraform GitHub provider (`integrations/terraform-provider-github`, `provider.go`: `EnvDefaultFunc("GITHUB_BASE_URL", DotComAPIURL)`) reads it as the **API** base URL, for example `https://api.github.com/` or a GHES `/api/v3/` URL. Other tools, such as Elixir `git_store`, do the same. A Pi user who exports it for Terraform would have every GitHub marketplace clone go to `https://api.github.com/<o>/<r>.git` and fail. Claude Code 2.1.296 hardcodes `https://github.com/<repo>.git` and reads no such variable (binary grep), so there is no upstream name to match. A namespaced name in the house style of `PI_CLAUDE_MARKETPLACE_DEBUG` (for example `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL`) would avoid the collision. D-MF-01 records the name, so this goes to the user as a question. It does not change the decision here.
 
 ## Sources
 
-- npm registry, `npm view <pkg> version|peerDependencies|engines|time` for every package above (2026-10-01/02). HIGH: primary metadata.
-- Unpacked tarballs in the session scratchpad: `pi-coding-agent@1.0.0` (CHANGELOG 0.87.1-1.0.0, `dist/core/extensions/types.d.ts`, `dist/core/package-manager.js` install args, `dist/extensions/mcp/index.js`), `pi-mcp-adapter@{4.0.0,5.0.0}` (CHANGELOG, `docs/configuration.md` file layout/precedence, `docs/extension-api.md` status snapshots, `types.ts`, `index.ts`), `pi-subagents@0.74.0`, `@quintinshaw/pi-dynamic-workflows@{3.13.0,3.13.1}` (diff). HIGH.
-- Scratch copies of HEAD `8b6ac3bc` with Pi 1.0.0 (pi1) and all bumps (pi2): `tsc --noEmit`, `npm test`, `test:integration`, `test:e2e`, `test:architecture`, `test:analyzers`, `npm run fallow`, `prettier --check`, `eslint`, `lint:type-members`. HIGH: executed.
-- npm 11.19.1 `--package-lock-only` resolution experiments for the `pi-ai` peer gap. HIGH: executed.
-- GitHub API: `typescript-eslint` v8.71.0 release notes; `fallow-rs/fallow` tags v3.28.0/v3.31.0 and release notes v3.28-v3.31. HIGH.
-- `git show` of features/mcp `74162ca6`, `5b1d8ef6`, `dac3a245`, `69e0870a`, `4f82096f`; `git apply --check` of each onto HEAD. HIGH.
-- Not run: the live Stop canary and the live workflow-engine canary on Pi 1.0. They need a live Pi session with the stub provider; that is phase work.
+- Codebase (HIGH): `domain/clone-key.ts:61-128`, `orchestrators/auth-host.ts:81-99`, `orchestrators/marketplace/{add.ts:807,866,974; update.ts:388-400; shared.ts:252-264}`, `platform/git.ts:201-360,459,541`, `platform/git-auth-callbacks.ts:170-250`, `platform/git-credential.ts:145-160`, `shared/git-failure-classifiers.ts`, `eslint.config.js:44-106,361-391`, `rule-packs/architecture.json`, `.fallowrc.json`, `tests/e2e/_rpc.ts:166-173`, `features/support/pi-process.ts`, `.github/workflows/ci.yml` (`behavioral` job), `.pre-commit-config.yaml` (TruffleHog `--results=verified`), `node_modules/isomorphic-git/http/node/index.js:187-203`, `node_modules/simple-get/index.js:39`
+- Local experiments (HIGH): the openssl command on OpenSSL 4.0.3 (22 ms; SAN and basicConstraints checked); a Node 26.11.1 child fails without `NODE_EXTRA_CA_CERTS` (`DEPTH_ZERO_SELF_SIGNED_CERT`) and succeeds with it; `git-http-backend` present in Fedora `git-core-2.55.0`
+- [git-http-backend docs](https://git-scm.com/docs/git-http-backend) (MEDIUM): `HTTP_GIT_PROTOCOL` is copied to `GIT_PROTOCOL`, an explicit `GIT_PROTOCOL` takes precedence, `GIT_HTTP_EXPORT_ALL`, `GIT_PROJECT_ROOT`; silent on `CONTENT_LENGTH` and gzip
+- [actions/runner-images Ubuntu 24.04 readme](https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md) (MEDIUM): image 20261004, Git 2.55.0, OpenSSL 3.0.13, `ubuntu-latest` moves to 26.04 in November 2026
+- `npm view` (HIGH): `selfsigned@5.5.0` deps `@peculiar/x509`, `pkijs` (and their trees); `isomorphic-git@1.44.2` latest; `@cucumber/cucumber@13.3.0` latest
+- [Terraform GitHub provider](https://github.com/integrations/terraform-provider-github) via `gh search code` (HIGH): `GITHUB_BASE_URL` is the API base URL
+- Claude Code 2.1.296 binary grep (HIGH): GitHub clone URL hardcoded as `https://github.com/${repo}.git`; no base-URL env read for clones
+- `.planning/milestones/ws-git-hosts-2026-10-01/.../01-UAT.md`, `02-UAT.md` (HIGH): prior runs of isomorphic-git against `git http-backend` behind Node HTTPS with `NODE_EXTRA_CA_CERTS`; marketplace add/update wire = `GET info/refs` + `POST git-upload-pack`
 
 ---
-*Stack research for: Pi extension, Claude plugin MCP delivery via pi-mcp-adapter 5*
-*Researched: 2026-10-01*
+*Stack research for: marketplace behavioral tests (cucumber + loopback HTTPS git stand-in)*
+*Researched: 2026-10-15*

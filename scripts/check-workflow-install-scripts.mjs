@@ -37,6 +37,7 @@ function workflowPaths(projectRoot) {
 function checkWorkflowInstallScripts(projectRoot = defaultProjectRoot) {
   const violations = [];
 
+  // fallow-ignore-next-line code-duplication -- reviewed: scripts/check-corresponding-tests.mjs comes from the TypeScript blueprint, so a helper shared with it would conflict on every blueprint sync; each gate script keeps its own CLI prologue
   for (const workflowPath of workflowPaths(projectRoot)) {
     const lines = readFileSync(path.join(projectRoot, workflowPath), "utf8").split("\n");
 
@@ -78,6 +79,7 @@ function main() {
 
   for (const violation of violations) {
     process.stderr.write(
+      // fallow-ignore-next-line code-duplication -- reviewed: scripts/check-corresponding-tests.mjs comes from the TypeScript blueprint, so a helper shared with it would conflict on every blueprint sync; each gate script keeps its own CLI prologue
       `missing ${ignoreScriptsFlag}: ${violation.path}:${violation.line}: ${violation.text}\n`,
     );
   }

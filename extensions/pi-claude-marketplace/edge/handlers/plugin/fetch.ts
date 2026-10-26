@@ -20,7 +20,7 @@ import { errorMessage } from "../../../shared/errors.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
 
-import { splitPluginMarketplaceRef } from "./shared.ts";
+import { parsePluginTarget } from "./shared.ts";
 
 import type { FetchTarget } from "../../../orchestrators/plugin/fetch.ts";
 import type { ExtensionCommandContext } from "../../../platform/pi-api.ts";
@@ -72,43 +72,12 @@ function parseFetchTarget(
     return undefined;
   }
 
-  const target = toFetchTarget(nonFlagPositionals[0], ctx, run);
+  const target = parsePluginTarget(nonFlagPositionals[0], ctx, run, USAGE);
   if (target === undefined) {
     return undefined;
   }
 
   return parsed.scope === undefined ? { target } : { target, scope: parsed.scope };
-}
-
-/**
- * Map a single positional token (or its absence) to a `FetchTarget`. A bare
- * `@<marketplace>` yields the marketplace form; a `<plugin>@<marketplace>` ref
- * yields the plugin form; no positional yields the all form. A malformed ref
- * emits a USAGE error and returns `undefined`.
- */
-function toFetchTarget(
-  ref: string | undefined,
-  ctx: ExtensionCommandContext,
-  run: NotificationRun,
-): FetchTarget | undefined {
-  if (ref === undefined) {
-    return { kind: "all" };
-  }
-
-  if (ref.startsWith("@") && ref.length > 1) {
-    return { kind: "marketplace", marketplace: ref.slice(1) };
-  }
-
-  const split = splitPluginMarketplaceRef(ref);
-  if (split === undefined) {
-    notifyUsageError(ctx, run, {
-      message: `Invalid <plugin>@<marketplace> ref: "${ref}".`,
-      usage: USAGE,
-    });
-    return undefined;
-  }
-
-  return { kind: "plugin", ...split };
 }
 
 /**

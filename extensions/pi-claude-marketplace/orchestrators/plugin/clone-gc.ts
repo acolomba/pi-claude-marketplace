@@ -24,6 +24,9 @@ import { errorMessage } from "../../shared/errors.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 
+/** A per-commit clone key, `pluginCloneKey`'s shape; group 1 is its mirror key. */
+const PER_COMMIT_KEY = /^([0-9a-f]{12})-[0-9a-f]{12}$/;
+
 /**
  * D-78-01 Option A: derive the set of still-referenced clone keys from the
  * surviving plugin records. A record contributes a key only when it carries
@@ -33,6 +36,12 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
  * `<key>/<subdir>`, so the segment is the clone root, not the subdir. A
  * `resolvedSource` outside `pluginClonesDir` yields a leading ".." (or empty)
  * segment and protects no cache dir.
+ *
+ * GIT-02 / D-16-07: a live per-commit key `<url12>-<sha12>` also keeps the
+ * URL-keyed mirror `<url12>` of the same URL, the download cache a later
+ * `update` of that plugin fetches into. A mirror no installed plugin's URL
+ * shares, such as one `fetch` warmed for a plugin that is not installed, is
+ * not live.
  */
 function deriveLiveCloneKeys(state: ExtensionState, pluginClonesDir: string): Set<string> {
   const liveKeys = new Set<string>();
@@ -45,6 +54,10 @@ function deriveLiveCloneKeys(state: ExtensionState, pluginClonesDir: string): Se
       const seg = path.relative(pluginClonesDir, record.resolvedSource).split(path.sep)[0];
       if (seg !== undefined && seg !== "" && !seg.startsWith("..")) {
         liveKeys.add(seg);
+        const mirrorKey = PER_COMMIT_KEY.exec(seg)?.[1];
+        if (mirrorKey !== undefined) {
+          liveKeys.add(mirrorKey);
+        }
       }
     }
   }
@@ -52,10 +65,38 @@ function deriveLiveCloneKeys(state: ExtensionState, pluginClonesDir: string): Se
   return liveKeys;
 }
 
+/** The `plugin-clones/` entries on disk; a missing dir has none (NFR-3). */
+async function readCloneKeys(locations: ScopedLocations): Promise<string[]> {
+  try {
+    return await readdir(locations.pluginClonesDir);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return [];
+    }
+
+    throw err;
+  }
+}
+
+/**
+ * UPD-DEP-D1 / IN-N4: the clone keys on disk now that no record references,
+ * such as a mirror `fetch` warmed. A sweep after a dependency plan keeps them
+ * and collects every other unreferenced clone: those the plan created, and
+ * the revisions its moves replaced.
+ */
+export async function listUnreferencedPluginClones(
+  locations: ScopedLocations,
+): Promise<ReadonlySet<string>> {
+  const state = await loadState(locations.extensionRoot);
+  const liveKeys = deriveLiveCloneKeys(state, locations.pluginClonesDir);
+  return new Set((await readCloneKeys(locations)).filter((key) => !liveKeys.has(key)));
+}
+
 /**
  * PURL-05 / PURL-06 / D-78-01: delete every unreferenced `plugin-clones/<key>/`
  * directory, returning per-dir rm-failure leak strings (callers ignore them --
- * hygienic cleanup never becomes the primary path, D-19-01).
+ * hygienic cleanup never becomes the primary path, D-19-01). A key in `keep`
+ * stays even when unreferenced (UPD-DEP-D1).
  *
  * Flow:
  *   1. Load the scope state and derive the live clone-key set. A record
@@ -71,25 +112,17 @@ function deriveLiveCloneKeys(state: ExtensionState, pluginClonesDir: string): Se
  *      enforce NFR-10 BEFORE any delete) then `rm(dir, { recursive, force })`
  *      inside a try/catch that records `<key>: <message>` leaks (D-19-01 swallow).
  */
-export async function garbageCollectPluginClones(locations: ScopedLocations): Promise<string[]> {
+export async function garbageCollectPluginClones(
+  locations: ScopedLocations,
+  keep: ReadonlySet<string> = new Set(),
+): Promise<string[]> {
   const state = await loadState(locations.extensionRoot);
   const liveKeys = deriveLiveCloneKeys(state, locations.pluginClonesDir);
-
-  let entries: string[];
-  try {
-    entries = await readdir(locations.pluginClonesDir);
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-      // NFR-3: a missing cache dir is a no-op; nothing to sweep.
-      return [];
-    }
-
-    throw err;
-  }
+  const entries = await readCloneKeys(locations);
 
   const leaks: string[] = [];
   for (const key of entries) {
-    if (liveKeys.has(key)) {
+    if (liveKeys.has(key) || keep.has(key)) {
       continue;
     }
 

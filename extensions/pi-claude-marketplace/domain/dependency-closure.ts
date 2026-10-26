@@ -123,6 +123,7 @@ export interface ClosureMember {
 /** Root marketplace permission and target-scope records for an install walk. */
 export interface DependencyInstallPolicy {
   readonly allowedMarketplaces: ReadonlySet<string>;
+  /** Keys exempt from `allowedMarketplaces`: the enabled records of the target scope. */
   readonly recordedKeys: ReadonlySet<string>;
 }
 

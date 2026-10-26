@@ -27,6 +27,9 @@
 //  header plus a synthetic `PluginFailedMessage` child carrying
 //  `cause: err` so the underlying MarketplaceUpdateError reaches the user
 //  (`err.retryHint` remains on the error for programmatic inspection).
+//  - invalid GitHub base override: an `InvalidGitHubBaseUrlError` from the
+//  refresh or from a cascade plugin update fails the whole command; no row is
+//  rendered (GHB-03).
 //  - empty targets (no marketplaces configured): `{ marketplaces: [] }`
 //  renders the `(no marketplaces)` sentinel.
 //  - post-success cache cleanup: a `rm` runs to drop the stale completion
@@ -62,13 +65,13 @@
 //  // at false so the "Retry the command." hint is suppressed.
 //  // Any later step throw (forceUpdateRef/checkout) or
 //  // manifest re-read throw still produces the retry hint.
-//  manifest = read+validate <marketplaceRoot>/.claude-plugin/marketplace.json
+//  manifest = read+validate recordedManifestPath(record)
 //  record.lastUpdatedAt = now
 //  } catch (err) {
 //  throw new MarketplaceUpdateError(..., { cause, retryHint: cloneAdvanced ? "Retry the command." : "" })
 //  }
 //  else if path:
-//  refreshPathManifest(record) // NO gitOps; NFR-5
+//  manifest = read+validate recordedManifestPath(record) // NO gitOps; NFR-5
 //  // capture snapshot for cascade-outside-guard:
 //  snapshot = { autoupdate: record.autoupdate ?? false, plugins: Object.keys(record.plugins) }
 //  return snapshot
@@ -92,21 +95,30 @@
 //  D-14 sequence: fetch + (symbolic HEAD) forceUpdateRef + checkout, OR
 //  (detached HEAD) checkout directly. NO `pull`.
 
-import path from "node:path";
+import { isDeepStrictEqual } from "node:util";
 
-import { loadMarketplaceManifest } from "../../domain/manifest.ts";
+import { networkCloneUrl } from "../../domain/clone-key.ts";
+import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
   InvalidMarketplaceManifestError,
+  MarketplaceBaselineUnreadableError,
   MarketplaceUpdateError,
   PluginShapeError,
+  StateLockHeldError,
   composeErrorWithCauseChain,
   errorMessage,
+  isErrnoException,
+  rethrowInvalidGitHubBaseUrl,
 } from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import {
+  classifyGitTransportFailure,
+  hostHttpFailureFrame,
+  hostHttpStatus,
+} from "../../shared/git-failure-classifiers.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
@@ -117,11 +129,16 @@ import {
   type Single,
 } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
-import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
+import {
+  DEFAULT_CREDENTIAL_OPS,
+  NO_STORED_CREDENTIAL_CAUSE,
+  buildGitHubAuth,
+} from "../auth-host.ts";
 // WR-12 / WR-03: the `(updated)` row composer, imported from the LEAF module
 // that holds it rather than from the plugin-update ledger. The ledger stays
 // behind the injected `pluginUpdate` seam -- and now stays out of this module's
@@ -130,9 +147,12 @@ import { DEFAULT_CREDENTIAL_OPS, buildAuthForHost, hostFromCloneUrl } from "../a
 
 import {
   DEFAULT_GIT_OPS,
+  lacksStoredCredential,
+  recordedManifestPath,
   refreshGitHubClone,
   refreshUrlClone,
   resolveScopeOrNotifyNotAdded,
+  type GitAuthBundle,
   type GitOps,
 } from "./shared.ts";
 import {
@@ -174,7 +194,7 @@ export interface UpdateMarketplaceOptions {
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
-   * inject createCredentialOpsFake() from tests/platform/credential-ops-fake.ts
+   * inject createCredentialOpsFake() from test/platform/credential-ops-fake.ts
    * so the developer's OS keychain is never touched.
    */
   readonly credentialOps?: CredentialOps;
@@ -207,7 +227,7 @@ export interface UpdateAllMarketplacesOptions {
   /**
    * AUTH-02 injection seam. Defaults to DEFAULT_CREDENTIAL_OPS which
    * wraps `git credential fill/approve/reject` via subprocess. Tests
-   * inject createCredentialOpsFake() from tests/platform/credential-ops-fake.ts
+   * inject createCredentialOpsFake() from test/platform/credential-ops-fake.ts
    * so the developer's OS keychain is never touched.
    */
   readonly credentialOps?: CredentialOps;
@@ -318,48 +338,68 @@ interface RefreshOneArgs {
 }
 
 /**
- * UXG-05 change-detection seam. Reads the persisted, schema-validated
- * `MarketplaceManifest` and returns a comparison key (the `JSON.stringify` of
- * the validated parsed content). Used to compare the manifest content PRE vs
- * POST refresh so the no-op vs changed decision (autoupdate-OFF and
- * autoupdate-ON alike) can distinguish a genuine change (`updated`) from a
- * no-op (`skipped {up-to-date}`).
- *
- * WR-01: `loadMarketplaceManifest` returns the RAW `JSON.parse` value -- it
- * runs `MARKETPLACE_VALIDATOR.Check()` but NEVER `.Parse()`/`.Clean()`. So the
- * comparison key is `JSON.stringify` of the schema-validated-but-raw parsed
- * manifest: its key order mirrors the source file and it retains any
- * unknown/extra fields. Any content delta -- including reordered keys or
- * changed extra fields -- reads as "changed", the conservative direction. Do
- * NOT "optimize" `loadMarketplaceManifest` into `.Parse()`: that would rewrite
- * the key order and could silently flip the no-op classification.
- *
- * Compares ONLY post-validation parsed content (T-27-05 mitigation): a tampered
- * manifest that fails the schema throws inside `loadMarketplaceManifest` and
- * routes to the `(failed)` path, never to the no-op `(skipped)` decision.
- *
- * WR-02: returns `undefined` ONLY for a genuine "no manifest yet" (ENOENT) PRE
- * read; a `undefined` PRE key compared against a defined POST key reads as
- * "changed", the safe default. Any OTHER PRE-read failure (EACCES, malformed
- * JSON, schema-invalid) is re-thrown so it propagates to `refreshRecord`'s
- * try/catch and routes to the existing `(failed)` path -- the same routing
- * `validateManifestAtRoot` already uses for POST-read failures. This removes
- * the silent always-`(updated)` failure mode for a corrupt/unreadable
- * pre-existing manifest.
+ * Reads the pre-fetch comparison for a git record without a saved baseline.
+ * A manifest that is missing or invalid gives no comparison, so the refresh
+ * counts as changed once the fetched manifest validates. D-07: a later update
+ * can succeed once the source is fixed. Any other read failure (EACCES, EIO,
+ * EISDIR) fails the refresh.
  */
 async function manifestContentKey(
   record: ExtensionState["marketplaces"][string],
 ): Promise<string | undefined> {
   try {
-    const parsed = await loadMarketplaceManifest(record.manifestPath);
-    return JSON.stringify(parsed);
+    return (await loadMarketplaceManifestDocument(recordedManifestPath(record))).comparisonJson;
   } catch (err) {
-    // WR-02: only ENOENT (no manifest yet) maps to the changed-safe default.
-    // Mirrors the errno-narrowing idiom `reasonsFromCascadeError` already uses
-    // (gates on `(err as NodeJS.ErrnoException).code`). All other failures
-    // propagate to `(failed)`.
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+    // The fetched manifest is still validated, so an invalid one fails there.
+    if (
+      err instanceof InvalidMarketplaceManifestError ||
+      (isErrnoException(err) && err.code === "ENOENT")
+    ) {
       return undefined;
+    }
+
+    throw err;
+  }
+}
+
+/**
+ * Parses the comparison text, or returns undefined when there is none. A saved
+ * baseline that does not parse refuses the refresh as unreadable before any
+ * source read or fetch.
+ */
+function parseBaseline(name: string, text: string | undefined): unknown {
+  if (text === undefined) {
+    return undefined;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch (cause) {
+    throw new MarketplaceBaselineUnreadableError(name, { cause });
+  }
+}
+
+/**
+ * UPD-12 / GAUTH-04 / GHB-01: refresh a github clone. Under
+ * `PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL` the bundle is a stored credential
+ * bound to the override's host, so a failed credential lookup gains the line
+ * that names how to store one. The line goes before the fetched-URL link, which
+ * stays the last link, and the code-bearing error stays at depth 0. With the
+ * override unset the bundle is the github.com Device Flow and nothing changes
+ * (GHB-04).
+ */
+async function refreshGitHubSource(
+  cloneDir: string,
+  ref: string | undefined,
+  gitOps: GitOps,
+  onFetchSucceeded: () => void,
+  auth: GitAuthBundle,
+): Promise<void> {
+  try {
+    await refreshGitHubClone(cloneDir, ref, gitOps, onFetchSucceeded, auth);
+  } catch (err) {
+    if (lacksStoredCredential(err, auth)) {
+      err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(auth.host), { cause: err.cause });
     }
 
     throw err;
@@ -372,42 +412,36 @@ async function refreshRecord(
 ): Promise<boolean> {
   const { name, locations, gitOps } = args;
   const source = record.source as ParsedSource;
+  const remoteUrl =
+    source.kind === "github" || source.kind === "url" ? networkCloneUrl(source) : undefined;
   let cloneAdvanced = false;
   try {
-    // UXG-05: capture the PRE-refresh validated-manifest content key BEFORE the
-    // refresh re-validates and re-persists. Read off the currently persisted
-    // `record.manifestPath` (the manifest as the user last saw it). NOT keyed on
-    // `record.lastUpdatedAt` -- it is stamped to `now` every refresh
-    // regardless of content.
-    // WR-01: this read lives INSIDE the try so a non-ENOENT PRE-read failure
-    // (manifestContentKey re-throws per WR-02) is wrapped as MarketplaceUpdateError
-    // exactly like a POST-read failure -- same `(failed)` routing, same cause
-    // chain. Do NOT hoist it back outside the try (that bypasses the wrapper and
-    // surfaces a bare, mislabeled reason).
-    const preKey = await manifestContentKey(record);
+    // A local legacy record has no historical content to compare. Its first
+    // successful refresh establishes the baseline and reports a change.
+    const preKey =
+      record.lastSuccessfulManifest ??
+      (source.kind === "path" ? undefined : await manifestContentKey(record));
+    const baseline = parseBaseline(name, preKey);
     if (source.kind === "github") {
       const cloneDir = await locations.sourceCloneDir(name);
-      // AUTH-02 / D-79-05: buildAuthForHost binds the GitHub provider's
-      // Device Flow as the onAuthRequired closure for this fetch.
+      // AUTH-02 / D-79-05: buildGitHubAuth binds github.com with the GitHub
+      // provider's Device Flow as the onAuthRequired closure for this fetch,
+      // or the override host with a stored credential and no Device Flow when
+      // PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL is set (GHB-02).
       // platform/git.ts::buildAuthCallbacks first consults
       // credentialOps.fill(host); on a hit (the post-add common case) the
       // stored token is returned and Device Flow does NOT trigger -- this is
       // the AUTH-02 silent-reuse contract. AUTH-09: only the user code and
       // the verification URI cross the flow's onDeviceCode callback.
       const { ctx, credentialOps, deviceFlowHttp } = args;
-      const host = hostFromCloneUrl(
-        `https://github.com/${source.owner}/${source.repo}.git`,
-        "github",
-      );
-      const auth = buildAuthForHost({
-        host,
+      const auth = buildGitHubAuth({
         credentialOps,
         ctx,
         run: args.run,
         ...(deviceFlowHttp !== undefined && { deviceFlowHttp }),
       });
 
-      await refreshGitHubClone(
+      await refreshGitHubSource(
         cloneDir,
         source.ref,
         gitOps,
@@ -416,7 +450,6 @@ async function refreshRecord(
         },
         auth,
       );
-      await validateManifestAtRoot(record, cloneDir);
     } else if (source.kind === "url") {
       const cloneDir = await locations.sourceCloneDir(name);
       const { ctx, credentialOps, deviceFlowHttp } = args;
@@ -432,46 +465,58 @@ async function refreshRecord(
           cloneAdvanced = true;
         },
       });
-      await validateManifestAtRoot(record, cloneDir);
-    } else if (source.kind === "path") {
-      await validateManifestAtRoot(record, record.marketplaceRoot);
-    } else {
+    } else if (source.kind !== "path") {
       throw new Error(
         `Cannot update marketplace "${name}": unsupported source kind "${source.kind}"`,
       );
     }
 
-    // UXG-05: capture the POST-refresh validated-manifest content key AFTER the
-    // refresh re-validates (and `validateManifestAtRoot` repoints
-    // `record.manifestPath` if the root moved). Whole-manifest equality of the
-    // parsed/validated content -- source-kind-uniform (a path source whose local
-    // marketplace.json is unchanged compares equal; a github source whose clone
-    // advanced but yielded byte-identical manifest content also compares equal).
-    const postKey = await manifestContentKey(record);
-    const changed = preKey !== postKey;
+    const document = await loadMarketplaceManifestDocument(recordedManifestPath(record));
 
+    const changed =
+      preKey === undefined || !isDeepStrictEqual(baseline, JSON.parse(document.comparisonJson));
+
+    record.lastSuccessfulManifest = document.comparisonJson;
     // lastUpdatedAt is stamped on EVERY refresh (used elsewhere); it is
     // deliberately NOT the change signal.
     record.lastUpdatedAt = new Date().toISOString();
     return changed;
   } catch (err) {
     throw new MarketplaceUpdateError(
-      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone.
-      cloneAdvanced
-        ? `Marketplace "${name}" clone advanced but manifest could not be persisted.`
-        : `Failed to update marketplace "${name}".`,
+      refreshFailureMessage(name, err, remoteUrl, cloneAdvanced),
       // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- cloneAdvanced is set via callback inside refreshGitHubClone.
       { cause: err, retryHint: cloneAdvanced ? "Retry the command." : "" },
     );
   }
 }
 
+/**
+ * UPD-11: the first frame of a refresh failure's cause line. When the git host
+ * answered with an HTTP status, the frame names the status and the URL the
+ * fetch sent (see `hostHttpFailureFrame`).
+ */
+function refreshFailureMessage(
+  name: string,
+  err: unknown,
+  remoteUrl: string | undefined,
+  cloneAdvanced: boolean,
+): string {
+  const frame = remoteUrl === undefined ? undefined : hostHttpFailureFrame(err, remoteUrl);
+  if (frame !== undefined) {
+    return frame;
+  }
+
+  return cloneAdvanced
+    ? `Marketplace "${name}" clone advanced but manifest could not be persisted.`
+    : `Failed to update marketplace "${name}".`;
+}
+
 interface RefreshSnapshot {
   readonly autoupdate: boolean;
   readonly plugins: readonly string[];
   /**
-   * UXG-05: true when the refresh changed the validated marketplace.json
-   * content; false when the manifest content was byte-identical pre/post
+   * UXG-05: true when the refresh changed the complete parsed manifest
+   * content; false when it equals the last successful baseline
    * (the no-op case). Drives the autoupdate-OFF `updated` vs `skipped
    * {up-to-date}` emission. Source-kind-uniform (path + github).
    */
@@ -497,9 +542,9 @@ async function snapshotAfterRefresh(args: RefreshOneArgs): Promise<RefreshSnapsh
         // standalone `{marketplace not added}` variant); reaching here means a concurrent
         // removal in that window. Return undefined so the caller skips the
         // cascade and emits NOTHING further -- no raw MarketplaceNotFoundError
-        // escapes (which `refreshOneMarketplace`'s catch would misattribute as the
-        // lying `{network unreachable}` default, the exact ATTR-10/NFR-5 class this
-        // change closes). Mirrors runRemoveLockBody's silent-return in remove.ts
+        // escapes to `refreshOneMarketplace`'s catch, which would render a
+        // second, failed row for a marketplace that is already gone (ATTR-10).
+        // Mirrors runRemoveLockBody's silent-return in remove.ts
         // at the same withLockedStateTransaction boundary; that path also
         // saves the unmodified state (a harmless re-write of the same content).
         await tx.save();
@@ -534,6 +579,7 @@ async function cascadeAutoupdates(
       // eslint-disable-next-line no-await-in-loop -- each update locks the scope (retries: 0)
       outcomes.push(await pluginUpdate(plugin, name, scope));
     } catch (err) {
+      rethrowInvalidGitHubBaseUrl(err);
       // `notes` is consumed by callers OUTSIDE the notify path (e.g.
       // JSON-mode outcome aggregation in tests) and by the
       // narrowFailReason notes-substring fallback below, so the cause-chain
@@ -579,7 +625,9 @@ async function cascadeAutoupdates(
  * error to a closed-set Reason[] using the same priority order as the cascade
  * narrowers in `orchestrators/plugin/{update,reinstall}.ts::reasonsFromTypedError`:
  * PluginShapeError variants first, then errno-bearing FS errors, then
- * `undefined` to defer to the consumer's substring fallback.
+ * `undefined` to defer to the consumer's substring fallback. The refresh
+ * classification in `refreshFailureReasons` calls it as well, with the
+ * `MarketplaceUpdateError` that wraps a refresh failure.
  */
 function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undefined {
   if (err instanceof PluginShapeError) {
@@ -598,25 +646,23 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
     }
   }
 
-  // ATTR-10 / D-48-B: a typed marketplace-manifest parse/validation failure
-  // (malformed JSON or schema-invalid marketplace.json) maps to the closed-set
-  // `invalid manifest` reason for BOTH path and github sources. A path-source
-  // manifest failure is network-free (NFR-5), so it MUST NOT fall through to the
-  // `?? ["network unreachable"]` default at the refreshOneMarketplace catch; a
-  // github clone that advanced and then hit a malformed manifest is genuinely
-  // `invalid manifest` too (only typed manifest errors map here, not generic
-  // github network failures). The refreshOneMarketplace catch sees
-  // the InvalidMarketplaceManifestError WRAPPED inside a MarketplaceUpdateError
-  // (refreshRecord rethrows with `{ cause }`), so unwrap ONE level of cause as
-  // well (mirrors add.ts::unwrapAddError). The cascadeAutoupdates catch passes
-  // the raw error, which the direct `instanceof` covers. Placed before the errno
-  // checks so the typed class takes precedence over any incidental errno on the
-  // cause chain.
-  if (
-    err instanceof InvalidMarketplaceManifestError ||
-    (err instanceof Error && err.cause instanceof InvalidMarketplaceManifestError)
-  ) {
-    return ["invalid manifest"] as const;
+  // ATTR-10 / D-48-B / MPA-02: a typed marketplace-manifest parse or
+  // validation failure maps to the token `list` and `info` use (D-11):
+  // malformed JSON reads `unparseable`, a schema-invalid manifest
+  // `invalid manifest`, for both path and github sources. The refresh
+  // classification sees the InvalidMarketplaceManifestError WRAPPED inside a
+  // MarketplaceUpdateError (refreshRecord rethrows with `{ cause }`), so unwrap
+  // ONE level of cause (mirrors add.ts::unwrapAddError); the cascadeAutoupdates
+  // catch passes the raw error. Placed before the errno checks so the typed
+  // class takes precedence over any incidental errno on the cause chain.
+  const manifestError =
+    err instanceof Error && err.cause instanceof InvalidMarketplaceManifestError ? err.cause : err;
+  if (manifestError instanceof InvalidMarketplaceManifestError) {
+    return [narrowProbeError(manifestError)] as const;
+  }
+
+  if (err instanceof Error && err.cause instanceof MarketplaceBaselineUnreadableError) {
+    return ["unreadable"] as const;
   }
 
   // Mirror the one-level cause unwrap above for code-bearing transport
@@ -633,19 +679,19 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
 
 /**
  * Narrow a code-bearing transport failure to its closed-set Reason. The
- * refreshOneMarketplace catch receives the transport error WRAPPED inside a
+ * refresh classification receives the transport error WRAPPED inside a
  * MarketplaceUpdateError (refreshRecord rethrows with `{ cause }`), so the
- * wrapper itself carries no `code` -- hence the one-level cause unwrap.
- * Without it, a path-source refresh that hits ENOENT/ENOTDIR/EACCES/EPERM --
- * a network-free failure (NFR-5) -- would fall through to the lying
- * `?? ["network unreachable"]` default instead of the correct closed-set
- * `source missing` / `permission denied` reasons.
+ * wrapper itself carries no `code` -- hence the one-level cause unwrap. A
+ * path-source refresh that hits ENOENT/ENOTDIR/EACCES/EPERM is a network-free
+ * failure (NFR-5) and maps to `source missing` / `permission denied`.
  *
  * EACCES/EPERM/ENOENT/ENOTDIR classify first since the shared classifier
  * has no opinion on them (path-source failures never reach git). The
- * remaining ladder -- isomorphic-git `HttpError` 401/403, `UserCanceledError`
- * (a declined or failed Device Flow), and network errno -- delegates to
- * `classifyGitTransportFailure` (`shared/git-failure-classifiers.ts`)
+ * remaining ladder -- `StoredCredentialRejectedError` (a stored credential the
+ * host refused), isomorphic-git `HttpError` 401/403, `UserCanceledError` (a
+ * helper miss, a declined or failed Device Flow, or a device-flow credential
+ * the host refused), and network errno --
+ * delegates to `classifyGitTransportFailure` (`shared/git-failure-classifiers.ts`)
  * instead of a hand-rolled copy, so `update` cannot drift out of sync with
  * `install-outcome.ts`/`fetch.ts` (plugin), which already delegate to it.
  */
@@ -672,6 +718,32 @@ function transportReason(err: Error): ContentReason | undefined {
   return classifyGitTransportFailure(bearer);
 }
 
+/**
+ * ATTR-10 / UPD-11: the reasons of a failed marketplace refresh row. Only a
+ * failure of the refresh itself, which `refreshRecord` wraps in a
+ * `MarketplaceUpdateError`, is classified. A held state lock is `lock held`,
+ * as in autoupdate. Any other error failed outside the refresh (the state
+ * load, the state save, or the lock release), so no errno code on it is
+ * mapped. A refresh failure that no rule names gets no reason; its cause chain
+ * still prints.
+ */
+function refreshFailureReasons(err: unknown): readonly ContentReason[] {
+  if (err instanceof StateLockHeldError) {
+    return ["lock held"];
+  }
+
+  if (!(err instanceof MarketplaceUpdateError)) {
+    return [];
+  }
+
+  const typedReasons = reasonsFromCascadeError(err);
+  if (typedReasons !== undefined) {
+    return typedReasons;
+  }
+
+  return hostHttpStatus(err.cause) === undefined ? [] : ["network error"];
+}
+
 async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   const { ctx, cardinality, name, scope, locations, pluginUpdate, run } = args;
 
@@ -679,6 +751,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
   try {
     snapshot = await snapshotAfterRefresh(args);
   } catch (err) {
+    rethrowInvalidGitHubBaseUrl(err);
     // A marketplace refresh failure renders as the header
     // `⊘ <name> [<scope>] (failed)`. The MarketplaceNotificationMessage
     // shape carries no `cause` (SNM-10 confines `cause` to plugin-level
@@ -687,11 +760,10 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     // failed-plugin child whose `cause` drives the depth-5 cause-chain
     // trailer the renderer appends. Mirrors the reinstall synthetic-failed
     // recipe (orchestrators/plugin/reinstall-flow.ts).
-    const typedReasons = reasonsFromCascadeError(err);
     const failedRow: PluginFailedMessage = {
       status: "failed",
       name,
-      reasons: typedReasons ?? (["network unreachable"] as const),
+      reasons: refreshFailureReasons(err),
       cause: err as Error,
       // D-03/D-06: a marketplace-refresh failure -> error, no reload.
       severity: "error",
@@ -712,9 +784,8 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     // TOCTOU concurrent-removal no-op: the marketplace was removed between the
     // pre-guard existence read and snapshotAfterRefresh's fresh guard load. The
     // pre-guard already emitted the standalone `{marketplace not added}` notification, so
-    // return silently -- NO second contradictory notification, and crucially NO
-    // lying `{network unreachable}` (the raw MarketplaceNotFoundError does not
-    // escape; mirrors remove.ts).
+    // return silently -- NO second contradictory notification (the raw
+    // MarketplaceNotFoundError does not escape; mirrors remove.ts).
     return;
   }
 
@@ -829,7 +900,11 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       // WR-01: `outcomeToCascadePluginMessage` returns `UpdateRowMsg` by
       // construction, so the mapped rows are the narrowed Msg the
       // UPDATE_CONTEXT requires with no cast.
-      plugins: outcomes.map((o) => outcomeToCascadePluginMessage(o, scope)),
+      // UPD-DEP-D1: the dependencies an update changed render beside its row.
+      plugins: outcomes.flatMap((o) => [
+        outcomeToCascadePluginMessage(o, scope),
+        ...(o.dependencyRows ?? []),
+      ]),
     },
   ];
   notifyWithContext(ctx, run, UPDATE_CONTEXT, cascadeRows, undefined, cardinality);
@@ -844,32 +919,4 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       o.partition === "updated" || o.partition === "failed" ? (o.mcpConfigNotices ?? []) : [],
     ),
   );
-}
-
-/**
- * MU-4 / MU-5: re-read and re-validate the marketplace.json at the
- * given root. Throws on read or validation failure -- the caller wraps
- * as `MarketplaceUpdateError`.
- *
- * WR-03: for path sources the caller already passes
- * `record.marketplaceRoot`, and for github sources
- * `cloneDir === record.marketplaceRoot` after `add`, so the
- * `record.manifestPath` / `record.marketplaceRoot` writes are gated on a
- * real change. This keeps the function's purpose (validate) clear and lets
- * a "did anything change?" optimization rely on identity.
- */
-async function validateManifestAtRoot(
-  record: ExtensionState["marketplaces"][string],
-  marketplaceRoot: string,
-): Promise<void> {
-  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
-  await loadMarketplaceManifest(manifestPath);
-
-  if (record.manifestPath !== manifestPath) {
-    record.manifestPath = manifestPath;
-  }
-
-  if (record.marketplaceRoot !== marketplaceRoot) {
-    record.marketplaceRoot = marketplaceRoot;
-  }
 }

@@ -11,7 +11,7 @@ import ts from "typescript";
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const reporterPath = fileURLToPath(new URL("./test-reporter.mjs", import.meta.url));
 const productionRoot = "extensions/pi-claude-marketplace";
-const testRoot = "tests";
+const testRoot = "test";
 
 function toProjectPath(inputPath) {
   const absolutePath = path.resolve(projectRoot, inputPath);
@@ -206,7 +206,7 @@ const nonCorrespondingRoots = new Set(["architecture", "e2e", "integration"]);
  * still treated as a pair member and still has to map.
  */
 function isStructuralSupplement(projectPath) {
-  const match = /^tests\/(?:domain|platform)\/(?<name>.+)-fake\.test\.ts$/.exec(projectPath);
+  const match = /^test\/(?:domain|platform)\/(?<name>.+)-fake\.test\.ts$/.exec(projectPath);
 
   if (match === null) {
     return false;
@@ -666,7 +666,7 @@ async function runChangedPairs(explicitBase) {
   }
 }
 
-// A pair test can import support files from any `tests/` root, the two scripts run every pair, and
+// A pair test can import support files from any `test/` root, the two scripts run every pair, and
 // the three remaining files decide the dependencies and compiler settings.
 const everyPairInputs = new Set([
   "package.json",

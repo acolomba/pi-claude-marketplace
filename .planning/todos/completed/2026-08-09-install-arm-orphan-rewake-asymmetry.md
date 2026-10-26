@@ -70,9 +70,9 @@ inherit. That is what would make this class of asymmetry a compile error instead
 of a review finding — the enable arm already gets that protection, the install
 arm does not.
 
-Needs: a row assertion in `tests/orchestrators/reconcile/notify.test.ts` (the
+Needs: a row assertion in `test/orchestrators/reconcile/notify.test.ts` (the
 enable-arm equivalent already exists and can be mirrored), and an end-to-end
-assertion in `tests/orchestrators/reconcile/apply.test.ts` if a hooks fixture
+assertion in `test/orchestrators/reconcile/apply.test.ts` if a hooks fixture
 with an orphan companion field is cheap to seed there. No new catalog state is
 needed — `success-with-orphan-rewake` in `docs/output-catalog.md` already pins
 the rendered form; this only makes a second surface reach it.

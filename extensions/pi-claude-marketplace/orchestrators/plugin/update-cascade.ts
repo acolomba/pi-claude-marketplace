@@ -12,7 +12,7 @@ import {
 } from "../../shared/notify-context.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
 
-import { constraintCauseFor, updatedRowFromOutcome } from "./update-row.ts";
+import { constraintCauseFor, revisionVersionSlot, updatedRowFromOutcome } from "./update-row.ts";
 import { UPDATE_CONTEXT, type UpdateMsg } from "./update.messaging.ts";
 
 import type { DirectRenderableOutcome } from "./update-swap.ts";
@@ -45,10 +45,6 @@ function cascadeSkipSeverity(
   reasons: readonly ContentReason[],
   cardinality: "single" | "plural",
 ): "info" | "warning" | "error" {
-  if (reasons.includes("not installed") || reasons.includes("not found")) {
-    return "error";
-  }
-
   if (reasons.includes("no longer installable")) {
     return cardinality === "single" ? "warning" : "info";
   }
@@ -142,7 +138,10 @@ function outcomeToCascadePluginMessage(
         status: "failed",
         name: outcome.name,
         scope: target.scope,
+        // UPR-03: a failure before any candidate names the installed version.
+        ...revisionVersionSlot(outcome),
         reasons: outcome.reasons,
+        ...(outcome.cause !== undefined && { cause: outcome.cause }),
         severity: "error",
         needsReload: false,
       };
@@ -167,16 +166,16 @@ function groupCascadeOutcomes(
     }
 
     const key = `${target.scope}:${target.marketplace}`;
-    const row = outcomeToCascadePluginMessage(target, outcome, probe, cardinality);
+    // UPD-DEP-D1: the dependencies the update changed render beside its row.
+    const rows = [
+      outcomeToCascadePluginMessage(target, outcome, probe, cardinality),
+      ...(outcome.dependencyRows ?? []),
+    ];
     const existing = byMarketplace.get(key);
     if (existing === undefined) {
-      byMarketplace.set(key, {
-        name: target.marketplace,
-        scope: target.scope,
-        plugins: [row],
-      });
+      byMarketplace.set(key, { name: target.marketplace, scope: target.scope, plugins: rows });
     } else {
-      existing.plugins.push(row);
+      existing.plugins.push(...rows);
     }
   }
 

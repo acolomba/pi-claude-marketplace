@@ -1,5 +1,12 @@
-import { causeChainTrailer, errorMessage, PluginShapeError } from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import {
+  causeChainTrailer,
+  CleanupLeakError,
+  errorMessage,
+  InstallMarketplaceAddError,
+  PluginShapeError,
+  StateLockHeldError,
+} from "../../shared/errors.ts";
+import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import {
   type ContentReason,
   type PluginDisabledMessage,
@@ -11,7 +18,7 @@ import {
   type StatusToken,
 } from "../../shared/notification-types.ts";
 import { PathContainmentError } from "../../shared/path-safety.ts";
-import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import { narrowUnsupportedKinds, SOURCE_DIR_MISSING_NOTE } from "../../shared/probe-classifiers.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -139,31 +146,28 @@ function composeNotInstallableMessage(
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
- * D-76-08 / D-79-03: classify a git-source clone auth challenge into
- * the EXISTING closed-set `authentication required` REASON -- no new token. A
- * credential the server rejects (a still-401 after a fresh credential, D-79-02)
- * throws the isomorphic-git `HttpError` with a 401/403 status. When no
- * credential can be produced at all -- an empty helper on a host the provider
- * registry does not claim (GAUTH-03), or an unsuccessful device flow (denied /
- * expired / poll network error) -- `platform/git-auth-callbacks.ts::onAuth`
- * returns `{ cancel: true }`, which isomorphic-git throws as `UserCanceledError`
- * instead. The seam append-leak-rethrows either
- * up to the install catch; both shapes narrow through the shared
- * `classifyGitTransportFailure` ladder. Install keeps ONLY its auth
- * classification: a network-class transport failure stays undefined here so it
- * rides the generic-runtime cause-chain fallthrough.
- *
- * D-79-03 (amended): the install row is the BARE `(failed) {authentication
- * required}` -- no `NO_STORED_CREDENTIAL_CAUSE` cause line (the plugin failure
- * grammar has no cause-chain trailer slot that renders on the SUBJECT row; that
- * cause line lives ONLY on the update path's synthetic failed-plugin child
- * row). Returns undefined for a non-auth throw so the caller
- * keeps its generic-runtime cause-chain fallthrough.
+ * FLR-01 / D-02: the reasons of the runtime-throw row. A held state lock reads
+ * `lock held`, as uninstall's row does; a git host that refused the clone reads
+ * its git-host reason; any other throw has none.
  */
-function classifyGitAuthFailure(err: unknown): "authentication required" | undefined {
-  return classifyGitTransportFailure(err) === "authentication required"
-    ? "authentication required"
-    : undefined;
+function runtimeFailureReasons(
+  err: unknown,
+  gitReason: ContentReason | undefined,
+): readonly ContentReason[] {
+  if (err instanceof StateLockHeldError) {
+    return ["lock held"];
+  }
+
+  return gitReason !== undefined ? [gitReason] : [];
+}
+
+/**
+ * The runtime row keeps its cause chain, except the bare auth row (amended
+ * D-79-03). A cleanup leak keeps it even then, because the cause carries the
+ * manual-cleanup hint (MA-9, INR-02).
+ */
+function keepsRuntimeCause(err: unknown, gitReason: ContentReason | undefined): boolean {
+  return gitReason !== "authentication required" || err instanceof CleanupLeakError;
 }
 
 export function composeInstallFailureMessage(args: {
@@ -241,21 +245,24 @@ export function composeInstallFailureMessage(args: {
     return failed;
   }
 
-  // Branch 4: runtime throw. A git-source clone auth challenge maps to
-  // the bare `(failed) {authentication required}` row (amended D-79-03: the
-  // closed-set REASON carries the classification and NO cause line renders on
-  // the install subject row -- the stored-credential cause line lives only on
-  // the update path's child row), so `cause` is omitted for it. Every other runtime
-  // throw keeps an empty reasons array and rides the cause-chain trailer (the
-  // renderer suppresses the `{}` brace per D-15-01).
-  const authReason = classifyGitAuthFailure(err);
+  // Branch 4: runtime throw. A git host that refused the clone maps to the
+  // reason `marketplace add` reports for the same answer (ADD-09, INS-06):
+  // `source missing`, `network unreachable`, `network error`, or
+  // `authentication required`. The auth row is bare (amended D-79-03: the
+  // stored-credential cause line lives only on the update path's child row);
+  // every other row keeps its cause chain, as fetch's failed row does. A held
+  // state lock reads `lock held` and keeps its StateLockHeldError cause chain
+  // (FLR-01 / D-02). A throw the ladder leaves unclassified keeps an empty
+  // reasons array and rides the cause-chain trailer (the renderer suppresses
+  // the `{}` brace per D-15-01).
+  const gitReason = classifyGitHostFailure(err);
   const failed: PluginFailedMessage = {
     status: "failed",
     name: plugin,
-    reasons: authReason !== undefined ? ([authReason] as const) : ([] as const),
+    reasons: runtimeFailureReasons(err, gitReason),
     ...(version !== undefined && version !== "" && { version }),
     scope,
-    ...(authReason === undefined && cause !== undefined && { cause }),
+    ...(keepsRuntimeCause(err, gitReason) && cause !== undefined && { cause }),
     // D-03/D-06: a failed install -> error, no reload (nothing landed).
     severity: "error",
     needsReload: false,
@@ -352,6 +359,19 @@ export function classifyEntityShapeError(
   err: unknown,
   ctx: { plugin: string; marketplace: string; scope: Scope },
 ): EntityErrorRow | undefined {
+  // WR-04 / LAYER-07: the add a project install ran failed; the row carries
+  // the reason `marketplace add` reports for the same failure.
+  if (err instanceof InstallMarketplaceAddError) {
+    return {
+      kind: "entity-error",
+      name: ctx.plugin,
+      marketplace: ctx.marketplace,
+      scope: ctx.scope,
+      status: "failed",
+      reasons: [err.reason],
+    };
+  }
+
   // Dispatch on `instanceof PluginShapeError` + `.shape.kind` rather than
   // substring-matching `.message`. The throw sites carry their structural
   // classification verbatim, so the catch site does not need to reparse text.
@@ -469,7 +489,7 @@ function manifestFieldTokenFromNote(note: string): ContentReason | undefined {
  * `unsupported hooks` token for the same on-disk condition (SURF-01). Mirrors
  * the probe-side prefix set verbatim -- if a prefix is added or renamed on one
  * side, the other side MUST follow in lockstep (pinned by
- * tests/architecture/cross-surface-reason-parity.test.ts).
+ * test/architecture/cross-surface-reason-parity.test.ts).
  */
 function isHooksResolverNote(reason: string): boolean {
   return (
@@ -550,6 +570,12 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
     return ["malformed mcp"];
   }
 
+  // SRC-01: a missing plugin directory, mirroring `classifyResolverNote`.
+  // Placed before the `includes("source")` catch-all, which it also matches.
+  if (reason.startsWith(SOURCE_DIR_MISSING_NOTE)) {
+    return ["source missing"];
+  }
+
   if (reason.includes("source")) {
     return ["unsupported source"];
   }
@@ -575,7 +601,8 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
  *      set as `list`/`info` (CR-01 / D-64-02 / D-90-05); on the structural
  *      `unavailable` arm it stays on the source axis as `unsupported source`,
  *      mirroring `narrowResolverNotes`'s catch-all (SURF-01 / WR-01 / D-64-07)
- *   2. "source" substring -> `unsupported source`
+ *   2. the `source dir does not exist` note -> `source missing` (SRC-01);
+ *      any other "source" substring -> `unsupported source`
  *   3. errno-like substrings (EACCES / EPERM / ENOENT / SyntaxError)
  *   4. permissive fallback: `unsupported source`
  * Steps 3-4 are defensive for notes already serialised by deeper helpers;
@@ -598,7 +625,7 @@ function classifyResolverReason(reason: string, partialable: boolean): readonly 
  * such a note ONLY on the partially-available arm; the structural arm keeps it on
  * the source axis (`unsupported source`), agreeing with `narrowResolverNotes`.
  */
-function narrowResolverReasons(
+export function narrowResolverReasons(
   reasons: readonly string[],
   unsupportedKinds: readonly string[] = [],
   partialable = false,
@@ -621,12 +648,23 @@ function narrowResolverReasons(
   return [...new Set(out)];
 }
 
-export function classifyInstallFailure(err: unknown, formattedCause: string): InstallPluginOutcome {
+export function classifyInstallFailure(
+  err: unknown,
+  formattedCause: string,
+  rollbackPartials: readonly RollbackPartial[] = [],
+): InstallPluginOutcome {
   // All failure variants collapse to `{ status: "failed"; error; cause }`.
   // `error` is the dispatch surface (narrow on `instanceof PluginShapeError`
   // to recover `.shape.kind`); `cause` is the formatted user-visible text.
   // `ConcurrentInstallError` is preserved as a distinct typed branch (PI-15);
   // non-Error inputs are wrapped so the contract guarantees `error instanceof Error`.
+  // REC-06: the rollback partials ride along, so an orchestrated caller can
+  // name them as the standalone row does.
   const wrapped = err instanceof Error ? err : new Error(formattedCause);
-  return { status: "failed", error: wrapped, cause: formattedCause };
+  return {
+    status: "failed",
+    error: wrapped,
+    cause: formattedCause,
+    ...(rollbackPartials.length > 0 && { rollbackPartials }),
+  };
 }

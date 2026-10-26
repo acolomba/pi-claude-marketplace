@@ -1,4 +1,4 @@
-import { isRenderablePluginKey } from "../../domain/dependencies.ts";
+import { renderDependentKeys } from "../../domain/dependencies.ts";
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
 import { isErrnoException, PluginShapeError } from "../../shared/errors.ts";
 import {
@@ -9,7 +9,7 @@ import {
   type PluginSkippedMessage,
   type ContentReason,
 } from "../../shared/notification-types.ts";
-import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+import { narrowUnsupportedKinds, SOURCE_DIR_MISSING_NOTE } from "../../shared/probe-classifiers.ts";
 
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -70,9 +70,8 @@ export type EnableCascadeMemberRow = PluginInstalledMessage | PluginSkippedMessa
  * comparator's scope half is inert here by construction, exactly as it is
  * for the install cascade's block.
  *
- * A one-element sort is a no-op, so a root that declares no dependencies (or
- * whose every member fails classification, `members: []`) composes to
- * exactly `[rootRow]`.
+ * A one-element sort is a no-op, so a root that declares no dependencies
+ * (`members: []`) composes to exactly `[rootRow]`.
  */
 export function composeEnableCascadeRows(args: {
   readonly scope: Scope;
@@ -99,23 +98,6 @@ export const DISABLE_CONTEXT = {
 } as const satisfies CommandContext<DisableStatus>;
 
 /**
- * The dependents as EDEP-02's refusal sentence names them: the keys
- * themselves when every one of them is renderable, and their count when any
- * is not. Local mirror of `uninstall.messaging.ts::renderDependents` --
- * T-08-06: the keys are holder keys `findDependents` derived from STATE
- * records, bounded only by `domain/name.ts::assertSafeName`, which admits
- * `"`, `,`, spaces and bidi controls. Interpolated unchecked, one hostile
- * name could forge the rest of the sentence.
- */
-function renderDependentKeys(dependents: readonly string[]): string {
-  if (dependents.every(isRenderablePluginKey)) {
-    return dependents.join(", ");
-  }
-
-  return dependents.length === 1 ? "1 other plugin" : `${dependents.length} other plugins`;
-}
-
-/**
  * D-08-01: the disable refusal's plain-English instruction. Upstream's
  * template offers a chained command; `disable` accepts exactly one
  * `<plugin>@<marketplace>` target, so this names the target, names the
@@ -127,6 +109,19 @@ function renderDependentKeys(dependents: readonly string[]): string {
  */
 export function composeDisableRefusalCause(target: string, dependents: readonly string[]): string {
   return `Disable ${renderDependentKeys(dependents)} first, then ${target}.`;
+}
+
+/**
+ * The enable refusal's instruction when a dependency in the target's closure
+ * is not installed, in the same D-08-01 form as `composeDisableRefusalCause`:
+ * install the missing dependencies first, then enable the target. Upstream
+ * refuses the same enable as `dependency_missing`.
+ */
+export function composeEnableMissingDependencyCause(
+  target: string,
+  missing: readonly string[],
+): string {
+  return `Install ${renderDependentKeys(missing)} first, then enable ${target}.`;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -200,7 +195,7 @@ export function narrowEnableFailure(cause: Error): readonly ContentReason[] {
   if (
     cause instanceof PluginShapeError &&
     cause.shape.kind === "not-installable" &&
-    cause.shape.reasons.some((reason) => reason.startsWith("source dir does not exist"))
+    cause.shape.reasons.some((reason) => reason.startsWith(SOURCE_DIR_MISSING_NOTE))
   ) {
     return ["source missing"];
   }

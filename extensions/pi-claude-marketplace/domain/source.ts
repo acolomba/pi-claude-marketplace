@@ -117,7 +117,7 @@ function optionalString(obj: Record<string, unknown>, key: string): string | und
 }
 
 /**
- * Clone-key / sha-version invariant (domain/clone-key.ts, domain/version.ts):
+ * Clone-key / commit-version invariant (domain/clone-key.ts, domain/version.ts):
  * a git source's `sha` must be the FULL 40-hex commit sha -- `pluginCloneKey`
  * and `shaVersion` slice its first 12 chars unchecked.
  */
@@ -129,8 +129,8 @@ const FULL_SHA_RE = /^[0-9a-f]{40}$/i;
  * sources from smuggling the fields through the spread). `ref` is freeform (any
  * branch/tag name); `sha` must satisfy FULL_SHA_RE or it is DROPPED so the
  * source degrades to unpinned rather than mis-keying the clone cache or
- * emitting a `sha-<12hex>` version that fails SHA_VERSION_RE. A valid sha is
- * lowercased for the same reason (SHA_VERSION_RE is lowercase-only).
+ * emitting a commit version (GV-01) that is not 12 hex characters. A valid sha
+ * is lowercased for the same reason: the renderer reads lowercase hex only.
  */
 function withOptionalSourceFields<T extends GitHubSource | UrlSource | GitSubdirSource>(
   source: T,
@@ -397,6 +397,11 @@ function parseUrlSourceForm(raw: string): GitHubSource | UrlSource | UnknownSour
 /**
  * The scheme-less `owner/repo` shorthands.
  *
+ * SRC-03: `owner/repo#<ref>` folds into `github` plus a ref. The split is on
+ * the first `#` when no `@` comes before it, as Claude Code 2.1.296's shorthand
+ * does. An empty `#` ref reads as no ref, the way the URL form drops an empty
+ * fragment (D-MF-07, a recorded divergence: Claude Code refuses it).
+ *
  * D-76-04: `owner/repo@<ref>` folds into `github` plus a ref. The split is on
  * the LAST `@`, and the fold only happens when the left side is a valid
  * `owner/repo`. SP-5: a bare `owner/repo` is exactly one slash with both
@@ -404,6 +409,12 @@ function parseUrlSourceForm(raw: string): GitHubSource | UrlSource | UnknownSour
  * string, whitespace) is unknown.
  */
 function parseShorthandSourceForm(raw: string): ParsedSource {
+  const hashIdx = raw.indexOf("#");
+  const firstAtIdx = raw.indexOf("@");
+  if (hashIdx !== -1 && (firstAtIdx === -1 || firstAtIdx > hashIdx)) {
+    return parseShorthandHashRef(raw, hashIdx);
+  }
+
   const atIdx = raw.lastIndexOf("@");
   if (atIdx !== -1) {
     const github = parseOwnerRepo(raw.slice(0, atIdx), raw);
@@ -423,9 +434,22 @@ function parseShorthandSourceForm(raw: string): ParsedSource {
   return { kind: "unknown", raw, reason: nonRelativeReason(raw) };
 }
 
+/** SRC-03 / D-MF-07: split `owner/repo#<ref>` at its first `#`, `hashIdx`. */
+function parseShorthandHashRef(raw: string, hashIdx: number): ParsedSource {
+  const github = parseOwnerRepo(raw.slice(0, hashIdx), raw);
+  if (github.kind !== "github") {
+    return { kind: "unknown", raw, reason: nonRelativeReason(raw) };
+  }
+
+  const ref = raw.slice(hashIdx + 1);
+  return ref.length > 0 ? { ...github, ref } : github;
+}
+
+/** Parses a manifest or user-supplied source into its `ParsedSource` variant; never throws. */
 export function parsePluginSource(raw: unknown): ParsedSource {
   if (typeof raw !== "string") {
     if (typeof raw === "object" && raw !== null && !Array.isArray(raw)) {
+      // A non-array object is a string-keyed record once its values are `unknown`.
       return parseObjectPluginSource(raw as Record<string, unknown>);
     }
 
@@ -517,7 +541,7 @@ export function stripSlashAndFragment(input: string): { base: string; ref: strin
  * directory (D-2-05).
  *
  * D-2-03: this string is what `pluginCloneKey` and `pluginMirrorKey` hash, so
- * its composition order is pinned by `tests/domain/source.test.ts`'s identity
+ * its composition order is pinned by `test/domain/source.test.ts`'s identity
  * table. `stripSlashAndFragment` composes the same two steps in the same order
  * for the wire form and differs only in keeping `.git`; the two share no
  * composition, so a correction to the wire form cannot move the cache identity.
@@ -611,6 +635,7 @@ function gitHubUrlPath(raw: string): string | undefined {
     host = host.slice("www.".length);
   }
 
+  // eslint-disable-next-line local/no-github-literal -- GHB-02: the parser recognizes github.com spellings; the override changes only where bytes go
   return host === "github.com" ? rest.slice(slashIdx + 1) : undefined;
 }
 
@@ -627,6 +652,7 @@ function parseGitHubUrl(raw: string, rest: string): GitHubSource | UnknownSource
     return {
       kind: "unknown",
       raw,
+      // eslint-disable-next-line local/no-github-literal -- GHB-02: a reason names the github.com form the user types
       reason: `${raw} is a browser URL; use https://github.com/${ownerRepo}#${ref} instead`,
     };
   }
@@ -641,6 +667,7 @@ function parseGitHubUrl(raw: string, rest: string): GitHubSource | UnknownSource
     return {
       kind: "unknown",
       raw,
+      // eslint-disable-next-line local/no-github-literal -- GHB-02: a reason names the github.com form the user types
       reason: `${raw} must be https://github.com/<owner>/<repo>[.git][#<ref>]`,
     };
   }
@@ -676,6 +703,9 @@ export function githubSource(raw: string): GitHubSource {
   return parsed;
 }
 
+/** The outcome of comparing a stored source record with a planned source. */
+export type SamePlannedSourceResult = "same" | "different" | "unknown-stored";
+
 /**
  * Compare a stored source record against a planned raw source string for
  * semantic equality.
@@ -694,18 +724,16 @@ export function githubSource(raw: string): GitHubSource {
  *     source-mismatch.
  *
  * The tri-state union (vs `boolean | "unknown-stored"`) closes a
- * truthy-coercion footgun: under the prior shape a bare
- * `if (samePlannedSource(...))` silently treated `"unknown-stored"` (a
- * corrupt record) as a source match. With the literal union the compiler
- * forces every caller to switch on the discriminant explicitly.
+ * truthy-coercion footgun: a bare `if (samePlannedSource(...))` would treat
+ * `"unknown-stored"` (a corrupt record) as a source match. With the literal
+ * union the compiler forces every caller to switch on the discriminant
+ * explicitly.
  *
  * Used by `orchestrators/import/execute.ts` (existing import path) and
  * `orchestrators/reconcile/plan.ts` (the pure planner foundation).
  * Lives in `domain/source.ts` so both callers import a leaf-pure helper
  * without pulling in either orchestrator's effectful transitive closure.
  */
-export type SamePlannedSourceResult = "same" | "different" | "unknown-stored";
-
 export function samePlannedSource(stored: unknown, plannedRaw: string): SamePlannedSourceResult {
   const planned = parsePluginSource(plannedRaw);
   const current = parsePluginSource(stored);
@@ -759,6 +787,7 @@ export function sourceLogical(source: ParsedSource): string {
 
     case "github": {
       const refSuffix = source.ref === undefined ? "" : `#${source.ref}`;
+      // eslint-disable-next-line local/no-github-literal -- GHB-04: list and info show GitHub sources in github.com terms
       return `https://github.com/${source.owner}/${source.repo}${refSuffix}`;
     }
 

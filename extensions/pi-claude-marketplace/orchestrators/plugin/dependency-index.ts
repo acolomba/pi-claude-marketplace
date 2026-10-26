@@ -20,9 +20,15 @@
 // cache). Nothing here names a git surface, and the network-free gate pins
 // this file so nothing can.
 //
+// DLS-01 / DLS-D1: a record its loaded manifest no longer lists is read from
+// its installed copy (`readInstalledCopyDeclaration`), because Pi keeps such a
+// plugin running and it keeps the dependencies it runs with. Upstream reads
+// none: it does not load a delisted plugin at all.
+//
 // D-05-07: the walk FAILS CLOSED. The first record whose declarations cannot
-// be established -- its marketplace manifest fails to load, that manifest does
-// not list it, or its declaration parses as unusable -- ends the walk with a
+// be established -- its marketplace manifest fails to load, neither that
+// manifest nor its installed copy states them, or its declaration parses as
+// unusable -- ends the walk with a
 // failure arm naming that record, because deleting on incomplete information
 // is the one outcome the callers must never produce. A record with no usable
 // answer is never read as "declares nothing".
@@ -36,10 +42,17 @@
 // cascade keeps its own entry fallback for that case (D-01-07).
 //
 // The failure arm's `cause.message` IS the rendered cause line. It carries the
-// declarer's `name@marketplace` key and a field path, a fixed phrase, or a
-// path-redacted message -- never an absolute path -- and it is built WITHOUT
-// `{ cause }` chaining, so the renderer's cause-chain walk cannot print the
-// raw underlying message behind it.
+// declarer's `name@marketplace` key and a fixed phrase or field path this
+// extension writes. It never carries the text of a manifest that fails to
+// load, because that text comes from repository content (T-05-04). A load
+// failure gets a fixed reason chosen by the error's class or errno code, never
+// by its message, so a missing, an unreadable, and an invalid manifest stay
+// distinguishable. It is built WITHOUT `{ cause }` chaining, so the renderer's
+// cause-chain walk has no raw message to print behind it.
+//
+// The failure arm's `reason` is the closed-set token of the same fault, picked
+// by the same branch as the phrase. Only the row whose subject is the declarer
+// itself renders it: the load-time stale-declarer warning (REC-05).
 //
 // A declaration HOLDS its key whatever `version` or `sha` constraint it
 // carries. The closure walk's refusal of a `sha` pin is an install-time rule;
@@ -59,16 +72,34 @@
 
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
-import { errorMessage } from "../../shared/errors.ts";
-import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
+import { isRecordedButDisabled } from "../../persistence/state-io.ts";
+import { InvalidMarketplaceManifestError, isErrnoException } from "../../shared/errors.ts";
+import { ownValue } from "../../shared/own-key.ts";
+import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 
-import { readDependencyDeclaration } from "./dependency-declaration-read.ts";
+import {
+  readDependencyDeclaration,
+  readInstalledCopyDeclaration,
+} from "./dependency-declaration-read.ts";
 
 import type { DependencyDeclarationReader } from "./dependency-declaration-read.ts";
 import type { DeclaredDependency } from "../../domain/dependencies.ts";
 import type { DeclarationIndex, OrphanCandidate } from "../../domain/dependency-orphans.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
+import type { Reason } from "../../shared/notification-types.ts";
+
+/**
+ * REC-05: why a declarer's declarations could not be established, as the
+ * token its own row renders. A dropped catalog entry is `not in manifest`; a
+ * declaration the parser rejects is `invalid manifest`; an own manifest that is
+ * present but cannot be used is `unreadable manifest`. A marketplace manifest
+ * that fails to load takes the token `list` and `info` give the same fault
+ * (`narrowProbeError`), so one fault reads the same on every surface.
+ */
+export type DeclarerReadFailure =
+  | Extract<Reason, "not in manifest" | "invalid manifest" | "unreadable manifest">
+  | ReturnType<typeof narrowProbeError>;
 
 /**
  * One marketplace's record in the state document. Exported because the
@@ -119,13 +150,14 @@ export interface ScopeDeclarationIndexOptions extends ScopeDeclarationDetailOpti
  * The index and the walked records, or the first record whose declarations
  * could not be established (D-05-07). `cause.message` names the declarer and
  * says why it could not be read -- its marketplace does not list it, its
- * declaration is unusable, its marketplace manifest failed to load, or its own
- * manifest is present but cannot be read. No classified token rides along: the
- * row a caller renders is about the TARGET, and the declarer's read-failure
- * token would make a false claim about the target's own manifest (the row
- * grammar's brace states a fact about the row's subject). `candidates` holds
- * every indexed record (the excluded target omitted) in walk order, enabled or
- * disabled, whatever its provenance.
+ * declaration is unusable, its marketplace manifest is missing, cannot be read,
+ * or is invalid, or its own manifest is present but cannot be read. `reason`
+ * is the same fault as a closed-set token. A row about the TARGET never
+ * renders it: the declarer's read-failure token would make a false claim about
+ * the target's own manifest (the row grammar's brace states a fact about the
+ * row's subject). Only a row whose subject is the declarer does (REC-05).
+ * `candidates` holds every indexed record (the excluded target omitted) in walk
+ * order, enabled or disabled, whatever its provenance.
  */
 export type ScopeDeclarationIndexResult =
   | {
@@ -136,6 +168,7 @@ export type ScopeDeclarationIndexResult =
   | {
       readonly ok: false;
       readonly declarer: string;
+      readonly reason: DeclarerReadFailure;
       readonly cause: Error;
     };
 
@@ -155,19 +188,51 @@ export type ScopeDeclarationDetailResult =
   | {
       readonly ok: false;
       readonly declarer: string;
+      readonly reason: DeclarerReadFailure;
       readonly cause: Error;
     };
 
 /** One record's declarations, or the failure that ends the walk. */
 export type RecordDeclarations =
-  { readonly ok: true; readonly declared: readonly AddressedDependency[] } | IndexFailure;
+  | {
+      readonly ok: true;
+      readonly declared: readonly AddressedDependency[];
+      /** DLS-01: the declarations came from the installed copy of a delisted record. */
+      readonly delisted?: true;
+    }
+  | IndexFailure;
 
-function unreadableDeclarer(key: string, detail: string): IndexFailure {
+/**
+ * The failure that names `key`. `phrase` is a fixed phrase or field path this
+ * extension writes, never the text of a thrown error or of a file (T-05-04).
+ */
+function unreadableDeclarer(
+  key: string,
+  reason: DeclarerReadFailure,
+  phrase: string,
+): IndexFailure {
   return {
     ok: false,
     declarer: key,
-    cause: new Error(`cannot read the dependencies of ${key}: ${detail}`),
+    reason,
+    cause: new Error(`cannot read the dependencies of ${key}: ${phrase}`),
   };
+}
+
+/**
+ * D-04 / T-05-04: why a marketplace manifest failed to load, as a fixed phrase
+ * picked by the error's class or errno code. The error's own message never
+ * reaches the cause line.
+ */
+function manifestLoadPhrase(err: unknown): string {
+  if (err instanceof InvalidMarketplaceManifestError) {
+    return "its marketplace manifest is invalid";
+  }
+
+  const code = isErrnoException(err) ? err.code : undefined;
+  return code === "ENOENT" || code === "ENOTDIR"
+    ? "its marketplace manifest is missing"
+    : "its marketplace manifest cannot be read";
 }
 
 /**
@@ -190,24 +255,35 @@ export async function readRecordDeclarations(
   let manifest: Awaited<ReturnType<typeof loadMarketplaceManifest>>;
   try {
     manifest = await (options.loadManifest ?? loadMarketplaceManifest)(marketplace.manifestPath);
-  } catch (err: unknown) {
-    return unreadableDeclarer(key, redactAbsolutePaths(errorMessage(err)));
+  } catch (err) {
+    return unreadableDeclarer(key, narrowProbeError(err), manifestLoadPhrase(err));
   }
 
   const declared = lookupDeclaredPlugin(manifest, name);
-  if (declared.kind === "absent") {
-    return unreadableDeclarer(key, "not declared by its marketplace");
+  const read =
+    declared.kind === "absent"
+      ? await readInstalledCopy(options, marketplace, name)
+      : await readDependencyDeclaration({
+          marketplaceRoot: marketplace.marketplaceRoot,
+          entry: declared.entry,
+          locations: options.locations,
+          ...(options.reader !== undefined && { reader: options.reader }),
+          refuseUnusableOwnManifest: true,
+        });
+  if (read.kind === "absent") {
+    return unreadableDeclarer(
+      key,
+      "not in manifest",
+      "not declared by its marketplace, and its installed copy cannot be read",
+    );
   }
 
-  const read = await readDependencyDeclaration({
-    marketplaceRoot: marketplace.marketplaceRoot,
-    entry: declared.entry,
-    locations: options.locations,
-    ...(options.reader !== undefined && { reader: options.reader }),
-    refuseUnusableOwnManifest: true,
-  });
   if (read.kind === "unusable") {
-    return unreadableDeclarer(key, read.detail);
+    return unreadableDeclarer(
+      key,
+      "ownManifest" in read ? "unreadable manifest" : "invalid manifest",
+      read.detail,
+    );
   }
 
   return {
@@ -216,7 +292,30 @@ export async function readRecordDeclarations(
       ...dep,
       marketplace: dep.marketplace ?? marketplace.name,
     })),
+    ...(declared.kind === "absent" && { delisted: true }),
   };
+}
+
+/**
+ * DLS-01: a delisted record's declarations come from its installed copy, the
+ * root its install recorded (`resolvedSource`), admitted only inside the
+ * marketplace clone or the scope's `plugin-clones/` (NFR-10).
+ */
+async function readInstalledCopy(
+  options: ScopeDeclarationDetailOptions,
+  marketplace: MarketplaceStateRecord,
+  name: string,
+): ReturnType<typeof readInstalledCopyDeclaration> {
+  const record = ownValue(marketplace.plugins, name);
+  if (record === undefined) {
+    return { kind: "absent" };
+  }
+
+  return readInstalledCopyDeclaration({
+    pluginRoot: record.resolvedSource,
+    ownerRoots: [marketplace.marketplaceRoot, options.locations.pluginClonesDir],
+    ...(options.reader !== undefined && { reader: options.reader }),
+  });
 }
 
 /** The `name@marketplace` key one addressed declaration names. */
@@ -275,4 +374,26 @@ export async function buildScopeDeclarationDetail(
   }
 
   return { ok: true, declarations };
+}
+
+/**
+ * UNI-01 / D-23-07: drops every holder the user or a config disabled. Claude
+ * Code counts only enabled plugins as reverse dependents, so such a plugin
+ * neither holds a named uninstall nor is named on its row. A record the
+ * load-time check held down (`dependencyDisabled`) is still enabled in its
+ * config, so it keeps holding, as Claude Code reads the settings. Shared by a
+ * named uninstall and a layer `marketplace remove` (MPR-01).
+ */
+export function withoutDisabledHolders(
+  index: DeclarationIndex,
+  state: ExtensionState,
+): DeclarationIndex {
+  const disabled = new Set(
+    Object.entries(state.marketplaces).flatMap(([marketplace, record]) =>
+      Object.entries(record.plugins)
+        .filter(([, plugin]) => isRecordedButDisabled(plugin) && plugin.dependencyDisabled !== true)
+        .map(([name]) => `${name}@${marketplace}`),
+    ),
+  );
+  return new Map([...index].filter(([holder]) => !disabled.has(holder)));
 }

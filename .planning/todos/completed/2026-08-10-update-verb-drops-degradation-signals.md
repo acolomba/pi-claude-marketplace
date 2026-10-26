@@ -85,7 +85,7 @@ Work items:
    command-local render map. **Do not skip this one**: the command-context map
    is what actually renders the verb's output, and WR-09 showed that fixing the
    central arm alone raises the severity while still dropping the brace.
-5. `docs/output-catalog.md` + `tests/architecture/catalog-uat.test.ts` — a
+5. `docs/output-catalog.md` + `test/architecture/catalog-uat.test.ts` — a
    `update-degraded-component` state and its byte fixture.
 6. `docs/messaging-style-guide.md` — extend the optional-`reasons` bullet from
    two variants to three.

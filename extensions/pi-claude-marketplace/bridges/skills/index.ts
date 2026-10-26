@@ -14,17 +14,10 @@ import { createUnstagePluginSkills } from "./unstage.ts";
 
 import type { SkillsUnstageRemover } from "./unstage.ts";
 
-export {
-  abortPreparedSkills,
-  commitPreparedSkills,
-  finalizeSkillsReplacement,
-  prepareStageSkills,
-  replacePreparedSkills,
-  rollbackSkillsReplacement,
-} from "./stage.ts";
+export { abortPreparedSkills, commitPreparedSkills, prepareStageSkills } from "./stage.ts";
 export { discoverPluginSkills } from "./discover.ts";
 
-export type { PreparedSkillsStaging, SkillsReplacement } from "./types.ts";
+export type { PreparedSkillsStaging } from "./types.ts";
 
 const NODE_SKILLS_UNSTAGE_REMOVER: SkillsUnstageRemover = {
   async removeTree(target: string): Promise<void> {

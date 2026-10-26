@@ -1,13 +1,9 @@
 # changes here will be overwritten by copier
-_commit: fa8629a
+_commit: 904d340
 _src_path: gh:acolomba/blueprint-typescript
-agents:
-  - claude
-  - codex
-  - pi
 author_email: acolomba@gmail.com
 author_name: Alessandro Colomba
-behavioral_tests: false
+behavioral_tests: true
 build: false
 codegraph: true
 copyright_license: MIT

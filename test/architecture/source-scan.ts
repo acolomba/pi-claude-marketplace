@@ -1,0 +1,158 @@
+/**
+ * Shared source-scanning mechanic for the architecture gates.
+ *
+ * Several gates assert that a named set of repository files carries none of a
+ * named set of forbidden textual surfaces, for example
+ * `test/architecture/no-test-only-production-surface.test.ts` and
+ * `test/architecture/no-lifecycle-default-enabled-read.test.ts`. The mechanic
+ * lives here so they share ONE implementation instead of duplicating it, and
+ * so a gate can reuse it without importing a `*.test.ts` module -- under
+ * `node:test`, importing a module that registers cases at its top level
+ * registers those cases a SECOND time in the importing file's run, doubling the
+ * work and misreporting the count (D-98-09).
+ *
+ * A third gate needs the opposite question -- which files DO carry a surface --
+ * and `filesMatching` answers it from the same read-and-strip mechanic, so a
+ * coverage case list can be bound to the tree instead of hand-maintained
+ * (`test/architecture/workflows-marker-coverage.test.ts`, WR-04).
+ *
+ * Every read goes through the `node:fs/promises` API rather than a subprocess
+ * line tool (D-98-10). A `grep`-style subprocess treats a file it classifies as
+ * binary as unprintable and reports nothing, which would green a gate on a file
+ * it never actually inspected; `readFile(..., "utf8")` either yields the text or
+ * throws, so no target can be silently skipped.
+ *
+ * The scan reads from the repository root and reports the repository-relative
+ * paths it actually opened in `ScanReport.visited` (D-07-03). A target that does
+ * not exist fails the scan (WR-06), so a gate that deep-compares `visited`
+ * against its declared target list never reports success over a list it did
+ * not read.
+ *
+ * This file registers no case of its own.
+ */
+
+import assert from "node:assert/strict";
+import { readFile, readdir } from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+/** Repository root, resolved from this module's own URL (`test/architecture/`). */
+export const REPO_ROOT: string = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../..",
+);
+
+/**
+ * Strip block and line comments ahead of pattern matching.
+ *
+ * Mandatory for every scanning clause: source files carry header docstrings
+ * that legally NAME the forbidden symbols (e.g. "MUST NOT import platform/git"),
+ * so an unstripped scan fails on its own subject's prose rather than on real
+ * code.
+ */
+export function stripComments(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, "") // block comments
+    .replace(/^\s*\/\/.*$/gm, ""); // line comments
+}
+
+/** What one `assertNoForbiddenSurface` run actually looked at. */
+export interface ScanReport {
+  /** Repository-relative paths really opened, in declared target order. */
+  readonly visited: ReadonlyArray<string>;
+}
+
+/**
+ * Read every repository-relative `targets` entry, strip its comments, and
+ * accumulate one offender string per forbidden pattern match. Makes a SINGLE
+ * deep-equality assertion against an empty array, so a failure reports every
+ * offending file at once instead of only the first.
+ *
+ * `describeViolation` receives the accumulated offenders and returns the
+ * requirement-anchored failure message, keeping each gate's own wording with
+ * its own requirement IDs.
+ *
+ * WR-06: a target that does not exist FAILS. Skipping it silently meant that
+ * renaming, moving, or deleting a guarded file turned the gate green over zero
+ * inspected files -- the same "greened on a file it never read" failure mode the
+ * `readFile`-over-`grep` choice above exists to prevent, arriving by a different
+ * door.
+ *
+ * D-07-03: the returned `ScanReport` is the visitation half of the answer. A
+ * gate deep-compares `report.visited` against its own declared target list, so a
+ * shortened or reordered list fails instead of greening.
+ */
+export async function assertNoForbiddenSurface(
+  targets: ReadonlyArray<string>,
+  patterns: ReadonlyArray<{ readonly name: string; readonly pattern: RegExp }>,
+  describeViolation: (offenders: ReadonlyArray<string>) => string,
+): Promise<ScanReport> {
+  const offenders: string[] = [];
+  const visited: string[] = [];
+
+  for (const rel of targets) {
+    let src: string;
+    try {
+      src = await readFile(path.join(REPO_ROOT, rel), "utf8");
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT") {
+        assert.fail(
+          `source-scan: target ${rel} does not exist, so this gate inspected nothing for it. A renamed or deleted target silently uncovers the gate.`,
+        );
+      }
+
+      throw err;
+    }
+
+    visited.push(rel);
+
+    const stripped = stripComments(src);
+    for (const { name, pattern } of patterns) {
+      if (pattern.test(stripped)) {
+        offenders.push(`${rel} matches forbidden ${name}: ${String(pattern)}`);
+      }
+    }
+  }
+
+  assert.deepEqual(offenders, [], describeViolation(offenders));
+
+  return { visited };
+}
+
+/**
+ * Walk every `.ts` file below a repository-relative directory and return the
+ * repo-relative POSIX paths whose comment-stripped source matches `pattern`,
+ * sorted.
+ *
+ * The inverse of `assertNoForbiddenSurface`: that one takes a roster and proves
+ * a surface is absent from it, this one DISCOVERS the roster from a surface's
+ * presence. A coverage gate needs the second shape -- a hand-maintained case
+ * list can only prove the cases it already names, so binding it to a scan is
+ * what makes an unlisted site red instead of invisible.
+ *
+ * `pattern` must not carry the `g` flag: `RegExp.prototype.test` on a global
+ * regex advances `lastIndex` between calls and would skip files.
+ */
+export async function filesMatching(dirRel: string, pattern: RegExp): Promise<string[]> {
+  assert.ok(
+    !pattern.global,
+    `filesMatching: ${String(pattern)} is global; test() would be stateful`,
+  );
+  const names = await readdir(path.join(REPO_ROOT, dirRel), { recursive: true });
+  const matched: string[] = [];
+
+  for (const name of names) {
+    if (!name.endsWith(".ts")) {
+      continue;
+    }
+
+    const rel = path.posix.join(dirRel, name.split(path.sep).join("/"));
+    const src = await readFile(path.join(REPO_ROOT, rel), "utf8");
+    if (pattern.test(stripComments(src))) {
+      matched.push(rel);
+    }
+  }
+
+  return matched.sort();
+}

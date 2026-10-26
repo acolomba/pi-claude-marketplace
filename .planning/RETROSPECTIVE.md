@@ -2,6 +2,74 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: lifecycle-coverage -- Plugin Lifecycle Behavioral Tests
+
+**Completed:** 2026-10-25 on `claude/plugin-lifecycle-coverage-b1d431` (not yet pushed, no npm release)
+**Phases:** 30 | **Plans:** 76 | **Requirements:** 104/104 | **Audit:** `tech_debt`, no blockers (integration 8/8, flows 8/8); override close (24 phase digests stale from post-verification doc edits)
+
+### What Was Built
+- Cucumber scenarios for every `/claude:plugin` plugin lifecycle verb (825 scenarios in the suite), with plugins served from git repositories on the loopback git host as `github`, `url`, or `git-subdir` sources.
+- Parity fixes the scenarios surfaced: one version rule, one update/reinstall runner with per-commit git copies, aligned failure reasons and rows, and a delisted plugin read from its installed copy.
+- A read-only load with the new `/claude:plugin apply` (APL-D1/D2), and the `autoapply` setting and command (AAP-D1/D2).
+
+### What Worked
+- **Phases 2-15 in parallel after a shared-steps phase 1.** A file ownership table let a dozen phase sessions run at once without step collisions.
+- **Second-round decision batching.** Review findings across phases were collected in one notes file and answered by the user in two rounds, which became phases 20-27 instead of piecemeal interrupts.
+- **Upstream binary grep for every parity question** (Claude Code 2.1.309): it settled the delisted-plugin walk, the `apply` split and the `autoapply` command shape with cited evidence.
+
+### What Was Inefficient
+- **Phase 29 changed scope mid-flight.** "Load converges on the catalog" became "read-only load plus `apply`" after planning; a review revert reopened CR-01 and left the two-apply case for the user to accept.
+- **The `autoapply` command shape took two redirects** (on/off vs a verb pair vs the upstream `/effort` + `/fast` shape) because the first prompt carried a wrong premise about `marketplace autoupdate`.
+
+### Patterns Established
+- **Load previews, `apply` mutates.** Every load-time change goes through one shared read pass and convergence planner, so `pending`, the load and `apply` cannot disagree.
+- **A fail-closed set for config writes:** a write refuses while any of the four config files is invalid, so a later repair cannot trigger a mass uninstall.
+
+### Key Lessons
+1. **Check a premise against the code before passing it on.** The `autoupdate` on/off claim cost a round trip.
+2. **A revert in a review-fix loop reopens earlier findings.** Re-run the disposition ledger after any revert and put the reopened finding to the user at once.
+
+### Cost Observations
+- Model mix: opus throughout (planning, execution, review, fixing, verification)
+- Timeline: 2026-10-22 -> 2026-10-25, ~470 commits on the branch
+- Notable: up to a dozen phase sessions ran in parallel worktrees; each merge was gated by a combined `npm run check` (~3-4 min).
+
+---
+
+## Milestone: marketplace-features -- Marketplace Behavioral Tests (PR #271)
+
+**Completed:** 2026-10-21 on `features/cucumber-behavioral-tests` (not yet merged, no npm release)
+**Phases:** 14 (1-10, with 3.1-3.4 inserted) | **Plans:** 82 | **Tasks:** 183 | **Requirements:** 97/97 | **Audit:** `tech_debt`, no blockers (integration 9/9, flows 5/6); override close (one deferred todo)
+
+### What Was Built
+- A cucumber suite of 433 scenarios drives every `/claude:plugin marketplace` verb through a real headless Pi, with stand-ins for directory, file, https git URL, and GitHub sources, and no tag excluded.
+- A loopback HTTPS git host around `git http-backend`, armed per repository for 401, 404, 5xx, and dropped connections, and a GitHub base override (D-MF-01) that points GitHub sources at it.
+- Product fixes the scenarios surfaced: the `--local` migration leak, base/local layer partition, per-scope marketplace records for project installs, C-10, the `#ref` shorthand, and clearer git authentication causes.
+
+### What Worked
+- **Outlines written once with `@url`/`@github` blocks that waited for their kind phase.** The verb phases wrote every row; phases 9 and 10 only had to remove the tag exclusion, and 38 of 39 github rows passed on first run.
+- **Scenarios as a defect finder.** Four inserted phases (3.1-3.4) and five test-first product fixes came straight from scenarios that pinned upstream-parity behavior.
+- **Red proofs recorded as JSON evidence** (`*-RED.json`) before every product fix and for the LAYER-07 rows, so a fix is shown failing on the old code, not just passing on the new.
+
+### What Was Inefficient
+- **Verification went stale across the milestone.** Phases 1-7 and 9 read `stale` at close because later phases touched shared fixtures and orchestrators; all 12 needed a re-verify pass before the lifecycle could run.
+- **The review fix loop renumbered findings across re-reviews.** The scripted disposition ledger kept only the last two, so phase 10's ledger was rendered by hand, and its built-in commit bypassed the hooks (`ca1ec217`).
+
+### Patterns Established
+- **One `<source kind>` parameter and kind-neutral steps**, with tagged `Examples:` blocks per kind and a scratch tags config (relative path) for triage.
+- **Hermetic everything:** Pi, the git host, and fixture git run with `GIT_CONFIG_NOSYSTEM=1`, a sandbox global config, and no inherited `GIT_*`; a hostile-config control changes no result.
+
+### Key Lessons
+1. **Re-verify early when shared fixtures move.** A cheap verifier pass per touched phase at each phase close would avoid a 12-phase re-verification at milestone close.
+2. **Upstream-parity questions surface in review, not only in discuss.** SHORTREF-01 (the `@` split) was found by a reviewer in phase 10; check the upstream binary's parse rules when a phase touches source parsing.
+
+### Cost Observations
+- Model mix: opus research, planning, execution, review and fixing; sonnet verifiers, plan checker and integration checker
+- Timeline: 2026-10-15 -> 2026-10-21, ~662 commits on the branch
+- Notable: Phase 10 ran 7 sequential plans with an `npm run check` gate after each (~75 s), 3 review-fix iterations plus one targeted pass, and 12 parallel re-verifications in batches of 4.
+
+---
+
 ## Milestone: json-output -- Mode-Keyed Presentation Strategies
 
 **Completed:** 2026-10-11 on `features/json` (not yet merged, no npm release)

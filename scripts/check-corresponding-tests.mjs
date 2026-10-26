@@ -6,7 +6,7 @@ import ts from "typescript";
 
 const defaultProjectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const productionRoot = "extensions/pi-claude-marketplace";
-const testRoot = "tests";
+const testRoot = "test";
 const nonCorrespondingRoots = new Set(["architecture", "e2e", "integration"]);
 
 function toProjectPath(projectRoot, absolutePath) {
@@ -43,13 +43,13 @@ function isCorrespondingTestCandidate(testPath) {
 }
 
 function supplementalCompanions(testPath) {
-  const match = testPath.match(/^tests\/(domain|platform)\/(.+)-fake\.test\.ts$/);
+  const match = testPath.match(/^test\/(domain|platform)\/(.+)-fake\.test\.ts$/);
   if (match === null) {
     return undefined;
   }
 
   const [, concern, relativeName] = match;
-  const prefix = `tests/${concern}/${relativeName}`;
+  const prefix = `test/${concern}/${relativeName}`;
   return {
     contractPath: `${prefix}-contract.ts`,
     fakePath: `${prefix}-fake.ts`,
@@ -158,6 +158,7 @@ function checkCorrespondingTests(projectRoot = defaultProjectRoot) {
     }
   }
 
+  // fallow-ignore-next-line code-duplication -- reviewed: scripts/check-corresponding-tests.mjs comes from the TypeScript blueprint, so a helper shared with it would conflict on every blueprint sync; each gate script keeps its own CLI prologue
   for (const testPath of testPaths.filter(isCorrespondingTestCandidate)) {
     if (isStructuralSupplement(projectRoot, testPath)) {
       continue;
@@ -198,6 +199,7 @@ function main() {
   }
 
   for (const violation of violations) {
+    // fallow-ignore-next-line code-duplication -- reviewed: scripts/check-corresponding-tests.mjs comes from the TypeScript blueprint, so a helper shared with it would conflict on every blueprint sync; each gate script keeps its own CLI prologue
     process.stderr.write(`${violation.kind}: ${violation.path}\n`);
   }
 

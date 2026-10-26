@@ -1,7 +1,7 @@
 // edge/handlers/marketplace/update.ts
 //
-// Thin-shim handler factory for
-// `/claude:plugin marketplace update [<name>] [--scope user|project]`.
+// Thin-shim handler factory for `marketplace update`; its usage line comes
+// from `marketplaceUsage("update")`.
 //
 // Two forms via optional positional:
 //   - bare    -> updateAllMarketplaces
@@ -26,11 +26,12 @@ import {
 } from "../../../orchestrators/marketplace/update.ts";
 import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseCommandArgs } from "../../args-schema.ts";
+import { marketplaceUsage } from "../../router.ts";
 
 import type { SubcommandHandler } from "../../router.ts";
 import type { EdgeDeps } from "../../types.ts";
 
-const USAGE = "Usage: /claude:plugin marketplace update [<name>] [--scope user|project]";
+const USAGE = marketplaceUsage("update");
 
 export function makeMarketplaceUpdateHandler(
   deps: Pick<EdgeDeps, "beginPluginUpdateRun" | "completionCache" | "gitOps">,
@@ -39,7 +40,7 @@ export function makeMarketplaceUpdateHandler(
     const parsed = parseCommandArgs(
       args,
       {
-        positional: [{ name: "name", required: false }] as const,
+        positional: [{ name: "name", label: "Marketplace name", required: false }] as const,
         usage: USAGE,
       },
       (message) => {
@@ -55,7 +56,7 @@ export function makeMarketplaceUpdateHandler(
       return;
     }
 
-    const pluginUpdate = deps.beginPluginUpdateRun();
+    const pluginUpdate = deps.beginPluginUpdateRun({ ctx, run });
     if (parsed.name === undefined) {
       await updateAllMarketplaces({
         completionCache: deps.completionCache,

@@ -10,13 +10,11 @@
 
 export {
   abortPreparedAgents,
+  assertAgentCommitTargets,
   commitPreparedAgents,
-  finalizeAgentsReplacement,
   prepareStagePluginAgents,
-  replacePreparedAgents,
-  rollbackAgentsReplacement,
 } from "./stage.ts";
 export { unstagePluginAgents } from "./unstage.ts";
 export { discoverPluginAgents } from "./discover.ts";
 
-export type { AgentsReplacement, PreparedAgentsStaging } from "./types.ts";
+export type { PreparedAgentsStaging } from "./types.ts";

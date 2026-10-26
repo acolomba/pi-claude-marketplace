@@ -33,6 +33,7 @@ import path from "node:path";
 
 import { errorMessage, isErrnoException, PluginShapeError } from "../shared/errors.ts";
 import { PathContainmentError, assertPathInside } from "../shared/path-safety.ts";
+import { SOURCE_DIR_MISSING_NOTE } from "../shared/probe-classifiers.ts";
 
 import { collectStrictComponentPaths, type ComponentPathResolution } from "./component-paths.ts";
 import { PLUGIN_MANIFEST_VALIDATOR, type PluginEntry } from "./components/plugin.ts";
@@ -52,6 +53,7 @@ import {
 import { collectUnsupportedKinds } from "./unsupported-components.ts";
 
 import type {
+  GitPluginRootResult,
   ResolveContext,
   ResolvedPlugin,
   ResolvedPluginInstallable,
@@ -389,6 +391,9 @@ function resolveDescription(
   return entry.description === "" ? undefined : entry.description;
 }
 
+type SourcePluginRoot =
+  { kind: "ok"; pluginRoot: string } | { kind: "unavailable"; result: ResolvedPluginUnavailable };
+
 /**
  * PURL-01 / PURL-03: derive the pluginRoot for an already-supported source kind.
  *
@@ -420,27 +425,11 @@ async function deriveSourcePluginRoot(
   ctx: ResolveContext,
   parsedSource: SupportedParsedSource,
   partial: PartialResolution,
-): Promise<
-  { kind: "ok"; pluginRoot: string } | { kind: "unavailable"; result: ResolvedPluginUnavailable }
-> {
+): Promise<SourcePluginRoot> {
   if (parsedSource.kind === "path") {
     if (ctx.resolvePathPluginRoot !== undefined && ctx.pathPluginPin !== undefined) {
       const r = await ctx.resolvePathPluginRoot(parsedSource, ctx.pathPluginPin);
-      switch (r.kind) {
-        case "materialized":
-          return { kind: "ok", pluginRoot: r.pluginRoot };
-        case "escapes":
-        case "missing-subdir":
-          return {
-            kind: "unavailable",
-            result: unavailable(entry.name, [...partial.notes, r.detail]),
-          };
-        case "not-cached":
-          return {
-            kind: "unavailable",
-            result: unavailable(entry.name, [...partial.notes, `not installed`]),
-          };
-      }
+      return pluginRootFromResult(entry, partial, r);
     }
 
     const pluginRoot = path.resolve(ctx.marketplaceRoot, parsedSource.raw);
@@ -468,6 +457,19 @@ async function deriveSourcePluginRoot(
   }
 
   const r = await ctx.resolveGitPluginRoot(parsedSource);
+  return pluginRootFromResult(entry, partial, r);
+}
+
+/**
+ * Map a pinned-path or git root resolution to the source-root verdict:
+ * `materialized` carries the pluginRoot, `escapes` / `missing-subdir` carry
+ * their structural detail, and `not-cached` reports the plugin is not installed.
+ */
+function pluginRootFromResult(
+  entry: PluginEntry,
+  partial: PartialResolution,
+  r: GitPluginRootResult,
+): SourcePluginRoot {
   switch (r.kind) {
     case "materialized":
       return { kind: "ok", pluginRoot: r.pluginRoot };
@@ -572,7 +574,7 @@ async function preflightStages(
       kind: "unavailable",
       result: unavailable(entry.name, [
         ...partial.notes,
-        `source dir does not exist: ${pluginRoot}`,
+        `${SOURCE_DIR_MISSING_NOTE}: ${pluginRoot}`,
       ]),
     };
   }
@@ -773,10 +775,10 @@ export function requireInstallable(
  * NFR-7). Throw shape mirrors `requireInstallable`; `r.notes` exists on all
  * three arms so `reasons` compiles.
  *
- * BFILL-01: the reinstall flow and its direct clone probe
- * (orchestrators/plugin/reinstall-clone-probe.ts) resolve through this gate so
- * they can re-materialize a partially-installed (`partially-available`)
- * plugin in place. The `--partial` install/update flag plumbing lands later.
+ * BFILL-01 / D-18-06: reinstall resolves through this gate (the shared
+ * runner admits a partial candidate for it), so it can re-materialize a
+ * partially-installed (`partially-available`) plugin in place. `install
+ * --partial` and `update --partial` resolve through it too.
  */
 export function requirePartialInstallable(
   r: ResolvedPlugin,

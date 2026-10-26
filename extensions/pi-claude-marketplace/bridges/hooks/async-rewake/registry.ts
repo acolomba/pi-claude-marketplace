@@ -8,7 +8,7 @@
 //
 // This is the THIRD of exactly THREE sanctioned `node:child_process` import
 // sites in the extension tree (closed-set whitelist at
-// tests/architecture/no-shell-out.test.ts). Adding a FOURTH site requires
+// test/architecture/no-shell-out.test.ts). Adding a FOURTH site requires
 // amending the whitelist set AND the sibling assertion in the SAME commit
 // (D-58-01 atomic-supersession). The first two sites are
 // platform/git-credential.ts (AUTH-08) and bridges/hooks/dispatch-exec.ts
@@ -357,6 +357,7 @@ export async function spawnAndRegister(
     child.once("error", (err) => {
       ladder.cancel();
       hookDebugLog(`async-rewake: child error dispatchId=${dispatchId}: ${errorMessage(err)}`);
+      // fallow-ignore-next-line code-duplication -- reviewed: the async-rewake and synchronous dispatch paths each own their child's stdin wiring; the shared part is a short EPIPE guard
       finalizeOnce(undefined);
     });
 

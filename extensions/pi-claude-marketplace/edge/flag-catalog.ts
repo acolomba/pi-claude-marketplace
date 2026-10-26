@@ -15,11 +15,11 @@
 //   - the scope-target flag name consumed by `extractLocalFlag`
 //     (`SCOPE_TARGET_FLAG`).
 //
-// Guarded BY TEST (tests/architecture/flag-catalog-drift.test.ts): the
-// reinstall/enable/disable/fetch/pending/import/bootstrap handlers hard-reject
-// unknown long flags inline rather than consuming the catalog, so the drift
-// guard pins every verb's parse-set to the exact flags its handler accepts (and
-// reconciles catalog vs emitted completions per verb).
+// Guarded BY TEST (test/architecture/flag-catalog-drift.test.ts): the
+// reinstall/enable/disable/fetch/pending/apply/import/bootstrap handlers
+// hard-reject unknown long flags inline rather than consuming the catalog, so
+// the drift guard pins every verb's parse-set to the exact flags its handler
+// accepts (and reconciles catalog vs emitted completions per verb).
 //
 // SCOPE: this catalog models ONLY the per-verb EXTRA flags. `--scope` is a
 // global base flag consumed by the parseArgs tokenizer and hard-coded as the
@@ -61,6 +61,8 @@ export type CatalogVerb =
   | "enable"
   | "disable"
   | "pending"
+  | "apply"
+  | "autoapply"
   | "import"
   | "bootstrap"
   | "browse"
@@ -75,18 +77,18 @@ export type CatalogVerb =
   | "marketplace noautoupdate";
 
 // The write-target flag, shared by install/update/uninstall/reinstall/enable/
-// disable. It selects the PHYSICAL config file within a scope
-// (`claude-plugins.local.json` instead of the shared `claude-plugins.json`), so
-// a change can stay out of a git-tracked config. It is orthogonal to `--scope`,
-// which selects the scope's state tree rather than the file inside it, and it is
-// valid at both scopes.
+// disable. It selects the PHYSICAL config file within a scope: the local
+// config `claude-plugins.local.json` instead of the base config
+// `claude-plugins.json`, so a change can stay out of a git-tracked config. It
+// is orthogonal to `--scope`, which selects the scope's state tree rather than
+// the file inside it, and it is valid at both scopes.
 //
 // Completion offers it because every one of those six verbs documents
 // `[--local]` in its `USAGE` string.
 const WRITE_TARGET_FLAG_ENTRY: FlagEntry = {
   name: "--local",
   description:
-    "Write to claude-plugins.local.json (per-machine override), not the shared claude-plugins.json",
+    "Write to the local config (claude-plugins.local.json), not the base config (claude-plugins.json)",
   parse: true,
   complete: true,
 };
@@ -201,6 +203,16 @@ const CATALOG: Record<CatalogVerb, readonly FlagEntry[]> = {
   enable: [WRITE_TARGET_FLAG_ENTRY],
   disable: [WRITE_TARGET_FLAG_ENTRY],
   pending: [],
+  apply: [],
+  // AAP-04: `--local` picks the local config to write, or lists only it.
+  autoapply: [
+    {
+      name: "--local",
+      description: "Set or show the local config (claude-plugins.local.json), not the base config",
+      parse: true,
+      complete: true,
+    },
+  ],
   import: [],
   bootstrap: [],
   // The three documentation/navigation verbs take no flags at all, not even

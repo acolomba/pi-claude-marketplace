@@ -9,21 +9,21 @@
 //
 // Duck-typed on the isomorphic-git error shapes (D-13: no isomorphic-git
 // import outside the platform tier); the project's own
-// `CrossOriginChallengeError` is narrowed by `instanceof`. Per-verb fallbacks
-// (fetch's `source missing` fold, install's auth-only narrowing) stay thin
-// wrappers at their call sites.
+// `CrossOriginChallengeError` and `StoredCredentialRejectedError` are narrowed
+// by `instanceof`. Per-verb fallbacks (fetch's `source missing` fold) stay
+// thin wrappers at their call sites.
 
-import { CrossOriginChallengeError } from "./errors.ts";
+import {
+  CrossOriginChallengeError,
+  PinnedCommitMissingError,
+  StoredCredentialRejectedError,
+  withoutCleanupLeaks,
+} from "./errors.ts";
+import { gitHubWireUrl } from "./github-base-url.ts";
 
 type GitTransportReason = "network unreachable" | "authentication required";
-type GitSourceAccessReason = GitTransportReason | "source missing";
 
-const SOURCE_ACCESS_HTTP_STATUS_REASONS = new Map<number, GitSourceAccessReason>([
-  [404, "source missing"],
-  [408, "network unreachable"],
-  [410, "source missing"],
-  [429, "network unreachable"],
-]);
+const SOURCE_MISSING_HTTP_STATUSES = new Set([404, 410]);
 
 const NETWORK_ERRNO_CODES = new Set([
   "ENETUNREACH",
@@ -33,20 +33,6 @@ const NETWORK_ERRNO_CODES = new Set([
   "ECONNRESET",
   "EAI_AGAIN",
 ]);
-
-function classifySourceAccessHttpStatus(
-  statusCode: number | undefined,
-): GitSourceAccessReason | undefined {
-  if (statusCode === undefined) {
-    return undefined;
-  }
-
-  return SOURCE_ACCESS_HTTP_STATUS_REASONS.get(statusCode) ?? classifyServerHttpStatus(statusCode);
-}
-
-function classifyServerHttpStatus(statusCode: number): GitSourceAccessReason | undefined {
-  return statusCode >= 500 && statusCode < 600 ? "network unreachable" : undefined;
-}
 
 function classifyNetworkErrno(code: string | undefined): GitTransportReason | undefined {
   return code !== undefined && NETWORK_ERRNO_CODES.has(code) ? "network unreachable" : undefined;
@@ -58,38 +44,46 @@ function classifyNetworkErrno(code: string | undefined): GitTransportReason | un
  *
  *   - `CrossOriginChallengeError` -> `authentication required`: a hop reached
  *     after a redirect to another origin asked for credentials (Q-02).
+ *   - `StoredCredentialRejectedError` -> `authentication required`: the host
+ *     refused the stored credential it was sent (GAUTH-04).
  *   - isomorphic-git `HttpError` (`.code === "HttpError"`) with a 401/403
- *     status -> `authentication required` (a private clone challenge, or a
- *     still-401 after a fresh credential).
+ *     status -> `authentication required`: a 401/403 that no auth callback
+ *     answered, such as a 403, or a 401 with no bundle.
  *   - `UserCanceledError` (both `code` and `name` carry the string) ->
- *     `authentication required`. A device flow that terminates unsuccessfully
- *     (denied / expired / poll network error) makes platform/git.ts's onAuth
- *     return `{ cancel: true }`, which isomorphic-git throws as
- *     `UserCanceledError` -- a real auth failure, NOT an HttpError 401/403.
+ *     `authentication required`. A stored-credential helper miss, a device
+ *     flow that terminates unsuccessfully (denied / expired / poll network
+ *     error), or a device-flow credential the host refuses makes
+ *     `platform/git-auth-callbacks.ts` return `{ cancel: true }`, which
+ *     isomorphic-git throws as `UserCanceledError` -- a real auth failure, NOT
+ *     an HttpError 401/403.
  *   - network errno ladder -> `network unreachable`.
  *
  * Returns undefined for any other throw so each caller keeps its own
- * fallthrough (e.g. update's `no longer installable`, info's
- * `narrowProbeError` ladder).
+ * fallthrough (e.g. info's `narrowProbeError` ladder). The error behind a
+ * cleanup leak is the one classified (INR-02).
  */
 export function classifyGitTransportFailure(
-  err: unknown,
+  thrown: unknown,
 ): "network unreachable" | "authentication required" | undefined {
-  if (!(err instanceof Error)) {
+  const error = withoutCleanupLeaks(thrown);
+  if (!(error instanceof Error)) {
     return undefined;
   }
 
-  if (err instanceof CrossOriginChallengeError) {
+  if (
+    error instanceof CrossOriginChallengeError ||
+    error instanceof StoredCredentialRejectedError
+  ) {
     return "authentication required";
   }
 
-  const code = (err as NodeJS.ErrnoException).code;
-  const statusCode = (err as { data?: { statusCode?: number } }).data?.statusCode;
+  const code = (error as NodeJS.ErrnoException).code;
+  const statusCode = (error as { data?: { statusCode?: number } }).data?.statusCode;
   if (code === "HttpError" && (statusCode === 401 || statusCode === 403)) {
     return "authentication required";
   }
 
-  if (code === "UserCanceledError" || err.name === "UserCanceledError") {
+  if (code === "UserCanceledError" || error.name === "UserCanceledError") {
     return "authentication required";
   }
 
@@ -97,28 +91,97 @@ export function classifyGitTransportFailure(
 }
 
 /**
- * Extend the shared transport ladder for a source-access operation. This
- * opt-in layer keeps caller-specific fallthroughs unchanged while classifying
- * repository absence and transient HTTP failures for commands such as
- * `marketplace add`.
+ * UPD-11 / ADD-10: the HTTP status of an isomorphic-git `HttpError` that the transport
+ * ladder leaves unclassified, so the 401/403 auth challenge stays
+ * `authentication required`. Returns undefined for any other error.
  */
-export function classifyGitSourceAccessFailure(
-  err: unknown,
-): "network unreachable" | "authentication required" | "source missing" | undefined {
-  const transportReason = classifyGitTransportFailure(err);
+export function hostHttpStatus(thrown: unknown): number | undefined {
+  const error = withoutCleanupLeaks(thrown);
+  if (!(error instanceof Error) || (error as NodeJS.ErrnoException).code !== "HttpError") {
+    return undefined;
+  }
+
+  const statusCode = (error as { data?: { statusCode?: unknown } }).data?.statusCode;
+  if (typeof statusCode !== "number" || classifyGitTransportFailure(error) !== undefined) {
+    return undefined;
+  }
+
+  return statusCode;
+}
+
+/**
+ * UPD-11 / ADD-10: the first cause frame of a fetch the git host answered with an HTTP
+ * status, `{status} on {url}`, because a reason token cannot carry either.
+ * `remoteUrl` is rebuilt to the URL the fetch sent: the fetch already went
+ * out, so the GitHub base override is valid here. Undefined when `error` has no
+ * such status.
+ */
+export function hostHttpFailureFrame(error: unknown, remoteUrl: string): string | undefined {
+  const status = hostHttpStatus(error);
+  return status === undefined ? undefined : `${status} on ${gitHubWireUrl(remoteUrl)}`;
+}
+
+/**
+ * isomorphic-git's `NotFoundError`, which a clone throws when the remote does
+ * not have the ref or object it asked for.
+ */
+function isRemoteNotFound(error: unknown): boolean {
+  return error instanceof Error && (error as NodeJS.ErrnoException).code === "NotFoundError";
+}
+
+/**
+ * Extend the shared transport ladder with the git host's own HTTP answer. A
+ * 404 or 410 is `source missing` (ADD-09, INS-06). Any other status outside
+ * the 401/403 auth challenge is `network error`, because the host was reached
+ * and refused; `network unreachable` stays for the connection errno codes.
+ * `install` uses this layer: a local read that finds no ref or object on a
+ * clone already on disk stays unclassified there, so it is never reported as
+ * a repository the host lacks. A pin that a fresh clone does not hold is
+ * `source missing` too (INR-03). The error behind a cleanup leak is the one
+ * classified (INR-02).
+ */
+export function classifyGitHostFailure(
+  error: unknown,
+):
+  | "network unreachable"
+  | "authentication required"
+  | "source missing"
+  | "network error"
+  | undefined {
+  if (withoutCleanupLeaks(error) instanceof PinnedCommitMissingError) {
+    return "source missing";
+  }
+
+  const transportReason = classifyGitTransportFailure(error);
   if (transportReason !== undefined) {
     return transportReason;
   }
 
-  if (!(err instanceof Error)) {
+  const status = hostHttpStatus(error);
+  if (status === undefined) {
     return undefined;
   }
 
-  const code = (err as NodeJS.ErrnoException).code;
-  if (code === "HttpError") {
-    const statusCode = (err as { data?: { statusCode?: number } }).data?.statusCode;
-    return classifySourceAccessHttpStatus(statusCode);
-  }
+  return SOURCE_MISSING_HTTP_STATUSES.has(status) ? "source missing" : "network error";
+}
 
-  return undefined;
+/**
+ * Extend the host ladder for a source-access operation such as `marketplace
+ * add`, which always clones fresh: a ref or object the remote does not have,
+ * like a repository the host does not have, is `source missing` too. The
+ * opt-in layer keeps other callers' fallthroughs unchanged: the transport
+ * and host ladders that update and the plugin verbs use leave a missing ref
+ * unclassified.
+ */
+export function classifyGitSourceAccessFailure(
+  error: unknown,
+):
+  | "network unreachable"
+  | "authentication required"
+  | "source missing"
+  | "network error"
+  | undefined {
+  return isRemoteNotFound(withoutCleanupLeaks(error))
+    ? "source missing"
+    : classifyGitHostFailure(error);
 }
