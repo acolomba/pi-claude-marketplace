@@ -584,7 +584,7 @@ Feature: Plugin import
       | marketplace name | marketplace scope | marketplace status | marketplace reasons | id           | name         | status  | reasons                 | scope | version | from  | to    | cause chain                                                              | cause truncated | leaks | rollback partial |
       | fixtures         | user              | skipped            | already added       | app@fixtures | app          | failed  | dependency failed       | user  |         |       |       | Dependency "aaa@fixtures" did not move into ^2.0.0.                      | false           |       |                  |
       | fixtures         | user              | skipped            | already added       | zzz@fixtures | zzz@fixtures | updated | dependency current copy | user  |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@fixtures" | false           |       |                  |
-      | fixtures         | user              | skipped            | already added       | aaa@fixtures | aaa@fixtures | failed  |                         | user  | 1.0.0   |       |       | EACCES: permission denied, copyfile 'notes.md'                           | false           |       |                  |
+      | fixtures         | user              | skipped            | already added       | aaa@fixtures | aaa@fixtures | failed  |                         | user  | 1.0.0   |       |       | {unreadable skill file copy error}                                       | false           |       |                  |
     Then the installation record of the user scope holds these plugins:
       | id           | version | enabled |
       | aaa@fixtures | 1.0.0   | true    |

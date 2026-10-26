@@ -11,7 +11,7 @@
  */
 
 import assert from "node:assert/strict";
-import { chmod, mkdir, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, cp, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { publishGitRepository, pushGitBranch, pushGitRepository } from "./git-marketplace.ts";
@@ -402,6 +402,36 @@ export async function restoreUnreadableSkillFile(
   const file = unreadableSkillFile(published, plugin);
   await chmod(file, 0o644);
   return file;
+}
+
+/**
+ * Copies the skill directory that holds the file `publishUnreadableSkillFile`
+ * left in `plugin` into a new directory under `scratch`, as Pi stages a skill,
+ * and returns the error the copy fails with. Each quoted path in its message
+ * is cut to its last segment, as Pi shows a cause, so the message reads as
+ * Pi reports the failed copy on this Node.
+ */
+export async function unreadableSkillCopyError(
+  published: PublishedMarketplace,
+  plugin: string,
+  scratch: string,
+): Promise<NodeJS.ErrnoException> {
+  const skillDir = path.dirname(unreadableSkillFile(published, plugin));
+  const error = await cp(skillDir, path.join(scratch, path.basename(skillDir)), {
+    recursive: true,
+    dereference: false,
+    verbatimSymlinks: true,
+    errorOnExist: true,
+    force: false,
+  }).then(
+    () => assert.fail(`copying ${skillDir} did not fail`),
+    (reason: unknown) => reason as NodeJS.ErrnoException,
+  );
+  error.message = error.message.replaceAll(
+    /'([^']+)'/gu,
+    (_quoted, quotedPath: string) => `'${path.basename(quotedPath)}'`,
+  );
+  return error;
 }
 
 // The skill file of `plugin` that `publishUnreadableSkillFile` writes.

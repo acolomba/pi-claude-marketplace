@@ -3,7 +3,8 @@
  */
 
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import path from "node:path";
 
 import { Given } from "@cucumber/cucumber";
 
@@ -15,6 +16,7 @@ import {
   restoreUnreadableSkillFile,
   removePublishedSource,
   rewritePublishedManifest,
+  unreadableSkillCopyError,
 } from "../../lib/published-marketplace.ts";
 
 import type { ScenarioWorld } from "../../support/world.ts";
@@ -92,8 +94,14 @@ Given(
 Given(
   "the published plugin {string} of the marketplace {string} has an unreadable skill file",
   async function (this: ScenarioWorld, plugin: string, name: string) {
-    const file = await publishUnreadableSkillFile(this.requirePublished(name), plugin);
+    const published = this.requirePublished(name);
+    const file = await publishUnreadableSkillFile(published, plugin);
     await assert.rejects(readFile(file), { code: "EACCES" });
+    const scratch = await mkdtemp(path.join(this.tokens.home, "skill-copy-"));
+    this.onRelease(() => rm(scratch, { recursive: true, force: true }));
+    const error = await unreadableSkillCopyError(published, plugin, scratch);
+    assert.deepStrictEqual([error.code, error.syscall], ["EACCES", "copyfile"]);
+    this.recordErrorMessage("{unreadable skill file copy error}", error.message);
   },
 );
 

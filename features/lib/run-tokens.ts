@@ -15,7 +15,12 @@
  * Code records for a git plugin that declares none, and a commit token such as
  * `{ghp commit 1}` for that revision's full 40-hex commit; commit dates change
  * every run, so the sha does too. A commit starts with its revision's digits,
- * so a result is projected through the commit tokens first.
+ * so a result is projected through the commit tokens first. An error token
+ * such as `{mcp-adapter.json read error}` stands for the message this Node
+ * gives a file call that a step set up to fail, which differs between Node
+ * majors; the step reads it back by making the same call. A message can hold
+ * a sandbox path, so a result is projected through the error tokens before
+ * any other.
  */
 
 /** The values the tokens stand for in one scenario. */
@@ -34,6 +39,8 @@ export interface RunTokens {
   readonly revisions: ReadonlyMap<string, string>;
   /** The full commit each commit token, such as `{ghp commit 1}`, stands for. */
   readonly commits: ReadonlyMap<string, string>;
+  /** The error message each error token, such as `{mcp-adapter.json read error}`, stands for. */
+  readonly errors: ReadonlyMap<string, string>;
 }
 
 const HOME_TOKEN = "{home}";
@@ -63,7 +70,7 @@ export function expandTokens(text: string, tokens: RunTokens): string {
     .replaceAll(PROJECT_DIR_TOKEN, tokens.projectDir)
     .replaceAll(AGENT_DIR_TOKEN, tokens.agentDir)
     .replaceAll(GIT_HOST_TOKEN, tokens.gitHost);
-  for (const [token, standsFor] of [...tokens.revisions, ...tokens.commits]) {
+  for (const [token, standsFor] of [...tokens.revisions, ...tokens.commits, ...tokens.errors]) {
     expanded = expanded.replaceAll(token, standsFor);
   }
 
@@ -73,7 +80,8 @@ export function expandTokens(text: string, tokens: RunTokens): string {
 /**
  * Projects the result value `value` of the field `key` back to tokens. A
  * `lastUpdatedAt` inside the scenario's window becomes `{scenario time}`;
- * otherwise every occurrence of a sandbox directory becomes its token, every
+ * otherwise every occurrence of a recorded error message becomes its error
+ * token, then every occurrence of a sandbox directory becomes its token, every
  * occurrence of the git host's address becomes `{git host}`, every
  * occurrence of a revision's commit becomes its commit token, and every
  * remaining occurrence of a revision's 12 digits becomes its revision token.
@@ -83,7 +91,12 @@ export function projectTokens(key: string, value: string, tokens: RunTokens): st
     return SCENARIO_TIME_TOKEN;
   }
 
-  let projected = value
+  let projected = value;
+  for (const [token, standsFor] of tokens.errors) {
+    projected = projected.replaceAll(standsFor, token);
+  }
+
+  projected = projected
     .replaceAll(tokens.home, HOME_TOKEN)
     .replaceAll(tokens.projectDir, PROJECT_DIR_TOKEN)
     .replaceAll(tokens.agentDir, AGENT_DIR_TOKEN)

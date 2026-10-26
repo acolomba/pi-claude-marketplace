@@ -70,6 +70,7 @@ export class ScenarioWorld extends World {
   requestWindow: RequestWindow | undefined = undefined;
   private readonly published = new Map<string, PublishedMarketplace>();
   private readonly gitRepositories = new Map<string, GitPluginRepository>();
+  private readonly errorMessages = new Map<string, string>();
   private readonly releases: Array<() => Promise<void> | void> = [];
   // A Pi this scenario started with an environment of its own; while set it
   // takes the place of the run's Pi.
@@ -127,7 +128,24 @@ export class ScenarioWorld extends World {
       scenarioStartedAt: this.startedAt,
       revisions: this.revisionTokens("revision", (sha) => sha.slice(0, 12)),
       commits: this.revisionTokens("commit", (sha) => sha),
+      errors: this.errorMessages,
     };
+  }
+
+  /**
+   * Records `message`, the wording this Node gives a failing file call, as the
+   * value of the error token `token`, such as `{mcp-adapter.json read error}`.
+   * A step that sets up the failure reads the wording back by making the same
+   * call, since Node majors word one errno differently. A second recording
+   * must agree with the first.
+   */
+  recordErrorMessage(token: string, message: string): void {
+    const recorded = this.errorMessages.get(token);
+    if (recorded !== undefined) {
+      assert.strictEqual(message, recorded, `${token} already stands for another message`);
+    }
+
+    this.errorMessages.set(token, message);
   }
 
   // One `{<repository> <noun> <n>}` token per published revision, standing

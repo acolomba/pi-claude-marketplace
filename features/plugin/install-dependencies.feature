@@ -723,7 +723,7 @@ Feature: Plugin install dependencies
       | marketplace name | marketplace scope | id        | name      | status  | reasons                 | scope   | version | from  | to    | cause chain                                                           | cause truncated | leaks | rollback partial |
       | tools            | project           | app@tools | app       | failed  | dependency failed       | project |         |       |       |                                                                       |                 |       |                  |
       | tools            | project           | zzz@tools | zzz@tools | updated | dependency current copy | project |         | 1.0.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@tools" | false           |       |                  |
-      | tools            | project           | aaa@tools | aaa@tools | failed  |                         | project | 1.0.0   |       |       | EACCES: permission denied, copyfile 'notes.md'                        | false           |       |                  |
+      | tools            | project           | aaa@tools | aaa@tools | failed  |                         | project | 1.0.0   |       |       | {unreadable skill file copy error}                                    | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | aaa@tools | 1.0.0   | true    |
@@ -868,10 +868,10 @@ Feature: Plugin install dependencies
       | needs reload | false                               |
       | summary      | Some plugin operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name      | status  | reasons           | scope   | version | from  | to    | cause chain                                    | cause truncated | leaks | rollback partial |
-      | tools            | project           | app@tools | app       | failed  | dependency failed | project |         |       |       |                                                |                 |       |                  |
-      | tools            | project           | ddd@tools | ddd@tools | updated | already disabled  | project |         | 1.0.0 | 2.0.0 |                                                |                 |       |                  |
-      | tools            | project           | aaa@tools | aaa@tools | failed  |                   | project | 1.0.0   |       |       | EACCES: permission denied, copyfile 'notes.md' | false           |       |                  |
+      | marketplace name | marketplace scope | id        | name      | status  | reasons           | scope   | version | from  | to    | cause chain                        | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed  | dependency failed | project |         |       |       |                                    |                 |       |                  |
+      | tools            | project           | ddd@tools | ddd@tools | updated | already disabled  | project |         | 1.0.0 | 2.0.0 |                                    |                 |       |                  |
+      | tools            | project           | aaa@tools | aaa@tools | failed  |                   | project | 1.0.0   |       |       | {unreadable skill file copy error} | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | aaa@tools | 1.0.0   | true    |

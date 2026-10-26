@@ -47,7 +47,12 @@ Given(
     // Not recursive, so a file already there fails the step.
     await mkdir(file);
     this.onRelease(() => rm(file, { recursive: true, force: true }));
-    await assert.rejects(readFile(file), { code: "EISDIR" });
+    const error = await readFile(file).then(
+      () => assert.fail(`reading ${file} did not fail`),
+      (reason: unknown) => reason as NodeJS.ErrnoException,
+    );
+    assert.deepStrictEqual([error.code, error.syscall], ["EISDIR", "read"]);
+    this.recordErrorMessage("{mcp-adapter.json read error}", error.message);
   },
 );
 

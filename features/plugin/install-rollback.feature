@@ -18,8 +18,8 @@ Feature: Plugin install rollback
       | needs reload | false                          |
       | summary      | A plugin operation has failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id            | name | status | reasons | scope   | version | cause chain                                                                         | cause truncated | leaks | rollback partial |
-      | fixtures         | project           | demo@fixtures | demo | failed |         | project | 1.0.0   | EISDIR: illegal operation on a directory, read '{project dir}/.pi/mcp-adapter.json' | false           |       |                  |
+      | marketplace name | marketplace scope | id            | name | status | reasons | scope   | version | cause chain                   | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo | failed |         | project | 1.0.0   | {mcp-adapter.json read error} | false           |       |                  |
     Then the "claude-plugins.json" file of the project scope declares no plugins
     Then the project scope has no installed plugins
 
