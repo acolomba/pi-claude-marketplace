@@ -15,10 +15,9 @@ import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { passThroughFlagNames } from "../../flag-catalog.ts";
 import { extractLocalFlag } from "../shared.ts";
 
-import { parseMapModelArgs, splitPluginMarketplaceRef } from "./shared.ts";
+import { parseMapModelArgs, parsePluginTarget } from "./shared.ts";
 
 import type { UpdatePluginsFn } from "../../../orchestrators/plugin/update-flow.ts";
-import type { UpdatePluginsTarget } from "../../../orchestrators/plugin/update-preflight.ts";
 import type { SubcommandHandler } from "../../router.ts";
 
 const USAGE =
@@ -50,26 +49,9 @@ export function makeUpdateHandler(updatePlugins: UpdatePluginsFn): SubcommandHan
       return;
     }
 
-    let target: UpdatePluginsTarget;
-    const ref = nonFlagPositionals[0];
-    if (ref === undefined) {
-      target = { kind: "all" };
-    } else if (ref.startsWith("@") && ref.length > 1) {
-      target = { kind: "marketplace", marketplace: ref.slice(1) };
-    } else {
-      const split = splitPluginMarketplaceRef(ref);
-      if (split === undefined) {
-        notifyUsageError(ctx, run, {
-          message: `Invalid <plugin>@<marketplace> ref: "${ref}".`,
-          usage: USAGE,
-        });
-        return;
-      }
-
-      target = {
-        kind: "plugin",
-        ...split,
-      };
+    const target = parsePluginTarget(nonFlagPositionals[0], ctx, run, USAGE);
+    if (target === undefined) {
+      return;
     }
 
     await updatePlugins({

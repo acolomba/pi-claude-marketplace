@@ -10,12 +10,13 @@ Run `gh pr view <number> --json number,headRefName,url,state` with the PR number
 
 Converge the PR's diff to review-clean before Sonar even runs. One review pass is never enough -- reviewers miss things, fixes introduce new problems, and the only way to know a fix worked is to review again -- so this is a bounded loop:
 
-1. **Scope.** Review the PR's changes: the branch's commits versus its base (merge-base with `main`) plus any uncommitted work. List the changed files (`git diff --name-only --diff-filter=d <merge-base>` plus `git status --short`) and note the `.ts` subset -- it drives step 2. If there is nothing to review, skip to Phase 2.
+1. **Scope.** Review the PR's changes: the branch's commits versus its base (merge-base with `main`) plus any uncommitted work. List the changed files (`git diff --name-only --diff-filter=d <merge-base>` plus `git status --short`) and note the `.ts` subset and the `features/` subset -- they drive step 2. If there is nothing to review, skip to Phase 2.
 
-2. **Project skill loop.** Converge every changed `.ts` file against the project skills before the broader review runs. Each subagent reads the skill's `SKILL.md`, then the rules files it points to for the files under review. Route each file by kind:
+2. **Project skill loop.** Converge every changed `.ts` file and every changed file under `features/` against the project skills before the broader review runs. Each subagent reads the skill's `SKILL.md`, then the rules files it points to for the files under review. Route each file by kind:
 
    - `.agents/skills/typescript-style/SKILL.md` for every changed `.ts` file.
-   - `.agents/skills/typescript-unit-tests/SKILL.md` for every changed `tests/**/*.ts` file, and for every changed production module together with its paired test (`extensions/pi-claude-marketplace/.../x.ts` ↔ `tests/.../x.test.ts`) -- it reviews the pair, so send a source module and its test to the same subagent.
+   - `.agents/skills/typescript-unit-tests/SKILL.md` for every changed `test/**/*.ts` file, and for every changed production module together with its paired test (`extensions/pi-claude-marketplace/.../x.ts` ↔ `test/.../x.test.ts`) -- it reviews the pair, so send a source module and its test to the same subagent.
+   - `.agents/skills/cucumber/SKILL.md` for every changed file under `features/`, feature files included. Send a feature file and the step modules its scenarios use to the same subagent.
 
    Batch units (files or source-test pairs) into groups of 5-10 per subagent instead of one per file -- group by module/directory where the split allows it, sizing toward 5 for large or complex files and toward 10 for small ones, so a large PR does not spend its context on a subagent per file. Spawn one subagent per batch, in parallel only over disjoint file sets. Each subagent loops over its batch: run the applicable skill(s) on each file, fix every finding at its root, run the skill again, and stop on a file only when the skill comes back clean for it -- cap three passes per file. A subagent edits only its own files and does not commit; when the batch returns, run the project's checks once and commit the pass, staging explicit paths (never `git add -A`). A file that has not converged after three passes is reported, not ground on.
 
@@ -25,7 +26,7 @@ Converge the PR's diff to review-clean before Sonar even runs. One review pass i
 
 5. **Fix, one cause at a time.** Address each Critical and Important finding at its root. Fix the actual defect; do not silence the reviewer with a blanket lint-disable or by deleting the test that caught it. After each fix, run the project's checks (`npm run check` and the pre-commit hooks) so a fix cannot quietly break the build, then commit it atomically. Never `--no-verify`. Delegate independent fixes to subagents.
 
-6. **Re-review.** Return to step 2 for every `.ts` file the fixes touched, then to step 3. The re-review is the point: it confirms the fixes landed and catches anything they introduced.
+6. **Re-review.** Return to step 2 for every `.ts` file and `features/` file the fixes touched, then to step 3. The re-review is the point: it confirms the fixes landed and catches anything they introduced.
 
 7. **Finish on advisory-only.** When the skill loop is clean for every changed file and the toolkit review returns no Critical or Important findings, make one pass over the Suggestions -- apply the ones that clearly improve the code, and note in one line why you leave the rest -- then stop. Optionally run the `simplify` aspect as a final polish; the toolkit is built to run that once a change passes review.
 

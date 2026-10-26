@@ -63,4 +63,4 @@ Either way, decide what the row says: the artifact state genuinely is
 unchanged, so `(skipped) {up-to-date}` may still be right even when the pin
 moved — but that should be an explicit, documented call rather than a
 side effect of the ordering. Pin whichever contract is chosen in the ENBL-09
-suite in `tests/orchestrators/plugin/update.test.ts`.
+suite in `test/orchestrators/plugin/update.test.ts`.

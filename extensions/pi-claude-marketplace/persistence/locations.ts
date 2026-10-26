@@ -64,10 +64,10 @@ export interface ScopedLocations {
    * plugin MCP servers are staged (AFILE-01, NFR-10).
    */
   readonly mcpAdapterJsonPath: string;
-  /** `<scopeRoot>/claude-plugins.json` -- declarative config base (CFG-01). */
-  readonly configJsonPath: string;
-  /** `<scopeRoot>/claude-plugins.local.json` -- per-machine override layer (CFG-02). */
-  readonly configLocalJsonPath: string;
+  /** `<scopeRoot>/claude-plugins.json` -- the base config (CFG-01). */
+  readonly baseConfigJsonPath: string;
+  /** `<scopeRoot>/claude-plugins.local.json` -- the local config (CFG-02). */
+  readonly localConfigJsonPath: string;
   /** `<extensionRoot>/skills-staging/` -- per-skill atomic-rename source (D-04). */
   readonly skillsStagingDir: string;
   /** `<extensionRoot>/commands-staging/` -- per-command atomic-rename source. */
@@ -210,14 +210,14 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
   const agentsIndexPath = path.join(extensionRoot, "agents-index.json");
   const mcpJsonPath = path.join(scopeRoot, "mcp.json");
   const mcpAdapterJsonPath = path.join(scopeRoot, "mcp-adapter.json");
-  // CFG-01 / CFG-02: declarative config base + per-machine override sit under
-  // scopeRoot at the same tier as agentsDir, mcpJsonPath and mcpAdapterJsonPath
+  // CFG-01 / CFG-02: the base config and the local config sit under scopeRoot
+  // at the same tier as agentsDir, mcpJsonPath and mcpAdapterJsonPath
   // (AFILE-01). NFR-10 containment
   // is enforced at the WRITE site (saveConfig) rather than here; both paths are
   // composed from hard-coded suffixes on scopeRoot so the T-03-04 disposition
   // below covering the suffix-only construction applies.
-  const configJsonPath = path.join(scopeRoot, "claude-plugins.json");
-  const configLocalJsonPath = path.join(scopeRoot, "claude-plugins.local.json");
+  const baseConfigJsonPath = path.join(scopeRoot, "claude-plugins.json");
+  const localConfigJsonPath = path.join(scopeRoot, "claude-plugins.local.json");
   const skillsStagingDir = path.join(extensionRoot, "skills-staging");
   const commandsStagingDir = path.join(extensionRoot, "commands-staging");
   const skillsTargetDir = path.join(extensionRoot, "resources", "skills");
@@ -291,8 +291,8 @@ export function locationsFor(scope: Scope, cwd: string): ScopedLocations {
     agentsIndexPath,
     mcpJsonPath,
     mcpAdapterJsonPath,
-    configJsonPath,
-    configLocalJsonPath,
+    baseConfigJsonPath,
+    localConfigJsonPath,
     skillsStagingDir,
     commandsStagingDir,
     skillsTargetDir,

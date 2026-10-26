@@ -17,7 +17,7 @@
 //
 // The only two `platform/git.ts` symbols this module may import are
 // `listTags` and `resolveTagOid`.
-// `tests/architecture/marketplace-tag-probe-offline.test.ts` pins that import
+// `test/architecture/marketplace-tag-probe-offline.test.ts` pins that import
 // set to exactly those two names as TAGS-01's automated, positive proof that
 // this module never reaches the network.
 

@@ -4,7 +4,7 @@ last_mapped_at: 2026-10-05
 ---
 # Codebase Structure
 
-**Analysis Date:** 2026-10-05
+**Analysis Date:** 2026-10-25
 
 ## Directory Layout
 
@@ -20,7 +20,7 @@ pi-claude-marketplace/
 │   ├── persistence/                    # atomic state.json / config.json / agents-index.json I/O
 │   ├── platform/                       # Pi API + git wrappers
 │   └── shared/                         # leaf utilities: notify, errors, path-safety, atomic-json
-├── tests/                              # 343 *.test.ts files, mirrors extensions/ layout, plus pi-runtime.ts support and index.test.ts
+├── test/                              # 343 *.test.ts files, mirrors extensions/ layout, plus pi-runtime.ts support and index.test.ts
 │   ├── architecture/                   # 49 tests — source-scan gates, catalog-uat/
 │   ├── bridges/                        # 69 tests + _fixtures/ (fixture plugin trees, no .test.ts inside)
 │   ├── domain/                         # 35 tests
@@ -53,13 +53,13 @@ pi-claude-marketplace/
 
 **`extensions/pi-claude-marketplace/edge/`:**
 - Purpose: parse `/claude:plugin` subcommand strings and CLI flags, dispatch to exactly one orchestrator
-- Contains: `router.ts`, `register.ts`, `args.ts`/`args-schema.ts`, `flag-catalog.ts`, `skill-aliases.ts`, `types.ts`, `browser/plugin-browser.ts` (pure-UI SelectList browser), `handlers/plugin/*.ts` (bootstrap, browse, enable-disable, fetch, help, import, info, install, list, pending, prune, reinstall, shared, uninstall, update), `handlers/marketplace/*.ts` (add, autoupdate, info, list, remove, shared, update), `handlers/shared.ts`, `handlers/tools.ts`, `completions/*.ts` (data, normalize, provider)
+- Contains: `router.ts`, `register.ts`, `args.ts`/`args-schema.ts`, `flag-catalog.ts`, `skill-aliases.ts`, `types.ts`, `browser/plugin-browser.ts` (pure-UI SelectList browser), `handlers/plugin/*.ts` (apply, autoapply, bootstrap, browse, enable-disable, fetch, help, import, info, install, list, pending, prune, reinstall, shared, uninstall, update), `handlers/marketplace/*.ts` (add, autoupdate, info, list, remove, shared, update), `handlers/shared.ts`, `handlers/tools.ts`, `completions/*.ts` (data, normalize, provider)
 - Key files: `edge/router.ts` (subcommand table), `edge/handlers/tools.ts` (MCP tool registration)
 
 **`extensions/pi-claude-marketplace/orchestrators/`:**
 - Purpose: business logic for every mutating and read-only command
-- Contains: `plugin/*.ts` (49 files; split verbs pair a `<verb>-flow.ts` ledger entry point with leaf modules: `install-flow.ts` + `install-outcome`/`install-cascade`/`install-clone-probe`/`install-declared-enabled`/`install-disable-cascade`; `update-flow.ts` + `update-swap`/`update-preflight`/`update-cascade`/`update-row`/`update-constraint-gate`; `reinstall-flow.ts` + `reinstall-clone-probe`/`reinstall-record`/`reinstall-replace`/`reinstall-targets`; `list-flow.ts` + `list-candidate-row`/`list-installed-row`/`list-orphan-fold`; single-file owners `uninstall.ts`, `info.ts`, `fetch.ts`, `enable-disable.ts`, `prune.ts` + `prune-rollback.ts`, `bootstrap.ts`; git/tag seams `clone-cache`, `clone-gc`, `git-source-probe`, `marketplace-tag-probe`, `dependency-tag-probe`; dependency helpers `dependency-declaration-read`, `dependency-index`; `operations.ts` (binds the real `runPhases` transaction), `plugin-state-classifier`, `discover-names`, `workflows-staging-gc`, `shared.ts`, plus a `*.messaging.ts` sibling per verb), `marketplace/*.ts` (add, remove, update, autoupdate, info, list, shared, plus `*.messaging.ts` siblings), `import/*.ts` (execute, execute.messaging, marketplaces, refs, settings, types, `index.ts` barrel), `reconcile/*.ts` (apply, apply-outcomes, backfill, plan, pending, notify, dependency-verdict, reconcile.messaging, types), top-level `discover.ts`, `edge-deps.ts`, `plugin-path.ts`, `auth-host.ts`, `scope-fanout.ts`, `skill-alias-state.ts`, `types.ts`
-- Key files: `orchestrators/plugin/install-outcome.ts` (inner 7-phase ledger), `install-cascade.ts` and `enable-disable.ts` (cascade ledgers), `orchestrators/reconcile/apply.ts` (drives `resources_discover` self-healing)
+- Contains: `plugin/*.ts` (51 files; split verbs pair a `<verb>-flow.ts` ledger entry point with leaf modules: `install-flow.ts` + `install-outcome`/`install-cascade`/`install-clone-probe`/`install-declared-enabled`/`install-disable-cascade`; `update-flow.ts` + `update-swap`/`update-preflight`/`update-cascade`/`update-row`/`update-constraint-gate`; `reinstall-flow.ts` + `reinstall-record`/`reinstall-targets`; `materialize-latest` (the update/reinstall/converge shared runner); `list-flow.ts` + `list-candidate-row`/`list-installed-row`/`list-orphan-fold`; single-file owners `uninstall.ts`, `info.ts`, `fetch.ts`, `enable-disable.ts`, `prune.ts` + `prune-rollback.ts`, `bootstrap.ts`; git/tag seams `clone-cache`, `clone-gc`, `git-source-probe`, `marketplace-tag-probe`, `dependency-tag-probe`; dependency helpers `dependency-declaration-read`, `dependency-index`; `operations.ts` (binds the real `runPhases` transaction), `plugin-state-classifier`, `discover-names`, `workflows-staging-gc`, `shared.ts`, plus a `*.messaging.ts` sibling per verb), `marketplace/*.ts` (add, remove, update, autoupdate, info, list, shared, plus `*.messaging.ts` siblings), `import/*.ts` (execute, execute.messaging, marketplaces, refs, settings, types, `index.ts` barrel), `reconcile/*.ts` (load, read-pass, apply, apply-outcomes, convergence, autoapply-setting, delisted-plugins, mcp-migration, plan, pending, notify, dependency-verdict, reconcile.messaging, types), top-level `discover.ts`, `edge-deps.ts`, `plugin-path.ts`, `auth-host.ts`, `scope-fanout.ts`, `skill-alias-state.ts`, `types.ts`
+- Key files: `orchestrators/plugin/install-outcome.ts` (inner 7-phase ledger), `install-cascade.ts` and `enable-disable.ts` (cascade ledgers), `orchestrators/reconcile/load.ts` (the read-only `resources_discover` pass, or `apply` when `autoapply` is on), `orchestrators/reconcile/apply.ts` (`/claude:plugin apply`)
 
 **`extensions/pi-claude-marketplace/bridges/`:**
 - Purpose: translate one Claude-plugin component kind into its Pi-native artifact
@@ -84,7 +84,7 @@ pi-claude-marketplace/
 
 **`extensions/pi-claude-marketplace/shared/`:**
 - Purpose: cross-cutting leaf utilities, no upward dependencies
-- Contains: `notification-types.ts`, `notification-grammar.ts` (largest module), `notification-summary.ts`, `notification-dispatch.ts` (sole `ctx.ui.notify` site), `notify-context.ts`, `notify-reasons.ts`, `compare-name-scope.ts`, `redact-absolute-paths.ts`, `path-containment.ts`, `bom.ts`, `regexp.ts`, `errors.ts`, `errors-bridges.ts`, `path-safety.ts`, `atomic-json.ts`, `fs-utils.ts`, `debug-log.ts`, `types.ts`, `vars.ts`, `git-failure-classifiers.ts`, `probe-classifiers.ts`, `extension-version.ts`, `markers.ts`, `session-env.ts`, `completion-cache.ts`, `concerns/` (soft-dep, hooks)
+- Contains: `notification-types.ts`, `notification-grammar.ts` (largest module), `notification-summary.ts`, `notification-dispatch.ts` (sole `ctx.ui.notify` site), `notify-context.ts`, `notify-reasons.ts`, `compare-name-scope.ts`, `redact-absolute-paths.ts`, `path-containment.ts`, `bom.ts`, `regexp.ts`, `errors.ts`, `errors-bridges.ts`, `path-safety.ts`, `atomic-json.ts`, `fs-utils.ts`, `debug-log.ts`, `types.ts`, `vars.ts`, `git-failure-classifiers.ts`, `probe-classifiers.ts`, `markers.ts`, `session-env.ts`, `completion-cache.ts`, `concerns/` (soft-dep, hooks)
 
 ## Key File Locations
 
@@ -95,7 +95,7 @@ pi-claude-marketplace/
 - `.fallowrc.json`: fallow entry point, health thresholds (`maxCyclomatic: 20`, `maxCognitive: 15`, and `maxCrap: 0`, which switches CRAP off), 14-zone boundary rules, and `rulePacks`, which loads `rule-packs/architecture.json`
 - `rule-packs/architecture.json`: the fallow rule pack, the call and import bans (stdio, console, `ui.notify`, Pi peer, `isomorphic-git`, `proper-lockfile`, `write-file-atomic`, network modules, `fetch`) scoped to `extensions/pi-claude-marketplace/**` with per-file chokepoint exemptions (see ARCHITECTURE.md and CONVENTIONS.md)
 - `eslint.config.js`: flat ESLint config, incl. `import-x/no-restricted-paths` (BLOCK C: the 8-folder boundary matrix plus the D-v1.0-01-11 ledger zones over `PLUGIN_LEDGERS`/`MARKETPLACE_LEDGERS`), and BLOCK F's default-deny NFR-5 network-free rules over every `orchestrators/` and `domain/` module outside `NETWORK_SEAMS`
-- `tsconfig.json`: strict compiler options, includes `extensions/**/*.ts` and `tests/**/*.ts`
+- `tsconfig.json`: strict compiler options, includes `extensions/**/*.ts` and `test/**/*.ts`
 
 **Core Logic:**
 - `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts`: install composition root; `install-outcome.ts` holds the 7-phase ledger body
@@ -103,7 +103,7 @@ pi-claude-marketplace/
 - `extensions/pi-claude-marketplace/domain/plugin-resolver.ts`: discriminated-union plugin resolver
 
 **Testing:**
-- `tests/architecture/source-scan.ts`: shared grep/comment-stripping helpers used by architecture tests
+- `test/architecture/source-scan.ts`: shared grep/comment-stripping helpers used by architecture tests
 
 ## Naming Conventions
 
@@ -125,7 +125,7 @@ pi-claude-marketplace/
 - Router entry: `extensions/pi-claude-marketplace/edge/router.ts`
 - Handler: `extensions/pi-claude-marketplace/edge/handlers/plugin/<verb>.ts` or `handlers/marketplace/<verb>.ts`
 - Business logic: `extensions/pi-claude-marketplace/orchestrators/plugin/<verb>.ts` or `<verb>-flow.ts` (+ `<verb>.messaging.ts`) or `orchestrators/marketplace/<verb>.ts`
-- Tests: `tests/edge/handlers/...` and `tests/orchestrators/plugin/<verb>.test.ts` or `tests/orchestrators/marketplace/<verb>.test.ts`
+- Tests: `test/edge/handlers/...` and `test/orchestrators/plugin/<verb>.test.ts` or `test/orchestrators/marketplace/<verb>.test.ts`
 
 **New artifact-kind bridge:**
 - Implementation: `extensions/pi-claude-marketplace/bridges/<kind>/` following the `discover.ts`/`stage.ts`/`unstage.ts`/`types.ts` shape, plus a barrel `index.ts`
@@ -143,13 +143,13 @@ pi-claude-marketplace/
 - Generated: Yes
 - Committed: No (not verified against `.gitignore` here, but cache directories are standard non-source)
 
-**`tests/fixtures/` and `tests/bridges/_fixtures/`:**
+**`test/fixtures/` and `test/bridges/_fixtures/`:**
 - Purpose: static fixture plugin trees (manifests, skills, agents, commands) consumed by bridge/discover tests
 - Generated: No — hand-authored fixture data
 - Committed: Yes
 - Contains no `.test.ts` files itself
 
-**`tests/live-uat/`:**
+**`test/live-uat/`:**
 - Purpose: standalone `.mjs` UAT drivers, excluded from the typed TypeScript tree (see the `eslint.config.js` ignored paths) and containing no `.test.ts` suites
 - Committed: Yes
 
@@ -157,8 +157,8 @@ pi-claude-marketplace/
 - Purpose: ADRs (`docs/adr/`), PRDs (`docs/prd/`), research notes (`docs/research/`), execution plans (`docs/plans/`), competitive analysis, plus root-level `env-vars.md`, `hooks-compatibility.md`, `messaging-style-guide.md`, `output-catalog.md`
 - Generated: No
 - Committed: Yes
-- Note: there is no `tests/docs` directory in this tree
+- Note: there is no `test/docs` directory in this tree
 
 ---
 
-*Structure analysis: 2026-10-05*
+*Structure analysis: 2026-10-25*

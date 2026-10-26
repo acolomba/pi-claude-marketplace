@@ -2,7 +2,7 @@
 //
 // DIFF-01 pure bidirectional 8-bucket diff between MergedConfig and
 // ExtensionState. NEVER touches the disk or network. The architecture
-// purity gate at `tests/architecture/reconcile-planner-purity.test.ts`
+// purity gate at `test/architecture/reconcile-planner-purity.test.ts`
 // structurally enforces zero effectful imports (no node:fs, no platform
 // git, no save*/withState*/withLockedStateTransaction, no notify).
 //
@@ -764,6 +764,7 @@ interface DependencyInstallGroup {
   ranges: string[];
   requiredBy: string;
   declarers: string[];
+  requirers: string[];
 }
 
 /** Fold one eligible verdict row while keeping its first diagnostic declarer. */
@@ -777,6 +778,7 @@ function addMissingDependencyGroup(
       ranges: [...(entry.ranges ?? [])],
       requiredBy: entry.dependent,
       declarers: [entry.dependent],
+      requirers: entry.ranges === undefined ? [] : [entry.dependent],
     });
     return;
   }
@@ -784,6 +786,10 @@ function addMissingDependencyGroup(
   group.ranges.push(...(entry.ranges ?? []));
   if (!group.declarers.includes(entry.dependent)) {
     group.declarers.push(entry.dependent);
+  }
+
+  if (entry.ranges !== undefined && !group.requirers.includes(entry.dependent)) {
+    group.requirers.push(entry.dependent);
   }
 }
 
@@ -842,6 +848,7 @@ function buildDependencyInstallBucket(
       ranges: group.ranges,
       requiredBy: group.requiredBy,
       declarers: group.declarers,
+      ...(group.requirers.length > 0 && { requirers: group.requirers }),
     });
   }
 

@@ -4,12 +4,12 @@ last_mapped_at: 2026-10-05
 ---
 # Codebase Concerns
 
-**Analysis Date:** 2026-10-05
+**Analysis Date:** 2026-10-25
 
 ## Tech Debt
 
 **`.planning/` markdown has no automated formatting or lint gate:**
-- Issue: `.pre-commit-config.yaml` excludes `.planning/` from `mdformat` and `markdownlint-cli2` (`exclude: ^(tests/fixtures/|tests/bridges/_fixtures/|\.planning/)`), and also from the smartquote/dash/ligature fixers. `npm run format:check` globs only `{extensions,rule-packs,tests}/**/*.{js,json,ts}` plus a few root files, so Prettier never touches `.planning/`.
+- Issue: `.pre-commit-config.yaml` excludes `.planning/` from `mdformat` and `markdownlint-cli2` (`exclude: ^(test/fixtures/|test/bridges/_fixtures/|\.planning/)`), and also from the smartquote/dash/ligature fixers. `npm run format:check` globs only `{extensions,rule-packs,test}/**/*.{js,json,ts}` plus a few root files, so Prettier never touches `.planning/`.
 - Files: `.pre-commit-config.yaml`, `.planning/codebase/*.md`, `.planning/BACKLOG.md`, all phase/plan artifacts under `.planning/`
 - Impact: generated docs are point-in-time snapshots with no verification loop. They drift silently as code lands.
 - Fix approach: none proposed; a periodic `/gsd-map-codebase` re-run is the only refresh.
@@ -64,17 +64,17 @@ last_mapped_at: 2026-10-05
 
 ## Reconciliation Model Limits
 
-**Load-time reconcile is config-to-record, not a deep diff against disk:**
+**`apply` is config-to-record and record-to-catalog, not a deep diff against disk:**
 - Problem: `applyReconcile` (`extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts`) diffs declared config against `state.json` records. It does not re-verify that recorded artifacts exist on disk.
 - Files: `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts`, `orchestrators/reconcile/plan.ts`
-- Impact: an artifact deleted underneath an intact record is not detected or repaired by `/reload`.
+- Impact: an artifact deleted underneath an intact record is not detected or repaired by `/claude:plugin apply` or `/reload`.
 
 ## CI Coverage Gaps
 
 **Staged deletions of build inputs do not trigger the commit hook (accepted):**
 - Issue: the `npm-check` hook in `.pre-commit-config.yaml` runs only when a staged file matches its `files:` pattern; a pure deletion of a build input (for example a file under `extensions/` or `rule-packs/`) does not run `npm run check:commit`.
 - Impact: a deletion that breaks an import or a pair is caught only by PR CI. Accepted by the operator.
-- Note: `docs/output-catalog.md` is now listed in both the CI `paths` build inputs (`.github/workflows/ci.yml`) and the hook pattern, so a catalog-only edit runs `tests/architecture/catalog-uat/` checks. Other `docs/**` files remain outside the build inputs.
+- Note: `docs/output-catalog.md` is now listed in both the CI `paths` build inputs (`.github/workflows/ci.yml`) and the hook pattern, so a catalog-only edit runs `test/architecture/catalog-uat/` checks. Other `docs/**` files remain outside the build inputs.
 
 ## Open Backlog Items (from `.planning/BACKLOG.md`)
 

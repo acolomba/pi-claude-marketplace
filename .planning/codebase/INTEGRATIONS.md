@@ -4,7 +4,7 @@ last_mapped_at: 2026-10-05
 ---
 # External Integrations
 
-**Analysis Date:** 2026-10-05
+**Analysis Date:** 2026-10-25
 
 ## APIs & External Services
 
@@ -14,8 +14,8 @@ last_mapped_at: 2026-10-05
   - GitLab: scope `read_repository` (deliberately narrower than GitHub's `repo` -- this project only ever clones read-only); access tokens expire in 7200s with no refresh_token issued, unlike GitHub's non-expiring classic OAuth App tokens
   - Both `clientId` values are public OAuth/Application client IDs (Device Flow has no client_secret, so committing them as literals is safe per RFC 8628 §3.1, documented as D-32-03)
 - Client: `isomorphic-git` (`extensions/pi-claude-marketplace/platform/git.ts`) performs clone/fetch/checkout over `isomorphic-git/http/node` as the HTTP transport -- no shell-out to a `git` binary for these operations
-- Auth: `extensions/pi-claude-marketplace/platform/git-credential.ts` additionally shells out to the OS `git credential` helper chain (osxkeychain, manager-core, libsecret) to reuse locally cached credentials; this is one of exactly three files in the extension tree permitted to import `node:child_process` (enforced by `tests/architecture/no-shell-out.test.ts`'s `ALLOWED_CHILD_PROCESS_FILES` whitelist and its "exactly three files" assertion). The other two are `extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts` (sync hook-command execution, EXEC-01..04) and `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts` (fire-and-forget async hook spawns with PID-table persistence, EXEC-05/HOOK-06)
-- Network policy: git-source `marketplace add`/`update` require network; `install`/`update`/`reinstall` of git-source plugins require network only on cache miss (warm sha-pinned cache stays offline). `list`, `info`, `uninstall`, `marketplace remove`, and path-source operations never touch the network. ESLint BLOCK F in `eslint.config.js` enforces this at the source level: no `orchestrators/` or `domain/` module outside `NETWORK_SEAMS` (a default-deny list of the 17 modules that must name the git surface) may import `platform/git` or name `gitOps`, `DEFAULT_GIT_OPS`, or `refreshGitHubClone`, so the list, info, uninstall, and `marketplace remove` owners are all gated
+- Auth: `extensions/pi-claude-marketplace/platform/git-credential.ts` additionally shells out to the OS `git credential` helper chain (osxkeychain, manager-core, libsecret) to reuse locally cached credentials; this is one of exactly three files in the extension tree permitted to import `node:child_process` (enforced by `test/architecture/no-shell-out.test.ts`'s `ALLOWED_CHILD_PROCESS_FILES` whitelist and its "exactly three files" assertion). The other two are `extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts` (sync hook-command execution, EXEC-01..04) and `extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts` (fire-and-forget async hook spawns with PID-table persistence, EXEC-05/HOOK-06)
+- Network policy: git-source `marketplace add`/`update` require network; `install`/`update`/`reinstall` of git-source plugins require network only on cache miss (warm sha-pinned cache stays offline). `list`, `info`, `uninstall`, `marketplace remove`, and path-source operations never touch the network. A load is offline unless `autoapply` is on, in which case it runs `apply` and may use the network as `apply` does (AAP-D1). ESLint BLOCK F in `eslint.config.js` enforces this at the source level: no `orchestrators/` or `domain/` module outside `NETWORK_SEAMS` (a default-deny list of the 17 modules that must name the git surface) may import `platform/git` or name `gitOps`, `DEFAULT_GIT_OPS`, or `refreshGitHubClone`, so the list, info, uninstall, and `marketplace remove` owners are all gated
 
 ## Data Storage
 
@@ -35,7 +35,7 @@ last_mapped_at: 2026-10-05
 **Auth Provider:**
 - No user-account auth for the extension itself. Git host authentication only, via RFC-8628 OAuth Device Flow against GitHub and GitLab (see APIs & External Services above)
 - Implementation: `extensions/pi-claude-marketplace/domain/auth-registry.ts` (provider descriptors) + a device-flow polling engine consuming those descriptors; `extensions/pi-claude-marketplace/orchestrators/auth-host.ts` builds a host-keyed credential bundle, memoized once-per-host per command invocation (`authMemo`) to avoid repeated device-flow prompts during a bulk import cascade
-- Credential-leak discipline: no credential field (access token, etc.) is ever interpolated into an `Error` or `notify()` call; enforced by `tests/architecture/no-credential-leak.test.ts`
+- Credential-leak discipline: no credential field (access token, etc.) is ever interpolated into an `Error` or `notify()` call; enforced by `test/architecture/no-credential-leak.test.ts`
 
 ## Monitoring & Observability
 

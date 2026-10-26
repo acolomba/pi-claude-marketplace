@@ -7,7 +7,11 @@
 // `architecture/notify-chokepoint` forbids direct notify on the Pi context
 // outside of shared/notification-dispatch.ts.
 //
-// `TOP_LEVEL_USAGE` and `MARKETPLACE_USAGE` are PRD-stable strings.
+// `TOP_LEVEL_USAGE` is a PRD-stable string. `MARKETPLACE_USAGE` is built from
+// one signature row per marketplace verb (USE-01). The same row also builds
+// that verb's own usage line through `marketplaceUsage`, and the rows supply
+// the marketplace spelling list in both help texts and the `MarketplaceVerb`
+// type.
 //
 // `routeClaudePlugin` accepts `ls` as an alias for `list`; `routeMarketplace`
 // accepts `rm` and `ls` as aliases for `remove` and `list`.
@@ -20,6 +24,8 @@
 // in. The router hands that run to whichever handler it dispatches.
 
 import { notifyUsageError } from "../shared/notification-dispatch.ts";
+
+import { tokenizeArgs } from "./args.ts";
 
 import type { ExtensionCommandContext } from "../platform/pi-api.ts";
 import type { NotificationRun } from "../shared/notification-run.ts";
@@ -50,6 +56,13 @@ export interface SubcommandHandlers {
   pluginInfo: SubcommandHandler;
   // DIFF-01 SC #2 / D-53-01: `/claude:plugin pending` read-only diff command.
   pending: SubcommandHandler;
+  // APL-01 / D-07: `/claude:plugin apply` makes the changes `pending` lists.
+  // Named `pluginApply` (NOT `apply`): strong-mock reserves `apply`, `call`
+  // and `bind` on every mock, so a `SubcommandHandlers` mock could not state
+  // an `apply` member.
+  pluginApply: SubcommandHandler;
+  // AAP-04: `/claude:plugin autoapply` shows or sets the autoapply setting.
+  autoapply: SubcommandHandler;
   // D-54-01 / ENBL-01..04: enable/disable commands.
   enable: SubcommandHandler;
   disable: SubcommandHandler;
@@ -82,6 +95,8 @@ export const TOP_LEVEL_SUBCOMMANDS = [
   "ls",
   "info",
   "pending",
+  "apply",
+  "autoapply",
   "enable",
   "disable",
   "import",
@@ -107,8 +122,31 @@ export const MARKETPLACE_SUBCOMMANDS = [
   "help",
 ] as const;
 
+interface MarketplaceVerbSignature {
+  readonly alias?: string;
+  readonly args: string;
+}
+
+const MARKETPLACE_VERB_SIGNATURES = {
+  add: { args: "<source> [--scope user|project] [--local]" },
+  remove: { alias: "rm", args: "<name> [--scope user|project] [--local]" },
+  list: { alias: "ls", args: "[--scope user|project]" },
+  info: { args: "<name> [--scope user|project]" },
+  update: { args: "[<name>] [--scope user|project]" },
+  autoupdate: { args: "[<name>] [--scope user|project] [--local]" },
+  noautoupdate: { args: "[<name>] [--scope user|project] [--local]" },
+} as const satisfies Record<string, MarketplaceVerbSignature>;
+
+export type MarketplaceVerb = keyof typeof MARKETPLACE_VERB_SIGNATURES;
+
+const MARKETPLACE_VERB_ROWS = Object.entries<MarketplaceVerbSignature>(MARKETPLACE_VERB_SIGNATURES);
+
+const MARKETPLACE_SPELLINGS = MARKETPLACE_VERB_ROWS.flatMap(([verb, { alias }]) =>
+  alias === undefined ? [verb] : [verb, alias],
+).join("|");
+
 export const TOP_LEVEL_USAGE =
-  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|enable|disable|import|browse|marketplace|help> ...\n" +
+  "Usage: /claude:plugin <bootstrap|install|uninstall|prune|update|fetch|reinstall|list|ls|info|pending|apply|autoapply|enable|disable|import|browse|marketplace|help> ...\n" +
   "  bootstrap                                          add anthropics/claude-plugins-official to user scope and enable autoupdate\n" +
   "  install <plugin>@<marketplace> [--scope user|project]\n" +
   "  uninstall <plugin>@<marketplace> [--scope user|project] [--keep-data] [--local] [--prune]\n" +
@@ -119,22 +157,40 @@ export const TOP_LEVEL_USAGE =
   "  list [<marketplace>] [--scope user|project]   (alias: ls)\n" +
   "  info <plugin>@<marketplace> [--scope user|project]\n" +
   "  pending [--scope user|project]\n" +
+  "  apply [--scope user|project]\n" +
+  "  autoapply [on|off] [--scope user|project] [--local]\n" +
   "  enable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  disable <plugin>@<marketplace> [--scope user|project] [--local]\n" +
   "  import [--scope user|project]\n" +
   "  browse\n" +
-  "  marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
+  `  marketplace <${MARKETPLACE_SPELLINGS}> ...\n` +
   "  help [marketplace]";
 
-export const MARKETPLACE_USAGE =
-  "Usage: /claude:plugin marketplace <add|remove|rm|list|ls|info|update|autoupdate|noautoupdate> ...\n" +
-  "  add <source> [--scope user|project]\n" +
-  "  remove <name> [--scope user|project]   (alias: rm)\n" +
-  "  list [--scope user|project]            (alias: ls)\n" +
-  "  info <name> [--scope user|project]\n" +
-  "  update [<name>] [--scope user|project]\n" +
-  "  autoupdate [<name>] [--scope user|project]\n" +
-  "  noautoupdate [<name>] [--scope user|project]";
+/** The usage line of one marketplace verb, built from its signature row. */
+export function marketplaceUsage(verb: MarketplaceVerb): string {
+  const { alias, args }: MarketplaceVerbSignature = MARKETPLACE_VERB_SIGNATURES[verb];
+  const spelling = alias === undefined ? verb : `<${verb}|${alias}>`;
+  return `Usage: /claude:plugin marketplace ${spelling} ${args}`;
+}
+
+// The alias notes share one column, three spaces past the longest line that
+// carries one.
+function marketplaceHelp(): string {
+  const rows = MARKETPLACE_VERB_ROWS.map(([verb, { alias, args }]) => ({
+    line: `  ${verb} ${args}`,
+    alias,
+  }));
+  const aliasColumn =
+    Math.max(...rows.filter((row) => row.alias !== undefined).map((row) => row.line.length)) + 3;
+  return [
+    `Usage: /claude:plugin marketplace <${MARKETPLACE_SPELLINGS}> ...`,
+    ...rows.map(({ line, alias }) =>
+      alias === undefined ? line : `${line.padEnd(aliasColumn)}(alias: ${alias})`,
+    ),
+  ].join("\n");
+}
+
+export const MARKETPLACE_USAGE = marketplaceHelp();
 
 /**
  * Peel off the first whitespace-delimited token from `args`. Returns
@@ -175,6 +231,34 @@ export async function routeClaudePlugin(
   notifyUsageError(ctx, run, { message: route.message, usage: route.usage });
 }
 
+interface VerbRoute {
+  readonly commandId: string;
+  readonly handler: keyof SubcommandHandlers;
+}
+
+// The top-level spellings whose identity and handler depend on the spelling
+// alone. `marketplace` and `help` read the rest of the text, so they stay in
+// `selectClaudePluginRoute`'s switch.
+const TOP_LEVEL_VERB_ROUTES: ReadonlyMap<string, VerbRoute> = new Map([
+  ["bootstrap", { commandId: "plugin bootstrap", handler: "bootstrap" }],
+  ["install", { commandId: "plugin install", handler: "install" }],
+  ["uninstall", { commandId: "plugin uninstall", handler: "uninstall" }],
+  ["prune", { commandId: "plugin prune", handler: "prune" }],
+  ["update", { commandId: "plugin update", handler: "update" }],
+  ["fetch", { commandId: "plugin fetch", handler: "fetch" }],
+  ["reinstall", { commandId: "plugin reinstall", handler: "reinstall" }],
+  ["list", { commandId: "plugin list", handler: "list" }],
+  ["ls", { commandId: "plugin list", handler: "list" }],
+  ["info", { commandId: "plugin info", handler: "pluginInfo" }],
+  ["pending", { commandId: "plugin pending", handler: "pending" }],
+  ["apply", { commandId: "plugin apply", handler: "pluginApply" }],
+  ["autoapply", { commandId: "plugin autoapply", handler: "autoapply" }],
+  ["enable", { commandId: "plugin enable", handler: "enable" }],
+  ["disable", { commandId: "plugin disable", handler: "disable" }],
+  ["import", { commandId: "plugin import", handler: "import" }],
+  ["browse", { commandId: "plugin browse", handler: "browse" }],
+]);
+
 /** Selects canonical identity and dispatch together, preserving handler arguments. */
 export function selectClaudePluginRoute(
   args: string,
@@ -188,41 +272,17 @@ export function selectClaudePluginRoute(
     return { commandId: "plugin browse", handler: handlers.browse, args: rest };
   }
 
+  const verbRoute = TOP_LEVEL_VERB_ROUTES.get(head);
+  if (verbRoute !== undefined) {
+    return { commandId: verbRoute.commandId, handler: handlers[verbRoute.handler], args: rest };
+  }
+
   switch (head) {
-    case "bootstrap":
-      return { commandId: "plugin bootstrap", handler: handlers.bootstrap, args: rest };
-    case "install":
-      return { commandId: "plugin install", handler: handlers.install, args: rest };
-    case "uninstall":
-      return { commandId: "plugin uninstall", handler: handlers.uninstall, args: rest };
-    case "prune":
-      return { commandId: "plugin prune", handler: handlers.prune, args: rest };
-    case "update":
-      return { commandId: "plugin update", handler: handlers.update, args: rest };
-    case "fetch":
-      return { commandId: "plugin fetch", handler: handlers.fetch, args: rest };
-    case "reinstall":
-      return { commandId: "plugin reinstall", handler: handlers.reinstall, args: rest };
-    case "list":
-    case "ls":
-      return { commandId: "plugin list", handler: handlers.list, args: rest };
-    case "info":
-      return { commandId: "plugin info", handler: handlers.pluginInfo, args: rest };
-    case "pending":
-      return { commandId: "plugin pending", handler: handlers.pending, args: rest };
-    case "enable":
-      return { commandId: "plugin enable", handler: handlers.enable, args: rest };
-    case "disable":
-      return { commandId: "plugin disable", handler: handlers.disable, args: rest };
-    case "import":
-      return { commandId: "plugin import", handler: handlers.import, args: rest };
     case "marketplace":
       return selectMarketplaceRoute(rest, handlers);
-    case "browse":
-      return { commandId: "plugin browse", handler: handlers.browse, args: rest };
     case "help":
       return {
-        commandId: rest.trim() === "marketplace" ? "marketplace help" : "plugin help",
+        commandId: isMarketplaceHelpTopic(rest) ? "marketplace help" : "plugin help",
         handler: handlers.help,
         args: rest,
       };
@@ -233,6 +293,13 @@ export function selectClaudePluginRoute(
         usage: TOP_LEVEL_USAGE,
       };
   }
+}
+
+// The help handler tokenizes its topic, so the identity reads the same tokens:
+// `help "marketplace"` is the marketplace topic too.
+function isMarketplaceHelpTopic(args: string): boolean {
+  const tokens = tokenizeArgs(args);
+  return tokens.length === 1 && tokens[0]?.value === "marketplace";
 }
 
 const MARKETPLACE_HELP_USAGE = "Usage: /claude:plugin marketplace help";
@@ -277,11 +344,16 @@ function selectMarketplaceRoute(args: string, handlers: SubcommandHandlers): Sel
       // The topic is fixed by the spelling, so there is nothing left to
       // consume. Every sibling verb rejects what it cannot use; silently
       // discarding `rest` here would make this the one spelling where a
-      // mistyped argument reads as success.
+      // mistyped argument reads as success. MPA-03: a flag is named first, as
+      // `help marketplace` and `bootstrap` name it.
       if (rest.trim() !== "") {
+        const flag = tokenizeArgs(rest).find((token) => token.value.startsWith("--"));
         return {
           commandId: "marketplace help",
-          message: "marketplace help takes no arguments.",
+          message:
+            flag === undefined
+              ? "marketplace help takes no arguments."
+              : `Unknown flag: "${flag.value}".`,
           usage: MARKETPLACE_HELP_USAGE,
         };
       }

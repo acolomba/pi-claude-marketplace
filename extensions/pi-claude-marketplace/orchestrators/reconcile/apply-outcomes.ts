@@ -10,8 +10,10 @@
 // The variants split on { entity-kind, success | failed }:
 //   - marketplace: add / remove
 //   - plugin:      install / uninstall / enable / disable
+//   - plugin:      converged (a catalog move, held move or declined move)
 //   - planner-only:    source-mismatch (report-only)
 //   - planner-only:    invalid-block (CFG-03 from the read pass)
+//   - planner-only:    layer-marketplace-gap (LAYER-06 from the read pass)
 //
 // Failure variants carry `reason: Reason` (broader than ContentReason so the
 // structural `"marketplace not added"` sentinel can flow through; mirrors the orchestrator
@@ -26,15 +28,19 @@
 import path from "node:path";
 
 import { isRenderablePluginKey } from "../../domain/dependencies.ts";
-import { renderConstraintRange } from "../../domain/dependency-range.ts";
 import {
   DependencyCascadeError,
+  DirectoryPinUnsatisfiedError,
+  InstallMarketplaceAddError,
   PluginShapeError,
   StateLockHeldError,
+  withoutCleanupLeaks,
 } from "../../shared/errors.ts";
+import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type Reason } from "../../shared/notification-types.ts";
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
+import { narrowResolverReasons } from "../plugin/install.messaging.ts";
 
 import {
   DEPENDENCY_UNSATISFIED_ROW_REASONS,
@@ -42,9 +48,12 @@ import {
 } from "./reconcile.messaging.ts";
 
 import type { UnsatisfiedKind } from "./dependency-verdict.ts";
+import type { ReconcileAppliedMsg } from "./reconcile.messaging.ts";
+import type { ReconcilePlan } from "./types.ts";
 import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { DeclarerReadFailure } from "../plugin/dependency-index.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { UninstallRefusedError } from "../plugin/uninstall.ts";
 
@@ -151,26 +160,25 @@ export interface PluginInstalledOutcome
 }
 
 /**
- * Plugin re-materialized in place by load-time backfill (BFILL-01). A recorded
- * plugin -- any recorded plugin, not only a partially-installed one (WCONV-01) --
- * is re-resolved offline (NFR-5) and its now-fuller
- * supported set is materialized via the reinstall primitive; this outcome folds
- * the promotion into the single applied cascade (D-68-04 / RECON-04). `version`
+ * Plugin re-materialized in place by `apply`'s growth move (BFILL-01, D-08,
+ * D-10). A recorded plugin -- any enabled one, not only a partially-installed
+ * one (WCONV-01) -- whose supported set grew is re-materialized at its recorded
+ * revision through the update runner (D-25, D-26); this outcome folds the
+ * promotion into the single applied cascade (D-68-04 / RECON-04). `version`
  * mirrors the unchanged recorded version (a promotion is NOT an upgrade);
  * `dependencies` drives the soft-dep markers like the install arm. The required
  * `installable` is the RE-RESOLVED installability: `true` selects the
  * `(installed)` row (unsupported set now empty -> fully promoted), `false`
  * selects the `(partially-installed)` row (partial re-materialize, still degraded).
  *
- * WR-04: the backfill runs the same class of ledger the install and enable arms
- * run, so it INHERITS the same two ledger-degradation signals rather than
- * declaring a narrower vocabulary of its own. Without them, a backfill of a
+ * WR-04: the growth move runs the same class of ledger the install and enable
+ * arms run, so it INHERITS the same two ledger-degradation signals rather than
+ * declaring a narrower vocabulary of its own. Without them, a promotion of a
  * plugin whose `hooks.json` declares `rewakeMessage` without `asyncRewake: true`
- * -- or whose skill frontmatter is unparseable -- rendered a clean row naming
- * neither fact, which is the contradiction the shared shape exists to prevent.
- * The dropped-kind list is NOT inherited: this arm carries the re-resolved
- * `unsupported` kind list below, which is that same fact read off the backfill's
- * own offline resolution.
+ * -- or whose skill frontmatter is unparseable -- would render a clean row
+ * naming neither fact, which is the contradiction the shared shape exists to
+ * prevent. The dropped-kind list is NOT inherited: this arm carries the
+ * `unsupported` kind list below, read off the runner's partial-degrade result.
  */
 export interface PluginBackfilledOutcome
   extends PluginOutcomeBase, Pick<EnableDegradationSignals, "orphanRewake" | "degradedKinds"> {
@@ -195,6 +203,12 @@ export interface PluginInstallFailedOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-install-failed";
   readonly reason: Reason;
   /**
+   * REC-06: the row's brace when it differs from `reason` alone: the reasons
+   * `install` narrows a plugin that cannot be installed to. `reason` stays the
+   * summary token (`no longer installable`). Omitted otherwise (NREG-01).
+   */
+  readonly reasons?: readonly ContentReason[];
+  /**
    * RESV-06: set ONLY when the failure is attributable to a DEPENDENCY
    * (`reason === "dependency failed"`) -- the projection surfaces it as the
    * row's cause-chain trailer, mirroring `plugin-uninstall-failed.cause`
@@ -209,8 +223,12 @@ export interface PluginInstallFailedOutcome extends PluginOutcomeBase {
    * `redactCauseChain`) with every link redacted, since the renderer's
    * depth-5 `causeChainTrailer` walker (`shared/errors.ts`) does not redact
    * on its own.
+   *
+   * GV-01: a plugin directory dependency whose listed copy falls outside its
+   * dependents' ranges carries Claude Code's refusal (`version conflict`),
+   * built from names, ranges and a version, never a path.
    */
-  readonly cause?: DependencyCascadeError;
+  readonly cause?: DependencyCascadeError | DirectoryPinUnsatisfiedError;
 }
 
 /** Plugin uninstall success outcome. */
@@ -237,9 +255,9 @@ export interface PluginUninstallFailedOutcome extends PluginOutcomeBase {
    * carriage is live rather than dead.
    *
    * No `redactAbsolutePaths` pass is applied here, on purpose: the refusal's
-   * message is composed from `name@marketplace` keys, field paths and text the
-   * declaration-index leaf already redacted, and it chains no `cause` behind
-   * it, so there is no path left for the depth-5 cause-chain walker to print.
+   * message is composed from `name@marketplace` keys, field paths and fixed
+   * phrases, and it chains no `cause` behind it, so there is no path left for
+   * the depth-5 cause-chain walker to print.
    */
   readonly cause?: UninstallRefusedError;
 }
@@ -374,8 +392,9 @@ function remedyParty(key: string, keyless: string): string {
  *
  * Each party is quoted only after `remedyParty` clears it. The row's own
  * subject already names the held-down plugin, so the key-less form stays
- * actionable. T-06-05: a declared range is bounded by `renderConstraintRange`,
- * never sliced by hand.
+ * actionable. T-06-05: the verdict already bounded the declared ranges once,
+ * so the range is printed verbatim; a second bound would cut the bounded text
+ * and replace its true overflow count.
  */
 function dependencyRemedy(held: {
   readonly marketplace: string;
@@ -397,7 +416,7 @@ function dependencyRemedy(held: {
       // constraint the operator cannot act on.
       return held.range === undefined
         ? `Update ${dependency} or uninstall ${dependent}`
-        : `Update ${dependency} to satisfy ${renderConstraintRange(held.range)}, or uninstall ${dependent}`;
+        : `Update ${dependency} to satisfy ${held.range}, or uninstall ${dependent}`;
   }
 }
 
@@ -450,10 +469,71 @@ export function dependencyDisabledOutcome(
   };
 }
 
+/**
+ * APPLY1-01: the disable `apply` makes after its catalog cascade, when a move
+ * that did not land leaves a plugin's range unmet. The remedy names the move
+ * that failed: the plugin's own (`own-move`), or the dependency's, which also
+ * takes `{dependency failed}` (`dependency-failed`). A move that landed and
+ * still leaves the range unmet is an ordinary LOAD-01 disable.
+ */
+export function cascadeDisabledOutcome(
+  held: Parameters<typeof dependencyDisabledOutcome>[0],
+  version: string | undefined,
+  failed: "own-move" | "dependency-failed",
+): PluginDependencyDisabledOutcome {
+  const dependent = remedyParty(`${held.plugin}@${held.marketplace}`, "this plugin");
+  const dependency = remedyParty(held.dependency, "the declared dependency");
+  return {
+    ...dependencyDisabledOutcome(held, version),
+    ...(failed === "own-move"
+      ? {
+          cause: new Error(
+            `The update of ${dependent} did not install; run apply again once it can, or uninstall ${dependent}`,
+          ),
+        }
+      : {
+          reasons: ["dependency failed"],
+          cause: new Error(
+            `${dependency} did not update; run apply again once it can, or uninstall ${dependent}`,
+          ),
+        }),
+  };
+}
+
 /** Plugin disable failure outcome. */
 export interface PluginDisableFailedOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-disable-failed";
   readonly reason: Reason;
+}
+
+/**
+ * REC-05: a recorded plugin whose declarations could not be established, so the
+ * load-time dependency check did not run for the scope (D-05-07). The plugin
+ * stays installed and loading; `reason` names the fault and `cause` is the
+ * walk's fixed-phrase line (T-05-04).
+ *
+ * DLS-01: the same row reports an enabled plugin its marketplace no longer
+ * lists, with `not in manifest` and upstream's `plugin-not-found` words as the
+ * cause (`delisted-plugins.ts`), whether or not the walk could read it.
+ */
+export interface PluginDeclarerUnreadableOutcome extends PluginOutcomeBase {
+  readonly kind: "plugin-declarer-unreadable";
+  readonly reason: DeclarerReadFailure;
+  readonly cause: Error;
+}
+
+/**
+ * D-08 / D-12 / D-13: one catalog move's row in `apply`'s report -- `(updated)`
+ * for a realized move, the `(skipped) {dependents constrain}` and
+ * `(partially-upgradable)` warning rows for a blocked one, and `(failed)` with
+ * its closed-set reason for a move that failed to materialize. The row is
+ * composed where the move's verdict is read (`notify.ts`), so the blocked rows
+ * share their bytes with the rows `pending` lists; the projection pushes it
+ * as is.
+ */
+export interface PluginConvergedOutcome extends PluginOutcomeBase {
+  readonly kind: "plugin-converged";
+  readonly row: ReconcileAppliedMsg;
 }
 
 /**
@@ -508,6 +588,51 @@ export function sourceMismatchOutcomeSubject(outcome: SourceMismatchOutcome): st
 }
 
 /**
+ * Source-mismatch and dangling-reference rows from the planner are NOT
+ * actionable at apply time -- they surface as `(failed) {source mismatch}`
+ * marketplace rows (with an optional plugin child for dangling references).
+ * Routing them through the same per-entry outcome accumulator keeps the
+ * projection a single seam. Each planner cause lifts its renderable fields
+ * onto the matching `SourceMismatchOutcome` arm; the renderer derives the
+ * subject through `sourceMismatchOutcomeSubject`.
+ */
+export function sourceMismatchOutcomes(plan: ReconcilePlan): PerEntryOutcome[] {
+  return plan.sourceMismatches.map((m): SourceMismatchOutcome => {
+    switch (m.cause) {
+      case "source-mismatch":
+        return {
+          kind: "source-mismatch",
+          cause: "source-mismatch",
+          scope: m.scope,
+          marketplace: m.marketplace,
+        };
+      case "unknown-stored":
+        return {
+          kind: "source-mismatch",
+          cause: "unknown-stored",
+          scope: m.scope,
+          marketplace: m.marketplace,
+        };
+      case "dangling-reference":
+        return {
+          kind: "source-mismatch",
+          cause: "dangling-reference",
+          scope: m.scope,
+          marketplace: m.marketplace,
+          plugin: m.plugin,
+        };
+      case "malformed-plugin-key":
+        return {
+          kind: "source-mismatch",
+          cause: "malformed-plugin-key",
+          scope: m.scope,
+          rawKey: m.rawKey,
+        };
+    }
+  });
+}
+
+/**
  * Invalid-config outcome from the per-scope read pass (CFG-03). Carries
  * the file BASENAME in `basename` so the projection renders
  * `⊘ <basename> [<scope>] (failed) {invalid manifest}` -- the absolute
@@ -540,6 +665,21 @@ export interface InvalidBlockOutcome {
 }
 
 /**
+ * LAYER-06 / D-MF-03: a layer that declares a plugin whose marketplace only the
+ * other layer declares, from the per-scope read pass. It stops the scope's
+ * reload as an invalid layer config does. `basename` is the layer config's
+ * BASENAME (T-55-02-01), and `cause` names the plugins and the repair. The
+ * projection renders the file as a block header with no status and one failed
+ * row under it, so the tally counts the one error once, as `pending` does.
+ */
+export interface LayerMarketplaceGapOutcome {
+  readonly kind: "layer-marketplace-gap";
+  readonly scope: Scope;
+  readonly basename: string;
+  readonly cause: Error;
+}
+
+/**
  * RECON-04: the per-entry outcome union consumed by
  * `buildReconcileAppliedCascade`. Single source of truth for the apply-time
  * outcomes the projection knows how to fold.
@@ -560,14 +700,17 @@ export type PerEntryOutcome =
   | PluginDisabledOutcome
   | PluginDependencyDisabledOutcome
   | PluginDisableFailedOutcome
+  | PluginDeclarerUnreadableOutcome
+  | PluginConvergedOutcome
   | SourceMismatchOutcome
-  | InvalidBlockOutcome;
+  | InvalidBlockOutcome
+  | LayerMarketplaceGapOutcome;
 
 // ───────────────────────────────────────────────────────────────────────────
 // Throw classification and the install-outcome dependency derivation, moved
-// from apply.ts. Both the apply pass and the backfill pass narrow the same
-// throws into the same closed set, so the classifiers sit beside the outcome
-// shapes they feed rather than inside one of their two callers (FLOW-09).
+// from apply.ts. The apply pass and the read pass narrow throws into the same
+// closed set, so the classifiers sit beside the outcome shapes they feed
+// rather than inside one of their callers (FLOW-09).
 // ───────────────────────────────────────────────────────────────────────────
 
 /**
@@ -580,14 +723,18 @@ export type PerEntryOutcome =
  * instead of flattening to the misleading `{unreadable}` fallback. Mirrors
  * the instanceof ladder in `import/execute.ts::dispatchFailedOutcome`; the
  * `not-installable` and `no-longer-installable` shape kinds collapse to the
- * single `no longer installable` token used by import's
- * `importWarningReason("uninstallable")` so the cross-surface reason stays
- * identical for the same underlying failure.
+ * single `no longer installable` token. Import instead narrows them to the
+ * resolver reasons `install` renders (IMP-08).
  *
  * RESV-06: a `DependencyCascadeError` is checked FIRST -- an install failure
  * attributable to one of the plugin's dependencies otherwise falls through to
  * `{unreadable}`, losing the closure/constraint arms' `name@marketplace`
  * cause entirely.
+ *
+ * INR-01: a git host that refused a clone reads the reason a direct install
+ * reads (`classifyGitHostFailure`) before the probe fallback, which would call
+ * it `{unreadable}`, and a failed marketplace add reads the reason it carries.
+ * The probe fallback classifies the error behind a cleanup leak (INR-02).
  *
  * Exported for direct unit-test exercise of the closed-set mapping
  * (the function is otherwise module-private).
@@ -599,6 +746,14 @@ export function classifyOrchestratorThrow(err: unknown): ContentReason {
 
   if (err instanceof StateLockHeldError) {
     return "lock held";
+  }
+
+  if (err instanceof DirectoryPinUnsatisfiedError) {
+    return "version conflict";
+  }
+
+  if (err instanceof InstallMarketplaceAddError) {
+    return err.reason;
   }
 
   if (err instanceof PluginShapeError) {
@@ -613,7 +768,42 @@ export function classifyOrchestratorThrow(err: unknown): ContentReason {
     }
   }
 
-  return narrowProbeError(err);
+  return classifyGitHostFailure(err) ?? narrowProbeError(withoutCleanupLeaks(err));
+}
+
+/**
+ * REC-06: the reason fields of a failed install's row. A plugin that cannot be
+ * installed reads the reasons `install` and `import` narrow it to
+ * (`narrowResolverReasons`); every other throw reads its one classified reason.
+ * A reason the caller already holds (a dependency's `cross-marketplace`) wins.
+ */
+export function installFailureReasonFields(
+  err: unknown,
+  known?: ContentReason,
+): {
+  readonly reason: ContentReason;
+  readonly reasons?: readonly ContentReason[];
+} {
+  if (known !== undefined) {
+    return { reason: known };
+  }
+
+  const reason = classifyOrchestratorThrow(err);
+  if (
+    err instanceof PluginShapeError &&
+    (err.shape.kind === "not-installable" || err.shape.kind === "no-longer-installable")
+  ) {
+    return {
+      reason,
+      reasons: narrowResolverReasons(
+        err.shape.reasons,
+        err.shape.unsupportedKinds,
+        err.shape.partialable,
+      ),
+    };
+  }
+
+  return { reason };
 }
 
 /**
@@ -650,34 +840,6 @@ export function classifyReadPassThrow(err: unknown): ContentReason {
   }
 
   return narrowProbeError(err);
-}
-
-/**
- * Derive the closed-set Dependency[] from InstallPluginOutcome flags.
- *
- * WDEP-02: `workflows` pushes LAST, so a projection that declares agents and
- * mcp renders the same two-marker brace whether or not it also declares
- * workflows.
- */
-export function dependenciesFromInstall(outcome: {
-  readonly declaresAgents: boolean;
-  readonly declaresMcp: boolean;
-  readonly declaresWorkflows: boolean;
-}): readonly Dependency[] {
-  const deps: Dependency[] = [];
-  if (outcome.declaresAgents) {
-    deps.push("agents");
-  }
-
-  if (outcome.declaresMcp) {
-    deps.push("mcp");
-  }
-
-  if (outcome.declaresWorkflows) {
-    deps.push("workflows");
-  }
-
-  return deps;
 }
 
 /**

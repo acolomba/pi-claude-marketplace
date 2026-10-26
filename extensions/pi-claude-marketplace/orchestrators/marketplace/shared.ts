@@ -19,15 +19,13 @@
 //     Throws MarketplaceNotFoundError or MarketplaceAmbiguousScopeError
 //     (both exported by shared/errors.ts).
 //
-//   - classifyAutoupdateFlip (MAU-1..4): single helper used by
-//     autoupdate.ts. Idempotent -- already-matching marketplaces land
-//     in `unchanged[]`.
-//
 // Per D-02 ANTI-PATTERN: this file MUST NOT import from `transaction/`
 // (no phase-ledger runner). The cascade is the wrong shape for ledger
 // semantics (MR-3 requires continuation across plugin failures; the
 // ledger runner halts on first throw). Code review enforces; ESLint
 // does not.
+
+import path from "node:path";
 
 import { unstagePluginAgents } from "../../bridges/agents/index.ts";
 import { unstagePluginCommands } from "../../bridges/commands/index.ts";
@@ -46,12 +44,16 @@ import {
   errorMessage,
   InvalidMarketplaceManifestError,
   isErrnoException,
+  MarketplaceInBaseLayerOnlyError,
+  MarketplaceInLocalLayerOnlyError,
   MarketplaceNotFoundError,
   PluginShapeError,
+  StoredCredentialRejectedError,
 } from "../../shared/errors.ts";
 import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
+import { type MarketplaceRows, type Single } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { NO_STORED_CREDENTIAL_CAUSE, buildAuthForHost, hostFromCloneUrl } from "../auth-host.ts";
 
@@ -59,6 +61,7 @@ import type { UnstageAgentFailure } from "../../bridges/agents/types.ts";
 import type { UnstageWorkflowFailure } from "../../bridges/workflows/types.ts";
 import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
 import type { UrlSource } from "../../domain/source.ts";
+import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type {
@@ -69,7 +72,7 @@ import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { ListRemotesResult } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { McpConfigNotice, PluginFailedMessage } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -164,7 +167,13 @@ export interface GitOps {
     auth?: GitAuthBundle;
   }): Promise<void>;
   /** D-14 step 1: refresh remote refs (no merge, no working-tree changes). */
-  fetch(opts: { dir: string; remote?: string; ref?: string; auth?: GitAuthBundle }): Promise<void>;
+  fetch(opts: {
+    dir: string;
+    remote?: string;
+    ref?: string;
+    tags?: boolean;
+    auth?: GitAuthBundle;
+  }): Promise<void>;
   /** D-14 step 2 (symbolic HEAD): force-set local branch ref to remote SHA. */
   forceUpdateRef(opts: { dir: string; ref: string; value: string }): Promise<void>;
   /** D-14 step 3: move HEAD to ref/SHA. */
@@ -339,7 +348,8 @@ export async function refreshGitHubClone(
  * `device-flow` bundle is excluded -- there the story is a declined or expired
  * Device Flow, and the bare closed-set token is the whole truth. A challenge
  * after a cross-origin redirect keeps its own cause text, because a credential
- * stored for `host` cannot answer it (Q-02).
+ * stored for `host` cannot answer it (Q-02). So does a stored credential the
+ * host refused, because the helper produced it.
  */
 export async function refreshUrlClone(args: {
   readonly cloneDir: string;
@@ -376,18 +386,30 @@ export async function refreshUrlClone(args: {
   try {
     await refreshGitHubClone(cloneDir, source.ref, gitOps, onFetchSucceeded, auth);
   } catch (err) {
-    if (
-      err instanceof Error &&
-      err.cause === undefined &&
-      classifyGitTransportFailure(err) === "authentication required" &&
-      auth.kind === "stored-credential" &&
-      !(err instanceof CrossOriginChallengeError)
-    ) {
+    if (lacksStoredCredential(err, auth) && err.cause === undefined) {
       err.cause = new Error(NO_STORED_CREDENTIAL_CAUSE(host));
     }
 
     throw err;
   }
+}
+
+/**
+ * GAUTH-04: an auth failure that a stored credential could answer, so the
+ * failure gains the `NO_STORED_CREDENTIAL_CAUSE` line. Only a
+ * `stored-credential` bundle qualifies. A challenge after a cross-origin
+ * redirect does not, because a credential stored for the bundle's host is
+ * never sent there (Q-02). A refused credential does not either, because the
+ * helper produced it and the host was sent it. Each caller places the line.
+ */
+export function lacksStoredCredential(err: unknown, auth: GitAuthBundle): err is Error {
+  return (
+    err instanceof Error &&
+    auth.kind === "stored-credential" &&
+    !(err instanceof CrossOriginChallengeError) &&
+    !(err instanceof StoredCredentialRejectedError) &&
+    classifyGitTransportFailure(err) === "authentication required"
+  );
 }
 
 /**
@@ -616,14 +638,7 @@ export async function cascadeUnstagePlugin(
 
     return Object.freeze({
       ok: true,
-      dropped: Object.freeze({
-        skills: Object.freeze([...dropped.skills]),
-        commands: Object.freeze([...dropped.commands]),
-        agents: Object.freeze([...dropped.agents]),
-        hooks: Object.freeze([...dropped.hooks]),
-        mcpServers: Object.freeze([...dropped.mcpServers]),
-        workflows: Object.freeze([...dropped.workflows]),
-      }),
+      dropped: freezeDropped(dropped),
       ...mcpConfigNoticesMember(mcpConfigNotices),
       ...writtenMcpFilesMember(writtenMcpFiles),
     });
@@ -646,14 +661,7 @@ export async function cascadeUnstagePlugin(
 
     return Object.freeze({
       ok: false,
-      dropped: Object.freeze({
-        skills: Object.freeze([...dropped.skills]),
-        commands: Object.freeze([...dropped.commands]),
-        agents: Object.freeze([...dropped.agents]),
-        hooks: Object.freeze([...dropped.hooks]),
-        mcpServers: Object.freeze([...dropped.mcpServers]),
-        workflows: Object.freeze([...dropped.workflows]),
-      }),
+      dropped: freezeDropped(dropped),
       cause: failure instanceof Error ? failure : new Error(String(failure)),
       ...mcpConfigNoticesMember(mcpConfigNotices),
       ...writtenMcpFilesMember(writtenMcpFiles),
@@ -661,74 +669,15 @@ export async function cascadeUnstagePlugin(
   }
 }
 
-/** MAU-1..4: idempotent autoupdate-flip outcome. */
-export interface AutoupdateFlipResult {
-  /** Marketplace names whose flag actually changed in this call. */
-  readonly changed: readonly string[];
-  /** Marketplace names whose flag already matched the requested value. */
-  readonly unchanged: readonly string[];
-}
-
-/**
- * MAU-1..4: idempotent autoupdate-flip classification.
- * - When `name` is undefined, classify every marketplace in this scope's
- *   state (MAU-2 bare form).
- * - When `name` is given but missing, throw MarketplaceNotFoundError
- *   with an empty scope list -- the caller fills the scope detail.
- * - MAU-3: already-matching marketplaces report as "unchanged"; the
- *   caller composes the user-visible "Already enabled/disabled: ..."
- *   line.
- * - MAU-4: missing/undefined `record.autoupdate` is read as `false`
- *   via the `=== true` comparison.
- *
- * WR-05: CLASSIFY ONLY -- the legacy state-side
- * `autoupdate` field is READ (a state record pre-dating the D-13 scrub may
- * still carry it) but NEVER written. SPLIT-01 moved the truth into the
- * per-marketplace config entry; the config write-back is the real flip.
- * Writing the carved-out field back into state.json would re-introduce a
- * schema-stripped legacy field that the D-13 scrub removes again on the
- * next load -- pointless state churn the architecture gate at
- * tests/architecture/no-split-01-cast-reads.test.ts now forbids (the
- * assignment-form sibling pattern). The caller reclassifies this state-side
- * result against the CONFIG truth (`reclassifyByConfigTruth`) before any
- * write.
- */
-export function classifyAutoupdateFlip(
-  state: ExtensionState,
-  name: string | undefined,
-  enable: boolean,
-): AutoupdateFlipResult {
-  const changed: string[] = [];
-  const unchanged: string[] = [];
-
-  // D-04: undefined === false. Read through `Record<string, unknown>` cast
-  // (legacy field; not on MARKETPLACE_RECORD_SCHEMA since SPLIT-01).
-  if (name !== undefined) {
-    const record = ownValue(state.marketplaces, name);
-    if (record === undefined) {
-      throw new MarketplaceNotFoundError(name, []);
-    }
-
-    const legacy = record as { readonly autoupdate?: unknown };
-    if ((legacy.autoupdate === true) === enable) {
-      unchanged.push(name);
-    } else {
-      changed.push(name);
-    }
-
-    return { changed, unchanged };
-  }
-
-  for (const [mp, record] of Object.entries(state.marketplaces)) {
-    const legacy = record as { readonly autoupdate?: unknown };
-    if ((legacy.autoupdate === true) === enable) {
-      unchanged.push(mp);
-    } else {
-      changed.push(mp);
-    }
-  }
-
-  return { changed, unchanged };
+function freezeDropped(dropped: UnstageOutcome["dropped"]): UnstageOutcome["dropped"] {
+  return Object.freeze({
+    skills: Object.freeze([...dropped.skills]),
+    commands: Object.freeze([...dropped.commands]),
+    agents: Object.freeze([...dropped.agents]),
+    hooks: Object.freeze([...dropped.hooks]),
+    mcpServers: Object.freeze([...dropped.mcpServers]),
+    workflows: Object.freeze([...dropped.workflows]),
+  });
 }
 
 /**
@@ -1026,4 +975,118 @@ export async function crossScopeFlag(opts: {
     scope: opts.scope,
   });
   return elsewhere ? { presentInOtherScope: true } : {};
+}
+
+/**
+ * WR-02 / D-01 / D-02: the manifest file of a recorded marketplace. Every
+ * marketplace is a directory on disk: the managed clone of a github or url
+ * source, or the user's own directory of a path source. The add records the
+ * absolute path of the manifest inside that directory: the conventional
+ * `.claude-plugin/marketplace.json` for a clone or a directory source, and the
+ * exact file for a file source. Every reader locates the manifest here. The
+ * typed source and the add-time directory only say where the marketplace came
+ * from.
+ */
+export function recordedManifestPath(record: ExtensionState["marketplaces"][string]): string {
+  return record.manifestPath;
+}
+
+/**
+ * The rows of a marketplace-level failure that has a cause: a `(failed)`
+ * marketplace header with one failed child of the same name. A marketplace
+ * header carries no cause (SNM-10), so the child carries the reason and the
+ * cause line.
+ */
+export function marketplaceFailureRows(
+  name: string,
+  scope: Scope,
+  reason: ContentReason,
+  cause: Error,
+): Single<MarketplaceRows<PluginFailedMessage>> {
+  return [
+    {
+      name,
+      scope,
+      status: "failed",
+      severity: "error",
+      plugins: [
+        {
+          status: "failed",
+          name,
+          reasons: [reason],
+          cause,
+          severity: "error",
+          needsReload: false,
+        },
+      ],
+    },
+  ];
+}
+
+/**
+ * Where a marketplace a named command targets is declared, as seen from the
+ * command's target layer:
+ *
+ * - `declared`: the target layer declares it; `other` says whether the other
+ *   layer declares it too, or could not be read.
+ * - `refused`: only the other layer declares it; `refusal` is the cause line.
+ * - `undeclared`: neither layer declares it (a recorded marketplace).
+ * - `other-unreadable`: the target layer does not declare it and the other
+ *   file is invalid; `otherBasename` names that file without its path.
+ */
+export type MarketplaceLayerVerdict =
+  | { readonly kind: "declared"; readonly other: "declares" | "silent" | "unreadable" }
+  | {
+      readonly kind: "refused";
+      readonly reason: "marketplace in local layer only" | "marketplace in base layer only";
+      readonly refusal: MarketplaceInLocalLayerOnlyError | MarketplaceInBaseLayerOnlyError;
+    }
+  | { readonly kind: "undeclared" }
+  | { readonly kind: "other-unreadable"; readonly otherBasename: string };
+
+/**
+ * LAYER-02 / D-MF-03: a named command changes only its target layer, and fails
+ * when that layer does not declare the marketplace while the other one does.
+ *
+ * Pure: the caller loads both files inside its lock and handles a CFG-03
+ * invalid target first. Membership is an own-key read, so a `__proto__` or
+ * `constructor` name is declared only by an own entry. An unreadable other
+ * file is never read as declaring nothing, as with
+ * `localOnlyMarketplaceRefusal`: it may declare the marketplace.
+ */
+export function marketplaceLayerVerdict(args: {
+  readonly target: ScopeConfig;
+  readonly other: ConfigLoadResult;
+  readonly targetIsLocal: boolean;
+  readonly marketplace: string;
+}): MarketplaceLayerVerdict {
+  const inTarget = ownValue(args.target.marketplaces, args.marketplace) !== undefined;
+  if (args.other.status === "invalid") {
+    return inTarget
+      ? { kind: "declared", other: "unreadable" }
+      : { kind: "other-unreadable", otherBasename: path.basename(args.other.filePath) };
+  }
+
+  const inOther =
+    args.other.status === "valid" &&
+    ownValue(args.other.config.marketplaces, args.marketplace) !== undefined;
+  if (inTarget) {
+    return { kind: "declared", other: inOther ? "declares" : "silent" };
+  }
+
+  if (!inOther) {
+    return { kind: "undeclared" };
+  }
+
+  return args.targetIsLocal
+    ? {
+        kind: "refused",
+        reason: "marketplace in base layer only",
+        refusal: new MarketplaceInBaseLayerOnlyError(args.marketplace),
+      }
+    : {
+        kind: "refused",
+        reason: "marketplace in local layer only",
+        refusal: new MarketplaceInLocalLayerOnlyError(args.marketplace),
+      };
 }

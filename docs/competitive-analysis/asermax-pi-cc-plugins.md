@@ -192,7 +192,7 @@ Their source grammar is one string with an optional fragment, parsed in 48 lines
 | Archive or file over `url`   | Absent                                                                    | Supported                                                 |
 | Pin to a ref, tag, or commit | **Absent.** Always `git clone --depth 1` of the default branch            | Supported, with a full 40-hex `sha` authoritative         |
 
-The pinning row is the widest gap in this table. Their clone is `git clone --depth 1` with no ref (`src/cache.ts:61`). Their update is `git fetch origin` followed by `git reset --hard origin/HEAD` (`src/cache.ts:95-102`). A user cannot hold a plugin at a known revision. A user cannot see which revision is live, and cannot return to a previous one. Our version ladder derives `sha-<12hex>` for a git source, and `hash-<12hex>` from a deterministic content walk otherwise. Our `reinstall` repairs from the recorded sha and never touches the network.
+The pinning row is the widest gap in this table. Their clone is `git clone --depth 1` with no ref (`src/cache.ts:61`). Their update is `git fetch origin` followed by `git reset --hard origin/HEAD` (`src/cache.ts:95-102`). A user cannot hold a plugin at a known revision. A user cannot see which revision is live, and cannot return to a previous one. Our version ladder derives `sha-<12hex>` for a git source, and `hash-<12hex>` from a deterministic content walk otherwise. Our `reinstall` installs the revision our cached mirror already holds, and it touches the network only on a cache miss.
 
 Their git access shells out through `execSync` with an interpolated command string. The interpolation is single-quote escaped (`src/cache.ts:122-124`), so this is not an injection finding. It is a portability finding. Cleanup after a failed clone runs `rm -rf` (`src/cache.ts:69`), which has no meaning on Windows. We use `isomorphic-git` and need no `git` binary at all.
 
@@ -206,7 +206,7 @@ They register no command. The complete user-facing surface is one CLI flag and t
 
 Their output is four `ctx.ui.notify` calls in `index.ts`. One reports a count of what loaded. One reports the missing MCP adapter. One reports warnings, and one reports errors. The error call passes severity `"warning"` (`index.ts:300-304`), so a failed clone and a skipped MCP entry read the same.
 
-Our surface is `/claude:plugin` with sixteen subcommands. A flag catalog is guarded against router drift by `tests/architecture/flag-catalog-drift.test.ts`. A tab-completion provider carries five branches. A closed output vocabulary of 26 status tokens and about 40 reasons is held byte-exact against `docs/output-catalog.md` by `tests/architecture/catalog-uat/catalog-contract.test.ts`.
+Our surface is `/claude:plugin` with sixteen subcommands. A flag catalog is guarded against router drift by `test/architecture/flag-catalog-drift.test.ts`. A tab-completion provider carries five branches. A closed output vocabulary of 26 status tokens and about 40 reasons is held byte-exact against `docs/output-catalog.md` by `test/architecture/catalog-uat/catalog-contract.test.ts`.
 
 ## What they have that we do not
 

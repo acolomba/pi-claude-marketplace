@@ -10,9 +10,10 @@ import { registerClaudeMarketplaceTools, registerClaudePluginCommand } from "./e
 import { registerSkillAliases } from "./edge/skill-aliases.ts";
 import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
 import { DEFAULT_GIT_OPS } from "./orchestrators/marketplace/shared.ts";
-import { createPluginUpdateOperations } from "./orchestrators/plugin/update-flow.ts";
+import { createUpdateOperations } from "./orchestrators/plugin/operations.ts";
 import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
 import { createApplyReconcile } from "./orchestrators/reconcile/apply.ts";
+import { createLoadReconcile } from "./orchestrators/reconcile/load.ts";
 import { locationsFor } from "./persistence/locations.ts";
 import { loadState } from "./persistence/state-io.ts";
 import { createMcpStatusTracker } from "./platform/mcp-status.ts";
@@ -76,13 +77,18 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // ASTAT-01: one status tracker per extension load. Pi drops its subscription
   // when it invalidates this runtime, and the next load starts empty.
   const mcpStatus = createMcpStatusTracker(pi.events);
-  const pluginUpdateOperations = createPluginUpdateOperations(hooksRouting, completionCache);
+  const pluginUpdateOperations = createUpdateOperations(hooksRouting, completionCache);
   const hooksHydration = createHooksHydration(hooksRuntime, { loadState, readHooksJson });
-  // RECON-01..05: one reconcile operation per extension load, bound to the
-  // production state reader. The `resources_discover` handler below drives it;
-  // constructing it here keeps the single binding at extension lifetime rather
+  // RECON-01..05: one reconcile apply operation and one load reconcile step
+  // per extension load, both bound to the production state reader.
+  // `/claude:plugin apply` (APL-01) drives the apply operation; the
+  // `resources_discover` handler below drives the load step, which changes no
+  // installation state (APL-03 / D-02) unless the configs turn `autoapply` on,
+  // when it runs the same apply operation before resource discovery (AAP-02).
+  // Constructing them here keeps each binding at extension lifetime rather
   // than rebuilding it on every event.
   const applyReconcile = createApplyReconcile({ loadState });
+  const loadReconcile = createLoadReconcile({ loadState }, applyReconcile);
 
   // DISP-01 / DISP-02 / D-59-02 / D-59-03: register the hooks bridge at
   // factory time. The bridge's signature requires a `cwd`, which does not
@@ -98,7 +104,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   //      `session_start` BEFORE `resources_discover`, so a project-scope
   //      SessionStart hook would otherwise dispatch against an empty bucket),
   //      then `hydrateProjectScopeForCwd(event.cwd)` BELOW re-runs it so the
-  //      routing-table rebuild inside `applyReconcile` sees the correct
+  //      routing-table rebuild inside `loadReconcile` sees the correct
   //      project cache. Both are idempotent against the same cwd.
   //
   // The `await` is LOAD-BEARING: Pi's loader awaits the factory Promise, so
@@ -120,14 +126,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
 
     requireNotificationMode(ctx.mode);
     try {
-      await applyReconcile({
-        ctx,
-        run,
-        cwd: event.cwd,
-        hooksRouting,
-        completionCache,
-        reason: event.reason,
-      });
+      await loadReconcile({ ctx, run, cwd: event.cwd, hooksRouting, completionCache });
     } catch (err) {
       try {
         notifyReconcileAborted(ctx, run, err);
@@ -215,6 +214,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
       mcpStatus,
       gitOps: DEFAULT_GIT_OPS,
       beginPluginUpdateRun: pluginUpdateOperations.beginPluginUpdateRun,
+      applyReconcile,
     },
     hooksRouting,
     pluginUpdateOperations.updatePlugins,

@@ -3,7 +3,9 @@
 /.agents/skills/herdr/
 /.agents/skills/humanizer/
 /.agents/skills/simple-english/
+/.agents/skills/show-me/
 /.agents/skills/fallow/
+/.agents/skills/fallow-setup/
 # fetch record for the skills above, not a version pin (see CONTRIBUTING.md)
 /skills-lock.json
 
@@ -39,8 +41,11 @@
 /.claude/skills/herdr
 /.claude/skills/humanizer
 /.claude/skills/simple-english
+/.claude/skills/show-me
 /.claude/skills/fallow
+/.claude/skills/fallow-setup
 /.claude/skills/spike-findings-*/
+/.claude/worktrees
 
 # codex
 /.codex/.gsd-profile

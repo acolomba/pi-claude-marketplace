@@ -128,4 +128,4 @@ Produce, in the conversation:
 - `/gsd-quick` — a doc correction (e.g. a stale row in `docs/hooks-compatibility.md`)
 - `/gsd-new-milestone` — when the findings add up to scoped work
 
-If a finding implies a version bump, note that it also touches `sonar-project.properties`, `EXTENSION_VERSION`, `package-lock.json`, and `CHANGELOG.md`, and that `npm run check` must be green — not just the pre-commit hooks.
+If a finding implies a version bump, note that it also touches `sonar-project.properties`, `package-lock.json`, and `CHANGELOG.md`, and that `npm run check` must be green — not just the pre-commit hooks.

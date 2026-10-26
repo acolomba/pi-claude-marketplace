@@ -10,11 +10,12 @@
 // parser retains the command-specific diagnostics for forbidden arguments.
 //
 // IL-2: all user-visible output flows through `shared/notification-dispatch.ts`. The
-// success path is emitted by the composed orchestrators. `addMarketplace`
-// signals failures by THROWING (it does not notify), so the handler wraps
-// `bootstrapClaudePlugin` in a catch that routes a thrown failure through
-// the `notify` path as a failed marketplace row -- a raw stack trace
-// must never reach the user channel.
+// composed orchestrators emit the success rows and a failed add's row (with
+// its reason and cause, as `marketplace add` renders it). An error that is not
+// an add precondition still THROWS, so the handler wraps
+// `bootstrapClaudePlugin` in a catch that routes it through the `notify` path
+// as a failed marketplace row -- a raw stack trace must never reach the user
+// channel.
 //
 // D-05: the router's run renders the add, the autoupdate flip, and the
 // handler's own failed row from one soft-dependency snapshot.
@@ -23,9 +24,10 @@ import {
   bootstrapClaudePlugin,
   BOOTSTRAP_MARKETPLACE_NAME,
 } from "../../../orchestrators/plugin/bootstrap.ts";
-import { errorMessage } from "../../../shared/errors.ts";
+import { errorMessage, rethrowInvalidGitHubBaseUrl } from "../../../shared/errors.ts";
 import { notify, notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { parseArgs } from "../../args.ts";
+import { rejectUnknownFlag } from "../shared.ts";
 
 import type { SubcommandHandler } from "../../router.ts";
 import type { EdgeDeps } from "../../types.ts";
@@ -42,6 +44,10 @@ export function makeBootstrapHandler(
       parsed = parseArgs(args);
     } catch (err) {
       notifyUsageError(ctx, run, { message: errorMessage(err), usage: USAGE });
+      return;
+    }
+
+    if (rejectUnknownFlag(parsed.positional, { ctx, run, usage: USAGE })) {
       return;
     }
 
@@ -67,16 +73,17 @@ export function makeBootstrapHandler(
         completionCache: deps.completionCache,
         gitOps: deps.gitOps,
       });
-    } catch {
-      // `addMarketplace`'s default contract (used by the public `marketplace
-      // add` command) routes precondition failures through `notify` instead
-      // of throwing (ATTR-07). `bootstrapClaudePlugin` passes
-      // `rethrowPreconditionErrors: true` to restore a throw-based contract,
-      // so a failure here (e.g. a first-run GitHub clone failure) still
-      // needs routing through the notify path as a failed marketplace row
-      // (IL-2). The row stamps caller `severity: "error"` (SEV-02). The
-      // marketplace-level row carries no cause chain -- SNM-10 confines
-      // `cause` to plugin-level variants.
+    } catch (err) {
+      // GHB-03: an invalid GitHub base override fails the command instead of
+      // becoming the causeless failed row below, so the user sees the variable.
+      rethrowInvalidGitHubBaseUrl(err);
+      // `bootstrapClaudePlugin` renders every add precondition failure itself
+      // (ATTR-07), so only an error outside that closed set, or a failure of
+      // the autoupdate step after a successful add, reaches here, and it still
+      // needs routing through the notify path as a failed
+      // marketplace row (IL-2). The row stamps caller `severity: "error"`
+      // (SEV-02). The marketplace-level row carries no cause chain -- SNM-10
+      // confines `cause` to plugin-level variants.
       notify(ctx, run, {
         marketplaces: [
           {

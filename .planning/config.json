@@ -50,14 +50,17 @@
   "agent_skills": {
     "gsd-discuss-phase": [
       ".agents/skills/claude-code-compat-research",
-      ".agents/skills/typescript-unit-tests"
+      ".agents/skills/typescript-unit-tests",
+      ".agents/skills/cucumber"
     ],
     "gsd-advisor-researcher": [
       ".agents/skills/claude-code-compat-research",
-      ".agents/skills/typescript-unit-tests"
+      ".agents/skills/typescript-unit-tests",
+      ".agents/skills/cucumber"
     ],
     "gsd-assumptions-analyzer": [
-      ".agents/skills/typescript-unit-tests"
+      ".agents/skills/typescript-unit-tests",
+      ".agents/skills/cucumber"
     ]
   },
   "mode": "yolo",

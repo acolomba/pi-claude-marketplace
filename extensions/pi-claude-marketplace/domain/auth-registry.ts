@@ -8,16 +8,15 @@
  * access token to the isomorphic-git credential shape.
  *
  * Descriptors are COMPILE-TIME constants; there is no runtime provider
- * configuration in v1 (PROV-07 per-source declarations deferred to v2). The
- * GitHub descriptor supplies today's exact literals so github.com behavior is
- * byte-identical when the engine defaults to GITHUB_PROVIDER.
+ * configuration (PROV-07 per-source declarations are deferred). The engine
+ * defaults to GITHUB_PROVIDER.
  *
  * The registry carries two descriptors: GITHUB_PROVIDER and GITLAB_PROVIDER
  * (GAUTH-02). GitLab's Device Authorization Grant matches GitHub's on field
  * names, error codes and request bodies, so both hosts share one engine.
  *
  * AUTH-09 discipline: no credential field is ever interpolated into an
- * Error/notify here; enforced by tests/architecture/no-credential-leak.test.ts
+ * Error/notify here; enforced by test/architecture/no-credential-leak.test.ts
  * (PROV-05).
  */
 
@@ -44,15 +43,17 @@ export interface GitAuthProvider {
 }
 
 /**
- * GitHub descriptor carrying today's exact literals (byte-identity source for
- * the engine's default path). deviceCodeUrl/tokenUrl/clientId/scope and the
- * `x-access-token` credential mapping are GitHub's real Device Flow values,
- * injected into the generic engine in domain/github-auth.ts.
+ * GitHub descriptor and the engine's default. deviceCodeUrl/tokenUrl/clientId/
+ * scope and the `x-access-token` credential mapping are GitHub's real Device
+ * Flow values, injected into the generic engine in domain/github-auth.ts.
  */
 export const GITHUB_PROVIDER: GitAuthProvider = {
   id: "github",
+  // eslint-disable-next-line local/no-github-literal -- GHB-02: the Device Flow provider claims the real github.com host, never the override
   hostMatch: (host) => host === "github.com",
+  // eslint-disable-next-line local/no-github-literal -- GHB-02: GitHub's Device Flow runs only against github.com; it never runs under the override
   deviceCodeUrl: "https://github.com/login/device/code",
+  // eslint-disable-next-line local/no-github-literal -- GHB-02: GitHub's Device Flow runs only against github.com; it never runs under the override
   tokenUrl: "https://github.com/login/oauth/access_token",
   clientId: "Ov23liNcyK08uGdU0mMl",
   scope: "repo",

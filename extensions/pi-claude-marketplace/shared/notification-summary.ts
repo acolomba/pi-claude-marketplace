@@ -71,8 +71,8 @@ function isInfoKind(
 // (install/update/reinstall/uninstall + the fresh-disable) stamp
 // needsReload:true; inventory rows stamp false. No marketplace-status /
 // cascade-kind inference: the decision is a per-row stamped fact. Info-surface
-// kinds short-circuit to false (including reconcile-applied-cascade, which
-// suppresses the trailer at the kind level even though its rows stamp true).
+// kinds short-circuit to false; reconcile-applied-cascade reads its rows like a
+// cascade does.
 // ---------------------------------------------------------------------------
 
 /**
@@ -473,12 +473,6 @@ export function shouldEmitReloadHint(message: NotificationMessage): boolean {
     // DIFF-01 SC #2: `reconcile-pending-empty` rows are pre-transition; the
     // trailer would be grammatically false (`/reload` cannot pick up zero
     // changes).
-    // RECON-04: `reconcile-applied-cascade` already ran ON /reload (the
-    // resources_discover handler IS the trailer's nominal trigger), so
-    // emitting `Run /reload to pick up changes` after applying changes
-    // would be a lie. Structurally false closes the trailer-leak gap --
-    // this kind-level exclusion stands EVEN THOUGH its rows stamp
-    // needsReload:true (they are realized transitions).
     switch (message.kind) {
       case "marketplace-info":
       case "plugin-info":
@@ -487,19 +481,29 @@ export function shouldEmitReloadHint(message: NotificationMessage): boolean {
       case "marketplace-not-added":
       case "reconcile-pending-empty":
       case "prune-empty":
-      case "reconcile-applied-cascade":
         return false;
       case "prune-committed-warning":
         return true;
+      case "reconcile-applied-cascade":
+        // D-08: this report comes from `/claude:plugin apply`, which changed
+        // state the running session has not loaded, so its rows decide. A
+        // load's per-session warning rows stamp needsReload:false, so those
+        // warnings never carry the trailer.
+        return rowsNeedReload(message.marketplaces);
     }
   }
 
-  // RLD-02: the trailer fires iff the OR-reduce of the stamped `needsReload`
-  // over the flattened marketplace + plugin rows is true. Realized install/
-  // update/reinstall/uninstall and the realized fresh-disable transition stamp
-  // needsReload:true, while list/info inventory `disabled`/`installed` rows
-  // stamp needsReload:false.
-  for (const mp of message.marketplaces) {
+  return rowsNeedReload(message.marketplaces);
+}
+
+/**
+ * RLD-02: the OR-reduce of the stamped `needsReload` over the flattened
+ * marketplace + plugin rows. Realized install/update/reinstall/uninstall and
+ * the realized fresh-disable transition stamp needsReload:true, while
+ * list/info inventory `disabled`/`installed` rows stamp needsReload:false.
+ */
+function rowsNeedReload(marketplaces: readonly MarketplaceNotificationMessage[]): boolean {
+  for (const mp of marketplaces) {
     if (mp.needsReload === true) {
       return true;
     }

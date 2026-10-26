@@ -18,9 +18,12 @@ import type {
   ImportClaudeSettingsOptions,
 } from "../orchestrators/import/index.ts";
 import type { GitOps } from "../orchestrators/marketplace/shared.ts";
+import type { ApplyReconcileOptions } from "../orchestrators/reconcile/types.ts";
 import type { PluginUpdateFn } from "../orchestrators/types.ts";
 import type { McpStatusReader } from "../platform/mcp-status.ts";
+import type { NotificationContext } from "../platform/pi-api.ts";
 import type { CompletionCache } from "../shared/completion-cache.ts";
+import type { NotificationRun } from "../shared/notification-run.ts";
 
 export interface EdgeDeps {
   readonly completionCache: CompletionCache;
@@ -34,9 +37,16 @@ export interface EdgeDeps {
    * Autoupdate-cascade injection seam, allocated per command invocation:
    * the marketplace update handler calls this once and passes the returned
    * function to the orchestrator, so the cascade's D-10-18 tag memos are
-   * bounded by the run rather than by this binding's lifetime.
+   * bounded by the run rather than by this binding's lifetime. UPD-DEP-D1:
+   * the command's context is what a dependency install the cascade makes
+   * reports through.
    */
-  readonly beginPluginUpdateRun: () => PluginUpdateFn;
+  readonly beginPluginUpdateRun: (notification: {
+    readonly ctx: NotificationContext;
+    readonly run: NotificationRun;
+  }) => PluginUpdateFn;
+  /** APL-01: the reconcile apply step that `/claude:plugin apply` runs. */
+  readonly applyReconcile: (opts: ApplyReconcileOptions) => Promise<void>;
   readonly importClaudeSettings?: (
     opts: ImportClaudeSettingsOptions,
   ) => Promise<ClaudeImportExecutionResult>;

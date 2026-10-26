@@ -1,5 +1,10 @@
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
-import { DependencyCascadeError } from "../../shared/errors.ts";
+import {
+  DependencyCascadeError,
+  DirectoryPinUnsatisfiedError,
+  InstallMarketplaceAddError,
+} from "../../shared/errors.ts";
+import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
 
 import { INSTALL_CONTEXT } from "./install.messaging.ts";
@@ -12,11 +17,14 @@ import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type {
   ContentReason,
   PluginFailedMessage,
+  PluginInstalledMessage,
   PluginSkippedMessage,
+  PluginUpdatedMessage,
 } from "../../shared/notification-types.ts";
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
+import type { UpdateDependencyRow } from "../types.ts";
 
 /**
  * install-cascade.messaging.ts -- the command-local notification vocabulary for
@@ -69,7 +77,7 @@ import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
  * in this same block, so restating the list here would be a second copy free to
  * drift from the one the install surface is checked against.
  */
-type CascadeMemberStatus = InstallMsg["status"] | "skipped";
+type CascadeMemberStatus = InstallMsg["status"] | "skipped" | "updated";
 
 /**
  * The cascade block's row union: install's own rows plus the RESV-05 skip.
@@ -78,7 +86,7 @@ type CascadeMemberStatus = InstallMsg["status"] | "skipped";
  * install's, so a materialized dependency that staged agents or MCP servers
  * fires the same `{requires pi-...}` marker an ordinary install row does.
  */
-export type CascadeMsg = InstallMsg | PluginSkippedMessage;
+export type CascadeMsg = InstallMsg | PluginSkippedMessage | PluginUpdatedMessage;
 
 /**
  * D-04 / D-05: the cascade's `CommandContext`. The label is install's own --
@@ -95,6 +103,8 @@ export const CASCADE_CONTEXT = {
   rowPolicies: {
     ...INSTALL_CONTEXT.rowPolicies,
     skipped: { markers: false, contentReasons: true },
+    // UPD-DEP-D1: a dependency moved into the range before the install.
+    updated: { markers: true, contentReasons: true },
   },
 } as const satisfies CommandContext<CascadeMemberStatus>;
 
@@ -181,6 +191,47 @@ function stagedDependencies(member: CascadeInstalledRow): readonly Dependency[] 
 }
 
 /**
+ * One materialized closure member's row: installed fresh, or turned back on
+ * through its own disabled record. UPD-DEP-D1: an update's dependency rows are
+ * these rows too.
+ */
+export function composeCascadeMemberRow(
+  member: CascadeInstalledRow,
+  probe: SoftDepStatus,
+): PluginInstalledMessage {
+  return {
+    status: "installed",
+    name: member.key,
+    dependencies: stagedDependencies(member),
+    version: member.version,
+    // TAGS-02 / D-07-03: the fallback names itself on the row but never
+    // touches severity -- that stays exactly what `companionSeverity`
+    // computes, so a member with an unloaded companion still reports the
+    // genuine SEV-01 degradation the fallback must not paper over.
+    ...(member.fellBackToCurrentCopy && { reasons: ["dependency current copy"] as const }),
+    // D-08-02: a member re-materialized through its own disabled record
+    // reports both what was already true and what this command is
+    // responsible for, on the same split the promotion row's own
+    // `["already installed", "dependency promoted"]` pair already sets out
+    // -- never alongside the fallback token above, since a member is either
+    // freshly resolved (possibly falling back) or already-installed and
+    // disabled, never both.
+    ...(member.reEnabledFromRecord && {
+      reasons: ["already installed", "dependency enabled"] as const,
+    }),
+    severity: companionSeverity(
+      {
+        declaresAgents: member.declaresAgents,
+        declaresMcp: member.declaresMcp,
+        declaresWorkflows: member.declaresWorkflows,
+      },
+      probe,
+    ),
+    needsReload: true,
+  };
+}
+
+/**
  * RESV-01 / RESV-05 / RESV-06: one row per closure member, beside the requesting
  * plugin's own row.
  *
@@ -202,46 +253,21 @@ export function composeCascadeMemberRows(args: {
   readonly installed: readonly CascadeInstalledRow[];
   readonly alreadyInstalled: readonly CascadeSkippedMember[];
   readonly probe: SoftDepStatus;
+  /** UPD-DEP-D1: the rows of the dependencies moved into range first. */
+  readonly moved?: readonly UpdateDependencyRow[];
 }): readonly CascadeMsg[] {
-  const rows: CascadeMsg[] = [args.rootRow];
+  const rows: CascadeMsg[] = [args.rootRow, ...(args.moved ?? [])];
   for (const member of args.installed) {
     if (member.key === args.rootKey) {
       continue;
     }
 
-    rows.push({
-      status: "installed",
-      name: member.key,
-      dependencies: stagedDependencies(member),
-      version: member.version,
-      // TAGS-02 / D-07-03: the fallback names itself on the row but never
-      // touches severity -- that stays exactly what `companionSeverity`
-      // computes, so a member with an unloaded companion still reports the
-      // genuine SEV-01 degradation the fallback must not paper over.
-      ...(member.fellBackToCurrentCopy && { reasons: ["dependency current copy"] as const }),
-      // D-08-02: a member re-materialized through its own disabled record
-      // reports both what was already true and what this command is
-      // responsible for, on the same split the promotion row's own
-      // `["already installed", "dependency promoted"]` pair already sets out
-      // -- never alongside the fallback token above, since a member is either
-      // freshly resolved (possibly falling back) or already-installed and
-      // disabled, never both.
-      ...(member.reEnabledFromRecord && {
-        reasons: ["already installed", "dependency enabled"] as const,
-      }),
-      severity: companionSeverity(
-        {
-          declaresAgents: member.declaresAgents,
-          declaresMcp: member.declaresMcp,
-          declaresWorkflows: member.declaresWorkflows,
-        },
-        args.probe,
-      ),
-      needsReload: true,
-    });
+    rows.push(composeCascadeMemberRow(member, args.probe));
   }
 
-  for (const member of args.alreadyInstalled) {
+  // UPD-DEP-D1: a dependency moved into range reports its move, not a skip.
+  const moved = new Set((args.moved ?? []).map((row) => row.name));
+  for (const member of args.alreadyInstalled.filter((entry) => !moved.has(entry.key))) {
     // RESV-05: every member reaching this loop is left-alone and ENABLED --
     // the cascade's walk never skips a disabled record, which re-enables as a
     // member of the `installed` loop above instead (EDEP-03) -- so the skip
@@ -338,7 +364,9 @@ function rangeConflictFacts(
         version: failure.recordedVersion,
         reasons: ["already installed", "version conflict"],
         cause: new DependencyCascadeError(
-          `Dependency "${failure.key}" is installed at version ${failure.recordedVersion}, which does not satisfy "${failure.range}".`,
+          failure.moveRefusal === undefined
+            ? `Dependency "${failure.key}" is installed at version ${failure.recordedVersion}, which does not satisfy ${failure.range}.`
+            : `Dependency "${failure.key}" is installed at version ${failure.recordedVersion}, which does not satisfy ${failure.range}, and cannot move: ${failure.moveRefusal}`,
           failure.key,
         ),
       }
@@ -346,7 +374,7 @@ function rangeConflictFacts(
         key: failure.key,
         reasons: ["version conflict"],
         cause: new DependencyCascadeError(
-          `Dependency "${failure.key}" has contradictory version constraints "${failure.range}" (${failure.detail}).`,
+          `Dependency "${failure.key}" has contradictory version constraints ${failure.range} (${failure.detail}).`,
           failure.key,
         ),
       };
@@ -369,7 +397,7 @@ function constraintFailureFacts(failure: CascadeConstraintFailure): CascadeFailu
         key: failure.key,
         reasons: ["no matching version"],
         cause: new DependencyCascadeError(
-          `Dependency "${failure.key}" has no release tag satisfying "${failure.range}".`,
+          `Dependency "${failure.key}" has no release tag satisfying ${failure.range}.`,
           failure.key,
         ),
       };
@@ -383,7 +411,7 @@ function constraintFailureFacts(failure: CascadeConstraintFailure): CascadeFailu
         // `unreadable`.
         reasons: [failure.classification ?? "unreadable"],
         cause: new DependencyCascadeError(
-          `Dependency "${failure.key}" could not be checked against "${failure.range}" (${failure.classification ?? "tag listing failed"}).`,
+          `Dependency "${failure.key}" could not be checked against ${failure.range} (${failure.classification ?? "tag listing failed"}).`,
           failure.key,
         ),
       };
@@ -392,7 +420,7 @@ function constraintFailureFacts(failure: CascadeConstraintFailure): CascadeFailu
         key: failure.key,
         reasons: ["invalid version constraint"],
         cause: new DependencyCascadeError(
-          `Dependency "${failure.key}" declares an unparseable version constraint "${failure.range}" (${failure.detail}).`,
+          `Dependency "${failure.key}" declares an unparseable version constraint ${failure.range} (${failure.detail}).`,
           failure.key,
         ),
       };
@@ -438,6 +466,30 @@ function memberCause(
   );
 }
 
+/**
+ * The member arm's brace: a rollback partial, else the reason a direct install
+ * reads -- a failed marketplace add's own reason, or the git host's refusal.
+ */
+function memberReasons(
+  subject: Extract<CascadeFailureSubject, { readonly kind: "member" }>,
+): readonly ContentReason[] {
+  if (subject.rollbackPartials.length > 0) {
+    return ["rollback partial"];
+  }
+
+  if (subject.error instanceof InstallMarketplaceAddError) {
+    return [subject.error.reason];
+  }
+
+  // GV-01: a plugin directory copy outside its dependents' range.
+  if (subject.error instanceof DirectoryPinUnsatisfiedError) {
+    return ["version conflict"];
+  }
+
+  const gitReason = classifyGitHostFailure(subject.error);
+  return gitReason !== undefined ? [gitReason] : [];
+}
+
 /** The subject, brace and cause any cascade failure resolves to. */
 function failureFacts(subject: CascadeFailureSubject, rootKey: string): CascadeFailureFacts {
   if (subject.kind === "closure") {
@@ -449,13 +501,14 @@ function failureFacts(subject: CascadeFailureSubject, rootKey: string): CascadeF
   }
 
   // The member resolved cleanly and its own six-phase ledger then failed, so
-  // there is no cascade reason to add -- the ledger's error IS the fact, and the
-  // renderer suppresses the empty brace. A rollback that could not finish is the
-  // one thing worth naming on top of it, on the same terms the single-plugin
-  // failure row names it.
+  // there is no cascade reason to add -- the ledger's error IS the fact. A
+  // rollback that could not finish is named on the same terms the
+  // single-plugin failure row names it; otherwise a git host that refused the
+  // member's clone reads the reason a direct install reads (INR-01), and any
+  // other throw leaves the empty brace the renderer suppresses.
   return {
     key: subject.key,
-    reasons: subject.rollbackPartials.length > 0 ? ["rollback partial"] : [],
+    reasons: memberReasons(subject),
     cause: memberCause(subject, rootKey),
     ...(subject.rollbackPartials.length > 0 && { rollbackPartials: subject.rollbackPartials }),
   };

@@ -1,16 +1,19 @@
 import { compareByNameThenScope } from "../../shared/compare-name-scope.ts";
+import { declaredDependencies } from "../../shared/concerns/soft-dep.ts";
 import {
   type ContentReason,
   type PluginFailedMessage,
   type PluginManualRecoveryMessage,
   type PluginReinstalledMessage,
-  type PluginSkippedMessage,
+  type PluginUpdateSkippedMessage,
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { malformedReasonsForKinds, skipSeverity } from "../../shared/notify-reasons.ts";
+import { narrowUnsupportedKinds } from "../../shared/probe-classifiers.ts";
+
+import { disclosureCause, revisionVersionSlot } from "./update-row.ts";
 
 import type { NotificationContext } from "../../platform/pi-api.ts";
-import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { CommandContext, MarketplaceRows, Plural } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
@@ -18,6 +21,7 @@ import type {
   ReinstallFailedOutcome,
   ReinstallPluginOutcome,
   ReinstallReinstalledOutcome,
+  ReinstallSkippedOutcome,
 } from "../types.ts";
 
 /**
@@ -33,7 +37,7 @@ type ReinstallStatus = "reinstalled" | "skipped" | "failed" | "manual recovery";
  */
 type ReinstallMsg =
   | PluginReinstalledMessage
-  | PluginSkippedMessage
+  | PluginUpdateSkippedMessage
   | PluginFailedMessage
   | PluginManualRecoveryMessage;
 
@@ -185,6 +189,19 @@ export function reinstalledRowFromOutcome(
   rowScope: Scope | undefined,
 ): PluginReinstalledMessage {
   const malformed = malformedReasonsForKinds(outcome.degradedKinds);
+  // D-10-15 / D-18-07: no tag a range admits pinned this; the marketplace's
+  // current copy is what landed. Named first, and it moves no severity, as on
+  // update's row.
+  const currentCopy: readonly ContentReason[] =
+    outcome.constraint?.fellBackToCurrentCopy === true
+      ? (["dependency current copy"] as const)
+      : [];
+  // D-18-06: the kinds the reinstall left out, after the malformed kinds, in
+  // the install row's emit order.
+  const dropped: readonly ContentReason[] =
+    outcome.partialDegrade === undefined
+      ? []
+      : narrowUnsupportedKinds(outcome.partialDegrade.kinds);
   // WLIF-06: the tail token. The reinstall's new source did not re-place a
   // workflow the record named, so the command that envelope registered is still
   // live -- the host cannot unregister it, and only a reload drops it. Raises
@@ -192,20 +209,33 @@ export function reinstalledRowFromOutcome(
   // is not reached until that reload.
   const stale: readonly ContentReason[] =
     outcome.staleWorkflowCommand === true ? (["stale workflow command"] as const) : [];
-  const reasons: readonly ContentReason[] = [...malformed, ...stale];
+  const reasons: readonly ContentReason[] = [...currentCopy, ...malformed, ...dropped, ...stale];
+  // A newly left-out kind is a shortfall the user did not ask for, so it
+  // raises the row; a record that was already partial stays `info`.
+  const raised =
+    malformed.length > 0 || stale.length > 0 || outcome.partialDegrade?.newlyDegraded === true;
+  // D-10-13 / D-18-07: the range that admitted what landed rides the cause
+  // line, read through update's own carrier so the two verbs word it alike.
+  const cause = disclosureCause(outcome.constraint);
   return {
     status: "reinstalled",
     name: outcome.name,
-    dependencies: dependenciesFromOutcome(outcome),
-    // IN-02: the spread is not defensive -- `resolvePluginVersion` always
-    // returns a non-empty string. It keeps a legacy record carrying an empty
-    // version from putting an empty slot in the payload; the renderer suppresses
-    // the `v<version>` token either way.
-    ...(outcome.version !== "" && { version: outcome.version }),
+    // WDEP-04 / SEV-01: the reinstall row stamps the soft-dep marker but takes
+    // NO `companionSeverity` raise, matching the `agents` and `mcp` markers on
+    // this same row. That asymmetry against install / update / enable is
+    // deliberate and byte-pinned by the catalog's reinstall soft-dep state,
+    // which carries no attention summary line; do not "repair" it with a raise.
+    dependencies: declaredDependencies(outcome),
+    // UPR-03: the arrow only when the revision moved, so a repair at the
+    // recorded revision keeps its single version. IN-02: an empty version
+    // counts as unknown, so a legacy record carrying one puts no empty slot in
+    // the payload.
+    ...revisionVersionSlot({ ...outcome, toVersion: outcome.version }),
     ...(rowScope !== undefined && { scope: rowScope }),
     ...(reasons.length > 0 && { reasons }),
+    ...(cause !== undefined && { cause }),
     // D-03/D-06: realized reinstall transition -> reloads Pi resources.
-    severity: reasons.length > 0 ? "warning" : "info",
+    severity: raised ? "warning" : "info",
     needsReload: true,
   };
 }
@@ -220,6 +250,7 @@ export function reinstalledRowFromOutcome(
  *  (2) typed `outcome.reasons` (set at the catch site via
  *  `reasonsFromTypedError(err)`) -> verbatim
  *  (3) substring parse on `notes` via `narrowReasons` -> legacy fallback
+ * A plain failed outcome that carries `cause` renders it as the cause line.
  *
  * Orphan-fold scope-bracket suppression: the row carries no `scope?`. The sole
  * caller groups outcomes by `(scope, marketplace)`, so a row's scope always
@@ -232,21 +263,8 @@ function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
     case "reinstalled":
       return reinstalledRowFromOutcome(outcome, undefined);
 
-    case "skipped": {
-      const reasons = narrowReasons(outcome.notes);
-      const skipped: PluginSkippedMessage = {
-        status: "skipped",
-        name: outcome.name,
-        reasons,
-        // D-01: an absent-target reinstall (the named plugin is not installed)
-        // cannot be carried out -> error (severity-only flip; the `(skipped)
-        // {not installed}` per-row grammar is preserved). Otherwise benign
-        // idempotent skip -> info, actionable skip -> warning; never reloads.
-        severity: reasons.includes("not installed") ? "error" : skipSeverity(reasons),
-        needsReload: false,
-      };
-      return skipped;
-    }
+    case "skipped":
+      return skippedRowFromOutcome(outcome);
 
     case "failed": {
       // CMC-16: structural failure-class tag takes priority over
@@ -263,13 +281,15 @@ function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
       //  (3) narrowReasons(outcome.notes) -> substring fallback
       // WR-04: `narrowReasons([])` and `narrowReasons(undefined)` both return
       // `[]`, which would render a failed row with no `{<reason>}` brace. Guard
-      // with the `"unreadable"` fallback (ATTR-09 / D-47-B) so a failed row never
-      // renders bare.
+      // with the `"unreadable"` fallback (ATTR-09 / D-47-B) so a failed row with
+      // nothing to explain it never renders bare. A failure no ladder
+      // classifies keeps no reason and explains itself through its cause line,
+      // as update's row does.
       const narrowed: readonly ContentReason[] = isManualRecoveryOutcome(outcome)
         ? (["rollback partial"] as const)
         : (outcome.reasons ?? narrowReasons(outcome.notes));
       const reasons: readonly ContentReason[] =
-        narrowed.length > 0 ? narrowed : (["unreadable"] as const);
+        narrowed.length > 0 || outcome.cause !== undefined ? narrowed : (["unreadable"] as const);
 
       if (isManualRecoveryOutcome(outcome)) {
         const manualRecovery: PluginManualRecoveryMessage = {
@@ -287,7 +307,12 @@ function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
       const failed: PluginFailedMessage = {
         status: "failed",
         name: outcome.name,
+        // UPR-03: the move the reinstall attempted, when the runner knew it.
+        ...revisionVersionSlot(outcome),
         reasons,
+        ...(outcome.cause !== undefined && { cause: outcome.cause }),
+        // D-18-10: one child per bridge whose commit or finalize failed.
+        ...(outcome.rollbackPartial !== undefined && { rollbackPartial: outcome.rollbackPartial }),
         // D-03/D-06: a failed reinstall -> error, no reload.
         severity: "error",
         needsReload: false,
@@ -298,37 +323,22 @@ function outcomeToPluginMessage(outcome: ReinstallPluginOutcome): ReinstallMsg {
 }
 
 /**
- * Map a `ReinstallReinstalledOutcome`'s `declaresAgents` / `declaresMcp` /
- * `declaresWorkflows` predicate flags to the `Dependency[]` tuple consumed by
- * `PluginReinstalledMessage.dependencies` per SNM-06. `resolveRows`
- * iterates this array to compose the `{requires pi-subagents}` /
- * `{requires pi-mcp-adapter}` / `{requires pi-dynamic-workflows}` markers when the
- * companion extension is unloaded (MSG-SD-1..2, D-12).
- *
- * WDEP-02: `workflows` pushes LAST, so a reinstall that declares agents and mcp
- * renders the same two-marker brace whether or not it also declares workflows.
- *
- * WDEP-04 / SEV-01: the reinstall row stamps the marker but takes NO
- * `companionSeverity` raise, matching the `agents` and `mcp` markers on this
- * same row. That asymmetry against install / update / enable is deliberate and
- * byte-pinned by the catalog's reinstall soft-dep state, which carries no
- * attention summary line; do not "repair" it by adding a raise here.
+ * The `skipped` row. The shared runner's typed reasons win over the narrowed
+ * notes (D-18-07). A `dependents constrain` skip carries the gate's holders on
+ * `notes`, and they become the row's cause line, as on update's row.
  */
-function dependenciesFromOutcome(outcome: ReinstallReinstalledOutcome): readonly Dependency[] {
-  const deps: Dependency[] = [];
-  if (outcome.declaresAgents) {
-    deps.push("agents");
-  }
-
-  if (outcome.declaresMcp) {
-    deps.push("mcp");
-  }
-
-  if (outcome.declaresWorkflows) {
-    deps.push("workflows");
-  }
-
-  return Object.freeze(deps);
+function skippedRowFromOutcome(outcome: ReinstallSkippedOutcome): PluginUpdateSkippedMessage {
+  const reasons = outcome.reasons ?? narrowReasons(outcome.notes);
+  const holdsCause = reasons.includes("dependents constrain") && outcome.notes.length > 0;
+  return {
+    status: "skipped",
+    name: outcome.name,
+    reasons,
+    ...(holdsCause && { cause: new Error(outcome.notes.join(" ")) }),
+    // Benign idempotent skip -> info, actionable skip -> warning; never reloads.
+    severity: skipSeverity(reasons),
+    needsReload: false,
+  };
 }
 
 /**

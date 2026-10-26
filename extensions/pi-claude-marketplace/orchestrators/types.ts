@@ -9,10 +9,18 @@
 
 import { type ContentReason } from "../shared/notification-types.ts";
 
+import type { ScopedLocations } from "../persistence/locations.ts";
 import type { CleanupFailure } from "../shared/errors.ts";
-import type { McpConfigNotice } from "../shared/notification-types.ts";
+import type {
+  McpConfigNotice,
+  PluginFailedMessage,
+  PluginInstalledMessage,
+  PluginPartiallyInstalledMessage,
+  PluginUpdatedMessage,
+} from "../shared/notification-types.ts";
 import type { DegradeKind } from "../shared/notify-reasons.ts";
 import type { Scope } from "../shared/types.ts";
+import type { RollbackPartial } from "../transaction/phase-ledger.ts";
 import type { LedgerDegradationSignals } from "./plugin/shared.ts";
 
 export interface ReinstallOutcomeBase {
@@ -24,7 +32,19 @@ export interface ReinstallOutcomeBase {
 export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly partition: "reinstalled";
   readonly version: string;
-  readonly resourcesChanged: boolean;
+  /**
+   * UPR-03: the version the record held before the reinstall. The row shows
+   * the move from it to `version` only when the revision moved (D-18-08 as
+   * amended), so a repair at the recorded revision keeps its single version.
+   */
+  readonly fromVersion: string;
+  /**
+   * UPR-02: the full sha of the record the reinstall read and of the
+   * candidate, each omitted when that side has none (a path source), so a
+   * path reinstall's outcome shape is unchanged (NREG-01).
+   */
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
   /**
    * WLIF-06: the reinstall's new source did not re-place at least one workflow
    * envelope the record named, so the command that envelope registered is still
@@ -38,7 +58,25 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    */
   readonly staleWorkflowCommand?: boolean;
   /**
-   * D-99-02c: the GENERATED NAMES the reinstall ledger staged. The `Names`
+   * D-18-06 / D-18-08: the component kinds the reinstall left out because its
+   * source now resolves partially-available, carried from the shared runner's
+   * `updated` outcome. `newlyDegraded` is true when the record left nothing
+   * out before, which raises the row to `warning`. Omitted for a clean
+   * candidate (NREG-01).
+   */
+  readonly partialDegrade?: {
+    readonly kinds: readonly string[];
+    readonly newlyDegraded: boolean;
+  };
+  /**
+   * D-18-07: the constraint gate's disclosure when a dependent's range chose
+   * what landed, carried from the shared runner's `updated` outcome. The row
+   * reads `fellBackToCurrentCopy`, as update's row does. Omitted for an
+   * unconstrained reinstall (NREG-01).
+   */
+  readonly constraint?: UpdateConstraintDisclosure;
+  /**
+   * D-99-02c: the GENERATED NAMES the reinstall staged. The `Names`
    * suffix keeps them spelled apart from the same-subject presence FLAGS on
    * `LedgerDegradationSignals` (`plugin/shared.ts`), which carry a count
    * verdict only. A name list and a boolean answer different questions --
@@ -77,12 +115,13 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly declaresWorkflows: boolean;
   /**
    * WARN-01 / WR-04 / D-86-03: the component kinds whose SOURCE frontmatter
-   * could not be parsed and which re-materialized in degraded form. The
-   * reinstall primitive drives the load-time backfill, so without this the
-   * backfill projection renders a clean row over a ledger that just degraded a
-   * component -- the contradiction the install and enable arms already avoid by
-   * carrying the same signal. Omitted when nothing degraded, so a clean
-   * reinstall's outcome shape is unchanged (NREG-01).
+   * could not be parsed and which re-materialized in degraded form. Without
+   * this the reinstall row renders clean over a reinstall that just degraded a
+   * component -- the contradiction the install and enable arms already avoid
+   * by carrying the same signal. (`apply`'s growth move, which re-materializes
+   * a grown plugin, reads the update runner's own `degradedKinds`.) Omitted
+   * when nothing degraded, so a clean reinstall's outcome shape is unchanged
+   * (NREG-01).
    */
   readonly degradedKinds?: readonly DegradeKind[];
   readonly notes?: readonly string[];
@@ -90,14 +129,16 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * D-141-03 / D-141-05: the DISCOVERY half of this reinstall's staging
    * warnings, unprefixed, carried separately from `notes`.
    *
-   * `notes` folds all three halves (discovery + hygiene + maintenance) behind
-   * a `warning: ` prefix for orchestrated consumers, so a reader cannot tell
-   * the halves apart again. `reinstallPlugins` needs exactly the discovery
-   * half to render after its cascade, and the boundary forces the carrier:
-   * the warnings originate inside the locked ledger while the rows are not
-   * rendered until `renderReinstallPartitionAndNotify` at the very end of
-   * `reinstallPlugins`, so a diagnostic fired from inside the ledger would
-   * print the detail BEFORE the row it explains.
+   * `notes` folds the discovery half and the maintenance warnings behind a
+   * `warning: ` prefix for orchestrated consumers, so a reader cannot tell
+   * them apart again. The agents and MCP hygiene half is not carried: the
+   * shared swap drops it in direct mode, as it does for `update`.
+   * `reinstallPlugins` needs exactly the discovery half to render after its
+   * cascade, and the boundary forces the carrier: the warnings originate
+   * inside the shared runner while the rows are not rendered until
+   * `renderReinstallPartitionAndNotify` at the very end of `reinstallPlugins`,
+   * so a diagnostic fired from inside the runner would print the detail
+   * BEFORE the row it explains.
    *
    * Populated only on the `render: "none"` arm, the same arm that populates
    * `notes`. The self-rendering `render !== "none"` arm leaves this undefined
@@ -113,8 +154,8 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly discoveryWarnings?: readonly string[];
   /**
    * AFILE-04 / AFILE-02: the MCP config file notices from this reinstall's
-   * MCP replace. The outcome carries them because the rows render after the
-   * locked ledger finishes. A consumer routes them through
+   * MCP commit. The outcome carries them because the rows render after the
+   * shared runner finishes. A consumer routes them through
    * `notifyMcpConfigNotices`. Populated only on the `render: "none"` arm, and
    * omitted when there are none (NREG-01).
    */
@@ -124,11 +165,28 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
 export interface ReinstallSkippedOutcome extends ReinstallOutcomeBase {
   readonly partition: "skipped";
   readonly notes: readonly string[];
+  /**
+   * D-18-07: the shared runner's typed skip reasons, such as `dependents
+   * constrain`, whose holders ride on `notes`. Absent for reinstall's own
+   * `already disabled` skip, whose `notes` the messaging narrows. A target
+   * the scope does not record is a failure, not a skip (UPR-04).
+   */
+  readonly reasons?: readonly ContentReason[];
 }
 
 export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
   readonly partition: "failed";
   readonly notes: readonly string[];
+  /**
+   * UPR-03: whatever the shared runner knew of the move the reinstall
+   * attempted -- the record's and the candidate's versions and shas. Each is
+   * absent when that side is unknown, as on a failure before any candidate
+   * exists (NREG-01).
+   */
+  readonly fromVersion?: string;
+  readonly toVersion?: string;
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
   /**
    * CMC-16 / CMC-11: structural failure-class tag
    * consumed by `outcomeToCascadePluginMessage`'s closed-set Reason mapping. When the
@@ -148,13 +206,39 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
    * present, `outcomeToCascadePluginMessage` prefers `reasons[0]` over
    * `narrowReasons(notes)`; when absent, the substring narrow
    * is used (for fixtures that build outcomes without
-   * `reasons`). Populated by the catch in `reinstallPlugins` so an
+   * `reasons`). Populated by `reinstall-record.ts` so an
    * EACCES / EPERM / ENOENT failure renders as the matching closed
    * Reason (`permission denied` / `source missing`) rather than the
    * permissive `not in manifest` default. Typed `ContentReason` (TYPE-02):
    * the structural `marketplace not added` marker is never a per-plugin outcome reason.
    */
   readonly reasons?: readonly ContentReason[];
+  /**
+   * LAYER-04 / CFG-03: set for a named reinstall's layer refusal. Its
+   * message is the row's cause line, built from fixed text and safe names or
+   * a file's basename. FLR-01: also set for a held state lock, whose cause
+   * line names the lock file the way the uninstall row does (D-01), and for
+   * an unreadable dependency walk, whose message names the record it could
+   * not read (D-18-17). Every other failure keeps its text in `notes` only,
+   * because that text is not prepared for a rendered cause line.
+   */
+  readonly cause?: Error;
+  /**
+   * D-18-10: one child per bridge whose commit or finalize failed, as update
+   * renders them. Set only for a commit or finalize failure, whose `cause` is
+   * the swap's aggregate error.
+   */
+  readonly rollbackPartial?: readonly {
+    readonly phase: UpdatePhaseBridge;
+    readonly cause: Error;
+  }[];
+  /**
+   * AFILE-04: the MCP config file notices of a commit or finalize failure
+   * that came after the MCP commit had rewritten the file. The swap does not
+   * restore that file, so the user still needs to hear what changed in it.
+   * Omitted when there are none (NREG-01).
+   */
+  readonly mcpConfigNotices?: readonly McpConfigNotice[];
 }
 
 export type ReinstallPluginOutcome =
@@ -198,6 +282,18 @@ export interface UpdatePhaseFailure {
   readonly cleanupFailures?: readonly CleanupFailure[];
 }
 
+/**
+ * UPR-02 / UPR-03: the revisions a materialization moves between, read by the
+ * row composers. Each commit is optional on its own: a path source records
+ * none, and a switch between source kinds has one on one side only.
+ */
+export interface RevisionMove {
+  readonly fromVersion: string;
+  readonly toVersion: string;
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
+}
+
 export interface PluginUpdateBase {
   readonly name: string;
   /**
@@ -209,7 +305,33 @@ export interface PluginUpdateBase {
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
   readonly declaresWorkflows: boolean;
+  /**
+   * UPD-DEP-D1: one row per dependency the update installed, enabled or moved
+   * for its new version, or the row of the dependency that refused it. They
+   * render beside this plugin's row in its marketplace block, named by their
+   * full keys as install's cascade rows are. Omitted when there are none
+   * (NREG-01).
+   */
+  readonly dependencyRows?: readonly UpdateDependencyRow[];
 }
+
+/** UPD-DEP-D1: a dependency a move changed, with the row that reports it. */
+export interface MovedDependency {
+  readonly key: string;
+  readonly name: string;
+  readonly marketplace: string;
+  readonly row: UpdateDependencyRow;
+}
+
+/**
+ * UPD-DEP-D1: a row for a dependency an update or install changed for the
+ * plugin it named: installed or enabled, moved, or the one that refused it.
+ */
+export type UpdateDependencyRow =
+  | PluginInstalledMessage
+  | PluginPartiallyInstalledMessage
+  | PluginUpdatedMessage
+  | PluginFailedMessage;
 
 /**
  * `(updated)` partition. `fromVersion` and `toVersion`
@@ -237,6 +359,15 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
   readonly partition: "updated";
   readonly fromVersion: string;
   readonly toVersion: string;
+  /**
+   * UPR-02: the full sha of the record the preflight read and of the
+   * candidate, each omitted when that side has none (a path source, or a
+   * record written before commits were recorded), so a path update's outcome
+   * shape is unchanged (NREG-01). The row composer decides whether a row
+   * shows them.
+   */
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
   /**
    * D-99-02c: generated NAMES, spelled apart from the same-subject presence
    * flags on `LedgerDegradationSignals` (`plugin/shared.ts`). While both
@@ -429,6 +560,12 @@ export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
   readonly partition: "failed";
   readonly fromVersion?: string;
   readonly toVersion?: string;
+  /**
+   * UPR-03: the full shas of the move a failure after the candidate
+   * attempted, each omitted when that side has none (NREG-01).
+   */
+  readonly fromCommit?: string;
+  readonly toCommit?: string;
   readonly notes: readonly string[];
   readonly reasons?: readonly ContentReason[];
   readonly phaseFailures?: readonly UpdatePhaseFailure[];
@@ -472,6 +609,42 @@ export type PluginUpdateFn = (
   marketplace: string,
   scope: Scope,
 ) => Promise<PluginUpdateOutcome>;
+
+/**
+ * D-26: one catalog move `apply` materializes. `cwd` is explicit, because the
+ * project scope is the command's, not the process's. `partial` admits a
+ * partially-available candidate, and the caller sets it only for a record
+ * already installed partial (`installable: false`).
+ */
+export interface PluginConvergeTarget {
+  readonly plugin: string;
+  readonly marketplace: string;
+  readonly scope: Scope;
+  readonly cwd: string;
+  readonly partial: boolean;
+  /**
+   * D-10 / D-25: a growth-only move re-materializes the recorded revision, so
+   * the runner does not skip a candidate at the recorded revision. A plugin
+   * whose supported component set grew gets the components it lacked.
+   */
+  readonly rematerialize: boolean;
+  /**
+   * APPLY1-01 / WR-3: what the runner calls to collect clones once a pin
+   * moves. `apply` defers the collection for a held-down record until its
+   * enable is known, so a failed enable can restore the pin's copy; the
+   * runner's own collector applies when absent.
+   */
+  readonly cleanupClones?: (locations: ScopedLocations) => Promise<unknown>;
+}
+
+/**
+ * D-26: the runner entry `apply` drives for a catalog move. It runs the shared
+ * runner `update` uses, never reinstall, which would delete the plugin data
+ * directory and overwrite user-edited agents. Like `PluginUpdateFn`, it answers
+ * every failure as a `failed` outcome and throws only an invalid GitHub base
+ * override (GHB-03).
+ */
+export type PluginConvergeFn = (target: PluginConvergeTarget) => Promise<PluginUpdateOutcome>;
 
 // ───────────────────────────────────────────────────────────────────────────
 // It moved here from the install flow owner to join its three siblings. Leaving it in the
@@ -517,7 +690,7 @@ export type PluginUpdateFn = (
  * shape would widen this arm with a field nothing here writes. The key set is
  * pinned bidirectionally by `COMPAT-01: the install outcome inherits exactly the
  * signals installPlugin populates` in
- * `tests/architecture/compat-01-no-expansion.test.ts`, which stops compiling on
+ * `test/architecture/compat-01-no-expansion.test.ts`, which stops compiling on
  * either a widening or a narrowing. Each field of the shared shape is optional,
  * so intersecting all six never made a missing one a compile error -- it only
  * advertised `stagedAgents` / `stagedMcpServers` / `stagedWorkflows` that
@@ -580,6 +753,20 @@ export type InstallPluginOutcome =
        * COMPAT-01 key-set pin is undisturbed.
        */
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
+      /**
+       * UPD-DEP-D1: the recorded dependencies the install moved into range
+       * first, and their own closures' rows, each a complete update. An
+       * orchestrated caller reports them (`apply` folds them into its rows).
+       * Omitted when nothing moved (NREG-01).
+       */
+      readonly movedDependencies?: readonly MovedDependency[];
+      /**
+       * UPD-DEP-D1 / WR-3: the dependencies an install after a dependency
+       * plan installed or re-enabled together with the plugin, so `import`
+       * lists every change the install made. Omitted when the install needed
+       * no plan or landed none (NREG-01).
+       */
+      readonly dependencyInstalls?: readonly MovedDependency[];
     } & Omit<LedgerDegradationSignals, "stagedAgents" | "stagedMcpServers" | "stagedWorkflows">)
   | {
       /**
@@ -594,9 +781,22 @@ export type InstallPluginOutcome =
       readonly error: Error;
       readonly cause: string;
       /**
+       * REC-06: the undo steps the failed install's own ledger could not
+       * finish, so an orchestrated caller reports `{rollback partial}` as the
+       * standalone row does. Omitted when every undo finished (NREG-01).
+       */
+      readonly rollbackPartials?: readonly RollbackPartial[];
+      /**
        * AFILE-04: the MCP config file notices of the dependencies that
        * committed before a later cascade member failed. Omitted when there
        * are none (NREG-01).
        */
       readonly mcpConfigNotices?: readonly McpConfigNotice[];
+      /**
+       * UPD-DEP-D1: the recorded dependencies the install moved into range
+       * first, and their own closures' rows, each a complete update. An
+       * orchestrated caller reports them (`apply` folds them into its rows).
+       * Omitted when nothing moved (NREG-01).
+       */
+      readonly movedDependencies?: readonly MovedDependency[];
     };

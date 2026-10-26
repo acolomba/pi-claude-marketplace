@@ -6,7 +6,7 @@ These rules decide which test modules exist, where they live, what they may reac
 
 ## Pairing and coverage
 
-- Every production `.ts` module under `extensions/pi-claude-marketplace/` has exactly one `.test.ts` module under `tests/` at the mirrored path: `extensions/pi-claude-marketplace/orders/order-service.ts` -> `tests/orders/order-service.test.ts`. That test module owns the source module's exported behavior.
+- Every production `.ts` module under `extensions/pi-claude-marketplace/` has exactly one `.test.ts` module under `test/` at the mirrored path: `extensions/pi-claude-marketplace/orders/order-service.ts` -> `test/orders/order-service.test.ts`. That test module owns the source module's exported behavior.
 - No exclusions. Type-only modules, `index.ts` barrels, and one-function modules all need a test module. If a module is not worth a test, fold it into its consumer.
 - Do not co-locate tests under `extensions/pi-claude-marketplace/`, use `.spec.ts`, or test one source module from another module's test.
 - Test modules and test support (fakes, seeds, contracts) need no meta-tests; a fake is verified through its shared contract.
@@ -21,7 +21,7 @@ These rules decide which test modules exist, where they live, what they may reac
 
 ## Test support organization
 
-Keep fakes, seeds, contracts, and fixtures next to the tests of the concern they serve: `tests/orders/create-fake-order-store.ts`, `tests/orders/order-seeds.ts`, `tests/orders/order-store-contract.ts`. Do not create `tests/helpers/`, `tests/utils/`, or `tests/mocks/`. Use a `fixtures/` directory only when a concern has enough static files to need one.
+Keep fakes, seeds, contracts, and fixtures next to the tests of the concern they serve: `test/orders/create-fake-order-store.ts`, `test/orders/order-seeds.ts`, `test/orders/order-store-contract.ts`. Do not create `test/helpers/`, `test/utils/`, or `test/mocks/`. Use a `fixtures/` directory only when a concern has enough static files to need one.
 
 ## Design production code for its tests
 

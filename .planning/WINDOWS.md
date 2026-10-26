@@ -1,10 +1,10 @@
 ---
 schema_version: 1
-open_count: 0
-waived_count: 51
-fixed_count: 41
-total_count: 92
-last_updated: 2026-10-10T20:21:09.962Z
+open_count: 12
+waived_count: 52
+fixed_count: 46
+total_count: 110
+last_updated: 2026-10-23T04:36:21.369Z
 ---
 
 # Broken Windows Ledger
@@ -107,6 +107,24 @@ last_updated: 2026-10-10T20:21:09.962Z
 | 90 | 08 | deviation | extensions/pi-claude-marketplace/domain/dependency-closure.ts | 490 | [mcp-4] install __proto__@<mp> is refused by the closure root-key token rule as (failed) {invalid manifest} with the cause 'declares an unusable dependency (root: ...)', not the resolver's (unavailable) {unsupported source}; the same cause text reaches any root name outside the dependency token alphabet (e.g. _x@mp) | waived | [mcp-4] Carried by BACKLOG.md ROOTKEY-01 (f47a2c9e): the refusal is correct and no record or file changes; only the cause text misleads, and choosing the right verdict for an invalid root name needs an upstream check first. Not fixed in the debt phase. | 2026-10-10T06:58:57.793Z | 2026-10-10T07:14:44.742Z |
 | 91 | 04 | deviation | extensions/pi-claude-marketplace/shared/notification-dispatch.ts |  | [json-output] composeContextBlocks kept in dispatch: renderMpHeader and composePluginLines have no other production reader; ~110 test sites import them | waived | [json-output] Accepted design: composeContextBlocks stays in shared/notification-dispatch.ts as the one production reader of renderMpHeader and composePluginLines; removing it fails the fallow dead-code gate, 15 test files hold 138 references to the two exports, and the catalog gate pins the output bytes either way. Reversible: a later change can still move the composer. | 2026-10-03T15:02:22.034Z | 2026-10-10T20:21:09.615Z |
 | 92 | 07 | skipped-test | tests/integration/skill-path-resolution.test.ts | 124 | [json-output] Existing optional pi-subagents resolver integration case skips because its module is unavailable; no new test skip was introduced. Evidence: TEST-07-06-01 in phase deferred-items.md. | fixed |  | 2026-10-10T04:04:37.773Z | 2026-10-10T20:21:09.962Z |
+| 93 | 2 | deviation | README.es.md |  | [marketplace-features] README.es.md drifted from README.md before this phase: it lacks the GitLab marketplace paragraph and its note under Mercado, and its --local paragraph says something different | open |  | 2026-10-16T01:44:57.366Z |  |
+| 94 | 03.1 | deviation | tests/orchestrators/plugin/install-flow.test.ts |  | [marketplace-features] FIX-02 D-04 truth 'reload after a local plugin install writes a base file with the shared marketplace and no plugin key' is unreachable: install adopts the marketplace into claude-plugins.local.json (CR-02), so the reload writes no base file; the DFEN-06 case pins ENOENT and rule 2 is proven by unit and convergence cases instead | open |  | 2026-10-16T16:20:58.926Z |  |
+| 95 | 03.1 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts |  | [marketplace-features] notifyInvalidConfigWriteBack JSDoc says the S5 warning follows the success row; measured, the S5 row is emitted first (update-flow S5 local-file case) | fixed |  | 2026-10-16T17:04:18.661Z | 2026-10-16T17:48:34.896Z |
+| 96 | 03.2 | todo | extensions/pi-claude-marketplace/shared/notification-json.ts | 410 | [marketplace-features] A cascade row for a cross-marketplace dependency renders id lib@tools@upstream on the JSON wire (wireRow appends the block name to a row name that already carries @marketplace); found by the cross-scope install scenario, which pins the current value | fixed |  | 2026-10-17T04:13:17.267Z | 2026-10-17T06:00:11.386Z |
+| 97 | 03.2 | todo | README.md | 305 | [marketplace-features] The command reference line 'Remove a marketplace and all plugins installed from it.' (and its README.es.md twin) predates the layer partition: a remove from one config file uninstalls only that file's plugins, and a dependency another plugin needs stays | fixed |  | 2026-10-17T04:38:40.511Z | 2026-10-17T06:03:01.499Z |
+| 98 | 03.2 | todo | extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts |  | [marketplace-features] A marketplace-level refusal row (marketplaceFailureRows: remove, autoupdate, add under the GitHub base override) carries a synthetic failed child named after the marketplace, so its JSON wire id reads <mp>@<mp> (tools@tools), as if a plugin named tools existed; the scenarios pin that value. Fixing it needs a wire decision (mark the child as a marketplace subject, or give it no plugin id), so the review fix left it open | waived | [marketplace-features] The failed git marketplace add child row now has the bare source as its JSON id (D-19). The other marketplace-level failure rows from marketplaceFailureRows (remove, update, autoupdate, info) keep <mp>@<mp> by the user's scope for D-19; BACKLOG ROWID-01 carries them. | 2026-10-17T06:00:17.471Z | 2026-10-21T04:17:09.380Z |
+| 99 | 03.3 | deviation | extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts |  | [marketplace-features] LAYER-06: in the MIG-01 pre-migration window (no claude-plugins.json, a populated state.json, and a local layer), pending checks the layer files on disk while the load checks them after the first-run migration writes the shared layer from state, so a local plugin whose marketplace only the migrated shared layer would declare is an error on load but not in pending | fixed |  | 2026-10-17T19:17:47.670Z | 2026-10-17T20:49:33.381Z |
+| 100 | 09 | deviation | docs/output-catalog.md | 2563 | [marketplace-features] The add-authentication-required catalog state (docs/output-catalog.md and tests/architecture/catalog-uat/fixtures/marketplace-add.ts:222) shows the 401 reason on a synthetic child row with a cause, but a real url marketplace add answered 401 renders a bare failed row with reasons [authentication required] and no cause; features/marketplace/url-source.feature pins the measured shape. The catalog is unchanged. | open |  | 2026-10-21T03:59:49.683Z |  |
+| 101 | 10 | deviation | extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts | 184 | [marketplace-features] The github marketplace sync of plugin update (orchestrators/plugin/update-flow.ts) under PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL still fails a 401 without the git credential approve line, while its url arm has it (UPD-12 fixed this only in marketplace update). | open |  | 2026-10-21T14:53:20.602Z |  |
+| 102 | 10 | lint-warning | features/marketplace/add.feature | 208 | [marketplace-features] cucumber review: features/marketplace/add.feature:208 the duplicate-name Outline, a behavior the git kinds share, has no @github Examples block, so the github kind's duplicate-name refusal is never run | open |  | 2026-10-21T15:20:46.310Z |  |
+| 103 | 10 | lint-warning | features/marketplace/add.feature | 287 | [marketplace-features] cucumber review: features/marketplace/add.feature:287 the invalid-manifest Outline has no @github Examples block, so a github marketplace whose manifest is malformed or schema-invalid is never added in a scenario | open |  | 2026-10-21T15:20:46.677Z |  |
+| 104 | 10 | lint-warning | features/marketplace/autoupdate.feature | 556 | [marketplace-features] cucumber review: features/marketplace/autoupdate.feature:556 the already-autoupdate skip states the local config but not the base config, unlike its siblings, so a skip that rewrote the base autoupdate value is not compared | open |  | 2026-10-21T15:20:46.996Z |  |
+| 105 | 10 | lint-warning | features/marketplace/list.feature | 3 | [marketplace-features] cucumber review: features/marketplace/list.feature:3 the feature description does not say that the scenarios use local marketplaces in place of published ones (features.md: the description names what the scenarios stand in for) | open |  | 2026-10-21T15:20:47.362Z |  |
+| 106 | 10 | lint-warning | features/marketplace/url-source-update.feature | 7 | [marketplace-features] cucumber review: features/marketplace/url-source-update.feature:7 the failed url update Outline does not state that the config still declares the marketplace, as update.feature states for the local kinds | open |  | 2026-10-21T15:20:47.728Z |  |
+| 107 | 10 | lint-warning | features/marketplace/url-source-update.feature | 31 | [marketplace-features] cucumber review: features/marketplace/url-source-update.feature:31 the bare update past a dropped connection does not state that the config still declares both marketplaces | open |  | 2026-10-21T15:20:48.101Z |  |
+| 108 | 10 | lint-warning | features/plugin/disable.feature | 3 | [marketplace-features] cucumber review: features/plugin/disable.feature:3 the description says disabling keeps the plugin installed, but both scenarios are refusals; no scenario of the file disables a plugin and shows what it keeps | open |  | 2026-10-21T15:24:37.024Z |  |
+| 109 | 10 | lint-warning | features/plugin/enable.feature | 3 | [marketplace-features] cucumber review: features/plugin/enable.feature:3 the description says enabling materializes the plugin again, but both scenarios are refusals; no scenario of the file enables a plugin and shows it materialized | open |  | 2026-10-21T15:24:37.353Z |  |
+| 110 | 1 | deviation | features/step_definitions/config.steps.ts |  | [lifecycle-coverage] No committed seed fails when the marketplaces config writer leaves a run token in a source: pending never reads the source of a marketplace it would add (DIFF-01, NFR-5). Close it in Phase 11 with a reconcile seed whose new session adds a marketplace declared only by this writer. | fixed |  | 2026-10-23T04:22:25.048Z | 2026-10-23T04:36:21.369Z |
 
 ````json
 [
@@ -1248,6 +1266,240 @@ last_updated: 2026-10-10T20:21:09.962Z
     "reason": "",
     "recorded_at": "2026-10-10T04:04:37.773Z",
     "resolved_at": "2026-10-10T20:21:09.962Z",
+    "milestone": null
+  },
+  {
+    "id": 93,
+    "kind": "deviation",
+    "phase": "2",
+    "file": "README.es.md",
+    "line": null,
+    "description": "[marketplace-features] README.es.md drifted from README.md before this phase: it lacks the GitLab marketplace paragraph and its note under Mercado, and its --local paragraph says something different",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-16T01:44:57.366Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 94,
+    "kind": "deviation",
+    "phase": "03.1",
+    "file": "tests/orchestrators/plugin/install-flow.test.ts",
+    "line": null,
+    "description": "[marketplace-features] FIX-02 D-04 truth 'reload after a local plugin install writes a base file with the shared marketplace and no plugin key' is unreachable: install adopts the marketplace into claude-plugins.local.json (CR-02), so the reload writes no base file; the DFEN-06 case pins ENOENT and rule 2 is proven by unit and convergence cases instead",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-16T16:20:58.926Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 95,
+    "kind": "deviation",
+    "phase": "03.1",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts",
+    "line": null,
+    "description": "[marketplace-features] notifyInvalidConfigWriteBack JSDoc says the S5 warning follows the success row; measured, the S5 row is emitted first (update-flow S5 local-file case)",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-16T17:04:18.661Z",
+    "resolved_at": "2026-10-16T17:48:34.896Z",
+    "milestone": null
+  },
+  {
+    "id": 96,
+    "kind": "todo",
+    "phase": "03.2",
+    "file": "extensions/pi-claude-marketplace/shared/notification-json.ts",
+    "line": 410,
+    "description": "[marketplace-features] A cascade row for a cross-marketplace dependency renders id lib@tools@upstream on the JSON wire (wireRow appends the block name to a row name that already carries @marketplace); found by the cross-scope install scenario, which pins the current value",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-17T04:13:17.267Z",
+    "resolved_at": "2026-10-17T06:00:11.386Z",
+    "milestone": null
+  },
+  {
+    "id": 97,
+    "kind": "todo",
+    "phase": "03.2",
+    "file": "README.md",
+    "line": 305,
+    "description": "[marketplace-features] The command reference line 'Remove a marketplace and all plugins installed from it.' (and its README.es.md twin) predates the layer partition: a remove from one config file uninstalls only that file's plugins, and a dependency another plugin needs stays",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-17T04:38:40.511Z",
+    "resolved_at": "2026-10-17T06:03:01.499Z",
+    "milestone": null
+  },
+  {
+    "id": 98,
+    "kind": "todo",
+    "phase": "03.2",
+    "file": "extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts",
+    "line": null,
+    "description": "[marketplace-features] A marketplace-level refusal row (marketplaceFailureRows: remove, autoupdate, add under the GitHub base override) carries a synthetic failed child named after the marketplace, so its JSON wire id reads <mp>@<mp> (tools@tools), as if a plugin named tools existed; the scenarios pin that value. Fixing it needs a wire decision (mark the child as a marketplace subject, or give it no plugin id), so the review fix left it open",
+    "status": "waived",
+    "reason": "[marketplace-features] The failed git marketplace add child row now has the bare source as its JSON id (D-19). The other marketplace-level failure rows from marketplaceFailureRows (remove, update, autoupdate, info) keep <mp>@<mp> by the user's scope for D-19; BACKLOG ROWID-01 carries them.",
+    "recorded_at": "2026-10-17T06:00:17.471Z",
+    "resolved_at": "2026-10-21T04:17:09.380Z",
+    "milestone": null
+  },
+  {
+    "id": 99,
+    "kind": "deviation",
+    "phase": "03.3",
+    "file": "extensions/pi-claude-marketplace/orchestrators/reconcile/pending.ts",
+    "line": null,
+    "description": "[marketplace-features] LAYER-06: in the MIG-01 pre-migration window (no claude-plugins.json, a populated state.json, and a local layer), pending checks the layer files on disk while the load checks them after the first-run migration writes the shared layer from state, so a local plugin whose marketplace only the migrated shared layer would declare is an error on load but not in pending",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-17T19:17:47.670Z",
+    "resolved_at": "2026-10-17T20:49:33.381Z",
+    "milestone": null
+  },
+  {
+    "id": 100,
+    "kind": "deviation",
+    "phase": "09",
+    "file": "docs/output-catalog.md",
+    "line": 2563,
+    "description": "[marketplace-features] The add-authentication-required catalog state (docs/output-catalog.md and tests/architecture/catalog-uat/fixtures/marketplace-add.ts:222) shows the 401 reason on a synthetic child row with a cause, but a real url marketplace add answered 401 renders a bare failed row with reasons [authentication required] and no cause; features/marketplace/url-source.feature pins the measured shape. The catalog is unchanged.",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T03:59:49.683Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 101,
+    "kind": "deviation",
+    "phase": "10",
+    "file": "extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts",
+    "line": 184,
+    "description": "[marketplace-features] The github marketplace sync of plugin update (orchestrators/plugin/update-flow.ts) under PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL still fails a 401 without the git credential approve line, while its url arm has it (UPD-12 fixed this only in marketplace update).",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T14:53:20.602Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 102,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/add.feature",
+    "line": 208,
+    "description": "[marketplace-features] cucumber review: features/marketplace/add.feature:208 the duplicate-name Outline, a behavior the git kinds share, has no @github Examples block, so the github kind's duplicate-name refusal is never run",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:46.310Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 103,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/add.feature",
+    "line": 287,
+    "description": "[marketplace-features] cucumber review: features/marketplace/add.feature:287 the invalid-manifest Outline has no @github Examples block, so a github marketplace whose manifest is malformed or schema-invalid is never added in a scenario",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:46.677Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 104,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/autoupdate.feature",
+    "line": 556,
+    "description": "[marketplace-features] cucumber review: features/marketplace/autoupdate.feature:556 the already-autoupdate skip states the local config but not the base config, unlike its siblings, so a skip that rewrote the base autoupdate value is not compared",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:46.996Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 105,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/list.feature",
+    "line": 3,
+    "description": "[marketplace-features] cucumber review: features/marketplace/list.feature:3 the feature description does not say that the scenarios use local marketplaces in place of published ones (features.md: the description names what the scenarios stand in for)",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:47.362Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 106,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/url-source-update.feature",
+    "line": 7,
+    "description": "[marketplace-features] cucumber review: features/marketplace/url-source-update.feature:7 the failed url update Outline does not state that the config still declares the marketplace, as update.feature states for the local kinds",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:47.728Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 107,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/marketplace/url-source-update.feature",
+    "line": 31,
+    "description": "[marketplace-features] cucumber review: features/marketplace/url-source-update.feature:31 the bare update past a dropped connection does not state that the config still declares both marketplaces",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:20:48.101Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 108,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/plugin/disable.feature",
+    "line": 3,
+    "description": "[marketplace-features] cucumber review: features/plugin/disable.feature:3 the description says disabling keeps the plugin installed, but both scenarios are refusals; no scenario of the file disables a plugin and shows what it keeps",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:24:37.024Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 109,
+    "kind": "lint-warning",
+    "phase": "10",
+    "file": "features/plugin/enable.feature",
+    "line": 3,
+    "description": "[marketplace-features] cucumber review: features/plugin/enable.feature:3 the description says enabling materializes the plugin again, but both scenarios are refusals; no scenario of the file enables a plugin and shows it materialized",
+    "status": "open",
+    "reason": "",
+    "recorded_at": "2026-10-21T15:24:37.353Z",
+    "resolved_at": null,
+    "milestone": null
+  },
+  {
+    "id": 110,
+    "kind": "deviation",
+    "phase": "1",
+    "file": "features/step_definitions/config.steps.ts",
+    "line": null,
+    "description": "[lifecycle-coverage] No committed seed fails when the marketplaces config writer leaves a run token in a source: pending never reads the source of a marketplace it would add (DIFF-01, NFR-5). Close it in Phase 11 with a reconcile seed whose new session adds a marketplace declared only by this writer.",
+    "status": "fixed",
+    "reason": "",
+    "recorded_at": "2026-10-23T04:22:25.048Z",
+    "resolved_at": "2026-10-23T04:36:21.369Z",
     "milestone": null
   }
 ]

@@ -5,7 +5,7 @@
 // To support the boolean `--map-model` opt-in (AG-7), the shim follows the
 // `list` handler's pattern: call `parseArgs` directly, then scan
 // `parsed.positional` for the boolean flag(s), then split the remaining
-// single non-flag positional via `splitPluginMarketplaceRef`.
+// single non-flag positional via `parsePluginRef`.
 //
 // Argument-parsing failures
 // route through `notifyUsageError` per MSG-NC-2 / MSG-SR-7 (sentence form
@@ -25,7 +25,7 @@ import { notifyUsageError } from "../../../shared/notification-dispatch.ts";
 import { passThroughFlagNames } from "../../flag-catalog.ts";
 import { extractLocalFlag } from "../shared.ts";
 
-import { parseMapModelArgs, splitPluginMarketplaceRef } from "./shared.ts";
+import { parseMapModelArgs, parsePluginRef } from "./shared.ts";
 
 import type { InstallHooksRouting } from "../../../orchestrators/plugin/install-disable-cascade.ts";
 import type { CompletionCache } from "../../../shared/completion-cache.ts";
@@ -65,8 +65,13 @@ export function makeInstallHandler(
 
     const { nonFlagPositionals, mapModel, partial } = flagged;
 
+    if (nonFlagPositionals.length > 1) {
+      notifyUsageError(ctx, run, { message: "Too many arguments.", usage: USAGE });
+      return;
+    }
+
     const positional = nonFlagPositionals[0];
-    if (nonFlagPositionals.length !== 1 || positional === undefined) {
+    if (positional === undefined) {
       notifyUsageError(ctx, run, {
         message: "install requires exactly one <plugin>@<marketplace> argument.",
         usage: USAGE,
@@ -74,15 +79,8 @@ export function makeInstallHandler(
       return;
     }
 
-    const ref = splitPluginMarketplaceRef(positional);
+    const ref = parsePluginRef(positional, ctx, run, USAGE);
     if (ref === undefined) {
-      // PI-1 invalid `<plugin>@<marketplace>` token (no `@`, leading `@`,
-      // trailing `@`) -- this is a USAGE ERROR, not an entity-shape error:
-      // the ref string never anchored to a real plugin/marketplace pair.
-      notifyUsageError(ctx, run, {
-        message: `Invalid <plugin>@<marketplace> ref: "${positional}".`,
-        usage: USAGE,
-      });
       return;
     }
 

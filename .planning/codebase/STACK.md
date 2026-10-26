@@ -4,12 +4,12 @@ last_mapped_at: 2026-10-05
 ---
 # Technology Stack
 
-**Analysis Date:** 2026-10-05
+**Analysis Date:** 2026-10-25
 
 ## Languages
 
 **Primary:**
-- TypeScript `^6.0.3` (strict mode) - all extension source (`extensions/pi-claude-marketplace/`) and tests (`tests/`)
+- TypeScript `^6.0.3` (strict mode) - all extension source (`extensions/pi-claude-marketplace/`) and tests (`test/`)
 
 **Secondary:**
 - YAML - agent and skill frontmatter, read and emitted line-by-line by `bridges/agents/frontmatter.ts` and `bridges/skills/frontmatter-degrade.ts` (line-based, no nested mappings), not via a YAML library. Plugin and marketplace manifests are JSON and go through `JSON.parse`
@@ -35,7 +35,7 @@ last_mapped_at: 2026-10-05
 - `pi-mcp-adapter` (optional peer dep `>=5.2.0 <6`) - soft-dependency companion extension that serves MCP servers; never a dependency, devDependency, or lockfile package (PIFL-03); the integration tests install its declared floor into `node_modules/.cache/optional-peers` through `scripts/install-test-peers.mjs`
 
 **Testing:**
-- `node:test` (Node's built-in test runner) - suites under `tests/{architecture,bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts` plus `tests/index.test.ts` (`npm test`; `npm run test:modules` is the same minus `architecture`; `npm run test:unpaired` runs `tests/architecture/**` plus `tests/{domain,platform}/**/*-fake.test.ts`, the tests with no source pair), plus a separate `tests/integration/**/*.test.ts` suite (`npm run test:integration`, which first runs `scripts/install-test-peers.mjs`) and `tests/e2e/**/*.test.ts` (`npm run test:e2e`, pinned ref; `npm run test:e2e:nightly` runs against floating `main`)
+- `node:test` (Node's built-in test runner) - suites under `test/{architecture,bridges,domain,edge,orchestrators,persistence,platform,shared,transaction}/**/*.test.ts` plus `test/index.test.ts` (`npm test`; `npm run test:modules` is the same minus `architecture`; `npm run test:unpaired` runs `test/architecture/**` plus `test/{domain,platform}/**/*-fake.test.ts`, the tests with no source pair), plus a separate `test/integration/**/*.test.ts` suite (`npm run test:integration`, which first runs `scripts/install-test-peers.mjs`) and `test/e2e/**/*.test.ts` (`npm run test:e2e`, pinned ref; `npm run test:e2e:nightly` runs against floating `main`)
 - Real temporary directories (`mkdtemp`, plus a `withHermeticHome` helper) for filesystem isolation -- no in-memory filesystem layer is used
 - Coverage via `node --test --experimental-test-coverage` with `lcov` reporters. `npm run test:coverage:direct:all` runs each source-test pair alone and merges each pair's record for its own source into `coverage/direct.lcov`, the only report SonarCloud reads (`sonar.javascript.lcov.reportPaths=coverage/direct.lcov` in `sonar-project.properties`). `npm run test:coverage` also writes the partial-surface `coverage/integration.lcov` and `coverage/e2e.lcov`, which stay out of Sonar
 
@@ -43,12 +43,12 @@ last_mapped_at: 2026-10-05
 - No bundler/build step -- TypeScript is type-checked only (`tsc --noEmit`); Node runs `.ts` sources natively
 - `eslint` `^10.4.0` with flat config (`eslint.config.js`, ~520 lines; `npm run lint` passes `--max-warnings 0` and covers `extensions tests scripts eslint.config.js`), including the architecture-boundary rules (BLOCK C) and the NFR-5 git-surface rules (BLOCK F); the output and import bans live in the fallow rule pack
 - `prettier` `^3.9.9` for formatting (`npm run format` / `format:check`)
-- `fallow` `^3.31.0` - whole-graph static analysis (`.fallowrc.json`). `npm run fallow` first fails on any rule-pack `WARN` that `fallow rule-pack test` prints, then chains four subcommands, each `--fail-on-issues --format human`:
+- `fallow` `^3.33.1` - whole-graph static analysis (`.fallowrc.json`). `npm run fallow` first fails on any rule-pack `WARN` that `fallow rule-pack test` prints, then chains four subcommands, each `--fail-on-issues --format human`:
   - `fallow dead-code` (entry point `extensions/pi-claude-marketplace/index.ts`), scoped to production reachability by `production.deadCode`
-  - `fallow dead-code --no-production --circular-deps --re-export-cycles`, which carries the two cycle classes across `tests/` and `scripts/`
+  - `fallow dead-code --no-production --circular-deps --re-export-cycles`, which carries the two cycle classes across `test/` and `scripts/`
   - `fallow health` (`maxCyclomatic: 20`, `maxCognitive: 15`, plus `maxCrap: 0`, which switches CRAP OFF -- see the CRAP note in TESTING.md before touching it)
   - `.fallowrc.json` also loads `rulePacks: ["rule-packs/architecture.json"]` (11 rules: `no-stdio`, `no-console`, `migrate-console-warn-only`, `debug-log-console-error-only`, `notify-chokepoint`, `pi-peer-chokepoint`, `isomorphic-git-chokepoint`, `proper-lockfile-chokepoint`, `write-file-atomic-chokepoint`, `no-network-modules`, `fetch-chokepoint`) enforcing output and import chokepoints
-  - `fallow dupes` (`threshold: 3`, with no `duplicates.ignoredClones` entry; reviewed clone groups carry inline `fallow-ignore-next-line code-duplication` markers)
+  - `fallow dupes` (since fallow 3.32 it fails on every clone group, so `.fallowrc.json` sets no `duplicates.threshold` and no `duplicates.ignoredClones` entry; reviewed clone groups carry inline `fallow-ignore-next-line code-duplication` markers)
   - `.fallowrc.json`'s `boundaries` block defines 14 architecture zones (`entry`, `edge`, `orchestrators`, `bridges-agents`, `bridges-commands`, `bridges-mcp`, `bridges-skills`, `bridges-hooks`, `bridges-workflows`, `domain`, `transaction`, `persistence`, `platform`, `shared`) with an explicit allow-list of legal import edges between zones -- finer-grained than the ESLint `no-restricted-paths` gate and the only mechanism enforcing that cross-bridge imports (e.g. `bridges-agents` -> `bridges-commands`) are forbidden. `rulePacks` loads `rule-packs/architecture.json`, the call and import bans for `extensions/pi-claude-marketplace/**` (stdio, console, direct `ctx.ui.notify`, the Pi peer, `isomorphic-git`, `proper-lockfile`, `write-file-atomic`, network modules, and `fetch`), each limited to its sanctioned files and reported as `policy-violation`
   - CI runs a separate `fallow-audit` job (`.github/workflows/lint.yml`) using the vendor action `fallow-rs/fallow@v3` with `command: audit`, `format: github-annotations` -- this gates PRs on newly-introduced findings only, distinct from the full `npm run fallow` gate that `npm run check` runs. The job installs the npm dependencies first, and it fails on a `warn` verdict or a degraded analysis as well as on `fail`
 - `pre-commit` framework (`.pre-commit-config.yaml`) runs trufflehog, gitlint, yamllint (with `--strict`, so a warning fails), yamlfmt, mdformat, markdownlint-cli2, zizmor, texthooks (smartquotes/dashes/ligatures/bidi-control fixers), plus two local hooks: `prettier` (formats staged files) and `npm-check` (`pass_filenames: false`), which runs `npm run check:commit` when a staged file is a build input. Its `files:` pattern names the same build inputs as the `paths` list in `ci.yml`, which the `pull_request` trigger reuses through a YAML anchor, so a docs-only commit skips it
@@ -74,7 +74,7 @@ last_mapped_at: 2026-10-05
 - `GIT_TERMINAL_PROMPT=0` and `GCM_INTERACTIVE=never` - set by `platform/git-credential.ts` when spawning `git credential` subprocesses to force non-interactive behavior
 
 **Build:**
-- `tsconfig.json` - strict TypeScript compiler options (`exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `noUnusedLocals`, etc.), includes `extensions/**/*.ts` and `tests/**/*.ts`
+- `tsconfig.json` - strict TypeScript compiler options (`exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`, `noUnusedLocals`, etc.), includes `extensions/**/*.ts` and `test/**/*.ts`
 - `eslint.config.js` - flat ESLint config with `typescript-eslint` `^8.71.0`, `@stylistic/eslint-plugin`, `eslint-plugin-import-x` `^4.17.1`, `eslint-plugin-sonarjs` `^4.2.2` and `globals` `^17.13.0`, plus project-specific architecture-boundary rules
 - `.fallowrc.json` - fallow zone/boundary/health/dupes configuration (see Build/Dev above)
 - `.prettierrc.json` / `.prettierignore` - formatting config
@@ -88,7 +88,7 @@ last_mapped_at: 2026-10-05
 - `pre-commit` (Python-based framework, Python 3.12 in CI) for the git hook pipeline
 
 **Production:**
-- Distributed as an npm package (`pi-claude-marketplace`, currently `0.19.2`) consumed as a Pi extension via `pi.extensions` in `package.json`, pointing at `./extensions/pi-claude-marketplace/index.ts`
+- Distributed as an npm package (`pi-claude-marketplace`, currently `0.20.1`) consumed as a Pi extension via `pi.extensions` in `package.json`, pointing at `./extensions/pi-claude-marketplace/index.ts`
 - Runs inside a host Pi agent process (`@earendil-works/pi-coding-agent`) -- no standalone server or deployment target of its own
 - Published to npm via GitHub Actions on `v*` tags (`.github/workflows/publish.yml`, which calls `ci.yml` as a reusable workflow via `workflow_call` before publishing, `id-token: write` for npm provenance)
 
@@ -107,4 +107,4 @@ Five workflow files in `.github/workflows/`:
 
 ---
 
-*Stack analysis: 2026-10-05*
+*Stack analysis: 2026-10-25*

@@ -34,8 +34,8 @@ jq -c -e -s --arg invocation "$invocation_id" '
     .kind as $kind
     | ["cascade", "marketplace-info", "plugin-info", "marketplace-info-cascade",
        "plugin-info-cascade", "marketplace-not-added", "reconcile-pending-empty",
-       "prune-empty", "prune-committed-warning", "usage-error", "usage-info",
-       "internal-error"] | index($kind) != null;
+       "reconcile-applied-cascade", "prune-empty", "prune-committed-warning",
+       "usage-error", "usage-info", "autoapply-status", "internal-error"] | index($kind) != null;
   [.[] | select(.type == "entry_appended")
    | .entry | select(.type == "custom" and .customType == "claude-plugin")
    | .data | select(.origin.kind == "command" and .origin.invocationId == $invocation)]
@@ -67,7 +67,7 @@ Pi wraps each notification in an `entry_appended` event. Its `entry` has `type: 
 
 The payload's `origin.kind` identifies `command`, `load`, or `hook` output. For a command, `origin.commandId` names the operation, such as `plugin list`. `origin.invocationId` identifies one run. Two runs of `plugin list` have the same command ID and different invocation IDs. For a file with several runs, set `invocation_id` to the run you need instead of using the single-run selector. The examples exclude load and hook entries.
 
-Real CLI tests passed on Pi 1.0.0, both the installed runtime and the exact-floor fixture, with stdin closed. Both runs emitted a command-origin `cascade` with `marketplaces: []` for an empty installation. The tests load the production extension in temporary directories without operator credentials. See [the runtime tests](../tests/e2e/pi-json-output.test.ts).
+Real CLI tests passed on Pi 1.0.0, both the installed runtime and the exact-floor fixture, with stdin closed. Both runs emitted a command-origin `cascade` with `marketplaces: []` for an empty installation. The tests load the production extension in temporary directories without operator credentials. See [the runtime tests](../test/e2e/pi-json-output.test.ts).
 
 ## Prepare one command for the examples
 
@@ -81,8 +81,8 @@ command_entries=$(jq -c -s --arg invocation "$invocation_id" '
     .kind as $kind
     | ["cascade", "marketplace-info", "plugin-info", "marketplace-info-cascade",
        "plugin-info-cascade", "marketplace-not-added", "reconcile-pending-empty",
-       "prune-empty", "prune-committed-warning", "usage-error", "usage-info",
-       "internal-error"] | index($kind) != null;
+       "reconcile-applied-cascade", "prune-empty", "prune-committed-warning",
+       "usage-error", "usage-info", "autoapply-status", "internal-error"] | index($kind) != null;
   [.[] | select(.type == "entry_appended")
    | .entry | select(.type == "custom" and .customType == "claude-plugin")
    | .data | select(.origin.kind == "command" and .origin.invocationId == $invocation)]
@@ -98,7 +98,7 @@ command_entries=$(jq -c -s --arg invocation "$invocation_id" '
 ' "$input_file") || exit $?
 ```
 
-An outcome reports a command result. The twelve kinds in `outcome` above match the extension's command-outcome classifier. An empty `cascade` counts as an outcome. `diagnostic`, `device-flow-prompt`, and lifecycle-only kinds do not. Silence, unrelated events, or only prompts and diagnostics fail with exactly `No command outcome received`.
+An outcome reports a command result. The thirteen kinds in `outcome` above match the extension's command-outcome classifier. An empty `cascade` counts as an outcome. `diagnostic`, `device-flow-prompt`, and lifecycle-only kinds do not. Silence, unrelated events, or only prompts and diagnostics fail with exactly `No command outcome received`.
 
 Unknown kinds remain in the selected data but cannot establish an outcome. Additional fields are preserved. An unfamiliar severity, a nonboolean `needsReload`, or an unsupported schema version fails with `Unsupported command envelope`. These checks cover the fields used here. They do not replace validation of the full payload against the schema.
 
@@ -207,6 +207,8 @@ The ten structured kinds through `prune-committed-warning` also permit this fiel
 
 Load and hook origins have only `kind`. Command IDs can repeat across runs. Invocation IDs keep their results separate, including overlapping commands.
 
+A load reports its pending changes as a `cascade` whose `origin.kind` is `load`, and its per-session warnings as a `reconcile-applied-cascade`. When a config turns `autoapply` on, the load runs `apply` instead and reports its changes as a `reconcile-applied-cascade` whose `origin.kind` is `load`. Such a load with nothing to change emits nothing.
+
 ### Command origin
 
 `internal-error` uses the command branch of [Origin](#origin). Both identifiers are required.
@@ -236,19 +238,20 @@ Command results or inventory, including an empty `marketplaces` array.
 
 <!-- use: structured-summary -->
 
-| Field path          | Type                                      | Presence | Meaning                                     |
-| ------------------- | ----------------------------------------- | -------- | ------------------------------------------- |
-| `marketplaces`      | [Marketplace block](#marketplace-block)[] | required | Marketplace and plugin rows in model order. |
-| `tally`             | [Tally](#tally)                           | optional | Counts for a plural result.                 |
-| `noOp`              | boolean `true`                            | optional | The command reports no work.                |
-| `advisories`        | string[]                                  | optional | Advisory lines in caller order.             |
-| `retainedWorkflows` | [Retained workflow](#retained-workflow)[] | optional | Workflow staging retained for recovery.     |
+| Field path          | Type                                      | Presence | Meaning                                                         |
+| ------------------- | ----------------------------------------- | -------- | --------------------------------------------------------------- |
+| `marketplaces`      | [Marketplace block](#marketplace-block)[] | required | Marketplace and plugin rows in model order.                     |
+| `tally`             | [Tally](#tally)                           | optional | Counts for a plural result.                                     |
+| `noOp`              | boolean `true`                            | optional | The command reports no work.                                    |
+| `needsApply`        | boolean `true`                            | optional | `pending` lists changes that `/claude:plugin apply` would make. |
+| `advisories`        | string[]                                  | optional | Advisory lines in caller order.                                 |
+| `retainedWorkflows` | [Retained workflow](#retained-workflow)[] | optional | Workflow staging retained for recovery.                         |
 
 <!-- /fields -->
 
 #### reconcile-applied-cascade
 
-Applied load-time reconciliation. It carries no `noOp`, advisories, or retained workflows.
+The changes `/claude:plugin apply` or an `autoapply` load made, or a load's per-session warnings. `needsReload` is true when a change needs a reload. It carries no `noOp`, advisories, or retained workflows. `/claude:plugin apply` (`origin.commandId` `plugin apply`) reports the changes it made with this kind, so the kind is a command outcome.
 
 <!-- fields: kind:reconcile-applied-cascade -->
 
@@ -343,7 +346,7 @@ A requested marketplace is absent from the selected scope.
 
 #### reconcile-pending-empty
 
-No pending reconciliation changes, with any retained staging information.
+No pending reconciliation changes. `pending` and `apply` both report it; `origin.commandId` names which. A `pending` report can carry retained staging information.
 
 <!-- fields: kind:reconcile-pending-empty -->
 
@@ -417,6 +420,23 @@ Explicitly requested command help.
 | Field path | Type   | Presence | Meaning     |
 | ---------- | ------ | -------- | ----------- |
 | `usage`    | string | required | Usage help. |
+
+<!-- /fields -->
+
+#### autoapply-status
+
+What `/claude:plugin autoapply` shows: the effective `autoapply` value, the config file that sets it, and each listed config file's own value. A set (`autoapply on` or `autoapply off`) also names the file it wrote. Severity is always `info`, and `needsReload` is always `false`.
+
+<!-- fields: kind:autoapply-status -->
+
+<!-- use: common-fields -->
+
+| Field path | Type                                            | Presence | Meaning                                                                                                               |
+| ---------- | ----------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------- |
+| `enabled`  | boolean                                         | required | Effective value. A load runs `/claude:plugin apply` when it is `true`.                                                |
+| `source`   | [Autoapply config file](#autoapply-config-file) | optional | Most specific config file that sets the value. Absent when no file sets it and the default, off, applies.             |
+| `files`    | [Autoapply file value](#autoapply-file-value)[] | required | Show: the config files the scope and layer filter keeps, user base first, project local last. Set: the file it wrote. |
+| `set`      | [Autoapply write](#autoapply-write)             | optional | The value a set wrote and the file it wrote it to. Absent for the show form.                                          |
 
 <!-- /fields -->
 
@@ -573,22 +593,24 @@ An unexpected command failure or a final outcome when ordinary delivery failed. 
 
 <!-- fields: plugin-row -->
 
-| Field path        | Type                                | Presence | Meaning                                                                      |
-| ----------------- | ----------------------------------- | -------- | ---------------------------------------------------------------------------- |
-| `status`          | PluginStatus                        | required | Plugin state or operation result.                                            |
-| `name`            | string                              | required | Plugin name.                                                                 |
-| `id`              | string                              | required | Qualified address, `<name>@<marketplace>`.                                   |
-| `reasons`         | Reason[]                            | required | Resolved reasons, including soft-dependency markers. Empty means no reasons. |
-| `version`         | string                              | optional | Plugin version.                                                              |
-| `from`            | string                              | optional | Version before an update.                                                    |
-| `to`              | string                              | optional | Version after an update.                                                     |
-| `scope`           | Scope                               | optional | Plugin installation scope.                                                   |
-| `description`     | string                              | optional | Plugin description.                                                          |
-| `partial`         | boolean                             | optional | Whether only part of the plugin is supported.                                |
-| `hint`            | RowHint                             | optional | Follow-up action hint.                                                       |
-| `cause`           | [Cause](#cause)                     | optional | Serialized row failure.                                                      |
-| `leaks`           | string[]                            | optional | Paths left behind by failed cleanup, after redaction.                        |
-| `rollbackPartial` | [Rollback phase](#rollback-phase)[] | optional | Rollback phases that did not finish.                                         |
+| Field path        | Type                                | Presence | Meaning                                                                                                                                                                                                                                         |
+| ----------------- | ----------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`          | PluginStatus                        | required | Plugin state or operation result.                                                                                                                                                                                                               |
+| `name`            | string                              | required | Plugin name.                                                                                                                                                                                                                                    |
+| `id`              | string                              | required | Qualified address, `<name>@<marketplace>`. A dependency row named by its `<plugin>@<marketplace>` key keeps that key. When a failed `marketplace add` has a child row, the row names the source after redaction, and its id is that name alone. |
+| `reasons`         | Reason[]                            | required | Resolved reasons, including soft-dependency markers. Empty means no reasons.                                                                                                                                                                    |
+| `version`         | string                              | optional | Plugin version. On a reinstalled, partially installed, or failed row that carries `from`, the version it moved to; an updated row carries `to` instead.                                                                                         |
+| `from`            | string                              | optional | Version before the move, on an update row or a pending catalog move, or on a reinstalled, partially installed, or failed row whose revision moved.                                                                                              |
+| `to`              | string                              | optional | Version after an update, or the version a pending catalog move reaches.                                                                                                                                                                         |
+| `fromCommit`      | string                              | optional | Full commit before a move whose version did not change. Present exactly when the text form shows the short commits.                                                                                                                             |
+| `toCommit`        | string                              | optional | Full commit after a move whose version did not change. Present exactly when the text form shows the short commits.                                                                                                                              |
+| `scope`           | Scope                               | optional | Plugin installation scope.                                                                                                                                                                                                                      |
+| `description`     | string                              | optional | Plugin description.                                                                                                                                                                                                                             |
+| `partial`         | boolean                             | optional | Whether only part of the plugin is supported.                                                                                                                                                                                                   |
+| `hint`            | RowHint                             | optional | Follow-up action hint.                                                                                                                                                                                                                          |
+| `cause`           | [Cause](#cause)                     | optional | Serialized cause line: a failure, a remedy, or the constraint disclosure of an updated, reinstalled, or partially installed row.                                                                                                                |
+| `leaks`           | string[]                            | optional | Paths left behind by failed cleanup, after redaction.                                                                                                                                                                                           |
+| `rollbackPartial` | [Rollback phase](#rollback-phase)[] | optional | Rollback phases that did not finish.                                                                                                                                                                                                            |
 
 <!-- /fields -->
 
@@ -771,6 +793,41 @@ The plain branch has `event` and an optional `matcher`. The lenient branch adds 
 
 <!-- /fields -->
 
+### Autoapply config file
+
+<!-- fields: autoapply-config-file -->
+
+| Field path | Type   | Presence | Meaning                                                              |
+| ---------- | ------ | -------- | -------------------------------------------------------------------- |
+| `scope`    | Scope  | required | Scope of the config file.                                            |
+| `file`     | string | required | `claude-plugins.json` (base) or `claude-plugins.local.json` (local). |
+
+<!-- /fields -->
+
+### Autoapply file value
+
+<!-- fields: autoapply-file-value -->
+
+| Field path | Type    | Presence | Meaning                                                                 |
+| ---------- | ------- | -------- | ----------------------------------------------------------------------- |
+| `scope`    | Scope   | required | Scope of the config file.                                               |
+| `file`     | string  | required | `claude-plugins.json` (base) or `claude-plugins.local.json` (local).    |
+| `value`    | boolean | optional | The file's own `autoapply` value. Absent when the file does not set it. |
+
+<!-- /fields -->
+
+### Autoapply write
+
+<!-- fields: autoapply-write -->
+
+| Field path | Type    | Presence | Meaning                                                              |
+| ---------- | ------- | -------- | -------------------------------------------------------------------- |
+| `scope`    | Scope   | required | Scope of the config file the set wrote.                              |
+| `file`     | string  | required | `claude-plugins.json` (base) or `claude-plugins.local.json` (local). |
+| `value`    | boolean | required | The value the set wrote.                                             |
+
+<!-- /fields -->
+
 ### Cause
 
 <!-- fields: cause -->
@@ -802,7 +859,7 @@ All counts are nonnegative integers. The failure and warning counts are always p
 | Field path | Type                            | Presence | Meaning                                |
 | ---------- | ------------------------------- | -------- | -------------------------------------- |
 | `label`    | string                          | required | Subject of the count, such as plugins. |
-| `failures` | nonnegative integer             | required | Failed rows.                           |
+| `failures` | nonnegative integer             | required | Error rows.                            |
 | `warnings` | nonnegative integer             | required | Warning rows.                          |
 | `success`  | [Success tally](#success-tally) | optional | Successful operation count.            |
 
@@ -834,15 +891,15 @@ All counts are nonnegative integers. The failure and warning counts are always p
 
 These are native wire values, including spaces and hyphens. They are not the labels produced by the text renderer. `Scope` is `user` or `project`.
 
-`PluginStatus`: `installed`, `updated`, `reinstalled`, `uninstalled`, `available`, `unavailable`, `upgradable`, `failed`, `skipped`, `manual recovery`, `will install`, `will uninstall`, `will enable`, `will disable`, `disabled`, `partially-installed`, `partially-upgradable`, `partially-available`, `remote`.
+`PluginStatus`: `installed`, `updated`, `reinstalled`, `uninstalled`, `available`, `unavailable`, `upgradable`, `failed`, `skipped`, `manual recovery`, `will install`, `will uninstall`, `will enable`, `will disable`, `will update`, `disabled`, `partially-installed`, `partially-upgradable`, `partially-available`, `remote`.
 
 `PluginInfoStatus`: `installed`, `available`, `remote`, `unavailable`, `partially-available`, `failed`, `partially-installed`, `disabled`.
 
-`MarketplaceStatus`: `added`, `removed`, `updated`, `failed`, `autoupdate enabled`, `autoupdate disabled`, `skipped`.
+`MarketplaceStatus`: `added`, `removed`, `updated`, `failed`, `autoupdate enabled`, `autoupdate disabled`, `skipped`, `will add`, `will remove`.
 
-`RowHint`: `partial-install`, `partial-update`, `stale-gate-update`, `enable`.
+`RowHint`: `partial-install`, `partial-update`, `catalog-partial-update`, `stale-gate-update`, `enable`.
 
-`Reason`: `up-to-date`, `not found`, `already installed`, `not installed`, `not in manifest`, `invalid manifest`, `no longer installable`, `unsupported source`, `unsupported component`, `unsupported hooks`, `lsp`, `requires pi-subagents`, `requires pi-mcp-adapter`, `rollback partial`, `unreadable`, `unparseable`, `unreadable manifest`, `source mismatch`, `plugins remain`, `concurrently uninstalled`, `concurrently updated`, `stale clone`, `duplicate name`, `lock held`, `already autoupdate`, `already no autoupdate`, `already enabled`, `already disabled`, `permission denied`, `source missing`, `network unreachable`, `marketplace not added`, `marketplace not added to user scope`, `marketplace not added to project scope`, `orphan rewake`, `authentication required`, `dangling reference`, `malformed mcp`, `malformed skill`, `malformed command`, `installs disabled`, `marketplace in user scope`, `marketplace in project scope`, `data kept`, `no matching version`, `version conflict`, `constraint too complex`, `invalid version constraint`, `dependency marketplace not added`, `dependency cycle`, `dependency failed`, `dependency promoted`, `dependency pruned`, `dependency unsatisfied`, `dependency version unsatisfied`, `dependents unsatisfied`, `dependency current copy`, `dependency enabled`, `dependents remain`, `dependency installed`, `dependents constrain`, `cross-marketplace`, `stale workflow command`, `requires pi-dynamic-workflows`, `components now supported`, `unsupported mcp`.
+`Reason`: `up-to-date`, `not found`, `already installed`, `already added`, `not installed`, `not in manifest`, `invalid manifest`, `no longer installable`, `unsupported source`, `unsupported component`, `unsupported hooks`, `lsp`, `requires pi-subagents`, `requires pi-mcp-adapter`, `rollback partial`, `unreadable`, `unparseable`, `unreadable manifest`, `source mismatch`, `plugins remain`, `concurrently uninstalled`, `concurrently updated`, `stale clone`, `duplicate name`, `lock held`, `already autoupdate`, `already no autoupdate`, `already enabled`, `already disabled`, `permission denied`, `source missing`, `network unreachable`, `marketplace not added`, `marketplace not added to user scope`, `marketplace not added to project scope`, `orphan rewake`, `authentication required`, `dangling reference`, `malformed mcp`, `malformed skill`, `malformed command`, `installs disabled`, `marketplace in user scope`, `marketplace in project scope`, `data kept`, `no matching version`, `version conflict`, `constraint too complex`, `invalid version constraint`, `dependency marketplace not added`, `dependency cycle`, `dependency failed`, `dependency promoted`, `dependency pruned`, `dependency unsatisfied`, `dependency version unsatisfied`, `dependents unsatisfied`, `dependency current copy`, `dependency enabled`, `dependents remain`, `dependency installed`, `dependents constrain`, `cross-marketplace`, `stale workflow command`, `requires pi-dynamic-workflows`, `components now supported`, `unsupported mcp`, `marketplace in local layer only`, `marketplace in base layer only`, `plugin in local layer only`, `plugin in base layer only`, `already installed in base layer`, `already installed in local layer`, `still installed in base layer`, `still installed in local layer`, `disabled in local layer`, `enabled in local layer`, `network error`.
 
 `McpServerStatus`: `connected`, `cached, connects on first use`, `needs authentication`, `pending approval`, `disabled`, `not connected`, `failed`, `status unknown`, `not loaded`, `overridden by project scope`.
 
@@ -864,7 +921,7 @@ RPC front-ends receive custom `claude-plugin` entries through the JSON strategy.
 
 A slash-command-only run does not create its initial session file until an assistant message exists. This applies even when persistence is enabled. The independent `--no-session` flag disables persistence altogether. An entry in session memory or the event stream therefore does not prove that Pi wrote a session file.
 
-The [real-runtime tests](../tests/e2e/pi-json-output.test.ts) passed on installed Pi 1.0.0 and on the separate exact-floor fixture, also Pi 1.0.0. Both runs verified schema-valid command output, startup memory without streaming, RPC retrieval, and slash-only persistence timing. An earlier [execution record](../.planning/milestones/json-output-phases/07-mode-refusals-real-pi-verification-and-docs/07-03-SUMMARY.md#verification-evidence) records the same checks on Pi 0.87.1 and the earlier 0.86.1 floor. These tests use fresh directories and no operator credentials.
+The [real-runtime tests](../test/e2e/pi-json-output.test.ts) passed on installed Pi 1.0.0 and on the separate exact-floor fixture, also Pi 1.0.0. Both runs verified schema-valid command output, startup memory without streaming, RPC retrieval, and slash-only persistence timing. An earlier [execution record](../.planning/milestones/json-output-phases/07-mode-refusals-real-pi-verification-and-docs/07-03-SUMMARY.md#verification-evidence) records the same checks on Pi 0.87.1 and the earlier 0.86.1 floor. These tests use fresh directories and no operator credentials.
 
 Output delivery has four accepted limits:
 

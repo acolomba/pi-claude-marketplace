@@ -7,14 +7,7 @@
 // consumers should never read or mutate them.
 
 export { discoverPluginCommands } from "./discover.ts";
-export {
-  abortPreparedCommands,
-  commitPreparedCommands,
-  finalizeCommandsReplacement,
-  prepareStageCommands,
-  replacePreparedCommands,
-  rollbackCommandsReplacement,
-} from "./stage.ts";
+export { abortPreparedCommands, commitPreparedCommands, prepareStageCommands } from "./stage.ts";
 export { unstagePluginCommands } from "./unstage.ts";
 
-export type { CommandsReplacement, PreparedCommandsStaging } from "./types.ts";
+export type { PreparedCommandsStaging } from "./types.ts";

@@ -272,7 +272,7 @@ Their exit codes live in `src/application/native-control-contract.ts:19-31`. The
 
 Their output channel is keyed by mode (`src/pi/pi-control-channel.ts`). The `rpc` and `json` modes emit `pi.appendEntry` frames, `print` emits stdout lines, and `tui` is a no-op because the manager consumes frames directly. Progress framing is a zod discriminated union of `accepted`, `progress`, and `result`, with strict ordering.
 
-Our single command is `/claude:plugin`. The router is `edge/router.ts`, the flag catalog is `edge/flag-catalog.ts`, and `tests/architecture/flag-catalog-drift.test.ts` guards the two against drift. The flag `--scope user|project` is global and position-independent.
+Our single command is `/claude:plugin`. The router is `edge/router.ts`, the flag catalog is `edge/flag-catalog.ts`, and `test/architecture/flag-catalog-drift.test.ts` guards the two against drift. The flag `--scope user|project` is global and position-independent.
 
 | Subcommand                                | Aliases | Flags                                                                             |
 | ----------------------------------------- | ------- | --------------------------------------------------------------------------------- |
@@ -684,10 +684,10 @@ Our behavior is per verb:
 | `install`                        | On cache miss only                 | Uses the cached manifest and does no sync                                                                                              |
 | `update`                         | Yes                                | Re-resolves the pin, refreshes the mirror, and short-circuits when `toVersion === fromVersion`                                         |
 | `fetch`                          | Yes, because that is the operation | Writes no state. A pinned and materialized plugin renders `(skipped) {up-to-date}` with no network                                     |
-| `reinstall`                      | Almost never                       | Never resolves a pin. Repairs the filesystem only, from the warm mirror, using the recorded sha                                        |
+| `reinstall`                      | On cache miss only                 | Installs the version the marketplace offers now. Reads a present mirror's HEAD offline and does no refresh                             |
 | `uninstall`, `enable`, `disable` | Never, and a gate enforces it      | Disable zeroes resources but keeps the record. Enable replays the ledger with `pinVersionOverride`, so a cycle cannot bump the version |
 
-Our version strings are `hash-<12hex>`, a SHA-256 over a deterministic walk with symlinks skipped and BOM and CRLF normalized, or `sha-<12hex>` for a git source. The ladder runs from `pinVersionOverride`, to the git `resolvedSha`, to `plugin.json.version`, to the manifest entry version, to the content hash.
+Our version strings are `hash-<12hex>`, a SHA-256 over a deterministic walk with symlinks skipped and BOM and CRLF normalized, or the commit's first 12 hex characters for a git source, as Claude Code records it (GV-01). The ladder runs from `pinVersionOverride`, to the git `resolvedSha`, to `plugin.json.version`, to the manifest entry version, to the content hash.
 
 Our autoupdate is opt-in and off by default, and it lives in `claude-plugins.json` rather than in state. There is no timer, no interval, and no session-start update run. The flag is consumed only by `marketplace update`. When autoupdate is off, change detection is a conservative manifest content compare with `JSON.stringify` before and after.
 
@@ -718,14 +718,14 @@ They ship no logger, no telemetry, and no analytics. Their one durable log is `<
 
 We have no `doctor` or `health` command. We have three read-only surfaces. The verb `pending` is a network-free reconcile preview that writes nothing and is byte-identical on repeated runs. It renders `will install`, `will uninstall`, `will enable`, and `will disable` rows, plus `(failed)` rows. Marketplace additions are deliberately absent from it, because they are immediate. The verb `list` shows inventory across both scopes with the filter family, and renders a hash version git-style as `v#<7hex>`. The verb `info` shows the resolved source, the components enumerated from disk, the per-handler `event(matcher) (unsupported)` breakdown for dropped hooks, and the resolver verdict. It is network-free, so a cold clone renders `(remote)` and `components: not resolved` unless the user passes `--fetch`.
 
-Our notification model has six named owners: closed tuples and unions in `shared/notification-types.ts`; icons, rows, and info rendering in `shared/notification-grammar.ts`; severity, tally, reload, and cascade folding in `shared/notification-summary.ts`; the single sanctioned output surface in `shared/notification-dispatch.ts`; redaction in `shared/redact-absolute-paths.ts`; and stable name/scope ordering in `shared/compare-name-scope.ts`. A direct `ctx.ui.notify` call outside the dispatch owner is forbidden by an ESLint rule and by the `tests/edge/notification-boundary.ts` gate. The grammar is fixed:
+Our notification model has six named owners: closed tuples and unions in `shared/notification-types.ts`; icons, rows, and info rendering in `shared/notification-grammar.ts`; severity, tally, reload, and cascade folding in `shared/notification-summary.ts`; the single sanctioned output surface in `shared/notification-dispatch.ts`; redaction in `shared/redact-absolute-paths.ts`; and stable name/scope ordering in `shared/compare-name-scope.ts`. A direct `ctx.ui.notify` call outside the dispatch owner is forbidden by an ESLint rule and by the `test/edge/notification-boundary.ts` gate. The grammar is fixed:
 
 ```text
 <glyph> <marketplace> [<scope>] (<status>) <marker>?
   <glyph> <name> [<scope>]? v<version>? (<status>) {<reasons>}?
 ```
 
-The glyphs are `*` for installed or positive, `o` for not-installed with no error, and `(/)` for blocked or error. The rest are `(-)` for partially available, `(.)` for remote, and `(x)` for disabled. The exact characters are in `docs/output-catalog.md`. There are 26 status tokens and about 40 reasons, and both are closed sets. Severity is first-match-wins over the contents: any `failed` gives error, any `manual recovery` gives warning, any non-benign `skipped` gives warning, and otherwise info. The reload trailer fires only on realized plugin transitions and is structurally suppressed on the load-time reconcile cascade. The indent ladder is byte-exact at 0, 2, 4, and 6 columns, gated by `tests/architecture/catalog-uat/catalog-contract.test.ts` against `docs/output-catalog.md`.
+The glyphs are `*` for installed or positive, `o` for not-installed with no error, and `(/)` for blocked or error. The rest are `(-)` for partially available, `(.)` for remote, and `(x)` for disabled. The exact characters are in `docs/output-catalog.md`. There are 26 status tokens and about 40 reasons, and both are closed sets. Severity is first-match-wins over the contents: any `failed` gives error, any `manual recovery` gives warning, any non-benign `skipped` gives warning, and otherwise info. The reload trailer fires only on realized plugin transitions and is structurally suppressed on the load-time reconcile cascade. The indent ladder is byte-exact at 0, 2, 4, and 6 columns, gated by `test/architecture/catalog-uat/catalog-contract.test.ts` against `docs/output-catalog.md`.
 
 The symmetry is worth naming. Both projects enforce a closed diagnostic vocabulary. Theirs is shaped as a doctor registry. Ours is shaped as a notification catalog.
 

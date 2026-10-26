@@ -1,0 +1,874 @@
+import { narrowUnsupportedKinds } from "../../../../extensions/pi-claude-marketplace/shared/probe-classifiers.ts";
+import {
+  piWithAllLoaded,
+  piWithBothLoaded,
+  piWithNothingLoaded,
+  piWithoutWorkflowEngine,
+} from "../mock-pi.ts";
+
+import type { FixtureMap } from "../fixture-types.ts";
+
+/** Catalog fixtures for the applied reconcile notification surface. */
+export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
+  "reconcile-applied-cascade": {
+    "success-cascade-mixed": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "new-mp",
+            scope: "project",
+            status: "added",
+            plugins: [
+              {
+                status: "installed",
+                name: "new-plugin",
+                version: "1.0.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+          {
+            name: "other-mp",
+            scope: "user",
+            status: "added",
+            plugins: [
+              {
+                status: "installed",
+                name: "other-plugin",
+                version: "1.0.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+    "soft-fail-mixed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "flaky-mp",
+            scope: "user",
+            status: "failed",
+            severity: "error",
+            needsReload: false,
+            reasons: ["network unreachable"],
+            plugins: [],
+          },
+          {
+            name: "ok-mp",
+            scope: "user",
+            status: "added",
+            plugins: [
+              {
+                status: "installed",
+                name: "ok-plugin",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+    "invalid-config-row": {
+      // T-55-02-01 / T-53-02-02: BASENAME only -- never the absolute path.
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "claude-plugins.json",
+            scope: "project",
+            status: "failed",
+            severity: "error",
+            needsReload: false,
+            reasons: ["invalid manifest"],
+            plugins: [],
+          },
+        ],
+      },
+    },
+
+    // I5 / PR #51: invalid-config row that carries the loadConfig diagnostic
+    // detail (EACCES / JSON-parse / schema key) via a synthetic plugin child
+    // (SNM-10 pattern -- mp headers cannot carry a cause). Absolute paths
+    // are stripped at the apply boundary via `redactAbsolutePaths`; the
+    // parse / permission detail survives so the operator can debug.
+    "invalid-config-row-with-cause": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "claude-plugins.json",
+            scope: "project",
+            status: "failed",
+            severity: "error",
+            reasons: ["invalid manifest"],
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "claude-plugins.json",
+                reasons: ["invalid manifest"],
+                cause: new Error("schema validation failed: /marketplaces: Expected object"),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LAYER-06: the local layer declares a plugin whose marketplace only the
+    // base layer declares. The scope's reload stops as it does for an
+    // invalid layer config, and the cause names the repair. The file heads its
+    // block with no status, so the one failed row is the one error the tally
+    // counts, as in the pending diff.
+    "reload-layer-marketplace-undeclared": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "claude-plugins.local.json",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                severity: "error",
+                needsReload: false,
+                name: "claude-plugins.local.json",
+                reasons: ["invalid manifest"],
+                cause: new Error(
+                  "The local config (claude-plugins.local.json) declares helper@official, but only the base config (claude-plugins.json) declares its marketplace. Run /claude:plugin marketplace add <source> --local --scope project with the source the base config declares, or remove the plugin from the local config.",
+                ),
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // I1 / PR #51: reconcile-driven `marketplace remove` whose cascade
+    // unstaged some plugins and failed others. Bare `(failed)` mp header +
+    // one row per unstaged plugin (○ uninstalled) + one row per failed
+    // plugin (⊘ {reason}). Mirrors the standalone `marketplace remove`
+    // `partial` byte form: collapsing to ONE mp-failed row would silently
+    // drop the N-1 other rows.
+    "partial-marketplace-remove": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "acme-mp",
+            scope: "user",
+            status: "failed",
+            severity: "error",
+            needsReload: false,
+            plugins: [
+              { status: "uninstalled", name: "plugin-ok", severity: "info", needsReload: true },
+              {
+                status: "failed",
+                name: "plugin-fail-a",
+                reasons: ["permission denied"],
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "plugin-fail-b",
+                reasons: ["source missing"],
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // BFILL-01 / WCONV-03 / SEV-05 / D-69-04: a load-time backfill promotion row
+    // leads its brace with the convergence marker, then carries the re-resolved
+    // dropped-component kinds through the shared narrowUnsupportedKinds seam
+    // (lspServers -> lsp). The marketplace was already added, so its header is
+    // bare (no status token). SEV-03 / A3: a benign promotion stays info -- no
+    // expectedSeverity.
+    "backfill-partially-installed": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "partially-installed",
+                name: "hello",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: ["components now supported", ...narrowUnsupportedKinds(["lspServers"])],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WCONV-03 / SEV-05 / D-69-04: a backfill partially-installed row whose
+    // dropped-kind set is empty still braces the convergence marker alone. A
+    // backfilled row has no brace-less shape.
+    "backfill-partially-installed-marker-only": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "partially-installed",
+                name: "hello",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: ["components now supported"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WCONV-03 / D-69-04: the FULLY PROMOTED arm -- a record whose supported set
+    // grew re-resolved clean, so the row takes the `installed` byte form a fresh
+    // install renders and the convergence marker is the only thing separating
+    // the two. Probe with every companion loaded, so no soft-dep marker fires
+    // and this state isolates the marker. SEV-03 / A3: a benign promotion stays
+    // info -- no expectedSeverity.
+    "backfill-installed": {
+      pi: piWithAllLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "hello",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: ["components now supported"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WCONV-03 / WDEP-04 / D-16-15: the same fully promoted row in a session
+    // with no host workflow engine -- the real population's likely first render.
+    // Two tokens, ONE brace, and the composed order is what this state pins: the
+    // convergence marker is caller-placed and leads, the soft-dep marker is
+    // appended by `composeReasons` and trails. Severity stays info: this
+    // projection applies no companion raise on either arm.
+    "backfill-installed-workflow-engine-absent": {
+      pi: piWithoutWorkflowEngine(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "hello",
+                version: "1.0.0",
+                dependencies: ["workflows"],
+                reasons: ["components now supported"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // WR-06 / SEV-01: the projected enable row derives `dependencies` from the
+    // ledger's staged counts, so the soft-dep marker fires on the load-time
+    // surface too. Severity stays `info` -- this projection applies the
+    // companion raise on neither arm, so its enable arm agrees with its
+    // install arm; the standalone verb owns the SEV-01 composition.
+    "reconcile-enable-soft-dep": {
+      pi: piWithNothingLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "installed",
+                name: "hello",
+                version: "1.0.0",
+                dependencies: ["agents"],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // DFEN-04 / OUT-01 / OUT-04: the load-time counterpart of the standalone
+    // install-disabled row. Same cause token and same remedy trailer; the
+    // reload stamp differs (`true` here) because this row shares the arm every
+    // other reconcile disable uses.
+    "reconcile-install-disabled": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "local-mp",
+            scope: "user",
+            plugins: [
+              {
+                status: "disabled",
+                name: "hello",
+                version: "1.0.0",
+                reasons: ["installs disabled"],
+                enableHint: true,
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LOAD-01: the load-time dependency check disabled a plugin whose declared
+    // dependency has no record in the scope. The token names the condition and
+    // the cause line carries the remedy, which names both parties.
+    "reconcile-dependency-unsatisfied": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "disabled",
+                name: "deploy-kit",
+                version: "1.0.0",
+                reasons: ["dependency unsatisfied"],
+                cause: new Error('Install "secrets-vault@mp" or uninstall "deploy-kit@mp"'),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LOAD-01: the same check, on the arm where the dependency IS recorded but
+    // its own record is disabled. Same token, because the dependency is not
+    // usable at all; the remedy says enable rather than install.
+    "reconcile-dependency-disabled": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "disabled",
+                name: "deploy-kit",
+                version: "1.0.0",
+                reasons: ["dependency unsatisfied"],
+                cause: new Error('Enable "secrets-vault@mp" or uninstall "deploy-kit@mp"'),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // REC-05: the check could not read one declarer's dependencies because its
+    // catalog no longer lists it. The plugin keeps loading, so the row is a
+    // warning naming the fault, with the walk's cause line.
+    "reconcile-dependency-declarer-unreadable": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "deploy-kit",
+                reasons: ["not in manifest"],
+                cause: new Error(
+                  "cannot read the dependencies of deploy-kit@mp: not declared by its marketplace, and its installed copy cannot be read",
+                ),
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // REC-05 / DLS-01: an enabled plugin its catalog no longer lists, Pi's
+    // counterpart to upstream's `plugin-not-found` load error. The plugin keeps
+    // loading, so the row is a warning in upstream's words.
+    "reconcile-plugin-not-in-manifest": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "deploy-kit",
+                reasons: ["not in manifest"],
+                cause: new Error('Plugin "deploy-kit" not found in marketplace "mp"'),
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // LOAD-01: the same check, on the arm where the dependency is recorded and
+    // enabled at a version outside the declared range. The second token, and a
+    // remedy that names the canonical folded range.
+    "reconcile-dependency-version-unsatisfied": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "disabled",
+                name: "deploy-kit",
+                version: "1.0.0",
+                reasons: ["dependency version unsatisfied"],
+                cause: new Error(
+                  'Update "secrets-vault@mp" to satisfy ^2.0.0, or uninstall "deploy-kit@mp"',
+                ),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // RESV-06: the load-time counterpart of the standalone dependency-cascade
+    // {dependency failed} row. Reconcile drives ONE orchestrated outcome per
+    // declared plugin, so the requesting plugin's own row carries both the
+    // {dependency failed} token and the failing dependency's own cause line.
+    "reconcile-install-dependency-failed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "hello",
+                reasons: ["dependency failed"],
+                cause: new Error('Dependency "missing@mp" is not declared by its marketplace.'),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // MISS-01 / D-09-09: `/reload` installed a missing declared dependency
+    // through the install cascade. The materialized member's row carries
+    // `{dependency installed}`; the dependent that declared it comes back up
+    // in the same reload as an ordinary `(installed)` row (D-09-07).
+    "reconcile-dependency-installed": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "installed",
+                name: "secrets-vault",
+                version: "1.0.0",
+                dependencies: [],
+                reasons: ["dependency installed"],
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "installed",
+                name: "deploy-kit",
+                version: "1.0.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // MISS-02 / D-09-10: `/reload` could not install a missing declared
+    // dependency. The dependency's own `(failed)` row reuses the standalone
+    // cascade's `{dependency failed}` token and cause line; the dependent
+    // stays held by the LOAD-01 `{dependency unsatisfied}` row with the
+    // install remedy.
+    "reconcile-dependency-install-failed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "secrets-vault",
+                reasons: ["dependency failed"],
+                cause: new Error('Dependency "crypto-core@mp" is not declared by its marketplace.'),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "disabled",
+                name: "deploy-kit",
+                version: "1.0.0",
+                reasons: ["dependency unsatisfied"],
+                cause: new Error('Install "secrets-vault@mp" or uninstall "deploy-kit@mp"'),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+    // GV-01: a missing plugin directory dependency whose listed copy falls
+    // outside the range its installed declarer asks for.
+    "reconcile-dependency-directory-pin-unsatisfied": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "anthropic-plugin-directory",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "secrets-vault",
+                reasons: ["version conflict"],
+                cause: new Error(
+                  '"secrets-vault" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "deploy-kit".',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "disabled",
+                name: "deploy-kit",
+                version: "1.0.0",
+                reasons: ["dependency unsatisfied"],
+                cause: new Error(
+                  'Install "secrets-vault@anthropic-plugin-directory" or uninstall "deploy-kit@anthropic-plugin-directory"',
+                ),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+    "reconcile-dependency-cross-marketplace": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "alpha",
+            scope: "project",
+            plugins: [
+              {
+                status: "disabled",
+                name: "a",
+                version: "1.0.0",
+                reasons: ["dependency unsatisfied"],
+                cause: new Error('Install "b@beta" or uninstall "a@alpha"'),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+          {
+            name: "beta",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "b",
+                reasons: ["cross-marketplace"],
+                cause: new Error(
+                  'Dependency "b@beta", declared by "a@alpha", is from marketplace "beta", which root marketplace "alpha" does not allow. Install "b@beta" manually first, or add "beta" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "alpha".',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-08 / D-26: `apply` moved a recorded plugin to the version its catalog
+    // offers, through the update runner, and the session has not loaded it.
+    "apply-updated": {
+      pi: piWithBothLoaded(),
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "updated",
+                name: "demo",
+                scope: "project",
+                from: "1.0.0",
+                to: "1.1.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-12: a move a dependent's range does not admit stays put with the row
+    // `pending` lists for it.
+    "apply-update-held": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "skipped",
+                name: "lib",
+                version: "1.0.0",
+                reasons: ["dependents constrain"],
+                cause: new Error(
+                  'version 2.0.0 falls outside what the combined range admits (^1.0.0) -- required by "app@mp"',
+                ),
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-12 / D-24: a clean record whose catalog candidate would drop components
+    // stays put with the decline row `pending` lists, and its consent hint.
+    "apply-update-partial-consent": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "warning",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "partially-upgradable",
+                name: "demo",
+                version: "1.0.0",
+                reasons: ["unsupported component"],
+                catalogHint: true,
+                severity: "warning",
+                needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // D-13: a move that failed to materialize names its closed-set reason and
+    // the move it attempted; the next move still ran.
+    "apply-update-failed": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "mp",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "alpha",
+                version: "1.1.0",
+                from: "1.0.0",
+                reasons: ["permission denied"],
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "updated",
+                name: "beta",
+                scope: "project",
+                from: "1.0.0",
+                to: "1.1.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
+  },
+};

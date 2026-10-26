@@ -8,7 +8,7 @@
  *
  * D-21: this is one of three files in
  * extensions/pi-claude-marketplace/ permitted to import node:child_process
- * (whitelist asserted in tests/architecture/no-shell-out.test.ts; the other
+ * (whitelist asserted in test/architecture/no-shell-out.test.ts; the other
  * two are bridges/hooks/dispatch-exec.ts and
  * bridges/hooks/async-rewake/registry.ts).
  *
