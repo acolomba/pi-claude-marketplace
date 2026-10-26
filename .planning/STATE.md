@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: lifecycle-coverage
 status: Awaiting next milestone
 stopped_at: Milestone lifecycle-coverage completed and archived
-last_updated: "2026-10-26T04:09:51.309Z"
-last_activity: 2026-10-25
+last_updated: "2026-10-26T05:39:41.077Z"
+last_activity: 2026-10-26
 last_activity_desc: Milestone lifecycle-coverage completed and archived
-state_head: 1daa12d031d2c4ae8093c5c4e8acbe42cf1ef576
+state_head: 6d57cb9a83232fc18f02a3ba7220246f83df8f7b
 progress:
   total_phases: 30
   completed_phases: 30
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 Phase: Milestone lifecycle-coverage complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-26 - Completed quick task 261025-vf1: UPD-DEP-D1, settle the dependencies of every version a plugin moves to
+Last activity: 2026-10-26 - Completed quick task 261026-26d: plan every dependency move before the first write
 
 ### mcp-4 closeout
 
@@ -179,6 +179,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 2 | APPLYTHROW-01: report the changes an apply made before it failed | 2026-10-25 | 20ee9b25 | complete | [261025-j40](./quick/261025-j40-report-the-changes-an-apply-made-before-/) |
 | 3 | APPLY1-01: move a plugin and its newer dependency in one apply | 2026-10-25 | a777b12f | complete | [261025-n1z](./quick/261025-n1z-move-a-plugin-and-its-newer-dependency-i/) |
 | 261025-vf1 | UPD-DEP-D1: settle the dependencies of every version a plugin moves to | 2026-10-26 | 1daa12d0 | complete | [261025-vf1-resolve-the-new-version-s-dependency-clo](./quick/261025-vf1-resolve-the-new-version-s-dependency-clo/) |
+| 261026-26d | UPDDEP-REVIEW: plan every dependency move before the first write | 2026-10-26 | 6d57cb9a | complete | [261026-26d-plan-dependency-moves-before-any-write](./quick/261026-26d-plan-dependency-moves-before-any-write/) |
 
 ## Session Continuity
 
