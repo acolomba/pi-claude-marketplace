@@ -3,10 +3,10 @@ gsd_state_version: "1.0"
 milestone: lifecycle-coverage
 status: Awaiting next milestone
 stopped_at: Milestone lifecycle-coverage completed and archived
-last_updated: "2026-10-26T13:30:00.000Z"
+last_updated: "2026-10-26T18:00:00.000Z"
 last_activity: 2026-10-26
 last_activity_desc: Milestone lifecycle-coverage completed and archived
-state_head: 82ef8cac54aab681fa4157b8e60072aebd3408c1
+state_head: cf2a1c37649ac2015efec6457f6fc3aceca374b6
 progress:
   total_phases: 30
   completed_phases: 30
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 Phase: Milestone lifecycle-coverage complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-26 - Completed quick task 261026-c06: lock compromise, apply dependency judgement, cross-marketplace trust
+Last activity: 2026-10-26 - Completed quick task 261026-gv1: record git plugin versions as Claude Code does
 
 ### mcp-4 closeout
 
@@ -181,6 +181,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261025-vf1 | UPD-DEP-D1: settle the dependencies of every version a plugin moves to | 2026-10-26 | 1daa12d0 | complete | [261025-vf1-resolve-the-new-version-s-dependency-clo](./quick/261025-vf1-resolve-the-new-version-s-dependency-clo/) |
 | 261026-26d | UPDDEP-REVIEW: plan every dependency move before the first write | 2026-10-26 | 6d57cb9a | complete | [261026-26d-plan-dependency-moves-before-any-write](./quick/261026-26d-plan-dependency-moves-before-any-write/) |
 | 261026-c06 | Lifecycle-coverage leftovers: a lost state lock, apply dependency judgement, cross-marketplace trust | 2026-10-26 | 82ef8cac | complete | [261026-c06-fix-lock-compromise-apply-dependency-jud](./quick/261026-c06-fix-lock-compromise-apply-dependency-jud/) |
+| 261026-gv1 | GV-01: record git plugin versions as Claude Code does; errno wording per Node; two Sonar findings | 2026-10-26 | cf2a1c37 | complete | [261026-gv1-record-git-plugin-versions-as-claude-code](./quick/261026-gv1-record-git-plugin-versions-as-claude-code/) |
 
 ## Session Continuity
 
