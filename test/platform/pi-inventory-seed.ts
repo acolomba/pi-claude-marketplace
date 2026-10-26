@@ -86,7 +86,7 @@ export function builtinMcpTool(): ToolInfo {
     description: "test tool mcp__stub__echo",
     parameters: Type.Object({}),
     exposure: "deferred",
-    namespace: { name: "mcp__stub" },
+    namespace: { name: "mcp__stub", aliases: ["stub"] },
     sourceInfo: { path: "builtin:mcp", source: "builtin", scope: "temporary", origin: "top-level" },
   } satisfies ToolInfo;
 }
