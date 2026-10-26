@@ -1,19 +1,19 @@
 ---
 gsd_state_version: "1.0"
 milestone: lifecycle-coverage
-milestone_name: Plugin Lifecycle Behavioral Tests
 status: Awaiting next milestone
 stopped_at: Milestone lifecycle-coverage completed and archived
-last_updated: "2026-10-25T14:17:40.899Z"
+last_updated: "2026-10-26T04:09:51.309Z"
 last_activity: 2026-10-25
 last_activity_desc: Milestone lifecycle-coverage completed and archived
-state_head: 1abe89af92d7e3551eb9523d2e60725bcabe4380
+state_head: 1daa12d031d2c4ae8093c5c4e8acbe42cf1ef576
 progress:
   total_phases: 30
   completed_phases: 30
   total_plans: 76
   completed_plans: 76
   percent: 100
+milestone_name: Plugin Lifecycle Behavioral Tests
 ---
 
 # Project State
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 Phase: Milestone lifecycle-coverage complete
 Plan: —
 Status: Awaiting next milestone
-Last activity: 2026-10-25 — Milestone lifecycle-coverage completed and archived
+Last activity: 2026-10-26 - Completed quick task 261025-vf1: UPD-DEP-D1, settle the dependencies of every version a plugin moves to
 
 ### mcp-4 closeout
 
@@ -178,6 +178,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 1 | Run init.sh in new worktrees: SessionStart guard keyed on node_modules/.init-done (7f4c2178) | 2026-10-24 | 7f4c2178 | — | — |
 | 2 | APPLYTHROW-01: report the changes an apply made before it failed | 2026-10-25 | 20ee9b25 | complete | [261025-j40](./quick/261025-j40-report-the-changes-an-apply-made-before-/) |
 | 3 | APPLY1-01: move a plugin and its newer dependency in one apply | 2026-10-25 | a777b12f | complete | [261025-n1z](./quick/261025-n1z-move-a-plugin-and-its-newer-dependency-i/) |
+| 261025-vf1 | UPD-DEP-D1: settle the dependencies of every version a plugin moves to | 2026-10-26 | 1daa12d0 | complete | [261025-vf1-resolve-the-new-version-s-dependency-clo](./quick/261025-vf1-resolve-the-new-version-s-dependency-clo/) |
 
 ## Session Continuity
 
