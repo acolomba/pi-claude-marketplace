@@ -5,10 +5,10 @@
 - A new session now lists pending plugin changes, the new `/claude:plugin apply` makes them, and several plugin commands behave more like Claude Code. (#274)
 
   - A new session or `/reload` lists the changes your configs and marketplaces need. `apply` makes them and moves plugins to the version their marketplace offers. Run `/reload` after it.
-  - When a marketplace ships a plugin together with the newer dependency it needs, one `apply` moves both, the dependency first. No `apply` leaves a plugin enabled while a dependency it needs is missing, disabled, or out of range, and `pending` lists each such disable first.
+  - When a marketplace ships a plugin with the newer dependency it needs, one `apply` moves both. No `apply` leaves a plugin enabled on a missing, disabled, or out-of-range dependency, and `pending` lists those disables first.
   - `install`, `import`, `update`, and autoupdate now install, enable, or move the dependencies a plugin needs, the dependencies first. Each dependency gets the highest version every plugin that needs it allows. When none fits, the command fails and changes nothing.
   - `pending` shows a move that a dependent's version range blocks as `(skipped) {dependents constrain}`, and a move that needs `--partial` as `(partially-upgradable)`.
-  - A marketplace that you add to a config by hand shows as `(will add)`, and a config that Pi cannot read shows its error under its row.
+  - A marketplace that you add to a config by hand shows as `(will add)`. A config that Pi cannot read shows its error under its row.
   - The new `autoapply` setting makes each new session run `apply`. Any config can turn it on, so read a cloned project's `.pi/claude-plugins.json` before you start `pi` in it.
   - `/claude:plugin autoapply` shows the value in effect and each config's own value. `on` or `off` sets it in the user base config, unless you add `--scope` or `--local`.
   - A plugin that its marketplace no longer lists no longer blocks commands on other plugins in its scope. Pi reads its dependencies from its installed copy.
@@ -16,13 +16,13 @@
   - The first clone of an unpinned git source no longer fetches again. An install that the git host refuses fails as `{source missing}`, `{network error}`, or `{network unreachable}`.
   - When `apply` installs a plugin, its `(installed)` row shows the version, as `install` does.
   - `apply` no longer disables a plugin whose new version needs a plugin that the same `apply` installs from a config. `pending` lists the move instead.
-  - An install refuses a disabled dependency from another marketplace with `{cross-marketplace}` unless the plugin's marketplace allows that marketplace, as Claude Code does.
+  - An install refuses a disabled dependency from another marketplace with `{cross-marketplace}` unless the plugin's marketplace allows that marketplace.
   - A state lock that another process takes or removes during a long command no longer crashes Pi. The command fails and saves no installation record after the loss.
-  - Git plugins now record the version Claude Code records: the commit's first 12 characters without `sha-`, plus a path hash for `git-subdir` and the pin for pinned `anthropic-plugin-directory` plugins.
-  - A dependency that a version range installs at a release tag now records the tag's commit in its version, as Claude Code does, and an update that finds no tag removes it.
-  - A version range now checks the listed copy of an `anthropic-plugin-directory` plugin instead of picking a release tag, as Claude Code does. A refusal names every plugin that asked for that range, also in `apply`.
-  - An update reports a pinned `anthropic-plugin-directory` plugin up to date when its listed commit has not changed, before any range check, as Claude Code does.
-  - `list` and completion show a plugin recorded at a release tag's commit as upgradable when the marketplace offers the version without that commit, as Claude Code does.
+  - A git plugin with no declared version now records the commit's first 12 characters, without `sha-`. A `git-subdir` source adds a hash of its path, and a pinned `anthropic-plugin-directory` plugin adds its pin.
+  - A dependency that a version range installs at a release tag now records the tag's commit in its version. An update that finds no tag removes the commit.
+  - A version range now checks the listed copy of an `anthropic-plugin-directory` plugin instead of picking a release tag. A refusal names every plugin that asked for that range, also in `apply`.
+  - An update reports a pinned `anthropic-plugin-directory` plugin up to date when its listed commit has not changed, before any range check.
+  - `list` and completion show a plugin recorded at a release tag's commit as upgradable when the marketplace offers the version without that commit.
 
 - Internal: a new worktree session now runs `scripts/init.sh` once when it starts, also in the Claude desktop app. (#273)
 
