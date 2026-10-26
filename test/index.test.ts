@@ -1272,7 +1272,7 @@ test("constructs one runtime, completion cache and reconcile operation per exten
   const routingConstructions =
     source.match(/createHooksRouting\(hooksRuntime, \{ readHooksJson \}\)/g) ?? [];
   const updateConstructions =
-    source.match(/createPluginUpdateOperations\(hooksRouting, completionCache\)/g) ?? [];
+    source.match(/createUpdateOperations\(hooksRouting, completionCache\)/g) ?? [];
   const reconcileConstructions = source.match(/createApplyReconcile\(\{ loadState \}\)/g) ?? [];
   const loadConstructions =
     source.match(/createLoadReconcile\(\{ loadState \}, applyReconcile\)/g) ?? [];
@@ -1289,7 +1289,7 @@ test("constructs one runtime, completion cache and reconcile operation per exten
     "createHooksRouting(hooksRuntime, { readHooksJson })",
   ]);
   assert.deepStrictEqual(updateConstructions, [
-    "createPluginUpdateOperations(hooksRouting, completionCache)",
+    "createUpdateOperations(hooksRouting, completionCache)",
   ]);
   assert.deepStrictEqual(hydrationConstruction, [
     "createHooksHydration(hooksRuntime, { loadState, readHooksJson })",

@@ -117,6 +117,7 @@ const MARKER_POLICY_TABLE = [
       "partially-available": { markers: false, contentReasons: true },
       disabled: { markers: false, contentReasons: true },
       skipped: { markers: false, contentReasons: true },
+      updated: { markers: true, contentReasons: true },
     },
   },
   {
@@ -153,6 +154,7 @@ const MARKER_POLICY_TABLE = [
       skipped: { markers: false, contentReasons: true },
       "partially-upgradable": { markers: false, contentReasons: true },
       failed: { markers: false, contentReasons: true },
+      installed: { markers: true, contentReasons: true },
     },
   },
   {
@@ -210,6 +212,7 @@ const MARKER_POLICY_TABLE = [
       "partially-installed": { markers: true, contentReasons: true },
       skipped: { markers: false, contentReasons: true },
       failed: { markers: false, contentReasons: true },
+      installed: { markers: true, contentReasons: true },
     },
   },
   {

@@ -166,16 +166,16 @@ function groupCascadeOutcomes(
     }
 
     const key = `${target.scope}:${target.marketplace}`;
-    const row = outcomeToCascadePluginMessage(target, outcome, probe, cardinality);
+    // UPD-DEP-D1: the dependencies the update changed render beside its row.
+    const rows = [
+      outcomeToCascadePluginMessage(target, outcome, probe, cardinality),
+      ...(outcome.dependencyRows ?? []),
+    ];
     const existing = byMarketplace.get(key);
     if (existing === undefined) {
-      byMarketplace.set(key, {
-        name: target.marketplace,
-        scope: target.scope,
-        plugins: [row],
-      });
+      byMarketplace.set(key, { name: target.marketplace, scope: target.scope, plugins: rows });
     } else {
-      existing.plugins.push(row);
+      existing.plugins.push(...rows);
     }
   }
 

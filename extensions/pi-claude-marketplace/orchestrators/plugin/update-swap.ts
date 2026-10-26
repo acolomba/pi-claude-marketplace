@@ -146,7 +146,39 @@ import type {
   PreparePluginUpdateOptions,
   UpdateCloneCacheSeam,
 } from "./update-preflight.ts";
-import type { PluginUpdateFailedOutcome, PluginUpdateOutcome, RevisionMove } from "../types.ts";
+import type {
+  PluginUpdateFailedOutcome,
+  PluginUpdateOutcome,
+  RevisionMove,
+  UpdateDependencyRow,
+} from "../types.ts";
+
+/**
+ * UPD-DEP-D1: what settling the dependency closure of an update's new version
+ * produced. `settled` carries a row for each dependency it installed, enabled
+ * or moved; `refused` carries the row of the dependency that cannot be met,
+ * and nothing changed.
+ */
+export type UpdateDependencySettlement =
+  | { readonly kind: "settled"; readonly rows: readonly UpdateDependencyRow[] }
+  | {
+      readonly kind: "refused";
+      readonly rows: readonly UpdateDependencyRow[];
+      readonly cause: Error;
+    };
+
+/** UPD-DEP-D1: settles the closure of the version `args` moves its plugin to. */
+export type UpdateDependencySettler = (args: ThreePhaseArgs) => Promise<UpdateDependencySettlement>;
+
+/**
+ * UPD-DEP-D1: the settler an update operation is bound to, before the
+ * notification context of the command that runs it is known. Install's flow
+ * owns the cascade it runs (`createUpdateDependencyResolver`).
+ */
+export type UpdateDependencyResolver = (
+  args: ThreePhaseArgs,
+  notification: { readonly ctx: NotificationContext; readonly run: NotificationRun },
+) => Promise<UpdateDependencySettlement>;
 
 /** Common collaborators and identity for one prepared plugin replacement. */
 export interface ThreePhaseArgsBase {
@@ -189,6 +221,14 @@ export interface ThreePhaseArgsBase {
   readonly onCandidate?: (move: RevisionMove) => void;
   /** UPR-03: the installed version, reported before any candidate; see `onCandidate`. */
   readonly onRecord?: NonNullable<PreparePluginUpdateOptions["onRecord"]>;
+  /** UPD-DEP-D1: the plugin a dependency move is made for (`PreparePluginUpdateOptions`). */
+  readonly requester?: NonNullable<PreparePluginUpdateOptions["requester"]>;
+  /**
+   * UPD-DEP-D1: settles the dependency closure of the version the update
+   * moves to before the swap, under a policy that resolves it. Absent, the
+   * update moves the plugin alone.
+   */
+  readonly settleDependencies?: UpdateDependencySettler;
   /**
    * State I/O for the intent-mark and finalize guards (and the disabled-pin
    * refresh in preflight). Production callers omit it and get the real state

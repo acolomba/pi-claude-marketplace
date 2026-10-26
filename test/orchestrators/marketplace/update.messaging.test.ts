@@ -54,7 +54,7 @@ test("exports the complete marketplace update context in declared order", () => 
   const expectedContext = {
     keys: ["Messaging", "rowPolicies"],
     label: "Marketplace update",
-    renderKeys: ["updated", "partially-installed", "skipped", "failed"],
+    renderKeys: ["updated", "partially-installed", "skipped", "failed", "installed"],
   };
 
   // act
@@ -1242,5 +1242,6 @@ test("UPDATE_CONTEXT declares complete row policies", () => {
     "partially-installed": { markers: true, contentReasons: true },
     skipped: { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
+    installed: { markers: true, contentReasons: true },
   });
 });

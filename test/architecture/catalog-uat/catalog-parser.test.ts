@@ -70,7 +70,7 @@ test("loadCatalogExamples maps the two non-command catalog sections exactly", ()
   ]);
 });
 
-test("loadCatalogExamples parses all 319 independent catalog tuples", async () => {
+test("loadCatalogExamples parses all 320 independent catalog tuples", async () => {
   // arrange
   const catalog = await readFile(CATALOG_PATH, "utf8");
 
@@ -78,7 +78,7 @@ test("loadCatalogExamples parses all 319 independent catalog tuples", async () =
   const examples = loadCatalogExamples(catalog);
 
   // assert
-  assert.equal(examples.length, 319);
+  assert.equal(examples.length, 320);
   assert.equal(new Set(examples.map(({ section }) => section)).size, 22);
   assert.deepStrictEqual(examples[0], {
     section: "/claude:plugin list",

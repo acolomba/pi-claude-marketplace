@@ -10,7 +10,7 @@ import { registerClaudeMarketplaceTools, registerClaudePluginCommand } from "./e
 import { registerSkillAliases } from "./edge/skill-aliases.ts";
 import { aggregateDiscoveredResources } from "./orchestrators/discover.ts";
 import { DEFAULT_GIT_OPS } from "./orchestrators/marketplace/shared.ts";
-import { createPluginUpdateOperations } from "./orchestrators/plugin/update-flow.ts";
+import { createUpdateOperations } from "./orchestrators/plugin/operations.ts";
 import { recomputePluginPath } from "./orchestrators/plugin-path.ts";
 import { createApplyReconcile } from "./orchestrators/reconcile/apply.ts";
 import { createLoadReconcile } from "./orchestrators/reconcile/load.ts";
@@ -77,7 +77,7 @@ export default async function claudeMarketplaceExtension(pi: ExtensionAPI): Prom
   // ASTAT-01: one status tracker per extension load. Pi drops its subscription
   // when it invalidates this runtime, and the next load starts empty.
   const mcpStatus = createMcpStatusTracker(pi.events);
-  const pluginUpdateOperations = createPluginUpdateOperations(hooksRouting, completionCache);
+  const pluginUpdateOperations = createUpdateOperations(hooksRouting, completionCache);
   const hooksHydration = createHooksHydration(hooksRuntime, { loadState, readHooksJson });
   // RECON-01..05: one reconcile apply operation and one load reconcile step
   // per extension load, both bound to the production state reader.

@@ -3739,3 +3739,177 @@ for (const { label, probed, failure } of [
     assert.deepStrictEqual(cascade, { kind: "constraint-failed", failure });
   });
 }
+
+test("UPD-DEP-D1 / RESV-05: with moveOutOfRange, a recorded dependency outside its range is reported for a move and nothing materializes", async (t) => {
+  // arrange: `foo` declares `bar` at `^2.0.0`; `bar` is recorded at `0.0.1`.
+  const environment = await createHermeticEnvironment(t, "install-cascade-out-of-range-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"], { preinstalled: ["bar"] });
+  const locations = locationsFor("project", environment.cwd);
+  const before = await twoScopeFootprint(environment.cwd, state);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar", version: "^2.0.0" }],
+      [`bar@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    moveOutOfRange: true,
+  });
+
+  // assert
+  assert.deepStrictEqual(cascade, {
+    kind: "dependencies-out-of-range",
+    members: [
+      {
+        key: `bar@${MARKETPLACE}`,
+        name: "bar",
+        marketplace: MARKETPLACE,
+        requiredBy: `foo@${MARKETPLACE}`,
+        ranges: ["^2.0.0"],
+        range: "^2.0.0",
+        recordedVersion: "0.0.1",
+      },
+    ],
+  });
+  assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
+});
+
+test("UPD-DEP-D1: with moveOutOfRange, a fresh member that cannot resolve still fails the cascade before any move", async (t) => {
+  // arrange: `bar` is recorded outside its range, and no tag satisfies `baz`'s.
+  const environment = await createHermeticEnvironment(t, "install-cascade-out-of-range-fresh-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "baz", "foo"], {
+    preinstalled: ["bar"],
+    gitSourced: ["baz"],
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const seen: DependencyTagProbeOptions[] = [];
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [
+        { name: "bar", version: "^2.0.0" },
+        { name: "baz", version: "^1.0.0" },
+      ],
+      [`bar@${MARKETPLACE}`]: [],
+      [`baz@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set([`bar@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    moveOutOfRange: true,
+    tagProbe: tagProbeAnswering({ kind: "no-matching-tag", range: ">=1.0.0 <2.0.0-0" }, seen),
+  });
+
+  // assert
+  assert.deepStrictEqual(cascade, {
+    kind: "constraint-failed",
+    failure: { kind: "no-matching-tag", key: `baz@${MARKETPLACE}`, range: "^1.0.0" },
+  });
+});
+
+for (const { label, declared, failure } of [
+  {
+    label: "contradictory declarations",
+    declared: [
+      { name: "left", version: "^1.0.0" },
+      { name: "right", version: "^2.0.0" },
+    ],
+    failure: {
+      kind: "range-conflict",
+      why: "contradictory-declarations",
+      key: `shared@${MARKETPLACE}`,
+      range: "^1.0.0, ^2.0.0",
+      detail: "no version satisfies all 2 declared ranges",
+    },
+  },
+  {
+    label: "an unparseable declaration",
+    declared: [{ name: "left", version: "not-a-range" }],
+    failure: {
+      kind: "range-invalid",
+      key: `shared@${MARKETPLACE}`,
+      range: "not-a-range",
+      detail: "input 1 of 1 is not a valid version range",
+    },
+  },
+] satisfies readonly {
+  label: string;
+  declared: readonly { readonly name: string; readonly version: string }[];
+  failure: CascadeConstraintFailure;
+}[]) {
+  test(`UPD-DEP-D1: with moveOutOfRange, a recorded member with ${label} still fails the cascade`, async (t) => {
+    // arrange
+    const environment = await createHermeticEnvironment(t, "install-cascade-out-of-range-bad-");
+    const state = await seedMarketplace(environment.cwd, ["left", "right", "root", "shared"], {
+      preinstalled: ["shared"],
+    });
+    const locations = locationsFor("project", environment.cwd);
+    const graph: Record<string, readonly DeclaredDependency[]> = {
+      [`root@${MARKETPLACE}`]: declared.map((entry) => ({ name: entry.name })),
+      [`left@${MARKETPLACE}`]: [],
+      [`right@${MARKETPLACE}`]: [],
+    };
+    for (const entry of declared) {
+      graph[`${entry.name}@${MARKETPLACE}`] = [{ name: "shared", version: entry.version }];
+    }
+
+    // act
+    const cascade = await runInstallCascade({
+      state,
+      locations,
+      rootKey: `root@${MARKETPLACE}`,
+      lookup: catalog(graph),
+      ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+      rootAllowedMarketplaces: new Set<string>(),
+      installedKeys: new Set([`shared@${MARKETPLACE}`]),
+      knownMarketplaces: new Set([MARKETPLACE]),
+      moveOutOfRange: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(cascade, { kind: "constraint-failed", failure });
+  });
+}
+
+test("UPD-DEP-D1: a recorded root materializes only its closure and reports its members", async (t) => {
+  // arrange: `foo` is recorded and now declares `bar`, which is not installed.
+  const environment = await createHermeticEnvironment(t, "install-cascade-root-recorded-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "foo"], { preinstalled: ["foo"] });
+  const locations = locationsFor("project", environment.cwd);
+  const recordedRoot = structuredClone(state.marketplaces[MARKETPLACE]?.plugins.foo);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({ [`foo@${MARKETPLACE}`]: [{ name: "bar" }], [`bar@${MARKETPLACE}`]: [] }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set([`foo@${MARKETPLACE}`]),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    rootRecorded: true,
+  });
+
+  // assert
+  assert.strictEqual(cascade.kind, "dependencies-installed");
+  assert.deepStrictEqual(
+    cascade.kind === "dependencies-installed" &&
+      cascade.members.map((member) => [member.key, member.reEnabledFromRecord]),
+    [[`bar@${MARKETPLACE}`, false]],
+  );
+  assert.deepStrictEqual(state.marketplaces[MARKETPLACE]?.plugins.foo, recordedRoot);
+  assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar?.version, "0.0.1");
+});

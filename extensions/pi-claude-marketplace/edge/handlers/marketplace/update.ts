@@ -56,7 +56,7 @@ export function makeMarketplaceUpdateHandler(
       return;
     }
 
-    const pluginUpdate = deps.beginPluginUpdateRun();
+    const pluginUpdate = deps.beginPluginUpdateRun({ ctx, run });
     if (parsed.name === undefined) {
       await updateAllMarketplaces({
         completionCache: deps.completionCache,

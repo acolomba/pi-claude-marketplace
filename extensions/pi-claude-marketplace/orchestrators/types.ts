@@ -11,7 +11,13 @@ import { type ContentReason } from "../shared/notification-types.ts";
 
 import type { ScopedLocations } from "../persistence/locations.ts";
 import type { CleanupFailure } from "../shared/errors.ts";
-import type { McpConfigNotice } from "../shared/notification-types.ts";
+import type {
+  McpConfigNotice,
+  PluginFailedMessage,
+  PluginInstalledMessage,
+  PluginPartiallyInstalledMessage,
+  PluginUpdatedMessage,
+} from "../shared/notification-types.ts";
 import type { DegradeKind } from "../shared/notify-reasons.ts";
 import type { Scope } from "../shared/types.ts";
 import type { RollbackPartial } from "../transaction/phase-ledger.ts";
@@ -299,7 +305,25 @@ export interface PluginUpdateBase {
   readonly declaresAgents: boolean;
   readonly declaresMcp: boolean;
   readonly declaresWorkflows: boolean;
+  /**
+   * UPD-DEP-D1: one row per dependency the update installed, enabled or moved
+   * for its new version, or the row of the dependency that refused it. They
+   * render beside this plugin's row in its marketplace block, named by their
+   * full keys as install's cascade rows are. Omitted when there are none
+   * (NREG-01).
+   */
+  readonly dependencyRows?: readonly UpdateDependencyRow[];
 }
+
+/**
+ * UPD-DEP-D1: a row for a dependency an update or install changed for the
+ * plugin it named: installed or enabled, moved, or the one that refused it.
+ */
+export type UpdateDependencyRow =
+  | PluginInstalledMessage
+  | PluginPartiallyInstalledMessage
+  | PluginUpdatedMessage
+  | PluginFailedMessage;
 
 /**
  * `(updated)` partition. `fromVersion` and `toVersion`

@@ -900,7 +900,11 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       // WR-01: `outcomeToCascadePluginMessage` returns `UpdateRowMsg` by
       // construction, so the mapped rows are the narrowed Msg the
       // UPDATE_CONTEXT requires with no cast.
-      plugins: outcomes.map((o) => outcomeToCascadePluginMessage(o, scope)),
+      // UPD-DEP-D1: the dependencies an update changed render beside its row.
+      plugins: outcomes.flatMap((o) => [
+        outcomeToCascadePluginMessage(o, scope),
+        ...(o.dependencyRows ?? []),
+      ]),
     },
   ];
   notifyWithContext(ctx, run, UPDATE_CONTEXT, cascadeRows, undefined, cardinality);

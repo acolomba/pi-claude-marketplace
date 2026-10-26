@@ -23,6 +23,7 @@ import {
   createPruneOperation,
   createReinstallOperation,
   createUninstallOperation,
+  createUpdateOperations,
   fetchPlugins,
   getPluginInfo,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
@@ -967,6 +968,74 @@ test("D-26: convergePlugin moves the plugin to the catalog version in place and 
   const bucket = runtime.getRoutingBucket("PreToolUse");
   assert.equal(bucket.length, 1);
   assert.equal(bucket[0]?.handlerDecl["command"], "echo goodbye");
+});
+
+test("constructs the update operations without using their owners or starting asynchronous work", (t) => {
+  // arrange
+  const hooksRouting = mock<UpdateHooksRouting>({ exactParams: true, name: "hooks routing" });
+  const completionCache = mock<CompletionCache>({ exactParams: true, name: "completion cache" });
+  const startedResourceTypes: string[] = [];
+  const resources = createHook({
+    init: (_asyncId, type) => {
+      startedResourceTypes.push(type);
+    },
+  });
+  t.after(() => resources.disable());
+
+  // act
+  resources.enable();
+  const operations = createUpdateOperations(hooksRouting, completionCache);
+  resources.disable();
+
+  // assert
+  assert.deepStrictEqual(Object.keys(operations), [
+    "updatePlugins",
+    "beginPluginUpdateRun",
+    "convergePlugin",
+  ]);
+  assert.deepStrictEqual(startedResourceTypes, []);
+  verify(hooksRouting);
+  verify(completionCache);
+});
+
+test("UPD-DEP-D1: the composed update refuses a new version whose dependency no marketplace offers", async (t) => {
+  // arrange
+  const { cwd, locations, hooksRouting } = await installHooksDeclaringPlugin(
+    t,
+    "update-operation-dependencies-",
+  );
+  const { updatePlugins } = createUpdateOperations(hooksRouting, createCompletionCache());
+  await writeFile(
+    path.join(cwd, "mp-src", "plugins", "p1", ".claude-plugin", "plugin.json"),
+    JSON.stringify({ name: "p1", version: "0.0.2", dependencies: ["absent"] }),
+  );
+  const { ctx, run, notifications } = makeCtx();
+
+  // act
+  await updatePlugins({
+    ctx,
+    run,
+    scope: "project",
+    cwd,
+    target: { kind: "plugin", plugin: "p1", marketplace: "mp" },
+  });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● mp [project]",
+        "  ⊘ p1 v0.0.1 (failed) {dependency failed}",
+        "  ⊘ absent@mp (failed) {not in manifest}",
+        '    cause: Dependency "absent@mp" is not declared by its marketplace.',
+      ].join("\n"),
+      severity: "error",
+    },
+  ]);
+  const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["p1"];
+  assert.strictEqual(record?.version, "0.0.1");
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -13569,3 +13569,109 @@ test("GHB-03: convergePlugin rethrows an invalid base", async (t) => {
     );
   });
 });
+
+test("UPD-DEP-D1: a named update settles the new version's dependencies in the command's context and reports their rows", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-settles-dependencies-");
+    try {
+      // arrange
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const { ctx, run, notifications } = makeCtx();
+      const settled: unknown[] = [];
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+        undefined,
+        {},
+        (args, notification) => {
+          settled.push([args.plugin, notification.ctx === ctx, notification.run === run]);
+          return Promise.resolve({
+            kind: "settled",
+            rows: [
+              {
+                status: "installed",
+                name: "zcore@mp",
+                dependencies: [],
+                version: "1.0.0",
+                severity: "info",
+                needsReload: true,
+              },
+            ],
+          });
+        },
+      );
+
+      // act
+      await operations.updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n  ● hello v1.0.0 → v1.0.1 (updated)\n  ● zcore@mp v1.0.0 (installed)\n\n/reload to pick up changes",
+        },
+      ]);
+      assert.deepStrictEqual(settled, [["hello", true, true]]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const { label, notified, expected } of [
+  { label: "with the command's context settles", notified: true, expected: ["hello"] },
+  { label: "without a context settles no", notified: false, expected: [] },
+]) {
+  test(`UPD-DEP-D1: an autoupdate run ${label} dependencies`, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("autoupdate-settles-dependencies-");
+      const previousCwd = process.cwd();
+      try {
+        // arrange
+        await seedPathMarketplace({
+          cwd,
+          marketplaceRoot: path.join(cwd, "mp-src"),
+          marketplaceName: "mp",
+          manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+          installedVersions: { hello: "1.0.0" },
+        });
+        process.chdir(cwd);
+        const { ctx, run } = makeCtx();
+        const settled: string[] = [];
+        const operations = createPluginUpdateOperations(
+          createHooksRouting(createHooksRuntime(), { readHooksJson }),
+          createCompletionCache(),
+          undefined,
+          {},
+          (args) => {
+            settled.push(args.plugin);
+            return Promise.resolve({ kind: "settled", rows: [] });
+          },
+        );
+        const updateOne = operations.beginPluginUpdateRun(notified ? { ctx, run } : undefined);
+
+        // act
+        const outcome = await updateOne("hello", "mp", "project");
+
+        // assert
+        assert.strictEqual(outcome.partition, "updated");
+        assert.deepStrictEqual(settled, expected);
+      } finally {
+        process.chdir(previousCwd);
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}

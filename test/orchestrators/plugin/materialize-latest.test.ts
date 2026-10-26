@@ -24,8 +24,14 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
 import type { CandidateReport } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/materialize-latest.ts";
 import type { MaterializationPolicy } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
-import type { ThreePhaseArgsBase } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
-import type { RevisionMove } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
+import type {
+  ThreePhaseArgsBase,
+  UpdateDependencySettler,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
+import type {
+  RevisionMove,
+  UpdateDependencyRow,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { TestContext } from "node:test";
@@ -291,4 +297,136 @@ test("UPR-03: a candidate report holds the installed version when no candidate w
 
   // assert
   assert.deepStrictEqual(report, { move: { fromVersion: "1.0.0" } });
+});
+
+const ZCORE_ROW = {
+  status: "installed",
+  name: "zcore@mp",
+  dependencies: [],
+  version: "1.0.0",
+  severity: "info",
+  needsReload: true,
+} satisfies UpdateDependencyRow;
+
+test("UPD-DEP-D1: settles the new version's dependencies before the swap and reports their rows", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  const settledFor: string[] = [];
+  const settleDependencies: UpdateDependencySettler = async (args) => {
+    settledFor.push(args.plugin);
+    const state = await loadState(base.locations.extensionRoot);
+    settledFor.push(state.marketplaces.mp?.plugins.hello?.version ?? "");
+    return { kind: "settled", rows: [ZCORE_ROW] };
+  };
+
+  // act
+  const outcome = await materializeLatestVersion(
+    { ...base, cascade: true, settleDependencies },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "updated",
+    name: "hello",
+    fromVersion: "1.0.0",
+    toVersion: "1.1.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+    dependencyRows: [ZCORE_ROW],
+  });
+  assert.deepStrictEqual(settledFor, ["hello", "1.0.0"]);
+});
+
+test("UPD-DEP-D1: an update whose dependencies changed nothing reports no dependency rows", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { base } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      settleDependencies: () => Promise.resolve({ kind: "settled", rows: [] }),
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.strictEqual(outcome.partition, "updated");
+  assert.strictEqual(Object.hasOwn(outcome, "dependencyRows"), false);
+});
+
+test("UPD-DEP-D1: a refused dependency closure fails the update and keeps the installed version", async (t) => {
+  // arrange
+  const { base, pluginRoot } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  const refusal = {
+    status: "failed",
+    name: "zcore@mp",
+    reasons: ["already installed", "version conflict"],
+    severity: "error",
+  } satisfies UpdateDependencyRow;
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      settleDependencies: () =>
+        Promise.resolve({ kind: "refused", rows: [refusal], cause: new Error("zcore refused") }),
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "failed",
+    name: "hello",
+    fromVersion: "1.0.0",
+    notes: ["zcore refused"],
+    reasons: ["dependency failed"],
+    dependencyRows: [refusal],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
+  const state = await loadState(base.locations.extensionRoot);
+  assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello, recordedPlugin("1.0.0", pluginRoot));
+});
+
+test("UPD-DEP-D1: a disabled record's update settles no dependencies", async (t) => {
+  // arrange
+  const { base, pluginRoot } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  const state = await loadState(base.locations.extensionRoot);
+  const marketplace = state.marketplaces.mp;
+  assert.ok(marketplace !== undefined);
+  marketplace.plugins.hello = { ...recordedPlugin("1.0.0", pluginRoot), enabled: false };
+  await saveState(base.locations.extensionRoot, state);
+
+  // act
+  const outcome = await materializeLatestVersion(
+    {
+      ...base,
+      cascade: true,
+      settleDependencies: () => assert.fail("a disabled record settles nothing"),
+    },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "skipped",
+    name: "hello",
+    notes: [],
+    reasons: ["already disabled"],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  });
 });

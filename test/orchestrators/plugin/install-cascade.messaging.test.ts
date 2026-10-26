@@ -5,6 +5,7 @@ import {
   CASCADE_CONTEXT,
   cascadeFailureCause,
   composeCascadeFailureMessage,
+  composeCascadeMemberRow,
   composeCascadeMemberRows,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts";
 import {
@@ -121,7 +122,7 @@ function failureRows(subject: CascadeFailureSubject): readonly CascadeMsg[] {
 }
 
 describe("CASCADE_CONTEXT", () => {
-  test("adds exactly the RESV-05 skipped policy to install's own row policies", () => {
+  test("adds exactly the RESV-05 skipped and UPD-DEP-D1 updated policies to install's own row policies", () => {
     // arrange
     const expectedPolicyStatuses = [
       "disabled",
@@ -131,6 +132,7 @@ describe("CASCADE_CONTEXT", () => {
       "partially-installed",
       "skipped",
       "unavailable",
+      "updated",
     ];
 
     // act
@@ -196,6 +198,44 @@ describe("composeCascadeMemberRows", () => {
         "  ● formatter@tools v2.1.0 (installed)",
         "  ● helper v1.0.0 (installed)",
         "  ⊘ linter@tools v3.0.0 (skipped) {already installed}",
+        "",
+        "/reload to pick up changes",
+      ].join("\n"),
+    });
+  });
+
+  test("UPD-DEP-D1 a dependency moved into range reports its move in place of the skip", () => {
+    // arrange
+    const rows = composeCascadeMemberRows({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootRow: ROOT_ROW,
+      installed: [],
+      alreadyInstalled: [{ key: "linter@tools", version: "3.0.0" }],
+      probe: PROBE_BOTH_LOADED,
+      moved: [
+        {
+          status: "updated",
+          name: "linter@tools",
+          from: "2.0.0",
+          to: "3.0.0",
+          dependencies: [],
+          severity: "info",
+          needsReload: true,
+        },
+      ],
+    });
+
+    // act
+    const emitted = emit(rows, PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "info",
+      message: [
+        "● official [user]",
+        "  ● helper v1.0.0 (installed)",
+        "  ● linter@tools v2.0.0 → v3.0.0 (updated)",
         "",
         "/reload to pick up changes",
       ].join("\n"),
@@ -452,6 +492,27 @@ describe("composeCascadeMemberRows", () => {
   });
 });
 
+describe("composeCascadeMemberRow", () => {
+  test("UPD-DEP-D1 a member installed from its marketplace's current copy names the fallback", () => {
+    // act
+    const row = composeCascadeMemberRow(
+      member({ declaresMcp: true, fellBackToCurrentCopy: true }),
+      PROBE_BOTH_LOADED,
+    );
+
+    // assert
+    assert.deepStrictEqual(row, {
+      status: "installed",
+      name: "formatter@tools",
+      dependencies: ["mcp"],
+      version: "2.1.0",
+      reasons: ["dependency current copy"],
+      severity: "info",
+      needsReload: true,
+    });
+  });
+});
+
 describe("composeCascadeFailureMessage", () => {
   test("RESV-04 a cycle renders the whole chain including the repeated key", () => {
     // arrange
@@ -704,6 +765,37 @@ describe("composeCascadeFailureMessage", () => {
         "● official [user]",
         "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
         '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0.',
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("UPD-DEP-D1 an installed copy that cannot move into the constraint names why", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "installed-unsatisfied",
+        key: "formatter@tools",
+        range: "^2.0.0",
+        recordedVersion: "1.0.0",
+        moveRefusal: "no release moves it",
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
+        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: no release moves it',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });

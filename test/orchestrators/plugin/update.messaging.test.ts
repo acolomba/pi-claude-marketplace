@@ -53,7 +53,14 @@ test("exports the complete update command context in declared order", () => {
   const expectedContext = {
     keys: ["Messaging", "rowPolicies"],
     label: "Plugin update",
-    renderKeys: ["updated", "partially-installed", "skipped", "partially-upgradable", "failed"],
+    renderKeys: [
+      "updated",
+      "partially-installed",
+      "skipped",
+      "partially-upgradable",
+      "failed",
+      "installed",
+    ],
   };
 
   // act
@@ -281,5 +288,6 @@ test("UPDATE_CONTEXT declares complete row policies", () => {
     skipped: { markers: false, contentReasons: true },
     "partially-upgradable": { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
+    installed: { markers: true, contentReasons: true },
   });
 });

@@ -64,7 +64,11 @@ import type {
   PluginUpdateUnchangedOutcome,
   UpdateConstraintDisclosure,
 } from "../types.ts";
-import type { UpdateConstraintVerdict, UpdateTagPin } from "./constraint-fold.ts";
+import type {
+  ConstraintRequester,
+  UpdateConstraintVerdict,
+  UpdateTagPin,
+} from "./constraint-fold.ts";
 import type { UpdateConstraintOptions } from "./update-constraint-gate.ts";
 
 /** Target selected by the three public plugin-update invocation forms. */
@@ -153,6 +157,18 @@ export interface MaterializationPolicy {
   readonly searchReleaseTags: boolean;
 }
 
+/**
+ * D-18-04 / D-23: `update` refreshes the source, skips the recorded revision,
+ * never overwrites, and lets a range pick a release tag. A dependency move
+ * runs under it too (UPD-DEP-D1).
+ */
+export const UPDATE_MATERIALIZATION: MaterializationPolicy = {
+  refreshSource: true,
+  skipSameRevision: true,
+  overwrite: false,
+  searchReleaseTags: true,
+};
+
 /** Inputs required to classify and prepare one installed plugin update. */
 export interface PreparePluginUpdateOptions {
   readonly plugin: string;
@@ -197,6 +213,17 @@ export interface PreparePluginUpdateOptions {
    * left in place, as a returned preflight failure does.
    */
   readonly onRecord?: (fromVersion: string) => void;
+  /**
+   * UPD-DEP-D1: the plugin that needs this one moved, and the ranges it asks
+   * for. The constraint gate folds them in place of its record's declarations.
+   */
+  readonly requester?: ConstraintRequester;
+  /**
+   * UPD-DEP-D1: decide the candidate and write nothing, so a caller can judge
+   * every dependency move before it makes the first one. A disabled record's
+   * pin refresh is the one write the preflight makes, and it is skipped.
+   */
+  readonly judgeOnly?: true;
 }
 
 type PluginStateRecord = PreparedPluginUpdate["record"];
@@ -895,10 +922,11 @@ function constraintFromVerdict(
  */
 function constraintGateOptions(
   options: PreparePluginUpdateOptions,
-  base: Omit<UpdateConstraintOptions, "marketplaceTagMemo" | "seam" | "tagMemo">,
+  base: Omit<UpdateConstraintOptions, "marketplaceTagMemo" | "requester" | "seam" | "tagMemo">,
 ): UpdateConstraintOptions {
   return {
     ...base,
+    ...(options.requester !== undefined && { requester: options.requester }),
     ...(options.constraintTagMemo !== undefined && { tagMemo: options.constraintTagMemo }),
     ...(options.constraintMarketplaceTagMemo !== undefined && {
       marketplaceTagMemo: options.constraintMarketplaceTagMemo,
@@ -1050,7 +1078,7 @@ export async function preparePluginUpdate(
     constraint: constraintFromVerdict(verdict),
     ...(resolvedSha !== undefined && { resolvedSha }),
   };
-  return isRecordedButDisabled(triaged.record)
+  return isRecordedButDisabled(triaged.record) && options.judgeOnly !== true
     ? finishDisabledPreflight(options, prepared, constraintFromVerdict(verdict))
     : prepared;
 }

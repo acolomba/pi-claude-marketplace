@@ -170,6 +170,8 @@ async function prepare(
     readonly deviceFlowHttp?: DeviceFlowHttp;
     readonly authMemo?: Map<string, AuthAttemptResult>;
     readonly onRecord?: PreparePluginUpdateOptions["onRecord"];
+    readonly requester?: PreparePluginUpdateOptions["requester"];
+    readonly judgeOnly?: true;
   } = {},
 ) {
   return preparePluginUpdate({
@@ -194,6 +196,8 @@ async function prepare(
     ...(options.deviceFlowHttp !== undefined && { deviceFlowHttp: options.deviceFlowHttp }),
     ...(options.authMemo !== undefined && { authMemo: options.authMemo }),
     ...(options.onRecord !== undefined && { onRecord: options.onRecord }),
+    ...(options.requester !== undefined && { requester: options.requester }),
+    ...(options.judgeOnly !== undefined && { judgeOnly: options.judgeOnly }),
   });
 }
 
@@ -1194,6 +1198,42 @@ test("the constraint gate call omits both tag memos when the caller supplies nei
   // pushed above, never anything else.
   assert.strictEqual(Object.hasOwn(received[0] as object, "tagMemo"), false);
   assert.strictEqual(Object.hasOwn(received[0] as object, "marketplaceTagMemo"), false);
+});
+
+test("UPD-DEP-D1: the requester reaches the constraint gate as the caller supplied it", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0") });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const requester = { key: "app@mp", ranges: ["^2.0.0"] };
+  const received: unknown[] = [];
+  const constraintGate: PreparePluginUpdateOptions["constraintGate"] = (gateOptions) => {
+    received.push(gateOptions.requester);
+    return Promise.resolve({ kind: "unconstrained" });
+  };
+
+  // act
+  await prepare(seed, { constraintGate, requester });
+
+  // assert
+  assert.deepStrictEqual(received, [requester]);
+});
+
+test("UPD-DEP-D1: judging a disabled record prepares its candidate and leaves its pin alone", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0", false) });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const before = await readFile(seed.locations.stateJsonPath, "utf8");
+
+  // act
+  const outcome = await prepare(seed, { judgeOnly: true });
+
+  // assert
+  assert.strictEqual(isUpdatePreflightOutcome(outcome), false);
+  assert.deepStrictEqual(
+    isUpdatePreflightOutcome(outcome) ? undefined : [outcome.fromVersion, outcome.toVersion],
+    ["1.0.0", "2.0.0"],
+  );
+  assert.strictEqual(await readFile(seed.locations.stateJsonPath, "utf8"), before);
 });
 
 test("sends the unpinned mirror the identity url and the typed wire url", async (t) => {

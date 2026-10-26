@@ -38,7 +38,7 @@ Feature: Plugin reconcile
       | command           | description            |
       | /skill:demo-skill | A skill of demo 1.0.0. |
 
-  Scenario: A new session lists the disable of a plugin that an update left needing a newer version of its dependency
+  Scenario: A new session lists the disable of a plugin whose marketplace now declares a newer version of its dependency
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies |
@@ -48,9 +48,8 @@ Feature: Plugin reconcile
     Given the user has run "/claude:plugin install app@tools --scope project"
     Given the marketplace "tools" offers these plugins with dependencies:
       | name | version | dependencies |
-      | app  | 2.0.0   | lib@^2.0.0   |
+      | app  | 1.0.0   | lib@^2.0.0   |
       | lib  | 1.0.0   |              |
-    Given the user has run "/claude:plugin update app@tools --scope project"
     When the user starts a new pi session
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |
@@ -62,7 +61,7 @@ Feature: Plugin reconcile
       | tools            | project           | app@tools | app  | will disable |         | project |
     Then the session offers these skills:
       | command          | description           |
-      | /skill:app-skill | A skill of app 2.0.0. |
+      | /skill:app-skill | A skill of app 1.0.0. |
       | /skill:lib-skill | A skill of lib 1.0.0. |
 
   Scenario: Every new session warns about an installed plugin that its catalog no longer offers and keeps it working

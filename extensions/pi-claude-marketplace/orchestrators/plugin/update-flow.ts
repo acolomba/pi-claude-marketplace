@@ -101,6 +101,7 @@ import {
   surfaceDiscoveryWarnings,
 } from "./shared.ts";
 import { composeUpdateCascade } from "./update-cascade.ts";
+import { UPDATE_MATERIALIZATION } from "./update-preflight.ts";
 import { revisionVersionSlot } from "./update-row.ts";
 import { UPDATE_CONTEXT } from "./update.messaging.ts";
 
@@ -116,6 +117,7 @@ import type {
   ThreePhaseArgs,
   ThreePhaseArgsBase,
   UpdatePhase3Failure,
+  UpdateDependencyResolver,
   UpdatePhase3FailedOutcome,
   UpdateRunOutcome,
 } from "./update-swap.ts";
@@ -215,6 +217,9 @@ function makeSyncCloneOnce(
 
 /** The collaborators `createPluginUpdateOperations` binds into every target's arguments. */
 type UpdateBindings = Pick<ThreePhaseArgsBase, "hooksRouting" | "completionCache" | "env">;
+
+/** The command's notification context, which a dependency install reports through. */
+export type UpdateNotification = Parameters<UpdateDependencyResolver>[1];
 
 /**
  * Build the per-target `runThreePhaseUpdate` argument bag for the DIRECT
@@ -1250,21 +1255,10 @@ export interface PluginUpdateOperations {
    * what bounds the D-10-18 tag memos to the run (see
    * `createPluginUpdateOperations`).
    */
-  readonly beginPluginUpdateRun: () => PluginUpdateFn;
+  readonly beginPluginUpdateRun: (notification?: UpdateNotification) => PluginUpdateFn;
   /** D-26: materializes one catalog move for `apply` under the converge policy. */
   readonly convergePlugin: PluginConvergeFn;
 }
-
-/**
- * D-18-04 / D-23: `update` refreshes the source, skips the recorded revision,
- * never overwrites, and lets a range pick a release tag.
- */
-const UPDATE_MATERIALIZATION: MaterializationPolicy = {
-  refreshSource: true,
-  skipSameRevision: true,
-  overwrite: false,
-  searchReleaseTags: true,
-};
 
 /**
  * D-26 / D-11 / D-23: `apply`'s catalog move reads a present mirror's HEAD
@@ -1347,6 +1341,7 @@ export function createPluginUpdateOperations(
   completionCache: CompletionCache,
   stateTransaction?: LockedStateTransactionDeps,
   env: ClaudeEnv = process.env,
+  resolveDependencies?: UpdateDependencyResolver,
 ): PluginUpdateOperations {
   const bindings: UpdateBindings = { hooksRouting, completionCache, env };
   const withStateTransaction = (runner: UpdatePluginRunner): UpdatePluginRunner =>
@@ -1354,18 +1349,33 @@ export function createPluginUpdateOperations(
   const run = withStateTransaction(runPluginUpdate);
   const converge = withStateTransaction(runPluginConverge);
   const rematerialize = withStateTransaction(runPluginRematerialize);
+  // UPD-DEP-D1: `update` and the autoupdate cascade settle the closure of the
+  // version they move to, in the notification context of the command that
+  // runs them. `apply`'s catalog moves do not: its plan installs, enables and
+  // moves the dependencies first, as `pending` previews them.
+  const settling = (notification: UpdateNotification | undefined): UpdatePluginRunner =>
+    resolveDependencies === undefined || notification === undefined
+      ? run
+      : (args) =>
+          run({ ...args, settleDependencies: (moved) => resolveDependencies(moved, notification) });
   const updatePlugins: UpdatePluginsFn = (options) =>
-    updatePluginsWith(options, bindings, run, composeUpdateCascade);
+    updatePluginsWith(
+      options,
+      bindings,
+      settling({ ctx: options.ctx, run: options.run }),
+      composeUpdateCascade,
+    );
   // D-10-18: ONE memo pair per autoupdate run. `beginPluginUpdateRun`
   // allocates the pair, so the pair's lifetime is the run's and a release tag
   // pushed between two runs is visible to the second. The pair spans every
   // plugin of one run, so a marketplace common to several of them is listed
   // once and the cascade's warm-cache expectation for path sources holds.
-  const beginPluginUpdateRun = (): PluginUpdateFn => {
+  const beginPluginUpdateRun = (notification?: UpdateNotification): PluginUpdateFn => {
     const constraintTagMemo = new Map<string, readonly RemoteTag[]>();
     const constraintMarketplaceTagMemo = new Map<string, readonly ReleaseTagCandidate[]>();
+    const runner = settling(notification);
     return (plugin, marketplace, scope) =>
-      updateSinglePluginWith(bindings, run, plugin, marketplace, scope, {
+      updateSinglePluginWith(bindings, runner, plugin, marketplace, scope, {
         tagMemo: constraintTagMemo,
         marketplaceTagMemo: constraintMarketplaceTagMemo,
       });

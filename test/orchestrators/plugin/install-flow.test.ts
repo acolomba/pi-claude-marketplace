@@ -17,7 +17,9 @@ import {
 import { createRequire, syncBuiltinESMExports } from "node:module";
 import { homedir, tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import test, { describe } from "node:test";
+
+import lockfile from "proper-lockfile";
 
 import { GENERATED_AGENT_MARKER } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
 import {
@@ -39,6 +41,7 @@ import {
 import {
   createInstallMissingDependency,
   createInstallPlugin,
+  createUpdateDependencyResolver,
   type InstallTransaction,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts";
 import { runInstallLedger } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
@@ -47,6 +50,7 @@ import { locationsFor } from "../../../extensions/pi-claude-marketplace/persiste
 import {
   loadState,
   saveState,
+  toDisabledRecord,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { McpServerCollisionError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
@@ -57,6 +61,7 @@ import {
   MarketplaceInLocalLayerOnlyError,
   MarketplaceSourceUndeclarableError,
   PluginShapeError,
+  StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   createRemovalOps,
@@ -94,6 +99,7 @@ import type {
   InstallLedgerOptions,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
 import type { MarketplaceTagProbeOptions } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/marketplace-tag-probe.ts";
+import type { CascadeThreePhaseArgs } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
   NotificationContext,
@@ -17981,5 +17987,566 @@ test("WGATE-01 / D-115-05: a standalone install renders every workflow discovery
     } finally {
       await rm(cwd, { force: true, recursive: true });
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// UPD-DEP-D1 / RESV-05: an installed dependency outside the range the closure
+// asks for moves first through `update`'s own path, and an update's new version
+// gets its closure the way an install does.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface CatalogPlugin {
+  readonly version: string;
+  readonly dependencies?: readonly string[];
+  readonly mcp?: true;
+}
+
+/** Writes the path marketplace `mp` under `marketplaceRoot` offering `plugins`. */
+async function publishCatalog(
+  marketplaceRoot: string,
+  plugins: Readonly<Record<string, CatalogPlugin>>,
+): Promise<void> {
+  for (const [name, plugin] of Object.entries(plugins)) {
+    const pluginRoot = path.join(marketplaceRoot, "plugins", name);
+    await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+    await mkdir(path.join(pluginRoot, "skills", "tool"), { recursive: true });
+    await writeFile(
+      path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+      JSON.stringify({
+        name,
+        version: plugin.version,
+        ...(plugin.dependencies !== undefined && { dependencies: plugin.dependencies }),
+      }),
+    );
+    await writeFile(path.join(pluginRoot, "skills", "tool", "SKILL.md"), "---\nname: tool\n---\n");
+    if (plugin.mcp === true) {
+      await writeFile(
+        path.join(pluginRoot, ".mcp.json"),
+        JSON.stringify({ mcpServers: { [`${name}-server`]: { command: "node" } } }),
+      );
+    }
+  }
+
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: "mp",
+      plugins: Object.keys(plugins).map((name) => ({ name, source: `./plugins/${name}` })),
+    }),
+  );
+}
+
+/** A project scope that records the path marketplace `mp` offering `plugins`. */
+async function seedCatalogScope(
+  plugins: Readonly<Record<string, CatalogPlugin>>,
+): Promise<{ readonly cwd: string; readonly marketplaceRoot: string }> {
+  const cwd = await mkdtemp(path.join(tmpdir(), "install-upd-dep-"));
+  const marketplaceRoot = path.join(cwd, "mp-src");
+  await publishCatalog(marketplaceRoot, plugins);
+  const locations = locationsFor("project", cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  await saveState(locations.extensionRoot, {
+    schemaVersion: 2,
+    marketplaces: {
+      mp: {
+        name: "mp",
+        scope: "project",
+        source: pathSource("./mp-src"),
+        addedFromCwd: cwd,
+        manifestPath: path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"),
+        marketplaceRoot,
+        plugins: {},
+      },
+    },
+  });
+  return { cwd, marketplaceRoot };
+}
+
+/** Installs `plugin@mp` into the project scope and requires that it landed. */
+async function installed(owner: InstallTestOwner, cwd: string, plugin: string): Promise<void> {
+  const { ctx, run } = makeCtx();
+  const outcome = await owner.installPlugin({
+    ctx,
+    run,
+    scope: "project",
+    cwd,
+    marketplace: "mp",
+    plugin,
+  });
+  assert.strictEqual(outcome.status, "installed");
+}
+
+/** Each record's version and enabled bit, by name. */
+async function recordedVersions(cwd: string): Promise<Record<string, [string, boolean]>> {
+  const state = await loadState(locationsFor("project", cwd).extensionRoot);
+  return Object.fromEntries(
+    Object.entries(state.marketplaces.mp?.plugins ?? {}).map(([name, record]) => [
+      name,
+      [record.version, record.enabled],
+    ]),
+  );
+}
+
+/** Holds the project scope's state lock until the returned release runs. */
+async function lockScope(cwd: string): Promise<() => Promise<void>> {
+  const locations = locationsFor("project", cwd);
+  return lockfile.lock(locations.extensionRoot, {
+    lockfilePath: locations.stateLockFile,
+    realpath: false,
+  });
+}
+
+/** The cascade-mode update arguments that settle `plugin@mp`'s closure. */
+function updateArgs(owner: InstallTestOwner, cwd: string, plugin: string): CascadeThreePhaseArgs {
+  return {
+    plugin,
+    marketplace: "mp",
+    scope: "project",
+    cwd,
+    locations: locationsFor("project", cwd),
+    hooksRouting: owner.hooksRouting,
+    completionCache: owner.completionCache,
+    env: {},
+    cascade: true,
+    cleanupClones: () => Promise.resolve(),
+  };
+}
+
+test("UPD-DEP-D1: installing a plugin moves an installed dependency outside its range first", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd, marketplaceRoot } = await seedCatalogScope({ lib: { version: "1.2.0" } });
+    await installed(owner, cwd, "lib");
+    await publishCatalog(marketplaceRoot, {
+      app: { version: "1.0.0", dependencies: ["lib@^2.0.0"] },
+      lib: { version: "2.0.0" },
+    });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    const outcome = await owner.installPlugin({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "app",
+    });
+
+    // assert
+    assert.strictEqual(outcome.status, "installed");
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "● mp [project]",
+          "  ● app v1.0.0 (installed)",
+          "  ● lib@mp v1.2.0 → v2.0.0 (updated) {dependency current copy}",
+          '    cause: constrained to the combined range (^2.0.0) -- required by "app@mp"',
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      },
+    ]);
+    assert.deepStrictEqual(await recordedVersions(cwd), {
+      app: ["1.0.0", true],
+      lib: ["2.0.0", true],
+    });
+  });
+});
+
+test("UPD-DEP-D1: installing refuses a plugin whose installed dependency no release moves inside its range", async () => {
+  await withHermeticHome(async (owner) => {
+    // arrange
+    const { cwd } = await seedCatalogScope({
+      app: { version: "1.0.0", dependencies: ["lib@^2.0.0"] },
+      lib: { version: "1.2.0" },
+    });
+    await installed(owner, cwd, "lib");
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    const outcome = await owner.installPlugin({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      marketplace: "mp",
+      plugin: "app",
+    });
+
+    // assert
+    assert.strictEqual(outcome.status, "failed");
+    assert.deepStrictEqual(notifications, [
+      {
+        message: [
+          "Some plugin operations have failed.",
+          "",
+          "● mp [project]",
+          "  ⊘ app (failed) {dependency failed}",
+          "  ⊘ lib@mp v1.2.0 (failed) {already installed, version conflict}",
+          '    cause: Dependency "lib@mp" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: version 1.2.0 falls outside what the combined range admits (^2.0.0) -- required by "app@mp"',
+        ].join("\n"),
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await recordedVersions(cwd), { lib: ["1.2.0", true] });
+  });
+});
+
+for (const orchestrated of [false, true]) {
+  test(`UPD-DEP-D1: a dependency move that fails fails the ${orchestrated ? "orchestrated" : "standalone"} install`, async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        lib: { version: "1.2.0", mcp: true },
+      });
+      await installed(owner, cwd, "lib");
+      await publishCatalog(marketplaceRoot, {
+        app: { version: "1.0.0", dependencies: ["lib@^2.0.0"] },
+        lib: { version: "2.0.0", mcp: true },
+      });
+      const adapterPath = locationsFor("project", cwd).mcpAdapterJsonPath;
+      await rm(adapterPath, { force: true });
+      await mkdir(adapterPath, { recursive: true });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await owner.installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "app",
+        ...(orchestrated && { notifications: { mode: "orchestrated" } }),
+      });
+
+      // assert
+      assert.ok(outcome.status === "failed");
+      assert.ok(outcome.error instanceof DependencyCascadeError);
+      assert.deepStrictEqual(
+        [outcome.error.message, outcome.error.key],
+        ['Dependency "lib@mp" did not move into ^2.0.0.', "lib@mp"],
+      );
+      // The cause line is the runner's EISDIR, whose text varies across Node releases.
+      assert.deepStrictEqual(
+        notifications.map((notification) => notification.message.split("\n").slice(0, 5)),
+        orchestrated
+          ? []
+          : [
+              [
+                "Some plugin operations have failed.",
+                "",
+                "● mp [project]",
+                "  ⊘ app (failed) {dependency failed}",
+                "  ⊘ lib@mp v1.2.0 (failed)",
+              ],
+            ],
+      );
+      assert.deepStrictEqual(await recordedVersions(cwd), { lib: ["1.2.0", true] });
+    });
+  });
+}
+
+describe("createUpdateDependencyResolver", () => {
+  test("installs a dependency the new version needs and reports its row", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        widget: { version: "1.0.0" },
+        zcore: { version: "1.0.0" },
+      });
+      await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+        {},
+      );
+
+      // act
+      const settlement = await settle(updateArgs(owner, cwd, "widget"), { ctx, run });
+
+      // assert
+      assert.deepStrictEqual(settlement, {
+        kind: "settled",
+        rows: [
+          {
+            status: "installed",
+            name: "zcore@mp",
+            dependencies: [],
+            version: "1.0.0",
+            severity: "info",
+            needsReload: true,
+          },
+        ],
+      });
+      assert.deepStrictEqual(await recordedVersions(cwd), {
+        widget: ["1.0.0", true],
+        zcore: ["1.0.0", true],
+      });
+    });
+  });
+
+  test("enables a disabled dependency the new version needs and declares it enabled", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        widget: { version: "1.0.0" },
+        zcore: { version: "1.0.0" },
+      });
+      await installed(owner, cwd, "widget");
+      await installed(owner, cwd, "zcore");
+      const state = await loadState(locationsFor("project", cwd).extensionRoot);
+      const marketplace = state.marketplaces.mp;
+      const zcore = marketplace?.plugins.zcore;
+      assert.ok(marketplace !== undefined && zcore !== undefined);
+      marketplace.plugins.zcore = toDisabledRecord(zcore, "2026-01-01T00:00:00.000Z");
+      await saveState(locationsFor("project", cwd).extensionRoot, state);
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      // act
+      const settlement = await settle(
+        { ...updateArgs(owner, cwd, "widget"), constraintTagMemo: new Map() },
+        { ctx, run },
+      );
+
+      // assert
+      assert.deepStrictEqual(
+        settlement.rows.map((row) => [row.name, row.reasons]),
+        [["zcore@mp", ["already installed", "dependency enabled"]]],
+      );
+      assert.deepStrictEqual(await recordedVersions(cwd), {
+        widget: ["1.0.0", true],
+        zcore: ["1.0.0", true],
+      });
+    });
+  });
+
+  test("moves an out-of-range dependency first, then settles the closure again", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        widget: { version: "1.0.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["zcore@^2.0.0"] },
+        zcore: { version: "2.0.0" },
+      });
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      // act
+      const settlement = await settle(updateArgs(owner, cwd, "widget"), { ctx, run });
+
+      // assert
+      assert.deepStrictEqual(
+        settlement.rows.map((row) => [row.status, row.name]),
+        [["updated", "zcore@mp"]],
+      );
+      assert.strictEqual(settlement.kind, "settled");
+      assert.deepStrictEqual(await recordedVersions(cwd), {
+        widget: ["1.0.0", true],
+        zcore: ["2.0.0", true],
+      });
+    });
+  });
+
+  test("refuses a closure whose dependency no marketplace offers and changes nothing", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({ widget: { version: "1.0.0" } });
+      await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["absent"] },
+      });
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      // act
+      const settlement = await settle(updateArgs(owner, cwd, "widget"), { ctx, run });
+
+      // assert
+      assert.strictEqual(settlement.kind, "refused");
+      assert.deepStrictEqual(
+        settlement.rows.map((row) => [row.status, row.name, row.reasons]),
+        [["failed", "absent@mp", ["not in manifest"]]],
+      );
+      assert.deepStrictEqual(await recordedVersions(cwd), { widget: ["1.0.0", true] });
+    });
+  });
+
+  test("refuses a move that would need the plugin being updated moved again", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        widget: { version: "1.0.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "2.0.0", dependencies: ["zcore@^2.0.0"] },
+        zcore: { version: "2.0.0", dependencies: ["widget@^2.0.0"] },
+      });
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      // act
+      const settlement = await settle(updateArgs(owner, cwd, "widget"), { ctx, run });
+
+      // assert
+      assert.strictEqual(settlement.kind, "refused");
+      assert.deepStrictEqual(
+        settlement.rows.map((row) => [row.status, row.name]),
+        [
+          ["failed", "zcore@mp"],
+          ["failed", "widget@mp"],
+        ],
+      );
+      assert.deepStrictEqual(await recordedVersions(cwd), {
+        widget: ["1.0.0", true],
+        zcore: ["1.0.0", true],
+      });
+    });
+  });
+
+  test("rethrows a failure no dependency caused", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd } = await seedCatalogScope({ widget: { version: "1.0.0" } });
+      await installed(owner, cwd, "widget");
+      const held = await lockScope(cwd);
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      // act & assert
+      await assert.rejects(
+        () => settle(updateArgs(owner, cwd, "widget"), { ctx, run }),
+        StateLockHeldError,
+      );
+      await held();
+    });
+  });
+
+  test("reports a dependency whose marketplace a member's ledger finds missing as the update's own failure", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        widget: { version: "1.0.0" },
+        zcore: { version: "1.0.0" },
+      });
+      await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      owner.transactionControl.runPhases = (phases, context) => {
+        Object.assign(context as object, { marketplaceAbsent: true });
+        return Promise.resolve({ ok: phases.length === 0, rollbackPartials: [], leaks: [] });
+      };
+
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      // act & assert
+      await assert.rejects(
+        () => settle(updateArgs(owner, cwd, "widget"), { ctx, run }),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.strictEqual(
+            error.message,
+            'A dependency of "widget@mp" names a marketplace that is not added.',
+          );
+          return true;
+        },
+      );
+    });
+  });
+
+  test("threads the update's collaborators into the dependency installs", async () => {
+    await withHermeticHome(async (owner) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedCatalogScope({
+        widget: { version: "1.0.0" },
+        zcore: { version: "1.0.0" },
+      });
+      await installed(owner, cwd, "widget");
+      await publishCatalog(marketplaceRoot, {
+        widget: { version: "1.1.0", dependencies: ["zcore"] },
+        zcore: { version: "1.0.0" },
+      });
+      const credentials = createCredentialOpsFake({ boundary: "memory" });
+      const deviceFlow = createDeviceFlowFake({
+        boundary: "memory",
+        network: "disabled",
+        deviceCode: INSTALL_DEVICE_CODE,
+      });
+      const { ctx, run } = makeCtx();
+      const settle = createUpdateDependencyResolver(
+        owner.transaction,
+        owner.hooksRouting,
+        owner.completionCache,
+      );
+
+      // act
+      const settlement = await settle(
+        {
+          ...updateArgs(owner, cwd, "widget"),
+          mapModel: true,
+          partial: true,
+          credentialOps: credentials.credentialOps,
+          deviceFlowHttp: deviceFlow.http,
+          authMemo: new Map(),
+        },
+        { ctx, run },
+      );
+
+      // assert
+      assert.deepStrictEqual(
+        settlement.rows.map((row) => [row.status, row.name]),
+        [["installed", "zcore@mp"]],
+      );
+      assert.deepStrictEqual(credentials.calls, { fill: [], approve: [], reject: [] });
+      assert.deepStrictEqual(deviceFlow.calls, { requestCode: [], pollToken: [] });
+    });
   });
 });

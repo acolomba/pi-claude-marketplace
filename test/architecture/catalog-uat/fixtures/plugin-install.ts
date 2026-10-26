@@ -786,7 +786,7 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 version: "1.0.0",
                 reasons: ["already installed", "version conflict"],
                 cause: new Error(
-                  'Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0.',
+                  'Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "helper@official"',
                 ),
                 severity: "error",
                 needsReload: false,
@@ -797,6 +797,40 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 reasons: ["dependency failed"],
                 severity: "error",
                 needsReload: false,
+              },
+            ],
+          },
+        ],
+      },
+    },
+
+    // UPD-DEP-D1 / RESV-05: an already-installed dependency outside the
+    // constraint moved into it through `update`'s own path before the install,
+    // and reports its move in place of the `{already installed}` skip.
+    "dependency-cascade-moved-into-range": {
+      pi: piWithBothLoaded(),
+      message: {
+        marketplaces: [
+          {
+            name: "official",
+            scope: "user",
+            plugins: [
+              {
+                status: "updated",
+                name: "formatter@tools",
+                from: "1.0.0",
+                to: "2.1.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
+              },
+              {
+                status: "installed",
+                name: "helper",
+                version: "1.0.0",
+                dependencies: [],
+                severity: "info",
+                needsReload: true,
               },
             ],
           },

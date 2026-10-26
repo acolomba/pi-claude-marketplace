@@ -58,6 +58,17 @@ export interface UpdateTagPin {
 }
 
 /**
+ * UPD-DEP-D1: a plugin that asks for the target at `ranges` before it lands:
+ * a plugin being installed, or the new version of a plugin being updated. Its
+ * ranges replace whatever its record declares, so the fold judges the target
+ * by what the scope will declare once the requester lands.
+ */
+export interface ConstraintRequester {
+  readonly key: string;
+  readonly ranges: readonly string[];
+}
+
+/**
  * What the target's installed dependents hold it to. `held` is a hold over a
  * declared range only (D-18-07); a declaration walk that cannot read a record
  * produces no verdict and rejects instead (D-18-17).
@@ -179,6 +190,13 @@ function recordKey(name: string, marketplace: string): string {
   return `${name}@${marketplace}`;
 }
 
+/** UPD-DEP-D1: one holder per range the requester asks for, never disabled. */
+function requesterHolders(requester: ConstraintRequester | undefined): ConstraintHolder[] {
+  return requester === undefined
+    ? []
+    : requester.ranges.map((range) => ({ key: requester.key, range, disabled: false }));
+}
+
 /**
  * Every OTHER installed record that declares the target, sorted by key.
  *
@@ -189,18 +207,21 @@ function recordKey(name: string, marketplace: string): string {
  * declarer whose key equals the target's own is skipped before its
  * declarations are even read: a plugin that declares itself constrains
  * nothing. `provenance` is never read -- the question is who declares this
- * key, not how the record got here (D-10-08).
+ * key, not how the record got here (D-10-08). UPD-DEP-D1: a requester's
+ * record is skipped too, and its ranges hold the target in its place.
  */
 function collectHolders(
   declarations: ReadonlyMap<string, readonly AddressedDependency[]>,
   state: ExtensionState,
   target: string,
+  requester: ConstraintRequester | undefined,
 ): readonly ConstraintHolder[] {
-  const holders: ConstraintHolder[] = [];
+  const holders = requesterHolders(requester);
+  const replaced = new Set([target, requester?.key]);
   for (const marketplace of Object.values(state.marketplaces)) {
     for (const [name, record] of Object.entries(marketplace.plugins)) {
       const declarerKey = recordKey(name, marketplace.name);
-      if (declarerKey === target) {
+      if (replaced.has(declarerKey)) {
         continue;
       }
 
@@ -272,15 +293,17 @@ export function transportHeld(
  * range-only `admits` with no pin.
  *
  * `state` is the ONE scope document the declarations were walked over, so
- * the holders are scope-local by construction (D-10-07).
+ * the holders are scope-local by construction (D-10-07). A `requester`'s
+ * ranges stand in for its record's declarations (UPD-DEP-D1).
  */
 export function foldDeclaredConstraint(
   declarations: ReadonlyMap<string, readonly AddressedDependency[]>,
   state: ExtensionState,
   plugin: string,
   marketplace: string,
+  requester?: ConstraintRequester,
 ): UpdateConstraintVerdict {
-  const holders = collectHolders(declarations, state, recordKey(plugin, marketplace));
+  const holders = collectHolders(declarations, state, recordKey(plugin, marketplace), requester);
   // A declaration HOLDS the key whatever it names, but only a declared RANGE
   // constrains a version: a holder with no `range` stays in `holders` for
   // the cause line and is left out of the fold below.
@@ -347,6 +370,8 @@ export interface CatalogConstraintOptions {
   readonly state: ExtensionState;
   readonly locations: ScopedLocations;
   readonly seam?: CatalogConstraintSeam;
+  /** UPD-DEP-D1: the plugin whose ranges the move must also satisfy. */
+  readonly requester?: ConstraintRequester;
 }
 
 const REAL_CATALOG_CONSTRAINT_SEAM: CatalogConstraintSeam = Object.freeze({
@@ -382,5 +407,6 @@ export async function evaluateCatalogConstraint(
     options.state,
     options.plugin,
     options.marketplace,
+    options.requester,
   );
 }

@@ -224,6 +224,11 @@ export type CascadeConstraintFailure =
       readonly key: string;
       readonly range: string;
       readonly recordedVersion: string;
+      /**
+       * UPD-DEP-D1: why `update`'s path cannot move the copy into the range,
+       * when the caller judged a move. Absent when no move was judged.
+       */
+      readonly moveRefusal?: string;
     }
   | {
       readonly kind: "range-too-complex";
@@ -302,9 +307,31 @@ type CascadePhaseMember =
       readonly record: PluginInstallRecord;
     };
 
+/**
+ * UPD-DEP-D1 / RESV-05: a recorded dependency whose version falls outside the
+ * range the closure asks for. A caller that may move it judges and makes the
+ * move through `update`'s own path, then runs the cascade again.
+ */
+export interface OutOfRangeMember {
+  readonly key: string;
+  readonly name: string;
+  readonly marketplace: string;
+  /**
+   * The plugin being installed or updated: its closure asks for `ranges`, so a
+   * move names it as the plugin that holds the dependency.
+   */
+  readonly requiredBy: string;
+  /** Every range the closure declared for the member. */
+  readonly ranges: readonly string[];
+  /** `ranges` as a row renders them. */
+  readonly range: string;
+  readonly recordedVersion: string;
+}
+
 /** Every member decided, in the walk's post order, or the first failure one produced. */
 type MemberConstraintResolution =
   | { readonly ok: true; readonly members: readonly CascadePhaseMember[] }
+  | { readonly ok: true; readonly outOfRange: readonly OutOfRangeMember[] }
   | { readonly ok: false; readonly failure: CascadeConstraintFailure };
 
 /** Inputs of one cascade run's constraint resolution. */
@@ -319,6 +346,8 @@ interface MemberConstraintOptions {
    * the same site every member's ranges are folded (D-09-05, MISS-01).
    */
   readonly rootRanges?: readonly string[];
+  /** UPD-DEP-D1: report a recorded member outside its range instead of failing. */
+  readonly moveOutOfRange?: true;
   /**
    * Every member the walk returned, in post order. A member the snapshot
    * records DISABLED re-enables through that record; the rest install fresh.
@@ -463,6 +492,18 @@ export interface InstallCascadeOptions {
    * keep EDEP-03's read-through.
    */
   readonly treatDisabledAsWall?: true;
+  /**
+   * UPD-DEP-D1 / RESV-05: report recorded members whose version the closure's
+   * range rejects as `dependencies-out-of-range` instead of failing, so the
+   * caller can move them first. Omitted, such a member fails the cascade.
+   */
+  readonly moveOutOfRange?: true;
+  /**
+   * UPD-DEP-D1: the root is a recorded plugin moving to a newer version. Its
+   * closure is materialized and the root itself is not; the result is
+   * `dependencies-installed`.
+   */
+  readonly rootRecorded?: true;
   readonly knownMarketplaces: ReadonlySet<string>;
   /**
    * The caller's failure capture, threaded to every member's ledger so a
@@ -503,6 +544,18 @@ export type InstallCascadeResult =
       readonly alreadyInstalled: readonly CascadeSkippedMember[];
       /** AFILE-04: every member's MCP config file notices, in member order. */
       readonly mcpConfigNotices: readonly McpConfigNotice[];
+    }
+  | {
+      /** UPD-DEP-D1: the `rootRecorded` arm of `installed`; no root summary. */
+      readonly kind: "dependencies-installed";
+      readonly members: readonly CascadeMemberOutcome[];
+      readonly alreadyInstalled: readonly CascadeSkippedMember[];
+      readonly mcpConfigNotices: readonly McpConfigNotice[];
+    }
+  | {
+      /** UPD-DEP-D1: nothing materialized; these members must move first. */
+      readonly kind: "dependencies-out-of-range";
+      readonly members: readonly OutOfRangeMember[];
     }
   | { readonly kind: "marketplace-absent" }
   | {
@@ -884,22 +937,45 @@ function checkInstalledMember(
 
 /**
  * RESV-05 over every recorded member -- the enabled ones the walk skipped and
- * the disabled ones it walked -- none of which needs a query.
+ * the disabled ones it walked -- none of which needs a query. UPD-DEP-D1: with
+ * `moveOutOfRange`, a member whose recorded version the range rejects is
+ * collected for a move instead of failing the cascade; every other failure
+ * still fails it.
  */
-function checkRecordedMembers(
-  options: MemberConstraintOptions,
-): CascadeConstraintFailure | undefined {
+function checkRecordedMembers(options: MemberConstraintOptions): {
+  readonly failure?: CascadeConstraintFailure;
+  readonly outOfRange: readonly OutOfRangeMember[];
+} {
   const disabled = options.closure.filter(
     (member) => disabledRecordOf(options.state, options.rootKey, member) !== undefined,
   );
+  const outOfRange: OutOfRangeMember[] = [];
   for (const member of [...options.alreadyInstalled, ...disabled]) {
     const failure = checkInstalledMember(options.state, member);
-    if (failure !== undefined) {
-      return failure;
+    if (failure === undefined) {
+      continue;
     }
+
+    if (
+      options.moveOutOfRange !== true ||
+      failure.kind !== "range-conflict" ||
+      failure.why !== "installed-unsatisfied"
+    ) {
+      return { failure, outOfRange };
+    }
+
+    outOfRange.push({
+      key: member.key,
+      name: member.name,
+      marketplace: member.marketplace,
+      requiredBy: options.rootKey,
+      ranges: member.ranges,
+      range: failure.range,
+      recordedVersion: failure.recordedVersion,
+    });
   }
 
-  return undefined;
+  return { outOfRange };
 }
 
 /**
@@ -915,9 +991,9 @@ function checkRecordedMembers(
 async function resolveMemberConstraints(
   options: MemberConstraintOptions,
 ): Promise<MemberConstraintResolution> {
-  const recordedFailure = checkRecordedMembers(options);
-  if (recordedFailure !== undefined) {
-    return { ok: false, failure: recordedFailure };
+  const recorded = checkRecordedMembers(options);
+  if (recorded.failure !== undefined) {
+    return { ok: false, failure: recorded.failure };
   }
 
   const members: CascadePhaseMember[] = [];
@@ -937,7 +1013,11 @@ async function resolveMemberConstraints(
     members.push({ kind: "install", member: outcome.member });
   }
 
-  return { ok: true, members };
+  // UPD-DEP-D1: every other member resolved, so the moves are all that stand
+  // between the closure and its install; nothing is materialized yet.
+  return recorded.outOfRange.length > 0
+    ? { ok: true, outOfRange: recorded.outOfRange }
+    : { ok: true, members };
 }
 
 /**
@@ -1185,6 +1265,15 @@ function toCascadeResult(
   run: CascadeRun,
   alreadyInstalled: readonly CascadeSkippedMember[],
 ): InstallCascadeResult {
+  if (result.ok && options.rootRecorded === true) {
+    return {
+      kind: "dependencies-installed",
+      members: run.members,
+      alreadyInstalled,
+      mcpConfigNotices: run.mcpConfigNotices,
+    };
+  }
+
   if (result.ok) {
     const root = run.root;
     if (root === undefined) {
@@ -1265,6 +1354,7 @@ export async function runInstallCascade(
     tagMemo: new Map<string, readonly RemoteTag[]>(),
     marketplaceTagMemo: new Map<string, readonly ReleaseTagCandidate[]>(),
     ...(options.rootRanges !== undefined && { rootRanges: options.rootRanges }),
+    ...(options.moveOutOfRange !== undefined && { moveOutOfRange: options.moveOutOfRange }),
     ...(options.marketplaceTagProbe !== undefined && {
       marketplaceTagProbe: options.marketplaceTagProbe,
     }),
@@ -1274,6 +1364,10 @@ export async function runInstallCascade(
   });
   if (!constraints.ok) {
     return { kind: "constraint-failed", failure: constraints.failure };
+  }
+
+  if ("outOfRange" in constraints) {
+    return { kind: "dependencies-out-of-range", members: constraints.outOfRange };
   }
 
   const seam = options.seam ?? REAL_INSTALL_CASCADE_SEAM;
@@ -1288,7 +1382,13 @@ export async function runInstallCascade(
   };
   // One phase per closure member, in the walk's post order: a dependency is
   // live -- installed or re-enabled -- before the member that needs it runs.
-  const phases: readonly Phase<CascadeRun>[] = constraints.members.map((entry) =>
+  // UPD-DEP-D1: a recorded root is the plugin an update moves; its own swap
+  // replaces it, so only its closure becomes phases.
+  const members =
+    options.rootRecorded === true
+      ? constraints.members.filter((entry) => entry.member.key !== options.rootKey)
+      : constraints.members;
+  const phases: readonly Phase<CascadeRun>[] = members.map((entry) =>
     entry.kind === "re-enable"
       ? buildReEnableMemberPhase(options, seam, transaction, entry.member, entry.record)
       : buildMemberPhase(options, seam, transaction, entry.member),

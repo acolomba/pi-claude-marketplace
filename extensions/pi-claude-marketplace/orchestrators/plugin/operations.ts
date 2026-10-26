@@ -28,7 +28,11 @@ import { createSetPluginEnabled } from "./enable-disable.ts";
 import { createFetchPlugins } from "./fetch.ts";
 import { makePresenceProbe, probeManifestEntry } from "./git-source-probe.ts";
 import { createGetPluginInfo } from "./info.ts";
-import { createInstallMissingDependency, createInstallPlugin } from "./install-flow.ts";
+import {
+  createInstallMissingDependency,
+  createInstallPlugin,
+  createUpdateDependencyResolver,
+} from "./install-flow.ts";
 import { runInstallLedger } from "./install-outcome.ts";
 import { createPrunePlugin } from "./prune.ts";
 import { createReinstallPlugin } from "./reinstall-flow.ts";
@@ -54,6 +58,7 @@ import type { PrunePluginOptions } from "./prune.ts";
 import type { ReinstallHooksRouting, ReinstallPluginFn } from "./reinstall-flow.ts";
 import type { UninstallHooksRouting, UninstallPluginOperation } from "./uninstall.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
+import type { PluginUpdateOperations } from "./update-flow.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { PluginConvergeFn } from "../types.ts";
 
@@ -202,6 +207,26 @@ const NODE_PLUGIN_INFO_READER: PluginInfoReader = {
  * the value runs no work of its own -- only invoking it does.
  */
 export const getPluginInfo = createGetPluginInfo(NODE_PLUGIN_INFO_READER);
+
+/**
+ * Composes the update operations the extension entry point binds for
+ * `update` and the autoupdate cascade. UPD-DEP-D1: each settles the closure of
+ * the version it moves a plugin to through install's cascade, bound to the
+ * SAME production transaction owner `createInstallOperation` binds.
+ * Constructing the operations runs no work of their own.
+ */
+export function createUpdateOperations(
+  hooksRouting: UpdateHooksRouting,
+  completionCache: CompletionCache,
+): PluginUpdateOperations {
+  return createPluginUpdateOperations(
+    hooksRouting,
+    completionCache,
+    undefined,
+    process.env,
+    createUpdateDependencyResolver(INSTALL_TRANSACTION, hooksRouting, completionCache),
+  );
+}
 
 /**
  * D-26: composes `apply`'s catalog-move operation from the caller's routing

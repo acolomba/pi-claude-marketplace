@@ -979,11 +979,25 @@ Some plugin operations have failed.
 
 ● official [user]
   ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}
-    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0.
+    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "helper@official"
   ⊘ helper (failed) {dependency failed}
 ```
 
-The SAME `version conflict` token as the row above, over a different subject: the copy already on disk. The pair `{already installed, version conflict}` and the recorded version on the row are what separate the two, which is why the cascade mints one token rather than two -- the fact is identical and only the subject moves. RESV-05 is a check, never a touch: nothing reinstalls, re-pins or re-declares the existing copy, and no tag is queried for one.
+The SAME `version conflict` token as the row above, over a different subject: the copy already on disk. The pair `{already installed, version conflict}` and the recorded version on the row are what separate the two, which is why the cascade mints one token rather than two -- the fact is identical and only the subject moves. UPD-DEP-D1 amends RESV-05: the cascade first tries to move the copy into the constraint (the state below), and this row is what it reports when no version can move there. After `cannot move:` the cause gives `update`'s own reason: the version the move would reach falls outside the range, or the dependency's other dependents hold it (`the declared ranges admit no version in common (...) -- required by ...`). Every move is judged before any runs, so a refusal changes nothing.
+
+### Dependency cascade -- an installed copy moved into the constraint first (UPD-DEP-D1)
+
+<!-- catalog-state: dependency-cascade-moved-into-range -->
+
+```text
+● official [user]
+  ● formatter@tools v1.0.0 → v2.1.0 (updated)
+  ● helper v1.0.0 (installed)
+
+/reload to pick up changes
+```
+
+`helper` declares `formatter@tools` at a range its installed copy falls outside. The install moves `formatter` first, through `update`'s own path: the highest release tag the range allows, else the marketplace's version, with `helper`'s range folded in beside every other installed plugin's that declares `formatter`, so the move never breaks another dependent. The moved dependency reports its `(updated)` row in place of the `(skipped) {already installed}` row. `update` and the autoupdate cascade do the same for the dependencies of the version they move a plugin to, and they also install a missing dependency and enable a disabled one, as an install does.
 
 ### Dependency cascade -- constraints too complex to combine (RESV-03)
 

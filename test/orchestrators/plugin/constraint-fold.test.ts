@@ -90,6 +90,50 @@ describe("foldDeclaredConstraint", () => {
     });
   });
 
+  test("UPD-DEP-D1: a requester's ranges replace what its record declares for the target", () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>([
+      ["app@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+      ["other@mp", [dependency({ name: "target", version: "^1.0.0" })]],
+    ]);
+    const state = stateOf({
+      mp: { target: pluginRecord(), app: pluginRecord(), other: pluginRecord() },
+    });
+
+    // act
+    const verdict = foldDeclaredConstraint(declarations, state, "target", "mp", {
+      key: "app@mp",
+      ranges: ["^2.0.0"],
+    });
+
+    // assert
+    assert.deepStrictEqual(verdict, {
+      kind: "held",
+      cause:
+        'the declared ranges admit no version in common (^2.0.0, ^1.0.0) -- required by "app@mp", "other@mp"',
+    });
+  });
+
+  test("UPD-DEP-D1: a requester that is not recorded constrains the target with its ranges", () => {
+    // arrange
+    const declarations = new Map<string, readonly AddressedDependency[]>();
+
+    // act
+    const verdict = foldDeclaredConstraint(declarations, stateOf({ mp: {} }), "target", "mp", {
+      key: "app@mp",
+      ranges: ["^2.0.0"],
+    });
+
+    // assert
+    assert.deepStrictEqual(verdict, {
+      kind: "admits",
+      range: ">=2.0.0 <3.0.0-0",
+      holders: [{ key: "app@mp", range: "^2.0.0", disabled: false }],
+      fellBackToCurrentCopy: false,
+      disclosure: 'constrained to the combined range (^2.0.0) -- required by "app@mp"',
+    });
+  });
+
   test("UPDT-02: holders are named in lexicographic key order", () => {
     // arrange
     const declarations = new Map<string, readonly AddressedDependency[]>([

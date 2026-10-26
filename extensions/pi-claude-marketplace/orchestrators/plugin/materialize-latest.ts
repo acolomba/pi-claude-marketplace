@@ -66,6 +66,32 @@ export async function materializeLatestVersion(
     return preflight;
   }
 
-  args.onCandidate?.(preflightMove(preflight));
-  return swapPluginUpdate(args, preflight, policy);
+  const move = preflightMove(preflight);
+  args.onCandidate?.(move);
+  // UPD-DEP-D1: an update is an install of a newer version, so before the
+  // swap the version it moves to gets its dependency closure the way an
+  // install does: missing dependencies installed, disabled ones enabled,
+  // out-of-range ones moved, dependencies first. A disabled record never gets
+  // here: its preflight refreshes its pin, and enabling it runs the same
+  // cascade (EDEP-03).
+  const settled = await args.settleDependencies?.(args);
+  if (settled?.kind === "refused") {
+    // UPR-03: a refused update names the installed version it kept.
+    return {
+      partition: "failed",
+      name: args.plugin,
+      fromVersion: move.fromVersion,
+      notes: [settled.cause.message],
+      reasons: ["dependency failed"],
+      dependencyRows: settled.rows,
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+    };
+  }
+
+  const outcome = await swapPluginUpdate(args, preflight, policy);
+  return settled === undefined || settled.rows.length === 0
+    ? outcome
+    : { ...outcome, dependencyRows: settled.rows };
 }

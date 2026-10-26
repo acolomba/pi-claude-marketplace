@@ -27,7 +27,11 @@ import { buildScopeDeclarationDetail } from "./dependency-index.ts";
 import { probeDependencyTags } from "./dependency-tag-probe.ts";
 import { probeMarketplaceTags } from "./marketplace-tag-probe.ts";
 
-import type { ConstraintHolder, UpdateConstraintVerdict } from "./constraint-fold.ts";
+import type {
+  ConstraintHolder,
+  ConstraintRequester,
+  UpdateConstraintVerdict,
+} from "./constraint-fold.ts";
 import type { DependencyTagListingFailureReason } from "./dependency-tag-probe.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
@@ -62,6 +66,8 @@ export interface UpdateConstraintOptions {
   readonly tagMemo?: Map<string, readonly RemoteTag[]>;
   /** The path-source analogue of `tagMemo` (D-10-18), same status. */
   readonly marketplaceTagMemo?: Map<string, readonly ReleaseTagCandidate[]>;
+  /** UPD-DEP-D1: the plugin whose ranges the move must also satisfy. */
+  readonly requester?: ConstraintRequester;
   readonly auth: {
     readonly notification?: { readonly ctx: NotificationContext; readonly run: NotificationRun };
     readonly credentialOps: CredentialOps;

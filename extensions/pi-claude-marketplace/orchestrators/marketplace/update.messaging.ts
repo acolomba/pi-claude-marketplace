@@ -1,6 +1,7 @@
 import {
   type ContentReason,
   type PluginFailedMessage,
+  type PluginInstalledMessage,
   type PluginPartiallyInstalledMessage,
   type PluginUpdateSkippedMessage,
   type PluginUpdatedMessage,
@@ -20,8 +21,9 @@ import type {
   PluginUpdateSkippedOutcome,
 } from "../types.ts";
 
-type UpdateRowStatus = "updated" | "partially-installed" | "skipped" | "failed";
+type UpdateRowStatus = "updated" | "partially-installed" | "skipped" | "failed" | "installed";
 export type UpdateRowMsg =
+  | PluginInstalledMessage
   | PluginUpdatedMessage
   | PluginPartiallyInstalledMessage
   | PluginUpdateSkippedMessage
@@ -35,6 +37,8 @@ export const UPDATE_CONTEXT = {
     "partially-installed": { markers: true, contentReasons: true },
     skipped: { markers: false, contentReasons: true },
     failed: { markers: false, contentReasons: true },
+    // UPD-DEP-D1: a dependency an autoupdate installed or enabled for a new version.
+    installed: { markers: true, contentReasons: true },
   },
 } as const satisfies CommandContext<UpdateRowStatus>;
 
