@@ -1330,52 +1330,62 @@ test("GV-01: a constrained plugin directory member makes no tag query and carrie
       [
         "bar",
         undefined,
-        { range: ">=1.0.0 <2.0.0-0", declared: "^1.0.0", requiredBy: `foo@${MARKETPLACE}` },
+        { range: ">=1.0.0 <2.0.0-0", declared: "^1.0.0", requiredBy: [`foo@${MARKETPLACE}`] },
       ],
       ["foo", undefined, undefined],
     ],
   );
 });
 
-test("GV-01 / D-09-05: a root range on a plugin directory root makes no tag query and names no requirer", async (t) => {
-  // arrange
-  const environment = await createHermeticEnvironment(t, "install-cascade-directory-root-");
-  const state = await seedMarketplace(environment.cwd, []);
-  const locations = locationsFor("project", environment.cwd);
-  const materialized: InstallLedgerOptions[] = [];
-  const seen: DependencyTagProbeOptions[] = [];
-  const directory = "anthropic-plugin-directory";
-  const baseOptions = ledgerOptionsFor(environment.cwd);
+for (const { label, rootRequiredBy, requiredBy } of [
+  { label: "names no requirer", rootRequiredBy: undefined, requiredBy: [] },
+  {
+    label: "names the caller's requirers (MISS-01)",
+    rootRequiredBy: [`app@${MARKETPLACE}`, `tool@${MARKETPLACE}`],
+    requiredBy: [`app@${MARKETPLACE}`, `tool@${MARKETPLACE}`],
+  },
+]) {
+  test(`GV-01 / D-09-05: a root range on a plugin directory root makes no tag query and ${label}`, async (t) => {
+    // arrange
+    const environment = await createHermeticEnvironment(t, "install-cascade-directory-root-");
+    const state = await seedMarketplace(environment.cwd, []);
+    const locations = locationsFor("project", environment.cwd);
+    const materialized: InstallLedgerOptions[] = [];
+    const seen: DependencyTagProbeOptions[] = [];
+    const directory = "anthropic-plugin-directory";
+    const baseOptions = ledgerOptionsFor(environment.cwd);
 
-  // act
-  const cascade = await runInstallCascade({
-    state,
-    locations,
-    rootKey: `bar@${directory}`,
-    rootRanges: ["^1.0.0"],
-    lookup: catalog({ [`bar@${directory}`]: [] }),
-    ledgerOptionsFor: (member) => ({
-      ...baseOptions(member),
-      ...(member.directoryPin !== undefined && { directoryPin: member.directoryPin }),
-    }),
-    rootAllowedMarketplaces: new Set<string>(),
-    installedKeys: new Set(),
-    knownMarketplaces: new Set([directory]),
-    seam: recordingLedgerSeam(environment.cwd, locations, materialized),
-    tagProbe: tagProbeAnswering(
-      { kind: "pinned", tag: "bar--v1.4.0", oid: PINNED_OID, version: "1.4.0" },
-      seen,
-    ),
+    // act
+    const cascade = await runInstallCascade({
+      state,
+      locations,
+      rootKey: `bar@${directory}`,
+      rootRanges: ["^1.0.0"],
+      ...(rootRequiredBy !== undefined && { rootRequiredBy }),
+      lookup: catalog({ [`bar@${directory}`]: [] }),
+      ledgerOptionsFor: (member) => ({
+        ...baseOptions(member),
+        ...(member.directoryPin !== undefined && { directoryPin: member.directoryPin }),
+      }),
+      rootAllowedMarketplaces: new Set<string>(),
+      installedKeys: new Set(),
+      knownMarketplaces: new Set([directory]),
+      seam: recordingLedgerSeam(environment.cwd, locations, materialized),
+      tagProbe: tagProbeAnswering(
+        { kind: "pinned", tag: "bar--v1.4.0", oid: PINNED_OID, version: "1.4.0" },
+        seen,
+      ),
+    });
+
+    // assert
+    assert.strictEqual(cascade.kind, "installed");
+    assert.deepStrictEqual(seen, []);
+    assert.deepStrictEqual(
+      materialized.map((options) => [options.plugin, options.directoryPin]),
+      [["bar", { range: ">=1.0.0 <2.0.0-0", declared: "^1.0.0", requiredBy }]],
+    );
   });
-
-  // assert
-  assert.strictEqual(cascade.kind, "installed");
-  assert.deepStrictEqual(seen, []);
-  assert.deepStrictEqual(
-    materialized.map((options) => [options.plugin, options.directoryPin]),
-    [["bar", { range: ">=1.0.0 <2.0.0-0", declared: "^1.0.0" }]],
-  );
-});
+}
 
 test("D-09-05: a root range pins the root through the tag probe like a constrained member", async (t) => {
   // arrange: `bar` is the ROOT itself, git-sourced and declaring nothing --

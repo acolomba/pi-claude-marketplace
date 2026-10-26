@@ -347,6 +347,38 @@ Feature: Plugin update dependencies
       | app@anthropic-plugin-directory  | 1.0.0   | true    |
       | dirp@anthropic-plugin-directory | 1.0.0   | true    |
 
+  Scenario: Updating a pinned anthropic-plugin-directory dependency still listed at its recorded commit leaves it up to date, even outside a dependent's range
+    Given the git repository "dirp" holds these plugins:
+      | name | version | path |
+      | dirp | 1.0.0   |      |
+    Given the marketplace "anthropic-plugin-directory" is published as a dir source
+    Given the marketplace "anthropic-plugin-directory" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | dirp@^1.0.0  |
+    Given the marketplace "anthropic-plugin-directory" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | dirp | url         | dirp       | true   |
+    Given the marketplace "anthropic-plugin-directory" is added to the project scope
+    Given the user has run "/claude:plugin install app@anthropic-plugin-directory --scope project"
+    Given the marketplace "anthropic-plugin-directory" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | dirp@^2.0.0  |
+    Given the marketplace "anthropic-plugin-directory" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | dirp | url         | dirp       | true   |
+    When the user runs "/claude:plugin update dirp@anthropic-plugin-directory --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these plugins:
+      | marketplace name           | marketplace scope | id                              | name | status  | reasons    | scope   |
+      | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp | skipped | up-to-date | project |
+    Then the installation record of the project scope holds these plugins:
+      | id                              | version                 | enabled |
+      | app@anthropic-plugin-directory  | 1.0.0                   | true    |
+      | dirp@anthropic-plugin-directory | 1.0.0-{dirp revision 1} | true    |
+
   Scenario: Updating every plugin installs the dependency a plugin's new version needs
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

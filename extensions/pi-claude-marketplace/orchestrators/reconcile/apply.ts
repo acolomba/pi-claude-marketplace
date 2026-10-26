@@ -78,7 +78,11 @@
 import { locationsFor } from "../../persistence/locations.ts";
 import { declaredDependencies } from "../../shared/concerns/soft-dep.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
-import { DependencyCascadeError, errorMessage } from "../../shared/errors.ts";
+import {
+  DependencyCascadeError,
+  DirectoryPinUnsatisfiedError,
+  errorMessage,
+} from "../../shared/errors.ts";
 import {
   notify,
   notifyDiagnostic,
@@ -673,6 +677,7 @@ async function applyDependencyInstalls(
       ranges: op.ranges,
       requiredBy: op.requiredBy,
       declarers: op.declarers,
+      ...(op.requirers !== undefined && { requirers: op.requirers }),
     });
 
     if (result.status === "skipped") {
@@ -723,6 +728,7 @@ async function applyDependencyInstalls(
       ...(result.error instanceof DependencyCascadeError && {
         cause: redactedDependencyCascadeError(result.error),
       }),
+      ...(result.error instanceof DirectoryPinUnsatisfiedError && { cause: result.error }),
       ...carriedMcpConfigNotices(result),
     });
   }

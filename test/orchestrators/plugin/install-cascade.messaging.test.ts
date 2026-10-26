@@ -1032,7 +1032,7 @@ describe("composeCascadeFailureMessage", () => {
         plugin: "formatter",
         manifestVersion: "1.0.0",
         ranges: "^2.0.0",
-        requiredBy: "helper",
+        requiredBy: ["helper"],
       }),
       rollbackPartials: [],
     };

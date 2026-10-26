@@ -181,12 +181,13 @@ export type InstallPluginNotifications =
 /**
  * GV-01: the range the listed copy of a plugin of Claude Code's plugin
  * directory must satisfy, which picks no release tag, and what a refusal
- * names: the declared ranges and the plugin that asked.
+ * names: the declared ranges and the `name@marketplace` keys of the plugins
+ * that asked for one.
  */
 export interface DirectoryPinRange {
   readonly range: string;
   readonly declared: string;
-  readonly requiredBy?: string;
+  readonly requiredBy: readonly string[];
 }
 
 /** Inputs consumed by the guard-free install ledger. */
@@ -830,7 +831,7 @@ async function assertDirectoryPinSatisfied(
     plugin,
     manifestVersion,
     ranges: pin.declared,
-    requiredBy: pin.requiredBy?.split("@")[0],
+    requiredBy: pin.requiredBy.map((key) => key.replace(/@[^@]*$/u, "")),
   });
 }
 

@@ -2470,7 +2470,7 @@ test("GV-01: a plugin directory copy whose declared version satisfies its range 
   await assert.doesNotReject(
     previewInstall(seeded.state, locations, {
       ...projectInstallOptions(environment.cwd),
-      directoryPin: { range: ">=0.0.1 <0.0.2-0", declared: "^0.0.1" },
+      directoryPin: { range: ">=0.0.1 <0.0.2-0", declared: "^0.0.1", requiredBy: [] },
     }),
   );
 });
@@ -2479,14 +2479,14 @@ for (const { label, pluginJson, requiredBy, message } of [
   {
     label: "a declared version outside its range",
     pluginJson: {},
-    requiredBy: "app@marketplace",
+    requiredBy: ["app@marketplace", "tool@marketplace"],
     message:
-      '"empty" from the Anthropic Directory is pinned to its listed commit (version 0.0.1), which does not satisfy ^1.0.0 required by "app".',
+      '"empty" from the Anthropic Directory is pinned to its listed commit (version 0.0.1), which does not satisfy ^1.0.0 required by "app", "tool".',
   },
   {
     label: "no declared version",
     pluginJson: { version: undefined },
-    requiredBy: undefined,
+    requiredBy: [],
     message:
       '"empty" from the Anthropic Directory is pinned to its listed commit (no version), which does not satisfy ^1.0.0.',
   },
@@ -2501,11 +2501,7 @@ for (const { label, pluginJson, requiredBy, message } of [
     await assert.rejects(
       previewInstall(seeded.state, locations, {
         ...projectInstallOptions(environment.cwd),
-        directoryPin: {
-          range: ">=1.0.0 <2.0.0-0",
-          declared: "^1.0.0",
-          ...(requiredBy !== undefined && { requiredBy }),
-        },
+        directoryPin: { range: ">=1.0.0 <2.0.0-0", declared: "^1.0.0", requiredBy },
       }),
       (error: unknown) => {
         assert.ok(error instanceof DirectoryPinUnsatisfiedError);

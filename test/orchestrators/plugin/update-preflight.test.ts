@@ -1236,6 +1236,117 @@ test("GV-01: the post-fetch guard reads a pinned plugin directory candidate's de
   assert.strictEqual(prepared.toVersion, "1.0.0-777777777777");
 });
 
+/**
+ * A pinned plugin directory record at the commit its catalog still lists, and
+ * a dependent's range its declared version falls outside.
+ */
+async function seedDirectoryAtListedCommit() {
+  const pinnedSha = "8888888888888888888888888888888888888888";
+  const seed = await seedUpdate({
+    marketplaceName: "anthropic-plugin-directory",
+    installed: (pluginRoot) => ({
+      ...pluginRecord("1.0.0-888888888888"),
+      resolvedSource: pluginRoot,
+      resolvedSha: pinnedSha,
+    }),
+    source: { source: "url", url: "https://example.com/directory", sha: pinnedSha },
+    version: "1.0.0",
+  });
+  const fetched: string[] = [];
+  const cloneCacheSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: () => {
+      fetched.push("pin");
+      return Promise.resolve({ cloneUrl: "https://example.com/directory", pin: pinnedSha });
+    },
+    materializePluginClone: () => {
+      fetched.push("clone");
+      return Promise.resolve(seed.pluginRoot);
+    },
+    materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
+  };
+  const constraintGate: PreparePluginUpdateOptions["constraintGate"] = () =>
+    Promise.resolve({
+      kind: "admits",
+      range: ">=2.0.0 <3.0.0-0",
+      holders: [{ key: "alpha@anthropic-plugin-directory", range: "^2.0.0", disabled: false }],
+      fellBackToCurrentCopy: false,
+      disclosure: "constrained to the combined range (^2.0.0)",
+    });
+  return { seed, cloneCacheSeam, constraintGate, fetched };
+}
+
+test("GV-01: a pinned plugin directory plugin still listed at its recorded commit is unchanged before any fetch or range check", async (t) => {
+  // arrange
+  const { seed, cloneCacheSeam, constraintGate, fetched } = await seedDirectoryAtListedCommit();
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+
+  // act
+  const outcome = await prepare(seed, { cloneCacheSeam, constraintGate });
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "unchanged",
+    name: "hello",
+    fromVersion: "1.0.0-888888888888",
+    toVersion: "1.0.0-888888888888",
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    constraint: undefined,
+  });
+  assert.deepStrictEqual(fetched, []);
+});
+
+test("GV-02: a pinned plugin directory record from before GV-01 at its listed commit reads no shortcut", async (t) => {
+  // arrange
+  const pinnedSha = "9999999999999999999999999999999999999999";
+  const seed = await seedUpdate({
+    marketplaceName: "anthropic-plugin-directory",
+    installed: (pluginRoot) => ({
+      ...pluginRecord("1.0.0"),
+      resolvedSource: pluginRoot,
+      resolvedSha: pinnedSha,
+    }),
+    source: { source: "url", url: "https://example.com/directory", sha: pinnedSha },
+    version: "1.0.0",
+  });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const cloneCacheSeam: UpdateCloneCacheSeam = {
+    resolvePluginPin: () =>
+      Promise.resolve({ cloneUrl: "https://example.com/directory", pin: pinnedSha }),
+    materializePluginClone: () => Promise.resolve(seed.pluginRoot),
+    materializeOrRefreshPluginMirror: () => Promise.reject(new Error("unexpected mirror refresh")),
+    materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
+  };
+
+  // act
+  const prepared = await prepare(seed, {
+    cloneCacheSeam,
+    constraintGate: () => Promise.resolve({ kind: "unconstrained" }),
+  });
+
+  // assert
+  assert.ok(!("partition" in prepared));
+  assert.deepStrictEqual(
+    [prepared.fromVersion, prepared.toVersion],
+    ["1.0.0", "1.0.0-999999999999"],
+  );
+});
+
+test("GV-01: reinstall re-materializes a pinned plugin directory plugin at its recorded commit", async (t) => {
+  // arrange
+  const { seed, cloneCacheSeam, constraintGate, fetched } = await seedDirectoryAtListedCommit();
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+
+  // act
+  const outcome = await prepare(seed, { cloneCacheSeam, constraintGate, policy: REINSTALL_POLICY });
+
+  // assert
+  assert.ok("partition" in outcome);
+  assert.deepStrictEqual([outcome.partition, fetched], ["skipped", ["pin", "clone"]]);
+});
+
 test("UPDT-01: a path-source pin materializes through the marketplace's own tag clone", async (t) => {
   // arrange
   const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), version: "1.2.0" });

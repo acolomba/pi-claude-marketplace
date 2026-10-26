@@ -660,6 +660,46 @@ export const RECONCILE_APPLIED_FIXTURES: FixtureMap = {
         ],
       },
     },
+    // GV-01: a missing plugin directory dependency whose listed copy falls
+    // outside the range its installed declarer asks for.
+    "reconcile-dependency-directory-pin-unsatisfied": {
+      pi: piWithBothLoaded(),
+      expectedSeverity: "error",
+      message: {
+        kind: "reconcile-applied-cascade",
+        label: "Reconcile",
+        cardinality: "plural",
+        marketplaces: [
+          {
+            name: "anthropic-plugin-directory",
+            scope: "project",
+            plugins: [
+              {
+                status: "failed",
+                name: "secrets-vault",
+                reasons: ["version conflict"],
+                cause: new Error(
+                  '"secrets-vault" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "deploy-kit".',
+                ),
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "disabled",
+                name: "deploy-kit",
+                version: "1.0.0",
+                reasons: ["dependency unsatisfied"],
+                cause: new Error(
+                  'Install "secrets-vault@anthropic-plugin-directory" or uninstall "deploy-kit@anthropic-plugin-directory"',
+                ),
+                severity: "warning",
+                needsReload: true,
+              },
+            ],
+          },
+        ],
+      },
+    },
     "reconcile-dependency-cross-marketplace": {
       pi: piWithBothLoaded(),
       expectedSeverity: "error",

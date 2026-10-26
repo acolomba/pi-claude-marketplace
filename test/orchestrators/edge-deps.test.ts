@@ -288,7 +288,7 @@ const bucketizerCases = [
     rows: [{ name: "plug", status: "installed", version: "1.0.0" }],
   },
   {
-    title: "GV-01: keeps a record at a release tag of the manifest version installed",
+    title: "GV-01: marks a record at a release tag's commit upgradable to the manifest version",
     marketplace: "tagged-mp",
     plugins: () => [
       {
@@ -297,7 +297,7 @@ const bucketizerCases = [
         installed: { version: "1.0.0-0123456789ab", resolvedSha: "0123456789ab".repeat(3) },
       },
     ],
-    rows: [{ name: "plug", status: "installed", version: "1.0.0-0123456789ab" }],
+    rows: [{ name: "plug", status: "upgradable", version: "1.0.0-0123456789ab" }],
   },
   {
     title: "marks an installed record with a newer manifest version upgradable",

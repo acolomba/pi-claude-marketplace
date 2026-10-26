@@ -1154,7 +1154,7 @@ Some plugin operations have failed.
   ⊘ helper (failed) {dependency failed}
 ```
 
-A plugin of the `anthropic-plugin-directory` marketplace never installs at a release tag, as in Claude Code: the dependency installs the copy its catalog entry lists, and that copy's `plugin.json` version must satisfy the constraint. It does not here, so the cascade fails and unwinds what it had materialized. The `version conflict` token is the one the other version rows use. The cause is Claude Code's own message, naming the listed version (`no version` when the copy declares none), the declared ranges, and the plugin that asked for the dependency. No reload-hint.
+A plugin of the `anthropic-plugin-directory` marketplace never installs at a release tag, as in Claude Code: the dependency installs the copy its catalog entry lists, and that copy's `plugin.json` version must satisfy the constraint. It does not here, so the cascade fails and unwinds what it had materialized. The `version conflict` token is the one the other version rows use. The cause is Claude Code's own message, naming the listed version (`no version` when the copy declares none), the declared ranges, and each plugin that asked for the dependency with a range, comma-separated. No reload-hint.
 
 ### Dependency promoted to a direct install (D-04-07)
 
@@ -4138,6 +4138,24 @@ A plugin operation has failed.
     cause: Dependency "crypto-core@mp" is not declared by its marketplace.
   ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}
     cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"
+
+Reconcile: 1 failure, 1 warning
+
+/reload to pick up changes
+```
+
+A missing dependency from the `anthropic-plugin-directory` marketplace installs the copy its catalog entry lists, never a release tag (GV-01). When that copy's `plugin.json` version falls outside the declared ranges, or it declares none, the dependency's row reads `{version conflict}` and carries Claude Code's own cause. The cause names each installed plugin whose declaration carries one of the ranges, as Claude Code names them when it installs a missing dependency.
+
+<!-- catalog-state: reconcile-dependency-directory-pin-unsatisfied -->
+
+```text
+A plugin operation has failed.
+
+● anthropic-plugin-directory [project]
+  ⊘ secrets-vault (failed) {version conflict}
+    cause: "secrets-vault" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "deploy-kit".
+  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}
+    cause: Install "secrets-vault@anthropic-plugin-directory" or uninstall "deploy-kit@anthropic-plugin-directory"
 
 Reconcile: 1 failure, 1 warning
 

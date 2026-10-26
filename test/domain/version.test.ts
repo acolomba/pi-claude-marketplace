@@ -9,8 +9,10 @@ import {
   declaredVersionWithPin,
   isPluginDirectoryMarketplace,
   isSameVersion,
+  listedDirectoryPin,
   shaVersion,
   tagShaVersion,
+  versionNamesCommit,
   withoutTagCommit,
   withTagCommit,
 } from "../../extensions/pi-claude-marketplace/domain/version.ts";
@@ -314,6 +316,32 @@ describe("isPluginDirectoryMarketplace", () => {
       ),
       [true, false, false],
     );
+  });
+});
+
+describe("versionNamesCommit", () => {
+  test("GV-01: a declared, a commit or a subdirectory version at the commit names it; a GV-02 declared version does not", () => {
+    // act
+    const named = ["1.0.0-0123456789ab", "0123456789ab", "0123456789ab-3989e95a", "1.0.0"].map(
+      (version) => versionNamesCommit(version, PIN),
+    );
+
+    // assert
+    assert.deepStrictEqual(named, [true, true, true, false]);
+  });
+});
+
+describe("listedDirectoryPin", () => {
+  test("GV-01: a pinned plugin of the plugin directory is listed at its pin, any other at none", () => {
+    // act
+    const pins = [
+      listedDirectoryPin(githubSource(PIN), "anthropic-plugin-directory"),
+      listedDirectoryPin(githubSource(PIN), "tools"),
+      listedDirectoryPin(githubSource(), "anthropic-plugin-directory"),
+    ];
+
+    // assert
+    assert.deepStrictEqual(pins, [PIN, undefined, undefined]);
   });
 });
 

@@ -2927,6 +2927,11 @@ export interface InstallMissingDependencyOptions {
   readonly requiredBy: string;
   /** Every eligible original declarer; absent for singular direct callers. */
   readonly declarers?: readonly string[];
+  /**
+   * GV-01: the declarers whose declaration carries one of `ranges`, which a
+   * plugin directory copy outside them names as Claude Code does.
+   */
+  readonly requirers?: readonly string[];
   readonly tagProbe?: CascadeTagProbe;
   readonly marketplaceTagProbe?: CascadeMarketplaceTagProbe;
   readonly cloneCacheSeam?: InstallCloneCacheSeam;
@@ -3099,6 +3104,7 @@ async function installMissingDependencyWithTransaction(
           // D-09-05: the declarers' folded ranges pin the root exactly as a
           // constrained member is pinned.
           rootRanges: opts.ranges,
+          ...(opts.requirers !== undefined && { rootRequiredBy: opts.requirers }),
           // D-09-04: a disabled recorded dependency is a wall on this path,
           // never a read-through member.
           treatDisabledAsWall: true,

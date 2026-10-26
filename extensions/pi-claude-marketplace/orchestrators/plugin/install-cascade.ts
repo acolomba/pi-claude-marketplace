@@ -358,6 +358,11 @@ interface MemberConstraintOptions {
    * the same site every member's ranges are folded (D-09-05, MISS-01).
    */
   readonly rootRanges?: readonly string[];
+  /**
+   * GV-01 / MISS-01: the keys of the plugins whose ranges `rootRanges` holds,
+   * which a plugin directory root's refusal names.
+   */
+  readonly rootRequiredBy?: readonly string[];
   /** UPD-DEP-D1: report a recorded member outside its range instead of failing. */
   readonly moveOutOfRange?: true;
   /**
@@ -488,6 +493,8 @@ export interface InstallCascadeOptions {
    * because the user typed the root.
    */
   readonly rootRanges?: readonly string[];
+  /** GV-01 / MISS-01: the keys of the plugins whose ranges `rootRanges` holds. */
+  readonly rootRequiredBy?: readonly string[];
   readonly lookup: ClosureLookup;
   /**
    * Per-member ledger options; the caller owns scope, cwd and the auth bundle.
@@ -915,6 +922,22 @@ function effectiveRanges(
 }
 
 /**
+ * GV-01: the plugins a member's ranges came from, as Claude Code names them
+ * when a plugin directory copy falls outside them: the caller's requirers for
+ * the root (MISS-01), else the plugin whose declaration reached the member.
+ */
+function rangeRequirers(
+  options: MemberConstraintOptions,
+  member: ClosureMember,
+): readonly string[] {
+  if (member.key === options.rootKey && options.rootRequiredBy !== undefined) {
+    return options.rootRequiredBy;
+  }
+
+  return member.requiredBy === undefined ? [] : [member.requiredBy];
+}
+
+/**
  * Resolve one member this run would install.
  *
  * The wildcard arm returns the member untouched and makes NO query: an empty
@@ -945,7 +968,7 @@ async function resolveOneMember(
         directoryPin: {
           range: intersected.range,
           declared: renderDeclaredRanges(ranges),
-          ...(member.requiredBy !== undefined && { requiredBy: member.requiredBy }),
+          requiredBy: rangeRequirers(options, member),
         },
       },
     };
@@ -1557,6 +1580,7 @@ async function resolveCascade(
     marketplaceTagMemo:
       options.marketplaceTagMemo ?? new Map<string, readonly ReleaseTagCandidate[]>(),
     ...(options.rootRanges !== undefined && { rootRanges: options.rootRanges }),
+    ...(options.rootRequiredBy !== undefined && { rootRequiredBy: options.rootRequiredBy }),
     ...(moveOutOfRange && { moveOutOfRange: true }),
     ...(options.marketplaceTagProbe !== undefined && {
       marketplaceTagProbe: options.marketplaceTagProbe,

@@ -112,8 +112,9 @@ export interface LocationsResolverLike {
  * LIST-02 / D-67-02: build the cache row for ONE installed plugin via the
  * shared `classifyInstalledRecord`. The upgrade-candidate resolve stays
  * NO-NETWORK (`resolveStrict`, NFR-5) and runs only when the manifest carries
- * a newer version (PL-5 string compare; `upgradable === true` narrows
- * `manifestEntry` to defined). CR-01: a candidate probe failure degrades to
+ * a newer version (PL-5 string compare, which reads a record at a release
+ * tag's commit, `<v>-<commit 12>`, as other than `<v>`, as Claude Code does,
+ * GV-01; `upgradable === true` narrows `manifestEntry` to defined). CR-01: a candidate probe failure degrades to
  * plain `upgradable` (the classifier reads `undefined` as "could not assert").
  */
 async function classifyInstalledPluginRow(
@@ -132,7 +133,6 @@ async function classifyInstalledPluginRow(
         parsePluginSource(manifestEntry.source),
         marketplaceContext.marketplaceName,
       ),
-      installed.resolvedSha,
     );
 
   // PURL-08 / D-78-04 / CR-01: the shared probe injects the fs-only presence

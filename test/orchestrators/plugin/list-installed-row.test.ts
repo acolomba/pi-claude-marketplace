@@ -635,7 +635,7 @@ test("GV-01: a pinned plugin directory entry with no mirror matches its record's
   });
 });
 
-test("GV-01: a git plugin recorded at a release tag with no mirror matches its entry version", async (testContext) => {
+test("GV-01: a git plugin recorded at a release tag's commit is upgradable to its entry version without the commit", async (testContext) => {
   // arrange
   const composeInstalledListRow = await loadComposeInstalledListRow();
   const environment = await installedEnvironment(testContext);
@@ -658,12 +658,10 @@ test("GV-01: a git plugin recorded at a release tag with no mirror matches its e
 
   // assert
   assert.deepStrictEqual(row, {
-    status: "installed",
+    status: "upgradable",
     name: "cold-plugin",
-    dependencies: [],
+    reasons: [],
     version: "2.0.0-0123456789ab",
-    severity: "info",
-    needsReload: false,
   });
 });
 

@@ -39,6 +39,7 @@ import {
 import {
   appendLeakToError,
   DependencyCascadeError,
+  DirectoryPinUnsatisfiedError,
   InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
   PluginShapeError,
@@ -719,6 +720,22 @@ describe("classifyOrchestratorThrow", () => {
 
     // assert
     assert.strictEqual(reason, "dependency failed");
+  });
+
+  test("GV-01: classifies a plugin directory copy outside its range as a version conflict", () => {
+    // arrange
+    const error = new DirectoryPinUnsatisfiedError({
+      plugin: "linter",
+      manifestVersion: "1.0.0",
+      ranges: "^2.0.0",
+      requiredBy: ["formatter"],
+    });
+
+    // act
+    const reason = classifyOrchestratorThrow(error);
+
+    // assert
+    assert.strictEqual(reason, "version conflict");
   });
 
   test("classifies an already-installed plugin shape", () => {

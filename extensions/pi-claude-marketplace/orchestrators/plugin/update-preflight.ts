@@ -6,7 +6,7 @@ import {
   resolveStrict,
 } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
-import { withoutTagCommit } from "../../domain/version.ts";
+import { listedDirectoryPin, versionNamesCommit, withoutTagCommit } from "../../domain/version.ts";
 import { isRecordedButDisabled, loadState } from "../../persistence/state-io.ts";
 import { hookDebugLog } from "../../shared/debug-log.ts";
 import {
@@ -933,6 +933,42 @@ function postFetchGuard(
 }
 
 /**
+ * GV-01: Claude Code's update counts a plugin directory plugin up to date when
+ * the commit its catalog lists is the one the record holds, with no fetch and
+ * before its post-fetch range check (`updatePluginOp`), so a dependent's range
+ * its version falls outside does not hold it. Its row names no range.
+ * `reinstall` re-materializes the recorded revision, so it reads no shortcut.
+ * GV-02: a record from before GV-01 lacks the pin in its version, and still
+ * moves once to the pinned form.
+ */
+function unchangedDirectoryPin(
+  options: PreparePluginUpdateOptions,
+  triaged: { readonly record: PluginStateRecord; readonly entry: PluginEntry },
+): PluginUpdateUnchangedOutcome | undefined {
+  const { record } = triaged;
+  const pin = listedDirectoryPin(parsePluginSource(triaged.entry.source), options.marketplace);
+  if (
+    !options.policy.skipSameRevision ||
+    pin === undefined ||
+    pin !== record.resolvedSha ||
+    !versionNamesCommit(record.version, pin)
+  ) {
+    return undefined;
+  }
+
+  return {
+    partition: "unchanged",
+    name: options.plugin,
+    fromVersion: record.version,
+    toVersion: record.version,
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+  };
+}
+
+/**
  * AUTH-09: the ONE credential composition `preparePluginUpdate` shares
  * between the constraint gate and the clone probe -- kept out of its own
  * body for the same cognitive-complexity reason as the other extractions
@@ -1050,6 +1086,11 @@ export async function preparePluginUpdate(
       [verdict.cause],
       ["dependents constrain"],
     );
+  }
+
+  const listedAtRecord = unchangedDirectoryPin(options, triaged);
+  if (listedAtRecord !== undefined) {
+    return listedAtRecord;
   }
 
   const clone = makeUpdateCloneProbe(

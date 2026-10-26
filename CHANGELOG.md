@@ -20,7 +20,9 @@
   - A state lock that another process takes or removes during a long command no longer crashes Pi. The command fails and saves no installation record after the loss.
   - Git plugins now record the version Claude Code records: the commit's first 12 characters without `sha-`, plus a path hash for `git-subdir` and the pin for pinned `anthropic-plugin-directory` plugins.
   - A dependency that a version range installs at a release tag now records the tag's commit in its version, as Claude Code does, and an update that finds no tag removes it.
-  - A version range now checks the listed copy of an `anthropic-plugin-directory` plugin instead of picking a release tag, as Claude Code does.
+  - A version range now checks the listed copy of an `anthropic-plugin-directory` plugin instead of picking a release tag, as Claude Code does. A refusal names every plugin that asked for that range, also in `apply`.
+  - An update reports a pinned `anthropic-plugin-directory` plugin up to date when its listed commit has not changed, before any range check, as Claude Code does.
+  - `list` and completion show a plugin recorded at a release tag's commit as upgradable when the marketplace offers the version without that commit, as Claude Code does.
 
 - Internal: a new worktree session now runs `scripts/init.sh` once when it starts, also in the Claude desktop app. (#273)
 

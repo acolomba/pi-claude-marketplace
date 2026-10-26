@@ -118,6 +118,15 @@ export function withoutTagCommit(version: string, commit: string | undefined): s
 }
 
 /**
+ * GV-01: whether a recorded version carries the first 12 characters of
+ * `commit`, as every version Claude Code records at a pinned or tagged commit
+ * does. A version recorded before GV-01 (GV-02) may not.
+ */
+export function versionNamesCommit(version: string, commit: string): boolean {
+  return version.includes(commit.slice(0, HASH_TRUNC));
+}
+
+/**
  * GV-01: whether a marketplace is Claude Code's plugin directory,
  * whose plugins never install at a release tag a version range selects.
  */
@@ -135,12 +144,19 @@ export function declaredVersionWithPin(
   source: ParsedSource,
   marketplaceName: string,
 ): string {
-  const pin = sourcePin(source);
-  if (!isPluginDirectoryMarketplace(marketplaceName) || pin === undefined) {
-    return declared;
-  }
+  const pin = listedDirectoryPin(source, marketplaceName);
+  return pin === undefined ? declared : withTagCommit(declared, pin);
+}
 
-  return withTagCommit(declared, pin);
+/**
+ * GV-01: the commit a plugin of the `anthropic-plugin-directory` marketplace is
+ * listed at, which Claude Code's `AZ` reads; any other plugin has none.
+ */
+export function listedDirectoryPin(
+  source: ParsedSource,
+  marketplaceName: string,
+): string | undefined {
+  return isPluginDirectoryMarketplace(marketplaceName) ? sourcePin(source) : undefined;
 }
 
 /** The commit a git source is pinned to; other sources carry no pin. */

@@ -182,6 +182,9 @@ export interface PlannedDependencyDisable {
  * true). `requiredBy` is the first eligible declarer in verdict order, the
  * key a closure failure on this root names as its dependent. `declarers`
  * retains each eligible source key once in that order for original-edge policy.
+ * `requirers` keeps, in the same order, only the declarers that carry a range,
+ * which a plugin directory copy outside the ranges names (GV-01); it is
+ * absent when no declarer constrained the dependency.
  */
 export interface PlannedDependencyInstall {
   readonly scope: Scope;
@@ -190,6 +193,7 @@ export interface PlannedDependencyInstall {
   readonly ranges: readonly string[];
   readonly requiredBy: string;
   readonly declarers: readonly string[];
+  readonly requirers?: readonly string[];
 }
 
 /**

@@ -605,13 +605,13 @@ describe("withoutCleanupLeaks", () => {
 });
 
 describe("DirectoryPinUnsatisfiedError", () => {
-  test("GV-01: names the listed version, the declared ranges and the plugin that asked", () => {
+  test("GV-01: names the listed version, the declared ranges and the plugins that asked", () => {
     // act
     const error = new DirectoryPinUnsatisfiedError({
       plugin: "dirp",
       manifestVersion: "1.0.0",
-      ranges: "^2.0.0",
-      requiredBy: "app",
+      ranges: "^2.0.0, ^2.1.0",
+      requiredBy: ["app", "tool"],
     });
 
     // assert
@@ -627,11 +627,11 @@ describe("DirectoryPinUnsatisfiedError", () => {
       {
         name: "DirectoryPinUnsatisfiedError",
         message:
-          '"dirp" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "app".',
+          '"dirp" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0, ^2.1.0 required by "app", "tool".',
         plugin: "dirp",
         manifestVersion: "1.0.0",
-        ranges: "^2.0.0",
-        requiredBy: "app",
+        ranges: "^2.0.0, ^2.1.0",
+        requiredBy: ["app", "tool"],
       },
     );
   });
@@ -642,7 +642,7 @@ describe("DirectoryPinUnsatisfiedError", () => {
       plugin: "dirp",
       manifestVersion: undefined,
       ranges: "^2.0.0",
-      requiredBy: undefined,
+      requiredBy: [],
     });
 
     // assert
@@ -651,7 +651,7 @@ describe("DirectoryPinUnsatisfiedError", () => {
       [
         '"dirp" from the Anthropic Directory is pinned to its listed commit (no version), which does not satisfy ^2.0.0.',
         undefined,
-        undefined,
+        [],
       ],
     );
   });

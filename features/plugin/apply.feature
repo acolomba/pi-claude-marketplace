@@ -1175,3 +1175,39 @@ Feature: Plugin apply
       | kind         | reconcile-pending-empty |
       | severity     | info                    |
       | needs reload | false                   |
+
+  Scenario: Apply refuses a missing anthropic-plugin-directory dependency whose listed copy falls outside a plugin's range, naming that plugin
+    Given the git repository "dirp" holds these plugins:
+      | name | version | path |
+      | dirp | 1.0.0   |      |
+    Given the marketplace "anthropic-plugin-directory" is published as a dir source
+    Given the marketplace "anthropic-plugin-directory" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   |              |
+    Given the marketplace "anthropic-plugin-directory" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | dirp | url         | dirp       | true   |
+    Given the marketplace "anthropic-plugin-directory" is added to the project scope
+    Given the user has run "/claude:plugin install app@anthropic-plugin-directory --scope project"
+    Given the marketplace "anthropic-plugin-directory" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | dirp@^2.0.0  |
+    Given the marketplace "anthropic-plugin-directory" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | dirp | url         | dirp       | true   |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind           | reconcile-applied-cascade      |
+      | severity       | error                          |
+      | needs reload   | true                           |
+      | summary        | A plugin operation has failed. |
+      | tally label    | Reconcile                      |
+      | tally failures | 1                              |
+      | tally warnings | 1                              |
+    Then the result lists these plugins:
+      | marketplace name           | marketplace scope | id                              | name | status   | reasons                | scope   | version | cause chain                                                                                                                          | cause truncated | leaks | rollback partial |
+      | anthropic-plugin-directory | project           | dirp@anthropic-plugin-directory | dirp | failed   | version conflict       | project |         | "dirp" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "app". | false           |       |                  |
+      | anthropic-plugin-directory | project           | app@anthropic-plugin-directory  | app  | disabled | dependency unsatisfied | project | 1.0.0   | Install "dirp@anthropic-plugin-directory" or uninstall "app@anthropic-plugin-directory"                                              | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id                             | version | enabled |
+      | app@anthropic-plugin-directory | 1.0.0   | false   |

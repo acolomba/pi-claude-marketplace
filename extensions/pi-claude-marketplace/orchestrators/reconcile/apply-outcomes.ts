@@ -30,6 +30,7 @@ import path from "node:path";
 import { isRenderablePluginKey } from "../../domain/dependencies.ts";
 import {
   DependencyCascadeError,
+  DirectoryPinUnsatisfiedError,
   InstallMarketplaceAddError,
   PluginShapeError,
   StateLockHeldError,
@@ -222,8 +223,12 @@ export interface PluginInstallFailedOutcome extends PluginOutcomeBase {
    * `redactCauseChain`) with every link redacted, since the renderer's
    * depth-5 `causeChainTrailer` walker (`shared/errors.ts`) does not redact
    * on its own.
+   *
+   * GV-01: a plugin directory dependency whose listed copy falls outside its
+   * dependents' ranges carries Claude Code's refusal (`version conflict`),
+   * built from names, ranges and a version, never a path.
    */
-  readonly cause?: DependencyCascadeError;
+  readonly cause?: DependencyCascadeError | DirectoryPinUnsatisfiedError;
 }
 
 /** Plugin uninstall success outcome. */
@@ -741,6 +746,10 @@ export function classifyOrchestratorThrow(err: unknown): ContentReason {
 
   if (err instanceof StateLockHeldError) {
     return "lock held";
+  }
+
+  if (err instanceof DirectoryPinUnsatisfiedError) {
+    return "version conflict";
   }
 
   if (err instanceof InstallMarketplaceAddError) {

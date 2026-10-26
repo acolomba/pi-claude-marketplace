@@ -782,3 +782,27 @@ Feature: Plugin list
       | marketplace name | marketplace scope | id       | name | status    | reasons | version |
       | gits             | project           | ghp@gits | ghp  | available |         | 1.0.0   |
     Then the git host receives no request
+
+  Scenario: The list shows a dependency recorded at its release tag's commit as upgradable when the catalog offers that version without the commit
+    Given the git repository "lib" holds these plugins:
+      | name | version | path |
+      | lib  | 2.0.0   |      |
+    Given the git repository "lib" has a revision only the tag "lib--v2.0.0" reaches, holding these plugins:
+      | name  | version | path  |
+      | lib   | 2.0.0   |       |
+      | other | 1.0.0   | other |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^2.0.0   |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | lib  | url         | lib        | false  |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin fetch lib@tools --scope project"
+    When the user runs "/claude:plugin list --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status     | reasons | scope   | version                |
+      | tools            | project           | app@tools | app  | installed  |         | project | 1.0.0                  |
+      | tools            | project           | lib@tools | lib  | upgradable |         | project | 2.0.0-{lib revision 2} |

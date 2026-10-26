@@ -96,10 +96,9 @@ async function upgradeCandidate(
   ).catch((): undefined => undefined);
   const resolved = candidate?.kind === "resolved" ? candidate : undefined;
   const version = resolved?.version ?? catalogVersion(manifestEntry, options.marketplaceName);
-  if (
-    version === undefined ||
-    isSameVersion(options.record.version, version, options.record.resolvedSha)
-  ) {
+  // GV-01: Claude Code compares the recorded string with the catalog's, so a
+  // record at a release tag's commit (`<v>-<commit 12>`) is not `<v>`.
+  if (version === undefined || isSameVersion(options.record.version, version)) {
     return { upgradable: false };
   }
 

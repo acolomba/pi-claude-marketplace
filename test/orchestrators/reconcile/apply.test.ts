@@ -4629,6 +4629,72 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
+  test("GV-01: a missing plugin directory dependency outside its range fails as a version conflict naming its requirer", async (t) => {
+    // arrange
+    const directory = "anthropic-plugin-directory";
+    const { cwd, project } = await createHermeticScopes(t, "dependency-directory-pin");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(
+      cwd,
+      "mp-src",
+      directory,
+      {
+        "deploy-kit": { dependencies: ["secrets-vault@^2.0.0"], skill: "clean" },
+        "secrets-vault": { skill: "clean" },
+      },
+    );
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { [directory]: { source: marketplaceRoot } },
+        plugins: { [`deploy-kit@${directory}`]: {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        [directory]: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: directory,
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "\u25cf anthropic-plugin-directory [project]\n" +
+          "  \u2298 secrets-vault (failed) {version conflict}\n" +
+          '    cause: "secrets-vault" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "deploy-kit".\n' +
+          "  \u25cd deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "secrets-vault@anthropic-plugin-directory" or uninstall "deploy-kit@anthropic-plugin-directory"\n' +
+          "\n" +
+          "Reconcile: 1 failure, 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await recordFor(project, directory, "secrets-vault"), undefined);
+    verifyBoundary();
+  });
+
   test("LOAD-02 / D-09-14: a second apply over an unchanged unsatisfied tree plans the retry bucket and retries the install", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-converges");
