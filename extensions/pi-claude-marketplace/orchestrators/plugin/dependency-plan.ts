@@ -159,6 +159,7 @@ function unmovable(request: DependencyMoveRequest, cause: string): Refusal {
         range: renderRequestedRanges(request.requesters),
         recordedVersion: request.recordedVersion,
         moveRefusal: cause,
+        declaredBy: request.requesters.map((requester) => requester.key),
       },
     },
   };

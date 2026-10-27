@@ -18357,7 +18357,7 @@ test("UPD-DEP-D1: installing refuses a plugin whose installed dependency no rele
           "● mp [project]",
           "  ⊘ app (failed) {dependency failed}",
           "  ⊘ lib@mp v1.2.0 (failed) {already installed, version conflict}",
-          '    cause: Dependency "lib@mp" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: version 1.2.0 falls outside what the combined range admits (^2.0.0) -- required by "app@mp"',
+          '    cause: Dependency "lib@mp" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: version 1.2.0 falls outside what the combined range admits (^2.0.0) -- required by "app@mp". To look for a version in range, run /claude:plugin update lib@mp.',
         ].join("\n"),
         severity: "error",
       },

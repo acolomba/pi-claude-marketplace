@@ -394,21 +394,42 @@ function closureFailureFacts(
   }
 }
 
+/**
+ * RESV-05 / UPD-DEP-D1: the sentence for an installed copy outside the range.
+ * When a move was judged and the plugin the user named declares the
+ * dependency itself, the cause ends with Claude Code's next step, as Claude
+ * Code adds it only under that condition (CAS-06, D-PL3-11). The hint names
+ * only the dependency key, which the walk checked against the token allowlist.
+ */
+function installedUnsatisfiedCause(
+  failure: Extract<CascadeConstraintFailure, { readonly why: "installed-unsatisfied" }>,
+  rootKey: string,
+): string {
+  const head = `Dependency "${failure.key}" is installed at version ${failure.recordedVersion}, which does not satisfy ${failure.range}`;
+  if (failure.moveRefusal === undefined) {
+    return `${head}.`;
+  }
+
+  const refused = `${head}, and cannot move: ${failure.moveRefusal}`;
+  if (failure.declaredBy?.includes(rootKey) !== true) {
+    return refused;
+  }
+
+  const separator = failure.moveRefusal.endsWith(".") ? "" : ".";
+  return `${refused}${separator} To look for a version in range, run /claude:plugin update ${failure.key}.`;
+}
+
 /** The two `range-conflict` arms, which differ in subject rather than in fact. */
 function rangeConflictFacts(
   failure: Extract<CascadeConstraintFailure, { readonly kind: "range-conflict" }>,
+  rootKey: string,
 ): CascadeFailureFacts {
   return failure.why === "installed-unsatisfied"
     ? {
         key: failure.key,
         version: failure.recordedVersion,
         reasons: ["already installed", "version conflict"],
-        cause: new DependencyCascadeError(
-          failure.moveRefusal === undefined
-            ? `Dependency "${failure.key}" is installed at version ${failure.recordedVersion}, which does not satisfy ${failure.range}.`
-            : `Dependency "${failure.key}" is installed at version ${failure.recordedVersion}, which does not satisfy ${failure.range}, and cannot move: ${failure.moveRefusal}`,
-          failure.key,
-        ),
+        cause: new DependencyCascadeError(installedUnsatisfiedCause(failure, rootKey), failure.key),
       }
     : {
         key: failure.key,
@@ -428,10 +449,13 @@ function rangeConflictFacts(
  * this function fail typecheck instead of falling through to a `default` arm
  * no case can ever reach.
  */
-function constraintFailureFacts(failure: CascadeConstraintFailure): CascadeFailureFacts {
+function constraintFailureFacts(
+  failure: CascadeConstraintFailure,
+  rootKey: string,
+): CascadeFailureFacts {
   switch (failure.kind) {
     case "range-conflict":
-      return rangeConflictFacts(failure);
+      return rangeConflictFacts(failure, rootKey);
     case "no-matching-tag":
       return {
         key: failure.key,
@@ -540,7 +564,7 @@ function failureFacts(subject: CascadeFailureSubject, rootKey: string): CascadeF
   }
 
   if (subject.kind === "constraint") {
-    return constraintFailureFacts(subject.failure);
+    return constraintFailureFacts(subject.failure, rootKey);
   }
 
   // The member resolved cleanly and its own six-phase ledger then failed, so

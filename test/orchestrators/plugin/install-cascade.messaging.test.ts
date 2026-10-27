@@ -838,7 +838,103 @@ describe("composeCascadeFailureMessage", () => {
     });
   });
 
-  test("UPD-DEP-D1 an installed copy that cannot move into the constraint names why", () => {
+  test("UPD-DEP-D1 / CAS-06 an installed copy the requested plugin declares that cannot move names why and the update to run", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "installed-unsatisfied",
+        key: "formatter@tools",
+        range: "^2.0.0",
+        recordedVersion: "1.0.0",
+        moveRefusal: "no release moves it",
+        declaredBy: [ROOT_KEY],
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
+        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: no release moves it. To look for a version in range, run /claude:plugin update formatter@tools.',
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("CAS-06 a move refusal that already ends with a period gets no second one before the update hint", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "installed-unsatisfied",
+        key: "formatter@tools",
+        range: "^2.0.0",
+        recordedVersion: "1.0.0",
+        moveRefusal: "no release moves it.",
+        declaredBy: [ROOT_KEY],
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
+        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: no release moves it. To look for a version in range, run /claude:plugin update formatter@tools.',
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("CAS-06 a move refusal names no update when the requested plugin does not declare the dependency", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "installed-unsatisfied",
+        key: "formatter@tools",
+        range: "^2.0.0",
+        recordedVersion: "1.0.0",
+        moveRefusal: "no release moves it",
+        declaredBy: ["other@official"],
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
+        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: no release moves it',
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("CAS-06 a move refusal names no update when no declaring plugin is known", () => {
     // arrange
     const subject: CascadeFailureSubject = {
       kind: "constraint",
@@ -864,6 +960,37 @@ describe("composeCascadeFailureMessage", () => {
         "● official [user]",
         "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
         '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: no release moves it',
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("CAS-06 an installed copy no move was judged for names no update", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "installed-unsatisfied",
+        key: "formatter@tools",
+        range: "^2.0.0",
+        recordedVersion: "1.0.0",
+        declaredBy: [ROOT_KEY],
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
+        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0.',
         "  ⊘ helper (failed) {dependency failed}",
       ].join("\n"),
     });

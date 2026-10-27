@@ -238,6 +238,12 @@ export type CascadeConstraintFailure =
        * when the caller judged a move. Absent when no move was judged.
        */
       readonly moveRefusal?: string;
+      /**
+       * D-PL3-11: the keys of the plugins that declare the dependency, set
+       * beside `moveRefusal` by the plan that judged the move, so the refusal
+       * can tell whether the plugin the user named declares it.
+       */
+      readonly declaredBy?: readonly string[];
     }
   | {
       readonly kind: "range-too-complex";

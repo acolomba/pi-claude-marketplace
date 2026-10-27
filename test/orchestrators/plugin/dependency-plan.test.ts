@@ -156,7 +156,7 @@ function landedAt(version: string, tagged: boolean): PlannedCandidate {
     : { toVersion: version };
 }
 
-function refusal(key: string, range: string, moveRefusal: string) {
+function refusal(key: string, range: string, moveRefusal: string, declaredBy: readonly string[]) {
   return {
     ok: false,
     subject: {
@@ -168,6 +168,7 @@ function refusal(key: string, range: string, moveRefusal: string) {
         range,
         recordedVersion: "1.0.0",
         moveRefusal,
+        declaredBy,
       },
     },
   } as const;
@@ -443,7 +444,7 @@ describe("planDependencyGraph", () => {
     // assert
     assert.deepStrictEqual(
       plan,
-      refusal("lib@mp", "^2.0.0", "version 1.5.0 falls outside the range"),
+      refusal("lib@mp", "^2.0.0", "version 1.5.0 falls outside the range", ["aaa@mp", "app@mp"]),
     );
     assert.deepStrictEqual(bound.calls.judged, [request("lib", requesters)]);
   });
@@ -728,6 +729,7 @@ describe("planDependencyGraph", () => {
         "lib@mp",
         "^2.0.0",
         "its version does not settle: each version chosen for it changes what the other dependencies need",
+        ["app@mp"],
       ),
     );
     assert.deepStrictEqual(bound.calls.walks, ["", "lib@mp=2.0.0"]);

@@ -190,9 +190,9 @@ Feature: Plugin install dependencies
       | needs reload | false                               |
       | summary      | Some plugin operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                                                                                                                                          | cause truncated | leaks | rollback partial |
-      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                                                                                                                                      |                 |       |                  |
-      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.2.0   | Dependency "lib@tools" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: version 1.2.0 falls outside what the combined range admits (^2.0.0) -- required by "app@tools" | false           |       |                  |
+      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                                                                                                                                                                                                                | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                                                                                                                                                                                                            |                 |       |                  |
+      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.2.0   | Dependency "lib@tools" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: version 1.2.0 falls outside what the combined range admits (^2.0.0) -- required by "app@tools". To look for a version in range, run /claude:plugin update lib@tools. | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | lib@tools | 1.2.0   | true    |
@@ -223,9 +223,9 @@ Feature: Plugin install dependencies
       | needs reload | false                               |
       | summary      | Some plugin operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                                                                                                                                                     | cause truncated | leaks | rollback partial |
-      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                                                                                                                                                 |                 |       |                  |
-      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.2.0   | Dependency "lib@tools" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: the declared ranges admit no version in common (^2.0.0, ^1.0.0) -- required by "app@tools", "other@tools" | false           |       |                  |
+      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                                                                                                                                                                                                                           | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                                                                                                                                                                                                                       |                 |       |                  |
+      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.2.0   | Dependency "lib@tools" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: the declared ranges admit no version in common (^2.0.0, ^1.0.0) -- required by "app@tools", "other@tools". To look for a version in range, run /claude:plugin update lib@tools. | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id          | version | enabled |
       | lib@tools   | 1.2.0   | true    |
@@ -320,6 +320,40 @@ Feature: Plugin install dependencies
       | id        | version                | enabled |
       | app@tools | 1.0.0                  | true    |
       | lib@tools | 2.0.0-{lib revision 2} | true    |
+
+  Scenario: Installing a plugin whose installed git-source dependency cannot move while the git host drops the connection names the update that looks for a version in range
+    Given the git repository "lib" holds these plugins:
+      | name | version | path |
+      | lib  | 1.0.0   |      |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | lib  | url         | lib        | false  |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install lib@tools --scope project"
+    Given the git repository "lib" has a revision only the tag "lib--v2.0.0" reaches, holding these plugins:
+      | name | version | path |
+      | lib  | 2.0.0   |      |
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@^2.0.0   |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | lib  | url         | lib        | false  |
+    Given the git host drops the connection for the plugin "lib"
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                                                                                                                                                                                                       | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                                                                                                                                                                                                   |                 |       |                  |
+      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.0.0   | Dependency "lib@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: the release tags could not be listed (network unreachable) -- required by "app@tools". To look for a version in range, run /claude:plugin update lib@tools. | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | lib@tools | 1.0.0   | true    |
 
   Scenario: Installing a plugin records a git-source dependency installed at a release tag with the tag's commit
     Given the git repository "lib" holds these plugins:
@@ -740,9 +774,9 @@ Feature: Plugin install dependencies
       | xx   | url         | xx         | false  |
     When the user runs "/claude:plugin install app@tools --scope project"
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                                                                                                                                          | cause truncated | leaks | rollback partial |
-      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                                                                                                                                      |                 |       |                  |
-      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.2.0   | Dependency "lib@tools" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "app@tools" | false           |       |                  |
+      | marketplace name | marketplace scope | id        | name      | status | reasons                             | scope   | version | cause chain                                                                                                                                                                                                                                                                | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools | app       | failed | dependency failed                   | project |         |                                                                                                                                                                                                                                                                            |                 |       |                  |
+      | tools            | project           | lib@tools | lib@tools | failed | already installed, version conflict | project | 1.2.0   | Dependency "lib@tools" is installed at version 1.2.0, which does not satisfy ^2.0.0, and cannot move: version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "app@tools". To look for a version in range, run /claude:plugin update lib@tools. | false           |       |                  |
     Then the installation record of the project scope holds these plugins:
       | id        | version | enabled |
       | lib@tools | 1.2.0   | true    |
