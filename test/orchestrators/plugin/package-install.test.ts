@@ -30,6 +30,7 @@ import { createHermeticEnvironment } from "../../platform/hermetic-environment.t
 import type {
   PackageInstallOps,
   PackagesPhaseContext,
+  PackageStepTarget,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
 import type { UpdateRunOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
 import type { PluginUpdateUpdatedOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
@@ -53,11 +54,13 @@ const PACKAGE_JSON = JSON.stringify({ name: "plugin", dependencies: { "pkd-dep":
 const LOCKFILE = '{"lockfileVersion":3}';
 const MODULE_TEXT = 'module.exports = "pkd-dep loaded";\n';
 const SUCCESS: PackageManagerRun = { code: 0, stdout: "", stderr: "", timedOut: false };
+const MARKETPLACE = "tools";
 
 interface SeededPlugin {
   readonly locations: ScopedLocations;
   readonly pluginRoot: string;
   readonly workDir: string;
+  readonly target: Omit<PackageStepTarget, "force">;
   readonly context: PackagesPhaseContext;
 }
 
@@ -82,7 +85,13 @@ async function seedPlugin(
     locations,
     pluginRoot,
     workDir: path.join(locations.extensionRoot, "sources-staging", "work-1"),
-    context: { locations, resolved: { pluginRoot }, discoveryWarnings: [] },
+    target: { locations, marketplace: MARKETPLACE, pluginRoot },
+    context: {
+      locations,
+      marketplace: MARKETPLACE,
+      resolved: { pluginRoot },
+      discoveryWarnings: [],
+    },
   };
 }
 
@@ -295,7 +304,7 @@ describe("createPackagesPhase", () => {
 
       // assert
       assert.deepStrictEqual(seeded.context.discoveryWarnings, [
-        `Skipped installing this plugin's dependencies: its folder ${seeded.pluginRoot} is outside the folders this extension manages, so it was not changed. To install them, run "${command}" in that folder.`,
+        `Skipped installing this plugin's dependencies: its folder in the marketplace "tools" is outside the folders this extension manages, so it was not changed. To install them, run "${command}" in that folder.`,
       ]);
       assert.deepStrictEqual(
         await sortedEntries(seeded.pluginRoot),
@@ -350,6 +359,7 @@ describe("createPackagesPhase", () => {
     const phase = createPackagesPhase(opsWith(runPackageManager));
     const context: PackagesPhaseContext = {
       locations: seeded.locations,
+      marketplace: MARKETPLACE,
       resolved: { pluginRoot: linkedRoot },
       discoveryWarnings: [],
     };
@@ -359,7 +369,7 @@ describe("createPackagesPhase", () => {
 
     // assert
     assert.deepStrictEqual(context.discoveryWarnings, [
-      `Skipped installing this plugin's dependencies: its folder ${linkedRoot} is outside the folders this extension manages, so it was not changed. To install them, run "npm ${NPM_CI_ARGUMENTS.join(" ")}" in that folder.`,
+      `Skipped installing this plugin's dependencies: its folder in the marketplace "tools" is outside the folders this extension manages, so it was not changed. To install them, run "npm ${NPM_CI_ARGUMENTS.join(" ")}" in that folder.`,
     ]);
     assert.deepStrictEqual(await sortedEntries(linkTarget), [path.basename(seeded.pluginRoot)]);
     assert.deepStrictEqual(await sortedEntries(seeded.pluginRoot), [
@@ -983,7 +993,7 @@ describe("installUpdatedPackages", () => {
       const hookedOutcome = await installUpdatedPackages(
         opsWith(runPackageManager),
         expectedOutcome,
-        { locations: seeded.locations, pluginRoot: seeded.pluginRoot, force: true },
+        { ...seeded.target, force: true },
       );
 
       // assert
@@ -1005,7 +1015,7 @@ describe("installUpdatedPackages", () => {
     const hookedOutcome = await installUpdatedPackages(
       opsWith(installingRunner(requests)),
       updatedOutcome(),
-      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, force: true },
+      { ...seeded.target, force: true },
     );
 
     // assert
@@ -1036,7 +1046,7 @@ describe("installUpdatedPackages", () => {
     const hookedOutcome = await installUpdatedPackages(
       opsWith(runPackageManager),
       expectedOutcome,
-      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, force: false },
+      { ...seeded.target, force: false },
     );
 
     // assert
@@ -1058,7 +1068,7 @@ describe("installUpdatedPackages", () => {
     const hookedOutcome = await installUpdatedPackages(
       opsWith(answeringRunner(FAILED_RUN)),
       { ...updatedOutcome(), notes: ["first"] },
-      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, force: true },
+      { ...seeded.target, force: true },
     );
 
     // assert
@@ -1079,7 +1089,7 @@ describe("installUpdatedPackages", () => {
     const hookedOutcome = await installUpdatedPackages(
       opsWith(answeringRunner(FAILED_RUN)),
       updatedOutcome(),
-      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, force: true },
+      { ...seeded.target, force: true },
     );
 
     // assert
@@ -1099,7 +1109,7 @@ describe("installUpdatedPackages", () => {
     const hookedOutcome = await installUpdatedPackages(
       opsWith(runPackageManager),
       expectedOutcome,
-      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, force: true },
+      { ...seeded.target, force: true },
     );
 
     // assert
@@ -1138,7 +1148,7 @@ describe("installUpdatedPackages", () => {
         return SUCCESS;
       }),
       updatedOutcome(),
-      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, force: true },
+      { ...seeded.target, force: true },
     );
 
     // assert
@@ -1164,7 +1174,7 @@ describe("installUpdatedPackages", () => {
     const hookedOutcome = await installUpdatedPackages(
       opsWith(answeringRunner(SUCCESS)),
       updatedOutcome(),
-      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, force: true },
+      { ...seeded.target, force: true },
     );
 
     // assert

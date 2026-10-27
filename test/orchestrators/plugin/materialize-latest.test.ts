@@ -488,9 +488,7 @@ async function writePackageFiles(pluginRoot: string): Promise<void> {
   await writeFile(path.join(pluginRoot, "package-lock.json"), '{"lockfileVersion":3}');
 }
 
-function packageNote(pluginRoot: string): string {
-  return `Skipped installing this plugin's dependencies: its folder ${pluginRoot} is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.`;
-}
+const PACKAGE_NOTE = `Skipped installing this plugin's dependencies: its folder in the marketplace "mp" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.`;
 
 test("D-PL9-07: an update whose new version ships a lockfile carries the package note", async (t) => {
   // arrange
@@ -513,7 +511,7 @@ test("D-PL9-07: an update whose new version ships a lockfile carries the package
     declaresMcp: false,
     constraint: undefined,
     declaresWorkflows: false,
-    notes: [packageNote(pluginRoot)],
+    notes: [PACKAGE_NOTE],
   });
 });
 
@@ -544,7 +542,7 @@ test("D-PL9-07: an update that settled its dependencies carries the package note
     constraint: undefined,
     declaresWorkflows: false,
     dependencyRows: [ZCORE_ROW],
-    notes: [packageNote(pluginRoot)],
+    notes: [PACKAGE_NOTE],
   });
 });
 

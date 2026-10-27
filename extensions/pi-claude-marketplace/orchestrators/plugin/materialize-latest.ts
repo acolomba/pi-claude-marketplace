@@ -106,6 +106,7 @@ export async function materializeLatestVersion(
   // D-PL9-07: an updated plugin gets the packages its new version lists.
   const packageTarget = {
     locations: args.locations,
+    marketplace: args.marketplace,
     pluginRoot: preflight.installable.pluginRoot,
     force: revisionMoved(move),
   };

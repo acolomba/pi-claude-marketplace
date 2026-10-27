@@ -2647,7 +2647,7 @@ test("D-PL9-03: installs a plugin outside the extension root and notes the packa
   // assert
   assert.strictEqual(ledgerOutcome.kind, "installed");
   assert.deepStrictEqual(ledgerOutcome.summary.discoveryWarnings, [
-    `Skipped installing this plugin's dependencies: its folder ${seeded.pluginRoot} is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.`,
+    `Skipped installing this plugin's dependencies: its folder in the marketplace "marketplace" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.`,
   ]);
   assert.strictEqual(seeded.state.marketplaces.marketplace?.plugins.empty?.version, "0.0.1");
   assert.deepStrictEqual((await readdir(seeded.pluginRoot)).sort(), [

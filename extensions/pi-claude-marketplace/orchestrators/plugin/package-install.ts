@@ -15,7 +15,8 @@
 // NFR-10 / D-PL9-03: the install writes only inside the extension root. A
 // plugin that runs from the user's own folder (a path-source marketplace) is
 // never written to: when that folder has no node_modules, a note names the
-// folder and the command to run there.
+// plugin's marketplace and the command to run in the plugin's folder. It names
+// no absolute path, which every surface would redact to a basename.
 //
 // D-PL9-04: the package manager runs in a fresh work dir under sources-staging
 // that holds only package.json and the lockfile, so the plugin's own .npmrc or
@@ -132,8 +133,24 @@ export const DEFAULT_PACKAGE_INSTALL_OPS: PackageInstallOps = Object.freeze({
 /** The slice of the install ledger context the packages phase reads. */
 export interface PackagesPhaseContext {
   readonly locations: ScopedLocations;
+  readonly marketplace: string;
   readonly resolved: { readonly pluginRoot: string };
   readonly discoveryWarnings: string[];
+}
+
+/** The plugin one package step runs for. */
+export interface PackageStepTarget {
+  readonly locations: ScopedLocations;
+  /** The marketplace that lists the plugin, which a D-PL9-03 note names. */
+  readonly marketplace: string;
+  readonly pluginRoot: string;
+  /**
+   * D-PL9-06: `true` replaces an existing node_modules. The update hook sets
+   * it when the swap moved to another revision, which may carry another
+   * lockfile; the install ledger and a swap that re-materialized the recorded
+   * revision keep node_modules and stay offline.
+   */
+  readonly force: boolean;
 }
 
 interface PackageStepOutcome {
@@ -251,7 +268,7 @@ async function isInsideExtensionRoot(extensionRoot: string, pluginRoot: string):
 // D-PL9-03: a folder that already holds node_modules gets no note. Only a
 // forced run reaches here with one.
 function outsideRootDetection(
-  pluginRoot: string,
+  marketplace: string,
   row: RunnableLockfile,
   hasNodeModules: boolean,
 ): Detection {
@@ -262,23 +279,20 @@ function outsideRootDetection(
   return {
     kind: "note",
     note: skippedNote(
-      `its folder ${pluginRoot} is outside the folders this extension manages, so it was not changed. To install them, run "${row.command} ${row.args.join(" ")}" in that folder`,
+      `its folder in the marketplace "${marketplace}" is outside the folders this extension manages, so it was not changed. To install them, run "${row.command} ${row.args.join(" ")}" in that folder`,
     ),
   };
 }
 
-async function detectInstall(
-  pluginRoot: string,
-  locations: ScopedLocations,
-  force: boolean,
-): Promise<Detection> {
+async function detectInstall(target: PackageStepTarget): Promise<Detection> {
+  const { pluginRoot, locations } = target;
   const entries = await readEntryNames(pluginRoot);
   if (!entries?.has("package.json")) {
     return SKIP;
   }
 
   const hasNodeModules = entries.has("node_modules");
-  if (hasNodeModules && !force) {
+  if (hasNodeModules && !target.force) {
     return SKIP;
   }
 
@@ -302,7 +316,7 @@ async function detectInstall(
   }
 
   if (!(await isInsideExtensionRoot(locations.extensionRoot, pluginRoot))) {
-    return outsideRootDetection(pluginRoot, row, hasNodeModules);
+    return outsideRootDetection(target.marketplace, row, hasNodeModules);
   }
 
   const lockfile = await readBoundedFile(pluginRoot, row.lockfile);
@@ -423,14 +437,12 @@ async function runInstallStage(
 }
 
 async function installPluginPackages(
-  pluginRoot: string,
-  locations: ScopedLocations,
+  target: PackageStepTarget,
   ops: PackageInstallOps,
-  force: boolean,
 ): Promise<PackageStepOutcome> {
   let detection: Detection;
   try {
-    detection = await detectInstall(pluginRoot, locations, force);
+    detection = await detectInstall(target);
   } catch (error: unknown) {
     return { note: skippedNote(errorMessage(error)), createdNodeModules: false };
   }
@@ -441,7 +453,7 @@ async function installPluginPackages(
 
   return detection.kind === "note"
     ? { note: detection.note, createdNodeModules: false }
-    : runInstallStage(detection.inputs, locations, ops);
+    : runInstallStage(detection.inputs, target.locations, ops);
 }
 
 /**
@@ -455,7 +467,15 @@ export function createPackagesPhase(ops: PackageInstallOps): Phase<PackagesPhase
   return {
     name: "packages",
     do: async (c) => {
-      const outcome = await installPluginPackages(c.resolved.pluginRoot, c.locations, ops, false);
+      const outcome = await installPluginPackages(
+        {
+          locations: c.locations,
+          marketplace: c.marketplace,
+          pluginRoot: c.resolved.pluginRoot,
+          force: false,
+        },
+        ops,
+      );
       createdNodeModules = outcome.createdNodeModules;
       if (outcome.note !== undefined) {
         c.discoveryWarnings.push(outcome.note);
@@ -472,18 +492,6 @@ export function createPackagesPhase(ops: PackageInstallOps): Phase<PackagesPhase
   };
 }
 
-/** What the update hook needs to run the package step for an updated plugin. */
-export interface UpdatedPackagesTarget {
-  readonly locations: ScopedLocations;
-  readonly pluginRoot: string;
-  /**
-   * D-PL9-06: `true` when the swap moved to another revision, which may carry
-   * another lockfile, so the step replaces an existing node_modules. A swap
-   * that re-materialized the recorded revision keeps it and stays offline.
-   */
-  readonly force: boolean;
-}
-
 /**
  * D-PL9-07: an update's new version gets the package install, and a failure
  * is a note on the `updated` outcome that never turns it into a failure
@@ -492,17 +500,12 @@ export interface UpdatedPackagesTarget {
 export async function installUpdatedPackages(
   ops: PackageInstallOps,
   outcome: UpdateRunOutcome,
-  target: UpdatedPackagesTarget,
+  target: PackageStepTarget,
 ): Promise<UpdateRunOutcome> {
   if (outcome.partition !== "updated") {
     return outcome;
   }
 
-  const { note } = await installPluginPackages(
-    target.pluginRoot,
-    target.locations,
-    ops,
-    target.force,
-  );
+  const { note } = await installPluginPackages(target, ops);
   return note === undefined ? outcome : { ...outcome, notes: [...(outcome.notes ?? []), note] };
 }
