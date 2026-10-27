@@ -8,6 +8,7 @@ import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/sou
 import {
   buildScopeDeclarationDetail,
   buildScopeDeclarationIndex,
+  readInstalledRecordDeclarations,
   readRecordDeclarations,
   withoutDisabledHolders,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/dependency-index.ts";
@@ -41,6 +42,7 @@ interface RecordSeed {
   readonly provenance?: PluginRecord["provenance"];
   readonly dependencyDisabled?: true;
   readonly resolvedSource?: string;
+  readonly resolvedSha?: string;
 }
 
 function pluginRecord(seed: RecordSeed = {}): PluginRecord {
@@ -52,6 +54,7 @@ function pluginRecord(seed: RecordSeed = {}): PluginRecord {
     enabled: seed.enabled ?? true,
     provenance: seed.provenance ?? "explicit",
     ...(seed.dependencyDisabled !== undefined && { dependencyDisabled: seed.dependencyDisabled }),
+    ...(seed.resolvedSha !== undefined && { resolvedSha: seed.resolvedSha }),
     installedAt: "2026-01-01T00:00:00.000Z",
     updatedAt: "2026-01-01T00:00:00.000Z",
   };
@@ -914,4 +917,220 @@ test("DLS-01 / NFR-10: a delisted git-source record reads its copy under the sco
     declared: [{ name: "lib", version: "^2.0.0", marketplace: "mp" }],
     delisted: true,
   });
+});
+
+/** The per-commit clone of `app` that a record pinned to a commit installed. */
+const APP_CLONE = path.join(LOCATIONS.pluginClonesDir, "acme-app", "0123456");
+const APP_SHA = "0123456789abcdef0123456789abcdef01234567";
+
+/** The manifest of `APP_CLONE`. */
+const APP_CLONE_MANIFEST = path.join(APP_CLONE, ".claude-plugin", "plugin.json");
+
+/** `mp` recording `app` at `APP_CLONE` and `lib`, the catalog listing `app` as `entries` says. */
+function pinnedAppScope(entries: Readonly<Record<string, EntrySeed>>): {
+  readonly mp: MarketplaceRecord;
+  readonly loadManifest: (manifestPath: string) => Promise<MarketplaceManifest>;
+} {
+  const mp = marketplaceRecord("mp", {
+    app: { resolvedSource: APP_CLONE, resolvedSha: APP_SHA },
+    lib: {},
+  });
+  return { mp, loadManifest: manifestLoader({ [mp.manifestPath]: manifestOf("mp", entries) }) };
+}
+
+test("D-PL2-06: a record pinned to a commit answers what its installed copy declares, not its catalog entry", async () => {
+  // arrange
+  const { mp, loadManifest } = pinnedAppScope({ app: {}, lib: {} });
+  const reader = ownManifests({
+    [APP_CLONE_MANIFEST]: JSON.stringify({ dependencies: ["lib@^2.0.0"] }),
+  });
+
+  // act
+  const read = await readInstalledRecordDeclarations(
+    { state: stateOf(mp), locations: LOCATIONS, reader, loadManifest },
+    mp,
+    "app",
+  );
+
+  // assert
+  assert.deepStrictEqual(read, {
+    ok: true,
+    declared: [{ name: "lib", version: "^2.0.0", marketplace: "mp" }],
+  });
+});
+
+test("D-PL2-06 / D-05-07: an installed copy whose manifest is present but unusable fails closed", async () => {
+  // arrange
+  const { mp, loadManifest } = pinnedAppScope({ app: { dependencies: ["lib"] }, lib: {} });
+  const reader = ownManifests({ [APP_CLONE_MANIFEST]: "{ truncated" });
+
+  // act
+  const read = await readInstalledRecordDeclarations(
+    { state: stateOf(mp), locations: LOCATIONS, reader, loadManifest },
+    mp,
+    "app",
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    read.ok
+      ? undefined
+      : { declarer: read.declarer, reason: read.reason, message: read.cause.message },
+    {
+      declarer: "app@mp",
+      reason: "unreadable manifest",
+      message:
+        "cannot read the dependencies of app@mp: its own manifest is present but cannot be read",
+    },
+  );
+});
+
+test("D-PL2-06: an installed copy that holds no manifest falls back to the catalog read", async () => {
+  // arrange
+  const { mp, loadManifest } = pinnedAppScope({ app: { dependencies: ["lib"] }, lib: {} });
+
+  // act
+  const read = await readInstalledRecordDeclarations(
+    { state: stateOf(mp), locations: LOCATIONS, reader: ownManifests(), loadManifest },
+    mp,
+    "app",
+  );
+
+  // assert
+  assert.deepStrictEqual(read, { ok: true, declared: [{ name: "lib", marketplace: "mp" }] });
+});
+
+test("D-PL2-06: an installed copy that is gone falls back to the catalog read on real disk", async (t) => {
+  // arrange
+  const root = await mkdtemp(path.join(tmpdir(), "dependency-index-gone-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const locations = locationsFor("project", root);
+  const marketplaceRoot = path.join(root, "mp");
+  const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(
+    manifestPath,
+    JSON.stringify({
+      name: "mp",
+      plugins: [{ name: "app", source: "./plugins/app", dependencies: ["lib"] }],
+    }),
+  );
+  const mp: MarketplaceRecord = {
+    ...marketplaceRecord("mp", {}),
+    manifestPath,
+    marketplaceRoot,
+    plugins: {
+      app: {
+        ...pluginRecord({ resolvedSource: path.join(locations.pluginClonesDir, "acme-app", "0") }),
+        resolvedSha: APP_SHA,
+      },
+    },
+  };
+
+  // act
+  const read = await readInstalledRecordDeclarations({ state: stateOf(mp), locations }, mp, "app");
+
+  // assert
+  assert.deepStrictEqual(read, { ok: true, declared: [{ name: "lib", marketplace: "mp" }] });
+});
+
+test("D-PL2-07: a record with no recorded commit answers exactly what the catalog read answers", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", { app: { resolvedSource: APP_CLONE }, lib: {} });
+  const options = {
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests({
+      [APP_CLONE_MANIFEST]: JSON.stringify({ dependencies: ["lib@^2.0.0"] }),
+    }),
+    loadManifest: manifestLoader({
+      [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["lib"] }, lib: {} }),
+    }),
+  };
+
+  // act
+  const installed = await readInstalledRecordDeclarations(options, mp, "app");
+  const catalog = await readRecordDeclarations(options, mp, "app");
+
+  // assert
+  assert.deepStrictEqual(installed, catalog);
+  assert.deepStrictEqual(installed, { ok: true, declared: [{ name: "lib", marketplace: "mp" }] });
+});
+
+test("D-PL2-06 / DLS-01: a delisted record pinned to a commit answers its readable copy as delisted", async () => {
+  // arrange
+  const { mp, loadManifest } = pinnedAppScope({ lib: {} });
+  const reader = ownManifests({
+    [APP_CLONE_MANIFEST]: JSON.stringify({ dependencies: ["lib"] }),
+  });
+
+  // act
+  const read = await readInstalledRecordDeclarations(
+    { state: stateOf(mp), locations: LOCATIONS, reader, loadManifest },
+    mp,
+    "app",
+  );
+
+  // assert
+  assert.deepStrictEqual(read, {
+    ok: true,
+    declared: [{ name: "lib", marketplace: "mp" }],
+    delisted: true,
+  });
+});
+
+test("D-PL2-06 / D-05-07: a marketplace manifest that fails to load fails closed as the catalog read does", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", {
+    app: { resolvedSource: APP_CLONE, resolvedSha: APP_SHA },
+  });
+  const options = {
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests({
+      [APP_CLONE_MANIFEST]: JSON.stringify({ dependencies: ["lib"] }),
+    }),
+    loadManifest: manifestLoader({ [mp.manifestPath]: errno("EACCES") }),
+  };
+
+  // act
+  const installed = await readInstalledRecordDeclarations(options, mp, "app");
+  const catalog = await readRecordDeclarations(options, mp, "app");
+
+  // assert
+  assert.deepStrictEqual(
+    [installed, catalog].map((read) =>
+      read.ok ? undefined : { reason: read.reason, message: read.cause.message },
+    ),
+    [
+      {
+        reason: "permission denied",
+        message: "cannot read the dependencies of app@mp: its marketplace manifest cannot be read",
+      },
+      {
+        reason: "permission denied",
+        message: "cannot read the dependencies of app@mp: its marketplace manifest cannot be read",
+      },
+    ],
+  );
+});
+
+test("RCN-05: reading one record's installed declarations twice gives the same answer", async () => {
+  // arrange
+  const { mp, loadManifest } = pinnedAppScope({ app: {}, lib: {} });
+  const options = {
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests({
+      [APP_CLONE_MANIFEST]: JSON.stringify({ dependencies: ["lib@^2.0.0"] }),
+    }),
+    loadManifest,
+  };
+
+  // act
+  const first = await readInstalledRecordDeclarations(options, mp, "app");
+  const second = await readInstalledRecordDeclarations(options, mp, "app");
+
+  // assert
+  assert.deepStrictEqual(second, first);
 });

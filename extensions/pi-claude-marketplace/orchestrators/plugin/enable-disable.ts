@@ -79,7 +79,7 @@ import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
 import { foldUnstageNotices, mcpConfigNoticesMember } from "../marketplace/shared.ts";
 
-import { buildScopeDeclarationIndex, readRecordDeclarations } from "./dependency-index.ts";
+import { buildScopeDeclarationIndex, readInstalledRecordDeclarations } from "./dependency-index.ts";
 import {
   composeDisableRefusalCause,
   composeEnableCascadeRows,
@@ -642,7 +642,12 @@ function enableCascadeLookup(
       return { kind: "found", dependencies: [] };
     }
 
-    const read = await readRecordDeclarations({ state, locations }, marketplace, subject.name);
+    // D-PL2-06: the closure follows what each installed copy declares.
+    const read = await readInstalledRecordDeclarations(
+      { state, locations },
+      marketplace,
+      subject.name,
+    );
     if (subject.key === rootKey && isDelistedRead(read)) {
       return { kind: "found", dependencies: [] };
     }
@@ -763,9 +768,9 @@ function classifyEnableCascadeMember(
  * WR-03: reads lazily, one record at a time, as the walk visits it
  * (`enableCascadeLookup`) -- rather than the whole scope upfront -- so an
  * unreadable record OUTSIDE the closure never blocks an unrelated enable.
- * `readRecordDeclarations` is the same offline, fail-closed (D-05-07) read
- * `buildScopeDeclarationDetail` composed from, and is already covered by the
- * network-free gate.
+ * `readInstalledRecordDeclarations` is the same offline, fail-closed
+ * (D-05-07) read `buildInstalledScopeDeclarationDetail` composes from, and is
+ * already covered by the network-free gate.
  *
  * Throws `EnableRefusedError` when the closure cannot be resolved -- an
  * unreadable declarer reached by the walk, or a cycle -- and, when

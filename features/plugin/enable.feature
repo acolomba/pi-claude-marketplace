@@ -199,6 +199,42 @@ Feature: Plugin enable
       | /skill:app-skill | A skill of app 1.0.0. |
       | /skill:lib-skill | A skill of lib 1.2.0. |
 
+  Scenario: Enabling a git-source plugin enables the dependency its installed copy declares, not the one its marketplace now lists
+    Given the git repository "app" holds these plugins:
+      | name | version | path | dependencies |
+      | app  | 1.0.0   |      | lib          |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 1.2.0   |              |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | app  | url         | app        | true   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install lib@tools --scope project"
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the git repository "app" holds these plugins:
+      | name | version | path |
+      | app  | 1.0.0   |      |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | app  | url         | app        | true   |
+    Given the user has run "/claude:plugin disable app@tools --scope project"
+    Given the user has run "/claude:plugin disable lib@tools --scope project"
+    When the user runs "/claude:plugin enable app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status    | reasons            | scope   | version |
+      | tools            | project           | app@tools | app       | installed |                    | project | 1.0.0   |
+      | tools            | project           | lib@tools | lib@tools | installed | dependency enabled | project | 1.2.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | app@tools | 1.0.0   | true    |
+      | lib@tools | 1.2.0   | true    |
+
   Scenario: Enabling a plugin whose dependency is not installed fails as dependency unsatisfied
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
