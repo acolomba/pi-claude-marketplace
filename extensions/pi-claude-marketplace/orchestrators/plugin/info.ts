@@ -47,6 +47,10 @@ import {
   parseDeclaredDependencies,
   type DeclaredDependency,
 } from "../../domain/dependencies.ts";
+import {
+  copyManifestBoundary,
+  inPlaceManifestBoundary,
+} from "../../domain/manifest-containment.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
 import { loadMarketplaceManifest, type MarketplaceManifest } from "../../domain/manifest.ts";
@@ -2575,8 +2579,9 @@ async function buildGitNotInstalledRow(opts: {
 
       const pluginRoot = presence.pluginRoot;
       // VER-01: the warm tree's version by the rule an install of it records --
-      // the declared version (plugin.json, then the entry), else its commit.
-      const declared = await resolveDeclaredPluginVersion(entry, pluginRoot);
+      // the declared version (plugin.json, then the entry), else its commit. The
+      // warm tree is a copy, bounded by its plugin directory (D-PL2-17).
+      const declared = await resolveDeclaredPluginVersion(entry, copyManifestBoundary(pluginRoot));
       const warmVersion =
         declared === undefined
           ? shaVersion(presence.resolvedSha, gitSource)
@@ -2796,10 +2801,14 @@ async function buildNotInstalledRow(opts: {
 
   // VER-02: a resolved path tree shows its declared version (plugin.json, then
   // the entry), the version an install of it records. `unavailable` has no root.
+  // The path tree is read in place (D-PL2-17).
   const treeVersion =
     resolved.state === "unavailable"
       ? version
-      : await resolveDeclaredPluginVersion(entry, resolved.pluginRoot);
+      : await resolveDeclaredPluginVersion(
+          entry,
+          inPlaceManifestBoundary(resolved.pluginRoot, mpRecord.marketplaceRoot),
+        );
 
   if (resolved.state !== "installable") {
     return buildNotInstalledNonInstallableRow(resolved, {

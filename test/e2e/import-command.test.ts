@@ -10,6 +10,7 @@ import {
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { registerClaudePluginCommand } from "../../extensions/pi-claude-marketplace/edge/register.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
+import { createScopeDependencyInstall } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -134,6 +135,10 @@ function registerImportCommand(cwd: string, gitOps: GitOps) {
       applyReconcile: (): Promise<void> => {
         throw new Error("import must not run a reconcile apply");
       },
+      installMissingDependencies: createScopeDependencyInstall(
+        { loadState },
+        { hooksRouting, completionCache },
+      ),
     },
     hooksRouting,
     createPluginUpdateOperations(hooksRouting, completionCache).updatePlugins,

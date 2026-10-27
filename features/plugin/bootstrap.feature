@@ -41,6 +41,35 @@ Feature: Plugin bootstrap
       | name                    | source                             |
       | claude-plugins-official | anthropics/claude-plugins-official |
 
+  Scenario: Bootstrapping installs the missing dependency of an installed plugin that the official marketplace offers
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | app  | 1.0.0   |
+    Given the marketplace "tools" is added to the user scope
+    Given the user has run "/claude:plugin install app@tools --scope user"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies                |
+      | app  | 1.0.0   | lib@claude-plugins-official |
+    Given the marketplace "tools" allows dependencies on the marketplace "claude-plugins-official"
+    Given the marketplace "claude-plugins-official" is published as the official marketplace
+    Given the marketplace "claude-plugins-official" offers these plugins:
+      | name | version |
+      | lib  | 1.0.0   |
+    When the user runs "/claude:plugin bootstrap"
+    Then the command reports these results:
+      | kind    | severity | needs reload |
+      | cascade | info     | true         |
+      | cascade | info     | false        |
+    Then the results list these marketplaces and plugins:
+      | marketplace name        | marketplace scope | marketplace status | marketplace reasons | id                          | name                        | status    | reasons              | scope | version |
+      | claude-plugins-official | user              | added              |                     | lib@claude-plugins-official | lib@claude-plugins-official | installed | dependency installed | user  | 1.0.0   |
+      | claude-plugins-official | user              | skipped            | already autoupdate  |                             |                             |           |                      |       |         |
+    Then the installation record of the user scope holds these plugins:
+      | id                          | version | enabled |
+      | app@tools                   | 1.0.0   | true    |
+      | lib@claude-plugins-official | 1.0.0   | true    |
+
   Scenario: A bootstrap whose official marketplace is missing reports why and records nothing
     Given the marketplace "claude-plugins-official" is published as the official marketplace
     Given the git host answers 404 for the marketplace "claude-plugins-official"

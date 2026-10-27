@@ -12,6 +12,7 @@ import {
   emptyReconcilePlan,
   plannedSourceMismatchSubject,
   type ApplyReconcileOptions,
+  type DeferredPinRestore,
   type DependencyDisableStamp,
   type McpMigrationInput,
   type McpMigrationStep,
@@ -51,6 +52,7 @@ const uninstallPlugin = mock<UninstallPluginOperation>({
   name: "uninstall operation type evidence",
 });
 const dependencyDisableStamp: DependencyDisableStamp = () => Promise.resolve();
+const deferredPinRestore: DeferredPinRestore = () => Promise.resolve();
 const migrateMcpEntries: McpMigrationStep = () => Promise.resolve();
 
 const plannedMarketplaceAdd = {
@@ -182,6 +184,14 @@ void ({
   cwd: "/work/project",
   completionCache,
   hooksRouting,
+  restoreDeferredPin: deferredPinRestore,
+} satisfies ApplyReconcileOptions);
+void ({
+  ctx: extensionContext,
+  run: runWithNothingLoaded(),
+  cwd: "/work/project",
+  completionCache,
+  hooksRouting,
   migrateMcpEntries,
 } satisfies ApplyReconcileOptions);
 void ({
@@ -212,6 +222,7 @@ void ({
     },
   ],
   state: extensionState,
+  enablesAfterInstalls: [plannedPluginEnable],
 } satisfies ScopeReadResult);
 
 void ({
@@ -430,6 +441,12 @@ void ({
   invalidOutcomes: [],
   state: undefined,
   // @ts-expect-error exact optional properties reject an explicitly undefined state
+} satisfies ScopeReadResult);
+void ({
+  plan: undefined,
+  invalidOutcomes: [],
+  enablesAfterInstalls: undefined,
+  // @ts-expect-error exact optional properties reject explicitly undefined after-install enables
 } satisfies ScopeReadResult);
 
 type IsMutableArray<T extends readonly unknown[]> = T extends unknown[] ? true : false;

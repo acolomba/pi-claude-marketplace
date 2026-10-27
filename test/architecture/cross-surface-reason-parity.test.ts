@@ -80,6 +80,7 @@ for (const { note, reason } of [
     note: "source dir does not exist: /home/u/lspServers-kit/plugins/ghost",
     reason: "source missing",
   },
+  { note: "plugin manifest resolves outside the plugin directory", reason: "unreadable manifest" },
   { note: "some other unsupported source detail", reason: "unsupported source" },
   {
     note: "its marketplace entry path does not stay inside the marketplace directory (an absolute, climbing, network-shaped, backslash-containing or link-traversing entry, an entry of a fetched marketplace that resolves or opens outside its tree \u2014 or a relative entry in a url-catalog marketplace, which has no local directory)",

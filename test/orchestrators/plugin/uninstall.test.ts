@@ -5800,6 +5800,9 @@ async function seedDeclaringScope(
       await mkdir(skillDir, { recursive: true });
       await writeFile(path.join(skillDir, "SKILL.md"), `---\nname: ${skillName}\n---\nbody\n`);
       const record = makePluginRecord({ skills: [skillName] }, seed.provenance ?? "explicit");
+      // D-PL2-12: a path record's installed copy sits in its marketplace tree;
+      // this one is gone, so a delisted record's copy reads as absent.
+      record.resolvedSource = path.join(marketplaceRoot, "installed", plugin);
       record.enabled = seed.enabled ?? true;
       if (seed.dependencyDisabled !== undefined) {
         record.dependencyDisabled = seed.dependencyDisabled;

@@ -16,6 +16,11 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 
+import {
+  copyManifestBoundary,
+  locateManifestCandidate,
+  sourceManifestBoundary,
+} from "../../domain/manifest-containment.ts";
 import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import {
@@ -62,7 +67,8 @@ import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
 
 import type { MarketplaceStateRecord } from "./dependency-index.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
-import type { MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type { ManifestBoundary } from "../../domain/manifest-containment.ts";
+import type { MaterializablePlugin, ResolveContext } from "../../domain/resolver-types.ts";
 import type {
   ConfigLoadResult,
   PluginConfigEntry,
@@ -1216,30 +1222,64 @@ async function manifestCandidateExists(manifestPath: string): Promise<boolean> {
  * EXISTS ends the walk -- if it cannot be read, cannot be parsed, or carries
  * no usable `version`, the answer falls to the marketplace entry, never to a sibling
  * candidate. Never throws (D-23-02 / D-23-03).
+ *
+ * D-PL2-24 / D-PL2-17: each candidate is located inside `boundary`. A link
+ * whose target leaves it, or that cannot be resolved, is a present but
+ * unusable manifest and answers `undefined`; a dangling link is no manifest.
+ * On the install, update and reinstall paths the resolver has refused such a
+ * plugin before this read.
  */
-export async function readDeclaredPluginVersion(pluginRoot: string): Promise<string | undefined> {
+export async function readDeclaredPluginVersion(
+  boundary: ManifestBoundary,
+): Promise<string | undefined> {
   for (const candidate of MANIFEST_CANDIDATES) {
-    const manifestPath = path.join(pluginRoot, candidate);
-
     // eslint-disable-next-line no-await-in-loop -- D-01-07: the first existing manifest candidate wins
-    if (!(await manifestCandidateExists(manifestPath))) {
-      continue;
+    const read = await readVersionCandidate(boundary, path.join(boundary.pluginRoot, candidate));
+    if (read !== undefined) {
+      return read.version;
     }
-
-    let parsed: unknown;
-    try {
-      // eslint-disable-next-line no-await-in-loop -- D-01-07: only the first existing candidate is read
-      parsed = JSON.parse(await readFile(manifestPath, "utf8"));
-    } catch (err) {
-      // Present and unusable: the entry, the commit, or the hash covers it.
-      hookDebugLog(`resolvePluginVersion: plugin.json read/parse failed: ${errorMessage(err)}`);
-      return undefined;
-    }
-
-    return usableDeclaredVersion(parsed);
   }
 
   return undefined;
+}
+
+/** One candidate's declared version, or `undefined` when the candidate is absent. */
+async function readVersionCandidate(
+  boundary: ManifestBoundary,
+  candidatePath: string,
+): Promise<{ readonly version: string | undefined } | undefined> {
+  const location = await locateManifestCandidate(boundary, candidatePath);
+  switch (location.kind) {
+    case "absent":
+      return undefined;
+    case "escapes":
+    case "unresolvable":
+      hookDebugLog(
+        `resolvePluginVersion: plugin manifest not confirmed inside the ${boundary.label}`,
+      );
+      return { version: undefined };
+    case "open":
+      return readVersionAt(location.path);
+  }
+}
+
+async function readVersionAt(
+  manifestPath: string,
+): Promise<{ readonly version: string | undefined } | undefined> {
+  if (!(await manifestCandidateExists(manifestPath))) {
+    return undefined;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(manifestPath, "utf8"));
+  } catch (err) {
+    // Present and unusable: the entry, the commit, or the hash covers it.
+    hookDebugLog(`resolvePluginVersion: plugin.json read/parse failed: ${errorMessage(err)}`);
+    return { version: undefined };
+  }
+
+  return { version: usableDeclaredVersion(parsed) };
 }
 
 /** The `version` a parsed manifest declares when it is a non-empty string. */
@@ -1260,13 +1300,13 @@ function usableDeclaredVersion(parsed: unknown): string | undefined {
  * "If also set in the marketplace entry, `plugin.json` wins."), then the
  * marketplace `entry.version`. Each is accepted iff it is a non-empty string
  * (D-23-03 -- no SemVer enforcement). A read or parse failure falls through to
- * the entry and never throws.
+ * the entry and never throws. `boundary` bounds the manifest read (D-PL2-24).
  */
 export async function resolveDeclaredPluginVersion(
   entry: PluginEntry,
-  pluginRoot: string,
+  boundary: ManifestBoundary,
 ): Promise<string | undefined> {
-  const declaredVersion = await readDeclaredPluginVersion(pluginRoot);
+  const declaredVersion = await readDeclaredPluginVersion(boundary);
   if (declaredVersion !== undefined) {
     return declaredVersion;
   }
@@ -1287,18 +1327,27 @@ export async function resolveDeclaredPluginVersion(
  *
  * The plugin.json read is re-done here independently (D-23-02): the NFR-7
  * discriminated `ResolvedPluginInstallable` union is NOT widened with a
- * `manifest` field.
+ * `manifest` field. D-PL2-17: it is bounded as the resolver bounded it, by
+ * `sourceManifestBoundary` with no pin.
  */
 export async function resolvePluginVersion(
   entry: PluginEntry,
   installable: MaterializablePlugin,
-  marketplaceName: string,
+  marketplace: Pick<ResolveContext, "marketplaceName" | "marketplaceRoot">,
   resolvedSha?: string,
 ): Promise<string> {
   const source = parsePluginSource(entry.source);
-  const declared = await resolveDeclaredPluginVersion(entry, installable.pluginRoot);
+  const declared = await resolveDeclaredPluginVersion(
+    entry,
+    sourceManifestBoundary(
+      entry.source,
+      installable.pluginRoot,
+      marketplace.marketplaceRoot,
+      undefined,
+    ),
+  );
   if (declared !== undefined) {
-    return declaredVersionWithPin(declared, source, marketplaceName);
+    return declaredVersionWithPin(declared, source, marketplace.marketplaceName);
   }
 
   if (resolvedSha !== undefined) {
@@ -1313,6 +1362,7 @@ export async function resolvePluginVersion(
  * tag a dependency's version range selected. A declared version (with GV-01's
  * directory pin) gets the tag commit's first 12 characters appended; with none
  * declared, the version is the tag commit's, as `tagShaVersion` spells it.
+ * A tag's tree is a copy, bounded by its plugin directory (D-PL2-17).
  */
 export async function resolveTagPinnedPluginVersion(
   entry: PluginEntry,
@@ -1321,7 +1371,10 @@ export async function resolveTagPinnedPluginVersion(
   tagCommit: string,
 ): Promise<string> {
   const source = parsePluginSource(entry.source);
-  const declared = await resolveDeclaredPluginVersion(entry, installable.pluginRoot);
+  const declared = await resolveDeclaredPluginVersion(
+    entry,
+    copyManifestBoundary(installable.pluginRoot),
+  );
   return declared === undefined
     ? tagShaVersion(tagCommit, source)
     : withTagCommit(declaredVersionWithPin(declared, source, marketplaceName), tagCommit);

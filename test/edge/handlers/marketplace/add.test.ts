@@ -89,6 +89,10 @@ import {
 } from "../../notification-boundary.ts";
 
 import type { GitOps } from "../../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type {
+  ScopeDependencyInstallFn,
+  ScopeDependencyInstallRequest,
+} from "../../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { Scope } from "../../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 // The Git call shape is derived from the injected fake so a seam change is a
@@ -276,11 +280,12 @@ function createGitPort(sourceTree: string): ReturnType<typeof createGitOpsFake> 
   });
 }
 
-function createAddDeps(gitOps: GitOps): {
-  completionCache: ReturnType<typeof createCompletionCache>;
-  gitOps: GitOps;
-} {
-  return { completionCache: createCompletionCache(), gitOps };
+function createAddDeps(
+  gitOps: GitOps,
+  installMissingDependencies: ScopeDependencyInstallFn = () =>
+    Promise.resolve({ rows: [], mcpConfigNotices: [] }),
+): Parameters<typeof makeAddHandler>[0] {
+  return { completionCache: createCompletionCache(), gitOps, installMissingDependencies };
 }
 
 test("clones through the injected port into the user scope when no scope flag narrows the command", async (t) => {
@@ -303,6 +308,53 @@ test("clones through the injected port into the user scope when no scope flag na
     git.state.calls.clone.map((call) => describeClone(call, stagingRootFor("user", cwd))),
     [ALPHA_CLONE],
   );
+  assert.strictEqual(networkCallCount(), 0);
+  verifyBoundary();
+});
+
+test("forwards the missing-dependency step and renders its rows under the added marketplace (D-PL2-09)", async (t) => {
+  // arrange
+  const { cwd, sourceTree, networkCallCount } = await createHermeticScope(t, "dependencies");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1, {
+    value: cwd,
+    reads: 1,
+  });
+  const git = createGitPort(sourceTree);
+  const requests: Omit<ScopeDependencyInstallRequest, "ctx" | "run" | "select">[] = [];
+  const addHandler = makeAddHandler(
+    createAddDeps(git.gitOps, ({ scope, cwd: requestCwd }) => {
+      requests.push({ scope, cwd: requestCwd });
+      return Promise.resolve({
+        rows: [
+          {
+            status: "installed",
+            name: "lib@seeded",
+            version: "1.0.0",
+            dependencies: [],
+            reasons: ["dependency installed"],
+            severity: "info",
+            needsReload: true,
+          },
+        ],
+        mcpConfigNotices: [],
+      });
+    }),
+  );
+
+  // act
+  await addHandler(`${URL_SOURCE} --scope project`, ctx, runWithNothingLoaded());
+
+  // assert
+  assert.deepStrictEqual(requests, [{ scope: "project", cwd }]);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● seeded [project] (added)\n" +
+        "  ● lib@seeded v1.0.0 (installed) {dependency installed}\n" +
+        "\n" +
+        "/reload to pick up changes",
+    },
+  ]);
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
 });

@@ -53,7 +53,11 @@ import { evaluateUpdateConstraint } from "./update-constraint-gate.ts";
 
 import type { PluginEntry } from "../../domain/components/plugin.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
-import type { GitPluginRootResult, MaterializablePlugin } from "../../domain/resolver-types.ts";
+import type {
+  GitPluginRootResult,
+  MaterializablePlugin,
+  ResolveContext,
+} from "../../domain/resolver-types.ts";
 import type { GitBackedSource, PathSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -390,18 +394,18 @@ function makeUpdateCloneProbe(
 async function deriveUpdateToVersion(
   entry: PluginEntry,
   installable: MaterializablePlugin,
-  marketplaceName: string,
+  marketplace: Pick<ResolveContext, "marketplaceName" | "marketplaceRoot">,
   resolvedSha: string | undefined,
   pin: UpdateTagPin | undefined,
 ): Promise<string> {
   if (pin !== undefined) {
-    return resolveTagPinnedPluginVersion(entry, installable, marketplaceName, pin.oid);
+    return resolveTagPinnedPluginVersion(entry, installable, marketplace.marketplaceName, pin.oid);
   }
 
   return resolvePluginVersion(
     entry,
     installable,
-    marketplaceName,
+    marketplace,
     isGitSourceEntry(entry) ? resolvedSha : undefined,
   );
 }
@@ -1145,7 +1149,7 @@ export async function preparePluginUpdate(
   const toVersion = await deriveUpdateToVersion(
     triaged.entry,
     candidate,
-    options.marketplace,
+    { marketplaceName: options.marketplace, marketplaceRoot: marketplace.marketplaceRoot },
     resolvedSha,
     pin,
   );

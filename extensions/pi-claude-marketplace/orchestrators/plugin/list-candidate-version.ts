@@ -4,6 +4,10 @@
 // offline (NFR-5) through the fs-only presence probe, and shared by the
 // not-installed and the installed list rows so both read one derivation.
 
+import {
+  copyManifestBoundary,
+  inPlaceManifestBoundary,
+} from "../../domain/manifest-containment.ts";
 import { resolveStrict } from "../../domain/plugin-resolver.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { declaredVersionWithPin, shaVersion } from "../../domain/version.ts";
@@ -59,8 +63,12 @@ export async function resolveListCandidate(
       return { kind: "resolved", resolved };
     }
 
-    // VER-02: a path source takes the declared version the same way.
-    const version = await resolveDeclaredPluginVersion(manifestEntry, resolved.pluginRoot);
+    // VER-02: a path source takes the declared version the same way, read in
+    // place within its plugin and marketplace directories (D-PL2-17).
+    const version = await resolveDeclaredPluginVersion(
+      manifestEntry,
+      inPlaceManifestBoundary(resolved.pluginRoot, marketplaceContext.marketplaceRoot),
+    );
     return { kind: "resolved", resolved, ...(version !== undefined && { version }) };
   }
 
@@ -79,8 +87,12 @@ export async function resolveListCandidate(
   }
 
   // VER-01 / GV-01: the version an install of the warm tree records -- the
-  // declared version (plugin.json, then the entry), else its commit.
-  const declared = await resolveDeclaredPluginVersion(manifestEntry, presence.pluginRoot);
+  // declared version (plugin.json, then the entry), else its commit. The warm
+  // tree is a copy, bounded by its plugin directory (D-PL2-17).
+  const declared = await resolveDeclaredPluginVersion(
+    manifestEntry,
+    copyManifestBoundary(presence.pluginRoot),
+  );
   const version =
     declared === undefined
       ? shaVersion(presence.resolvedSha, parsedSource)

@@ -24,7 +24,7 @@ import { parsePluginSource } from "../../domain/source.ts";
 import { isPluginDirectoryMarketplace } from "../../domain/version.ts";
 
 import { admitsRange, evaluateCatalogConstraint, transportHeld } from "./constraint-fold.ts";
-import { buildScopeDeclarationDetail } from "./dependency-index.ts";
+import { buildInstalledScopeDeclarationDetail } from "./dependency-index.ts";
 import { probeDependencyTags } from "./dependency-tag-probe.ts";
 import { probeMarketplaceTags } from "./marketplace-tag-probe.ts";
 
@@ -49,7 +49,7 @@ import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-h
  * injectable for tests.
  */
 export interface UpdateConstraintSeam {
-  readonly buildScopeDeclarationDetail: typeof buildScopeDeclarationDetail;
+  readonly buildScopeDeclarationDetail: typeof buildInstalledScopeDeclarationDetail;
   readonly probeDependencyTags: typeof probeDependencyTags;
   readonly probeMarketplaceTags: typeof probeMarketplaceTags;
 }
@@ -79,8 +79,14 @@ export interface UpdateConstraintOptions {
   };
 }
 
+// D-PL2-06: the holders are read from their installed copies, so an update is
+// held by the range an installed plugin runs with. Only the callers whose
+// policy searches release tags (`update`, autoupdate, reinstall, an install's
+// dependency moves) reach this gate; `apply`'s converge path judges through
+// `evaluateCatalogConstraint` with the catalog-first walk, so the two can judge
+// a holder whose installed copy and catalog disagree differently.
 const REAL_UPDATE_CONSTRAINT_SEAM: UpdateConstraintSeam = Object.freeze({
-  buildScopeDeclarationDetail,
+  buildScopeDeclarationDetail: buildInstalledScopeDeclarationDetail,
   probeDependencyTags,
   probeMarketplaceTags,
 });

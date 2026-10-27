@@ -14,7 +14,17 @@
  */
 
 import assert from "node:assert/strict";
-import { chmod, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 
 import { publishGitRepository, pushGitBranch, pushGitRepository } from "./git-marketplace.ts";
@@ -749,6 +759,31 @@ export async function publishOutputStyle(
       "",
     ].join("\n"),
   );
+}
+
+/**
+ * Moves the manifest of the published plugin `plugin` to the file `target`,
+ * which lies outside the publication, makes its `.claude-plugin/plugin.json`
+ * an absolute link to that file, and returns the path of the link. The
+ * manifest keeps what it declared. A git publication commits and pushes the
+ * link.
+ */
+export async function linkPublishedManifest(
+  published: PublishedMarketplace,
+  plugin: string,
+  target: string,
+): Promise<string> {
+  const manifest = ownedTarget(
+    published,
+    path.join(published.root, "plugins", plugin, ".claude-plugin", "plugin.json"),
+  );
+  await changePublication(published, async () => {
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, await readFile(manifest));
+    await rm(manifest);
+    await symlink(target, manifest);
+  });
+  return manifest;
 }
 
 /**

@@ -37,7 +37,7 @@ import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { classifyReadPassThrow, MigrateConfigSaveError } from "./apply-outcomes.ts";
-import { settleMoveCascade } from "./convergence.ts";
+import { settleMoveCascade, withPlannedInstallsLanded } from "./convergence.ts";
 import {
   reportDelistedPlugins,
   reportRefusedMarketplaces,
@@ -50,11 +50,17 @@ import { planReconcile } from "./plan.ts";
 import { composeLayerMarketplaceCause, RECONCILE_APPLIED_CONTEXT } from "./reconcile.messaging.ts";
 
 import type { PerEntryOutcome } from "./apply-outcomes.ts";
-import type { McpMigrationInput, McpMigrationStep, ScopeReadResult } from "./types.ts";
+import type { ScopeSatisfactionVerdict } from "./dependency-verdict.ts";
+import type {
+  McpMigrationInput,
+  McpMigrationStep,
+  ReconcilePlan,
+  ScopeReadResult,
+} from "./types.ts";
 import type { ConfigLoadResult, ScopeConfig } from "../../persistence/config-io.ts";
-import type { ScopeLoadOutcome } from "../../persistence/config-merge.ts";
+import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
-import type { loadState } from "../../persistence/state-io.ts";
+import type { ExtensionState, loadState } from "../../persistence/state-io.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice, McpMigrationRow } from "../../shared/notification-types.ts";
@@ -120,6 +126,92 @@ export async function readPassForScope(
   reader: ReconcileStateReader,
   scope: Scope,
   cwd: string,
+): Promise<ScopeReadResult> {
+  return readScopeLocked(
+    reader,
+    scope,
+    cwd,
+    async ({ merged, state, locations, verdict, plan }) => {
+      // (6) APPLY1-01: a dependent the catalog moves together with the newer
+      // dependency it needs is not held down; `pending` settles the same way.
+      // The enables that wait on a move run after the convergence, not with
+      // the toggles. D-PL2-02: every plan counts the installs it schedules as
+      // landed, as `pending` plans, because `apply` runs its missing-dependency
+      // install after the moves.
+      const planFrom = (from: ScopeSatisfactionVerdict, planned: ReconcilePlan): ReconcilePlan =>
+        withPlannedInstallsLanded(planned, from, state, (released) =>
+          planReconcile(merged, state, scope, released),
+        );
+      const settled = await settleMoveCascade({
+        scope,
+        state,
+        locations,
+        plan: planFrom(verdict, plan),
+        verdict,
+        replan: (released) => planFrom(released, planReconcile(merged, state, scope, released)),
+      });
+      const deferred = new Set(
+        settled.deferredEnables.map((op) => `${op.plugin}@${op.marketplace}`),
+      );
+      // DLS-01: carry the loaded state snapshot out so the closing step can
+      // report a recorded plugin its marketplace no longer lists. planReconcile
+      // is pure, so the snapshot is the unmutated read-pass state.
+      return {
+        plan: {
+          ...settled.plan,
+          pluginsToEnable: settled.plan.pluginsToEnable.filter(
+            (op) => !deferred.has(`${op.plugin}@${op.marketplace}`),
+          ),
+        },
+        invalidOutcomes: [],
+        state,
+        verdict,
+        ...(settled.deferredEnables.length > 0 && { deferredEnables: settled.deferredEnables }),
+        // D-PL2-16: the enables that wait on a planned install.
+        ...(settled.enablesAfterInstalls.length > 0 && {
+          enablesAfterInstalls: settled.enablesAfterInstalls,
+        }),
+      };
+    },
+  );
+}
+
+/**
+ * D-PL2-01: the read pass without the move settlement, for `apply` once its
+ * catalog moves have run. The scope then records the versions the moves
+ * landed, so the plan's missing-dependency bucket names what a moved version
+ * needs, and after that install the plan's enables are the records it
+ * satisfied. No planned install counts as landed: the state it plans from is
+ * the one `apply` judges.
+ */
+export async function readPlainPlanForScope(
+  reader: ReconcileStateReader,
+  scope: Scope,
+  cwd: string,
+): Promise<ScopeReadResult> {
+  return readScopeLocked(reader, scope, cwd, ({ state, verdict, plan }) =>
+    Promise.resolve({ plan, invalidOutcomes: [], state, verdict }),
+  );
+}
+
+/** One scope as the read pass plans it, before any catalog move is settled. */
+interface ToggledScope {
+  readonly merged: MergedConfig;
+  readonly state: ExtensionState;
+  readonly locations: ScopedLocations;
+  readonly verdict: ScopeSatisfactionVerdict;
+  readonly plan: ReconcilePlan;
+}
+
+/**
+ * The steps `readPassForScope` and `readPlainPlanForScope` share, through the
+ * plan over the toggles. `finish` runs inside the same lock.
+ */
+async function readScopeLocked(
+  reader: ReconcileStateReader,
+  scope: Scope,
+  cwd: string,
+  finish: (toggled: ToggledScope) => Promise<ScopeReadResult>,
 ): Promise<ScopeReadResult> {
   const loc = locationsFor(scope, cwd);
 
@@ -229,37 +321,7 @@ export async function readPassForScope(
       });
       const toggled =
         verdict === firstVerdict ? firstPlan : planReconcile(outcome.merged, state, scope, verdict);
-      // (6) APPLY1-01: a dependent the catalog moves together with the newer
-      // dependency it needs is not held down; `pending` settles the same way.
-      // The enables that wait on a move run after the convergence, not with
-      // the toggles.
-      const settled = await settleMoveCascade({
-        scope,
-        state,
-        locations: loc,
-        plan: toggled,
-        verdict,
-        replan: (released) => planReconcile(outcome.merged, state, scope, released),
-      });
-      const deferred = new Set(
-        settled.deferredEnables.map((op) => `${op.plugin}@${op.marketplace}`),
-      );
-      const plan = {
-        ...settled.plan,
-        pluginsToEnable: settled.plan.pluginsToEnable.filter(
-          (op) => !deferred.has(`${op.plugin}@${op.marketplace}`),
-        ),
-      };
-      // DLS-01: carry the loaded state snapshot out so the closing step can
-      // report a recorded plugin its marketplace no longer lists. planReconcile
-      // is pure, so the snapshot is the unmutated read-pass state.
-      return {
-        plan,
-        invalidOutcomes: [],
-        state,
-        verdict,
-        ...(settled.deferredEnables.length > 0 && { deferredEnables: settled.deferredEnables }),
-      };
+      return finish({ merged: outcome.merged, state, locations: loc, verdict, plan: toggled });
     },
     { loadState: reader.loadState },
   );

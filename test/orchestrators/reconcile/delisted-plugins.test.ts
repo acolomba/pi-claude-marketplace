@@ -6,6 +6,7 @@ import { describe, test } from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
+  reportDeclarerFailure,
   reportDelistedPlugins,
   reportRefusedMarketplaces,
   reportUnreadableDeclarer,
@@ -455,4 +456,62 @@ describe("reportUnreadableDeclarer", () => {
       ]);
     });
   }
+});
+
+/** D-PL2-25: the failure a refused installed copy of `app@tools` ends a walk with. */
+function refusedCopy(): {
+  readonly declarer: string;
+  readonly reason: "unreadable manifest";
+  readonly cause: Error;
+} {
+  return {
+    declarer: "app@tools",
+    reason: "unreadable manifest",
+    cause: new Error(
+      "cannot read the dependencies of app@tools: its own manifest is present but cannot be read",
+    ),
+  };
+}
+
+/** The REC-05 row a refused installed copy of `app@tools` reports. */
+function refusedCopyRow(): PerEntryOutcome {
+  return {
+    kind: "plugin-declarer-unreadable",
+    scope: "project",
+    marketplace: "tools",
+    plugin: "app",
+    reason: "unreadable manifest",
+    cause: new Error(
+      "cannot read the dependencies of app@tools: its own manifest is present but cannot be read",
+    ),
+  };
+}
+
+describe("reportDeclarerFailure", () => {
+  test("D-PL2-25: reports a failure arm as one plugin-declarer-unreadable row", () => {
+    // arrange
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    reportDeclarerFailure("project", refusedCopy(), outcomes);
+
+    // assert
+    assert.deepStrictEqual(outcomes, [refusedCopyRow()]);
+  });
+
+  test("D-PL2-25: a declarer this pass already reported as unreadable gets no second row", () => {
+    // arrange
+    const outcomes: PerEntryOutcome[] = [];
+
+    // act
+    reportDeclarerFailure("project", refusedCopy(), outcomes);
+    reportUnreadableDeclarer(
+      "project",
+      { plan: undefined, invalidOutcomes: [], verdict: { ok: false, ...refusedCopy() } },
+      outcomes,
+    );
+
+    // assert
+    assert.deepStrictEqual(outcomes, [refusedCopyRow()]);
+  });
 });

@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, test } from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -881,5 +884,67 @@ describe("evaluateUpdateConstraint", () => {
     assert.ok(first.kind === "held");
     assert.ok(second.kind === "admits");
     assert.deepStrictEqual(second.pin, { oid: "oid-1.0.0", version: "1.0.0" });
+  });
+
+  test("D-PL2-06: a holder's installed copy constrains the target though its catalog entry declares nothing", async (t) => {
+    // arrange
+    const root = await mkdtemp(path.join(tmpdir(), "update-constraint-gate-"));
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const locations = locationsFor("project", root);
+    const marketplaceRoot = path.join(root, "mp");
+    const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    await writeFile(
+      manifestPath,
+      JSON.stringify({
+        name: "mp",
+        plugins: [
+          { name: "app", source: "./plugins/app" },
+          { name: "kit", source: "./plugins/kit", dependencies: ["target@^2.0.0"] },
+          { name: "target", source: "./plugins/target", version: "2.0.0" },
+        ],
+      }),
+    );
+    const appClone = path.join(locations.pluginClonesDir, "acme-app", "0123456");
+    await mkdir(path.join(appClone, ".claude-plugin"), { recursive: true });
+    await writeFile(
+      path.join(appClone, ".claude-plugin", "plugin.json"),
+      JSON.stringify({ name: "app", dependencies: ["target@^1.0.0"] }),
+    );
+    const state: ExtensionState = {
+      schemaVersion: 2,
+      marketplaces: {
+        mp: {
+          ...stateOf({ mp: {} }).marketplaces.mp!,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            app: pluginRecord({
+              resolvedSource: appClone,
+              resolvedSha: "0123456789abcdef0123456789abcdef01234567",
+            }),
+            kit: pluginRecord(),
+            target: pluginRecord(),
+          },
+        },
+      },
+    };
+
+    // act
+    const verdict = await evaluateUpdateConstraint(
+      options({
+        state,
+        locations,
+        marketplaceRoot,
+        entry: { name: "target", source: pathSource("./plugins/target") },
+      }),
+    );
+
+    // assert
+    assert.deepStrictEqual(verdict, {
+      kind: "held",
+      cause:
+        'the declared ranges admit no version in common (^1.0.0, ^2.0.0) -- required by "app@mp", "kit@mp"',
+    });
   });
 });

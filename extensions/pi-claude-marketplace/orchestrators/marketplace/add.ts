@@ -96,6 +96,7 @@ import {
   hostedFetchFailureReason,
   hostHttpFailureFrame,
 } from "../../shared/git-failure-classifiers.ts";
+import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { composeLeftoverRemovalAdvisories } from "../../shared/notification-summary.ts";
 import {
   type ContentReason,
@@ -152,6 +153,11 @@ import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { Scope } from "../../shared/types.ts";
+import type {
+  ScopeDependencyInstallFn,
+  ScopeDependencyInstallResult,
+  ScopeDependencyInstallRow,
+} from "../types.ts";
 
 /**
  * RECON-03: controls how `addMarketplace` surfaces
@@ -268,6 +274,15 @@ export interface AddMarketplaceOptions {
    * path.
    */
   readonly local?: boolean;
+  /**
+   * D-PL2-09: `apply`'s missing-dependency step over one scope. After a
+   * standalone add that recorded the marketplace, the add's scope installs
+   * the missing dependencies the added marketplace offers, as Claude Code
+   * resolves missing dependencies after a marketplace add. Only the
+   * `marketplace add` command and `bootstrap` pass it; `apply`, `import` and
+   * the install-time add omit it, because they run their own steps.
+   */
+  readonly installMissingDependencies?: ScopeDependencyInstallFn;
   /**
    * D-PL6-19: the recorded marketplace this add replaces in place. The new
    * source is recorded under the same name, the record's plugins are kept, and
@@ -1576,23 +1591,50 @@ async function runAddOutcome<U extends UnchangedAdd>(
   });
 
   if (!orchestrated) {
+    await notifyAdded(opts, recordedName);
+  }
+
+  return { status: "added", name: recordedName };
+}
+
+const NO_DEPENDENCY_INSTALLS: ScopeDependencyInstallResult = { rows: [], mcpConfigNotices: [] };
+
+/**
+ * The standalone `(added)` notification. D-PL2-09: the missing-dependency
+ * step runs first, outside the add's lock (CR-01), in the add's scope and
+ * only for dependencies the added marketplace offers (SC-1, D-29), and its
+ * rows render under the `(added)` header. A step that throws still lets the
+ * committed add report before the throw reaches the caller.
+ */
+async function notifyAdded(opts: AddMarketplaceOptions, recordedName: string): Promise<void> {
+  let installs = NO_DEPENDENCY_INSTALLS;
+  try {
+    installs =
+      (await opts.installMissingDependencies?.({
+        ctx: opts.ctx,
+        run: opts.run,
+        scope: opts.scope,
+        cwd: opts.cwd,
+        select: (install) => install.marketplace === recordedName,
+      })) ?? NO_DEPENDENCY_INSTALLS;
+  } finally {
     // Emit one MarketplaceNotificationMessage per outcome. Severity and
     // reload-hint are computed by the shared seam; callers MUST NOT compose them.
     // Catalog: `path-source` + `github-source` fixtures in catalog-uat.test.ts.
     // OUT-07 / D-12: single-target op -> Single 1-tuple. The `(added)` header
     // renders via the central renderMpHeader seam the spine reuses.
-    const addedRows: Single<MarketplaceRows<never>> = [
+    const addedRows: Single<MarketplaceRows<ScopeDependencyInstallRow>> = [
       {
         name: recordedName,
         scope: opts.scope,
         status: "added",
-        plugins: [],
+        plugins: installs.rows,
       },
     ];
     notifyWithContext(opts.ctx, opts.run, ADD_CONTEXT, addedRows, undefined, "single");
+    // AFILE-04: the notices of the step's installs follow the rows they explain.
+    notifyMcpConfigNotices(opts.ctx, opts.run, installs.mcpConfigNotices);
   }
-
-  return recorded;
 }
 
 /**

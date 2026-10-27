@@ -7,7 +7,10 @@ test("exports the complete marketplace-add command context", () => {
   // arrange
   const expected = {
     Messaging: { label: "Marketplace add" },
-    rowPolicies: { failed: { markers: false, contentReasons: true } },
+    rowPolicies: {
+      failed: { markers: false, contentReasons: true },
+      installed: { markers: true, contentReasons: true },
+    },
   } as const;
 
   // act
@@ -17,7 +20,7 @@ test("exports the complete marketplace-add command context", () => {
   assert.deepStrictEqual(context, expected);
   assert.deepStrictEqual(Object.keys(context), ["Messaging", "rowPolicies"]);
   assert.deepStrictEqual(Object.keys(context.Messaging), ["label"]);
-  assert.deepStrictEqual(Object.keys(context.rowPolicies), ["failed"]);
+  assert.deepStrictEqual(Object.keys(context.rowPolicies), ["failed", "installed"]);
 });
 
 test("ADD_CONTEXT declares complete row policies", () => {
@@ -25,5 +28,9 @@ test("ADD_CONTEXT declares complete row policies", () => {
   const policies = ADD_CONTEXT.rowPolicies;
 
   // assert
-  assert.deepStrictEqual(policies, { failed: { markers: false, contentReasons: true } });
+  // D-PL2-09: the installed rows of the missing-dependency step carry their markers.
+  assert.deepStrictEqual(policies, {
+    failed: { markers: false, contentReasons: true },
+    installed: { markers: true, contentReasons: true },
+  });
 });

@@ -22,6 +22,7 @@ import {
   notifyScopePasses,
   openScopePass,
   readPassForScope,
+  readPlainPlanForScope,
   runScopeIsolated,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/read-pass.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
@@ -142,6 +143,59 @@ function planOf(fields: Partial<Omit<ReconcilePlan, "scope">>): ReconcilePlan {
     sourceMismatches: [],
     ...fields,
   };
+}
+
+/**
+ * D-PL2-16: `app`, held down by an earlier pass, declares `vault`, which `mp`
+ * offers and the scope does not record; the config declares `app`.
+ */
+async function seedWaitingDependent(scope: ProjectScope): Promise<void> {
+  await writeUnder(
+    path.join(scope.marketplaceRoot, ".claude-plugin", "marketplace.json"),
+    JSON.stringify({
+      name: "mp",
+      plugins: [
+        { name: "app", source: "./plugins/app", dependencies: ["vault"] },
+        { name: "vault", source: "./plugins/vault" },
+      ],
+    }),
+  );
+  const seeded = recordedState(scope);
+  const mp = seeded.marketplaces["mp"];
+  assert.ok(mp !== undefined);
+  await mkdir(scope.project.extensionRoot, { recursive: true });
+  await saveState(scope.project.extensionRoot, {
+    ...seeded,
+    marketplaces: {
+      mp: {
+        ...mp,
+        plugins: {
+          app: {
+            version: "1.0.0",
+            resolvedSource: path.join(scope.marketplaceRoot, "plugins", "app"),
+            compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+            resources: {
+              skills: [],
+              prompts: [],
+              agents: [],
+              mcpServers: [],
+              hooks: [],
+              workflows: [],
+            },
+            enabled: false,
+            dependencyDisabled: true,
+            provenance: "explicit",
+            installedAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        },
+      },
+    },
+  });
+  await writeUnder(
+    scope.project.baseConfigJsonPath,
+    declaring({ mp: scope.marketplaceRoot }, { "app@mp": {} }),
+  );
 }
 
 describe("readPassForScope", () => {
@@ -318,6 +372,26 @@ describe("readPassForScope", () => {
     ]);
   });
 
+  test("D-PL2-16: an enable that waits on a planned dependency install is carried apart from the plan", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "waiting-enable");
+    await seedWaitingDependent(scope);
+
+    // act
+    const readResult = await readPassForScope(reader, "project", scope.cwd);
+
+    // assert
+    assert.deepStrictEqual(readResult.plan?.pluginsToEnable, []);
+    assert.deepStrictEqual(readResult.plan.pluginsToDependencyDisable, []);
+    assert.deepStrictEqual(
+      readResult.plan.pluginsToDependencyInstall.map((op) => op.plugin),
+      ["vault"],
+    );
+    assert.deepStrictEqual(readResult.enablesAfterInstalls, [
+      { scope: "project", plugin: "app", marketplace: "mp" },
+    ]);
+  });
+
   test("MIG-01: a recorded scope with no config gains a base config built from its state before it plans", async (t) => {
     // arrange
     const scope = await createProjectScope(t, "first-run");
@@ -427,6 +501,121 @@ describe("readPassForScope", () => {
         },
       ],
     });
+  });
+});
+
+describe("readPlainPlanForScope", () => {
+  test("WR-05: a scope with neither a state file nor a config returns no plan and creates nothing", async (t) => {
+    // arrange
+    const { cwd, project } = await createProjectScope(t, "plain-pristine");
+
+    // act
+    const readResult = await readPlainPlanForScope(reader, "project", cwd);
+
+    // assert
+    assert.deepStrictEqual(readResult, { plan: undefined, invalidOutcomes: [] });
+    assert.deepStrictEqual(await retryTree(project.scopeRoot), []);
+  });
+
+  test("CFG-03: an invalid config reports its row and no plan", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "plain-invalid");
+    await seedRecordedState(scope);
+    await writeUnder(
+      scope.project.baseConfigJsonPath,
+      JSON.stringify({ schemaVersion: 1, plugins: 7 }),
+    );
+
+    // act
+    const readResult = await readPlainPlanForScope(reader, "project", scope.cwd);
+
+    // assert
+    assert.deepStrictEqual(readResult, {
+      plan: undefined,
+      invalidOutcomes: [
+        {
+          kind: "invalid-block",
+          scope: "project",
+          basename: "claude-plugins.json",
+          reason: "invalid manifest",
+          cause: new Error("schema validation failed: /plugins: must be object"),
+        },
+      ],
+    });
+  });
+
+  test("D-PL2-01: a planned dependency install does not count as landed, so the dependent waiting on it is not enabled", async (t) => {
+    // arrange
+    const scope = await createProjectScope(t, "plain-waiting");
+    await seedWaitingDependent(scope);
+
+    // act
+    const readResult = await readPlainPlanForScope(reader, "project", scope.cwd);
+
+    // assert
+    assert.deepStrictEqual(readResult.plan?.pluginsToEnable, []);
+    assert.deepStrictEqual(
+      readResult.plan.pluginsToDependencyInstall.map((op) => op.plugin),
+      ["vault"],
+    );
+    assert.equal(Object.hasOwn(readResult, "enablesAfterInstalls"), false);
+    assert.deepStrictEqual(readResult.verdict, {
+      ok: true,
+      unsatisfied: [{ dependent: "app@mp", dependency: "vault@mp", kind: "missing" }],
+    });
+  });
+
+  test("D-PL2-01: the plan is not settled against the catalog moves, so a dependent held for a version stays down", async (t) => {
+    // arrange -- `app` 1.1.0 needs lib ^2.0.0 and ships with `lib` 2.0.0;
+    // `app` sits disabled by an earlier pass, both at 1.0.0.
+    const scope = await createProjectScope(t, "plain-unsettled");
+    await writeUnder(
+      path.join(scope.marketplaceRoot, ".claude-plugin", "marketplace.json"),
+      JSON.stringify({
+        name: "mp",
+        plugins: [
+          {
+            name: "app",
+            source: "./plugins/app",
+            version: "1.1.0",
+            dependencies: [{ name: "lib", version: "^2.0.0" }],
+          },
+          { name: "lib", source: "./plugins/lib", version: "2.0.0" },
+        ],
+      }),
+    );
+    const record = (plugin: string, enabled: boolean) => ({
+      version: "1.0.0",
+      resolvedSource: path.join(scope.marketplaceRoot, "plugins", plugin),
+      compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+      resources: { skills: [], prompts: [], agents: [], mcpServers: [], hooks: [], workflows: [] },
+      enabled,
+      ...(!enabled && { dependencyDisabled: true }),
+      provenance: "explicit" as const,
+      installedAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    });
+    const seeded = recordedState(scope);
+    const mp = seeded.marketplaces["mp"];
+    assert.ok(mp !== undefined);
+    await mkdir(scope.project.extensionRoot, { recursive: true });
+    await saveState(scope.project.extensionRoot, {
+      ...seeded,
+      marketplaces: {
+        mp: { ...mp, plugins: { app: record("app", false), lib: record("lib", true) } },
+      },
+    });
+    await writeUnder(
+      scope.project.baseConfigJsonPath,
+      declaring({ mp: scope.marketplaceRoot }, { "app@mp": {}, "lib@mp": {} }),
+    );
+
+    // act
+    const readResult = await readPlainPlanForScope(reader, "project", scope.cwd);
+
+    // assert
+    assert.deepStrictEqual(readResult.plan, planOf({}));
+    assert.equal(Object.hasOwn(readResult, "deferredEnables"), false);
   });
 });
 
