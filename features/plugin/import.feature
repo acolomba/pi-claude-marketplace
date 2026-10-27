@@ -667,7 +667,7 @@ Feature: Plugin import
       | id            |
       | demo@fixtures |
 
-  Scenario: Importing settings that name a known marketplace under another name installs the plugin under the recorded marketplace
+  Scenario: Importing settings that name a known marketplace under another name fails its plugin as not added
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
@@ -685,32 +685,23 @@ Feature: Plugin import
       """
     When the user runs "/claude:plugin import --scope user"
     Then the result has these fields:
-      | kind                | cascade |
-      | severity            | info    |
-      | needs reload        | true    |
-      | tally label         | Import  |
-      | tally failures      | 0       |
-      | tally warnings      | 0       |
-      | tally success count | 2       |
+      | kind           | cascade                      |
+      | severity       | error                        |
+      | needs reload   | false                        |
+      | summary        | Some operations have failed. |
+      | tally label    | Import                       |
+      | tally failures | 2                            |
+      | tally warnings | 0                            |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | version | status    | reasons | scope |
-      | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | 1.0.0   | installed |         | user  |
-    Then the installation record of the user scope holds these plugins:
-      | id            | version | enabled |
-      | demo@fixtures | 1.0.0   | true    |
+      | marketplace name | marketplace scope | marketplace status | id         | name | status | reasons | scope | cause chain                                         | cause truncated | leaks | rollback partial |
+      | other            | user              | failed             | demo@other | demo | failed |         | user  | Marketplace "other" is not added in the user scope. | false           |       |                  |
+    Then the user scope has no installed plugins
     Then the "claude-plugins.json" file of the user scope declares these marketplaces:
       | name     | source                       |
       | fixtures | {home}/marketplaces/fixtures |
-    Then the "claude-plugins.json" file of the user scope declares these plugins:
-      | id            |
-      | demo@fixtures |
-    When the user runs "/claude:plugin pending --scope user"
-    Then the result has these fields:
-      | kind         | reconcile-pending-empty |
-      | severity     | info                    |
-      | needs reload | false                   |
+    Then the "claude-plugins.json" file of the user scope declares no plugins
 
-  Scenario: Importing settings that name a known marketplace the way the config already names it keeps the config's names
+  Scenario: Importing settings that name a known marketplace by its recorded name keeps the name the config uses for it
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
@@ -725,9 +716,9 @@ Feature: Plugin import
     Given the claude code settings file of the user scope holds this text:
       """
       {
-        "enabledPlugins": { "demo@other": true },
+        "enabledPlugins": { "demo@fixtures": true },
         "extraKnownMarketplaces": {
-          "other": {
+          "fixtures": {
             "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
           }
         }
@@ -737,19 +728,17 @@ Feature: Plugin import
     Then the result lists these plugins:
       | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | status  | reasons           | scope |
       | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | skipped | already installed | user  |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
     Then the "claude-plugins.json" file of the user scope declares these marketplaces:
       | name  | source                       |
       | other | {home}/marketplaces/fixtures |
     Then the "claude-plugins.json" file of the user scope declares these plugins:
       | id         |
       | demo@other |
-    When the user runs "/claude:plugin pending --scope user"
-    Then the result has these fields:
-      | kind         | reconcile-pending-empty |
-      | severity     | info                    |
-      | needs reload | false                   |
 
-  Scenario: Importing settings that also declare the recorded name of a known marketplace does not follow its source to that record
+  Scenario: Importing settings that also declare the recorded name of a known marketplace fails the other name's plugin as not added
     Given the marketplace "fixtures" offers these plugins:
       | name | version |
       | demo | 1.0.0   |
@@ -774,11 +763,11 @@ Feature: Plugin import
       | cascade    | error    | false        | Some operations have failed. | Import      | 2              | 0              |                               |                                                                                                                                                                       |
       | diagnostic | warning  | false        |                              |             |                |                | 1 import diagnostic surfaced. | Skipping Claude marketplace "fixtures" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable). |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons | scope | cause chain                                          | cause truncated | leaks | rollback partial |
-      | other            | user              | failed             | other@other | other | failed |         | user  | Marketplace "fixtures" already exists in user scope. | false           |       |                  |
+      | marketplace name | marketplace scope | marketplace status | id         | name | status | reasons | scope | cause chain                                         | cause truncated | leaks | rollback partial |
+      | other            | user              | failed             | demo@other | demo | failed |         | user  | Marketplace "other" is not added in the user scope. | false           |       |                  |
     Then the user scope has no installed plugins
 
-  Scenario: Importing two settings marketplaces that name one known marketplace's source fails both and says why
+  Scenario: Importing two settings marketplaces that name one known marketplace's source reuses it with no row
     Given the marketplace "fixtures" is added to the user scope
     Given the claude code settings file of the user scope holds this text:
       """
@@ -794,18 +783,10 @@ Feature: Plugin import
       }
       """
     When the user runs "/claude:plugin import --scope user"
-    Then the result has these fields:
-      | kind                | cascade                      |
-      | severity            | error                        |
-      | needs reload        | false                        |
-      | summary             | Some operations have failed. |
-      | tally label         | Import                       |
-      | tally failures      | 4                            |
-      | tally warnings      | 0                            |
-    Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons | scope | cause chain                                                                             | cause truncated | leaks | rollback partial |
-      | other            | user              | failed             | other@other | other | failed |         | user  | Recorded marketplace fixtures is claimed by more than one Claude settings marketplace. | false           |       |                  |
-      | twin             | user              | failed             | twin@twin   | twin  | failed |         | user  | Recorded marketplace fixtures is claimed by more than one Claude settings marketplace. | false           |       |                  |
+    Then the result lists no marketplaces
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
 
   Scenario: Importing a plugin whose install rollback cannot finish names the rollback phase
     Given the marketplace "fixtures" offers these plugins:
@@ -835,7 +816,7 @@ Feature: Plugin import
       | tally warnings      | 0                              |
       | tally success count | 1                              |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id            | name | status | reasons          | scope | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                         |
+      | marketplace name | marketplace scope | marketplace status | id            | name | status | reasons          | scope | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                            |
       | fixtures         | user              | added              | demo@fixtures | demo | failed | rollback partial | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
     Then the installation record of the user scope holds these plugins:
       | id | version | enabled |
@@ -874,7 +855,7 @@ Feature: Plugin import
       | tally warnings      | 0                              |
       | tally success count | 1                              |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | status | reasons          | scope | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                         |
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | status | reasons          | scope | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                            |
       | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | failed | rollback partial | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
     Then the installation record of the user scope holds these plugins:
       | id            | version | enabled |
@@ -909,8 +890,8 @@ Feature: Plugin import
       | tally warnings      | 0                                   |
       | tally success count | 1                                   |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id           | name         | status | reasons           | scope | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                         |
-      | fixtures         | user              | added              | app@fixtures | app          | failed | dependency failed | user  |                                                              |                 |       |                                                                                                          |
+      | marketplace name | marketplace scope | marketplace status | id           | name         | status | reasons           | scope | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                            |
+      | fixtures         | user              | added              | app@fixtures | app          | failed | dependency failed | user  |                                                              |                 |       |                                                                                                             |
       | fixtures         | user              | added              | lib@fixtures | lib@fixtures | failed | rollback partial  | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
     Then the installation record of the user scope holds these plugins:
       | id | version | enabled |
@@ -945,9 +926,9 @@ Feature: Plugin import
       | tally warnings      | 0                                   |
       | tally success count | 1                                   |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id            | name         | status | reasons           | scope | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                         |
-      | fixtures         | user              | added              | app@fixtures  | app          | failed | dependency failed | user  |                                                              |                 |       |                                                                                                          |
+      | marketplace name | marketplace scope | marketplace status | id            | name         | status | reasons           | scope | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                            |
+      | fixtures         | user              | added              | app@fixtures  | app          | failed | dependency failed | user  |                                                              |                 |       |                                                                                                             |
       | fixtures         | user              | added              | lib@fixtures  | lib@fixtures | failed | rollback partial  | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
-      | fixtures         | user              | added              | tool@fixtures | tool         | failed | dependency failed | user  |                                                              |                 |       |                                                                                                          |
+      | fixtures         | user              | added              | tool@fixtures | tool         | failed | dependency failed | user  |                                                              |                 |       |                                                                                                             |
     Then the installation record of the user scope holds these plugins:
       | id | version | enabled |

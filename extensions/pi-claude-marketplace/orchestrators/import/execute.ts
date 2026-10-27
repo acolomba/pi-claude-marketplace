@@ -1,3 +1,4 @@
+import { samePlannedSource } from "../../domain/source.ts";
 import { addMarketplace as defaultAddMarketplace } from "../../orchestrators/marketplace/add.ts";
 import { type InstallPluginOptions } from "../../orchestrators/plugin/install-flow.ts";
 import {
@@ -10,12 +11,7 @@ import {
 } from "../../orchestrators/plugin/operations.ts";
 import { buildScopeSatisfactionVerdict } from "../../orchestrators/reconcile/dependency-verdict.ts";
 import { enabledRowFromOutcome } from "../../orchestrators/reconcile/notify.ts";
-import {
-  marketplaceClaimConflicts,
-  marketplaceSourceClaims,
-  planReconcile,
-  type MarketplaceClaimConflict,
-} from "../../orchestrators/reconcile/plan.ts";
+import { marketplaceSourceClaims, planReconcile } from "../../orchestrators/reconcile/plan.ts";
 import { loadConfig, type PluginConfigEntry } from "../../persistence/config-io.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import {
@@ -229,8 +225,16 @@ export interface UnexpectedPluginFailureOutcome {
    * cascade closure/constraint/member failure), so the row renders
    * `{dependency failed}`. IMP-09: `"unexpected-failure"` is a failure no
    * other arm classifies; its row carries `runtimeReason` or no reason at all.
+   * D-PL6-17: `"marketplace-not-added"` marks a plugin of a settings
+   * marketplace whose source the scope holds under another name; its row
+   * carries install's marketplace-absent cause and no reason.
    */
-  readonly reason: "unexpected-failure" | "dependency-failed" | "lock-held" | "not-installed";
+  readonly reason:
+    | "unexpected-failure"
+    | "dependency-failed"
+    | "lock-held"
+    | "not-installed"
+    | "marketplace-not-added";
   /**
    * IMP-09: the reason `install` reads off the same unclassified error -- the
    * reason of the marketplace add an install ran, or the git host's answer.
@@ -500,8 +504,10 @@ type ImportBlockStatus = Extract<MarketplaceStatus, "added" | "skipped" | "faile
  * `scopedPlan` (`import/marketplaces.ts`) plans the marketplace of every plugin
  * in `pluginsToInstall` under one scope, so every row key has a header.
  * D-PL6-01: `marketplacesToEnsure` also holds the extra known marketplaces no
- * plugin names, whose headers have no rows. A loud check here would be an arm
- * no input can reach.
+ * plugin names, whose headers have no rows. D-PL6-17: a marketplace reused
+ * under another name has no marketplace outcome, so each of its plugins'
+ * `marketplace-not-added` failures creates its `(failed)` header itself. A
+ * loud check here would be an arm no input can reach.
  */
 interface MarketplaceBlock {
   readonly key: string;
@@ -621,6 +627,8 @@ function unexpectedFailureReasons(
       return ["lock held"];
     case "not-installed":
       return ["not installed"];
+    case "marketplace-not-added":
+      return [];
   }
 }
 
@@ -733,31 +741,11 @@ function marketplaceFailureReasons(
 }
 
 /**
- * Converts a `ClaudeImportExecutionResult` into the
- * `MarketplaceNotificationMessage[]` payload for `notify()`.
- *
- * Outcome mapping: added -> "added"; already-present -> "skipped" with
- * "already added" (IMP-06);
- * marketplace failure or source mismatch -> "failed"; installed plugin ->
- * PluginInstalledMessage, or reconcile's enable row for an enable (IMP-10); already-installed plugin -> PluginSkippedMessage
- * with "already installed"; failed/unavailable plugin -> PluginFailedMessage
- * or PluginUnavailableMessage. Advisory-only warnings and orphan diagnostics
- * are silently dropped (the marketplace status row already carries the
- * structural signal).
- *
- * Iteration order: `compareByNameThenScope` (name primary
- * case-insensitive, scope secondary project-before-user). Per-plugin
- * `scope?` is omitted -- every row's scope matches its marketplace's scope
- * by construction, so `notify()` orphan-folds the bracket.
+ * The marketplace headers of the import cascade, one per (scope, marketplace)
+ * tuple that a marketplace-level outcome names.
  */
-function buildImportNotificationMarketplaces(
-  result: ClaudeImportExecutionResult,
-  dependencyChanges: readonly DependencyChangeOutcome[],
-): Plural<MarketplaceRows<ImportMsg>> {
+function marketplaceBlocks(result: ClaudeImportExecutionResult): Map<string, MarketplaceBlock> {
   const byMp = new Map<string, MarketplaceBlock>();
-  const rowsByMp = new Map<string, ImportMsg[]>();
-
-  // Marketplace-level outcomes: set status on the (scope, marketplace) tuple.
   for (const o of result.addedMarketplaces) {
     setMarketplaceStatus(byMp, o.scope, o.marketplace, "added");
   }
@@ -782,6 +770,43 @@ function buildImportNotificationMarketplaces(
   for (const o of result.sourceMismatches) {
     setMarketplaceStatus(byMp, o.scope, o.marketplace, "failed");
   }
+
+  // D-PL6-17: a reused marketplace has no outcome of its own, so a plugin that
+  // fails as not added gives its block the `(failed)` header.
+  for (const o of result.unexpectedPluginFailures) {
+    if (o.reason === "marketplace-not-added") {
+      setMarketplaceStatus(byMp, o.scope, o.marketplace, "failed");
+    }
+  }
+
+  return byMp;
+}
+
+/**
+ * Converts a `ClaudeImportExecutionResult` into the
+ * `MarketplaceNotificationMessage[]` payload for `notify()`.
+ *
+ * Outcome mapping: added -> "added"; already-present -> "skipped" with
+ * "already added" (IMP-06);
+ * marketplace failure, source mismatch, or a plugin of a reused marketplace
+ * that fails as not added (D-PL6-17) -> "failed"; installed plugin ->
+ * PluginInstalledMessage, or reconcile's enable row for an enable (IMP-10); already-installed plugin -> PluginSkippedMessage
+ * with "already installed"; failed/unavailable plugin -> PluginFailedMessage
+ * or PluginUnavailableMessage. Advisory-only warnings and orphan diagnostics
+ * are silently dropped (the marketplace status row already carries the
+ * structural signal).
+ *
+ * Iteration order: `compareByNameThenScope` (name primary
+ * case-insensitive, scope secondary project-before-user). Per-plugin
+ * `scope?` is omitted -- every row's scope matches its marketplace's scope
+ * by construction, so `notify()` orphan-folds the bracket.
+ */
+function buildImportNotificationMarketplaces(
+  result: ClaudeImportExecutionResult,
+  dependencyChanges: readonly DependencyChangeOutcome[],
+): Plural<MarketplaceRows<ImportMsg>> {
+  const byMp = marketplaceBlocks(result);
+  const rowsByMp = new Map<string, ImportMsg[]>();
 
   // Plugin rows -- orphan-fold contract: per-row `scope?` is OMITTED
   // because the row's scope matches its marketplace's scope by
@@ -998,27 +1023,6 @@ type PlannedMismatch = ReconcilePlan["sourceMismatches"][number];
 type SettledMismatch = Extract<PlannedMismatch, { cause: "source-mismatch" | "unknown-stored" }>;
 
 /**
- * D-PL6-09: the cause of a source mismatch. A conflicted source claim names
- * what conflicts, because the settings source does match a record.
- */
-function sourceMismatchCause(
-  marketplace: PlannedMarketplace,
-  recordedSource: string,
-  conflict: MarketplaceClaimConflict | undefined,
-): string {
-  if (conflict === undefined) {
-    return `Existing marketplace source ${recordedSource} does not match Claude settings source ${marketplace.source}.`;
-  }
-
-  switch (conflict.kind) {
-    case "ambiguous":
-      return `Claude settings source ${marketplace.source} matches more than one recorded marketplace: ${conflict.recorded.join(", ")}.`;
-    case "multiply-claimed":
-      return `Recorded marketplace ${conflict.recorded} is claimed by more than one Claude settings marketplace.`;
-  }
-}
-
-/**
  * IMP-05: settle a planned marketplace the reconcile planner reported as a
  * source mismatch, recording the blocked outcome directly on `result` /
  * `blockedMarketplaces`.
@@ -1029,7 +1033,6 @@ function recordPlannedMismatch(
   scopePlan: ScopedImportPlan,
   marketplace: PlannedMarketplace,
   mismatch: SettledMismatch,
-  conflict: MarketplaceClaimConflict | undefined,
 ): void {
   switch (mismatch.cause) {
     case "unknown-stored":
@@ -1060,7 +1063,7 @@ function recordPlannedMismatch(
       );
       return;
     case "source-mismatch": {
-      const cause = sourceMismatchCause(marketplace, mismatch.recordedSource, conflict);
+      const cause = `Existing marketplace source ${mismatch.recordedSource} does not match Claude settings source ${marketplace.source}.`;
       const plugins = pluginsForMarketplace(scopePlan.pluginsToInstall, marketplace.marketplace);
       if (plugins.length === 0) {
         // D-PL6-09: no plugin row would carry the mismatch, so the
@@ -1475,25 +1478,20 @@ type ImportReadPass =
       readonly state: ExtensionState;
       readonly plan: ReconcilePlan;
       /**
-       * D-PL6-02: each settings marketplace the scope records under exactly
-       * one other name, mapped to that recorded name.
-       */
-      readonly claims: ReadonlyMap<string, string>;
-      /**
        * CR-01: each recorded marketplace the scope's config claims, mapped to
        * the name the config declares it under.
        */
       readonly configNames: ReadonlyMap<string, string>;
-      /** D-PL6-09: each settings marketplace in a conflicted source claim. */
-      readonly conflicts: ReadonlyMap<string, MarketplaceClaimConflict>;
     }
   | { readonly kind: "lock-held"; readonly error: StateLockHeldError };
 
 /**
- * CR-01: the name the scope's merged config uses for each recorded
+ * D-PL6-17 / CR-01: the name the scope's merged config uses for each recorded
  * marketplace it claims, by its own name or by a one-to-one source claim, read
  * with the planner's own claim rule. A claim is one-to-one, so each recorded
- * name maps to one declared name.
+ * name maps to one declared name. When the settings name a recorded
+ * marketplace directly and the config declares it under another name, the
+ * post-pass keeps the config's name, so no later `pending` plans an add.
  */
 function configNamesByRecorded(
   config: MergedConfig["marketplaces"],
@@ -1504,7 +1502,7 @@ function configNamesByRecorded(
   );
 }
 
-/** CR-01: the name the post-pass declares a marketplace and its plugins under. */
+/** D-PL6-17 / CR-01: the name the post-pass declares a marketplace and its plugins under. */
 function declaredNameFor(configNames: ReadonlyMap<string, string>, marketplace: string): string {
   return configNames.get(marketplace) ?? marketplace;
 }
@@ -1532,24 +1530,12 @@ async function readPassForImport(
         // LOAD-01 / D-06-04: computed inside the lock, as reconcile's read
         // pass computes it, so it reads the same snapshot the planner sees.
         const verdict = await buildScopeSatisfactionVerdict({ state: tx.state, locations });
-        const desired = desiredConfigFor(scopePlan);
-        // D-PL6-10: the planner's own claim rule, read from the same snapshot.
-        const claims = marketplaceSourceClaims(desired.marketplaces, tx.state.marketplaces);
-        // D-PL6-02: a recorded name the settings declare themselves, planned
-        // or not, is never another settings name's alias.
-        const settingsNames = new Set(scopePlan.settingsMarketplaces);
         const config = await loadMergedScopeConfig(locations);
         return {
           kind: "planned",
           state: tx.state,
-          plan: planReconcile(desired, tx.state, scope, verdict),
-          claims: new Map(
-            [...claims].filter(
-              ([declared, recorded]) => declared !== recorded && !settingsNames.has(recorded),
-            ),
-          ),
+          plan: planReconcile(desiredConfigFor(scopePlan), tx.state, scope, verdict),
           configNames: configNamesByRecorded(config.merged.marketplaces, tx.state.marketplaces),
-          conflicts: marketplaceClaimConflicts(desired.marketplaces, tx.state.marketplaces),
         };
       },
       { loadState: async () => loadState(scope, opts.cwd) },
@@ -1588,45 +1574,77 @@ function plannedMismatchFor(plan: ReconcilePlan, marketplace: string): SettledMi
 }
 
 /**
- * D-PL6-02: the scope plan with each claimed settings marketplace renamed to
- * the name the scope records it under. The marketplace keeps the settings
- * source, and each plugin ref under it names the recorded marketplace in both
- * `marketplace` and `raw`, so every outcome and config key names one plugin.
- * Only one-to-one claims are in `claims`, and the read pass drops every claim
- * of a name the settings declare, planned or not, so a recorded name is never
- * a settings name and two entries cannot collide.
+ * D-PL6-17 / D-PL6-18: whether the snapshot records the planned marketplace's
+ * settings source under a name other than its own. Claude Code reuses the
+ * first known marketplace that holds a source before it reads any name, so a
+ * recorded name the settings also declare counts, and so does a source that
+ * two records hold.
  */
-function aliasedScopePlan(
-  scopePlan: ScopedImportPlan,
-  claims: ReadonlyMap<string, string>,
-): ScopedImportPlan {
-  return {
-    ...scopePlan,
-    marketplacesToEnsure: scopePlan.marketplacesToEnsure.map((marketplace) => ({
-      ...marketplace,
-      marketplace: claims.get(marketplace.marketplace) ?? marketplace.marketplace,
-    })),
-    pluginsToInstall: scopePlan.pluginsToInstall.map((plugin) => {
-      const recorded = claims.get(plugin.ref.marketplace);
-      return recorded === undefined
-        ? plugin
-        : {
-            ...plugin,
-            ref: { ...plugin.ref, marketplace: recorded, raw: `${plugin.ref.plugin}@${recorded}` },
-          };
-    }),
-  };
+function recordsSourceUnderAnotherName(
+  state: ExtensionState,
+  marketplace: PlannedMarketplace,
+): boolean {
+  return Object.entries(state.marketplaces).some(
+    ([name, record]) =>
+      samePlannedSource(record.source, marketplace.source) === "same" &&
+      name !== marketplace.marketplace,
+  );
 }
 
 /**
- * IMP-05 / IMP-06: settle the settings' marketplaces against the plan, in
- * this order. A planner source mismatch, a conflicted source claim included,
- * blocks the marketplace before anything is added (D-PL6-09). A name the
- * scope records, the recorded name of a claimed settings marketplace included,
- * is reported as a skip. Any other marketplace is added. D-PL6-02 supersedes
- * lifecycle-coverage D-07, which added a claimed settings marketplace under
- * its settings name and failed it as a duplicate. Answers the names whose
- * plugins may run.
+ * D-PL6-17: a settings marketplace whose source the scope holds under another
+ * name is reused as Claude Code reuses it: nothing is added, and the
+ * marketplace has no outcome of its own. The scope does not record the
+ * settings name, so each plugin the settings enable from it fails with
+ * install's marketplace-absent cause, and nothing is installed or declared
+ * for it.
+ */
+function recordReusedMarketplace(
+  result: MutableImportResult,
+  blockedMarketplaces: Set<string>,
+  scopePlan: ScopedImportPlan,
+  marketplace: PlannedMarketplace,
+): void {
+  blockedMarketplaces.add(marketplace.marketplace);
+  const cause = `Marketplace "${marketplace.marketplace}" is not added in the ${marketplace.scope} scope.`;
+  for (const plugin of pluginsForMarketplace(scopePlan.pluginsToInstall, marketplace.marketplace)) {
+    pushUnexpectedFailure(result, plugin, "marketplace-not-added", new Error(cause));
+  }
+}
+
+/**
+ * IMP-05 / IMP-06: settle a planned marketplace the snapshot records under its
+ * own name. A planner source mismatch blocks it; otherwise it is reported as a
+ * skip.
+ */
+function settleRecordedMarketplace(
+  result: MutableImportResult,
+  blockedMarketplaces: Set<string>,
+  scopePlan: ScopedImportPlan,
+  marketplace: PlannedMarketplace,
+  plan: ReconcilePlan,
+): void {
+  const mismatch = plannedMismatchFor(plan, marketplace.marketplace);
+  if (mismatch !== undefined) {
+    recordPlannedMismatch(result, blockedMarketplaces, scopePlan, marketplace, mismatch);
+    return;
+  }
+
+  result.skippedExistingMarketplaces.push({
+    kind: "marketplace-skip",
+    scope: marketplace.scope,
+    marketplace: marketplace.marketplace,
+    reason: "already-present",
+  });
+}
+
+/**
+ * IMP-05 / IMP-06: settle the settings' marketplaces against the read pass's
+ * snapshot. A name the scope records is settled against the plan
+ * (`settleRecordedMarketplace`). A name it does not record, whose source it
+ * records under another name, is reused and its plugins fail as not added
+ * (D-PL6-17), even when the settings also declare that other name (D-PL6-18).
+ * Any other marketplace is added. Answers the names whose plugins may run.
  */
 async function ensurePlannedMarketplaces(
   opts: ImportClaudeSettingsOptions,
@@ -1636,26 +1654,13 @@ async function ensurePlannedMarketplaces(
 ): Promise<ReadonlySet<string>> {
   const blockedMarketplaces = new Set<string>();
   for (const marketplace of scopePlan.marketplacesToEnsure) {
-    const mismatch = plannedMismatchFor(read.plan, marketplace.marketplace);
-    if (mismatch !== undefined) {
-      recordPlannedMismatch(
-        result,
-        blockedMarketplaces,
-        scopePlan,
-        marketplace,
-        mismatch,
-        read.conflicts.get(marketplace.marketplace),
-      );
-    } else if (ownValue(read.state.marketplaces, marketplace.marketplace) === undefined) {
+    if (ownValue(read.state.marketplaces, marketplace.marketplace) !== undefined) {
+      settleRecordedMarketplace(result, blockedMarketplaces, scopePlan, marketplace, read.plan);
+    } else if (recordsSourceUnderAnotherName(read.state, marketplace)) {
+      recordReusedMarketplace(result, blockedMarketplaces, scopePlan, marketplace);
+    } else {
       // eslint-disable-next-line no-await-in-loop -- each add locks the scope (retries: 0)
       await addOnePlannedMarketplace(opts, result, blockedMarketplaces, scopePlan, marketplace);
-    } else {
-      result.skippedExistingMarketplaces.push({
-        kind: "marketplace-skip",
-        scope: marketplace.scope,
-        marketplace: marketplace.marketplace,
-        reason: "already-present",
-      });
     }
   }
 
@@ -1759,10 +1764,9 @@ async function executeScopedPlan(
     return;
   }
 
-  const aliased = aliasedScopePlan(scopePlan, read.claims);
-  const usable = await ensurePlannedMarketplaces(opts, result, aliased, read);
-  pushSkippedPluginWarnings(result, aliased);
-  await applyPlannedPlugins(opts, result, aliased, read, usable);
+  const usable = await ensurePlannedMarketplaces(opts, result, scopePlan, read);
+  pushSkippedPluginWarnings(result, scopePlan);
+  await applyPlannedPlugins(opts, result, scopePlan, read, usable);
 
   // WB-03: after all per-entry orchestrated-mode addMarketplace
   // + installPlugin calls complete for THIS scope, run a per-scope batched
@@ -1780,7 +1784,7 @@ async function executeScopedPlan(
   // marketplace for REMOVAL and its plugins for UNINSTALL. The repair makes
   // a re-run converge CONSTRUCTIVELY (re-declare what import installed)
   // instead of destructively.
-  await writeBatchedConfigForScope(opts, result, aliased, read.configNames);
+  await writeBatchedConfigForScope(opts, result, scopePlan, read.configNames);
 }
 
 /**

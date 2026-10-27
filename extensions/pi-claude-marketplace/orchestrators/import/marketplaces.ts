@@ -164,12 +164,6 @@ function scopedPlan(input: ScopedClaudeImportPlanInput): ScopedClaudeImportPlan 
 
   return {
     scope: input.scope,
-    settingsMarketplaces: [
-      ...new Set([
-        ...extracted.refs.map((ref) => ref.marketplace),
-        ...Object.keys(input.settings.extraKnownMarketplaces),
-      ]),
-    ],
     marketplacesToEnsure: marketplacePlan.marketplacesToEnsure,
     pluginsToInstall,
     skippedPlugins,
