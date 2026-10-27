@@ -773,9 +773,6 @@ test("WR-01: a successful path-source swap drops a stale resolvedSha the fresh r
       const record = state.marketplaces.mp?.plugins.hello;
       assert.ok(record !== undefined);
       record.resolvedSha = "stale-sha-from-a-prior-tag-pin";
-      // D-PL2-12: a record with a commit owns a copy under the plugin clones,
-      // gone here, so the update reads its catalog declarations.
-      record.resolvedSource = path.join(locations.pluginClonesDir, "hello-copy");
       await saveState(locations.extensionRoot, state);
       const preflight = await preparePluginUpdate({
         policy: UPDATE_POLICY,
@@ -849,9 +846,6 @@ test("UPR-02: the updated outcome stamps the record's and the candidate's commit
       const record = state.marketplaces.mp?.plugins.hello;
       assert.ok(record !== undefined);
       record.resolvedSha = fromCommit;
-      // D-PL2-12: a record with a commit owns a copy under the plugin clones,
-      // gone here, so the update reads its catalog declarations.
-      record.resolvedSource = path.join(locations.pluginClonesDir, "hello-copy");
       await saveState(locations.extensionRoot, state);
       const prepared = await preparePluginUpdate({
         policy: UPDATE_POLICY,
@@ -1168,9 +1162,6 @@ test("UPR-03: a phase-3 failure outcome carries the commits of the move it attem
       const record = state.marketplaces.mp?.plugins.hello;
       assert.ok(record !== undefined);
       record.resolvedSha = fromCommit;
-      // D-PL2-12: a record with a commit owns a copy under the plugin clones,
-      // gone here, so the update reads its catalog declarations.
-      record.resolvedSource = path.join(locations.pluginClonesDir, "hello-copy");
       await saveState(locations.extensionRoot, state);
       const preflight = { ...(await preflightOf(args)), resolvedSha: toCommit };
 

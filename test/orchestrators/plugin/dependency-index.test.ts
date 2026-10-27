@@ -967,21 +967,70 @@ test("D-PL2-12 / NFR-10: a delisted record with no recorded commit whose copy si
   );
 });
 
-test("D-PL2-12 / NFR-10: a delisted record pinned to a commit whose copy sits under the marketplace clone fails as unreadable manifest", async () => {
+test("D-PL2-23: a delisted record pinned to a commit whose copy sits under the marketplace clone reads that copy in place", async () => {
   // act
   const read = await readDelistedApp({ resolvedSource: copyRoot("app"), resolvedSha: APP_SHA });
 
   // assert
-  assert.deepStrictEqual(
-    read.ok ? undefined : { reason: read.reason, message: read.cause.message },
-    APP_UNREADABLE_MANIFEST,
-  );
+  assert.deepStrictEqual(read, {
+    ok: true,
+    declared: [{ name: "lib", version: "^2.0.0", marketplace: "mp" }],
+    delisted: true,
+  });
 });
 
-test("D-PL2-12 / NFR-10: the installed-first read of a record pinned to a commit whose copy sits outside the plugin clones fails closed with no catalog read", async () => {
-  // arrange
+/**
+ * The installed detail walk of `mp` recording `lib` and an `app` left pinned
+ * to a stale commit with its copy in the marketplace clone, the catalog entry
+ * of `app` declaring `entry@mp`, and the copy's manifests exactly `files`.
+ */
+function walkStalePinnedPathApp(
+  files: Readonly<Record<string, string>>,
+): Promise<ScopeDeclarationDetailResult> {
   const mp = marketplaceRecord("mp", {
     app: { resolvedSource: copyRoot("app"), resolvedSha: APP_SHA },
+    lib: {},
+  });
+  return buildInstalledScopeDeclarationDetail({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader: ownManifests(files),
+    loadManifest: manifestLoader({
+      [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["entry@mp"] }, lib: {} }),
+    }),
+  });
+}
+
+test("D-PL2-23 / WR-01: the installed detail walk reads a path record left with a stale commit in its marketplace clone", async () => {
+  // act
+  const walk = await walkStalePinnedPathApp({
+    [path.join(copyRoot("app"), ".claude-plugin", "plugin.json")]: JSON.stringify({
+      dependencies: ["lib@^2.0.0"],
+    }),
+  });
+
+  // assert
+  assert.deepStrictEqual(detailEntries(walk), {
+    "app@mp": [{ name: "lib", version: "^2.0.0", marketplace: "mp" }],
+    "lib@mp": [],
+  });
+});
+
+test("D-PL2-22 / D-PL2-23: the installed detail walk answers a stale-commit path record with no manifest from its entry", async () => {
+  // act
+  const walk = await walkStalePinnedPathApp({});
+
+  // assert
+  assert.deepStrictEqual(detailEntries(walk), {
+    "app@mp": [{ name: "entry", marketplace: "mp" }],
+    "lib@mp": [],
+  });
+});
+
+test("D-PL2-23 / NFR-10: the installed-first read of a record pinned to a commit whose copy sits under neither clone root fails closed with no catalog read", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", {
+    app: { resolvedSource: path.join(SCOPE_ROOT, "elsewhere", "app"), resolvedSha: APP_SHA },
   });
   const loadManifest = manifestLoader({
     [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["entry@mp"] } }),

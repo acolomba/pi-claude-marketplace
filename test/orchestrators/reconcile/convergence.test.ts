@@ -1126,10 +1126,37 @@ test("D-12 / WCONV-01: a clean record whose candidate would drop components is d
   });
 });
 
-test("D-PL2-12 / D-PL2-25: a dependent whose copy sits outside the root its record owns ends the cascade with no move", async (t) => {
-  // arrange: `widget` is pinned to a commit, so it owns the plugin clones, but
-  // its recorded copy sits under the marketplace clone
+test("D-PL2-12 / D-PL2-25: a dependent whose copy sits under neither clone root ends the cascade with no move", async (t) => {
+  // arrange: `widget` is pinned to a commit, and its recorded copy, which
+  // holds a readable manifest, sits outside both the plugin clones and the
+  // marketplace clone
   const fixture = await createFixture(t, "foreign-root-copy");
+  const foreignCopy = path.join(fixture.cwd, "elsewhere", "widget");
+  await stagePlugin(foreignCopy, "1.0.0", [{ name: "core", version: "^1.0.0" }]);
+  const chain = heldDependentChain("widget-installed").map((plugin) =>
+    plugin.installed === undefined
+      ? plugin
+      : { ...plugin, record: { resolvedSha: "a".repeat(40), resolvedSource: foreignCopy } },
+  );
+  const state = await stageTools(fixture, chain);
+
+  // act
+  const cascade = await planConvergenceCascade({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { plan: cascade.plan, failure: describeFailure(cascade.installedCopyFailure) },
+    { plan: { moves: [], holds: [], declines: [] }, failure: WIDGET_UNREADABLE_MANIFEST },
+  );
+});
+
+test("D-PL2-23: a dependent left pinned to a stale commit with its copy in the marketplace clone is judged by that copy", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "stale-pin-copy");
   const chain = heldDependentChain("widget-installed").map((plugin) =>
     plugin.installed === undefined
       ? plugin
@@ -1146,8 +1173,21 @@ test("D-PL2-12 / D-PL2-25: a dependent whose copy sits outside the root its reco
 
   // assert
   assert.deepStrictEqual(
-    { plan: cascade.plan, failure: describeFailure(cascade.installedCopyFailure) },
-    { plan: { moves: [], holds: [], declines: [] }, failure: WIDGET_UNREADABLE_MANIFEST },
+    { plan: cascade.plan, failure: cascade.installedCopyFailure },
+    {
+      plan: {
+        moves: [],
+        holds: [
+          toolsHold(
+            "core",
+            'the declared ranges admit no version in common (^2.0.0, ^1.0.0) -- required by "widget@tools"',
+          ),
+          WIDGET_HOLD,
+        ],
+        declines: [],
+      },
+      failure: null,
+    },
   );
 });
 

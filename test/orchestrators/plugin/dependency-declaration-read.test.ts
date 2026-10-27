@@ -693,6 +693,42 @@ test("D-PL2-12 / D-PL2-17: a record with no recorded commit is read in place, ow
   });
 });
 
+test("D-PL2-23: a record pinned to a commit whose copy lies in its marketplace clone is read in place, owned by that clone", () => {
+  // act
+  const options = installedCopyReadOptions(
+    { resolvedSource: "/mp/alpha", resolvedSha: "0123456" },
+    { marketplaceRoot: "/mp", pluginClonesDir: "/clones" },
+  );
+
+  // assert
+  assert.deepStrictEqual(options, {
+    boundary: {
+      pluginRoot: "/mp/alpha",
+      roots: ["/mp/alpha", "/mp"],
+      label: "plugin directory and its marketplace directory",
+    },
+    ownerRoot: "/mp",
+  });
+});
+
+test("D-PL2-23: plugin clones nested in the marketplace clone own a pinned copy that lies under them", () => {
+  // act
+  const options = installedCopyReadOptions(
+    { resolvedSource: "/mp/.pi/clones/alpha", resolvedSha: "0123456" },
+    { marketplaceRoot: "/mp", pluginClonesDir: "/mp/.pi/clones" },
+  );
+
+  // assert
+  assert.deepStrictEqual(options, {
+    boundary: {
+      pluginRoot: "/mp/.pi/clones/alpha",
+      roots: ["/mp/.pi/clones/alpha"],
+      label: "plugin directory",
+    },
+    ownerRoot: "/mp/.pi/clones",
+  });
+});
+
 test("DLS-01: a delisted plugin's installed copy answers with its own manifest", async () => {
   // arrange
   const reader = buildReader({
@@ -774,6 +810,24 @@ test("D-PL2-12 / NFR-10: an installed copy under the other clone root is the fix
 
   // act
   const read = await readInstalledCopy(reader, path.join(CLONES_ROOT, "alpha"));
+
+  // assert
+  assert.deepStrictEqual(read, ownManifestRefusal());
+  assert.deepStrictEqual(reader.opened, []);
+});
+
+test("D-PL2-23 / NFR-10: a pinned copy under neither clone root is the fixed-detail refusal, never opened", async () => {
+  // arrange
+  const reader = buildReader({});
+
+  // act
+  const read = await readInstalledCopyDeclaration({
+    ...installedCopyReadOptions(
+      { resolvedSource: path.join(tmpdir(), "elsewhere", "alpha"), resolvedSha: "0123456" },
+      OWNER_ROOTS,
+    ),
+    reader,
+  });
 
   // assert
   assert.deepStrictEqual(read, ownManifestRefusal());

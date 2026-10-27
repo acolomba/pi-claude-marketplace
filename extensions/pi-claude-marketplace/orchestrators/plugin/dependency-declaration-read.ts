@@ -389,28 +389,40 @@ export async function readCandidateDeclaration(options: {
 }
 
 /**
- * NFR-10 / D-PL2-17: how to read a record's installed copy. A record with
- * `resolvedSha` installed a per-commit clone under `plugin-clones/` -- every
- * git source, and a tag-pinned path-source dependency -- so its copy is
- * bounded by its plugin directory, as Claude Code bounds a cached copy. One
- * without it runs the marketplace clone's files in place, bounded by its
- * plugin and marketplace directories.
+ * Whether `target` lies lexically below `root`: the relative path is neither
+ * empty nor a climb out. Clone GC keys live clones by the same test.
+ */
+function liesUnder(root: string, target: string): boolean {
+  const relative = path.relative(root, target);
+  return relative !== "" && !relative.startsWith("..");
+}
+
+/**
+ * NFR-10 / D-PL2-17: how to read a record's installed copy. A per-commit clone
+ * under `plugin-clones/` -- every git source, and a tag-pinned path-source
+ * dependency -- is a copy bounded by its plugin directory, as Claude Code
+ * bounds a cached copy. Every other copy runs the marketplace clone's files in
+ * place, bounded by its plugin and marketplace directories.
  *
- * D-PL2-12: the owning root is the one clone root the copy must sit in. Records
- * carry no source kind, and a delisted git record no longer has the catalog
- * source its clone key hashes, so the whole `plugin-clones/` is the narrowest
- * root a per-commit copy can be given.
+ * D-PL2-23 (amends D-PL2-12): each record has one owning root, the clone root
+ * its copy must sit in. `plugin-clones/` owns a record only when it has
+ * `resolvedSha` and its `resolvedSource` lies under `plugin-clones/`; every
+ * other record owns its marketplace clone. Records carry no source kind, so
+ * where the copy lies is the evidence. A path record that an older version
+ * left with a stale `resolvedSha` keeps its files in its marketplace clone,
+ * the root NFR-10 names for path sources, and is read there. A copy under
+ * neither root still fails closed when it is read (D-PL2-12).
  */
 export function installedCopyReadOptions(
   record: { readonly resolvedSource: string; readonly resolvedSha?: string },
   roots: { readonly marketplaceRoot: string; readonly pluginClonesDir: string },
 ): Pick<InstalledCopyDeclarationReadOptions, "boundary" | "ownerRoot"> {
-  return record.resolvedSha === undefined
-    ? {
+  return record.resolvedSha !== undefined && liesUnder(roots.pluginClonesDir, record.resolvedSource)
+    ? { boundary: copyManifestBoundary(record.resolvedSource), ownerRoot: roots.pluginClonesDir }
+    : {
         boundary: inPlaceManifestBoundary(record.resolvedSource, roots.marketplaceRoot),
         ownerRoot: roots.marketplaceRoot,
-      }
-    : { boundary: copyManifestBoundary(record.resolvedSource), ownerRoot: roots.pluginClonesDir };
+      };
 }
 
 /** Inputs of one read of an installed copy. */
@@ -418,8 +430,8 @@ export interface InstalledCopyDeclarationReadOptions {
   /** The boundary of the record's `resolvedSource`, the plugin root its install materialized. */
   readonly boundary: ManifestBoundary;
   /**
-   * NFR-10 / D-PL2-12: the one clone root that owns the record. A copy
-   * anywhere else is never opened.
+   * NFR-10 / D-PL2-23: the one clone root that owns the record. A copy
+   * anywhere else is never opened (D-PL2-12).
    */
   readonly ownerRoot: string;
   /** Filesystem seam; production omits it and reads real disk. */
