@@ -126,3 +126,20 @@ test("D-PL4-04: admits a generated name whose target holds no file", async (t) =
     assertAgentTargetsFree(locations, { marketplace: "catalog", plugin: "acme" }, [GENERATED_NAME]),
   );
 });
+
+test("D-PL4-04: refuses an occupied target behind a free one", async (t) => {
+  // arrange
+  const locations = await createScope(t);
+  const second = "pi-claude-marketplace-acme-helper";
+  const target = path.join(locations.agentsDir, `${second}.md`);
+  await writeFile(target, USER_BYTES);
+
+  // act & assert
+  await assert.rejects(
+    assertAgentTargetsFree(locations, { marketplace: "catalog", plugin: "acme" }, [
+      GENERATED_NAME,
+      second,
+    ]),
+    assertOccupiedRefusal(target),
+  );
+});

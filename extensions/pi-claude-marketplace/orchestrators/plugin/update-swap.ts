@@ -1365,8 +1365,9 @@ function composePhase3FailureOutcome(
  * plugin of the scope already owns, checked against `preflight.state` without
  * the plugin's own record, so an update never conflicts with itself (a plugin
  * moving its skill names from {a,b} to {a,c} would otherwise conflict on
- * "a"). Writes nothing, so UPD-DEP-D1's plan runs it before any dependency
- * moves, and the swap runs it again over the scope the moves left.
+ * "a"). Writes nothing. The swap runs it over the scope the moves left;
+ * `assertUpdateNamesFree` runs it, with the agent-target check, before any
+ * dependency moves.
  */
 async function assertNamesFree(
   args: Pick<ThreePhaseArgsBase, "marketplace" | "plugin" | "scope">,
