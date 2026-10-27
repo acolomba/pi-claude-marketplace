@@ -28,7 +28,7 @@ status: all_fixed
 
 **Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts`, `extensions/pi-claude-marketplace/orchestrators/reconcile/apply-outcomes.ts`, `test/orchestrators/plugin/update-flow.test.ts`, `test/orchestrators/reconcile/apply-outcomes.test.ts`
 **Commit:** a6513334
-**Applied fix:** Both paths now stable-sort by the marketplace block key `{ name: marketplace, scope }` with `compareByNameThenScope`, the comparator `update-cascade.ts` and `reconcile/notify.ts` use for their blocks. Inside a block, rows keep outcome order, so the stable sort gives the row order. `stagingDiagnosticsOf` now filters to the three staging outcome kinds with a type guard before it sorts, because not every `PerEntryOutcome` carries `marketplace`. The existing `stagingDiagnosticsOf` test now pins row order (project block before user block). There is a new unit case with marketplaces `zeta` then `alpha`, and a new direct-update case: a project `zeta` and a user `alpha`, where the bare update visits zeta first and the diagnostics follow the alpha-first rows. Both new cases fail without the source change.
+**Applied fix:** Both paths now stable-sort by the marketplace block key `{ name: marketplace, scope }` with `compareByNameThenScope`, the comparator `update-cascade.ts` and `reconcile/notify.ts` use for their blocks. Inside a block, rows keep outcome order, so the stable sort gives the row order. `stagingDiagnosticsOf` now filters to the three staging outcome kinds with a type guard before it sorts, because not every `PerEntryOutcome` carries `marketplace`. The existing `stagingDiagnosticsOf` test now pins row order (project block before user block). There is a new unit case with marketplaces `zeta` then `alpha`, and a new direct-update case: a project `zeta` and a user `alpha`, where the bare update visits zeta first and the diagnostics follow the alpha-first rows. Both new cases fail without the source change. The behavioral scenario came in a later commit, `a463dafc`; see below.
 **Status:** fixed: requires human verification (logic change)
 
 ### WR-02: `marketplace/update.messaging.ts` imports the `plugin/shared.ts` hub
@@ -73,11 +73,15 @@ All checks ran in the main checkout of this worktree (`/home/acolomba/src/pi-cla
 
 Per fix: typecheck, ESLint on the touched files, `npm run test:coverage:direct -- <source>` for each touched source (all exit 0), `npm run fallow` for WR-02 and IN-07, and the commit hook's `check:commit`.
 
-After all fixes: `npm run check` exited 0. That run included 912 cucumber scenarios, all passed.
+After all fixes: `npm run check` exited 0. That run included 912 cucumber scenarios, all passed. It exited 0 again after the WR-01 scenario was added (913 scenarios).
 
-## Open item
+## Behavioral scenario (closes the former open item)
 
-WR-01 changes the order of user-visible diagnostics. AGENTS.md asks for a cucumber scenario under `features/` for a user-visible `/claude:plugin` change. As the caller asked, this fix adds unit coverage only: a direct-update case and an `apply` projection case. Decide whether to add a two-marketplace ordering scenario to `features/plugin/staging-warnings.feature`.
+WR-01 changes the order of notes the user sees, so AGENTS.md asks for a cucumber scenario. The coordinator approved one. Commit `a463dafc` adds "A bare update over two marketplaces reports the skips in the order of the rows" to `features/plugin/staging-warnings.feature`. The project scope adds `fixtures` first and `addons` second, so the bare update visits `demo@fixtures` first. The rows show the `addons` block first, and the scenario requires the `tool` diagnostic before the `demo` one.
+
+Red proof: I reverse-applied the `a6513334` hunks of `update-flow.ts` and `apply-outcomes.ts` to the working tree for one run, and the scenario failed on the swapped diagnostic order. I then restored both files with `git checkout --`, and the scenario passed. I did not restore the literal pre-`a6513334` file bytes, because `28c9304b` later moved the renderer import, so those bytes no longer load.
+
+After the scenario commit, `npm run check` exited 0 (913 scenarios passed).
 
 ---
 
