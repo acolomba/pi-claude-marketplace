@@ -5878,3 +5878,91 @@ test("D-PL5-10 / ADD-10: a hosted download answering HTTP 500 renders {network e
     assert.deepStrictEqual(await scopeLeftovers(locations), NOTHING_LEFT);
   });
 });
+
+test("D-PL5-17: re-adding a hosted marketplace whose download is gone downloads it again and keeps its plugins", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const first = makeCtx();
+    await addMarketplace({
+      ctx: first.ctx,
+      run: first.run,
+      scope: "project",
+      cwd,
+      rawSource: HOSTED_URL,
+      hostedManifestFetch: createHostedManifestFetch().hostedManifestFetch,
+    });
+    const state = await loadState(locations.extensionRoot);
+    const recorded = state.marketplaces["valid-marketplace"];
+    assert.ok(recorded);
+    const record = { ...recorded, plugins: { hello: INSTALLED_HELLO } };
+    await saveState(locations.extensionRoot, {
+      ...state,
+      marketplaces: { "valid-marketplace": record },
+    });
+    await rm(record.marketplaceRoot, { recursive: true });
+    const configBefore = await readFile(locations.baseConfigJsonPath, "utf8");
+    const { ctx, run, notifications } = makeCtx();
+    const { hostedManifestFetch, urls } = createHostedManifestFetch();
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: HOSTED_URL,
+      hostedManifestFetch,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(urls, [HOSTED_URL]);
+    const repaired = (await loadState(locations.extensionRoot)).marketplaces["valid-marketplace"];
+    assert.ok(repaired);
+    const { lastUpdatedAt: _, ...kept } = repaired;
+    const { lastUpdatedAt: __, ...recordKept } = record;
+    assert.deepStrictEqual(kept, recordKept);
+    assert.deepStrictEqual(
+      {
+        catalog: await readFile(record.manifestPath, "utf8"),
+        marker: await readFile(path.join(record.marketplaceRoot, HOSTED_MARKER), "utf8"),
+        config: await readFile(locations.baseConfigJsonPath, "utf8"),
+      },
+      { catalog: VALID_MANIFEST_JSON, marker: hostedMarkerBytes(HOSTED_URL), config: configBefore },
+    );
+  });
+});
+
+test("MKT-01: refuses a hosted catalog that declares a reserved name and leaves nothing", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-reserved-hosted-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const { hostedManifestFetch } = createHostedManifestFetch(
+      JSON.stringify({ name: "claude-plugins-official", owner: { name: "acme" }, plugins: [] }),
+    );
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: HOSTED_URL,
+      hostedManifestFetch,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n" +
+          `⊘ ${HOSTED_URL} [project] (failed)\n` +
+          `  ⊘ ${HOSTED_URL} (failed) {invalid manifest}\n` +
+          "    cause: The name 'claude-plugins-official' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the 'anthropics' organization.",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await scopeLeftovers(locations), NOTHING_LEFT);
+  });
+});

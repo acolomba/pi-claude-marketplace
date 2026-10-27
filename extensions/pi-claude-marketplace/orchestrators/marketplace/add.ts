@@ -639,24 +639,24 @@ type RecordedSourceAction<U> =
   | {
       readonly kind: "repair";
       readonly record: MarketplaceRecord;
-      readonly source: GitHubSource | UrlSource;
+      readonly source: GitHubSource | UrlSource | HostedManifestSource;
       readonly declare: boolean;
     };
 
 /**
  * D-PL5-17: Claude Code re-fetches a registered marketplace whose cache is
- * gone. A github or url record whose checkout under `sources/<name>/` is gone
- * returns the source to re-clone it from. A path record whose recorded
+ * gone. A github, url, or hosted record whose checkout under `sources/<name>/`
+ * is gone returns the source to re-clone or download it from. A path record whose recorded
  * manifest is gone throws an ENOENT error, which reads `source missing`: the
  * add cannot rebuild a directory the user owns. Any other record is intact
  * and returns `undefined`.
  */
 async function repairableSource(
   record: MarketplaceRecord,
-): Promise<GitHubSource | UrlSource | undefined> {
+): Promise<GitHubSource | UrlSource | HostedManifestSource | undefined> {
   // ST-6 revalidated the stored source when the state loaded.
   const source = record.source as ParsedSource;
-  if (source.kind === "github" || source.kind === "url") {
+  if (source.kind === "github" || source.kind === "url" || source.kind === "hosted") {
     return (await pathExists(record.marketplaceRoot)) ? undefined : source;
   }
 

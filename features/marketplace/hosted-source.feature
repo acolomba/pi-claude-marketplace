@@ -98,3 +98,76 @@ Feature: Marketplace hosted source
       | GET    | /acme/tools/marketplace.json | 200    |
     Then the project scope holds no marketplace checkout
     Then the "claude-plugins.json" file of the project scope does not exist
+
+  Scenario: Installing a plugin from a hosted marketplace clones only the plugin
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | url         | ghp        | false  |
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install ghp@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status    | reasons | scope   | version |
+      | tools            | project           | ghp@tools | ghp  | installed |         | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | ghp@tools | 1.0.0   | true    |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
+
+  Scenario: Listing marketplaces reads a hosted marketplace without a request
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin marketplace list --scope project"
+    Then the result has these fields:
+      | kind                | cascade          |
+      | severity            | info             |
+      | needs reload        | false            |
+      | tally label         | Marketplace list |
+      | tally failures      | 0                |
+      | tally warnings      | 0                |
+      | tally success count | 1                |
+    Then the result lists these marketplaces:
+      | name  | scope   | details autoupdate | details last updated at |
+      | tools | project | false              | {scenario time}         |
+    Then the git host receives no request
+
+  Scenario: A hosted marketplace added by the command has nothing pending
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+    Then the git host receives no request
+
+  Scenario: Apply adds a hosted marketplace that a config declares
+    Given the marketplace "tools" is published as a hosted source
+    Given a config in scope project and layer base, with these marketplaces:
+      | name  | source                                         | autoupdate |
+      | tools | https://{git host}/acme/tools/marketplace.json | false      |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | false                     |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 1                         |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the git host receives these requests:
+      | method | path                         | status |
+      | GET    | /acme/tools/marketplace.json | 200    |
