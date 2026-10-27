@@ -57,7 +57,7 @@ import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { DeclarerReadFailure } from "../plugin/dependency-index.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
-import type { StagingDiagnostic } from "../plugin/shared.ts";
+import type { StagingDiagnostic } from "../plugin/staging-diagnostics.ts";
 import type { UninstallRefusedError } from "../plugin/uninstall.ts";
 
 export interface OutcomeBase {

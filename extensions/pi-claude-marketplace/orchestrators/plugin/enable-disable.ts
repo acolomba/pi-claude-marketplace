@@ -104,7 +104,6 @@ import {
   pluginLayerVerdict,
   resolveCrossScopePluginTarget,
   retiresWorkflowCommand,
-  surfaceStagingDiagnostics,
   undeclarableMarketplaceRefusal,
   type CrossScopePluginResolution,
   type LedgerDegradationSignals,
@@ -112,6 +111,7 @@ import {
   type TargetLayers,
   type writeAdoptingConfigEntries,
 } from "./shared.ts";
+import { surfaceStagingDiagnostics } from "./staging-diagnostics.ts";
 
 import type { RecordDeclarations } from "./dependency-index.ts";
 import type {

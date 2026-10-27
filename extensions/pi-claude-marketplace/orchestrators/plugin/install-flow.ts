@@ -99,14 +99,13 @@ import {
   overwriteDisabledMemberEntries,
   pluginLayerVerdict,
   resolveInstallMarketplaceSource,
-  surfaceDiscoveryWarnings,
-  surfaceStagingDiagnostics,
   undeclarableMarketplaceRefusal,
   sweepWorkflowsStaging,
   writeAdoptingConfigEntries,
   type LedgerDegradationSignals,
   type TargetLayers,
 } from "./shared.ts";
+import { surfaceDiscoveryWarnings, surfaceStagingDiagnostics } from "./staging-diagnostics.ts";
 import { UPDATE_MATERIALIZATION } from "./update-preflight.ts";
 import { assertUpdateNamesFree } from "./update-swap.ts";
 
@@ -1144,7 +1143,7 @@ function unwrapCascade<S extends Exclude<InstallCascadeResult, CascadeFailureArm
  * warning says the installed artifact set does not match what the plugin
  * author shipped, and the install row's resource count gives the user no
  * baseline to notice the shortfall. The caller renders the standalone half
- * through `./shared.ts::surfaceDiscoveryWarnings`, which update and
+ * through `./staging-diagnostics.ts::surfaceDiscoveryWarnings`, which update and
  * reinstall also call (D-141-05). Every bridge tags its warnings at the
  * producer, and the ledger partitions them by tag (D-PL1-02, D-PL1-03).
  */

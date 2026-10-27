@@ -7,7 +7,7 @@ import {
   type PluginUpdatedMessage,
 } from "../../shared/notification-types.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
-import { surfaceStagingDiagnostics } from "../plugin/shared.ts";
+import { surfaceStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
 import {
   constraintCauseFor,
   revisionVersionSlot,
@@ -18,7 +18,7 @@ import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { StagingDiagnostic } from "../plugin/shared.ts";
+import type { StagingDiagnostic } from "../plugin/staging-diagnostics.ts";
 import type {
   PluginUpdateFailedOutcome,
   PluginUpdateOutcome,

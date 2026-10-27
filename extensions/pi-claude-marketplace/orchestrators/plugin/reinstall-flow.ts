@@ -78,8 +78,8 @@ import {
   keepLocalLayerTargets,
   MarketplaceNotAddedSignal,
   namedPluginLayerRefusal,
-  surfaceStagingDiagnostics,
 } from "./shared.ts";
+import { surfaceStagingDiagnostics } from "./staging-diagnostics.ts";
 
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
@@ -95,7 +95,7 @@ import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts
 import type { CandidateReport } from "./materialize-latest.ts";
 import type { ReinstallPhaseFailure } from "./reinstall-record.ts";
 import type { ReinstallPluginsTarget, ReinstallTargetSelection } from "./reinstall-targets.ts";
-import type { StagingDiagnostic } from "./shared.ts";
+import type { StagingDiagnostic } from "./staging-diagnostics.ts";
 import type { MaterializationPolicy, UpdateCloneCacheSeam } from "./update-preflight.ts";
 import type { RmOptions } from "node:fs";
 

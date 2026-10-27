@@ -101,8 +101,8 @@ import {
   namedPluginLayerRefusal,
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,
-  surfaceStagingDiagnostics,
 } from "./shared.ts";
+import { surfaceStagingDiagnostics } from "./staging-diagnostics.ts";
 import { composeUpdateCascade } from "./update-cascade.ts";
 import { UPDATE_MATERIALIZATION } from "./update-preflight.ts";
 import { revisionVersionSlot } from "./update-row.ts";
@@ -142,7 +142,7 @@ import type {
   PluginUpdateOutcome,
 } from "../types.ts";
 import type { CandidateReport } from "./materialize-latest.ts";
-import type { StagingDiagnostic } from "./shared.ts";
+import type { StagingDiagnostic } from "./staging-diagnostics.ts";
 import type { StagingWarning } from "../../shared/staging-warnings.ts";
 
 /** Runs one prepared update target for the update flow. */

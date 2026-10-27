@@ -102,7 +102,8 @@ import {
   createInstallOperation,
   createUninstallOperation,
 } from "../plugin/operations.ts";
-import { degradationFromEnable, surfaceStagingDiagnostics } from "../plugin/shared.ts";
+import { degradationFromEnable } from "../plugin/shared.ts";
+import { surfaceStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
 import { UninstallRefusedError } from "../plugin/uninstall.ts";
 
 import {
