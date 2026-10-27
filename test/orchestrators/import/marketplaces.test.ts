@@ -34,6 +34,7 @@ test("buildClaudeImportPlan builds a complete mixed user plan with ordered diagn
             scope: "user",
             marketplace: "claude-plugins-official",
             source: "anthropics/claude-plugins-official",
+            sourceIsFallback: true,
           },
         ],
         pluginsToInstall: [
@@ -204,6 +205,7 @@ test("buildClaudeImportPlan preserves user and project scope input order", () =>
             scope: "user",
             marketplace: "claude-plugins-official",
             source: "anthropics/claude-plugins-official",
+            sourceIsFallback: true,
           },
         ],
         pluginsToInstall: [
@@ -226,6 +228,7 @@ test("buildClaudeImportPlan preserves user and project scope input order", () =>
             scope: "project",
             marketplace: "claude-plugins-official",
             source: "anthropics/claude-plugins-official",
+            sourceIsFallback: true,
           },
         ],
         pluginsToInstall: [
@@ -768,6 +771,7 @@ test("buildClaudeImportPlan maps the official source and skips its duplicate", (
             scope: "user",
             marketplace: "claude-plugins-official",
             source: "anthropics/claude-plugins-official",
+            sourceIsFallback: true,
           },
         ],
         diagnostics: [],
@@ -932,6 +936,7 @@ test("D-PL6-08: plans the official source for an official marketplace an enabled
             scope: "user",
             marketplace: "claude-plugins-official",
             source: "anthropics/claude-plugins-official",
+            sourceIsFallback: true,
           },
         ],
         pluginsToInstall: [
@@ -950,4 +955,35 @@ test("D-PL6-08: plans the official source for an official marketplace an enabled
     ],
     diagnostics: [],
   });
+});
+
+test("IMP-05: marks only the official marketplace an enabled plugin names as the fallback source", () => {
+  // arrange
+  const inputs = [
+    {
+      scope: "user" as const,
+      settings: {
+        enabledPlugins: { "official@claude-plugins-official": true, "tool@team": true },
+        extraKnownMarketplaces: {
+          team: { source: { source: "github", repo: "acme/team" } },
+          extra: { source: { source: "directory", path: "./extra" } },
+        },
+      },
+    },
+  ];
+
+  // act
+  const plan = buildClaudeImportPlan(inputs);
+
+  // assert
+  assert.deepStrictEqual(plan.scopes[0]?.marketplacesToEnsure, [
+    {
+      scope: "user",
+      marketplace: "claude-plugins-official",
+      source: "anthropics/claude-plugins-official",
+      sourceIsFallback: true,
+    },
+    { scope: "user", marketplace: "team", source: "acme/team" },
+    { scope: "user", marketplace: "extra", source: "./extra" },
+  ]);
 });

@@ -788,6 +788,106 @@ Feature: Plugin import
       | name     | source                       |
       | fixtures | {home}/marketplaces/fixtures |
 
+  Scenario: Importing settings that give a known marketplace a new source adds it again from that source and keeps its installed plugins
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given a second marketplace declaring the name "fixtures" is ready to add from "fixtures-copy"
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "formatter@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures-copy" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade |
+      | severity            | info    |
+      | needs reload        | true    |
+      | tally label         | Import  |
+      | tally failures      | 0       |
+      | tally warnings      | 0       |
+      | tally success count | 2       |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id                 | name      | version | status    | reasons | scope |
+      | fixtures         | user              | added              | formatter@fixtures | formatter | 1.0.0   | installed |         | user  |
+    Then the installation record of the user scope holds these plugins:
+      | id                 | version | enabled |
+      | demo@fixtures      | 1.0.0   | true    |
+      | formatter@fixtures | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                            |
+      | fixtures | {home}/marketplaces/fixtures-copy |
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id                 |
+      | demo@fixtures      |
+      | formatter@fixtures |
+
+  Scenario: Importing settings that give a known marketplace a directory that does not exist keeps the recorded marketplace
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the directory "fixtures-moved" to add does not exist
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures-moved" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | version | status    | reasons | scope |
+      | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | 1.0.0   | installed |         | user  |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+
+  Scenario: Importing settings that give a known marketplace the source of another known marketplace keeps both as they are
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the user scope
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/tools" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | version | status    | reasons | scope |
+      | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | 1.0.0   | installed |         | user  |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+      | tools    | {home}/marketplaces/tools    |
+
   Scenario: Importing a plugin whose install rollback cannot finish names the rollback phase
     Given the marketplace "fixtures" offers these plugins:
       | name | version |

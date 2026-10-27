@@ -110,7 +110,7 @@ function planMarketplaceSources(
   const diagnostics: ImportDiagnostic[] = [];
   const unmappableMarketplaces: string[] = [];
   const seen = new Set<string>();
-  const planOne = (marketplace: string, source: string | undefined): void => {
+  const planOne = (marketplace: string, source: string | undefined, fallback = false): void => {
     seen.add(marketplace);
     if (source === undefined) {
       unmappableMarketplaces.push(marketplace);
@@ -118,7 +118,12 @@ function planMarketplaceSources(
       return;
     }
 
-    marketplacesToEnsure.push({ scope, marketplace, source });
+    marketplacesToEnsure.push({
+      scope,
+      marketplace,
+      source,
+      ...(fallback && { sourceIsFallback: true }),
+    });
   };
 
   for (const ref of refs) {
@@ -126,11 +131,15 @@ function planMarketplaceSources(
       continue;
     }
 
+    // IMP-05: the official marketplace takes Claude Code's built-in source, a
+    // fallback (upstream `sourceIsFallback`).
+    const official = ref.marketplace === OFFICIAL_CLAUDE_MARKETPLACE;
     planOne(
       ref.marketplace,
-      ref.marketplace === OFFICIAL_CLAUDE_MARKETPLACE
+      official
         ? OFFICIAL_CLAUDE_MARKETPLACE_SOURCE
         : marketplaceSourceFromExtra(extraKnownMarketplaces[ref.marketplace]),
+      official,
     );
   }
 

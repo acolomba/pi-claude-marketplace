@@ -458,7 +458,7 @@ function resolvesToRecord(
     return true;
   }
 
-  const onDisk = path.resolve(cwd, expandTildePath(typed.logical));
+  const onDisk = resolvePathSource(typed.logical, cwd);
   return onDisk === record.marketplaceRoot || onDisk === recordedManifestPath(record);
 }
 
@@ -1545,7 +1545,7 @@ async function addPathInGuard(args: {
   // directory. Expand "~" and "~/..." against os.homedir() before
   // probing on disk. The stored `source.raw` keeps the verbatim "~"
   // form (SP-7); only the on-disk lookup is rewritten.
-  const onDiskPath = path.resolve(cwd, expandTildePath(source.logical));
+  const onDiskPath = resolvePathSource(source.logical, cwd);
   const probe = await stat(onDiskPath);
   let manifestPath: string;
   let marketplaceRoot: string;
@@ -1590,6 +1590,14 @@ async function addPathInGuard(args: {
     plugins: args.plugins,
   });
   return derivedName;
+}
+
+/**
+ * SP-7 / MA-4: the directory or manifest a path source names, as the add
+ * reads it: `~` expanded, then resolved against the command's directory.
+ */
+export function resolvePathSource(logical: string, cwd: string): string {
+  return path.resolve(cwd, expandTildePath(logical));
 }
 
 function expandTildePath(sourcePath: string): string {

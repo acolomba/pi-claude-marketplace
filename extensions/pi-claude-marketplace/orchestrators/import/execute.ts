@@ -1,5 +1,8 @@
-import { samePlannedSource } from "../../domain/source.ts";
-import { addMarketplace as defaultAddMarketplace } from "../../orchestrators/marketplace/add.ts";
+import { parsePluginSource, samePlannedSource } from "../../domain/source.ts";
+import {
+  addMarketplace as defaultAddMarketplace,
+  resolvePathSource,
+} from "../../orchestrators/marketplace/add.ts";
 import { type InstallPluginOptions } from "../../orchestrators/plugin/install-flow.ts";
 import {
   narrowResolverReasons,
@@ -38,6 +41,7 @@ import {
   rethrowInvalidGitHubBaseUrl,
   StateLockHeldError,
 } from "../../shared/errors.ts";
+import { pathExists } from "../../shared/fs-utils.ts";
 import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import { notifyDiagnostic, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -516,11 +520,11 @@ interface MarketplaceBlock {
   status: ImportBlockStatus;
   /**
    * The cause row for a `status: "failed"` block whose failure came from
-   * `result.marketplaceFailures` (a marketplace add attempt, an
-   * already-present marketplace whose stored source the planner could not
-   * classify, a source mismatch no plugin row carries (D-PL6-09), or a held
-   * lock) -- undefined otherwise, e.g. for a source mismatch whose per-plugin
-   * child rows already carry the mismatch reason.
+   * `result.marketplaceFailures` (a marketplace add attempt, a re-add from a
+   * new settings source included (D-PL6-19), an already-present marketplace
+   * whose stored source the planner could not classify, or a held lock) --
+   * undefined otherwise, e.g. for the official marketplace's source mismatch
+   * (IMP-05), whose per-plugin child rows already carry the mismatch reason.
    */
   failure?: MarketplaceBlockFailure;
 }
@@ -976,10 +980,10 @@ interface MarketplaceFailure {
 /**
  * WR-07: shared failure bookkeeping for a marketplace that will not be
  * usable this run -- a fresh add that did not record (typed failed outcome OR
- * unexpected throw, from `addOnePlannedMarketplace`), an already-present
- * marketplace whose stored source the planner could not classify, a source
- * mismatch no plugin row carries (D-PL6-09), or a scope another process held
- * locked at the read pass (IMP-07): block dependent plugin installs and
+ * unexpected throw, from `addOnePlannedMarketplace`, a re-add from a new
+ * settings source included (D-PL6-19)), an already-present marketplace whose
+ * stored source the planner could not classify, or a scope another process
+ * held locked at the read pass (IMP-07): block dependent plugin installs and
  * attribute the cause on both the marketplace row and each dependent plugin's
  * warning row.
  */
@@ -1024,8 +1028,9 @@ type SettledMismatch = Extract<PlannedMismatch, { cause: "source-mismatch" | "un
 
 /**
  * IMP-05: settle a planned marketplace the reconcile planner reported as a
- * source mismatch, recording the blocked outcome directly on `result` /
- * `blockedMarketplaces`.
+ * source mismatch that import does not add again: an unrecognized stored
+ * source, or the official marketplace's fallback source (D-PL6-19). It records
+ * the blocked outcome directly on `result` / `blockedMarketplaces`.
  */
 function recordPlannedMismatch(
   result: MutableImportResult,
@@ -1063,19 +1068,10 @@ function recordPlannedMismatch(
       );
       return;
     case "source-mismatch": {
+      // D-PL6-08: the official marketplace is planned only for an enabled
+      // plugin, so a plugin row always carries the mismatch.
       const cause = `Existing marketplace source ${mismatch.recordedSource} does not match Claude settings source ${marketplace.source}.`;
       const plugins = pluginsForMarketplace(scopePlan.pluginsToInstall, marketplace.marketplace);
-      if (plugins.length === 0) {
-        // D-PL6-09: no plugin row would carry the mismatch, so the
-        // marketplace takes the `(failed)` block and cause row the
-        // `unknown-stored` arm gives it.
-        recordMarketplaceAddFailure(result, blockedMarketplaces, scopePlan, marketplace, {
-          reason: "add-failed",
-          cause,
-        });
-        return;
-      }
-
       blockedMarketplaces.add(marketplace.marketplace);
       for (const plugin of plugins) {
         result.sourceMismatches.push({
@@ -1354,7 +1350,8 @@ async function enableOnePlannedPlugin(
 
 /**
  * WR-07: add ONE planned marketplace in ORCHESTRATED mode and dispatch on the
- * typed outcome.
+ * typed outcome. D-PL6-19: `replaceRecorded` names the recorded marketplace
+ * a re-add from a new settings source replaces in place.
  *
  * Standalone mode is wrong here: a classified precondition failure (duplicate
  * name, stale clone, invalid manifest, unsupported source, source missing)
@@ -1368,6 +1365,7 @@ async function addOnePlannedMarketplace(
   blockedMarketplaces: Set<string>,
   scopePlan: ScopedImportPlan,
   marketplace: PlannedMarketplace,
+  replaceRecorded?: string,
 ): Promise<void> {
   const addMarketplace = addMarketplaceFn(opts.deps);
   try {
@@ -1380,6 +1378,7 @@ async function addOnePlannedMarketplace(
       completionCache: opts.completionCache,
       notifications: { mode: "orchestrated" },
       ...(opts.gitOps !== undefined && { gitOps: opts.gitOps }),
+      ...(replaceRecorded !== undefined && { replaceRecorded }),
     });
     if (outcome?.status === "added") {
       result.addedMarketplaces.push({
@@ -1613,23 +1612,15 @@ function recordReusedMarketplace(
 }
 
 /**
- * IMP-05 / IMP-06: settle a planned marketplace the snapshot records under its
- * own name. A planner source mismatch blocks it; otherwise it is reported as a
- * skip.
+ * D-PL6-19: whether a settings source is a path that does not exist, resolved
+ * as the add resolves it (`~` expanded, relative to the command's directory).
  */
-function settleRecordedMarketplace(
-  result: MutableImportResult,
-  blockedMarketplaces: Set<string>,
-  scopePlan: ScopedImportPlan,
-  marketplace: PlannedMarketplace,
-  plan: ReconcilePlan,
-): void {
-  const mismatch = plannedMismatchFor(plan, marketplace.marketplace);
-  if (mismatch !== undefined) {
-    recordPlannedMismatch(result, blockedMarketplaces, scopePlan, marketplace, mismatch);
-    return;
-  }
+async function isMissingPathSource(rawSource: string, cwd: string): Promise<boolean> {
+  const source = parsePluginSource(rawSource);
+  return source.kind === "path" && !(await pathExists(resolvePathSource(source.logical, cwd)));
+}
 
+function pushMarketplaceSkip(result: MutableImportResult, marketplace: PlannedMarketplace): void {
   result.skippedExistingMarketplaces.push({
     kind: "marketplace-skip",
     scope: marketplace.scope,
@@ -1639,9 +1630,57 @@ function settleRecordedMarketplace(
 }
 
 /**
+ * IMP-05 / IMP-06 / D-PL6-19: settle a planned marketplace the snapshot
+ * records under its own name, as Claude Code's startup reconciler settles a
+ * known name. A recorded source that matches is a skip. An unrecognized stored
+ * source, or a mismatch on the official marketplace's fallback source, blocks
+ * it (`recordPlannedMismatch`). A new source that is a path that does not
+ * exist, or that the snapshot records under another name, keeps the record
+ * as a skip, so its plugins go on against it. Any other new source is added
+ * again in place.
+ */
+async function settleRecordedMarketplace(
+  opts: ImportClaudeSettingsOptions,
+  result: MutableImportResult,
+  blockedMarketplaces: Set<string>,
+  scopePlan: ScopedImportPlan,
+  marketplace: PlannedMarketplace,
+  read: Extract<ImportReadPass, { kind: "planned" }>,
+): Promise<void> {
+  const mismatch = plannedMismatchFor(read.plan, marketplace.marketplace);
+  if (mismatch === undefined) {
+    pushMarketplaceSkip(result, marketplace);
+    return;
+  }
+
+  if (mismatch.cause === "unknown-stored" || marketplace.sourceIsFallback === true) {
+    recordPlannedMismatch(result, blockedMarketplaces, scopePlan, marketplace, mismatch);
+    return;
+  }
+
+  if (
+    recordsSourceUnderAnotherName(read.state, marketplace) ||
+    (await isMissingPathSource(marketplace.source, opts.cwd))
+  ) {
+    pushMarketplaceSkip(result, marketplace);
+    return;
+  }
+
+  await addOnePlannedMarketplace(
+    opts,
+    result,
+    blockedMarketplaces,
+    scopePlan,
+    marketplace,
+    marketplace.marketplace,
+  );
+}
+
+/**
  * IMP-05 / IMP-06: settle the settings' marketplaces against the read pass's
- * snapshot. A name the scope records is settled against the plan
- * (`settleRecordedMarketplace`). A name it does not record, whose source it
+ * snapshot. A name the scope records is skipped, kept, blocked, or added again
+ * from its new source (`settleRecordedMarketplace`, D-PL6-19). A name it does
+ * not record, whose source it
  * records under another name, is reused and its plugins fail as not added
  * (D-PL6-17), even when the settings also declare that other name (D-PL6-18).
  * Any other marketplace is added. Answers the names whose plugins may run.
@@ -1655,7 +1694,15 @@ async function ensurePlannedMarketplaces(
   const blockedMarketplaces = new Set<string>();
   for (const marketplace of scopePlan.marketplacesToEnsure) {
     if (ownValue(read.state.marketplaces, marketplace.marketplace) !== undefined) {
-      settleRecordedMarketplace(result, blockedMarketplaces, scopePlan, marketplace, read.plan);
+      // eslint-disable-next-line no-await-in-loop -- a re-add locks the scope (retries: 0)
+      await settleRecordedMarketplace(
+        opts,
+        result,
+        blockedMarketplaces,
+        scopePlan,
+        marketplace,
+        read,
+      );
     } else if (recordsSourceUnderAnotherName(read.state, marketplace)) {
       recordReusedMarketplace(result, blockedMarketplaces, scopePlan, marketplace);
     } else {
