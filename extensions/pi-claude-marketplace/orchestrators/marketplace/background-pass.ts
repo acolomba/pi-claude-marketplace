@@ -43,7 +43,11 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationEntrySink, NotificationRun } from "../../shared/notification-run.ts";
 import type { BackgroundUpdatePlugin } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { PluginUpdateFailedOutcome, PluginUpdateFn } from "../types.ts";
+import type {
+  PluginUpdateFailedOutcome,
+  PluginUpdateFn,
+  PluginUpdateSkippedOutcome,
+} from "../types.ts";
 
 /** The `input` event's context; Pi's extension context satisfies it. */
 export interface BackgroundContext extends NotificationContext {
@@ -87,7 +91,7 @@ const SILENT_SINK: NotificationEntrySink = {
   appendEntry: () => undefined,
 };
 
-const NOT_RUN_NOTE = "the session ended before this update ran";
+const NOT_RUN_NOTE = "the background update stopped before this update ran";
 
 const AUTOUPDATE_OFF_NOTE = "autoupdate was turned off before this update ran";
 
@@ -157,14 +161,31 @@ interface YieldingPluginUpdateArgs {
 }
 
 /**
- * A failed outcome with no reason, for a plugin update the pass did not run,
- * because a throw would get a reason from the cascade's classifier.
+ * D-PL8-22: a skipped outcome with no reason, for a plugin update the pass did
+ * not run because the runtime stopped. It is returned, not thrown, because a
+ * throw would get a reason from the cascade's classifier.
  */
-function notRunOutcome(plugin: string, note: string): PluginUpdateFailedOutcome {
+function notRunOutcome(plugin: string): PluginUpdateSkippedOutcome {
+  return {
+    partition: "skipped",
+    name: plugin,
+    notes: [NOT_RUN_NOTE],
+    reasons: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+  };
+}
+
+/**
+ * D-PL8-18: a failed outcome with no reason, for a plugin update the pass did
+ * not run because a command turned the marketplace's autoupdate off.
+ */
+function autoupdateOffOutcome(plugin: string): PluginUpdateFailedOutcome {
   return {
     partition: "failed",
     name: plugin,
-    notes: [note],
+    notes: [AUTOUPDATE_OFF_NOTE],
     reasons: [],
     declaresAgents: false,
     declaresMcp: false,
@@ -185,12 +206,12 @@ function yieldingPluginUpdate(args: YieldingPluginUpdateArgs): PluginUpdateFn {
     gate.endStep();
     await gate.beginStep();
     if (isStopped()) {
-      return notRunOutcome(plugin, NOT_RUN_NOTE);
+      return notRunOutcome(plugin);
     }
 
     const { merged } = await loadMergedScopeConfig(locationsFor(scope, cwd));
     if (!isAutoupdateOn(merged, marketplace)) {
-      return notRunOutcome(plugin, AUTOUPDATE_OFF_NOTE);
+      return autoupdateOffOutcome(plugin);
     }
 
     const outcome = await updatePlugin(plugin, marketplace, scope);

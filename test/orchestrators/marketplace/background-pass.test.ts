@@ -637,7 +637,7 @@ test("AUP-03: a pass that an invalid GitHub base override ends still reports the
   capture.assertValid();
 });
 
-test("a runtime stopped during an update runs no further plugin update", async (t) => {
+test("D-PL8-22: a runtime stopped during an update skips the further plugin updates", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-stopped-");
   await seedTwoAutoupdateMarketplaces(cwd);
@@ -657,10 +657,10 @@ test("a runtime stopped during an update runs no further plugin update", async (
     ]),
   });
   const pass = createBackgroundPass(deps);
-  const expectedOutcome: PluginUpdateFailedOutcome = {
-    partition: "failed",
+  const expectedOutcome: PluginUpdateSkippedOutcome = {
+    partition: "skipped",
     name: "b",
-    notes: ["the session ended before this update ran"],
+    notes: ["the background update stopped before this update ran"],
     reasons: [],
     declaresAgents: false,
     declaresMcp: false,
