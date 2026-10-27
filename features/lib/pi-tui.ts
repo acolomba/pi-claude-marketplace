@@ -22,6 +22,7 @@ import type { Readable, Writable } from "node:stream";
 
 const PTY_BRIDGE = fileURLToPath(new URL("./pi-tui-pty.py", import.meta.url));
 const READY_PREFIX = "PI_TUI_PTY_READY";
+const READY_TEXT = "Warning: No models available.";
 const DEFAULT_READY_MS = 15_000;
 const DEFAULT_STOP_MS = 5_000;
 
@@ -158,11 +159,7 @@ export class PiTuiSession {
 
   /** Waits for an interactive slave and the first rendered TUI screen. */
   async waitUntilReady(readyMs: number = DEFAULT_READY_MS): Promise<PiTuiReadiness> {
-    await this.waitFor(
-      () => this.bridgeReady && removeTerminalControls(this.output).trim().length > 0,
-      readyMs,
-      "Pi TUI readiness",
-    );
+    await this.waitFor(() => this.bridgeReady && this.tuiRendered(), readyMs, "Pi TUI readiness");
     return this.readiness;
   }
 
@@ -170,7 +167,7 @@ export class PiTuiSession {
   get readiness(): PiTuiReadiness {
     return {
       isatty: this.bridgeReady,
-      ready: removeTerminalControls(this.output).trim().length > 0,
+      ready: this.tuiRendered(),
     };
   }
 
@@ -191,6 +188,63 @@ export class PiTuiSession {
   /** Waits until the normalized terminal contains `text`. */
   async waitForText(text: string, timeoutMs: number): Promise<void> {
     await this.waitFor(() => this.text.includes(text), timeoutMs, `terminal text ${text}`);
+  }
+
+  /** Marks the current raw terminal position for a later event-driven wait. */
+  markOutput(): number {
+    return this.output.length;
+  }
+
+  /** Waits until terminal output written after `mark` contains `text`. */
+  async waitForTextAfter(text: string, mark: number, timeoutMs: number): Promise<void> {
+    await this.waitFor(
+      () => removeTerminalControls(this.output.slice(mark)).includes(text),
+      timeoutMs,
+      `terminal text ${text}`,
+    );
+  }
+
+  /** Waits for terminal output to stay unchanged for `quietMs`, within `timeoutMs`. */
+  waitForQuiet(quietMs: number, timeoutMs: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const waiter: {
+        quiet?: NodeJS.Timeout;
+        hardStop?: NodeJS.Timeout;
+        changed: () => void;
+        finish: () => void;
+      } = { changed: () => undefined, finish: () => undefined };
+      const cleanup = (): void => {
+        clearTimeout(waiter.quiet);
+        clearTimeout(waiter.hardStop);
+        this.changes.delete(waiter.changed);
+      };
+
+      waiter.finish = (): void => {
+        cleanup();
+        resolve();
+      };
+
+      waiter.changed = (): void => {
+        clearTimeout(waiter.quiet);
+        waiter.quiet = setTimeout(waiter.finish, quietMs);
+      };
+
+      waiter.quiet = setTimeout(waiter.finish, quietMs);
+      waiter.hardStop = setTimeout(() => {
+        cleanup();
+        reject(
+          new Error(`Pi TUI output did not settle after ${timeoutMs} ms:\n${this.diagnostics()}`),
+        );
+      }, timeoutMs);
+
+      this.changes.add(waiter.changed);
+    });
+  }
+
+  /** Returns the complete normalized set of background-update notices on the terminal. */
+  backgroundUpdateNotices(): readonly string[] {
+    const notices = this.text.match(/Plugins? updated: .*? · Run \/reload to apply/g) ?? [];
+    return [...new Set(notices)];
   }
 
   /** Releases the TUI, escalating from its quit key to a process-group kill. */
@@ -225,6 +279,11 @@ export class PiTuiSession {
 
   private diagnostics(): string {
     return `${this.text}\n${this.bridgeOutput}`.trim();
+  }
+
+  private tuiRendered(): boolean {
+    const text = removeTerminalControls(this.output);
+    return text.includes(READY_TEXT) && !text.includes("Invalid mode");
   }
 
   private waitFor(condition: () => boolean, timeoutMs: number, description: string): Promise<void> {

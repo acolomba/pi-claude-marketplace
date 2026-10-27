@@ -88,6 +88,13 @@ Given(
 );
 
 Given(
+  "the git host holds the connection for the {git repository}",
+  async function (this: ScenarioWorld, reference: GitRepositoryReference): Promise<void> {
+    await armRepository(this, reference, { kind: "hold" });
+  },
+);
+
+Given(
   "the git host requires the user {string} with the password {string} for the {git repository}",
   async function (
     this: ScenarioWorld,

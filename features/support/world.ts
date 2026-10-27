@@ -64,6 +64,10 @@ export class ScenarioWorld extends World {
   // so a session payload without rows would otherwise pass unseen. The steps
   // that state the fields of every result call `markResultsCompared()`.
   uncomparedSessionResults: readonly string[] = [];
+  // A TUI message may produce background notices; its assertion compares the complete set.
+  uncomparedTuiNotices = false;
+  backgroundForegroundWaitMs: number | undefined = undefined;
+  backgroundRequestWindow: RequestWindow | undefined = undefined;
   // Cucumber builds the world before any `Before()` hook, so the
   // `{scenario time}` window opens before any setup command runs (D-05).
   readonly startedAt = Date.now();
@@ -84,6 +88,7 @@ export class ScenarioWorld extends World {
   // takes the place of the run's Pi.
   private scenarioPi: PiProcess | undefined = undefined;
   private tuiSession: PiTuiSession | undefined = undefined;
+  private tuiEnvironment: RpcGitEnvironment | undefined = undefined;
 
   /**
    * The Pi the steps talk to: the one this scenario started with
@@ -429,10 +434,12 @@ export class ScenarioWorld extends World {
    * ten-minute maximum.
    */
   async usePiWithBackgroundUpdateDelay(value: string): Promise<void> {
-    await this.usePiWith({
+    const environment = {
       ...currentRun().piEnvironment,
       PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS: value,
-    });
+    } satisfies RpcGitEnvironment;
+    this.tuiEnvironment = environment;
+    await this.usePiWith(environment);
   }
 
   /** Starts one contained production TUI and registers its release before waiting for readiness. */
@@ -442,7 +449,10 @@ export class ScenarioWorld extends World {
     }
 
     const run = currentRun();
-    const tui = await PiTuiSession.start({ sandbox: run.sandbox, git: run.piEnvironment });
+    const tui = await PiTuiSession.start({
+      sandbox: run.sandbox,
+      git: this.tuiEnvironment ?? run.piEnvironment,
+    });
     this.onRelease(() => tui.stop());
     this.tuiSession = tui;
     await tui.waitUntilReady();
@@ -456,6 +466,17 @@ export class ScenarioWorld extends World {
     }
 
     return this.tuiSession;
+  }
+
+  /** Marks that a TUI message may have produced notices that a Then step must compare. */
+  expectTuiNotices(): void {
+    assert.strictEqual(this.uncomparedTuiNotices, false, "TUI notices are already uncompared");
+    this.uncomparedTuiNotices = true;
+  }
+
+  /** Marks the complete TUI notice set compared. */
+  markTuiNoticesCompared(): void {
+    this.uncomparedTuiNotices = false;
   }
 
   /** Registers `release` to run when the scenario ends, before anything registered earlier. */
@@ -494,6 +515,7 @@ After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): 
   const uncompared = this.uncomparedRows;
   const uncomparedNotices = this.uncomparedNotices;
   const uncomparedSessionResults = this.uncomparedSessionResults;
+  const uncomparedTuiNotices = this.uncomparedTuiNotices;
   await this.release();
   if (result?.status === Status.PASSED) {
     assert.deepStrictEqual(uncompared, [], "no step compared these rows of the last results");
@@ -507,5 +529,6 @@ After(async function (this: ScenarioWorld, { result }: ITestCaseHookParameter): 
       [],
       "no step compared the fields of these results of the last session",
     );
+    assert.strictEqual(uncomparedTuiNotices, false, "no step compared the TUI notice set");
   }
 });

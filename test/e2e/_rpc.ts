@@ -218,8 +218,7 @@ export function piArguments(
   const extensions = [EXTENSION_ENTRY, ...extraExtensions];
   return [
     resolvePiRuntime(REPO_ROOT).cliPath,
-    "--mode",
-    mode,
+    ...(mode === "rpc" ? ["--mode", "rpc"] : []),
     "--offline",
     "--no-session",
     ...extensions.flatMap((extension) => ["--extension", extension]),

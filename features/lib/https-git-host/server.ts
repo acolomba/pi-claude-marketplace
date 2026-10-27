@@ -67,11 +67,12 @@ export type ArmedStatus = (typeof ARMED_STATUSES)[number];
  * How an armed repository fails until it is disarmed or the host is reset
  * (HOST-03): it answers an error status, drops the connection on every
  * request, answers 401 to every request that does not carry one user and
- * password, or answers 302 to a location.
+ * password, answers 302 to a location, or holds the response open.
  */
 export type GitHostArm =
   | { readonly kind: "status"; readonly status: ArmedStatus }
   | { readonly kind: "drop" }
+  | { readonly kind: "hold" }
   | { readonly kind: "credential"; readonly user: string; readonly password: string }
   | { readonly kind: "redirect"; readonly location: string };
 
@@ -236,6 +237,8 @@ function failArmed(
       logged.status = "dropped";
       req.socket.destroy();
       return true;
+    case "hold":
+      return true;
     case "status":
       logged.status = arm.status;
       res.statusCode = arm.status;
@@ -321,6 +324,8 @@ export class HttpsGitHost {
   private readonly children = new Set<ChildProcess>();
   private readonly arms = new Map<string, GitHostArm>();
   private readonly files = new Map<string, Buffer>();
+  private readonly requestWaiters = new Set<() => void>();
+  private readonly requestStatusWaiters = new Set<() => void>();
   private connections = 0;
 
   private constructor(root: string, server: Server, port: number) {
@@ -429,6 +434,60 @@ export class HttpsGitHost {
     };
   }
 
+  /** Resolves when a request arrives after `window`, without polling the host log. */
+  waitForRequestAfter(window: RequestWindow, timeoutMs = 5_000): Promise<void> {
+    if (this.log.length > window.requests) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      const waiter: { timer?: NodeJS.Timeout; finish: () => void } = {
+        finish: () => undefined,
+      };
+      waiter.finish = (): void => {
+        clearTimeout(waiter.timer);
+        this.requestWaiters.delete(waiter.finish);
+        resolve();
+      };
+
+      waiter.timer = setTimeout(() => {
+        this.requestWaiters.delete(waiter.finish);
+        reject(new Error(`the git host received no request after ${timeoutMs} ms`));
+      }, timeoutMs);
+      this.requestWaiters.add(waiter.finish);
+    });
+  }
+
+  /** Resolves when every request after `window` has left its pending state. */
+  waitForRequestsSettledAfter(window: RequestWindow, timeoutMs = 5_000): Promise<void> {
+    const settled = (): boolean =>
+      this.log.slice(window.requests).every((request) => request.status !== "pending");
+    if (settled()) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+      const waiter: { timer?: NodeJS.Timeout; finish: () => void } = {
+        finish: () => undefined,
+      };
+      waiter.finish = (): void => {
+        if (!settled()) {
+          return;
+        }
+
+        clearTimeout(waiter.timer);
+        this.requestStatusWaiters.delete(waiter.finish);
+        resolve();
+      };
+
+      waiter.timer = setTimeout(() => {
+        this.requestStatusWaiters.delete(waiter.finish);
+        reject(new Error(`the git host kept a request pending after ${timeoutMs} ms`));
+      }, timeoutMs);
+      this.requestStatusWaiters.add(waiter.finish);
+    });
+  }
+
   /** Returns the repositories, files, arms, requests, connections, and CGI children the host holds. */
   async snapshot(): Promise<GitHostSnapshot> {
     return {
@@ -498,6 +557,10 @@ export class HttpsGitHost {
       status: "pending",
     };
     this.log.push(logged);
+    for (const waiter of [...this.requestWaiters]) {
+      waiter();
+    }
+
     // A client that drops the socket must not crash the worker that hosts the server.
     req.on("error", () => {
       res.destroy();
@@ -505,6 +568,16 @@ export class HttpsGitHost {
     res.on("error", () => {
       res.destroy();
     });
+    res.on("close", () => {
+      if (logged.status === "pending") {
+        logged.status = "dropped";
+      }
+
+      for (const waiter of [...this.requestStatusWaiters]) {
+        waiter();
+      }
+    });
+
     const served = servedPath(logged.path, `https://${this.address}`);
     if (served === undefined) {
       answerServerError(logged, res);
