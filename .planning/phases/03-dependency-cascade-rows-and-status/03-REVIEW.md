@@ -25,6 +25,18 @@ findings:
   info: 4
   total: 5
 status: issues_found
+fixed:
+  - id: WR-01
+    commit: 5f998085
+  - id: IN-01
+    commit: e764aac9
+  - id: IN-02
+    commit: 8da37b6d
+skipped:
+  - id: IN-03
+    reason: not in the fix scope the operator chose
+  - id: IN-04
+    reason: not in the fix scope the operator chose; the plan-step path belongs to Phase 4 (D-PL3-15)
 ---
 
 # Phase 3: Code Review Report
@@ -56,6 +68,8 @@ One defect remains in scope: an unbounded version still reaches a refusal senten
 
 ### WR-01: The installed-unsatisfied refusal still prints the recorded version uncut
 
+**Status:** fixed in `5f998085`. `installedUnsatisfiedCause` cuts `recordedVersion` with `truncateForRefusal(…, MAX_REFUSAL_VERSION_CHARS)`. A unit case and the `install-dependencies.feature` scenario "Installing a plugin whose installed dependency records a very long version shows the version cut to 64 characters in the version conflict" (an 80-character recorded version) fail without the change. The catalog pins use a short version and do not change.
+
 **File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:408`
 
 **Issue:** `installedUnsatisfiedCause` was rewritten in this phase for the CAS-06 hint. Its `head` sentence still interpolates `failure.recordedVersion` raw:
@@ -81,6 +95,8 @@ Import both names from `../../domain/dependency-range.ts`. This needs a messagin
 
 ### IN-01: The comment says "nearest the requested plugin first", but the order is reverse post-order
 
+**Status:** fixed in `e764aac9` (second option, comment only). The `rangeRequirers` doc now says reverse install order, the closure's post order reversed, and that this is not the order of distance. No behavior change.
+
 **File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.ts:964` (doc), `:982-985` (code)
 
 **Issue:** The doc claims the requirers come "nearest the requested plugin first, which is the reverse of the closure's post order". These are not the same order.
@@ -94,6 +110,8 @@ Take the graph `app -> [a, b]`, `a -> x@^1`, `b -> c -> x@^1`. The post order is
 
 ### IN-02: The invalid-id row escapes the name in its cause but not in its subject
 
+**Status:** fixed in `8da37b6d`. Reachable: neither the edge nor the manifest parser restricts a plugin name, and an install of a listed `zero<U+200B>width@fixtures` printed the name raw. `composeCascadeFailureMessage` now passes the row name through `printable` for the `invalid-root-id` arm only. The JSON `id` of that row follows its name, so it is escaped too. The marketplace half (the block header) and the `DependencyCascadeError.key` field stay raw. A unit case and the `install.feature` scenario "Installing a plugin whose name holds a zero-width space shows the name escaped in its failed row" fail without the change.
+
 **File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:390` (cause), `:648` (row name)
 
 **Issue:** D-PL3-14 escapes the key in the `invalid-root-id` cause with `printable`. That arm only fires for a name outside the token allowlist. The same row's subject is `args.rootName`, which is rendered raw. The `DependencyCascadeError` `key` field also holds the raw key. A listed plugin whose name holds a bidi override or another format character therefore prints escaped in the cause and unescaped in the row head. Per D-PL3-17, `apply`, a load, and `import` reach the same row for a config-declared key.
@@ -104,6 +122,8 @@ Upstream escapes nothing. It appends ` The name holds a character that is not sh
 
 ### IN-03: The cascade messaging imports `printable` from the MCP notice module
 
+**Status:** skipped: not in the fix scope the operator chose.
+
 **File:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts:8`, `extensions/pi-claude-marketplace/shared/notification-mcp.ts:71`
 
 **Issue:** `printable` is a general escaping helper. It now has a second consumer, outside the MCP notices, through a module named for MCP rendering. A later change to the MCP notice text, or a later move of `notification-mcp.ts`, now affects install refusals through an import that is not obvious.
@@ -111,6 +131,8 @@ Upstream escapes nothing. It appends ` The name holds a character that is not sh
 **Fix:** Move `printable` and its `ESCAPED_CODE_POINT` and `codeUnitEscapes` helpers into a neutral leaf in `shared/`, for example `shared/printable.ts`. Import it from both places.
 
 ### IN-04: The plan-step move note still interpolates raw versions (outside the reviewed files)
+
+**Status:** skipped: not in the fix scope the operator chose; the site is on the plan-step path that D-PL3-15 assigns to Phase 4.
 
 **File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts:917`
 
