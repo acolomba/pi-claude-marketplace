@@ -1,12 +1,10 @@
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import * as fs from "node:fs";
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import nodeHttp from "node:http";
 import https from "node:https";
-import { tmpdir } from "node:os";
 import * as path from "node:path";
-import { join } from "node:path";
 import { PassThrough, Readable } from "node:stream";
 import { describe, test, type TestContext } from "node:test";
 
@@ -861,18 +859,19 @@ describe("local Git operations", () => {
     assert.strictEqual(await currentBranch({ dir: repository.dir }), "feature");
   });
 
-  test("forwards force so a checkout into an empty work tree writes the target tree", async (t) => {
+  test("checks out a detached commit", async (t) => {
     // arrange
     const repository = await createGitTestRepository(t, { boundary: "local" });
-    const staging = await mkdtemp(join(tmpdir(), "pi-cm-git-force-checkout-"));
-    t.after(() => rm(staging, { recursive: true, force: true }));
-    await cp(join(repository.dir, ".git"), join(staging, ".git"), { recursive: true });
 
     // act
-    await checkout({ dir: staging, ref: repository.initialOid, force: true });
+    await checkout({ dir: repository.dir, ref: repository.initialOid });
 
     // assert
-    assert.strictEqual(fs.existsSync(join(staging, "README.md")), true);
+    assert.strictEqual(await currentBranch({ dir: repository.dir }), undefined);
+    assert.strictEqual(
+      await resolveRef({ dir: repository.dir, ref: "HEAD" }),
+      repository.initialOid,
+    );
   });
 });
 
