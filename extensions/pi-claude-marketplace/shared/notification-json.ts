@@ -171,8 +171,8 @@ function wirePresentation(
  * `RAW_SURFACE_SEVERITY`, the table the text strategy reads (PMOD-01), except
  * the migration notice's, which resolve decides. The migration notice needs a
  * reload when resolve says so, and the background update notice always does
- * (D-PL8-11); every other raw kind never does. A raw kind carries no `summary`; the
- * rewake summary is copied verbatim into `text` (D-08).
+ * (D-PL8-11); every other raw kind never does. A raw kind carries no
+ * `summary`; the rewake summary is copied verbatim into `text` (D-08).
  */
 function wireRawSurface(
   surface: ResolvedRawSurface,

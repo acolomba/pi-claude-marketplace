@@ -84,12 +84,12 @@ function createSchedulerUnderTest(
 /** Enables mock `setTimeout` and records each scheduled delay and each `unref` call. */
 function observeTimers(t: TestContext): TimerObservation {
   t.mock.timers.enable({ apis: ["setTimeout"] });
-  const mockSetTimeout = globalThis.setTimeout;
+  const timerSetTimeout = globalThis.setTimeout;
   const delays: number[] = [];
   const unrefs: number[] = [];
 
   function observedSetTimeout(callback: () => void, delay: number): ReturnType<typeof setTimeout> {
-    const handle = mockSetTimeout(callback, delay);
+    const handle = timerSetTimeout(callback, delay);
     delays.push(delay);
     const originalUnref = handle.unref.bind(handle);
     t.mock.method(handle, "unref", () => {

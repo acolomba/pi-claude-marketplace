@@ -1,7 +1,6 @@
 /**
  * The official marketplace names of Claude Code 2.1.310, copied from the
- * binary (unchanged since 2.1.291). Upstream lowercases a marketplace name
- * before it checks this set.
+ * binary. Upstream lowercases a marketplace name before it checks this set.
  */
 const OFFICIAL_MARKETPLACE_NAMES: ReadonlySet<string> = new Set([
   "claude-code-marketplace",
@@ -31,7 +30,7 @@ export function isOfficialMarketplaceName(name: string): boolean {
 }
 
 /**
- * D-PL8-07 (reversed): the autoupdate setting that applies to a marketplace.
+ * D-PL8-07: the autoupdate setting that applies to a marketplace.
  * A config value wins; without one, autoupdate is on for an official name
  * other than the two default-off names, as in Claude Code. Claude Code also
  * turns it on for its `claudeai` and `pluginDirectory` sources, which have no

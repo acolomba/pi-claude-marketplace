@@ -619,6 +619,8 @@ test("an invalid GitHub base override ends the pass", async (t) => {
       return true;
     },
   );
+
+  // assert
   assert.deepStrictEqual(updatedTargets(calls), ["alpha [project]"]);
   assert.deepStrictEqual(capture.entries, []);
 });
@@ -652,6 +654,8 @@ test("AUP-03: a pass that an invalid GitHub base override ends still reports the
       return true;
     },
   );
+
+  // assert
   assert.deepStrictEqual(updatedTargets(calls), ["alpha [project]", "gamma [user]"]);
   assert.deepStrictEqual(capture.entries, [
     {
