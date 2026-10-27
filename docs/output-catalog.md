@@ -5327,6 +5327,28 @@ Left in mcp.json:
 
 Emitted by `notifyMcpMigration` when the step wrote a plugin's servers to `mcp-adapter.json` but could not remove the old entries from `mcp.json`, for example because the file could not be written. The step writes `mcp-adapter.json` first, then `state.json`, then `mcp.json`, so a fault between the writes loses no server: `mcp-adapter.json` and `mcp.json` both hold it for one session. The next `/reload` finds the old entries again, leaves `mcp-adapter.json` unchanged, removes the old entries and reports the move once. A user-scope move also removes the plugin's old-name disable stubs from the project `mcp-adapter.json` before it removes the old entries. When that write fails, for example because a project-scope operation holds the lock, the old entries and the stubs stay, and the row names the `project-scope mcp-adapter.json` in place of `mcp.json`. The row lists the plugin's old names in file order and a detail with no absolute path and no final period of its own. It sorts with the other rows left in `mcp.json`. Severity: `warning`. The byte form is locked by `test/architecture/mcp-migration-notice.test.ts`.
 
+### Background update notice (AUP-03 / D-PL8-10)
+
+<!-- catalog-state: background-update-one -->
+
+```text
+Plugin updated: demo · Run /reload to apply
+```
+
+<!-- catalog-state: background-update-two -->
+
+```text
+Plugins updated: alpha and beta · Run /reload to apply
+```
+
+<!-- catalog-state: background-update-many -->
+
+```text
+Plugins updated: 3 plugins · Run /reload to apply
+```
+
+Emitted once by `notifyBackgroundUpdate` after a background update that moved at least one plugin. A background update runs after the first message of a tui or rpc session, once for each extension runtime. The notice names plugins, without their marketplace. A plugin is named once even when it was updated in both scopes, and names keep the order of the update. Two names are joined with "and". Three or more names are counted instead. Severity: `info`. The notice always asks for `/reload`, because Claude Code reloads a plugin in the running session only for a plugin source kind this extension does not have (D-PL8-11). A background update that moved nothing, failed, or was skipped prints nothing, and its detail goes to the debug log (`PI_CLAUDE_MARKETPLACE_DEBUG=1`). In json and rpc mode the notice is one `background-update` entry whose `origin.kind` is `load` (see [`docs/json-output.md`](json-output.md)). The byte form is locked by `test/architecture/background-update-notice.test.ts`, not by the catalog-uat walk, whose parser skips this section.
+
 ______________________________________________________________________
 
 ## Cross-references
