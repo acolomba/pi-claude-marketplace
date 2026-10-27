@@ -194,11 +194,11 @@ parent session applies them at merge.
 2. A failing, timed-out, or lockfile-less package install leaves the plugin installed with a warning (PKD-02).
 3. The NFR-5 amendment and the spawn rule carry a decision ID, and `npm run check` is green (PKD-03).
 
-**Plans:** 5 plans
+**Plans:** 1/5 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 09-01-PLAN.md — tracer: the package step through the install ledger, the spawn module and its gates, then Claude Code's lockfile refusals
+- [x] 09-01-PLAN.md — tracer: the package step through the install ledger, the spawn module and its gates, then Claude Code's lockfile refusals
 
 **Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 09-02-PLAN.md — D-PL9-17 spike, loopback npm registry stand-in, and the install success, failure, and hook-proof scenarios

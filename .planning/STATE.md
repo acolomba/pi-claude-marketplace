@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 09
 current_phase_name: Plugin Package Dependencies
 status: executing
-stopped_at: "Phase 29 complete; next: milestone audit (`/gsd-audit-milestone`)"
-last_updated: "2026-10-27T03:02:17.901Z"
+stopped_at: Completed 09-01-PLAN.md
+last_updated: "2026-10-27T03:44:03.462Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase 09 execution started
-state_head: eb9e7e0d2710949330342e14bfb9eb5ebb0f2611
+state_head: 424457cb3370023afd442d864931d8edb9c56f2d
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 5
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -32,8 +32,8 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 09 (Plugin Package Dependencies) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 09
+Plan: 2 of 5
+Status: Ready to execute
 Last activity: 2026-10-26 — Phase 09 execution started
 
 
@@ -191,8 +191,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-25T12:00:00.000Z
-**Stopped at:** Phase 29 complete; next: milestone audit (`/gsd-audit-milestone`)
+**Last session:** 2026-10-27T03:44:03.196Z
+**Stopped at:** Completed 09-01-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -404,6 +404,7 @@ archived milestone artifacts.
 | Phase 29 P12 | 70 min | 3 tasks | 34 files |
 | Phase 29 P13 | 48 min | 3 tasks | 44 files |
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
+| Phase 09 P01 | 39min | 2 tasks | 11 files |
 
 ## Decisions
 
@@ -603,6 +604,9 @@ archived milestone artifacts.
 - [Phase 29]: The cascade failure classifier reads the errno a BridgeStagingError carries on its cause, so an unreadable plugin source is permission denied (also in the autoupdate cascade)
 - [Phase 29]: apply runs growth-only moves through convergePlugin with rematerialize (skipSameRevision off, overwrite off) and reports them with the plugin-backfilled row; the load-time backfill, its stamp gate and EXTENSION_VERSION are deleted, lastReconciledExtensionVersion stays readable and nothing writes it (D-10, D-13, D-25)
 - [Phase 29]: README.md's dependents sentence says apply reinstalls an uninstalled dependency a dependent still declares and disables the dependents only if that install fails; the APL-D1 and APL-D2 rows record the read-only load and the NFR-2 amendment
+- [Phase 09]: The packages phase reads only locations, resolved.pluginRoot and discoveryWarnings; InstallLedgerContext is unchanged
+- [Phase 09]: A plugin root that does not exist is a quiet skip; one that cannot be listed is a skip note
+- [Phase 09]: A failed work-dir removal is ignored; the install's own note stands
 
 ### mcp-4 decisions
 
