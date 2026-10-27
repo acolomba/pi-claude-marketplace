@@ -81,6 +81,12 @@ const NETWORK_SEAMS = [
   "extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts",
 ];
 
+// NFR-5 / D-PL5-07: the names of the git seam and of the hosted catalog
+// download. A network-free module reaches neither through a name the gate
+// does not match.
+const NETWORK_SEAM_NAMES =
+  "gitOps|DEFAULT_GIT_OPS|refreshGitHubClone|hostedManifestFetch|HostedManifestFetch|DEFAULT_HOSTED_MANIFEST_FETCH|downloadHostedCatalog|refreshHostedCatalog|fetchHostedManifest";
+
 const NETWORK_FREE_SYNTAX_SELECTORS = [
   {
     selector: "ImportExpression[source.value=/platform\\/(?:git|hosted-manifest)/]",
@@ -93,20 +99,19 @@ const NETWORK_FREE_SYNTAX_SELECTORS = [
       "NFR-5 / D-PL5-07: network-free modules must not name a platform/git or platform/hosted-manifest-fetch type through import().",
   },
   {
-    selector:
-      ":matches(Identifier, PrivateIdentifier)[name=/^(?:gitOps|DEFAULT_GIT_OPS|refreshGitHubClone)$/]",
+    selector: `:matches(Identifier, PrivateIdentifier)[name=/^(?:${NETWORK_SEAM_NAMES})$/]`,
     message:
-      "NFR-5: network-free modules must not name gitOps, DEFAULT_GIT_OPS, or refreshGitHubClone. Only the NETWORK_SEAMS files in eslint.config.js may name the git seam.",
+      "NFR-5 / D-PL5-07: network-free modules must not name the git seam (gitOps, DEFAULT_GIT_OPS, refreshGitHubClone) or the hosted catalog download (hostedManifestFetch, HostedManifestFetch, DEFAULT_HOSTED_MANIFEST_FETCH, downloadHostedCatalog, refreshHostedCatalog, fetchHostedManifest). Only the NETWORK_SEAMS files in eslint.config.js may name them.",
   },
   {
-    selector: "Literal[value=/\\b(?:gitOps|DEFAULT_GIT_OPS|refreshGitHubClone)\\b/]",
+    selector: `Literal[value=/\\b(?:${NETWORK_SEAM_NAMES})\\b/]`,
     message:
-      "NFR-5: network-free modules must not spell gitOps, DEFAULT_GIT_OPS, or refreshGitHubClone in a string.",
+      "NFR-5 / D-PL5-07: network-free modules must not spell a git seam or hosted catalog download name in a string.",
   },
   {
-    selector: "TemplateElement[value.raw=/\\b(?:gitOps|DEFAULT_GIT_OPS|refreshGitHubClone)\\b/]",
+    selector: `TemplateElement[value.raw=/\\b(?:${NETWORK_SEAM_NAMES})\\b/]`,
     message:
-      "NFR-5: network-free modules must not spell gitOps, DEFAULT_GIT_OPS, or refreshGitHubClone in a string.",
+      "NFR-5 / D-PL5-07: network-free modules must not spell a git seam or hosted catalog download name in a string.",
   },
 ];
 
@@ -530,8 +535,9 @@ export default tseslint.config(
     // BLOCK F (NFR-5 / PI-2 / PL-3 / PRL-07): default-deny. Every orchestrators/
     // and domain/ module outside NETWORK_SEAMS names no git surface: no
     // platform/git or platform/hosted-manifest-fetch import of any kind
-    // (type-only and dynamic included, D-PL5-07) and no
-    // gitOps / DEFAULT_GIT_OPS / refreshGitHubClone identifier, key, or string.
+    // (type-only and dynamic included, D-PL5-07) and no NETWORK_SEAM_NAMES
+    // identifier, key, or string: the git seam and the hosted catalog
+    // download.
     // edge/ and index.ts are outside the network rule. Compose the append
     // restriction again: this block replaces the earlier syntax rule options.
     files: [
