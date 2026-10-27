@@ -3,7 +3,9 @@ import { describe, test } from "node:test";
 
 import {
   addedMarketplaceNameRefusal,
+  assertRecordedMarketplaceName,
   assertSafeName,
+  catalogMarketplaceNameRefusal,
   declaredAgentName,
   generatedAgentName,
   generatedCommandName,
@@ -15,7 +17,10 @@ import {
   mcpServerDisplayName,
   reservedMarketplaceNameRefusal,
 } from "../../extensions/pi-claude-marketplace/domain/name.ts";
-import { UnsafeGeneratedNameError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  ReservedMarketplaceNameError,
+  UnsafeGeneratedNameError,
+} from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { setCasePlatform } from "../platform/case-platform.ts";
 
 import type { ParsedSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
@@ -655,6 +660,167 @@ describe("addedMarketplaceNameRefusal", () => {
 
     // assert
     assert.strictEqual(refusal, IMPERSONATION_REFUSAL);
+  });
+});
+
+describe("catalogMarketplaceNameRefusal", () => {
+  test("D-PL5-28: accepts a soft look-alike that keeps the registered name", () => {
+    // act
+    const refusal = catalogMarketplaceNameRefusal("Claude-Directory", "claude-directory");
+
+    // assert
+    assert.strictEqual(refusal, undefined);
+  });
+
+  test("D-PL5-28: refuses a strong look-alike that keeps the registered name", () => {
+    // act
+    const refusal = catalogMarketplaceNameRefusal("claude-plugins-v2", "claude-plugins-v2");
+
+    // assert
+    assert.strictEqual(refusal, IMPERSONATION_REFUSAL);
+  });
+
+  test("D-PL5-28: refuses a soft look-alike that renames the registered marketplace", () => {
+    // act
+    const refusal = catalogMarketplaceNameRefusal("anthropic-directories", "claude-directory");
+
+    // assert
+    assert.strictEqual(refusal, IMPERSONATION_REFUSAL);
+  });
+
+  test("D-PL5-28: refuses one of Claude Code's own names even when the registered name keeps it", () => {
+    // act
+    const refusal = catalogMarketplaceNameRefusal("Cargo", "cargo");
+
+    // assert
+    assert.strictEqual(
+      refusal,
+      'Marketplace name "cargo" is reserved for plugins installed from a Rust crate registry (reserved; not yet available)',
+    );
+  });
+
+  test("D-PL5-28: accepts a name that is neither a look-alike nor an own name", () => {
+    // act
+    const refusal = catalogMarketplaceNameRefusal("acme-tools", "tools");
+
+    // assert
+    assert.strictEqual(refusal, undefined);
+  });
+});
+
+describe("assertRecordedMarketplaceName", () => {
+  for (const { source, reserved } of [
+    { source: pathMarketplaceSource, reserved: ORGANIZATION_REFUSAL("claude-plugins-official") },
+    {
+      source: {
+        kind: "github",
+        raw: "acme/claude-plugins-official",
+        owner: "acme",
+        repo: "claude-plugins-official",
+      },
+      reserved: GITHUB_REFUSAL("claude-plugins-official"),
+    },
+  ] satisfies { source: ParsedSource; reserved: string }[]) {
+    test(`D-PL5-28: refuses claude-plugins-official recorded from the ${source.kind} source ${source.raw}`, () => {
+      // act & assert
+      assert.throws(
+        () => {
+          assertRecordedMarketplaceName("claude-plugins-official", source);
+        },
+        (error: unknown) => {
+          assert.ok(error instanceof ReservedMarketplaceNameError);
+          assert.strictEqual(
+            error.message,
+            `Marketplace "claude-plugins-official" is registered from an untrusted source: ${reserved} To fix it, remove the marketplace and re-add it from the official source.`,
+          );
+          return true;
+        },
+      );
+    });
+  }
+
+  test("D-PL5-28: refuses a record named as another spelling of a reserved name", () => {
+    // act & assert
+    assert.throws(
+      () => {
+        assertRecordedMarketplaceName("claude.code.plugins", pathMarketplaceSource);
+      },
+      (error: unknown) => {
+        assert.ok(error instanceof ReservedMarketplaceNameError);
+        assert.strictEqual(
+          error.message,
+          '"claude.code.plugins" is another spelling of "claude-code-plugins", a reserved marketplace name.',
+        );
+        return true;
+      },
+    );
+  });
+
+  for (const name of ["claude-plugins-official", "anthropic-plugin-directory"]) {
+    test(`D-PL5-28: accepts ${name} recorded from the anthropics organization`, () => {
+      // act & assert
+      assert.doesNotThrow(() => {
+        assertRecordedMarketplaceName(name, anthropicsSource(name));
+      });
+    });
+  }
+
+  test("D-PL5-28: refuses a catalog that declares a strong look-alike for the record tools", () => {
+    // act & assert
+    assert.throws(
+      () => {
+        assertRecordedMarketplaceName("tools", pathMarketplaceSource, "claude-plugins-v2");
+      },
+      (error: unknown) => {
+        assert.ok(error instanceof ReservedMarketplaceNameError);
+        assert.strictEqual(
+          error.message,
+          `Claude Code refuses the marketplace name "tools": it looks like one of Anthropic's own`,
+        );
+        return true;
+      },
+    );
+  });
+
+  test("D-PL5-28: refuses a look-alike record without naming a record name outside printable ASCII", () => {
+    // act & assert
+    assert.throws(
+      () => {
+        assertRecordedMarketplaceName("café", pathMarketplaceSource, "café");
+      },
+      (error: unknown) => {
+        assert.ok(error instanceof ReservedMarketplaceNameError);
+        assert.strictEqual(
+          error.message,
+          "Claude Code refuses this marketplace's name: it looks like one of Anthropic's own.",
+        );
+        return true;
+      },
+    );
+  });
+
+  test("D-PL5-28: refuses a catalog that declares one of Claude Code's own names", () => {
+    // act & assert
+    assert.throws(
+      () => {
+        assertRecordedMarketplaceName("tools", pathMarketplaceSource, "gh");
+      },
+      (error: unknown) => {
+        assert.ok(error instanceof ReservedMarketplaceNameError);
+        assert.strictEqual(
+          error.message,
+          'Marketplace name "gh" is reserved for plugins installed straight from a GitHub repository (reserved; not yet available)',
+        );
+        return true;
+      },
+    );
+  });
+
+  test("D-PL5-28: accepts a soft look-alike record whose catalog keeps its name", () => {
+    // act & assert
+    assert.doesNotThrow(() => {
+      assertRecordedMarketplaceName("claude-directory", pathMarketplaceSource, "claude-directory");
+    });
   });
 });
 

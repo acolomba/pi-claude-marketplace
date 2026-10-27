@@ -99,7 +99,11 @@ import { isDeepStrictEqual } from "node:util";
 
 import { networkCloneUrl } from "../../domain/clone-key.ts";
 import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
-import { reservedMarketplaceNameRefusal } from "../../domain/name.ts";
+import {
+  assertRecordedMarketplaceName,
+  catalogMarketplaceNameRefusal,
+  reservedMarketplaceNameRefusal,
+} from "../../domain/name.ts";
 import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
@@ -427,13 +431,21 @@ async function refreshGitHubSource(
 }
 
 /**
- * MKT-01 / D-PL5-27: refuses a refreshed manifest that now declares a name
- * Claude Code reserves for the anthropics GitHub organization. It runs before
- * the record is stamped, so a refused refresh keeps its baseline. A hosted
- * catalog was already refused before its rename.
+ * MKT-01 / D-PL5-27 / D-PL5-28: refuses a refreshed manifest that now declares
+ * a look-alike or one of Claude Code's own names, grandfathered against the
+ * record's name `recordName`, or a name Claude Code reserves for the anthropics
+ * GitHub organization. It runs before the record is stamped, so a refused
+ * refresh keeps its baseline. A hosted catalog was already refused before its
+ * rename.
  */
-function refuseReservedRefreshName(name: string, source: ParsedSource): void {
-  const refusal = reservedMarketplaceNameRefusal(name, source);
+function refuseReservedRefreshName(
+  declaredName: string,
+  recordName: string,
+  source: ParsedSource,
+): void {
+  const refusal =
+    catalogMarketplaceNameRefusal(declaredName, recordName) ??
+    reservedMarketplaceNameRefusal(declaredName, source);
   if (refusal !== undefined) {
     throw new ReservedMarketplaceNameError(refusal);
   }
@@ -448,6 +460,9 @@ async function refreshRecord(
   const remoteUrl = refreshRemoteUrl(source);
   let cloneAdvanced = false;
   try {
+    // D-PL5-28: Claude Code checks the recorded name before it refreshes, so a
+    // refused record makes no request.
+    assertRecordedMarketplaceName(name, source);
     // A local legacy record has no historical content to compare. Its first
     // successful refresh establishes the baseline and reports a change.
     const preKey =
@@ -501,6 +516,7 @@ async function refreshRecord(
       // D-PL5-09: download the catalog again; it replaces the stored one only
       // once it validates. Nothing is cloned, so no retry hint applies.
       await refreshHostedCatalog({
+        name,
         source,
         manifestPath: recordedManifestPath(record),
         locations,
@@ -514,7 +530,7 @@ async function refreshRecord(
     }
 
     const document = await loadMarketplaceManifestDocument(recordedManifestPath(record));
-    refuseReservedRefreshName(document.manifest.name, source);
+    refuseReservedRefreshName(document.manifest.name, name, source);
 
     const changed =
       preKey === undefined || !isDeepStrictEqual(baseline, JSON.parse(document.comparisonJson));

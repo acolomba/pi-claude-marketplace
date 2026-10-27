@@ -8,7 +8,11 @@
 import { createHash } from "node:crypto";
 
 import { commandNamespaceSeparator } from "../platform/os.ts";
-import { errorMessage, UnsafeGeneratedNameError } from "../shared/errors.ts";
+import {
+  errorMessage,
+  ReservedMarketplaceNameError,
+  UnsafeGeneratedNameError,
+} from "../shared/errors.ts";
 
 import type { ParsedSource } from "./source.ts";
 
@@ -163,7 +167,7 @@ const IMPERSONATION_REFUSAL =
  * add): a look-alike, then one of Claude Code's own names. Claude Code runs both
  * rules on every catalog it parses.
  */
-function catalogMarketplaceNameRefusal(
+export function catalogMarketplaceNameRefusal(
   declaredName: string,
   registeredName: string | undefined,
 ): string | undefined {
@@ -377,6 +381,63 @@ function objectMemberRefusal(name: string, recorded: boolean): string | undefine
   return !recorded && Object.hasOwn(Object.prototype, name)
     ? `Cannot add marketplace "${name}": Claude Code reserves this name and cannot register a marketplace under it. The name is set by "name" in the marketplace's marketplace.json; ask its maintainer to change it.`
     : undefined;
+}
+
+/**
+ * MKT-01 / D-PL5-28: throws `ReservedMarketplaceNameError` when Claude Code
+ * refuses the marketplace recorded as `recordName` from `source`, whose
+ * catalog declares `declaredName` when it was read. See
+ * `recordedMarketplaceNameRefusal` for the rules.
+ */
+export function assertRecordedMarketplaceName(
+  recordName: string,
+  source: ParsedSource,
+  declaredName?: string,
+): void {
+  const refusal = recordedMarketplaceNameRefusal(recordName, source, declaredName);
+  if (refusal !== undefined) {
+    throw new ReservedMarketplaceNameError(refusal);
+  }
+}
+
+/**
+ * MKT-01 / D-PL5-28: Claude Code's refusal of a marketplace an earlier version
+ * recorded, or undefined when Claude Code loads it. The record's own name is
+ * refused as another spelling of a reserved name, or as a reserved name from a
+ * source outside the anthropics organization; Claude Code checks it before it
+ * reads or refreshes the catalog. A catalog `declaredName` is then refused as
+ * a look-alike, grandfathered against the record's name, or as one of Claude
+ * Code's own names.
+ *
+ * The look-alike sentence echoes the record's name only when it is printable
+ * ASCII, so no unprintable name reaches a terminal.
+ */
+function recordedMarketplaceNameRefusal(
+  recordName: string,
+  source: ParsedSource,
+  declaredName?: string,
+): string | undefined {
+  const spelling = spellingRefusal(recordName);
+  if (spelling !== undefined) {
+    return spelling;
+  }
+
+  const reserved = reservedMarketplaceNameRefusal(recordName, source);
+  if (reserved !== undefined) {
+    return `Marketplace "${recordName}" is registered from an untrusted source: ${reserved} To fix it, remove the marketplace and re-add it from the official source.`;
+  }
+
+  if (declaredName === undefined) {
+    return undefined;
+  }
+
+  if (isRefusedLookalike(declaredName, recordName)) {
+    return OUTSIDE_PRINTABLE_ASCII.test(recordName)
+      ? "Claude Code refuses this marketplace's name: it looks like one of Anthropic's own."
+      : `Claude Code refuses the marketplace name "${recordName}": it looks like one of Anthropic's own`;
+  }
+
+  return ownNameRefusal(declaredName);
 }
 
 /**

@@ -11,7 +11,10 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
-import { reservedMarketplaceNameRefusal } from "../../domain/name.ts";
+import {
+  catalogMarketplaceNameRefusal,
+  reservedMarketplaceNameRefusal,
+} from "../../domain/name.ts";
 import { fetchHostedManifest } from "../../platform/hosted-manifest-fetch.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
 import {
@@ -73,18 +76,21 @@ export async function downloadHostedCatalog(args: {
  * under `sources-staging/`, on the filesystem of `sources/` (D-09), and are
  * read through the one manifest reader (NFR-8) before a rename replaces the
  * stored file. A catalog that now declares a reserved name is refused before
- * the rename (D-PL5-27). A failed download, an invalid or refused catalog, or a
+ * the rename (D-PL5-27), and so is one that declares a look-alike or one of
+ * Claude Code's own names, judged against the record's `name` (D-PL5-28). A
+ * failed download, an invalid or refused catalog, or a
  * failed rename leaves the stored file as it was, and a staging cleanup that
  * leaks is appended to the thrown error (MA-9).
  */
 export async function refreshHostedCatalog(args: {
+  readonly name: string;
   readonly source: HostedManifestSource;
   readonly manifestPath: string;
   readonly locations: ScopedLocations;
   readonly fetchCatalog: HostedManifestFetch;
   readonly removalOps: RemovalOps;
 }): Promise<void> {
-  const { source, manifestPath, locations, removalOps } = args;
+  const { name, source, manifestPath, locations, removalOps } = args;
   await assertPathInside(locations.sourcesDir, manifestPath, "hosted marketplace catalog");
   const bytes = await args.fetchCatalog(source.url);
   const stagingDir = await locations.sourcesStagingDir(randomUUID());
@@ -93,7 +99,9 @@ export async function refreshHostedCatalog(args: {
     await mkdir(stagingDir, { recursive: true });
     await writeFile(stagedPath, bytes);
     const document = await loadMarketplaceManifestDocument(stagedPath);
-    const refusal = reservedMarketplaceNameRefusal(document.manifest.name, source);
+    const refusal =
+      catalogMarketplaceNameRefusal(document.manifest.name, name) ??
+      reservedMarketplaceNameRefusal(document.manifest.name, source);
     if (refusal !== undefined) {
       throw new ReservedMarketplaceNameError(refusal);
     }

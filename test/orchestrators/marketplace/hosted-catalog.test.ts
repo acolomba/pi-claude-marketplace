@@ -330,6 +330,7 @@ describe("refreshHostedCatalog", () => {
 
     // act
     await refreshHostedCatalog({
+      name: "tools",
       source: HOSTED_SOURCE,
       manifestPath,
       locations,
@@ -356,6 +357,7 @@ describe("refreshHostedCatalog", () => {
     // act & assert
     await assert.rejects(
       refreshHostedCatalog({
+        name: "tools",
         source: HOSTED_SOURCE,
         manifestPath,
         locations,
@@ -379,6 +381,7 @@ describe("refreshHostedCatalog", () => {
       // act & assert
       await assert.rejects(
         refreshHostedCatalog({
+          name: "tools",
           source: HOSTED_SOURCE,
           manifestPath,
           locations,
@@ -400,6 +403,7 @@ describe("refreshHostedCatalog", () => {
     // act & assert
     await assert.rejects(
       refreshHostedCatalog({
+        name: "tools",
         source: HOSTED_SOURCE,
         manifestPath,
         locations,
@@ -421,6 +425,36 @@ describe("refreshHostedCatalog", () => {
     );
   });
 
+  test("D-PL5-28: refuses a download that declares a look-alike name and keeps the stored catalog", async (t) => {
+    // arrange
+    const { locations, manifestPath } = await storedCatalog(t);
+    const renamed = '{"name":"claude-plugins-v2","owner":{"name":"acme"},"plugins":[]}';
+
+    // act & assert
+    await assert.rejects(
+      refreshHostedCatalog({
+        name: "tools",
+        source: HOSTED_SOURCE,
+        manifestPath,
+        locations,
+        fetchCatalog: serving(renamed),
+        removalOps: createRemovalOps(),
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof ReservedMarketplaceNameError);
+        assert.strictEqual(
+          error.message,
+          "Marketplace name impersonates an official Anthropic/Claude marketplace",
+        );
+        return true;
+      },
+    );
+    assert.deepStrictEqual(
+      { catalog: await readFile(manifestPath, "utf8"), staging: await stagingEntries(locations) },
+      { catalog: CATALOG, staging: [] },
+    );
+  });
+
   test("appends the leak of a staging cleanup that fails to the refresh error", async (t) => {
     // arrange
     const { locations, manifestPath } = await storedCatalog(t);
@@ -431,6 +465,7 @@ describe("refreshHostedCatalog", () => {
     // act & assert
     await assert.rejects(
       refreshHostedCatalog({
+        name: "tools",
         source: HOSTED_SOURCE,
         manifestPath,
         locations,
@@ -456,6 +491,7 @@ describe("refreshHostedCatalog", () => {
     // act & assert
     await assert.rejects(
       refreshHostedCatalog({
+        name: "tools",
         source: HOSTED_SOURCE,
         manifestPath: outside,
         locations,

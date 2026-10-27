@@ -1,7 +1,8 @@
 /**
  * @fileoverview Steps that publish local marketplaces by source kind, or as
  * Claude Code's official marketplace on the git host, and add them to a
- * scope, shared by every marketplace verb.
+ * scope or record them as an earlier version added them, shared by every
+ * marketplace verb.
  *
  * A scenario publishes a marketplace once, naming its source kind, and that
  * step offers no plugins. Stating the plugins it offers, with or without the
@@ -16,6 +17,10 @@ import path from "node:path";
 
 import { type DataTable, Given } from "@cucumber/cucumber";
 
+import {
+  recordEarlierVersionMarketplace,
+  recordedMarketplace,
+} from "../../lib/earlier-version-state.ts";
 import {
   readOfferedPlugins,
   readOfferedPluginsWithDependencies,
@@ -175,6 +180,26 @@ Given(
       `/claude:plugin marketplace add ${source} --scope ${scope}`,
     );
     assert.strictEqual(payload.severity, "info", JSON.stringify(payload));
+  },
+);
+
+Given(
+  "an earlier version recorded the marketplace {string} in the {word} scope",
+  async function (this: ScenarioWorld, name: string, scope: string) {
+    const published = this.requirePublished(name);
+    if (published.kind !== "dir") {
+      assert.fail(`the marketplace ${name} is published as a ${published.kind} source, not dir`);
+    }
+
+    const scopeRoot = this.scopeRoot(scope);
+    const record = await recordEarlierVersionMarketplace({
+      scopeRoot,
+      scope,
+      projectDir: this.tokens.projectDir,
+      name,
+      published,
+    });
+    assert.deepStrictEqual(await recordedMarketplace(scopeRoot, name), record);
   },
 );
 

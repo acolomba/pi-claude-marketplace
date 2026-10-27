@@ -108,6 +108,38 @@ Feature: Marketplace reserved name
       | source kind | cause chain                                                                                                                                                                                                                     |
       | github      | Marketplace "tools" clone advanced but manifest could not be persisted., The name 'claude-plugins-official' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/anthropics/' can use this name. |
 
+  Scenario Outline: Updating a marketplace whose manifest now declares a name Claude Code keeps for itself fails with Claude Code's refusal
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the project scope
+    Given the marketplace "tools" update source contains this manifest:
+      """
+      {"name":"<declared name>","owner":{"name":"features"},"plugins":[]}
+      """
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons          | scope   | leaks | rollback partial | cause chain   | cause truncated |
+      | tools            | project           | failed             | tools | tools | failed | invalid manifest | project |       |                  | <cause chain> | false           |
+
+    Examples:
+      | source kind | declared name     | cause chain                                                                                                                                                                                         |
+      | dir         | claude-plugins-v2 | Failed to update marketplace "tools"., Marketplace name impersonates an official Anthropic/Claude marketplace                                                                                       |
+      | file        | npm               | Failed to update marketplace "tools"., Marketplace name "npm" is reserved for plugins installed from an npm registry (`<package>@npm`); remove this marketplace and add it again under another name |
+
+    @url
+    Examples:
+      | source kind | declared name     | cause chain                                                                                                                                     |
+      | url         | claude-plugins-v2 | Marketplace "tools" clone advanced but manifest could not be persisted., Marketplace name impersonates an official Anthropic/Claude marketplace |
+
+    @github
+    Examples:
+      | source kind | declared name | cause chain                                                                                                                                                                                                                           |
+      | github      | npm           | Marketplace "tools" clone advanced but manifest could not be persisted., Marketplace name "npm" is reserved for plugins installed from an npm registry (`<package>@npm`); remove this marketplace and add it again under another name |
+
   Scenario: The anthropics organization's GitHub repository may use a reserved name
     Given the marketplace "claude-plugins-official" is published as the official marketplace
     When the user runs "/claude:plugin marketplace add anthropics/claude-plugins-official --scope project"
