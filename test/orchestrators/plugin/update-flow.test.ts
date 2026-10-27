@@ -1690,6 +1690,71 @@ test("syncClone-fail: an HTTP 401 on the marketplace sync renders {authenticatio
   });
 });
 
+for (const { title, seed, marketplace, status, statusMessage, message } of [
+  {
+    title:
+      "GLK-01 / D-PL7-14: an HTTP 503 on a github marketplace sync fails as network error framed with the wire url",
+    seed: (cwd: string) => seedGithubMarketplaceForSync(cwd),
+    marketplace: "official",
+    status: 503,
+    statusMessage: "Service Unavailable",
+    message:
+      "A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {network error}\n    cause: 503 on https://github.com/test/repo.git -> HTTP Error: 503 Service Unavailable\n\nPlugin update: 1 failure",
+  },
+  {
+    title:
+      "GLK-01 / D-PL7-14: an HTTP 404 on a github marketplace sync fails as network error framed with the wire url",
+    seed: (cwd: string) => seedGithubMarketplaceForSync(cwd),
+    marketplace: "official",
+    status: 404,
+    statusMessage: "Not Found",
+    message:
+      "A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {network error}\n    cause: 404 on https://github.com/test/repo.git -> HTTP Error: 404 Not Found\n\nPlugin update: 1 failure",
+  },
+  {
+    title:
+      "GLK-01 / D-PL7-14: an HTTP 502 on a url marketplace sync fails as network error framed with the source url",
+    seed: (cwd: string) => seedUrlMarketplaceForSync(cwd, { hello: "1.0.0" }),
+    marketplace: "mp",
+    status: 502,
+    statusMessage: "Bad Gateway",
+    message:
+      "A plugin operation has failed.\n\n● mp [project]\n  ⊘ mp (failed) {network error}\n    cause: 502 on https://example.com/org/repo -> HTTP Error: 502 Bad Gateway\n\nPlugin update: 1 failure",
+  },
+] as const) {
+  test(title, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("update-sync-http-status-");
+      try {
+        // arrange
+        await seed(cwd);
+        const answered = Object.assign(new Error(`HTTP Error: ${status} ${statusMessage}`), {
+          code: "HttpError",
+          data: { statusCode: status, statusMessage },
+        });
+        const { gitOps } = createGitOps({ fetchThrows: answered });
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "marketplace", marketplace },
+          gitOps,
+          credentialOps: makeCredentialOps(),
+        });
+
+        // assert
+        assert.deepStrictEqual(notifications, [{ message, severity: "error" }]);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("CR-01: an HTTP 401 on a later marketplace sync still reports the earlier target's update", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-sync-401-later-");

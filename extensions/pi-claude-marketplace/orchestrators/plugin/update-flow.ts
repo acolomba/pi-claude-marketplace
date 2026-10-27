@@ -62,6 +62,7 @@
 // resolveScopeFromState). MUST NOT import from
 // orchestrators/marketplace/{add,remove,list,update,autoupdate}.ts.
 
+import { networkCloneUrl } from "../../domain/clone-key.ts";
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
 import { BridgeStagingError } from "../../shared/errors-bridges.ts";
@@ -72,6 +73,7 @@ import {
   DependencyDeclarationsUnreadableError,
   InvalidMarketplaceManifestError,
   MarketplaceNotFoundError,
+  MarketplaceUpdateError,
   PluginInBaseLayerOnlyError,
   PluginInLocalLayerOnlyError,
   PluginUpdateConcurrencyError,
@@ -123,7 +125,7 @@ import type {
 } from "./update-swap.ts";
 import type { ClaudeEnv } from "../../domain/claude-mcp-variables.ts";
 import type { ReleaseTagCandidate } from "../../domain/release-tag.ts";
-import type { ParsedSource } from "../../domain/source.ts";
+import type { GitHubSource, ParsedSource, UrlSource } from "../../domain/source.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { RemoteTag } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
@@ -152,11 +154,44 @@ type UpdateCascadeComposer = (
   abortedByFailure?: boolean,
 ) => void;
 /**
+ * UPD-11 / D-PL7-02: the 404 rule of a marketplace refresh. A plugin update
+ * refreshes its marketplace as `marketplace update` does, so a 404 or 410
+ * from the host is `network error`, not `source missing`.
+ */
+const MARKETPLACE_REFRESH_RULE: Parameters<typeof classifyGitFailure>[1] = {
+  notFound: "network error",
+};
+
+/**
+ * GLK-01 / D-PL7-03 / D-PL7-14: runs one marketplace refresh. When the git
+ * host answered with an HTTP status, the failure is rethrown as a
+ * `MarketplaceUpdateError` whose message is the status on the URL the fetch
+ * sent, as `marketplace update` frames it, so that frame leads the cause
+ * line. Every other failure is rethrown unchanged.
+ */
+async function refreshFramed(
+  source: GitHubSource | UrlSource,
+  refresh: () => Promise<void>,
+): Promise<void> {
+  try {
+    await refresh();
+  } catch (err) {
+    const frame = classifyGitFailure(err, MARKETPLACE_REFRESH_RULE, networkCloneUrl(source))?.frame;
+    if (frame === undefined) {
+      throw err;
+    }
+
+    throw new MarketplaceUpdateError(frame, { cause: err });
+  }
+}
+
+/**
  * PUP-2 syncCloneOnce memoization -- one refresh per (scope, marketplace)
  * pair. Path-source marketplaces are noops (NFR-5: no network for path
  * sources); GitHub- and url-source marketplaces refresh via gitOps.fetch +
  * forceUpdateRef + checkout (the D-14 sequence), as `marketplace update`
- * does. Throws on git-side failures.
+ * does. Throws on git-side failures; a git host's HTTP answer is framed as
+ * `marketplace update` frames it (`refreshFramed`).
  *
  * AUTH-02: the fetch carries the same host-keyed auth bundle as `marketplace
  * update` (github.com or the GitHub override host for GitHub sources, the
@@ -198,18 +233,23 @@ function makeSyncCloneOnce(
         ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
         ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
       });
-      await refreshGitHubClone(cloneDir, source.ref, gitOps, undefined, auth);
+      await refreshFramed(source, () =>
+        refreshGitHubClone(cloneDir, source.ref, gitOps, undefined, auth),
+      );
     } else if (source.kind === "url") {
-      await refreshUrlClone({
-        cloneDir: await locations.sourceCloneDir(mpName),
-        source,
-        gitOps,
-        ctx: opts.ctx,
-        run: opts.run,
-        credentialOps,
-        ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
-        ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
-      });
+      const cloneDir = await locations.sourceCloneDir(mpName);
+      await refreshFramed(source, () =>
+        refreshUrlClone({
+          cloneDir,
+          source,
+          gitOps,
+          ctx: opts.ctx,
+          run: opts.run,
+          credentialOps,
+          ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
+          ...(opts.authMemo !== undefined && { authMemo: opts.authMemo }),
+        }),
+      );
     }
     // path-source: NFR-5 noop. The manifest is re-read per-plugin.
   };
@@ -854,6 +894,12 @@ function typedUpdateFailReason(primary: unknown): ContentReason | undefined {
 
   if (primary instanceof MarketplaceNotFoundError) {
     return "not found";
+  }
+
+  // GLK-01: a framed marketplace refresh reads the host's answer under the
+  // marketplace-refresh rule.
+  if (primary instanceof MarketplaceUpdateError) {
+    return classifyGitFailure(primary.cause, MARKETPLACE_REFRESH_RULE)?.reason;
   }
 
   if (primary instanceof PluginUpdatePhase3Error) {
