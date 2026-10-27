@@ -79,7 +79,11 @@ import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { runPhases } from "../../transaction/phase-ledger.ts";
 import { foldUnstageNotices, mcpConfigNoticesMember } from "../marketplace/shared.ts";
 
-import { buildScopeDeclarationIndex, readInstalledRecordDeclarations } from "./dependency-index.ts";
+import {
+  buildScopeDeclarationIndex,
+  readInstalledRecordDeclarations,
+  withoutDisabledHolders,
+} from "./dependency-index.ts";
 import {
   composeDisableRefusalCause,
   composeEnableCascadeRows,
@@ -1590,12 +1594,10 @@ async function dispatchBranch(args: {
  * before the disable can proceed, so a record with no usable answer is never
  * read as "declares nothing".
  *
- * D-05-04: `buildScopeDeclarationIndex` indexes DISABLED declarers too,
+ * D-05-04: `buildScopeDeclarationIndex` indexes disabled declarers too,
  * because holding a declaration does not depend on being active. EDEP-02
- * asks about an ENABLED installed plugin, so this narrows the index's own
- * `candidates` to the keys whose record is not `isRecordedButDisabled`
- * before calling `findDependents` -- reusing the `record` handle each
- * candidate already carries, no second walk and no key re-lookup.
+ * asks about an enabled installed plugin, so `withoutDisabledHolders` applies
+ * the shared config-enabled rule before `findDependents` reads the index.
  */
 async function readEnabledDependents(args: {
   readonly state: ExtensionState;
@@ -1615,14 +1617,7 @@ async function readEnabledDependents(args: {
     throw new EnableRefusedError("unreadable", result.cause.message);
   }
 
-  const enabledDeclarers = new Set(
-    result.candidates
-      .filter((candidate) => !isRecordedButDisabled(candidate.record))
-      .map((candidate) => candidate.key),
-  );
-  const dependents = findDependents(key, result.index).filter((dependent) =>
-    enabledDeclarers.has(dependent),
-  );
+  const dependents = findDependents(key, withoutDisabledHolders(result.index, state));
   if (dependents.length > 0) {
     throw new EnableRefusedError("dependents remain", composeDisableRefusalCause(key, dependents));
   }
