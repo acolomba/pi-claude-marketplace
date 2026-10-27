@@ -104,6 +104,25 @@ Given(
   },
 );
 
+// The lockfiles the package step refuses by name before it reads them, so the
+// step below cannot create one that npm or bun would run.
+const REFUSED_LOCKFILES: readonly string[] = ["yarn.lock", "pnpm-lock.yaml", "bun.lockb"];
+
+Given(
+  "the published plugin {string} of the marketplace {string} ships a package.json and the lockfile {string}",
+  async function (this: ScenarioWorld, plugin: string, name: string, lockfile: string) {
+    if (!REFUSED_LOCKFILES.includes(lockfile)) {
+      assert.fail(`${lockfile} is not one of ${REFUSED_LOCKFILES.join(", ")}`);
+    }
+
+    const manifest = { name: plugin, version: "0.0.0", dependencies: { "pkd-dep": "1.0.0" } };
+    await writePluginFiles(this.requirePublished(name), plugin, {
+      "package.json": `${JSON.stringify(manifest)}\n`,
+      [lockfile]: "a lockfile the package step refuses by name\n",
+    });
+  },
+);
+
 Given(
   "the published plugin {string} of the marketplace {string} has a session start hook that writes what the npm package {string} exports to the project file {string}",
   async function (this: ScenarioWorld, plugin: string, name: string, pkg: string, file: string) {
