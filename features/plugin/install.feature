@@ -85,6 +85,20 @@ Feature: Plugin install
     Then the "claude-plugins.json" file of the project scope declares no plugins
     Then the project scope has no installed plugins
 
+  Scenario: Installing a plugin whose name holds a zero-width space shows the name escaped in its failed row
+    Given the marketplace "fixtures" offers these plugins:
+      | name       | version |
+      | zero​width | 1.0.0   |
+    When the user runs "/claude:plugin install zero​width@fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id                       | name            | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                                                                         | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | zero\u200bwidth@fixtures | zero\u200bwidth | failed | invalid manifest | project | Plugin "zero\u200bwidth@fixtures" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here the plugin's name does not; the marketplace's maintainer can rename it. | false           |       |                  |
+
   Scenario: Installing a plugin whose name breaks the plugin id rule and that the marketplace does not offer fails as not in manifest
     When the user runs "/claude:plugin install _x@fixtures --scope project"
     Then the result has these fields:

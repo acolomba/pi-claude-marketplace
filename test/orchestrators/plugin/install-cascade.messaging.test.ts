@@ -776,6 +776,42 @@ describe("composeCascadeFailureMessage", () => {
     );
   });
 
+  test("D-PL3-14 the invalid-id row escapes a format character in the plugin name", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "closure",
+      failure: {
+        ok: false,
+        reason: "invalid-root-id",
+        key: "_hel\u202eper@official",
+        invalidPart: "plugin",
+      },
+    };
+
+    // act
+    const emitted = emit(
+      composeCascadeFailureMessage({
+        scope: "user",
+        rootKey: "_hel\u202eper@official",
+        rootName: "_hel\u202eper",
+        subject,
+      }),
+      PROBE_BOTH_LOADED,
+    );
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "A plugin operation has failed.",
+        "",
+        "● official [user]",
+        String.raw`  ⊘ _hel\u202eper (failed) {invalid manifest}`,
+        String.raw`    cause: Plugin "_hel\u202eper@official" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here the plugin's name does not; the marketplace's maintainer can rename it.`,
+      ].join("\n"),
+    });
+  });
+
   test("RESV-03 contradictory declarations name the joined declared ranges", () => {
     // arrange
     const subject: CascadeFailureSubject = {

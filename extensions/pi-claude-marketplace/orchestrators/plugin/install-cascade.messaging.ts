@@ -625,6 +625,17 @@ function unmaterializedRows(
 }
 
 /**
+ * The requesting plugin's row name. An id that breaks the token rule may hold
+ * control or format characters, so its row name is escaped as its cause is
+ * (D-PL3-14).
+ */
+function rootRowName(subject: CascadeFailureSubject, rootName: string): string {
+  return subject.kind === "closure" && subject.failure.reason === "invalid-root-id"
+    ? printable(rootName)
+    : rootName;
+}
+
+/**
  * RESV-06: the failing dependency as the row's subject, with the requesting
  * plugin's own row beside it, and a `{dependency failed}` row with no cause for
  * every other member the install would have installed and did not (CAS-01,
@@ -649,7 +660,7 @@ export function composeCascadeFailureMessage(args: {
   const isRoot = facts.key === args.rootKey;
   const failed: PluginFailedMessage = {
     status: "failed",
-    name: isRoot ? args.rootName : facts.key,
+    name: isRoot ? rootRowName(args.subject, args.rootName) : facts.key,
     reasons: facts.reasons,
     ...(facts.version !== undefined && { version: facts.version }),
     ...(facts.rollbackPartials !== undefined && {
