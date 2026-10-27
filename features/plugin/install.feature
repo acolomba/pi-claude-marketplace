@@ -98,6 +98,8 @@ Feature: Plugin install
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id                       | name            | status | reasons          | scope   | cause chain                                                                                                                                                                                                                                                                                                         | cause truncated | leaks | rollback partial |
       | fixtures         | project           | zero\u200bwidth@fixtures | zero\u200bwidth | failed | invalid manifest | project | Plugin "zero\u200bwidth@fixtures" cannot be installed, because its id is invalid: Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", and must start with a letter or digit. Here the plugin's name does not; the marketplace's maintainer can rename it. | false           |       |                  |
+    Then the "claude-plugins.json" file of the project scope declares no plugins
+    Then the project scope has no installed plugins
 
   Scenario: Installing a plugin whose name breaks the plugin id rule and that the marketplace does not offer fails as not in manifest
     When the user runs "/claude:plugin install _x@fixtures --scope project"

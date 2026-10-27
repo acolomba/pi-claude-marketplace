@@ -816,6 +816,11 @@ async function preflightInstallResolve(
   return { kind: "ready", entry, installable: resolved, resolvedSha };
 }
 
+/** Cuts a directory-pin refusal field as Claude Code does (D-PL3-09). */
+function cutPinField(text: string): string {
+  return truncateForRefusal(text, MAX_DIRECTORY_PIN_FIELD_CHARS);
+}
+
 /**
  * GV-01: Claude Code checks the `plugin.json` version of a plugin directory
  * copy against its dependents' range after the fetch, and refuses the install
@@ -835,12 +840,11 @@ async function assertDirectoryPinSatisfied(
     return;
   }
 
-  const cut = (text: string): string => truncateForRefusal(text, MAX_DIRECTORY_PIN_FIELD_CHARS);
   throw new DirectoryPinUnsatisfiedError({
-    plugin: cut(plugin),
-    manifestVersion: manifestVersion === undefined ? undefined : cut(manifestVersion),
+    plugin: cutPinField(plugin),
+    manifestVersion: manifestVersion === undefined ? undefined : cutPinField(manifestVersion),
     ranges: pin.declared,
-    requiredBy: pin.requiredBy.map((key) => cut(key.replace(/@[^@]*$/u, ""))),
+    requiredBy: pin.requiredBy.map((key) => cutPinField(key.replace(/@[^@]*$/u, ""))),
   });
 }
 

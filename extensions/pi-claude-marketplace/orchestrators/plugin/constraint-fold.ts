@@ -172,9 +172,10 @@ function nameHolder(holder: ConstraintHolder): string {
  * range or a holder that repeats is named once. Each
  * declared range passed `domain/dependencies.ts`' allowlist and 64-character
  * bound at parse time, and the join is bounded again here. The `transport`
- * arm's classification is not a range, so it is bounded but never quoted. A stage-two `version` is cut
- * to 64 code units, as Claude Code cuts a version (VERSTR-01, D-PL3-12): the
- * marketplace sets that string, and nothing bounds its length at parse time.
+ * arm's classification is not a range, so it is bounded but never quoted. A
+ * stage-two `version` is cut to 64 code units, as Claude Code cuts a version
+ * (VERSTR-01, D-PL3-12): the marketplace sets that string, and nothing bounds
+ * its length at parse time.
  */
 function describeConstraint(holders: readonly ConstraintHolder[], line: ConstraintLine): string {
   const detail =

@@ -512,7 +512,9 @@ test("RESV-06 a closure failure materializes nothing and returns the walk's fail
   assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
 });
 
-const key = (name: string): string => `${name}@${MARKETPLACE}`;
+function key(name: string): string {
+  return `${name}@${MARKETPLACE}`;
+}
 
 for (const { label, root, plugins, graph, recorded, readThrough, expected } of [
   {
@@ -1557,7 +1559,7 @@ const PLUGIN_DIRECTORY = "anthropic-plugin-directory";
 
 for (const { label, graph, materializedPins } of [
   {
-    label: "names every member that declared a range on it, nearest the requested plugin first",
+    label: "names every member that declared a range on it, in reverse install order",
     graph: {
       [`foo@${MARKETPLACE}`]: [
         { name: "a", marketplace: MARKETPLACE },
