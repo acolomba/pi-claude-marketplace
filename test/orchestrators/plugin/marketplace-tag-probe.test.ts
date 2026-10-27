@@ -87,7 +87,7 @@ describe("probeMarketplaceTags", () => {
 
     const result = await probeMarketplaceTags(options({ seam: fake.seam }));
 
-    assert.deepStrictEqual(result, { kind: "no-matching-tag", range: "^2.0.0" });
+    assert.deepStrictEqual(result, { kind: "no-matching-tag" });
   });
 
   test("a clone whose only tags carry another plugin's prefix yields the no-match arm", async () => {
@@ -95,7 +95,7 @@ describe("probeMarketplaceTags", () => {
 
     const result = await probeMarketplaceTags(options({ seam: fake.seam }));
 
-    assert.deepStrictEqual(result, { kind: "no-matching-tag", range: "^2.0.0" });
+    assert.deepStrictEqual(result, { kind: "no-matching-tag" });
   });
 
   test("D-07-10: every listed tag name's oid is resolved eagerly, before selection runs", async () => {

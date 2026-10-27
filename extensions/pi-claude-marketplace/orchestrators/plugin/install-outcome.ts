@@ -16,7 +16,7 @@
 //       PI-7:                deriveInstallVersion -- pin override, then
 //                            `shared.ts::resolvePluginVersion` (plugin.json >
 //                            entry.version > git sha > hash, VER-01)
-//       runPhases(phases, ctx)                             // D-01 7-phase ledger
+//       runPhases(phases, ctx)                             // D-01 8-phase ledger
 //       format rollback result, capture rows, throw error  // D-02 PI-14 bypass
 //   })
 //
@@ -75,6 +75,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 
 import {
+  assertAgentTargetsFree,
   commitPreparedAgents,
   prepareStagePluginAgents,
   unstagePluginAgents,
@@ -102,7 +103,11 @@ import {
   unstagePluginWorkflows,
 } from "../../bridges/workflows/index.ts";
 import { parseHooksConfig, projectHookSummaryEntries } from "../../domain/components/hooks.ts";
-import { recordedVersionSatisfies } from "../../domain/dependency-range.ts";
+import {
+  MAX_DIRECTORY_PIN_FIELD_CHARS,
+  recordedVersionSatisfies,
+  truncateForRefusal,
+} from "../../domain/dependency-range.ts";
 import { sourceManifestBoundary } from "../../domain/manifest-containment.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import {
@@ -115,13 +120,16 @@ import {
   ConcurrentInstallError,
   DirectoryPinUnsatisfiedError,
   errorMessage,
+  errorWithManualRecovery,
   InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
+  ManualRecoveryError,
   PluginShapeError,
 } from "../../shared/errors.ts";
-import { type RemovalOps } from "../../shared/fs-utils.ts";
+import { pathExists, type RemovalOps } from "../../shared/fs-utils.ts";
 import { type DegradeKind } from "../../shared/notify-reasons.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
+import { PathContainmentError } from "../../shared/path-safety.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import {
   runPhases,
@@ -147,6 +155,11 @@ import { WorkflowsUnstageFailureError } from "../marketplace/shared.ts";
 import { materializeMarketplaceTagClone } from "./clone-cache.ts";
 import { discoverGeneratedNames } from "./discover-names.ts";
 import { probeInstallClone, type InstallCloneCacheSeam } from "./install-clone-probe.ts";
+import {
+  createPackagesPhase,
+  DEFAULT_PACKAGE_INSTALL_OPS,
+  type PackageInstallOps,
+} from "./package-install.ts";
 import {
   assertNoCrossPluginConflicts,
   readDeclaredPluginVersion,
@@ -284,6 +297,8 @@ export interface InstallLedgerOptions {
 /** Transaction operation required by the guard-free ledger. */
 export interface InstallLedgerTransaction {
   readonly runPhases: typeof runPhases;
+  /** D-PL9-12: the package step's ports; absent, the real package manager runs. */
+  readonly packageInstallOps?: PackageInstallOps;
 }
 
 /** Failure details captured before a formatted ledger error is rethrown. */
@@ -360,7 +375,7 @@ export type InstallLedgerResult =
   | { readonly kind: "marketplace-absent" };
 
 /**
- * Local context type for the 7-phase ledger. Carries every value the
+ * Local context type for the 8-phase ledger. Carries every value the
  * phases read or mutate. Per D-01 corollary "second-consumer rule" this
  * shape is NOT promoted to `orchestrators/types.ts` until/unless another
  * orchestrator needs it.
@@ -831,12 +846,21 @@ async function preflightInstallResolve(
   };
 }
 
+/** Cuts a directory-pin refusal field as Claude Code does (D-PL3-09). */
+function cutPinField(text: string): string {
+  return truncateForRefusal(text, MAX_DIRECTORY_PIN_FIELD_CHARS);
+}
+
 /**
  * GV-01: Claude Code checks the `plugin.json` version of a plugin directory
  * copy against its dependents' range after the fetch, and refuses the install
  * when it falls outside or declares none. `boundary` is the one the resolver
  * read the copy's manifest within (D-PL2-17), so a manifest it refused
  * declares no version here either.
+ *
+ * D-PL3-09: the refusal's fields arrive cut as Claude Code cuts them, because
+ * `shared/` cannot import the cut from `domain/`. The cascade already cut the
+ * joined ranges, and the requirer count has no cap.
  */
 async function assertDirectoryPinSatisfied(
   plugin: string,
@@ -849,28 +873,31 @@ async function assertDirectoryPinSatisfied(
   }
 
   throw new DirectoryPinUnsatisfiedError({
-    plugin,
-    manifestVersion,
+    plugin: cutPinField(plugin),
+    manifestVersion: manifestVersion === undefined ? undefined : cutPinField(manifestVersion),
     ranges: pin.declared,
-    requiredBy: pin.requiredBy.map((key) => key.replace(/@[^@]*$/u, "")),
+    requiredBy: pin.requiredBy.map((key) => cutPinField(key.replace(/@[^@]*$/u, ""))),
   });
 }
 
 /**
  * UPD-DEP-D1: whether the ledger would install one plugin, decided with no
  * write: the PI-15 / PI-3 / PI-4 preflight behind the same installability
- * gate, then the PI-6 name check. It runs over a copy of `state`, and a
- * marketplace only the user scope records is read from the user record rather
- * than added (D-MF-04), so a refused plan adds nothing. A git source clones on
- * a cache miss, as the install it previews would. Throws what the ledger
- * would throw; a marketplace neither scope records resolves quietly, since
- * the ledger reports it.
+ * gate, then the PI-6 name check, then the D-PL4-04 refusal of an agent
+ * target that holds a file the agents commit would not replace. It runs over
+ * a copy of `state`, and a marketplace only the user scope records is read
+ * from the user record rather than added (D-MF-04), so a refused plan adds
+ * nothing. A git source clones on a cache miss, as the install it previews
+ * would. Throws what the ledger would throw. Answers the commit its
+ * preflight resolved, which the install then pins (D-PL4-01), or `undefined`
+ * when the source resolved none (a path source with no pin) or when the
+ * marketplace is one neither scope records, since the ledger reports it.
  */
 export async function previewInstall(
   state: ExtensionState,
   locations: ScopedLocations,
   opts: InstallLedgerOptions,
-): Promise<void> {
+): Promise<string | undefined> {
   const preview = structuredClone(state);
   if (ownValue(preview.marketplaces, opts.marketplace) === undefined) {
     const source = await resolveInstallMarketplaceSource({
@@ -886,7 +913,7 @@ export async function previewInstall(
 
   const preflight = await preflightInstallResolve(preview, locations, opts);
   if (preflight.kind === "marketplace-absent") {
-    return;
+    return undefined;
   }
 
   const generatedNames = await discoverGeneratedNames(opts.plugin, preflight.installable);
@@ -895,6 +922,12 @@ export async function previewInstall(
     generatedNames,
     removePluginRecord(preview, opts.marketplace, opts.plugin),
   );
+  await assertAgentTargetsFree(
+    locations,
+    { marketplace: opts.marketplace, plugin: opts.plugin },
+    generatedNames.agents,
+  );
+  return preflight.resolvedSha;
 }
 
 /**
@@ -908,7 +941,7 @@ const DEFAULT_INSTALL_LEDGER_TRANSACTION: InstallLedgerTransaction = Object.free
 
 /**
  * CR-01: the guard-FREE install ledger body -- the
- * complete PI-15 / PI-3 / PI-2 / PI-4 / PI-6 / PI-7 + 7-phase ledger
+ * complete PI-15 / PI-3 / PI-2 / PI-4 / PI-6 / PI-7 + 8-phase ledger
  * sequence.
  *
  * Locking contract: the CALLER owns the per-scope state lock and the
@@ -983,6 +1016,43 @@ function toInstallLedgerSummary(context: InstallLedgerContext): InstallLedgerSum
     agentForeignFailures: context.agentForeignFailures,
     mcpConfigNotices: context.mcpConfigNotices,
   };
+}
+
+/**
+ * AS-7 / D-PL6-20: the error a failed skills undo throws. A containment
+ * refusal passes through unchanged, so the ledger still rethrows it (PI-14).
+ * Any other failure becomes a `ManualRecoveryError` that lists each staged
+ * skill directory still on disk, in place of the bridge error, whose own cause
+ * it keeps so the rendered chain shows the failure once. With
+ * no directory left, or when probing for them fails, the bridge error passes
+ * through, so a probe failure never hides the real unstage failure.
+ */
+async function skillsUndoError(
+  err: unknown,
+  locations: ScopedLocations,
+  names: readonly string[],
+): Promise<Error> {
+  if (err instanceof PathContainmentError) {
+    return err;
+  }
+
+  const dirs = names.map((name) => path.join(locations.skillsTargetDir, name));
+  try {
+    const present = await Promise.all(dirs.map((dir) => pathExists(dir)));
+    const leftovers = dirs.filter((_, index) => present[index] === true);
+    if (leftovers.length === 0) {
+      return errorWithManualRecovery(err, []);
+    }
+
+    const { cause } = errorWithManualRecovery(err, []);
+    return new ManualRecoveryError(
+      errorMessage(err),
+      leftovers,
+      cause === undefined ? undefined : { cause },
+    );
+  } catch {
+    return errorWithManualRecovery(err, []);
+  }
 }
 
 /**
@@ -1083,7 +1153,7 @@ async function runInstallLedgerBody(
   };
 
   // D-01 literal-array discipline: each phase is a single Phase<InstallLedgerContext>
-  // value; the ledger sees a 7-element constant array.
+  // value; the ledger sees an 8-element constant array.
   const skillsPhase: Phase<InstallLedgerContext> = {
     name: "skills",
     do: async (c) => {
@@ -1125,10 +1195,14 @@ async function runInstallLedgerBody(
 
       // Commit already succeeded -- the dirs are at the target path.
       // unstage* by name removes them.
-      await unstagePluginSkills({
-        locations: c.locations,
-        previousSkillNames: c.stagedSkillNames,
-      });
+      try {
+        await unstagePluginSkills({
+          locations: c.locations,
+          previousSkillNames: c.stagedSkillNames,
+        });
+      } catch (err) {
+        throw await skillsUndoError(err, c.locations, c.stagedSkillNames);
+      }
     },
   };
 
@@ -1542,10 +1616,17 @@ async function runInstallLedgerBody(
     // by the unwinding closure.
   };
 
+  // D-PL9-05: after the six bridge phases, so a bridge failure never spends the
+  // network; before state, so a state failure reaches its undo.
+  const packagesPhase = createPackagesPhase(
+    transaction.packageInstallOps ?? DEFAULT_PACKAGE_INSTALL_OPS,
+  );
+
   // D-01 literal-array; order is part of the contract -- never refactor
   // to a dynamic builder. D-63-01: hooks slot lands between agents and mcp.
+  // D-PL9-05: the packages slot lands between workflows and state.
   // The PRD-fixed sequence is
-  // [skills, commands, agents, hooks, mcp, workflows, state].
+  // [skills, commands, agents, hooks, mcp, workflows, packages, state].
   const phases: readonly Phase<InstallLedgerContext>[] = [
     skillsPhase,
     commandsPhase,
@@ -1553,6 +1634,7 @@ async function runInstallLedgerBody(
     hooksPhase,
     mcpPhase,
     workflowsPhase,
+    packagesPhase,
     statePhase,
   ];
 

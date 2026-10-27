@@ -815,6 +815,71 @@ test("swallows clone garbage-collection failure and safely reports the retry", a
   retryNotification.verifyInteractions();
 });
 
+test("GLK-03 / D-PL7-05: a held scope lock leaves the removed plugins' clone and the remove still succeeds", async (testContext) => {
+  // arrange -- the names-cache invalidation runs after the remove's lock is
+  // released and before the clone GC, so a second holder taken there holds the
+  // lock while the GC tries to take it.
+  const { cwd, locations } = await projectCase(testContext);
+  await seedMarketplace(locations, {
+    cwd,
+    name: "tools",
+    source: pathSource("./tools"),
+    plugins: {
+      tool: {
+        ...pluginRecord(),
+        resolvedSource: path.join(locations.pluginClonesDir, "keyTool"),
+        resolvedSha: "1111111111111111111111111111111111111111",
+      },
+    },
+  });
+  await mkdir(path.join(locations.pluginClonesDir, "keyTool"), { recursive: true });
+  const releases: Array<() => Promise<void>> = [];
+  const completionCache: CompletionCache = {
+    ...createCompletionCache(),
+    invalidateMarketplaceNames: async () => {
+      releases.push(
+        await lockfile.lock(locations.extensionRoot, {
+          lockfilePath: locations.stateLockFile,
+          realpath: false,
+        }),
+      );
+    },
+  };
+  const cascade: typeof cascadeUnstagePlugin = () =>
+    Promise.resolve({ ok: true, dropped: emptyDropped() });
+  const notification = notificationBoundary(1);
+
+  // act
+  let outcome: RemoveMarketplaceOutcome | undefined;
+  try {
+    outcome = await removeMarketplace({
+      completionCache,
+      ctx: notification.ctx,
+      run: notification.run,
+      name: "tools",
+      scope: "project",
+      cwd,
+      cascade,
+    });
+  } finally {
+    await Promise.all(releases.map((release) => release()));
+  }
+
+  // assert
+  assert.strictEqual(outcome, undefined);
+  assert.deepStrictEqual(notification.calls, [
+    {
+      message: "● tools [project] (removed)\n  ○ tool (uninstalled)\n\n/reload to pick up changes",
+    },
+  ]);
+  assert.deepStrictEqual(await loadState(locations.extensionRoot), {
+    schemaVersion: 3,
+    marketplaces: {},
+  });
+  assert.deepStrictEqual(await readdir(locations.pluginClonesDir), ["keyTool"]);
+  notification.verifyInteractions();
+});
+
 test("retains the source clone when a forward-compatible recorded kind is unavailable", async (testContext) => {
   // arrange
   const { cwd, locations } = await projectCase(testContext);

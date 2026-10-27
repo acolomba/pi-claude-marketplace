@@ -626,3 +626,457 @@ Feature: Plugin import
       | app@fixtures | 1.0.0   | true    |
       | fff@fixtures | 1.0.0   | true    |
       | ggg@fixtures | 1.0.0   | true    |
+
+  Scenario: Importing adds an extra known marketplace that no enabled plugin names
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "tools" is published as a dir source
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          },
+          "tools": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/tools" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade |
+      | severity            | info    |
+      | needs reload        | true    |
+      | tally label         | Import  |
+      | tally failures      | 0       |
+      | tally warnings      | 0       |
+      | tally success count | 3       |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | version | status    | reasons | scope |
+      | fixtures         | user              | added              | demo@fixtures | demo | 1.0.0   | installed |         | user  |
+      | tools            | user              | added              |               |      |         |           |         |       |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+      | tools    | {home}/marketplaces/tools    |
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id            |
+      | demo@fixtures |
+
+  Scenario: Importing settings that name a known marketplace under another name fails its plugin as not added
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@other": true },
+        "extraKnownMarketplaces": {
+          "other": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind           | cascade                      |
+      | severity       | error                        |
+      | needs reload   | false                        |
+      | summary        | Some operations have failed. |
+      | tally label    | Import                       |
+      | tally failures | 2                            |
+      | tally warnings | 0                            |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id         | name | status | reasons | scope | cause chain                                         | cause truncated | leaks | rollback partial |
+      | other            | user              | failed             | demo@other | demo | failed |         | user  | Marketplace "other" is not added in the user scope. | false           |       |                  |
+    Then the user scope has no installed plugins
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+    Then the "claude-plugins.json" file of the user scope declares no plugins
+
+  Scenario: Importing settings that name a known marketplace by its recorded name keeps the name the config uses for it
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given a config in scope user and layer base, with these marketplaces:
+      | name  | source                       | autoupdate |
+      | other | {home}/marketplaces/fixtures |            |
+    Given a config in scope user and layer base, with these plugins:
+      | marketplace | plugin | enabled |
+      | other       | demo   |         |
+    Given the user has run "/claude:plugin apply --scope user"
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | status  | reasons           | scope |
+      | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | skipped | already installed | user  |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name  | source                       |
+      | other | {home}/marketplaces/fixtures |
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id         |
+      | demo@other |
+
+  Scenario: Importing settings that also declare the recorded name of a known marketplace fails the other name's plugin as not added
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@other": true },
+        "extraKnownMarketplaces": {
+          "other": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          },
+          "fixtures": {
+            "source": { "source": "file", "url": "https://example.test/marketplace.json" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the command reports these results:
+      | kind       | severity | needs reload | summary                      | tally label | tally failures | tally warnings | header                        | lines                                                                                                                                                                 |
+      | cascade    | error    | false        | Some operations have failed. | Import      | 2              | 0              |                               |                                                                                                                                                                       |
+      | diagnostic | warning  | false        |                              |             |                |                | 1 import diagnostic surfaced. | Skipping Claude marketplace "fixtures" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable). |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id         | name | status | reasons | scope | cause chain                                         | cause truncated | leaks | rollback partial |
+      | other            | user              | failed             | demo@other | demo | failed |         | user  | Marketplace "other" is not added in the user scope. | false           |       |                  |
+    Then the user scope has no installed plugins
+
+  Scenario: Importing two settings marketplaces that name one known marketplace's source reuses it with no row
+    Given the marketplace "fixtures" is added to the user scope
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "extraKnownMarketplaces": {
+          "other": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          },
+          "twin": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result lists no marketplaces
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+
+  Scenario: Importing settings that give a known marketplace a new source adds it again from that source and keeps its installed plugins
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given a second marketplace declaring the name "fixtures" is ready to add from "fixtures-copy"
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "formatter@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures-copy" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade |
+      | severity            | info    |
+      | needs reload        | true    |
+      | tally label         | Import  |
+      | tally failures      | 0       |
+      | tally warnings      | 0       |
+      | tally success count | 2       |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id                 | name      | version | status    | reasons | scope |
+      | fixtures         | user              | added              | formatter@fixtures | formatter | 1.0.0   | installed |         | user  |
+    Then the installation record of the user scope holds these plugins:
+      | id                 | version | enabled |
+      | demo@fixtures      | 1.0.0   | true    |
+      | formatter@fixtures | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                            |
+      | fixtures | {home}/marketplaces/fixtures-copy |
+    Then the "claude-plugins.json" file of the user scope declares these plugins:
+      | id                 |
+      | demo@fixtures      |
+      | formatter@fixtures |
+
+  Scenario: Importing settings that give a known marketplace a directory that does not exist keeps the recorded marketplace
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the directory "fixtures-moved" to add does not exist
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures-moved" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | version | status    | reasons | scope |
+      | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | 1.0.0   | installed |         | user  |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+
+  Scenario: Importing settings that give a known marketplace the source of another known marketplace keeps both as they are
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" is added to the user scope
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/tools" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | version | status    | reasons | scope |
+      | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | 1.0.0   | installed |         | user  |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+      | tools    | {home}/marketplaces/tools    |
+
+  Scenario: Importing settings that give a known marketplace a source whose manifest names another marketplace blocks its plugins and keeps the recorded marketplace
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the marketplace "tools" is published as a dir source
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/tools" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind           | cascade                      |
+      | severity       | error                        |
+      | needs reload   | false                        |
+      | summary        | Some operations have failed. |
+      | tally label    | Import                       |
+      | tally failures | 2                            |
+      | tally warnings | 0                            |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id                | name     | status | reasons | scope | cause chain                                                                    | cause truncated | leaks | rollback partial |
+      | fixtures         | user              | failed             | fixtures@fixtures | fixtures | failed |         | user  | marketplace.json names the marketplace "tools", not "fixtures", which it replaces | false           |       |                  |
+    Then the user scope has no installed plugins
+    Then the "claude-plugins.json" file of the user scope declares these marketplaces:
+      | name     | source                       |
+      | fixtures | {home}/marketplaces/fixtures |
+
+  Scenario: Importing an extra known marketplace with no supported source that no enabled plugin names reports a diagnostic and no marketplace
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "extraKnownMarketplaces": {
+          "remote": {
+            "source": { "source": "file", "url": "https://example.test/marketplace.json" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                        | lines                                                                                                                                                              |
+      | cascade    | info     | false        |                               |                                                                                                                                                                    |
+      | diagnostic | warning  | false        | 1 import diagnostic surfaced. | Skipping Claude marketplace "remote" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable). |
+
+  Scenario: Importing a plugin whose install rollback cannot finish names the rollback phase
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has a read-only skill directory
+    Given a directory blocks the mcp-adapter.json file of the user scope
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade                        |
+      | severity            | error                          |
+      | needs reload        | false                          |
+      | summary             | A plugin operation has failed. |
+      | tally label         | Import                         |
+      | tally failures      | 1                              |
+      | tally warnings      | 0                              |
+      | tally success count | 1                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | status | reasons          | scope | cause chain                                                  | cause truncated | leaks      | rollback partial                                                                                            |
+      | fixtures         | user              | added              | demo@fixtures | demo | failed | rollback partial | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | demo-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+    Then the installation record of the user scope holds no plugins
+    Then the user scope stages these skills and prompts:
+      | kind  | name       |
+      | skill | demo-skill |
+
+  Scenario: Importing a disabled plugin whose enable rollback cannot finish names the rollback phase
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+    Given the marketplace "fixtures" is added to the user scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope user"
+    Given the user has run "/claude:plugin disable demo@fixtures --scope user"
+    Given the published plugin "demo" of the marketplace "fixtures" has a read-only skill directory
+    Given a directory blocks the mcp-adapter.json file of the user scope
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "demo@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade                        |
+      | severity            | error                          |
+      | needs reload        | false                          |
+      | summary             | A plugin operation has failed. |
+      | tally label         | Import                         |
+      | tally failures      | 1                              |
+      | tally warnings      | 0                              |
+      | tally success count | 1                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id            | name | status | reasons          | scope | cause chain                                                  | cause truncated | leaks      | rollback partial                                                                                            |
+      | fixtures         | user              | skipped            | already added       | demo@fixtures | demo | failed | rollback partial | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | demo-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+    Then the installation record of the user scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | false   |
+
+  Scenario: Importing a plugin whose dependency rollback cannot finish names the dependency and its rollback phase
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "fixtures" has a read-only skill directory
+    Given a directory blocks the mcp-adapter.json file of the user scope
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "app@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade                             |
+      | severity            | error                               |
+      | needs reload        | false                               |
+      | summary             | Some plugin operations have failed. |
+      | tally label         | Import                              |
+      | tally failures      | 2                                   |
+      | tally warnings      | 0                                   |
+      | tally success count | 1                                   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id           | name         | status | reasons           | scope | cause chain                                                  | cause truncated | leaks     | rollback partial                                                                                            |
+      | fixtures         | user              | added              | app@fixtures | app          | failed | dependency failed | user  |                                                              |                 |           |                                                                                                             |
+      | fixtures         | user              | added              | lib@fixtures | lib@fixtures | failed | rollback partial  | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | lib-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+    Then the installation record of the user scope holds no plugins
+
+  Scenario: Importing two plugins whose shared dependency rollback cannot finish names that dependency once
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | tool | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "fixtures" has a read-only skill directory
+    Given a directory blocks the mcp-adapter.json file of the user scope
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "app@fixtures": true, "tool@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade                             |
+      | severity            | error                               |
+      | needs reload        | false                               |
+      | summary             | Some plugin operations have failed. |
+      | tally label         | Import                              |
+      | tally failures      | 3                                   |
+      | tally warnings      | 0                                   |
+      | tally success count | 1                                   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name         | status | reasons           | scope | cause chain                                                  | cause truncated | leaks     | rollback partial                                                                                            |
+      | fixtures         | user              | added              | app@fixtures  | app          | failed | dependency failed | user  |                                                              |                 |           |                                                                                                             |
+      | fixtures         | user              | added              | lib@fixtures  | lib@fixtures | failed | rollback partial  | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | lib-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+      | fixtures         | user              | added              | tool@fixtures | tool         | failed | dependency failed | user  |                                                              |                 |           |                                                                                                             |
+    Then the installation record of the user scope holds no plugins

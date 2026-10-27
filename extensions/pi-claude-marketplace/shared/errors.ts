@@ -676,7 +676,7 @@ export class InvalidGitHubBaseUrlError extends Error {
  * class lets consumers narrow on `instanceof` instead of substring-matching
  * the message text or sniffing for `SyntaxError`:
  *   - `orchestrators/marketplace/add.ts::classifyAddError` and
- *     `orchestrators/marketplace/update.ts::reasonsFromCascadeError` map it
+ *     `orchestrators/marketplace/update.ts::refreshFailureReasons` map it
  *     through `narrowProbeError`: `unparseable` for malformed JSON,
  *     `invalid manifest` for a schema-invalid manifest (ATTR-07, ATTR-10,
  *     MPA-02), so a path-source manifest failure never falls back to the

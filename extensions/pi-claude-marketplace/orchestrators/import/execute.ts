@@ -1,4 +1,8 @@
-import { addMarketplace as defaultAddMarketplace } from "../../orchestrators/marketplace/add.ts";
+import { parsePluginSource, samePlannedSource } from "../../domain/source.ts";
+import {
+  addMarketplace as defaultAddMarketplace,
+  resolvePathSource,
+} from "../../orchestrators/marketplace/add.ts";
 import { type InstallPluginOptions } from "../../orchestrators/plugin/install-flow.ts";
 import {
   narrowResolverReasons,
@@ -8,11 +12,11 @@ import {
   createEnableOperation,
   createInstallOperation,
 } from "../../orchestrators/plugin/operations.ts";
-import { degradationFromEnable } from "../../orchestrators/plugin/shared.ts";
 import { buildScopeSatisfactionVerdict } from "../../orchestrators/reconcile/dependency-verdict.ts";
 import { enabledRowFromOutcome } from "../../orchestrators/reconcile/notify.ts";
-import { planReconcile } from "../../orchestrators/reconcile/plan.ts";
+import { marketplaceSourceClaims, planReconcile } from "../../orchestrators/reconcile/plan.ts";
 import { loadConfig, type PluginConfigEntry } from "../../persistence/config-io.ts";
+import { loadMergedScopeConfig } from "../../persistence/config-merge.ts";
 import {
   writeBatchedConfigEntries,
   writePluginConfigEntry,
@@ -37,6 +41,7 @@ import {
   rethrowInvalidGitHubBaseUrl,
   StateLockHeldError,
 } from "../../shared/errors.ts";
+import { pathExists } from "../../shared/fs-utils.ts";
 import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import { notifyDiagnostic, notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -54,7 +59,12 @@ import {
   type Plural,
 } from "../../shared/notify-context.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
-import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
+import {
+  redactAbsolutePaths,
+  redactCauseChain,
+  redactedRollbackPartials,
+  splitDependencyPartials,
+} from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { IMPORT_CONTEXT, type ImportMsg } from "./execute.messaging.ts";
@@ -90,6 +100,7 @@ import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { RollbackPartial } from "../../transaction/phase-ledger.ts";
 
 export interface MarketplaceAddedOutcome {
   readonly kind: "marketplace-added";
@@ -144,9 +155,14 @@ export interface PluginInstalledOutcome {
   /**
    * IMP-10: the degradation signals of an enable, present only on the enable
    * path. They select reconcile's enable row, so a re-enabled partial record
-   * reads `(partially-installed)` as it does on a reload.
+   * reads `(partially-installed)` as it does on a reload. LCCODE-01: the
+   * staged-kind facts live only in the required `declares*` members, so the
+   * two cannot disagree.
    */
-  readonly enableSignals?: EnableDegradationSignals;
+  readonly enableSignals?: Omit<
+    EnableDegradationSignals,
+    "stagedAgents" | "stagedMcpServers" | "stagedWorkflows"
+  >;
   readonly declaresWorkflows: boolean;
 }
 
@@ -218,8 +234,16 @@ export interface UnexpectedPluginFailureOutcome {
    * cascade closure/constraint/member failure), so the row renders
    * `{dependency failed}`. IMP-09: `"unexpected-failure"` is a failure no
    * other arm classifies; its row carries `runtimeReason` or no reason at all.
+   * D-PL6-17: `"marketplace-not-added"` marks a plugin of a settings
+   * marketplace whose source the scope holds under another name; its row
+   * carries install's marketplace-absent cause and no reason.
    */
-  readonly reason: "unexpected-failure" | "dependency-failed" | "lock-held" | "not-installed";
+  readonly reason:
+    | "unexpected-failure"
+    | "dependency-failed"
+    | "lock-held"
+    | "not-installed"
+    | "marketplace-not-added";
   /**
    * IMP-09: the reason `install` reads off the same unclassified error -- the
    * reason of the marketplace add an install ran, or the git host's answer.
@@ -238,6 +262,24 @@ export interface UnexpectedPluginFailureOutcome {
    * no onward cause (`exactOptionalPropertyTypes`).
    */
   readonly causeChain?: Error;
+  /**
+   * MIM-03 / D-PL6-03: the undo steps the failed install or enable could not
+   * finish, as install's failed row lists them. Each cause is already
+   * redacted (D-PL6-12). Omitted when every undo finished.
+   */
+  readonly rollbackPartial?: PluginFailedMessage["rollbackPartial"];
+  /**
+   * MIM-03 / D-PL6-04: the dependency of a `"dependency-failed"` outcome whose
+   * rollback could not finish, by its `plugin@marketplace` key, with its
+   * redacted rollback phases. Its cause is the outcome's own `cause` and
+   * `causeChain`. The cascade then shows the dependency's row as install does,
+   * beside the plugin's bare `{dependency failed}` row. Omitted when the
+   * dependency's undo finished.
+   */
+  readonly failedDependency?: {
+    readonly key: string;
+    readonly rollbackPartial: NonNullable<PluginFailedMessage["rollbackPartial"]>;
+  };
 }
 
 /**
@@ -468,9 +510,13 @@ type ImportBlockStatus = Extract<MarketplaceStatus, "added" | "skipped" | "faile
  * actually rules that out is an invariant spanning four functions, not a type:
  * every `pushMarketplaceRow` call site is reachable only for a plugin in
  * `scopePlan.pluginsToInstall` whose marketplace passed the usable-marketplace gate, and
- * `scopedPlan` (`import/marketplaces.ts`) derives `pluginsToInstall` and
- * `marketplacesToEnsure` from the same `refs` set under one scope, so the key
- * sets always match. A loud check here would be an arm no input can reach.
+ * `scopedPlan` (`import/marketplaces.ts`) plans the marketplace of every plugin
+ * in `pluginsToInstall` under one scope, so every row key has a header.
+ * D-PL6-01: `marketplacesToEnsure` also holds the extra known marketplaces no
+ * plugin names, whose headers have no rows. D-PL6-17: a marketplace reused
+ * under another name has no marketplace outcome, so each of its plugins'
+ * `marketplace-not-added` failures creates its `(failed)` header itself. A
+ * loud check here would be an arm no input can reach.
  */
 interface MarketplaceBlock {
   readonly key: string;
@@ -479,11 +525,11 @@ interface MarketplaceBlock {
   status: ImportBlockStatus;
   /**
    * The cause row for a `status: "failed"` block whose failure came from
-   * `result.marketplaceFailures` (a marketplace add attempt, an
-   * already-present marketplace whose stored source the planner could not
-   * classify, or a held lock) -- undefined otherwise, e.g. for a
-   * source-mismatch failure, whose per-plugin child rows already carry the
-   * mismatch reason.
+   * `result.marketplaceFailures` (a marketplace add attempt, a re-add from a
+   * new settings source included (D-PL6-19), an already-present marketplace
+   * whose stored source the planner could not classify, or a held lock) --
+   * undefined otherwise, e.g. for the official marketplace's source mismatch
+   * (IMP-05), whose per-plugin child rows already carry the mismatch reason.
    */
   failure?: MarketplaceBlockFailure;
 }
@@ -590,7 +636,69 @@ function unexpectedFailureReasons(
       return ["lock held"];
     case "not-installed":
       return ["not installed"];
+    case "marketplace-not-added":
+      return [];
   }
+}
+
+/**
+ * The rows of a plugin that failed for a reason no other bucket classifies.
+ * MIM-03 / D-PL6-03: a rollback that could not finish lists its phases, as
+ * install's row does. D-PL6-04: a dependency whose rollback could not finish
+ * gets its own row, with the cause and the phases, beside the plugin's bare
+ * `{dependency failed}` row, the two ordered by name as install orders them.
+ * Two plugins of one block can fail on the same dependency, so the
+ * block shows the dependency's row once, for the first of them;
+ * `shownDependencies` holds the block and dependency keys already shown.
+ */
+function unexpectedFailureRows(
+  o: UnexpectedPluginFailureOutcome,
+  shownDependencies: Set<string>,
+): readonly PluginFailedMessage[] {
+  if (o.failedDependency === undefined) {
+    return [unexpectedFailureRow(o)];
+  }
+
+  const dependency: PluginFailedMessage = {
+    status: "failed",
+    name: o.failedDependency.key,
+    reasons: ["rollback partial"],
+    cause: failureCause(o),
+    rollbackPartial: o.failedDependency.rollbackPartial,
+    severity: "error",
+    needsReload: false,
+  };
+  const requested: PluginFailedMessage = {
+    status: "failed",
+    name: o.plugin,
+    reasons: ["dependency failed"],
+    ...(o.rollbackPartial !== undefined && { rollbackPartial: o.rollbackPartial }),
+    severity: "error",
+    needsReload: false,
+  };
+  const shownKey = `${o.scope}:${o.marketplace}:${o.failedDependency.key}`;
+  if (shownDependencies.has(shownKey)) {
+    return [requested];
+  }
+
+  shownDependencies.add(shownKey);
+  return [dependency, requested].sort((a, b) =>
+    compareByNameThenScope({ name: a.name, scope: o.scope }, { name: b.name, scope: o.scope }),
+  );
+}
+
+function unexpectedFailureRow(o: UnexpectedPluginFailureOutcome): PluginFailedMessage {
+  return {
+    status: "failed",
+    name: o.plugin,
+    reasons: unexpectedFailureReasons(o),
+    // IMP-09: install's authentication row is bare, so this one is too.
+    ...(o.runtimeReason !== "authentication required" && { cause: failureCause(o) }),
+    ...(o.rollbackPartial !== undefined && { rollbackPartial: o.rollbackPartial }),
+    // D-03/D-06: an unexpected import failure -> error, no reload.
+    severity: "error",
+    needsReload: false,
+  };
 }
 
 /**
@@ -609,6 +717,9 @@ function installedRow(
       plugin: o.plugin,
       ...(o.version !== undefined && { version: o.version }),
       ...o.enableSignals,
+      ...(o.declaresAgents && { stagedAgents: true }),
+      ...(o.declaresMcp && { stagedMcpServers: true }),
+      ...(o.declaresWorkflows && { stagedWorkflows: true }),
     });
   }
 
@@ -640,31 +751,11 @@ function marketplaceFailureReasons(
 }
 
 /**
- * Converts a `ClaudeImportExecutionResult` into the
- * `MarketplaceNotificationMessage[]` payload for `notify()`.
- *
- * Outcome mapping: added -> "added"; already-present -> "skipped" with
- * "already added" (IMP-06);
- * marketplace failure or source mismatch -> "failed"; installed plugin ->
- * PluginInstalledMessage, or reconcile's enable row for an enable (IMP-10); already-installed plugin -> PluginSkippedMessage
- * with "already installed"; failed/unavailable plugin -> PluginFailedMessage
- * or PluginUnavailableMessage. Advisory-only warnings and orphan diagnostics
- * are silently dropped (the marketplace status row already carries the
- * structural signal).
- *
- * Iteration order: `compareByNameThenScope` (name primary
- * case-insensitive, scope secondary project-before-user). Per-plugin
- * `scope?` is omitted -- every row's scope matches its marketplace's scope
- * by construction, so `notify()` orphan-folds the bracket.
+ * The marketplace headers of the import cascade, one per (scope, marketplace)
+ * tuple that a marketplace-level outcome names.
  */
-function buildImportNotificationMarketplaces(
-  result: ClaudeImportExecutionResult,
-  dependencyChanges: readonly DependencyChangeOutcome[],
-): Plural<MarketplaceRows<ImportMsg>> {
+function marketplaceBlocks(result: ClaudeImportExecutionResult): Map<string, MarketplaceBlock> {
   const byMp = new Map<string, MarketplaceBlock>();
-  const rowsByMp = new Map<string, ImportMsg[]>();
-
-  // Marketplace-level outcomes: set status on the (scope, marketplace) tuple.
   for (const o of result.addedMarketplaces) {
     setMarketplaceStatus(byMp, o.scope, o.marketplace, "added");
   }
@@ -689,6 +780,43 @@ function buildImportNotificationMarketplaces(
   for (const o of result.sourceMismatches) {
     setMarketplaceStatus(byMp, o.scope, o.marketplace, "failed");
   }
+
+  // D-PL6-17: a reused marketplace has no outcome of its own, so a plugin that
+  // fails as not added gives its block the `(failed)` header.
+  for (const o of result.unexpectedPluginFailures) {
+    if (o.reason === "marketplace-not-added") {
+      setMarketplaceStatus(byMp, o.scope, o.marketplace, "failed");
+    }
+  }
+
+  return byMp;
+}
+
+/**
+ * Converts a `ClaudeImportExecutionResult` into the
+ * `MarketplaceNotificationMessage[]` payload for `notify()`.
+ *
+ * Outcome mapping: added -> "added"; already-present -> "skipped" with
+ * "already added" (IMP-06);
+ * marketplace failure, source mismatch, or a plugin of a reused marketplace
+ * that fails as not added (D-PL6-17) -> "failed"; installed plugin ->
+ * PluginInstalledMessage, or reconcile's enable row for an enable (IMP-10);
+ * already-installed plugin -> PluginSkippedMessage with "already installed"; failed/unavailable plugin -> PluginFailedMessage
+ * or PluginUnavailableMessage. Advisory-only warnings and orphan diagnostics
+ * are silently dropped (the marketplace status row already carries the
+ * structural signal).
+ *
+ * Iteration order: `compareByNameThenScope` (name primary
+ * case-insensitive, scope secondary project-before-user). Per-plugin
+ * `scope?` is omitted -- every row's scope matches its marketplace's scope
+ * by construction, so `notify()` orphan-folds the bracket.
+ */
+function buildImportNotificationMarketplaces(
+  result: ClaudeImportExecutionResult,
+  dependencyChanges: readonly DependencyChangeOutcome[],
+): Plural<MarketplaceRows<ImportMsg>> {
+  const byMp = marketplaceBlocks(result);
+  const rowsByMp = new Map<string, ImportMsg[]>();
 
   // Plugin rows -- orphan-fold contract: per-row `scope?` is OMITTED
   // because the row's scope matches its marketplace's scope by
@@ -722,18 +850,11 @@ function buildImportNotificationMarketplaces(
     pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, row);
   }
 
+  const shownDependencies = new Set<string>();
   for (const o of result.unexpectedPluginFailures) {
-    const row: PluginFailedMessage = {
-      status: "failed",
-      name: o.plugin,
-      reasons: unexpectedFailureReasons(o),
-      // IMP-09: install's authentication row is bare, so this one is too.
-      ...(o.runtimeReason !== "authentication required" && { cause: failureCause(o) }),
-      // D-03/D-06: an unexpected import failure -> error, no reload.
-      severity: "error",
-      needsReload: false,
-    };
-    pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, row);
+    for (const row of unexpectedFailureRows(o, shownDependencies)) {
+      pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, row);
+    }
   }
 
   // UPD-DEP-D1 / WR-N5: the dependencies each install changed, after the
@@ -865,11 +986,12 @@ interface MarketplaceFailure {
 /**
  * WR-07: shared failure bookkeeping for a marketplace that will not be
  * usable this run -- a fresh add that did not record (typed failed outcome OR
- * unexpected throw, from `addOnePlannedMarketplace`), an already-present
- * marketplace whose stored source the planner could not classify, or a scope
- * another process held locked at the read pass (IMP-07): block dependent
- * plugin installs and attribute the cause on both the marketplace row and
- * each dependent plugin's warning row.
+ * unexpected throw, from `addOnePlannedMarketplace`, a re-add from a new
+ * settings source included (D-PL6-19)), an already-present marketplace whose
+ * stored source the planner could not classify, or a scope another process
+ * held locked at the read pass (IMP-07): block dependent plugin installs and
+ * attribute the cause on both the marketplace row and each dependent plugin's
+ * warning row.
  */
 function recordMarketplaceAddFailure(
   result: MutableImportResult,
@@ -912,8 +1034,9 @@ type SettledMismatch = Extract<PlannedMismatch, { cause: "source-mismatch" | "un
 
 /**
  * IMP-05: settle a planned marketplace the reconcile planner reported as a
- * source mismatch, recording the blocked outcome directly on `result` /
- * `blockedMarketplaces`.
+ * source mismatch that import does not add again: an unrecognized stored
+ * source, or the official marketplace's fallback source (D-PL6-19). It records
+ * the blocked outcome directly on `result` / `blockedMarketplaces`.
  */
 function recordPlannedMismatch(
   result: MutableImportResult,
@@ -951,12 +1074,12 @@ function recordPlannedMismatch(
       );
       return;
     case "source-mismatch": {
-      blockedMarketplaces.add(marketplace.marketplace);
+      // D-PL6-08: the official marketplace is planned only for an enabled
+      // plugin, so a plugin row always carries the mismatch.
       const cause = `Existing marketplace source ${mismatch.recordedSource} does not match Claude settings source ${marketplace.source}.`;
-      for (const plugin of pluginsForMarketplace(
-        scopePlan.pluginsToInstall,
-        marketplace.marketplace,
-      )) {
+      const plugins = pluginsForMarketplace(scopePlan.pluginsToInstall, marketplace.marketplace);
+      blockedMarketplaces.add(marketplace.marketplace);
+      for (const plugin of plugins) {
         result.sourceMismatches.push({
           kind: "source-mismatch",
           scope: plugin.scope,
@@ -1071,7 +1194,7 @@ async function installOnePlannedPlugin(
       // on `instanceof PluginShapeError` plus `.kind` to recover the specific
       // failure class; everything else falls through to the unexpected bucket.
       dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause, {
-        rolledBackPartial: (outcome.rollbackPartials?.length ?? 0) > 0,
+        rollbackPartials: outcome.rollbackPartials ?? [],
       });
       return "install-failed";
     case "installed":
@@ -1122,6 +1245,20 @@ function pushDependencyChanges(
     });
     result.changedResources ||= entry.row.status !== "failed";
   }
+}
+
+/**
+ * LCCODE-01: an enable's degradation facts only. The staged-kind facts go to
+ * the outcome's `declares*` members, and `installedRow` reads them from there.
+ */
+function enableDegradation(
+  signals: EnableDegradationSignals,
+): NonNullable<PluginInstalledOutcome["enableSignals"]> {
+  return {
+    ...(signals.unsupported !== undefined && { unsupported: signals.unsupported }),
+    ...(signals.orphanRewake === true && { orphanRewake: true }),
+    ...(signals.degradedKinds !== undefined && { degradedKinds: signals.degradedKinds }),
+  };
 }
 
 /**
@@ -1185,7 +1322,7 @@ async function enableOnePlannedPlugin(
         declaresAgents: outcome.stagedAgents === true,
         declaresMcp: outcome.stagedMcpServers === true,
         reenabled: true,
-        enableSignals: degradationFromEnable(outcome),
+        enableSignals: enableDegradation(outcome),
         declaresWorkflows: outcome.stagedWorkflows === true,
       });
       result.changedResources = true;
@@ -1194,7 +1331,7 @@ async function enableOnePlannedPlugin(
       // AFILE-04: a failed enable can still have rewritten the MCP config.
       result.mcpConfigNotices.push(...(outcome.mcpConfigNotices ?? []));
       dispatchFailedOutcome(result, plugin, outcome.error, outcome.cause, {
-        rolledBackPartial: outcome.reason === "rollback partial",
+        rollbackPartials: outcome.rollbackPartials ?? [],
       });
       return "install-failed";
     case "skipped":
@@ -1219,7 +1356,8 @@ async function enableOnePlannedPlugin(
 
 /**
  * WR-07: add ONE planned marketplace in ORCHESTRATED mode and dispatch on the
- * typed outcome.
+ * typed outcome. D-PL6-19: `replaceRecorded` names the recorded marketplace
+ * a re-add from a new settings source replaces in place.
  *
  * Standalone mode is wrong here: a classified precondition failure (duplicate
  * name, stale clone, invalid manifest, unsupported source, source missing)
@@ -1233,6 +1371,7 @@ async function addOnePlannedMarketplace(
   blockedMarketplaces: Set<string>,
   scopePlan: ScopedImportPlan,
   marketplace: PlannedMarketplace,
+  replaceRecorded?: string,
 ): Promise<void> {
   const addMarketplace = addMarketplaceFn(opts.deps);
   try {
@@ -1245,6 +1384,7 @@ async function addOnePlannedMarketplace(
       completionCache: opts.completionCache,
       notifications: { mode: "orchestrated" },
       ...(opts.gitOps !== undefined && { gitOps: opts.gitOps }),
+      ...(replaceRecorded !== undefined && { replaceRecorded }),
     });
     if (outcome?.status === "added") {
       result.addedMarketplaces.push({
@@ -1338,8 +1478,39 @@ function desiredConfigFor(scopePlan: ScopedImportPlan): MergedConfig {
 }
 
 type ImportReadPass =
-  | { readonly kind: "planned"; readonly state: ExtensionState; readonly plan: ReconcilePlan }
+  | {
+      readonly kind: "planned";
+      readonly state: ExtensionState;
+      readonly plan: ReconcilePlan;
+      /**
+       * D-PL6-17: each recorded marketplace the scope's config claims, mapped to
+       * the name the config declares it under.
+       */
+      readonly configNames: ReadonlyMap<string, string>;
+    }
   | { readonly kind: "lock-held"; readonly error: StateLockHeldError };
+
+/**
+ * D-PL6-17: the name the scope's merged config uses for each recorded
+ * marketplace it claims, by its own name or by a one-to-one source claim, read
+ * with the planner's own claim rule. A claim is one-to-one, so each recorded
+ * name maps to one declared name. When the settings name a recorded
+ * marketplace directly and the config declares it under another name, the
+ * post-pass keeps the config's name, so no later `pending` plans an add.
+ */
+function configNamesByRecorded(
+  config: MergedConfig["marketplaces"],
+  recorded: ExtensionState["marketplaces"],
+): ReadonlyMap<string, string> {
+  return new Map(
+    [...marketplaceSourceClaims(config, recorded)].map(([declared, record]) => [record, declared]),
+  );
+}
+
+/** D-PL6-17: the name the post-pass declares a marketplace and its plugins under. */
+function declaredNameFor(configNames: ReadonlyMap<string, string>, marketplace: string): string {
+  return configNames.get(marketplace) ?? marketplace;
+}
 
 /**
  * IMP-05 / IMP-07: reconcile's read pass, with the settings as the desired
@@ -1364,10 +1535,12 @@ async function readPassForImport(
         // LOAD-01 / D-06-04: computed inside the lock, as reconcile's read
         // pass computes it, so it reads the same snapshot the planner sees.
         const verdict = await buildScopeSatisfactionVerdict({ state: tx.state, locations });
+        const config = await loadMergedScopeConfig(locations);
         return {
           kind: "planned",
           state: tx.state,
           plan: planReconcile(desiredConfigFor(scopePlan), tx.state, scope, verdict),
+          configNames: configNamesByRecorded(config.merged.marketplaces, tx.state.marketplaces),
         };
       },
       { loadState: async () => loadState(scope, opts.cwd) },
@@ -1406,13 +1579,117 @@ function plannedMismatchFor(plan: ReconcilePlan, marketplace: string): SettledMi
 }
 
 /**
- * IMP-05 / IMP-06: settle the settings' marketplaces against the plan. A
- * marketplace the scope does not record under the settings' name is added, as
- * before this path existed: that covers the planner's add bucket and its
- * source claims, which import does not follow (D-07). A recorded one is either
- * a planner source mismatch, which blocks it, or already recorded with the
- * settings' source, which is reported as a skip. Answers the names whose
- * plugins may run.
+ * D-PL6-17 / D-PL6-18: whether the snapshot records the planned marketplace's
+ * settings source under a name other than its own. Claude Code reuses the
+ * first known marketplace that holds a source before it reads any name, so a
+ * recorded name the settings also declare counts, and so does a source that
+ * two records hold.
+ */
+function recordsSourceUnderAnotherName(
+  state: ExtensionState,
+  marketplace: PlannedMarketplace,
+): boolean {
+  return Object.entries(state.marketplaces).some(
+    ([name, record]) =>
+      samePlannedSource(record.source, marketplace.source) === "same" &&
+      name !== marketplace.marketplace,
+  );
+}
+
+/**
+ * D-PL6-17: a settings marketplace whose source the scope holds under another
+ * name is reused as Claude Code reuses it: nothing is added, and the
+ * marketplace has no outcome of its own. The scope does not record the
+ * settings name, so each plugin the settings enable from it fails with
+ * install's marketplace-absent cause, and nothing is installed or declared
+ * for it.
+ */
+function recordReusedMarketplace(
+  result: MutableImportResult,
+  blockedMarketplaces: Set<string>,
+  scopePlan: ScopedImportPlan,
+  marketplace: PlannedMarketplace,
+): void {
+  blockedMarketplaces.add(marketplace.marketplace);
+  const cause = `Marketplace "${marketplace.marketplace}" is not added in the ${marketplace.scope} scope.`;
+  for (const plugin of pluginsForMarketplace(scopePlan.pluginsToInstall, marketplace.marketplace)) {
+    pushUnexpectedFailure(result, plugin, "marketplace-not-added", new Error(cause));
+  }
+}
+
+/**
+ * D-PL6-19: whether a settings source is a path that does not exist, resolved
+ * as the add resolves it (`~` expanded, relative to the command's directory).
+ */
+async function isMissingPathSource(rawSource: string, cwd: string): Promise<boolean> {
+  const source = parsePluginSource(rawSource);
+  return source.kind === "path" && !(await pathExists(resolvePathSource(source.logical, cwd)));
+}
+
+function pushMarketplaceSkip(result: MutableImportResult, marketplace: PlannedMarketplace): void {
+  result.skippedExistingMarketplaces.push({
+    kind: "marketplace-skip",
+    scope: marketplace.scope,
+    marketplace: marketplace.marketplace,
+    reason: "already-present",
+  });
+}
+
+/**
+ * IMP-05 / IMP-06 / D-PL6-19: settle a planned marketplace the snapshot
+ * records under its own name, as Claude Code's startup reconciler settles a
+ * known name. A recorded source that matches is a skip. An unrecognized stored
+ * source, or a mismatch on the official marketplace's fallback source, blocks
+ * it (`recordPlannedMismatch`). A new source that is a path that does not
+ * exist, or that the snapshot records under another name, keeps the record
+ * as a skip, so its plugins go on against it. Any other new source is added
+ * again in place.
+ */
+async function settleRecordedMarketplace(
+  opts: ImportClaudeSettingsOptions,
+  result: MutableImportResult,
+  blockedMarketplaces: Set<string>,
+  scopePlan: ScopedImportPlan,
+  marketplace: PlannedMarketplace,
+  read: Extract<ImportReadPass, { kind: "planned" }>,
+): Promise<void> {
+  const mismatch = plannedMismatchFor(read.plan, marketplace.marketplace);
+  if (mismatch === undefined) {
+    pushMarketplaceSkip(result, marketplace);
+    return;
+  }
+
+  if (mismatch.cause === "unknown-stored" || marketplace.sourceIsFallback === true) {
+    recordPlannedMismatch(result, blockedMarketplaces, scopePlan, marketplace, mismatch);
+    return;
+  }
+
+  if (
+    recordsSourceUnderAnotherName(read.state, marketplace) ||
+    (await isMissingPathSource(marketplace.source, opts.cwd))
+  ) {
+    pushMarketplaceSkip(result, marketplace);
+    return;
+  }
+
+  await addOnePlannedMarketplace(
+    opts,
+    result,
+    blockedMarketplaces,
+    scopePlan,
+    marketplace,
+    marketplace.marketplace,
+  );
+}
+
+/**
+ * IMP-05 / IMP-06: settle the settings' marketplaces against the read pass's
+ * snapshot. A name the scope records is skipped, kept, blocked, or added again
+ * from its new source (`settleRecordedMarketplace`, D-PL6-19). A name it does
+ * not record, whose source it records under another name, is reused and its
+ * plugins fail as not added (D-PL6-17), even when the settings also declare
+ * that other name (D-PL6-18).
+ * Any other marketplace is added. Answers the names whose plugins may run.
  */
 async function ensurePlannedMarketplaces(
   opts: ImportClaudeSettingsOptions,
@@ -1422,19 +1699,21 @@ async function ensurePlannedMarketplaces(
 ): Promise<ReadonlySet<string>> {
   const blockedMarketplaces = new Set<string>();
   for (const marketplace of scopePlan.marketplacesToEnsure) {
-    const mismatch = plannedMismatchFor(read.plan, marketplace.marketplace);
-    if (ownValue(read.state.marketplaces, marketplace.marketplace) === undefined) {
+    if (ownValue(read.state.marketplaces, marketplace.marketplace) !== undefined) {
+      // eslint-disable-next-line no-await-in-loop -- a re-add locks the scope (retries: 0)
+      await settleRecordedMarketplace(
+        opts,
+        result,
+        blockedMarketplaces,
+        scopePlan,
+        marketplace,
+        read,
+      );
+    } else if (recordsSourceUnderAnotherName(read.state, marketplace)) {
+      recordReusedMarketplace(result, blockedMarketplaces, scopePlan, marketplace);
+    } else {
       // eslint-disable-next-line no-await-in-loop -- each add locks the scope (retries: 0)
       await addOnePlannedMarketplace(opts, result, blockedMarketplaces, scopePlan, marketplace);
-    } else if (mismatch !== undefined) {
-      recordPlannedMismatch(result, blockedMarketplaces, scopePlan, marketplace, mismatch);
-    } else {
-      result.skippedExistingMarketplaces.push({
-        kind: "marketplace-skip",
-        scope: marketplace.scope,
-        marketplace: marketplace.marketplace,
-        reason: "already-present",
-      });
     }
   }
 
@@ -1558,7 +1837,7 @@ async function executeScopedPlan(
   // marketplace for REMOVAL and its plugins for UNINSTALL. The repair makes
   // a re-run converge CONSTRUCTIVELY (re-declare what import installed)
   // instead of destructively.
-  await writeBatchedConfigForScope(opts, result, scopePlan);
+  await writeBatchedConfigForScope(opts, result, scopePlan, read.configNames);
 }
 
 /**
@@ -1587,6 +1866,12 @@ async function executeScopedPlan(
  * Source: verbatim `rawSource` from `scopePlan.marketplacesToEnsure` keyed by
  * marketplace name, preserving the `samePlannedSource` contract.
  *
+ * D-PL6-17: each marketplace and plugin key names the marketplace the way the
+ * scope's config already names it (`configNames`). A config that reaches a
+ * recorded marketplace through another name is the planner's steady state, so
+ * the post-pass keeps that name rather than declaring the recorded name beside
+ * it, which would leave the other name claiming nothing.
+ *
  * CFG-03: invalid claude-plugins.json aborts THIS scope's post-pass but does
  * NOT throw -- other scopes' post-passes still run. State was already saved
  * by per-entry orchestrators; this post-pass writes only the config.
@@ -1598,9 +1883,10 @@ async function writeBatchedConfigForScope(
   opts: ImportClaudeSettingsOptions,
   result: MutableImportResult,
   scopePlan: ScopedImportPlan,
+  configNames: ReadonlyMap<string, string>,
 ): Promise<void> {
   const scope = scopePlan.scope;
-  const { ensure, repair } = buildBatchedPatchForScope(result, scopePlan);
+  const { ensure, repair } = buildBatchedPatchForScope(result, scopePlan, configNames);
   if (isEmptyPatch(ensure) && isEmptyPatch(repair)) {
     return;
   }
@@ -1623,7 +1909,12 @@ async function writeBatchedConfigForScope(
       }
 
       const current = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 as const };
-      const baseEnsure = await stampReenabledWhereLocalDeclares(locations, result, ensure);
+      const baseEnsure = await stampReenabledWhereLocalDeclares(
+        locations,
+        result,
+        ensure,
+        configNames,
+      );
       // WR-01: repairs apply ONLY when the key is absent from the loaded
       // config (already-declared entries are untouched -- byte stability).
       const batch = mergeEnsureAndRepairs(baseEnsure, repair, current);
@@ -1670,6 +1961,7 @@ async function stampReenabledWhereLocalDeclares(
   locations: ScopedLocations,
   result: MutableImportResult,
   ensure: ImportConfigPatch,
+  configNames: ReadonlyMap<string, string>,
 ): Promise<ImportConfigPatch> {
   const plugins = { ...ensure.plugins };
   for (const installed of result.installedPlugins) {
@@ -1677,7 +1969,8 @@ async function stampReenabledWhereLocalDeclares(
       continue;
     }
 
-    const key = `${installed.plugin}@${installed.marketplace}`;
+    const marketplace = declaredNameFor(configNames, installed.marketplace);
+    const key = `${installed.plugin}@${marketplace}`;
     // eslint-disable-next-line no-await-in-loop -- each stamp reads the previous stamp's write
     const localCfg = await loadConfig(locations.localConfigJsonPath);
     if (localCfg.status !== "valid" || ownValue(localCfg.config.plugins, key) === undefined) {
@@ -1690,7 +1983,7 @@ async function stampReenabledWhereLocalDeclares(
       locations.localConfigJsonPath,
       locations.scopeRoot,
       installed.plugin,
-      installed.marketplace,
+      marketplace,
       { enabled: true },
     );
     setOwn(plugins, key, {});
@@ -1702,6 +1995,7 @@ async function stampReenabledWhereLocalDeclares(
 function buildBatchedPatchForScope(
   result: MutableImportResult,
   scopePlan: ScopedImportPlan,
+  configNames: ReadonlyMap<string, string>,
 ): { ensure: ImportConfigPatch; repair: ImportConfigPatch } {
   // Map marketplace name -> verbatim rawSource so the batched patch records
   // `source: rawSource` exactly as the user/Claude settings declared it
@@ -1725,7 +2019,7 @@ function buildBatchedPatchForScope(
       continue;
     }
 
-    setOwn(marketplaces, added.marketplace, { source: rawSource });
+    setOwn(marketplaces, declaredNameFor(configNames, added.marketplace), { source: rawSource });
   }
 
   const plugins: Record<string, Partial<PluginConfigEntry>> = {};
@@ -1734,7 +2028,7 @@ function buildBatchedPatchForScope(
       continue;
     }
 
-    const key = `${installed.plugin}@${installed.marketplace}`;
+    const key = `${installed.plugin}@${declaredNameFor(configNames, installed.marketplace)}`;
     // D-04-07: a promotion that enabled a disabled record declares it the way
     // the enable path does; every other install declares the bare key.
     setOwn(plugins, key, installed.reenabled === true ? { enabled: true } : {});
@@ -1742,7 +2036,7 @@ function buildBatchedPatchForScope(
 
   return {
     ensure: { marketplaces, plugins },
-    repair: buildRepairPatchForScope(result, scopePlan, rawSourceByName),
+    repair: buildRepairPatchForScope(result, scopePlan, rawSourceByName, configNames),
   };
 }
 
@@ -1756,6 +2050,7 @@ function buildRepairPatchForScope(
   result: MutableImportResult,
   scopePlan: ScopedImportPlan,
   rawSourceByName: ReadonlyMap<string, string>,
+  configNames: ReadonlyMap<string, string>,
 ): ImportConfigPatch {
   const marketplaces: ImportConfigPatch["marketplaces"] = {};
   for (const skipped of result.skippedExistingMarketplaces) {
@@ -1768,7 +2063,7 @@ function buildRepairPatchForScope(
       continue;
     }
 
-    setOwn(marketplaces, skipped.marketplace, { source: rawSource });
+    setOwn(marketplaces, declaredNameFor(configNames, skipped.marketplace), { source: rawSource });
   }
 
   const plugins: Record<string, Record<string, never>> = {};
@@ -1777,7 +2072,7 @@ function buildRepairPatchForScope(
       continue;
     }
 
-    setOwn(plugins, `${skipped.plugin}@${skipped.marketplace}`, {});
+    setOwn(plugins, `${skipped.plugin}@${declaredNameFor(configNames, skipped.marketplace)}`, {});
   }
 
   return { marketplaces, plugins };
@@ -1857,17 +2152,18 @@ function isEmptyPatch(batch: ImportConfigPatch): boolean {
  * `buildImportNotificationMarketplaces` rebuild ONE `Error` with a real
  * `.cause` link for the notification grammar to walk, instead of the walker
  * re-rendering an already-flattened trailer embedded in the head text.
+ * MIM-03 / D-PL6-12: the rollback partials are redacted the same way.
  */
 function pushUnexpectedFailure(
   result: MutableImportResult,
   plugin: PlannedPluginImport,
   reason: UnexpectedPluginFailureOutcome["reason"],
   error: Error,
-  rolledBackPartial = false,
+  rollbackPartials: readonly RollbackPartial[] = [],
 ): void {
   const causeChain = redactCauseChain(error.cause);
   const runtimeReason =
-    reason === "unexpected-failure" ? runtimeFailureReason(error, rolledBackPartial) : undefined;
+    reason === "unexpected-failure" ? runtimeFailureReason(error, rollbackPartials) : undefined;
   result.unexpectedPluginFailures.push({
     kind: "plugin-failure",
     scope: plugin.scope,
@@ -1878,7 +2174,30 @@ function pushUnexpectedFailure(
     ...(runtimeReason !== undefined && { runtimeReason }),
     cause: redactAbsolutePaths(errorMessage(error)),
     ...(causeChain !== undefined && { causeChain }),
+    ...(rollbackPartials.length > 0 && partialMember(error, rollbackPartials)),
   });
+}
+
+/**
+ * MIM-03: where the redacted rollback phases ride. A dependency's own partial
+ * names the dependency (D-PL6-04); any other, including the undo of another
+ * member the cascade had materialized, names the plugin (D-PL6-03).
+ */
+function partialMember(
+  error: Error,
+  rollbackPartials: readonly RollbackPartial[],
+): Pick<UnexpectedPluginFailureOutcome, "rollbackPartial" | "failedDependency"> {
+  if (!(error instanceof DependencyCascadeError)) {
+    return { rollbackPartial: redactedRollbackPartials(rollbackPartials) };
+  }
+
+  const { dependency, others } = splitDependencyPartials(error.key, rollbackPartials);
+  return {
+    ...(others.length > 0 && { rollbackPartial: redactedRollbackPartials(others) }),
+    ...(dependency.length > 0 && {
+      failedDependency: { key: error.key, rollbackPartial: redactedRollbackPartials(dependency) },
+    }),
+  };
 }
 
 /**
@@ -1887,8 +2206,11 @@ function pushUnexpectedFailure(
  * row names it first), the reason of the marketplace add the install ran
  * (LAYER-07), or the git host's answer.
  */
-function runtimeFailureReason(error: Error, rolledBackPartial: boolean): ContentReason | undefined {
-  if (rolledBackPartial) {
+function runtimeFailureReason(
+  error: Error,
+  rollbackPartials: readonly RollbackPartial[],
+): ContentReason | undefined {
+  if (rollbackPartials.length > 0) {
     return "rollback partial";
   }
 
@@ -1918,10 +2240,10 @@ function dispatchFailedOutcome(
   plugin: PlannedPluginImport,
   error: Error,
   cause: string,
-  options: { readonly rolledBackPartial: boolean },
+  options: { readonly rollbackPartials: readonly RollbackPartial[] },
 ): void {
   if (error instanceof DependencyCascadeError) {
-    pushUnexpectedFailure(result, plugin, "dependency-failed", error);
+    pushUnexpectedFailure(result, plugin, "dependency-failed", error, options.rollbackPartials);
     return;
   }
 
@@ -1972,7 +2294,7 @@ function dispatchFailedOutcome(
     }
   }
 
-  pushUnexpectedFailure(result, plugin, "unexpected-failure", error, options.rolledBackPartial);
+  pushUnexpectedFailure(result, plugin, "unexpected-failure", error, options.rollbackPartials);
 }
 
 /**

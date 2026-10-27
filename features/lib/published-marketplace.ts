@@ -11,7 +11,17 @@
  */
 
 import assert from "node:assert/strict";
-import { chmod, cp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  stat,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 
 import { publishGitRepository, pushGitBranch, pushGitRepository } from "./git-marketplace.ts";
@@ -23,6 +33,7 @@ import {
   writeMarketplace,
   writeMarketplaceDescription,
 } from "./path-marketplace.ts";
+import { cutQuotedPaths } from "./run-tokens.ts";
 
 import type { OfferedPlugin } from "./path-marketplace.ts";
 
@@ -392,6 +403,30 @@ export async function publishUnreadableSkillFile(
 }
 
 /**
+ * Adds a command nobody may read to the published plugin `plugin`, and
+ * returns its path. Pi reads the plugin's manifest and dependencies as usual,
+ * then fails to read the command when it stages the update. Only a local
+ * publication can hold such a file: git stores no file mode that denies
+ * reading.
+ */
+export async function publishUnreadableCommandFile(
+  published: PublishedMarketplace,
+  plugin: string,
+): Promise<string> {
+  if (published.kind === "url" || published.kind === "github") {
+    throw new Error("a git repository cannot hold a file nobody may read");
+  }
+
+  const file = ownedTarget(
+    published,
+    path.join(published.root, "plugins", plugin, "commands", "notes.md"),
+  );
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, "Unreadable.\n", { mode: 0o000, flag: "wx" });
+  return file;
+}
+
+/**
  * Lets everyone read the file `publishUnreadableSkillFile` left in the plugin
  * `plugin` again, and returns its path.
  */
@@ -417,21 +452,26 @@ export async function unreadableSkillCopyError(
   scratch: string,
 ): Promise<NodeJS.ErrnoException> {
   const skillDir = path.dirname(unreadableSkillFile(published, plugin));
-  const error = await cp(skillDir, path.join(scratch, path.basename(skillDir)), {
+  const error = await copySkill(skillDir, scratch).then(
+    () => assert.fail(`copying ${skillDir} did not fail`),
+    (reason: unknown) => reason as NodeJS.ErrnoException,
+  );
+  error.message = cutQuotedPaths(error.message);
+  return error;
+}
+
+// Copies `skillDir` into `scratch` with the options Pi stages a skill with,
+// and returns the copy's path.
+async function copySkill(skillDir: string, scratch: string): Promise<string> {
+  const copy = path.join(scratch, path.basename(skillDir));
+  await cp(skillDir, copy, {
     recursive: true,
     dereference: false,
     verbatimSymlinks: true,
     errorOnExist: true,
     force: false,
-  }).then(
-    () => assert.fail(`copying ${skillDir} did not fail`),
-    (reason: unknown) => reason as NodeJS.ErrnoException,
-  );
-  error.message = error.message.replaceAll(
-    /'([^']+)'/gu,
-    (_quoted, quotedPath: string) => `'${path.basename(quotedPath)}'`,
-  );
-  return error;
+  });
+  return copy;
 }
 
 // The skill file of `plugin` that `publishUnreadableSkillFile` writes.
@@ -446,6 +486,83 @@ function unreadableSkillFile(published: PublishedMarketplace, plugin: string): s
     case "url":
     case "github":
       throw new Error("a git repository cannot hold a file nobody may read");
+  }
+}
+
+const READ_ONLY_SKILL_FILE = "data.txt";
+
+/**
+ * Adds a read-only directory that holds a file to the skill of the published
+ * plugin `plugin`, and returns its path. Pi copies the skill with the mode, so
+ * removing an installed copy fails with EACCES when it unlinks the file. The
+ * file is not markdown, so staging does not rewrite it. Only a local
+ * publication can hold such a directory: git stores no directory mode.
+ */
+export async function publishReadOnlySkillDirectory(
+  published: PublishedMarketplace,
+  plugin: string,
+): Promise<string> {
+  const directory = readOnlySkillDirectory(published, plugin);
+  await mkdir(directory);
+  await writeFile(path.join(directory, READ_ONLY_SKILL_FILE), "Read-only.\n");
+  await chmod(directory, 0o555);
+  return directory;
+}
+
+/**
+ * Copies the skill of `plugin` that holds the directory
+ * `publishReadOnlySkillDirectory` left into a new directory under `scratch`,
+ * as Pi stages a skill, then removes the copy, as Pi undoes a staged skill,
+ * and returns the error the removal fails with. Each quoted path in its
+ * message is cut to its last segment, as import and apply show a cause.
+ */
+export async function readOnlySkillRemovalError(
+  published: PublishedMarketplace,
+  plugin: string,
+  scratch: string,
+): Promise<NodeJS.ErrnoException> {
+  const copy = await copySkill(path.dirname(readOnlySkillDirectory(published, plugin)), scratch);
+  const error = await rm(copy, { recursive: true, force: true }).then(
+    () => assert.fail(`removing ${copy} did not fail`),
+    (reason: unknown) => reason as NodeJS.ErrnoException,
+  );
+  error.message = cutQuotedPaths(error.message);
+  return error;
+}
+
+/**
+ * Gives the owner write permission on every directory under `roots`, without
+ * following symlinks, so a read-only directory that Pi or a step copied
+ * anywhere there can be removed again.
+ */
+export async function restoreDirectoryWrites(roots: readonly string[]): Promise<void> {
+  await Promise.all(roots.map((root) => addOwnerWrite(root)));
+}
+
+async function addOwnerWrite(directory: string): Promise<void> {
+  const { mode } = await stat(directory);
+  await chmod(directory, mode | 0o200);
+  const entries = await readdir(directory, { withFileTypes: true });
+  await Promise.all(
+    entries
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => addOwnerWrite(path.join(directory, entry.name))),
+  );
+}
+
+// The directory of the skill of `plugin` that `publishReadOnlySkillDirectory`
+// makes read-only.
+function readOnlySkillDirectory(published: PublishedMarketplace, plugin: string): string {
+  switch (published.kind) {
+    case "dir":
+    case "file":
+      return ownedTarget(
+        published,
+        path.join(published.root, "plugins", plugin, "skills", `${plugin}-skill`, "read-only"),
+      );
+    case "url":
+    case "github":
+      throw new Error("a git repository cannot hold a read-only directory");
   }
 }
 
@@ -480,6 +597,32 @@ export async function writePublishedPluginFile(
     await writeFile(target, text, { flag: "wx" });
   });
   return target;
+}
+
+/**
+ * Writes every text of `files`, by its path inside the published plugin
+ * `plugin`, and creates the directories above it. Unlike
+ * `writePublishedPluginFile`, it replaces a file that exists, so a later
+ * revision may replace the files. It refuses a path outside the publication,
+ * and a git publication commits and pushes all the files as one change.
+ */
+export async function writePublishedPluginFiles(
+  published: PublishedMarketplace,
+  plugin: string,
+  files: Readonly<Record<string, string>>,
+): Promise<void> {
+  const targets = Object.entries(files).map(
+    ([file, text]) =>
+      [ownedTarget(published, path.join(published.root, "plugins", plugin, file)), text] as const,
+  );
+  await changePublication(published, async () => {
+    await Promise.all(
+      targets.map(async ([target, text]) => {
+        await mkdir(path.dirname(target), { recursive: true });
+        await writeFile(target, text);
+      }),
+    );
+  });
 }
 
 /**
@@ -531,6 +674,34 @@ export async function linkPublishedManifest(
     await symlink(target, manifest);
   });
   return manifest;
+}
+
+/**
+ * Gives the published plugin `plugin` the agent `agent` and returns the path
+ * of its file. The agent converts to a Pi agent, which an install writes to
+ * the scope's shared `agents/` directory as
+ * `pi-claude-marketplace-<plugin>-<agent>.md`.
+ */
+export async function publishAgent(
+  published: PublishedMarketplace,
+  plugin: string,
+  agent: string,
+): Promise<string> {
+  return writePublishedPluginFile(
+    published,
+    plugin,
+    path.join("agents", `${agent}.md`),
+    [
+      "---",
+      `name: ${agent}`,
+      `description: An agent of ${plugin}.`,
+      "tools: Read, Grep",
+      "---",
+      "",
+      "Read the files you are asked about.",
+      "",
+    ].join("\n"),
+  );
 }
 
 /**

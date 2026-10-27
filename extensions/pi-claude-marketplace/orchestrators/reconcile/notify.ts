@@ -90,7 +90,11 @@ import {
   withCommits,
 } from "../plugin/update-row.ts";
 
-import { carriedMcpConfigNotices, sourceMismatchOutcomeSubject } from "./apply-outcomes.ts";
+import {
+  carriedMcpConfigNotices,
+  carriedPackageNote,
+  sourceMismatchOutcomeSubject,
+} from "./apply-outcomes.ts";
 import { plannedSourceMismatchSubject } from "./types.ts";
 
 import type {
@@ -451,7 +455,8 @@ export function blockedMoveOutcomes(convergence: ConvergencePlan): PluginConverg
  *  - `updated`: update's row, without the range disclosure, because the
  *    catalog chose the version (D-23). A record already installed partial that
  *    drops a kind takes the `(partially-installed)` form. Both stay `info`: the
- *    move carried out what the catalog offers.
+ *    move carried out what the catalog offers. A package note rides along as
+ *    a post-install warning (PKD-02).
  *  - `skipped`: a block the runner met that the planner did not, such as a
  *    dependent installed in between; it takes the blocked rows above.
  *  - `failed`: the closed-set reason and the move it attempted, never the raw
@@ -478,6 +483,7 @@ export function convergedMoveOutcomes(
             ),
           ),
           ...carriedMcpConfigNotices(outcome),
+          ...carriedPackageNote(outcome),
         },
       ];
     case "skipped": {
@@ -1220,8 +1226,9 @@ function invalidBlockRow(
 }
 
 /**
- * D-05-16 / RESV-06: the cause a REFUSED uninstall or a dependency-cascade
- * install failure carries onto its reconcile row, so a config-driven failure
+ * D-05-16 / RESV-06 / MIM-03: the cause a REFUSED uninstall, a
+ * dependency-cascade install failure, or an install that left rollback
+ * partials carries onto its reconcile row, so a config-driven failure
  * renders the same cause line the standalone command / single-plugin install
  * does. Every other outcome, including a cause-less failure, answers the
  * empty object and keeps the bare row.
@@ -1236,6 +1243,18 @@ function failedRowCause(outcome: PerEntryOutcome): { cause?: Error } {
   }
 
   return {};
+}
+
+/**
+ * MIM-03 / D-PL6-05: the undo steps a failed install could not finish, so its
+ * reconcile row shows the per-phase rows the standalone install shows. The
+ * phase causes arrive redacted from apply.ts (D-PL6-12).
+ */
+function failedRowRollback(outcome: PerEntryOutcome): {
+  rollbackPartial?: readonly { readonly phase: string; readonly cause?: Error }[];
+} {
+  const partials = outcome.kind === "plugin-install-failed" ? outcome.rollbackPartials : undefined;
+  return partials !== undefined && partials.length > 0 ? { rollbackPartial: partials } : {};
 }
 
 /** REC-06: a failed install's narrowed reasons when it carries them, else its one reason. */
@@ -1266,9 +1285,11 @@ function failedRowFromOutcome(
     status: "failed",
     name: outcome.plugin,
     reasons: failedRowReasons(outcome),
-    // D-05-16 / RESV-06: only a refused uninstall or a dependency-cascade
-    // install failure carries a cause onto this row.
+    // D-05-16 / RESV-06 / MIM-03: a refused uninstall, a dependency-cascade
+    // install failure, and an install that left rollback partials carry a
+    // cause onto this row; the last also carries its phases.
     ...failedRowCause(outcome),
+    ...failedRowRollback(outcome),
     // D-03/D-06: a failed reconcile apply row -> error, no reload.
     severity: "error",
     needsReload: false,

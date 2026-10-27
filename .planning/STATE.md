@@ -5,11 +5,11 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 1
 current_phase_name: Staging Warning Channels
 status: verifying
-stopped_at: Phase 02 complete, ready to verify Phase 1
-last_updated: "2026-10-27T14:52:09.756Z"
+stopped_at: Phase 4 complete, ready to verify Phase 1
+last_updated: "2026-10-27T11:04:03.605Z"
 last_activity: 2026-10-27
-last_activity_desc: Phase 02 complete, transitioned to Phase 1
-state_head: 2ae7931d5cb42cbe2203b4ff8eaaeab021997a25
+last_activity_desc: Phase 4 complete, transitioned to Phase 1
+state_head: edac58eb2fb9fccd7212f72307195efa784d73c4
 progress:
   total_phases: 11
   completed_phases: 1
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-10-22 at the lifecycle-coverage start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 2 — Apply Ordering and Installed Declarations
+**Current focus:** Phase 07 — Git Errors and Lock Discipline
 
 ## Current Position
 
 Phase: 1 — Staging Warning Channels
 Plan: 4
 Status: Phase complete — ready for verification
-Last activity: 2026-10-27 — Phase 02 complete, transitioned to Phase 1
+Last activity: 2026-10-27 — Completed quick task 261027-9lp: agent-target refusal redaction and update reason
 
 
 ### mcp-4 closeout
@@ -188,16 +188,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-gvt | GV-01: record plugins at a range-selected release tag as Claude Code does, the tag semver kept as resolvedVersion | 2026-10-26 | 2638b001 | complete | [261026-gvt-record-plugins-at-release-tags-as-claude-code](./quick/261026-gvt-record-plugins-at-release-tags-as-claude-code/) |
 | 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
-| 261027-92s | Follow installed manifest links inside the owning root; refuse escapes as unreadable | 2026-10-27 | 99157528 | — | [261027-92s-manifest-symlink-containment](./quick/261027-92s-manifest-symlink-containment/) |
-| 261027-a3r | Contain install-time manifest links; fail closed on unusable installed copies | 2026-10-27 | 57a07ac5 | — | [261027-a3r-install-time-manifest-link-containment](./quick/261027-a3r-install-time-manifest-link-containment/) |
-| 261027-cyg | Answer a manifest-less installed copy from its entry; read path records in their marketplace clone | 2026-10-27 | 61bbe422 | — | [261027-cyg-entry-only-fallback-and-path-source-owne](./quick/261027-cyg-entry-only-fallback-and-path-source-owne/) |
-| 261027-9oo | Report a waiting plugin's move as its own row; list an unusable installed copy in pending and load | 2026-10-27 | 05a15c74 | — | [261027-9oo-waiting-record-move-as-its-own-step](./quick/261027-9oo-waiting-record-move-as-its-own-step/) |
-| 261027-9oq | Report a failed scope read in the add-time step; report autoupdate rows before a step throw | 2026-10-27 | 2ae7931d | — | [261027-9oq-add-and-autoupdate-dependency-step-repor](./quick/261027-9oq-add-and-autoupdate-dependency-step-repor/) |
-
-## Session Continuity
-
-**Last session:** 2026-10-27T07:17:58.411Z
-**Stopped at:** Phase 02 complete, ready to verify Phase 1
+**Stopped at:** Phase 4 complete, ready to verify Phase 1
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -409,12 +400,6 @@ archived milestone artifacts.
 | Phase 29 P12 | 70 min | 3 tasks | 34 files |
 | Phase 29 P13 | 48 min | 3 tasks | 44 files |
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
-| Phase 02 P01 | 33min | 2 tasks | 8 files |
-| Phase 02 P02 | 29 min | 2 tasks | 9 files |
-| Phase 02 P03 | 81min | 3 tasks | 8 files |
-| Phase 02 P04 | 27 min | 2 tasks | 6 files |
-| Phase 02 P05 | 32min | 2 tasks | 21 files |
-| Phase 02 P06 | 30min | 3 tasks | 12 files |
 
 ## Decisions
 
@@ -614,22 +599,6 @@ archived milestone artifacts.
 - [Phase 29]: The cascade failure classifier reads the errno a BridgeStagingError carries on its cause, so an unreadable plugin source is permission denied (also in the autoupdate cascade)
 - [Phase 29]: apply runs growth-only moves through convergePlugin with rematerialize (skipSameRevision off, overwrite off) and reports them with the plugin-backfilled row; the load-time backfill, its stamp gate and EXTENSION_VERSION are deleted, lastReconciledExtensionVersion stays readable and nothing writes it (D-10, D-13, D-25)
 - [Phase 29]: README.md's dependents sentence says apply reinstalls an uninstalled dependency a dependent still declares and disables the dependents only if that install fails; the APL-D1 and APL-D2 rows record the read-only load and the NFR-2 amendment
-- [Phase 02]: D-PL2-02: the shared planner counts every planned install as present; a released dependent keeps its scheduled missing entries so the replan still plans those installs; pending lists moves, then dependency installs
-- [Phase 02]: D-PL2-14: withPlannedInstallsLanded counts a dependency the replan enables as released, to a grow-only fixpoint
-- [Phase 02]: D-PL2-16: enables that wait on a planned install travel as MoveCascade.enablesAfterInstalls and pending lists them after the installs
-- [Phase 02]: D-PL2-06: enable closure and update preflight read a pinned record's declarations from its per-commit clone (catalog fallback when absent, fail closed when unusable)
-- [Phase 02]: D-PL2-05: every declaration walk keeps the whole-scope fail-closed unit, pinned per walk
-- [Phase 02]: D-PL2-07: path-source records keep the catalog read; DECLREC-01 deferred
-- [Phase 02]: D-PL2-01: apply runs MISS-01 after the catalog cascade; its bucket comes from readPlainPlanForScope once a cascade step ran
-- [Phase 02]: D-PL2-16: a waiting record's planned move runs with its enable after MISS-01 (runStep), so a failed install leaves it untouched
-- [Phase 02]: D-PL2-11: disables caused by a MISS-01 refusal print after its (failed) row, dependencies first
-- [Phase 02]: D-PL2-12 (amended): an installed copy is read only under the clone root its record owns, keyed on resolvedSha (plugin-clones/ with it, the marketplace clone without)
-- [Phase 02]: D-PL2-13: a symlinked manifest candidate inside an installed copy is refused and the read answers absent (stricter than Claude Code, NFR-10)
-- [Phase 02]: D-PL2-09: after a standalone marketplace add, the add's scope runs apply's missing-dependency step (injected ScopeDependencyInstallFn) for the dependencies the added marketplace offers; add's scope only
-- [Phase 02]: D-PL2-11 (add call site): a refused add-time install renders apply's (failed) row and cause under the (added) block and raises the notification to error
-- [Phase 02]: D-PL2-15: NFR-5 amendment -- marketplace add (any source kind), bootstrap and autoupdate may clone a git-source missing dependency on a cache miss
-- [Phase 02]: D-PL2-09 (bootstrap): bootstrap runs the missing-dependency step through its add, in the user scope, for the official marketplace's dependencies
-- [Phase 02]: D-PL2-10: marketplace update's autoupdate cascade runs the missing-dependency step after its plugin updates, for missing dependencies a plugin of that marketplace declares; wired in cascadeAutoupdates so Phase 8 inherits it; a dependency the cascade already reported is not tried again
 
 ### mcp-4 decisions
 

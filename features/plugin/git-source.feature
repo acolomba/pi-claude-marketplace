@@ -199,6 +199,42 @@ Feature: Plugin git source
       | drops the connection | network unreachable | dropped | socket hang up, fetched https://{git host}/acme/ghp.git                      |
       | answers 503          | network error       | 503     | HTTP Error: 503 Service Unavailable, fetched https://{git host}/acme/ghp.git |
 
+  Scenario Outline: An install fails on a constrained dependency as <reason> when the git host <refusal> while its tags are read and installs nothing
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | ghp@^1.0.0   |
+      | ghp  | 1.0.0   |              |
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the git host <refusal> for the plugin "ghp"
+    When the user runs "/claude:plugin install app@gits --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | Some plugin operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id       | name     | status | reasons           | scope   | leaks | rollback partial | cause chain                                                           | cause truncated |
+      | gits             | project           | app@gits | app      | failed | dependency failed | project |       |                  |                                                                       |                 |
+      | gits             | project           | ghp@gits | ghp@gits | failed | <reason>          | project |       |                  | Dependency "ghp@gits" could not be checked against ^1.0.0 (<reason>). | false           |
+    Then the git host receives these requests:
+      | method | path                                            | status   |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | <status> |
+    Then the project scope has no installed plugins
+    Then the project scope holds no git clones
+
+    Examples:
+      | refusal              | reason              | status  |
+      | answers 404          | source missing      | 404     |
+      | drops the connection | network unreachable | dropped |
+      | answers 503          | network error       | 503     |
+
   Scenario: Apply reports a declared plugin whose clone the git host refuses as source missing
     Given the git repository "ghp" holds these plugins:
       | name | version | path |

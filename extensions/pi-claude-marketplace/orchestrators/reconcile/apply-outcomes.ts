@@ -196,6 +196,8 @@ export interface PluginBackfilledOutcome
    * marker alone.
    */
   readonly unsupported: readonly string[];
+  /** PKD-02: the package note of the re-materialization (`carriedPackageNote`). */
+  readonly postCommitWarnings?: readonly string[];
 }
 
 /** Plugin install failure outcome. */
@@ -209,26 +211,38 @@ export interface PluginInstallFailedOutcome extends PluginOutcomeBase {
    */
   readonly reasons?: readonly ContentReason[];
   /**
-   * RESV-06: set ONLY when the failure is attributable to a DEPENDENCY
-   * (`reason === "dependency failed"`) -- the projection surfaces it as the
-   * row's cause-chain trailer, mirroring `plugin-uninstall-failed.cause`
-   * (D-05-16). Every other failed install leaves it unset.
+   * The row's cause-chain trailer, mirroring `plugin-uninstall-failed.cause`
+   * (D-05-16). RESV-06 sets it when the failure is attributable to a
+   * DEPENDENCY (`reason === "dependency failed"`). MIM-03 also sets it, as a
+   * redacted rebuild of the install error, when the failed install left
+   * rollback partials. Every other failed install leaves it unset.
    *
-   * Redacted at the apply.ts push site (T-55-02-02 / T-53-02-02): the
-   * closure/constraint arms build their message from `name@marketplace` keys
-   * and version constraints (never a path), but a dependency's own ledger
-   * failure can carry one anywhere in its cause chain. `apply.ts`'s
-   * `redactedDependencyCascadeError` rebuilds the value's message AND its
-   * full nested cause chain (via `shared/redact-absolute-paths.ts`'s
-   * `redactCauseChain`) with every link redacted, since the renderer's
-   * depth-5 `causeChainTrailer` walker (`shared/errors.ts`) does not redact
-   * on its own.
+   * Redacted at the apply.ts push site (T-55-02-02 / T-53-02-02, D-PL6-12):
+   * the closure/constraint arms build their message from `name@marketplace`
+   * keys and version constraints (never a path), but a ledger failure can
+   * carry one anywhere in its cause chain. `apply.ts`'s
+   * `redactedDependencyCascadeError` and `shared/redact-absolute-paths.ts`'s
+   * `redactCauseChain` rebuild the value's message AND its full nested cause
+   * chain with every link redacted, since the renderer's depth-5
+   * `causeChainTrailer` walker (`shared/errors.ts`) does not redact on its
+   * own.
    *
    * GV-01: a plugin directory dependency whose listed copy falls outside its
    * dependents' ranges carries Claude Code's refusal (`version conflict`),
    * built from names, ranges and a version, never a path.
    */
-  readonly cause?: DependencyCascadeError | DirectoryPinUnsatisfiedError;
+  readonly cause?: Error;
+  /**
+   * MIM-03 / D-PL6-05: the undo steps the failed install could not finish,
+   * shaped as `PluginFailedMessage.rollbackPartial`, so the row shows
+   * install's per-phase rows. Each phase cause is redacted at the apply.ts
+   * push site (D-PL6-12), and the raw ledger `msg` never reaches it. Omitted
+   * when every undo finished (NREG-01).
+   */
+  readonly rollbackPartials?: readonly {
+    readonly phase: string;
+    readonly cause?: Error;
+  }[];
 }
 
 /** Plugin uninstall success outcome. */
@@ -534,6 +548,8 @@ export interface PluginDeclarerUnreadableOutcome extends PluginOutcomeBase {
 export interface PluginConvergedOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-converged";
   readonly row: ReconcileAppliedMsg;
+  /** PKD-02: the package note of a realized move (`carriedPackageNote`). */
+  readonly postCommitWarnings?: readonly string[];
 }
 
 /**
@@ -840,6 +856,17 @@ export function classifyReadPassThrow(err: unknown): ContentReason {
   }
 
   return narrowProbeError(err);
+}
+
+/**
+ * PKD-02 / D-PL9-14: lift a realized move's package note onto the reconcile
+ * outcome built from it, as a post-install warning `apply` prints after its
+ * cascade. Absent when the package step had nothing to say (NREG-01).
+ */
+export function carriedPackageNote(carrier: { readonly packageNote?: string }): {
+  readonly postCommitWarnings?: readonly string[];
+} {
+  return carrier.packageNote === undefined ? {} : { postCommitWarnings: [carrier.packageNote] };
 }
 
 /**
