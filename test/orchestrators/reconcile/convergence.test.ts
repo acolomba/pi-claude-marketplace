@@ -17,6 +17,7 @@ import {
   planConvergence,
   planConvergenceCascade,
   settleMoveCascade,
+  withPlannedInstallsLanded,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/convergence.ts";
 import { buildScopeSatisfactionVerdict } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
 import { emptyReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
@@ -29,7 +30,10 @@ import type {
   PlannedHold,
   PlannedMove,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/convergence.ts";
-import type { ScopeSatisfactionVerdict } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
+import type {
+  ScopeSatisfactionVerdict,
+  UnsatisfiedDeclaration,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
 import type { ReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -1575,3 +1579,237 @@ test("APPLY1-01 / D-05-07: a planned judgement whose walk fails leaves the plan 
   // assert
   assert.deepStrictEqual(settled.plan, uninstall);
 });
+
+/**
+ * A stand-in for the planner over `verdict`: each held dependent is disabled,
+ * as `planFrom` disables it, and each missing dependency is installed once.
+ */
+function planInstallingMissing(verdict: ScopeSatisfactionVerdict): ReconcilePlan {
+  const unsatisfied = verdict.ok ? verdict.unsatisfied : [];
+  const missing = [
+    ...new Set(
+      unsatisfied.filter((entry) => entry.kind === "missing").map((entry) => entry.dependency),
+    ),
+  ];
+  return {
+    ...planFrom(verdict),
+    pluginsToDependencyInstall: missing.map((dependency) => ({
+      ...DEMO_OP,
+      plugin: dependency.replace("@tools", ""),
+      requiredBy: "widget@tools",
+      declarers: ["widget@tools"],
+      ranges: [],
+    })),
+  };
+}
+
+/** `state` without the record of `plugin` in `tools`; its catalog entry stays. */
+function withoutToolsRecord(state: ExtensionState, plugin: string): ExtensionState {
+  const mp = state.marketplaces["tools"];
+  assert.ok(mp !== undefined);
+  const plugins = Object.fromEntries(
+    Object.entries(mp.plugins).filter(([name]) => name !== plugin),
+  );
+  return { ...state, marketplaces: { tools: { ...mp, plugins } } };
+}
+
+/** `zcore` 2.0.0 needs `extra`, which the scope does not record. */
+const CO_SHIPPED_NEEDING_EXTRA: readonly StagedPlugin[] = [
+  CO_SHIPPED[0]!,
+  { name: "zcore", offered: "2.0.0", declares: [{ name: "extra" }] },
+  { name: "extra", offered: "1.0.0" },
+];
+
+const EXTRA_INSTALL = {
+  ...DEMO_OP,
+  plugin: "extra",
+  requiredBy: "widget@tools",
+  declarers: ["widget@tools"],
+  ranges: [],
+};
+
+test("D-PL2-02: a dependent is released when its dependency moves to a version that needs a planned install", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "released-by-install");
+  const state = withoutToolsRecord(await stageTools(fixture, CO_SHIPPED_NEEDING_EXTRA), "extra");
+  const verdict = await buildScopeSatisfactionVerdict({ state, locations: fixture.locations });
+  const replan = (from: ScopeSatisfactionVerdict): ReconcilePlan =>
+    withPlannedInstallsLanded(planInstallingMissing(from), from, state, planInstallingMissing);
+
+  // act
+  const settled = await settleMoveCascade({
+    scope: "project",
+    state,
+    locations: fixture.locations,
+    plan: replan(verdict),
+    verdict,
+    replan,
+  });
+
+  // assert
+  assert.deepStrictEqual(settled.plan, planWith({ pluginsToDependencyInstall: [EXTRA_INSTALL] }));
+  assert.deepStrictEqual(moveKeys(settled.cascade?.plan.moves), ["zcore@tools", "widget@tools"]);
+});
+
+test("D-PL2-02: a dependent stays held when its dependency's new version needs an install the plan does not make", async (t) => {
+  // arrange
+  const fixture = await createFixture(t, "held-without-install");
+  const state = withoutToolsRecord(await stageTools(fixture, CO_SHIPPED_NEEDING_EXTRA), "extra");
+
+  // act
+  const settled = await settle(fixture, state);
+
+  // assert
+  assert.deepStrictEqual(settled.plan, settled.input);
+  assert.deepStrictEqual(
+    settled.plan.pluginsToDependencyDisable.map((op) => op.plugin),
+    ["widget", "zcore"],
+  );
+});
+
+function toolsKey(plugin: string): string {
+  return `${plugin}@tools`;
+}
+
+function missingEntry(dependent: string, dependency: string): UnsatisfiedDeclaration {
+  return { dependent: toolsKey(dependent), dependency: toolsKey(dependency), kind: "missing" };
+}
+
+function disabledEntry(dependent: string, dependency: string): UnsatisfiedDeclaration {
+  return { dependent: toolsKey(dependent), dependency: toolsKey(dependency), kind: "disabled" };
+}
+
+/** `tools` records `app` enabled and `core` with `core` overrides; nothing reads disk. */
+function appAndCore(core: Partial<PluginRecord> = {}): ExtensionState {
+  return stateOf({
+    name: "tools",
+    scope: "project",
+    source: "acme/tools",
+    addedFromCwd: "/work",
+    manifestPath: "/work/tools/.claude-plugin/marketplace.json",
+    marketplaceRoot: "/work/tools",
+    plugins: {
+      app: pluginRecord("/work/tools/app"),
+      core: pluginRecord("/work/tools/core", core),
+    },
+  });
+}
+
+const VAULT_INSTALL = { ...EXTRA_INSTALL, plugin: "vault", requiredBy: "core@tools" };
+
+/** The replan's toggles, distinct from every input plan's, so a case sees which plan it got. */
+const FRESH_TOGGLES = {
+  pluginsToEnable: [{ ...DEMO_OP, plugin: "fresh-enable" }],
+  pluginsToDisable: [{ ...DEMO_OP, plugin: "fresh-disable" }],
+  pluginsToDependencyDisable: [],
+} satisfies Partial<ReconcilePlan>;
+
+/** A replan stub that records each verdict it is handed. */
+function recordingReplan(): {
+  readonly replan: (verdict: ScopeSatisfactionVerdict) => ReconcilePlan;
+  readonly seen: ScopeSatisfactionVerdict[];
+} {
+  const seen: ScopeSatisfactionVerdict[] = [];
+  return {
+    seen,
+    replan: (verdict) => {
+      seen.push(verdict);
+      return planWith({
+        ...FRESH_TOGGLES,
+        pluginsToInstall: [{ ...DEMO_OP, plugin: "ignored", configSource: "base" }],
+      });
+    },
+  };
+}
+
+for (const { title, plan, verdict } of [
+  {
+    title: "nothing is planned for install",
+    plan: planWith({ pluginsToDisable: [{ ...DEMO_OP, plugin: "app" }] }),
+    verdict: { ok: true, unsatisfied: [missingEntry("core", "vault")] },
+  },
+  {
+    title: "the verdict's walk failed",
+    plan: planWith({ pluginsToDependencyInstall: [VAULT_INSTALL] }),
+    verdict: {
+      ok: false,
+      declarer: "core@tools",
+      reason: "unreadable",
+      cause: new Error("unreadable manifest"),
+    },
+  },
+] satisfies readonly {
+  readonly title: string;
+  readonly plan: ReconcilePlan;
+  readonly verdict: ScopeSatisfactionVerdict;
+}[]) {
+  test(`D-PL2-02: withPlannedInstallsLanded keeps the plan as it is when ${title}`, () => {
+    // arrange
+    const { replan, seen } = recordingReplan();
+
+    // act
+    const landed = withPlannedInstallsLanded(plan, verdict, appAndCore(), replan);
+
+    // assert
+    assert.strictEqual(landed, plan);
+    assert.deepStrictEqual(seen, []);
+  });
+}
+
+for (const { title, core, unsatisfied, kept } of [
+  {
+    title: "a dependent whose missing dependency is planned for install",
+    core: {},
+    unsatisfied: [missingEntry("core", "vault")],
+    kept: [],
+  },
+  {
+    title: "a dependent whose held dependency the planned install releases",
+    core: { enabled: false, dependencyDisabled: true },
+    unsatisfied: [missingEntry("core", "vault"), disabledEntry("app", "core")],
+    kept: [],
+  },
+  {
+    title: "a dependent whose dependency the user disabled",
+    core: { enabled: false },
+    unsatisfied: [missingEntry("core", "vault"), disabledEntry("app", "core")],
+    kept: [disabledEntry("app", "core")],
+  },
+  {
+    title: "a dependent with a dependency out of range",
+    core: {},
+    unsatisfied: [
+      missingEntry("core", "vault"),
+      { ...missingEntry("app", "core"), kind: "out-of-range", range: "^2.0.0" },
+    ],
+    kept: [{ ...missingEntry("app", "core"), kind: "out-of-range", range: "^2.0.0" }],
+  },
+] satisfies readonly {
+  readonly title: string;
+  readonly core: Partial<PluginRecord>;
+  readonly unsatisfied: readonly UnsatisfiedDeclaration[];
+  readonly kept: readonly UnsatisfiedDeclaration[];
+}[]) {
+  test(`D-PL2-02: withPlannedInstallsLanded replans the toggles for ${title}`, () => {
+    // arrange
+    const plan = planWith({
+      pluginsToDependencyInstall: [VAULT_INSTALL],
+      pluginsToDependencyDisable: [
+        { ...DEMO_OP, plugin: "core", dependency: "vault@tools", kind: "missing" },
+      ],
+    });
+    const { replan, seen } = recordingReplan();
+
+    // act
+    const landed = withPlannedInstallsLanded(
+      plan,
+      { ok: true, unsatisfied },
+      appAndCore(core),
+      replan,
+    );
+
+    // assert
+    assert.deepStrictEqual(landed, { ...plan, ...FRESH_TOGGLES });
+    assert.deepStrictEqual(seen, [{ ok: true, unsatisfied: kept }]);
+  });
+}

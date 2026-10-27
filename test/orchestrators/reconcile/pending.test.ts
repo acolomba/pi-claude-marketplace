@@ -989,7 +989,7 @@ const dependencyRows = [
         { key: "lib@tools", enabled: true },
       ],
     },
-    expected: pendingList(["● vault (will install)", "◍ app (will disable)"]),
+    expected: pendingList(["◍ app (will disable)", "● vault (will install)"]),
   },
   {
     condition: "a dependency the user disabled, the config enables and the check holds down",
@@ -1008,11 +1008,7 @@ const dependencyRows = [
         { key: "core@tools", enabled: true },
       ],
     },
-    expected: pendingList([
-      "● vault (will install)",
-      "◍ app (will disable)",
-      "● core (will enable)",
-    ]),
+    expected: pendingList(["● core (will enable)", "● vault (will install)"]),
   },
   {
     condition: "a dependency the config disables",
@@ -1134,6 +1130,48 @@ const catalogMoveRows = [
     expected: pendingList([
       "● zcore v1.0.0 → v2.0.0 (will update)",
       "● widget v1.0.0 → v1.1.0 (will update)",
+    ]),
+  },
+  {
+    condition:
+      "a move whose newer dependency declares a plugin the scope lacks, moved before that install (D-PL2-02)",
+    seed: {
+      offered: {
+        widget: { version: "1.1.0", dependencies: ["zcore@^2.0.0"] },
+        zcore: { version: "2.0.0", dependencies: ["extra"] },
+        extra: { version: "1.0.0" },
+      },
+      recorded: { widget: { version: "1.0.0" }, zcore: { version: "1.0.0" } },
+      declared: [
+        { key: "widget@tools", enabled: true },
+        { key: "zcore@tools", enabled: true },
+      ],
+    },
+    expected: pendingList([
+      "● zcore v1.0.0 → v2.0.0 (will update)",
+      "● widget v1.0.0 → v1.1.0 (will update)",
+      "● extra (will install)",
+    ]),
+  },
+  {
+    condition:
+      "a missing dependency that needs a version the catalog moves to, installed after the moves (D-PL2-02)",
+    seed: {
+      offered: {
+        widget: { version: "1.1.0", dependencies: ["newdep"] },
+        newdep: { version: "1.0.0", dependencies: ["ycore@^2.0.0"] },
+        ycore: { version: "2.0.0" },
+      },
+      recorded: { widget: { version: "1.0.0" }, ycore: { version: "1.0.0" } },
+      declared: [
+        { key: "widget@tools", enabled: true },
+        { key: "ycore@tools", enabled: true },
+      ],
+    },
+    expected: pendingList([
+      "● widget v1.0.0 → v1.1.0 (will update)",
+      "● ycore v1.0.0 → v2.0.0 (will update)",
+      "● newdep (will install)",
     ]),
   },
   {

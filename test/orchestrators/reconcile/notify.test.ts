@@ -3023,6 +3023,78 @@ describe("buildReconcilePendingNotification", () => {
     });
   });
 
+  test("D-PL2-02: lists a config install before the moves and a dependency install after them", () => {
+    // arrange
+    const plans = [
+      reconcilePlan("project", {
+        pluginsToInstall: [
+          { scope: "project", plugin: "fresh", marketplace: "mp", configSource: "base" },
+        ],
+        pluginsToDependencyInstall: [
+          {
+            scope: "project",
+            plugin: "extra",
+            marketplace: "mp",
+            ranges: [],
+            requiredBy: "zcore@mp",
+            declarers: ["zcore@mp"],
+          },
+        ],
+      }),
+    ];
+    const convergence = {
+      moves: [
+        {
+          scope: "project",
+          marketplace: "mp",
+          plugin: "zcore",
+          fromVersion: "1.0.0",
+          toVersion: "2.0.0",
+          revisionChanged: true,
+          grew: false,
+          partial: false,
+        },
+      ],
+      holds: [
+        {
+          scope: "project",
+          marketplace: "mp",
+          plugin: "lib",
+          version: "1.0.0",
+          cause: "held by app@mp",
+        },
+      ],
+      declines: [],
+    } as const;
+
+    // act
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), convergence);
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            { status: "will install", name: "fresh" },
+            { status: "will update", name: "zcore", from: "1.0.0", to: "2.0.0" },
+            { status: "will install", name: "extra" },
+            {
+              status: "skipped",
+              name: "lib",
+              version: "1.0.0",
+              reasons: ["dependents constrain"],
+              cause: new Error("held by app@mp"),
+              severity: "warning",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   test("D-14 / UPR-02: a same-version move names its commits after the plan's rows", () => {
     // arrange
     const fromCommit = "a".repeat(40);

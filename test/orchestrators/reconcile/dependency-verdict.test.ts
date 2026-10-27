@@ -1062,3 +1062,66 @@ test("APPLY1-01 / D-21: the final judgement counts a dependency the same apply i
   ]);
   assert.deepStrictEqual(unsatisfiedOf(scheduled), []);
 });
+
+test("D-PL2-02: the satisfaction verdict counts a dependency the same apply installs as met", async () => {
+  // arrange: `app` declares `vault` and `lib`, neither recorded.
+  const mp = marketplaceRecord("mp", { app: {} });
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["vault", "lib"] } }),
+  });
+
+  // act
+  const verdict = await buildScopeSatisfactionVerdict({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    loadManifest,
+    reader: ownManifests(),
+    scheduled: new Set(["vault@mp"]),
+  });
+
+  // assert
+  assert.deepStrictEqual(unsatisfiedOf(verdict), [
+    { dependent: "app@mp", dependency: "lib@mp", kind: "missing" },
+  ]);
+});
+
+test("D-PL2-02: releases a dependent whose missing dependency the same apply installs, and keeps one it does not", () => {
+  // arrange: `app` waits on `lib`'s range and the scheduled `vault`; `solo`
+  // waits on `ghost`, which nothing installs.
+  const state = stateOf(marketplaceRecord("mp", { app: {}, solo: {} }));
+  const verdict: ScopeSatisfactionVerdict = {
+    ok: true,
+    unsatisfied: [
+      { dependent: "app@mp", dependency: "lib@mp", kind: "out-of-range", range: "^2.0.0" },
+      { dependent: "app@mp", dependency: "vault@mp", kind: "missing" },
+      { dependent: "solo@mp", dependency: "ghost@mp", kind: "missing" },
+    ],
+  };
+
+  // act
+  const released = releasableDependents(verdict, state, new Set(["vault@mp"]));
+
+  // assert
+  assert.deepEqual([...released], ["app@mp"]);
+});
+
+test("D-PL2-02: a released dependent keeps its missing entries the same apply installs", () => {
+  // arrange
+  const verdict: ScopeSatisfactionVerdict = {
+    ok: true,
+    unsatisfied: [
+      { dependent: "app@mp", dependency: "lib@mp", kind: "out-of-range", range: "^2.0.0" },
+      { dependent: "app@mp", dependency: "vault@mp", kind: "missing" },
+      { dependent: "app@mp", dependency: "ghost@mp", kind: "missing" },
+      { dependent: "top@mp", dependency: "app@mp", kind: "disabled" },
+    ],
+  };
+
+  // act
+  const without = verdictWithout(verdict, new Set(["app@mp"]), new Set(["vault@mp"]));
+
+  // assert
+  assert.deepEqual(unsatisfiedOf(without), [
+    { dependent: "app@mp", dependency: "vault@mp", kind: "missing" },
+  ]);
+});

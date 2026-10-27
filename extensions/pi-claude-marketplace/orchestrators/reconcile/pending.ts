@@ -72,7 +72,7 @@ import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { scanRetainedWorkflowsStaging } from "../plugin/workflows-staging-gc.ts";
 
-import { planConvergence, settleMoveCascade } from "./convergence.ts";
+import { planConvergence, settleMoveCascade, withPlannedInstallsLanded } from "./convergence.ts";
 import { buildScopeSatisfactionVerdict, verdictAfterToggles } from "./dependency-verdict.ts";
 import {
   buildReconcilePendingNotification,
@@ -90,7 +90,7 @@ import {
 } from "./reconcile.messaging.ts";
 
 import type { PlannedDecline, PlannedHold, PlannedMove } from "./convergence.ts";
-import type { ScopeSatisfactionVerdict, UnsatisfiedDeclaration } from "./dependency-verdict.ts";
+import type { ScopeSatisfactionVerdict } from "./dependency-verdict.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -257,96 +257,6 @@ function mergedViewForPlanning(outcome: ScopeLoadOutcome, state: ExtensionState)
 
   const local = outcome.local.status === "valid" ? outcome.local.config : {};
   return mergeScopeConfigs(buildConfigFromState(state, local), local);
-}
-
-/** Every recorded `name@marketplace` key disabled by something other than the check. */
-function independentlyDisabledKeys(state: ExtensionState): ReadonlySet<string> {
-  const keys = new Set<string>();
-  for (const marketplace of Object.values(state.marketplaces)) {
-    for (const [name, record] of Object.entries(marketplace.plugins)) {
-      if (isRecordedButDisabled(record) && record.dependencyDisabled !== true) {
-        keys.add(`${name}@${marketplace.name}`);
-      }
-    }
-  }
-
-  return keys;
-}
-
-/**
- * The dependents whose every unsatisfied declaration the planned installs
- * satisfy, run to a fixpoint: a `missing` dependency is satisfied once a
- * planned install names it, and a `disabled` one once the check releases it
- * and nothing else disabled it.
- */
-function releasedDependents(
-  unsatisfied: readonly UnsatisfiedDeclaration[],
-  installed: ReadonlySet<string>,
-  state: ExtensionState,
-): ReadonlySet<string> {
-  const disabled = independentlyDisabledKeys(state);
-  const released = new Set<string>();
-  const isSatisfied = (entry: UnsatisfiedDeclaration): boolean =>
-    entry.kind === "missing"
-      ? installed.has(entry.dependency)
-      : entry.kind === "disabled" &&
-        released.has(entry.dependency) &&
-        !disabled.has(entry.dependency);
-  const dependents = [...new Set(unsatisfied.map((entry) => entry.dependent))];
-  let batch: readonly string[];
-  do {
-    batch = dependents.filter(
-      (dependent) =>
-        !released.has(dependent) &&
-        unsatisfied.every((entry) => entry.dependent !== dependent || isSatisfied(entry)),
-    );
-    for (const dependent of batch) {
-      released.add(dependent);
-    }
-  } while (batch.length > 0);
-
-  return released;
-}
-
-/**
- * D-21 / D-09-07: the toggle buckets `apply` drives after its installs land.
- * `apply` reads the scope again after it installs a plugin or a missing
- * dependency and takes the fresh plan's enable, disable and dependency-disable
- * buckets, so a dependent whose missing dependency it just installed stays up,
- * or comes back up. `pending` installs nothing, so it removes from the verdict
- * each dependent the planned installs satisfy and plans again. The other
- * buckets stay the first plan's, as in `apply`, which also reads again only
- * when it installs something.
- */
-function withPlannedInstallsLanded(
-  plan: ReconcilePlan,
-  verdict: ScopeSatisfactionVerdict,
-  state: ExtensionState,
-  replan: (verdict: ScopeSatisfactionVerdict) => ReconcilePlan,
-): ReconcilePlan {
-  if (
-    (plan.pluginsToInstall.length === 0 && plan.pluginsToDependencyInstall.length === 0) ||
-    !verdict.ok
-  ) {
-    return plan;
-  }
-
-  const installed = new Set(
-    [...plan.pluginsToInstall, ...plan.pluginsToDependencyInstall].map(
-      (install) => `${install.plugin}@${install.marketplace}`,
-    ),
-  );
-  const released = releasedDependents(verdict.unsatisfied, installed, state);
-  const fresh = replan({
-    ok: true,
-    unsatisfied: verdict.unsatisfied.filter((entry) => !released.has(entry.dependent)),
-  });
-  return {
-    ...plan,
-    pluginsToEnable: fresh.pluginsToEnable,
-    pluginsToDisable: fresh.pluginsToDisable,
-    pluginsToDependencyDisable: fresh.pluginsToDependencyDisable,
-  };
 }
 
 /**

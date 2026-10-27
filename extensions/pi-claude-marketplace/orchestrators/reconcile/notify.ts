@@ -305,14 +305,8 @@ function pushMarketplaceActions(
  * The arrow names commits only under the `updated` row's rule (UPR-02). A move
  * whose supported set grew carries `{components now supported}`, the marker a
  * backfilled row carries (WCONV-03).
- *
- * D-12: then one row per blocked move, the row `update` gives the same block:
- * a range hold is `(skipped) {dependents constrain}` with the gate's cause
- * line, and a consent decline is `(partially-upgradable)` with the dropped
- * kinds and the hint naming `update --partial` (D-24). Both are warnings in
- * every cardinality; a blocked move changes nothing, so it asks for no reload.
  */
-function pushConvergence(
+function pushConvergenceMoves(
   byMp: Map<string, MarketplaceBlock<PendingMsg>>,
   convergence: ConvergencePlan,
 ): void {
@@ -327,7 +321,19 @@ function pushConvergence(
       ...(move.grew && { reasons: ["components now supported"] }),
     });
   }
+}
 
+/**
+ * D-12: one row per blocked move, the row `update` gives the same block: a
+ * range hold is `(skipped) {dependents constrain}` with the gate's cause line,
+ * and a consent decline is `(partially-upgradable)` with the dropped kinds and
+ * the hint naming `update --partial` (D-24). Both are warnings in every
+ * cardinality; a blocked move changes nothing, so it asks for no reload.
+ */
+function pushBlockedMoves(
+  byMp: Map<string, MarketplaceBlock<PendingMsg>>,
+  convergence: ConvergencePlan,
+): void {
   for (const hold of convergence.holds) {
     ensureMarketplaceBlock(byMp, hold.scope, hold.marketplace).plugins.push(holdRow(hold));
   }
@@ -675,22 +681,23 @@ export async function resolvePendingForceInstalls(
  *                              passes the satisfaction verdict, so the bucket
  *                              fills (D-21, superseding PENDING-VERDICT-01 /
  *                              D-06-25).
- *   - pluginsToDependencyInstall
- *                           -> child row { status: "will install" }, folded
- *                              into the pluginsToInstall loop (MISS-01,
- *                              D-09-12). A bucket entry never matches a force-
- *                              install key, so its row is the bare token. It
- *                              fills from the same verdict (D-21).
  *   - `convergence`         -> child row { status: "will update" } per catalog
  *                              move (D-14, superseding D-66-05's "no update
- *                              bucket"), then one `skipped` row per range
- *                              hold and one `partially-upgradable` row per
- *                              consent decline (D-12), after the plan buckets.
+ *                              bucket"), after the plan buckets, then one
+ *                              `skipped` row per range hold and one
+ *                              `partially-upgradable` row per consent decline
+ *                              (D-12), after the dependency installs.
+ *   - pluginsToDependencyInstall
+ *                           -> child row { status: "will install" } after the
+ *                              move rows (MISS-01, D-09-12). It never carries
+ *                              the partial modifier, so its row is the bare
+ *                              token. It fills from the same verdict (D-21).
  *
  * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
- * case-insensitive, project-before-user secondary). Plugin rows within a
- * block preserve insertion order per their owning bucket -- the apply path
- * will re-order at execution time if needed.
+ * case-insensitive, project-before-user secondary). D-PL2-02: plugin rows
+ * within a block follow the order `apply` makes the changes in: marketplace
+ * actions and mismatches, config installs, uninstalls, disables, enables,
+ * catalog moves, missing-dependency installs, then the blocked moves.
  */
 export function buildReconcilePendingNotification(
   plans: readonly ReconcilePlan[],
@@ -712,12 +719,7 @@ export function buildReconcilePendingNotification(
       );
     }
 
-    // MISS-01 / D-09-12: the dependency-install bucket previews the same
-    // action the config-driven install bucket does, so both feed one loop
-    // and one token. A bucket entry never matches a key
-    // `resolvePendingForceInstalls` resolved (its candidates come from
-    // `pluginsToInstall` alone), so its row is always the bare token.
-    for (const o of [...plan.pluginsToInstall, ...plan.pluginsToDependencyInstall]) {
+    for (const o of plan.pluginsToInstall) {
       const block = ensureMarketplaceBlock(byMp, o.scope, o.marketplace);
       // FSTAT-06 / D-66-04: stamp the partial modifier when the planned install
       // candidate resolved `partially-available` (no-network resolveStrict, computed
@@ -765,7 +767,20 @@ export function buildReconcilePendingNotification(
     }
   }
 
-  pushConvergence(byMp, convergence);
+  pushConvergenceMoves(byMp, convergence);
+
+  // MISS-01 / D-09-12 / D-PL2-02: `apply` installs a missing dependency after
+  // the catalog moves land, so its row follows the move rows. It keeps the
+  // bare `(will install)` token: `resolvePendingForceInstalls` resolves
+  // `pluginsToInstall` alone.
+  for (const o of plans.flatMap((plan) => plan.pluginsToDependencyInstall)) {
+    ensureMarketplaceBlock(byMp, o.scope, o.marketplace).plugins.push({
+      status: "will install",
+      name: o.plugin,
+    });
+  }
+
+  pushBlockedMoves(byMp, convergence);
 
   return {
     marketplaces: Object.freeze(

@@ -49,6 +49,7 @@ import {
 import type {
   InstalledDeclarationsReader,
   ScopeSatisfactionVerdict,
+  UnsatisfiedDeclaration,
 } from "./dependency-verdict.ts";
 import type { PlannedPluginEnable, ReconcilePlan } from "./types.ts";
 import type { PluginEntry } from "../../domain/components/plugin.ts";
@@ -150,6 +151,11 @@ function compareNames(a: string, b: string): number {
 
 function pluginKeys(ops: readonly { readonly marketplace: string; readonly plugin: string }[]) {
   return new Set(ops.map((op) => `${op.plugin}@${op.marketplace}`));
+}
+
+/** D-PL2-02: the keys a plan installs, a config install or a missing dependency. */
+function plannedInstallKeys(plan: ReconcilePlan): Set<string> {
+  return pluginKeys([...plan.pluginsToInstall, ...plan.pluginsToDependencyInstall]);
 }
 
 /**
@@ -726,6 +732,88 @@ export async function planConvergence(input: ConvergenceInput): Promise<Converge
   return (await planConvergenceCascade(input)).plan;
 }
 
+/** Every recorded `name@marketplace` key disabled by something other than the check. */
+function independentlyDisabledKeys(state: ExtensionState): ReadonlySet<string> {
+  const keys = new Set<string>();
+  for (const marketplace of Object.values(state.marketplaces)) {
+    for (const [name, record] of Object.entries(marketplace.plugins)) {
+      if (isRecordedButDisabled(record) && record.dependencyDisabled !== true) {
+        keys.add(`${name}@${marketplace.name}`);
+      }
+    }
+  }
+
+  return keys;
+}
+
+/**
+ * The dependents whose every unsatisfied declaration the planned installs
+ * satisfy, run to a fixpoint: a `missing` dependency is satisfied once a
+ * planned install names it, and a `disabled` one once the check releases it
+ * and nothing else disabled it.
+ */
+function releasedDependents(
+  unsatisfied: readonly UnsatisfiedDeclaration[],
+  installed: ReadonlySet<string>,
+  state: ExtensionState,
+): ReadonlySet<string> {
+  const disabled = independentlyDisabledKeys(state);
+  const released = new Set<string>();
+  const isSatisfied = (entry: UnsatisfiedDeclaration): boolean =>
+    entry.kind === "missing"
+      ? installed.has(entry.dependency)
+      : entry.kind === "disabled" &&
+        released.has(entry.dependency) &&
+        !disabled.has(entry.dependency);
+  const dependents = [...new Set(unsatisfied.map((entry) => entry.dependent))];
+  let batch: readonly string[];
+  do {
+    batch = dependents.filter(
+      (dependent) =>
+        !released.has(dependent) &&
+        unsatisfied.every((entry) => entry.dependent !== dependent || isSatisfied(entry)),
+    );
+    for (const dependent of batch) {
+      released.add(dependent);
+    }
+  } while (batch.length > 0);
+
+  return released;
+}
+
+/**
+ * D-21 / D-09-07 / D-PL2-02: the toggle buckets once the plan's installs land.
+ * `apply` runs its moves and its missing-dependency installs before it judges
+ * the scope, so a dependent whose missing dependency a planned install brings
+ * stays up, or comes back up. The planner installs nothing, so it removes from
+ * the verdict each dependent the planned installs satisfy and plans again.
+ * `pending` and `apply`'s read pass both plan through here, so the two agree.
+ * The install buckets stay the first plan's.
+ */
+export function withPlannedInstallsLanded(
+  plan: ReconcilePlan,
+  verdict: ScopeSatisfactionVerdict,
+  state: ExtensionState,
+  replan: (verdict: ScopeSatisfactionVerdict) => ReconcilePlan,
+): ReconcilePlan {
+  const installed = plannedInstallKeys(plan);
+  if (installed.size === 0 || !verdict.ok) {
+    return plan;
+  }
+
+  const released = releasedDependents(verdict.unsatisfied, installed, state);
+  const fresh = replan({
+    ok: true,
+    unsatisfied: verdict.unsatisfied.filter((entry) => !released.has(entry.dependent)),
+  });
+  return {
+    ...plan,
+    pluginsToEnable: fresh.pluginsToEnable,
+    pluginsToDisable: fresh.pluginsToDisable,
+    pluginsToDependencyDisable: fresh.pluginsToDependencyDisable,
+  };
+}
+
 /** One scope's plan and the verdict it was planned from, for `settleMoveCascade`. */
 export interface MoveCascadeInput extends Omit<ConvergenceInput, "enable"> {
   readonly plan: ReconcilePlan;
@@ -835,11 +923,7 @@ async function judgePlannedScope(
     locations: input.locations,
     installedDeclarations: (mp, record) =>
       movedRecords.has(record) ? Promise.resolve(undefined) : readCopy(mp, record),
-    scheduled: new Set(
-      [...plan.pluginsToInstall, ...plan.pluginsToDependencyInstall].map(
-        (op) => `${op.plugin}@${op.marketplace}`,
-      ),
-    ),
+    scheduled: plannedInstallKeys(plan),
   });
   const holds = (verdict.ok ? verdict.unsatisfied : []).filter(
     (entry) => !cascade.deferred.has(entry.dependent),
@@ -875,19 +959,25 @@ async function judgePlannedScope(
  * The release loop of `settleMoveCascade`: the caller's plan when no held
  * dependent can be released, or the plan with the largest released set whose
  * moves satisfy every released dependent, its cascade and that set.
+ *
+ * D-PL2-02: `apply` judges its moves after its installs land, so every
+ * install the plan schedules, a config install or a missing dependency,
+ * counts as present here: a dependent waiting only on one is released, and
+ * the moves are judged with it installed.
  */
 async function releaseOnLandedMoves(
   input: MoveCascadeInput,
 ): Promise<Pick<MoveCascade, "plan" | "cascade"> & { readonly released: ReadonlySet<string> }> {
   const base = { scope: input.scope, state: input.state, locations: input.locations };
-  let released = releasableDependents(input.verdict, input.state);
+  const scheduled = plannedInstallKeys(input.plan);
+  let released = releasableDependents(input.verdict, input.state, scheduled);
   while (released.size > 0) {
-    const plan = input.replan(verdictWithout(input.verdict, released));
+    const plan = input.replan(verdictWithout(input.verdict, released, scheduled));
     // eslint-disable-next-line no-await-in-loop -- each round plans the moves the previous round's release allows
     const cascade = await planConvergenceCascade({ ...base, plan });
     // eslint-disable-next-line no-await-in-loop -- each round judges the moves it planned
     const after = await verdictAfterMoves(
-      { state: input.state, locations: input.locations },
+      { state: input.state, locations: input.locations, scheduled: plannedInstallKeys(plan) },
       { enable: plan.pluginsToEnable, disable: plan.pluginsToDisable },
       cascade.plan.moves,
     );

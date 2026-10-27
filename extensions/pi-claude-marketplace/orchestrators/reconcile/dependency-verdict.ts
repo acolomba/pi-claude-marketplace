@@ -80,6 +80,11 @@ export interface ScopeSatisfactionOptions {
    * start the walk held, so their own dependents are held too.
    */
   readonly seeded?: readonly UnsatisfiedDeclaration[];
+  /**
+   * D-21 / MISS-01 / D-PL2-02: plugins the same `apply` installs, which a
+   * declaration naming them counts as met.
+   */
+  readonly scheduled?: ReadonlySet<string>;
 }
 
 /**
@@ -345,6 +350,7 @@ export async function buildScopeSatisfactionVerdict(
       detail.declarations,
       recordedPlugins(options.state),
       options.seeded ?? [],
+      options.scheduled,
     ),
   };
 }
@@ -435,10 +441,14 @@ function heldDependents(verdict: ScopeSatisfactionVerdict & { readonly ok: true 
  * or one this same verdict holds down. A dependency that is missing, or that
  * the user or a config disabled, no move can bring back, so its dependents
  * stay held. An empty set when the walk failed.
+ *
+ * D-PL2-02: a missing dependency in `scheduled` is one the same `apply`
+ * installs, so it does not keep its dependent held.
  */
 export function releasableDependents(
   verdict: ScopeSatisfactionVerdict,
   state: ExtensionState,
+  scheduled: ReadonlySet<string> = new Set(),
 ): ReadonlySet<string> {
   if (!verdict.ok) {
     return new Set();
@@ -450,7 +460,7 @@ export function releasableDependents(
     verdict.unsatisfied
       .filter(
         (entry) =>
-          entry.kind === "missing" ||
+          (entry.kind === "missing" && !scheduled.has(entry.dependency)) ||
           (entry.kind === "disabled" &&
             (!held.has(entry.dependency) || recorded.get(entry.dependency)?.disabled === true)),
       )
@@ -462,10 +472,16 @@ export function releasableDependents(
 /**
  * APPLY1-01: `verdict` with the dependents in `released` no longer held, so a
  * declaration naming one of them as a held dependency is satisfied too.
+ *
+ * D-PL2-02: a released dependent keeps each `missing` entry whose dependency
+ * is in `scheduled`, because the planner derives the missing-dependency
+ * install from that entry. The planned install then releases the dependent
+ * again when the plan counts it as landed.
  */
 export function verdictWithout(
   verdict: ScopeSatisfactionVerdict,
   released: ReadonlySet<string>,
+  scheduled: ReadonlySet<string> = new Set(),
 ): ScopeSatisfactionVerdict {
   if (!verdict.ok) {
     return verdict;
@@ -473,10 +489,10 @@ export function verdictWithout(
 
   return {
     ok: true,
-    unsatisfied: verdict.unsatisfied.filter(
-      (entry) =>
-        !released.has(entry.dependent) &&
-        !(entry.kind === "disabled" && released.has(entry.dependency)),
+    unsatisfied: verdict.unsatisfied.filter((entry) =>
+      released.has(entry.dependent)
+        ? entry.kind === "missing" && scheduled.has(entry.dependency)
+        : !(entry.kind === "disabled" && released.has(entry.dependency)),
     ),
   };
 }
@@ -540,11 +556,6 @@ export type InstalledDeclarationsReader = (
 /** Inputs of the judgement `apply` makes once its cascade has run. */
 export interface FinalScopeOptions extends ScopeSatisfactionOptions {
   readonly installedDeclarations: InstalledDeclarationsReader;
-  /**
-   * D-21 / MISS-01: plugins the same `apply` installs, which a declaration
-   * naming them counts as met.
-   */
-  readonly scheduled?: ReadonlySet<string>;
 }
 
 /**
