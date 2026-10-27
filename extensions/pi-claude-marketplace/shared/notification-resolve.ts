@@ -963,17 +963,6 @@ function isWarningNotice(notice: RenderedMcpConfigNotice): boolean {
   );
 }
 
-/**
- * AMIG-01 / AMIG-03 / AMIG-04: resolves the one migration notice per reload.
- * Moved and removed rows sort project before user, then by plugin, then by
- * old name; left rows by scope, then plugin, then first old name (a stopped
- * row by its detail, a file row before the plugin rows), in code-unit order.
- * The notices fold and deduplicate as a standalone section list does.
- * Severity is `"warning"` when a row was left in place, a server was removed
- * as unsupported or malformed, or a notice warns, and `"info"` otherwise: a
- * server removed because its plugin no longer declares it or is disabled does
- * not by itself warn.
- */
 // PMOD-04: names and versions come from records and catalogs, so each string
 // field is redacted; `fromVersion` stays absent when the row has none.
 function resolveBackgroundUpdate(surface: BackgroundUpdateSurface): BackgroundUpdateSurface {
@@ -991,6 +980,17 @@ function resolveBackgroundUpdate(surface: BackgroundUpdateSurface): BackgroundUp
   };
 }
 
+/**
+ * AMIG-01 / AMIG-03 / AMIG-04: resolves the one migration notice per reload.
+ * Moved and removed rows sort project before user, then by plugin, then by
+ * old name; left rows by scope, then plugin, then first old name (a stopped
+ * row by its detail, a file row before the plugin rows), in code-unit order.
+ * The notices fold and deduplicate as a standalone section list does.
+ * Severity is `"warning"` when a row was left in place, a server was removed
+ * as unsupported or malformed, or a notice warns, and `"info"` otherwise: a
+ * server removed because its plugin no longer declares it or is disabled does
+ * not by itself warn.
+ */
 function resolveMcpMigration(surface: McpMigrationSurface): ResolvedMcpMigration {
   const rows = surface.rows.map((row) => redactMigrationRow(row));
   const moved = rows.filter(isMovedRow).sort(compareMovedRows);
