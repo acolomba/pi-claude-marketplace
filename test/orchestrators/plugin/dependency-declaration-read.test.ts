@@ -616,23 +616,42 @@ async function linkedManifestCopy(
   return { root, pluginRoot };
 }
 
-test("D-PL2-13: an installed copy whose manifest is a symlink inside the plugin answers absent", async (testContext) => {
+/** The D-05-07 fixed-detail refusal an installed copy's unusable manifest answers. */
+function ownManifestRefusal(): Awaited<ReturnType<typeof readInstalledCopyDeclaration>> {
+  return {
+    kind: "unusable",
+    detail: "its own manifest is present but cannot be read",
+    ownManifest: true,
+  };
+}
+
+/** The wrapped manifest path of `pluginRoot`, made a link to `target` (the link text). */
+async function linkWrappedManifest(pluginRoot: string, target: string): Promise<void> {
+  await mkdir(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+  await symlink(target, path.join(pluginRoot, ".claude-plugin", "plugin.json"));
+}
+
+/** A manifest outside any owning root, declaring `outside@mp`. */
+async function outsideManifest(testContext: TestContext): Promise<string> {
+  const outside = await freshRoot(testContext, "installed-copy-outside-");
+  const manifest = path.join(outside, "plugin.json");
+  await writeFile(manifest, JSON.stringify({ dependencies: ["outside@mp"] }));
+  return manifest;
+}
+
+test("D-PL2-13: an installed copy whose manifest links to a file inside the plugin reads that file", async (testContext) => {
   // arrange
   const { root, pluginRoot } = await linkedManifestCopy(testContext);
-  await mkdir(path.join(pluginRoot, ".claude-plugin"));
-  await symlink(
-    path.join(pluginRoot, "real.json"),
-    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-  );
+  await linkWrappedManifest(pluginRoot, path.join(pluginRoot, "real.json"));
 
   // act
   const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
 
-  // assert: the refused first candidate ends the walk; the bare manifest is not read
-  assert.deepStrictEqual(read, { kind: "absent" });
+  // assert
+  assert.deepStrictEqual(read, dependsOn("linked"));
 });
 
-test("D-PL2-13: an installed copy whose manifest directory is a symlink answers absent", async (testContext) => {
+test("D-PL2-13: an installed copy whose manifest directory links inside the plugin reads the manifest through it", async (testContext) => {
   // arrange
   const { root, pluginRoot } = await linkedManifestCopy(testContext);
   await mkdir(path.join(pluginRoot, "meta"));
@@ -646,10 +665,10 @@ test("D-PL2-13: an installed copy whose manifest directory is a symlink answers 
   const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
 
   // assert
-  assert.deepStrictEqual(read, { kind: "absent" });
+  assert.deepStrictEqual(read, dependsOn("linked"));
 });
 
-test("D-PL2-13: an installed copy with no wrapped manifest and a symlinked bare one answers absent", async (testContext) => {
+test("D-PL2-13: an installed copy with no wrapped manifest reads a bare manifest that links inside the plugin", async (testContext) => {
   // arrange
   const { root, pluginRoot } = await linkedManifestCopy(testContext);
   await rm(path.join(pluginRoot, "plugin.json"));
@@ -659,7 +678,127 @@ test("D-PL2-13: an installed copy with no wrapped manifest and a symlinked bare 
   const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
 
   // assert
-  assert.deepStrictEqual(read, { kind: "absent" });
+  assert.deepStrictEqual(read, dependsOn("linked"));
+});
+
+test("D-PL2-13: an installed copy whose manifest links through a chain inside the plugin reads the last file", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await linkedManifestCopy(testContext);
+  await symlink("real.json", path.join(pluginRoot, "hop.json"));
+  await linkWrappedManifest(pluginRoot, path.join(pluginRoot, "hop.json"));
+
+  // act
+  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+
+  // assert
+  assert.deepStrictEqual(read, dependsOn("linked"));
+});
+
+test("D-PL2-13: an installed copy whose manifest links outside the plugin but inside its owning root reads that file", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await linkedManifestCopy(testContext);
+  await mkdir(path.join(root, "shared"));
+  await writeFile(
+    path.join(root, "shared", "plugin.json"),
+    JSON.stringify({ dependencies: ["shared@mp"] }),
+  );
+  await linkWrappedManifest(pluginRoot, path.join(root, "shared", "plugin.json"));
+
+  // act
+  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+
+  // assert
+  assert.deepStrictEqual(read, dependsOn("shared"));
+});
+
+test("D-PL2-17: an installed copy whose manifest links outside its owning root is the fixed-detail refusal", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await linkedManifestCopy(testContext);
+  await linkWrappedManifest(pluginRoot, await outsideManifest(testContext));
+
+  // act
+  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+
+  // assert: the bare manifest is not read in its place
+  assert.deepStrictEqual(read, ownManifestRefusal());
+});
+
+test("D-PL2-17: an installed copy whose manifest links through a chain that leaves its owning root is the fixed-detail refusal", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await linkedManifestCopy(testContext);
+  await symlink(await outsideManifest(testContext), path.join(pluginRoot, "hop.json"));
+  await linkWrappedManifest(pluginRoot, path.join("..", "hop.json"));
+
+  // act
+  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+
+  // assert
+  assert.deepStrictEqual(read, ownManifestRefusal());
+});
+
+test("D-PL2-17: an installed copy whose manifest directory links outside its owning root is the fixed-detail refusal", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await linkedManifestCopy(testContext);
+  const outside = path.dirname(await outsideManifest(testContext));
+  await symlink(outside, path.join(pluginRoot, ".claude-plugin"));
+
+  // act
+  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+
+  // assert
+  assert.deepStrictEqual(read, ownManifestRefusal());
+});
+
+test("D-PL2-17: an installed copy whose manifest link climbs out of its owning root by relative text is the fixed-detail refusal", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await linkedManifestCopy(testContext);
+  const outside = await outsideManifest(testContext);
+  await linkWrappedManifest(
+    pluginRoot,
+    path.relative(path.join(pluginRoot, ".claude-plugin"), outside),
+  );
+
+  // act
+  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+
+  // assert
+  assert.deepStrictEqual(read, ownManifestRefusal());
+});
+
+test("D-PL2-17: an installed copy whose manifest link loops is the fixed-detail refusal", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await linkedManifestCopy(testContext);
+  await linkWrappedManifest(pluginRoot, "plugin.json");
+
+  // act
+  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+
+  // assert
+  assert.deepStrictEqual(read, ownManifestRefusal());
+});
+
+test("D-01-06: an installed copy whose wrapped manifest link dangles reads its bare manifest", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await linkedManifestCopy(testContext);
+  await linkWrappedManifest(pluginRoot, path.join(pluginRoot, "missing.json"));
+
+  // act
+  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+
+  // assert
+  assert.deepStrictEqual(read, dependsOn("bare"));
+});
+
+test("D-01-06: an installed copy whose wrapped manifest link runs through a regular file reads its bare manifest", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await linkedManifestCopy(testContext);
+  await linkWrappedManifest(pluginRoot, path.join(pluginRoot, "real.json", "plugin.json"));
+
+  // act
+  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+
+  // assert
+  assert.deepStrictEqual(read, dependsOn("bare"));
 });
 
 test("D-PL2-13: an installed copy whose wrapped manifest is a regular file is read beside a symlink elsewhere", async (testContext) => {

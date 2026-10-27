@@ -1145,12 +1145,14 @@ test("D-PL2-06 / DLS-01: a delisted record pinned to a commit answers its readab
 
 /**
  * A fresh scope on real disk whose `app` copy at `copyDir` (relative to the
- * scope root) holds a `.claude-plugin/plugin.json` symlinked to a sibling file
- * declaring `lib@^2.0.0`.
+ * scope root) holds a `.claude-plugin/plugin.json` linked to a file declaring
+ * `lib@^2.0.0`. That file is the copy's `real.json`, or, with `outside`, a
+ * file under the scope root that neither owning root contains.
  */
 async function linkedManifestScope(
   t: TestContext,
   copyDir: (locations: ReturnType<typeof locationsFor>, marketplaceRoot: string) => string,
+  target: "inside" | "outside" = "inside",
 ): Promise<{
   readonly locations: ReturnType<typeof locationsFor>;
   readonly marketplaceRoot: string;
@@ -1161,41 +1163,48 @@ async function linkedManifestScope(
   const locations = locationsFor("project", root);
   const marketplaceRoot = path.join(root, "mp");
   const copy = copyDir(locations, marketplaceRoot);
+  const linked =
+    target === "inside" ? path.join(copy, "real.json") : path.join(root, "outside", "plugin.json");
   await mkdir(path.join(copy, ".claude-plugin"), { recursive: true });
-  await writeFile(path.join(copy, "real.json"), JSON.stringify({ dependencies: ["lib@^2.0.0"] }));
-  await symlink(path.join(copy, "real.json"), path.join(copy, ".claude-plugin", "plugin.json"));
+  await mkdir(path.dirname(linked), { recursive: true });
+  await writeFile(linked, JSON.stringify({ dependencies: ["lib@^2.0.0"] }));
+  await symlink(linked, path.join(copy, ".claude-plugin", "plugin.json"));
   return { locations, marketplaceRoot, copy };
 }
 
-test("D-PL2-13: a delisted record whose copy holds a symlinked manifest fails closed as not in manifest", async (t) => {
-  // arrange
-  const { locations, marketplaceRoot, copy } = await linkedManifestScope(t, (_, mpRoot) =>
-    path.join(mpRoot, "plugins", "app"),
+/** The unreadable-manifest failure of `app@mp` whose own manifest is refused. */
+const APP_UNREADABLE_MANIFEST = {
+  reason: "unreadable manifest",
+  message: "cannot read the dependencies of app@mp: its own manifest is present but cannot be read",
+};
+
+/** The delisted `app@mp`, its copy in the marketplace clone linking its manifest to `target`. */
+async function readDelistedLinkedApp(
+  t: TestContext,
+  target: "inside" | "outside",
+): Promise<Awaited<ReturnType<typeof readRecordDeclarations>>> {
+  const { locations, marketplaceRoot, copy } = await linkedManifestScope(
+    t,
+    (_, mpRoot) => path.join(mpRoot, "plugins", "app"),
+    target,
   );
   const mp: MarketplaceRecord = {
     ...marketplaceRecord("mp", { app: { resolvedSource: copy } }),
     marketplaceRoot,
   };
   const loadManifest = manifestLoader({ [mp.manifestPath]: manifestOf("mp", {}) });
+  return readRecordDeclarations({ state: stateOf(mp), locations, loadManifest }, mp, "app");
+}
 
-  // act
-  const read = await readRecordDeclarations(
-    { state: stateOf(mp), locations, loadManifest },
-    mp,
-    "app",
-  );
-
-  // assert
-  assert.deepStrictEqual(
-    read.ok ? undefined : { reason: read.reason, message: read.cause.message },
-    APP_NOT_IN_MANIFEST,
-  );
-});
-
-test("D-PL2-13: a listed record pinned to a commit whose copy holds a symlinked manifest is answered by the catalog", async (t) => {
-  // arrange
-  const { locations, marketplaceRoot, copy } = await linkedManifestScope(t, (scoped) =>
-    path.join(scoped.pluginClonesDir, "acme-app", "0123456"),
+/** The listed `app@mp` pinned to a commit, its clone linking its manifest to `target`. */
+async function readPinnedLinkedApp(
+  t: TestContext,
+  target: "inside" | "outside",
+): Promise<Awaited<ReturnType<typeof readInstalledRecordDeclarations>>> {
+  const { locations, marketplaceRoot, copy } = await linkedManifestScope(
+    t,
+    (scoped) => path.join(scoped.pluginClonesDir, "acme-app", "0123456"),
+    target,
   );
   const mp: MarketplaceRecord = {
     ...marketplaceRecord("mp", { app: { resolvedSource: copy, resolvedSha: APP_SHA } }),
@@ -1204,16 +1213,56 @@ test("D-PL2-13: a listed record pinned to a commit whose copy holds a symlinked 
   const loadManifest = manifestLoader({
     [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["lib"] } }),
   });
-
-  // act
-  const read = await readInstalledRecordDeclarations(
+  return readInstalledRecordDeclarations(
     { state: stateOf(mp), locations, loadManifest },
     mp,
     "app",
   );
+}
+
+test("D-PL2-13: a delisted record whose copy links its manifest inside the copy reads it", async (t) => {
+  // act
+  const read = await readDelistedLinkedApp(t, "inside");
 
   // assert
-  assert.deepStrictEqual(read, { ok: true, declared: [{ name: "lib", marketplace: "mp" }] });
+  assert.deepStrictEqual(read, {
+    ok: true,
+    declared: [{ name: "lib", version: "^2.0.0", marketplace: "mp" }],
+    delisted: true,
+  });
+});
+
+test("D-PL2-17: a delisted record whose copy links its manifest outside its owning root fails closed as an unreadable manifest", async (t) => {
+  // act
+  const read = await readDelistedLinkedApp(t, "outside");
+
+  // assert
+  assert.deepStrictEqual(
+    read.ok ? undefined : { reason: read.reason, message: read.cause.message },
+    APP_UNREADABLE_MANIFEST,
+  );
+});
+
+test("D-PL2-13: a listed record pinned to a commit reads a manifest its copy links inside the copy, not the catalog", async (t) => {
+  // act
+  const read = await readPinnedLinkedApp(t, "inside");
+
+  // assert
+  assert.deepStrictEqual(read, {
+    ok: true,
+    declared: [{ name: "lib", version: "^2.0.0", marketplace: "mp" }],
+  });
+});
+
+test("D-PL2-17: a listed record pinned to a commit whose copy links its manifest outside its owning root fails closed instead of reading the catalog", async (t) => {
+  // act
+  const read = await readPinnedLinkedApp(t, "outside");
+
+  // assert
+  assert.deepStrictEqual(
+    read.ok ? undefined : { reason: read.reason, message: read.cause.message },
+    APP_UNREADABLE_MANIFEST,
+  );
 });
 
 test("D-PL2-06 / D-05-07: a marketplace manifest that fails to load fails closed as the catalog read does", async () => {
