@@ -189,6 +189,24 @@ describe("recognizeHostedLeftover", () => {
     });
   }
 
+  test("refuses a git clone that ships a marker for the same URL as a stale clone and keeps it", async (t) => {
+    // arrange
+    const finalDir = await leftover(t, markerBytes(CATALOG_URL));
+    await mkdir(path.join(finalDir, ".git"));
+
+    // act & assert
+    await assert.rejects(
+      recognizeHostedLeftover({
+        finalDir,
+        derivedName: "tools",
+        url: CATALOG_URL,
+        removalOps: createRemovalOps(),
+      }),
+      assertStale(finalDir),
+    );
+    assert.strictEqual(await pathExists(path.join(finalDir, "sentinel")), true);
+  });
+
   test("refuses a destination that is a file as a stale clone", async (t) => {
     // arrange
     const finalDir = path.join(await scratchDir(t), "tools");

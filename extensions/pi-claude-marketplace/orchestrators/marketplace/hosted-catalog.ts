@@ -124,6 +124,10 @@ function marksDownloadOf(text: string, url: string): boolean {
  * cannot be read throws `UnreadableSourceCloneError`. Recognition is the only
  * authority for removal (D-3-02).
  *
+ * The marker sits at the tree root, where a git repository can ship a file of
+ * the same name. A download writes no `.git`, so a tree that has one is a
+ * clone and stays.
+ *
  * @returns the leak message from removing the leftover, or `undefined` when
  *   the removal left nothing behind or the destination no longer exists
  *   (IN-06).
@@ -152,7 +156,7 @@ export async function recognizeHostedLeftover(args: {
     throw new UnreadableSourceCloneError(finalDir, derivedName, failure);
   }
 
-  if (!marksDownloadOf(text, url)) {
+  if (!marksDownloadOf(text, url) || (await pathExists(path.join(finalDir, ".git")))) {
     throw new StaleSourceCloneError(finalDir, derivedName);
   }
 
