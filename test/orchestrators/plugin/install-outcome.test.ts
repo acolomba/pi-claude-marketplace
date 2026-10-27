@@ -49,6 +49,7 @@ import type {
   InstallLedgerOptions,
   InstallLedgerSummary,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
+import type { PackageInstallOps } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -2672,4 +2673,154 @@ test("UPD-DEP-D1: previewInstall throws the PI-6 conflict with a name another pl
     previewInstall(installedState, locations, projectInstallOptions(environment.cwd)),
     CrossPluginConflictError,
   );
+});
+
+test("D-PL9-05: runs the packages phase after the workflows phase and before the state phase", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-phase-order-");
+  const seeded = await seedPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+  const phaseNames: string[] = [];
+  const transaction = {
+    runPhases: <C>(phases: readonly Phase<C>[], ctx: C) => {
+      phaseNames.push(...phases.map((phase) => phase.name));
+      return runPhases(phases, ctx);
+    },
+  };
+
+  // act
+  const ledgerOutcome = await runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    undefined,
+    transaction,
+  );
+
+  // assert
+  assert.strictEqual(ledgerOutcome.kind, "installed");
+  assert.deepStrictEqual(phaseNames, [
+    "skills",
+    "commands",
+    "agents",
+    "hooks",
+    "mcp",
+    "workflows",
+    "packages",
+    "state",
+  ]);
+});
+
+test("D-PL9-03: installs a plugin outside the extension root and notes the package install its folder needs", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-outside-packages-");
+  const seeded = await seedPlugin(environment.cwd);
+  await writeFile(
+    path.join(seeded.pluginRoot, "package.json"),
+    JSON.stringify({ name: "empty", dependencies: { "pkd-dep": "1.0.0" } }),
+  );
+  await writeFile(path.join(seeded.pluginRoot, "package-lock.json"), '{"lockfileVersion":3}');
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(
+    seeded.state,
+    locations,
+    projectInstallOptions(environment.cwd),
+  );
+
+  // assert
+  assert.strictEqual(ledgerOutcome.kind, "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.discoveryWarnings, [
+    `Skipped installing this plugin's dependencies: its folder in the marketplace "marketplace" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.`,
+  ]);
+  assert.strictEqual(seeded.state.marketplaces.marketplace?.plugins.empty?.version, "0.0.1");
+  assert.deepStrictEqual((await readdir(seeded.pluginRoot)).sort(), [
+    ".claude-plugin",
+    "package-lock.json",
+    "package.json",
+  ]);
+});
+
+test("D-PL9-05: a state phase failure removes the node_modules the packages phase created in a contained plugin", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-packages-undo-");
+  const locations = locationsFor("project", environment.cwd);
+  const seeded = await seedPlugin(path.join(locations.extensionRoot, "sources", "fixture"));
+  await writeFile(
+    path.join(seeded.pluginRoot, "package.json"),
+    JSON.stringify({ name: "empty", dependencies: { "pkd-dep": "1.0.0" } }),
+  );
+  await writeFile(
+    path.join(seeded.pluginRoot, "package-lock.json"),
+    JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        "": { dependencies: { "pkd-dep": "1.0.0" } },
+        "node_modules/pkd-dep": {
+          version: "1.0.0",
+          resolved: "https://registry.npmjs.org/pkd-dep/-/pkd-dep-1.0.0.tgz",
+          integrity: "sha512-AAAA",
+        },
+      },
+    }),
+  );
+  const installedBeforeState: string[][] = [];
+  const packageInstallOps: PackageInstallOps = {
+    runPackageManager: async (request) => {
+      await mkdir(path.join(request.cwd, "node_modules", "pkd-dep"), { recursive: true });
+      return { code: 0, stdout: "", stderr: "", timedOut: false };
+    },
+    runRegistryQuery: () => assert.fail("a lockfile without http links queries no registry"),
+    newWorkDirName: () => "work-1",
+  };
+  const transaction = {
+    packageInstallOps,
+    runPhases: <C>(phases: readonly Phase<C>[], ctx: C) =>
+      runPhases(
+        phases.map((phase): Phase<C> =>
+          phase.name === "state"
+            ? {
+                ...phase,
+                do: async () => {
+                  installedBeforeState.push(
+                    (await readdir(path.join(seeded.pluginRoot, "node_modules"))).sort(),
+                  );
+                  throw new Error("state phase failed");
+                },
+              }
+            : phase,
+        ),
+        ctx,
+      ),
+  };
+
+  // act
+  await assert.rejects(
+    runInstallLedger(
+      seeded.state,
+      locations,
+      projectInstallOptions(environment.cwd),
+      undefined,
+      transaction,
+    ),
+    /state phase failed/,
+  );
+
+  // assert
+  assert.deepStrictEqual(installedBeforeState, [[".pi-claude-marketplace", "pkd-dep"]]);
+  assert.deepStrictEqual((await readdir(seeded.pluginRoot)).sort(), [
+    ".claude-plugin",
+    "package-lock.json",
+    "package.json",
+  ]);
 });

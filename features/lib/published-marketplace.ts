@@ -392,6 +392,30 @@ export async function publishUnreadableSkillFile(
 }
 
 /**
+ * Adds a command nobody may read to the published plugin `plugin`, and
+ * returns its path. Pi reads the plugin's manifest and dependencies as usual,
+ * then fails to read the command when it stages the update. Only a local
+ * publication can hold such a file: git stores no file mode that denies
+ * reading.
+ */
+export async function publishUnreadableCommandFile(
+  published: PublishedMarketplace,
+  plugin: string,
+): Promise<string> {
+  if (published.kind === "url" || published.kind === "github") {
+    throw new Error("a git repository cannot hold a file nobody may read");
+  }
+
+  const file = ownedTarget(
+    published,
+    path.join(published.root, "plugins", plugin, "commands", "notes.md"),
+  );
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, "Unreadable.\n", { mode: 0o000, flag: "wx" });
+  return file;
+}
+
+/**
  * Lets everyone read the file `publishUnreadableSkillFile` left in the plugin
  * `plugin` again, and returns its path.
  */
@@ -480,6 +504,32 @@ export async function writePublishedPluginFile(
     await writeFile(target, text, { flag: "wx" });
   });
   return target;
+}
+
+/**
+ * Writes every text of `files`, by its path inside the published plugin
+ * `plugin`, and creates the directories above it. Unlike
+ * `writePublishedPluginFile`, it replaces a file that exists, so a later
+ * revision may replace the files. It refuses a path outside the publication,
+ * and a git publication commits and pushes all the files as one change.
+ */
+export async function writePublishedPluginFiles(
+  published: PublishedMarketplace,
+  plugin: string,
+  files: Readonly<Record<string, string>>,
+): Promise<void> {
+  const targets = Object.entries(files).map(
+    ([file, text]) =>
+      [ownedTarget(published, path.join(published.root, "plugins", plugin, file)), text] as const,
+  );
+  await changePublication(published, async () => {
+    await Promise.all(
+      targets.map(async ([target, text]) => {
+        await mkdir(path.dirname(target), { recursive: true });
+        await writeFile(target, text);
+      }),
+    );
+  });
 }
 
 /**

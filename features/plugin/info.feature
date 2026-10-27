@@ -351,6 +351,33 @@ Feature: Plugin info
       | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /acme/ghp.git/git-upload-pack                   | 200    |
 
+  Scenario: Info with --fetch on a plugin the git host answers with 404 names it source missing
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "gits" is published as a dir source
+    Given the marketplace "gits" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "gits" is added to the project scope
+    Given the git host answers 404 for the plugin "ghp"
+    When the user runs "/claude:plugin info ghp@gits --fetch"
+    Then the result has these fields:
+      | kind                           | plugin-info    |
+      | marketplace details autoupdate | false          |
+      | marketplace name               | gits           |
+      | marketplace scope              | project        |
+      | needs reload                   | false          |
+      | plugin components resolved     | false          |
+      | plugin id                      | ghp@gits       |
+      | plugin name                    | ghp            |
+      | plugin reasons                 | source missing |
+      | plugin status                  | remote         |
+      | severity                       | info           |
+    Then the git host receives these requests:
+      | method | path                                            | status |
+      | GET    | /acme/ghp.git/info/refs?service=git-upload-pack | 404    |
+
   Scenario: Info with --fetch while another process holds the state lock fails as lock held
     Given the git repository "ghp" holds these plugins:
       | name | version | path |

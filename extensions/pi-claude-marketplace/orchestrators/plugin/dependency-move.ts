@@ -23,7 +23,7 @@
 import { MAX_REFUSAL_VERSION_CHARS, truncateForRefusal } from "../../domain/dependency-range.ts";
 import { errorMessage, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 import { companionSeverity } from "../../shared/notify-reasons.ts";
-import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
+import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 
 import { plannedRangeVersion } from "./dependency-plan.ts";
 import { materializeLatestVersion } from "./materialize-latest.ts";
@@ -230,6 +230,27 @@ function moveLanded(outcome: UpdateRunOutcome): boolean {
   );
 }
 
+type MovedRow = ReturnType<typeof updatedRowFromOutcome>;
+
+/**
+ * PKD-02 / D-PL9-14: a moved dependency whose package step had something to
+ * say carries the note on its row's cause line, after any range disclosure,
+ * and warns: the move was carried out, short of its packages. A dependency
+ * reaches the user only as a row, so the cause line is its one channel.
+ */
+function withPackageNote(row: MovedRow, note: string | undefined): MovedRow {
+  if (note === undefined) {
+    return row;
+  }
+
+  const noteCause = new Error(redactAbsolutePaths(note));
+  return {
+    ...row,
+    cause: row.cause === undefined ? noteCause : new Error(row.cause.message, { cause: noteCause }),
+    severity: "warning",
+  };
+}
+
 /**
  * The row a move reports, named by the dependency's full key as cascade rows
  * are: the update row of a move that landed, a failed row with what the update
@@ -248,7 +269,7 @@ function moveRow(
       updated: companionSeverity(outcome, context.softDeps),
       partiallyInstalled: companionSeverity(outcome, context.softDeps),
     });
-    return { ...row, name: request.key };
+    return { ...withPackageNote(row, outcome.packageNote), name: request.key };
   }
 
   if (outcome.partition === "unchanged") {

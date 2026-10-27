@@ -50,9 +50,9 @@ parent session applies them at merge.
 - [x] **Phase 4: Dependency Resolver Residue** - the resolver installs what it previewed and refuses before it moves (completed 2026-10-27)
 - [ ] **Phase 5: Marketplace Command Parity** - reserved names, hosted manifests, `market` alias, row ids, shorthand, remove reporting
 - [ ] **Phase 6: Import Marketplace Planning** - import plans marketplaces the way Claude Code registers them
-- [ ] **Phase 7: Git Errors and Lock Discipline** - one git-host classifier, and every clone read or cleanup under the lock
+- [x] **Phase 7: Git Errors and Lock Discipline** - one git-host classifier, and every clone read or cleanup under the lock (completed 2026-10-27)
 - [ ] **Phase 8: Background Autoupdate** - autoupdate updates in the background, as Claude Code does
-- [ ] **Phase 9: Plugin Package Dependencies** - a plugin's own npm or bun dependencies install with it
+- [x] **Phase 9: Plugin Package Dependencies** - a plugin's own npm or bun dependencies install with it (completed 2026-10-27)
 - [ ] **Phase 10: Lifecycle Test and Harness Gaps** - the open scenario, unit, and harness gaps are closed
 - [ ] **Phase 11: Cleanup, Split, and Docs** - dead code, the install-flow split, docs, and backlog closures
 
@@ -203,6 +203,20 @@ Plans:
 3. Two intent marks in one millisecond are distinguished (GLK-06).
 4. A `fetch` scenario for a plugin whose `plugin.json` and entry disagree shows the `list` version; a warm tag reinstall makes no network call (GLK-07, GLK-08).
 
+**Plans:** 10/10 plans complete in 3 waves
+
+Plans:
+- [x] 07-01-PLAN.md — wave 1: `classifyGitFailure` entry point behind the kept wrappers; marketplace update and the stored-credential check moved onto it (GLK-01)
+- [x] 07-02-PLAN.md — wave 1: clone GC and the dependency sweep's listing under a fresh scope lock at every site; unlocked GC made private (GLK-03)
+- [x] 07-03-PLAN.md — wave 1: strictly increasing intent-mark and finalize stamps (GLK-06)
+- [x] 07-04-PLAN.md — wave 1: offline tag resolve for a warm tag-ref reinstall (GLK-08)
+- [x] 07-05-PLAN.md — wave 1: completion's upgradable state from list's rule; browse verified (GLK-07)
+- [x] 07-06-PLAN.md — wave 2: one update failure ladder for direct and cascade paths; framed marketplace refresh in plugin update (GLK-01, GLK-02)
+- [x] 07-07-PLAN.md — wave 2: framed update-preflight host failures; tag copy under the plugin scope's lock (GLK-01, GLK-04)
+- [x] 07-08-PLAN.md — wave 2: fetch host classification with frame, locked fetch-and-read, list version on every row (GLK-01, GLK-05, GLK-07)
+- [x] 07-09-PLAN.md — wave 2: `info --fetch` host classification and locked fetch-and-read (GLK-01, GLK-05)
+- [x] 07-10-PLAN.md — wave 3: dependency tag-listing classification, transport layer made private, output-catalog prose, phase handoff (GLK-01)
+
 ### Phase 8: Background Autoupdate
 
 **Goal:** A marketplace with autoupdate on is refreshed and its plugins updated in the background after a session starts, as Claude Code does, with one passive notice.
@@ -231,6 +245,24 @@ Plans:
 1. Installing a plugin with `package.json` and `package-lock.json` runs `npm ci --ignore-scripts` (or the bun equivalent) in the staged copy, and its hook or MCP server finds its modules (PKD-01).
 2. A failing or timed-out package install, or one with a lockfile Claude Code refuses (`bun.lockb`, `yarn.lock`, `pnpm-lock.yaml`), leaves the plugin installed with a warning; a `package.json` with no lockfile stays silent, as Claude Code does (PKD-02, D-PL9-02).
 3. The NFR-5 amendment and the spawn rule carry a decision ID, and `npm run check` is green (PKD-03).
+
+**Plans:** 5/5 plans complete
+
+Plans:
+**Wave 1**
+- [x] 09-01-PLAN.md — tracer: the package step through the install ledger, the spawn module and its gates, then Claude Code's lockfile refusals
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 09-02-PLAN.md — D-PL9-17 spike, loopback npm registry stand-in, and the install success, failure, and hook-proof scenarios
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 09-03-PLAN.md — the local-folder note (D-PL9-03) and the update hook in the shared runner (D-PL9-07)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 09-04-PLAN.md — scenarios for the local-folder note, the lockfile refusals, the update, and the offline reinstall
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 09-05-PLAN.md — full `npm run check` on the combined tree and the parent's merge handoff
 
 ### Phase 10: Lifecycle Test and Harness Gaps
 

@@ -1,0 +1,64 @@
+---
+phase: 07-git-errors-and-lock-discipline
+asvs_level: 1
+block_on: high
+verdict: secured
+threats_total: 31
+threats_closed: 31
+threats_open: 0
+audited: 2026-10-27
+diff_base: cc459a82
+---
+
+# Phase 07 security audit
+
+Verdict: SECURED. Every threat in the plans' `<threat_model>` registers is closed. No
+threat is open at any severity.
+
+## Threat verification
+
+| Threat | Category | Severity | Disposition | Evidence | Status |
+|--------|----------|----------|-------------|----------|--------|
+| T-07-01 | Information disclosure: a URL in a cause frame | med | mitigate | `git-failure-classifiers.ts:165` builds the frame only when `remoteUrl` is passed; the frame always travels as an Error message in the cause chain; `errors.ts:192` runs `redactCredentials(linkMessage(link))` | closed |
+| T-07-02 | Repudiation: the wrong reason | low | mitigate | each wrapper is one `classifyGitFailure` call; pinned by `test/shared/git-failure-classifiers.test.ts` | closed |
+| T-07-03 | Tampering or DoS: clone GC against a locked reader | high | mitigate | `clone-gc.ts:160-178` locked bodies; readers hold the same lock (`fetch.ts:405`, `info.ts:2143`, `update-preflight.ts:333`); held-lock tests in clone-gc, uninstall, remove, dependency-bindings | closed |
+| T-07-04 | Tampering: GC inside a guard closure | high | mitigate | every GC site runs after its operation's lock is released; a nested call would hit `ELOCKED` and become a swallowed `StateLockHeldError`, never a delete | closed |
+| T-07-05 | DoS: a held lock starves GC | low | accept | every site traces and swallows the held lock | closed (accepted) |
+| T-07-06 | Tampering: same-millisecond ST-9 overwrite | med | mitigate | `update-swap.ts` `nextUpdateStamp` at the mark and the finalize, both inside `withStateGuard`; same-millisecond and overflow tests | closed |
+| T-07-07 | DoS: a future `updatedAt` | low | accept | `updatedAt` is only compared for equality and never shown | closed (accepted) |
+| T-07-08 | Tampering: a stale local tag | low | accept | the offline fallback reads only the mirror's own refs, the same trust as the tracking ref | closed (accepted) |
+| T-07-09 | Tampering: an annotated tag that points at a tree or blob | low | mitigate | `platform/git.ts:722-731` returns undefined unless the chain ends in a commit, and the miss falls through to a refresh | closed |
+| T-07-10 | DoS: a malformed plugin tree in completion | low | mitigate | `list-installed-row.ts:96` folds any throw to the degrade; `edge-deps.ts` imports no git module | closed |
+| T-07-11 | Information disclosure: the refresh frame and cascade causes | med | mitigate | the frame is wrapped in `MarketplaceUpdateError`; all rows go through `serializeCauseChain` | closed |
+| T-07-12 | Repudiation: cascade misattribution | low | mitigate | one `classifyUpdateFailure` ladder for the direct path and the cascade; twin scenarios | closed |
+| T-07-13 | Tampering: tag copy against a refresh in progress | high | mitigate | `update-preflight.ts:479-488` copies under `withExistingScopeLock`; `marketplace update` refreshes under the same lock file | closed |
+| T-07-14 | Information disclosure: preflight frame | med | mitigate | the frame is a cause link, redacted at `errors.ts:192` | closed |
+| T-07-15 | Tampering: fetch row read after unlock | med | mitigate | `fetch.ts:380-408` materializes and reads in one locked body on the unpinned arm | closed |
+| T-07-16 | Information disclosure: fetch frame | med | mitigate | `fetch.ts:573-605`, redacted at `errors.ts:192` | closed |
+| T-07-17 | Elevation (policy): fetch reaching git directly | low | mitigate | `fetch.ts` imports no git surface and stays outside `NETWORK_SEAMS`; ESLint exits 0 | closed |
+| T-07-18 | Tampering: `info --fetch` row read after unlock | med | mitigate | `info.ts:2132-2145` `runFetchLocked` on the unpinned arm | closed |
+| T-07-19 | Information disclosure: info rows | low | accept | no `remoteUrl` is passed, so no frame; reason token only | closed (accepted) |
+| T-07-20 | Information disclosure: tag-listing row | low | accept | no `remoteUrl` is passed; reason token only | closed (accepted) |
+| T-07-21 | Repudiation: docs drift | low | mitigate | `docs/output-catalog.md` prose updated; catalog contract test passes | closed |
+| T-07-SC (plans 01-10) | Tampering: package installs | low | accept | `package.json` and `package-lock.json` have no diff against the base | closed (accepted) |
+
+The table counts T-07-SC once; the plans carry it ten times.
+
+## Focus checks
+
+- **Credentials in frames:** every frame lands in a row's `cause`, never in `notes` or a reason token. The single serializer redacts URL userinfo, `x-access-token:`, `Bearer` and GitHub tokens in text and JSON modes.
+- **NFR-5:** `eslint.config.js` BLOCK F, the rule packs, `.fallowrc.json` and the package files are unchanged. The changed files outside `NETWORK_SEAMS` name no git surface. The offline tag fallback adds local reads only.
+- **NFR-10:** GC deletes still resolve through `locations.pluginCloneDir(key)`. The unlocked GC and listing are module-private. The phase adds no new write paths.
+- **Lock nesting:** every new lock site runs where its caller holds no lock on the same scope, including the marketplace refresh that the review fix added.
+
+## Accepted risks
+
+T-07-05, T-07-07, T-07-08, T-07-19, T-07-20 and T-07-SC, as above.
+
+## Unregistered flags and residuals (none blocking)
+
+- **R1, low, information disclosure:** autoupdate cascade cause lines can show absolute local paths, for example `skills-staging/<uuid>`. They are the user's own scope paths, not secrets. The direct `plugin update` row already shows them. This is deferred in 07-CONTEXT (review WR-02).
+- **R2, low:** some windows are still unlocked and deferred in 07-CONTEXT: between candidate creation and finalize, `previewInstall`'s tag copy and refresh, the `sources/<name>` deletes, and `seedSameRepoPluginMirrors`.
+- **R3, low:** the pinned arm of `fetch` and `info --fetch` takes no lock (D-PL7-07). A locked GC can still delete an unreferenced pinned clone during the read. The worst case is a mislabeled status row.
+- **R4, informational:** a lock lost mid-body in the preflight's locked steps and in `info --fetch`'s probe maps only `StateLockHeldError`.
+- **R5, informational:** the new frame surfaces have no surface-level userinfo test. They rely on the serializer's tests.

@@ -50,7 +50,7 @@ import {
   PluginShapeError,
   StoredCredentialRejectedError,
 } from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type MarketplaceRows, type Single } from "../../shared/notify-context.ts";
@@ -408,7 +408,7 @@ export function lacksStoredCredential(err: unknown, auth: GitAuthBundle): err is
     auth.kind === "stored-credential" &&
     !(err instanceof CrossOriginChallengeError) &&
     !(err instanceof StoredCredentialRejectedError) &&
-    classifyGitTransportFailure(err) === "authentication required"
+    classifyGitFailure(err, { notFound: "network error" })?.reason === "authentication required"
   );
 }
 

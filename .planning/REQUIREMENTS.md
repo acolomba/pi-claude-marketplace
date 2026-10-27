@@ -82,14 +82,14 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 ### Git errors and lock discipline (GLK)
 
-- [ ] **GLK-01**: Every remote git access classifies a host's HTTP answer through one entry point with an explicit per-operation 404/410 rule, so plugin install, update, fetch, and info report it as marketplace add and update do (GITERR-01)
-- [ ] **GLK-02**: The autoupdate cascade classifies an unclassified error as the direct update path does, not as `{not in manifest}` (CASCREASON-01)
-- [ ] **GLK-03**: Clone cleanup runs under the state lock at every call site (CLONEGC-01)
-- [ ] **GLK-04**: A marketplace-tag-pinned update copies the marketplace git data under a lock (TAGCOPY-01)
-- [ ] **GLK-05**: `fetch` and `info --fetch` read their result row inside the lock (FETCHROW-01)
-- [ ] **GLK-06**: Two update intent marks in the same millisecond are told apart (INTENTMS-01)
-- [ ] **GLK-07**: `fetch`, tab completion, and `browse` show the version `list` and `info` show (ENTRYVER-01)
-- [ ] **GLK-08**: A tag-ref reinstall with a warm mirror resolves the tag offline (LCORCH-01 b5)
+- [x] **GLK-01**: Every remote git access classifies a host's HTTP answer through one entry point with an explicit per-operation 404/410 rule, so plugin install, update, fetch, and info report it as marketplace add and update do (GITERR-01)
+- [x] **GLK-02**: The autoupdate cascade classifies an unclassified error as the direct update path does, not as `{not in manifest}` (CASCREASON-01)
+- [x] **GLK-03**: Clone cleanup runs under the state lock at every call site (CLONEGC-01)
+- [x] **GLK-04**: A marketplace-tag-pinned update copies the marketplace git data under a lock (TAGCOPY-01)
+- [x] **GLK-05**: `fetch` and `info --fetch` read their result row inside the lock (FETCHROW-01)
+- [x] **GLK-06**: Two update intent marks in the same millisecond are told apart (INTENTMS-01)
+- [x] **GLK-07**: `fetch`, tab completion, and `browse` show the version `list` and `info` show (ENTRYVER-01)
+- [x] **GLK-08**: A tag-ref reinstall with a warm mirror resolves the tag offline (LCORCH-01 b5)
 
 ### Background autoupdate (AUP)
 
@@ -99,9 +99,9 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 ### Plugin package dependencies (PKD)
 
-- [ ] **PKD-01**: Installing or updating a plugin whose root ships `package.json` and a supported lockfile runs the same frozen, script-free, time-bounded install Claude Code runs, in the staged copy (PKGDEP-01)
-- [ ] **PKD-02**: A failed, timed-out, or skipped package install degrades the plugin with a warning and never blocks it (PKGDEP-01)
-- [ ] **PKD-03**: NFR-5 and the process-spawn rules are amended with a recorded ID for the package install (PKGDEP-01)
+- [x] **PKD-01**: Installing or updating a plugin whose root ships `package.json` and a supported lockfile runs the same frozen, script-free, time-bounded install Claude Code runs, in the staged copy (PKGDEP-01)
+- [x] **PKD-02**: A failed, timed-out, or skipped package install degrades the plugin with a warning and never blocks it (PKGDEP-01)
+- [x] **PKD-03**: NFR-5 and the process-spawn rules are amended with a recorded ID for the package install (PKGDEP-01)
 
 ### Tests and harness (TST)
 
@@ -178,20 +178,20 @@ None.
 | MIM-02 | Phase 6 | Pending |
 | MIM-03 | Phase 6 | Pending |
 | MIM-04 | Phase 6 | Pending |
-| GLK-01 | Phase 7 | Pending |
-| GLK-02 | Phase 7 | Pending |
-| GLK-03 | Phase 7 | Pending |
-| GLK-04 | Phase 7 | Pending |
-| GLK-05 | Phase 7 | Pending |
-| GLK-06 | Phase 7 | Pending |
-| GLK-07 | Phase 7 | Pending |
-| GLK-08 | Phase 7 | Pending |
+| GLK-01 | Phase 7 | Complete |
+| GLK-02 | Phase 7 | Complete |
+| GLK-03 | Phase 7 | Complete |
+| GLK-04 | Phase 7 | Complete |
+| GLK-05 | Phase 7 | Complete |
+| GLK-06 | Phase 7 | Complete |
+| GLK-07 | Phase 7 | Complete |
+| GLK-08 | Phase 7 | Complete |
 | AUP-01 | Phase 8 | Pending |
 | AUP-02 | Phase 8 | Pending |
 | AUP-03 | Phase 8 | Pending |
-| PKD-01 | Phase 9 | Pending |
-| PKD-02 | Phase 9 | Pending |
-| PKD-03 | Phase 9 | Pending |
+| PKD-01 | Phase 9 | Complete |
+| PKD-02 | Phase 9 | Complete |
+| PKD-03 | Phase 9 | Complete |
 | TST-01 | Phase 10 | Pending |
 | TST-02 | Phase 10 | Pending |
 | TST-03 | Phase 10 | Pending |

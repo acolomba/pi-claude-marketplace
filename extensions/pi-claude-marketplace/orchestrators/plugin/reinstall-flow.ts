@@ -56,7 +56,7 @@ import { notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { type LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 
-import { garbageCollectPluginClones } from "./clone-gc.ts";
+import { collectPluginClonesLocked } from "./clone-gc.ts";
 import { materializeLatestVersion, recordCandidate } from "./materialize-latest.ts";
 import {
   recordReinstallOutcome,
@@ -411,7 +411,7 @@ async function runReinstall(
       // D-18-06 / BFILL-01: reinstall is partial-capable, so a still-partial
       // plugin re-materializes in place.
       partial: true,
-      cleanupClones: garbageCollectPluginClones,
+      cleanupClones: collectPluginClonesLocked,
       // D-18-10: the commit or finalize failure is reinstall's own outcome to
       // render, so the callback only captures it.
       notifyPhaseFailure: (error, failures) => {

@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-10-22 at the lifecycle-coverage start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 3 — Dependency Cascade Rows and Status
+**Current focus:** Phase 07 — Git Errors and Lock Discipline
 
 ## Current Position
 
@@ -188,11 +188,6 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-gvt | GV-01: record plugins at a range-selected release tag as Claude Code does, the tag semver kept as resolvedVersion | 2026-10-26 | 2638b001 | complete | [261026-gvt-record-plugins-at-release-tags-as-claude-code](./quick/261026-gvt-record-plugins-at-release-tags-as-claude-code/) |
 | 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
-| 261027-9lp | D-PL4-08/09: agent-target preview refusals name only the file; a plain update's refusal drops the false "unreadable manifest" reason | 2026-10-27 | edac58eb | complete | [261027-9lp-agent-target-refusal-redaction-and-updat](./quick/261027-9lp-agent-target-refusal-redaction-and-updat/) |
-
-## Session Continuity
-
-**Last session:** 2026-10-25T12:00:00.000Z
 **Stopped at:** Phase 4 complete, ready to verify Phase 1
 **Resume file:** None
 
@@ -405,12 +400,6 @@ archived milestone artifacts.
 | Phase 29 P12 | 70 min | 3 tasks | 34 files |
 | Phase 29 P13 | 48 min | 3 tasks | 44 files |
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
-| Phase 03 P01 | 17min | 2 tasks | 7 files |
-| Phase 03 P02 | 24min | 2 tasks | 15 files |
-| Phase 03 P03 | 70min | 3 tasks | 11 files |
-| Phase 03 P04 | 15min | 2 tasks | 7 files |
-| Phase 03 P05 | 15 min | 2 tasks | 11 files |
-| Phase 03 P06 | 12min | 2 tasks | 2 files |
 
 ## Decisions
 
@@ -610,18 +599,6 @@ archived milestone artifacts.
 - [Phase 29]: The cascade failure classifier reads the errno a BridgeStagingError carries on its cause, so an unreadable plugin source is permission denied (also in the autoupdate cascade)
 - [Phase 29]: apply runs growth-only moves through convergePlugin with rematerialize (skipSameRevision off, overwrite off) and reports them with the plugin-backfilled row; the load-time backfill, its stamp gate and EXTENSION_VERSION are deleted, lastReconciledExtensionVersion stays readable and nothing writes it (D-10, D-13, D-25)
 - [Phase 29]: README.md's dependents sentence says apply reinstalls an uninstalled dependency a dependent still declares and disables the dependents only if that install fails; the APL-D1 and APL-D2 rows record the read-only load and the NFR-2 amendment
-- [Phase 03]: D-PL3-12/16: versions quoted in hold and move refusals are cut at render to 64 UTF-16 code units via truncateForRefusal
-- [Phase 03]: D-PL3-04/D-PL3-14: install looks an id-invalid root up first; unlisted keeps {not in manifest}, listed is refused {invalid manifest} with Claude Code's invalid-id cause
-- [Phase 03]: D-PL3-17 known limit: apply, load, and import show the invalid-id cause under {dependency failed}
-- [Phase 03]: D-PL3-01/02: every closure member a failed install would have newly materialized and did not gets a cause-less (failed) {dependency failed} row
-- [Phase 03]: D-PL3-15: a key a moved row reports gets no second row; root ledger, plan-step, and mid-walk lookup failures keep one row
-- [Phase 03]: T-03-48: a dependency's ledger error in a cascade row has absolute paths cut to basenames, as the move row already does
-- [Phase 03]: D-PL3-08/13: a directory pin refusal names every range-declaring cascade member, nearest the requested plugin first; installed plugins outside the closure are not named
-- [Phase 03]: D-PL3-09: the directory pin refusal cuts name, listed version, joined ranges, and each requirer at 120 code units with an ellipsis
-- [Phase 03]: D-PL3-10: other refusals keep the 200-character range bound
-- [Phase 03]: D-PL3-11: a cannot-move refusal ends with 'To look for a version in range, run /claude:plugin update <dependency>.' when the named plugin declares the dependency directly, for every source kind
-- [Phase 03]: D-PL3-06: a dependency's partial availability does not change its dependents' status (as Claude Code); recorded in docs, no code change
-- [Phase 03]: D-PL3-07: git-source list rows keep the upgrade state; recorded divergence licensed by PL-5 and RSTA/FTCH
 
 ### mcp-4 decisions
 
