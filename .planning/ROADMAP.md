@@ -295,6 +295,19 @@ Plans:
 3. Docs, CHANGELOG, and PROJECT.md decision rows match the shipped behavior (CLN-03).
 4. `BACKLOG.md` marks every entry this milestone settled closed with its disposition (CLN-04).
 
+**Plans:** 6 plans
+
+Plans:
+**Wave 1**
+- [ ] 11-01-PLAN.md — remove dead seams, require lifecycle result data, and move deferred-pin injection to composition
+- [ ] 11-02-PLAN.md — consolidate marketplace-not-added messages and enabled-declarer filtering
+- [ ] 11-03-PLAN.md — consolidate hermetic state-lock test helpers
+- [ ] 11-04-PLAN.md — correct plugin-handler ownership, add no-op status, and remove weak assertions
+- [ ] 11-05-PLAN.md — reconcile reader docs, decisions, requirements, and backlog dispositions
+
+**Wave 2** *(blocked on Wave 1 and Phase 10 integration)*
+- [ ] 11-06-PLAN.md — split `install-flow.ts` into a flow root and paired leaf modules
+
 ## Carried Forward
 
 - `DEPADV-01` and `WOUT-01` remain in [BACKLOG.md](BACKLOG.md): Pi's shrinkwrap
