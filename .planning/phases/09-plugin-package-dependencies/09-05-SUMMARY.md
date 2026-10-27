@@ -155,6 +155,9 @@ For `.planning/PROJECT.md` "Key Decisions" (Decision | Rationale | Outcome):
 | D-PL9-18 (2026-10-27): On Windows a package manager is looked up only in the absolute PATH entries (never the current directory), `.exe` before `.cmd` in each directory. An `.exe` starts directly; `npm.cmd` becomes `<Node binary> <npm.cmd folder>\node_modules\npm\bin\npm-cli.js <args>`; every launch has `shell: false`. A `bun.cmd`, an `npm.cmd` without `npm-cli.js`, and a missing command become the failure note. Other platforms are unchanged | Pi capability gap: Node refuses to spawn a `.cmd` without a shell, so the npm entry route replaces upstream's execa/cross-spawn shell route | Good |
 | D-PL9-19 (2026-10-27): A package manager that outlives the timeout is stopped with its whole process tree: POSIX starts it detached and signals its process group (SIGTERM, then SIGKILL), falling back to the process alone when the group signal throws or the pid is below 2; Windows runs `<SystemRoot>\System32\taskkill.exe /PID <pid> /T /F` at both steps. The run never rejects and still settles one grace after SIGKILL | Closes the process-group residue of 09-REVIEW WR-01, so the 60-second limit holds (PKD-02) | Good |
 | D-PL9-17: The proof that a plugin finds its modules is a scenario where a session start hook of the installed plugin `require`s the npm package its lockfile lists and writes what it exports to a project file | The spike was positive: `SPIKE: positive -- SPIKE RESULT: ran from .../.pi/pi-claude-marketplace/sources/tools/plugins/pkp -- SPIKE PAYLOADS: []`. The hook runs from the plugin root, so Node resolves the package from its node_modules | Good |
+| D-PL9-20 (2026-10-27): A failed, timed-out, or refused package install stays an install-time warning shown with the plugin's row (the D-PL9-14 note) | The user kept uncertain choice 2. Pi has no log that the user reads, so the install note is the only place where the user learns of the failure until PKGDEP-02's load diagnostic | Good |
+| D-PL9-21 (2026-10-27): `marketplace update` with autoupdate on shows an updated plugin's package note as `/claude:plugin update` does: a warning diagnostic `Plugin "<name>" updated; 1 declared component has a note.` after the cascade rows and before the MCP config notices. Only the package note | The cascade dropped it (uncertain choice 34). WRN-02 owns the other notes of the cascade and replaces this call with its shared placement | Good (uncertain choices 62, 63) |
+| D-PL9-22 (2026-10-27): Uninstall, with its `--prune` members, `prune`, and apply's uninstall step, removes the node_modules that the package step wrote into a plugin folder inside `<scopeRoot>/pi-claude-marketplace/`, unless another installed plugin of the scope runs from that folder. The step writes the marker `node_modules/.pi-claude-marketplace` before its rename. Only a marked node_modules with no symlink on the way is removed: it is moved into `sources-staging` and deleted there, after the state save and best effort | A kept clone's old node_modules made the next install skip the step (WR-03). A node_modules from git or from the user has no marker, so it stays (NFR-10, D-PL9-03) | Good (uncertain choices 57-61, 65) |
 
 ### D-PL9-10: NFR-5 amendment text
 
@@ -195,15 +198,15 @@ D-PL9-10).
 - **PKGDEP-01: closed by this phase.** Commits: `f5ddedc8` feat(plugin): install a plugin's own npm or bun packages; `7e44cb66` feat(plugin): skip package installs that Claude Code refuses; `9eee85ff` test(features): prove plugin package installs end to end; `caf36f6b` test(features): prove a plugin hook loads its npm package; `ac0c892d` feat(plugin): note the package install a local plugin folder needs; `8a7b2348` feat(plugin): install the packages of an updated plugin; `f5d7880c` test(features): cover package notes for local folders and lockfiles; `949ff8c6` test(features): cover package installs on update and reinstall. The session-start rerun on a fresh machine moves to PKGDEP-02.
 - **PKGDEP-02 (new):** the load-time "packages not installed" / "packages refused" diagnostic, and `update` retrying the package install of an up-to-date plugin, as Claude Code 2.1.310 does (texts in the 09-CONTEXT.md upstream evidence). Seams: `orchestrators/reconcile/load.ts` and the up-to-date path of `update-flow.ts`.
 - **PKGDEP-03 (new, narrowed 2026-10-27):** Claude Code's secret redaction of npm output (T-09-10). The lockfile-content sanitizer it also named landed in `40c4963b` feat(plugin): check a plugin's lockfile before installing its packages (D-PL9-08 reversed).
-- **PKGDEP-05 (new):** uninstall removes the plugin's node_modules from a clone it keeps, so a later install of a new lockfile does not skip the package step (review WR-03).
+- **PKGDEP-05 (new):** uninstall removes the plugin's node_modules from a clone it keeps, so a later install of a new lockfile does not skip the package step (review WR-03). Closed by quick task 261027-b8d (D-PL9-22), commit `b3320aa2`.
 - **PKGDEP-04 (new):** a closed-set row reason for a package install that did not happen, on the install, update, enable, reconcile, and reinstall rows (the composer fan-out in 09-RESEARCH.md section 7).
 
 ## Uncertain choices (for user review)
 
-32 items here, 33-38 in the review addendum, and 39-56 from quick task 261027-95p. Items 1-7 are CONTEXT's. Items 8-12 are the planner's. Items 13-31 come from the 09-01..09-04 SUMMARYs. Item 32 is new in this plan.
+32 items here, 33-38 in the review addendum, 39-56 from quick task 261027-95p, and 57-65 from quick task 261027-b8d. Items 1-7 are CONTEXT's. Items 8-12 are the planner's. Items 13-31 come from the 09-01..09-04 SUMMARYs. Item 32 is new in this plan.
 
 1. **No-lockfile is silent (D-PL9-02).** Upstream and PKGDEP-01 skip a `package.json` with no recognized lockfile silently. The warning applies to refused lockfiles only. Alternative: warn on `package.json` with no lockfile.
-2. **Warning at install time (D-PL9-09, now D-PL9-14).** Upstream only logs at install and tells the user at the next load. With no load diagnostic yet (PKGDEP-02), we warn on the install. Alternative: stay silent and build the load diagnostic.
+2. **Warning at install time (D-PL9-09, now D-PL9-14).** Upstream only logs at install and tells the user at the next load. With no load diagnostic yet (PKGDEP-02), we warn on the install. Alternative: stay silent and build the load diagnostic. Kept: D-PL9-20 (quick task 261027-b8d).
 3. **Path-source plugins of a dir or file marketplace are not written (D-PL9-03).** Upstream copies every plugin into its cache, so it always installs. We run them from the user's folder, and NFR-10 forbids writes there, so we note the command. Alternative: amend NFR-10 to allow node_modules in the user's folder.
 4. **Sanitizer deferred (D-PL9-08).** A lockfile with `git:` or `file:` dependencies installs here and is refused upstream (PKGDEP-03). Alternative: port it now. Superseded by D-PL9-08 reversed (quick task 261027-95p, `40c4963b`).
 5. **Skip when node_modules exists (D-PL9-06).** A stale node_modules after `marketplace update` changes a path-in-clone plugin's lockfile is refreshed only by that plugin's `update`. Alternative: always reinstall.
@@ -263,6 +266,8 @@ Known residue for the parent (Phase 11, LCDOC-01). This phase may not edit these
 - A plugin whose skill directory is its root copies node_modules on re-materialization (skills bridge copy). Rare.
 - The package step runs inside the install ledger's state lock for up to about 65 seconds, so a concurrent command in the same scope meets `{lock held}` meanwhile (D-PL9-05 accepts it).
 - `.planning/PROJECT.md` line 1305's Network policy heading omits "and by AAP-D1" although its body cites AAP-D1 (see the D-PL9-10 amendment text).
+- `.planning/codebase/ARCHITECTURE.md` lists the plugin modules that marketplace code reaches (leaf composers, `orchestrators/types.ts`, the `pluginUpdate` seam). `orchestrators/marketplace/update.ts` now also imports `surfaceDiscoveryWarnings` from `orchestrators/plugin/shared.ts` (D-PL9-21, quick task 261027-b8d), so that list is incomplete.
+- `docs/output-catalog.md` has no entry for the package-note diagnostic that `marketplace update` with autoupdate now sends after its cascade rows (D-PL9-21, quick task 261027-b8d).
 
 Task 1 recorded nothing: the gate was green on its first run.
 
@@ -315,11 +320,11 @@ The code review (`09-REVIEW.md`, disposition in `09-REVIEW-DISPOSITION.md`) foun
 ### New uncertain choices (33-38; total 38)
 
 33. **A dependency move's package note rides the row's cause line (CR-02).** It reads `cause: <range disclosure> -> <note>` and raises the row to warning. A separate field would need `notification-types.ts`, which this phase may not edit.
-34. **`marketplace update` with autoupdate still drops the note.** Its rows render through `orchestrators/marketplace/update.messaging.ts`, outside the fix's functions. Follow-up.
+34. **`marketplace update` with autoupdate still drops the note.** Its rows render through `orchestrators/marketplace/update.messaging.ts`, outside the fix's functions. Follow-up. Resolved by D-PL9-21 (quick task 261027-b8d, `93e5cd3c`).
 35. **The D-PL9-03 note names the marketplace, not the plugin's folder (WR-02).** It now reads `its folder in the marketplace "<name>" is outside the folders this extension manages ...`, so redaction leaves it whole. A relative path would need the marketplace root at both callers.
 36. **The failure note compacts npm output (WR-04).** It strips ANSI and control characters, drops `npm warn` lines when anything else printed, strips `npm error` / `npm ERR!` prefixes, and joins lines with "; " before the 500-character cut. Claude Code logs the raw text.
 37. **No process-group kill (WR-01).** The run settles one grace after SIGKILL, but a grandchild holding the pipes can keep running. Superseded by D-PL9-19 (quick task 261027-95p).
-38. **WR-03 not fixed.** Uninstall keeps node_modules in a kept clone, so a later install skips the step (PKGDEP-05).
+38. **WR-03 not fixed.** Uninstall keeps node_modules in a kept clone, so a later install skips the step (PKGDEP-05). Resolved by D-PL9-22 (quick task 261027-b8d, `b3320aa2`).
 
 ### Quick task 261027-95p (39-56; total 56)
 
@@ -332,7 +337,7 @@ The user reversed D-PL9-08 and decided D-PL9-18 and D-PL9-19 on 2026-10-27. Thes
 43. **Hostname reading.** One trailing `.` is dropped, then every leading `www.` (upstream `Pst`'s trailing-dot handling was not confirmed).
 44. **The 120-character cut and the exact-version check.** `cut(x)` is the first 120 characters (upstream's `Ve(x,120)` may add an ellipsis). `semver.parse(v) !== null` is the exact-version test.
 45. **Rewritten files are two-space JSON with a trailing newline.** Upstream's serializer `_()` was not decoded.
-46. **No byte-order mark is stripped.** Upstream wraps both texts in `No()` before parsing, which may strip a BOM; this port parses the text as read, so a lockfile with a BOM is "not valid JSON".
+46. **No byte-order mark is stripped.** Upstream wraps both texts in `No()` before parsing, which may strip a BOM; this port parses the text as read, so a lockfile with a BOM is "not valid JSON". Resolved: the mark is stripped as upstream strips it. One leading U+FEFF is removed from package.json, package-lock.json / npm-shrinkwrap.json, and bun.lock before parsing (`shared/bom.ts` `stripBom`, which is Claude Code's `No`). Two marks are still "not valid JSON" (quick task 261027-b8d).
 47. **The tarball spec pattern is copied as is.** `/\.(?:tgz|tar.gz|tar)$/i` keeps upstream's unescaped middle dot, so `x.tar-gz` is refused as a tarball too.
 48. **Names are lowered A-Z only before the name patterns.** A full `toLowerCase()` would turn some non-ASCII letters (the Kelvin sign) into ASCII ones the patterns accept.
 49. **The registry query runs npm for a bun lockfile too,** as upstream does, because the http rule is about npm's saved token.
@@ -344,6 +349,20 @@ The user reversed D-PL9-08 and decided D-PL9-18 and D-PL9-19 on 2026-10-27. Thes
 55. **Windows is not detached** (a detached process would open its own console window); `taskkill /T /F` runs at both steps, from `<SystemRoot>\System32` (the env variable read in any case, default `C:\Windows`), with the run's cwd and env, `shell: false`, and an error listener. A taskkill that cannot start leaves the run to the WR-01 deadline.
 56. **A detached npm can outlive a Pi that was killed hard,** until its pipes to Pi break and it exits; its work dir lives under `sources-staging`, and the next run uses a fresh one.
 
+### Quick task 261027-b8d (57-65; total 65)
+
+The user and the parent decided D-PL9-20..22 and the byte-order mark on 2026-10-27. These are the choices that the work made.
+
+57. **How uninstall knows that the step wrote node_modules (D-PL9-22).** The step writes `node_modules/.pi-claude-marketplace` into the work dir's tree before the rename, so the marker moves in with the tree. Uninstall removes only a node_modules that holds the marker as a regular file. Two other rules were rejected. "The work-dir rename is the only writer inside the extension root" is false for a git clone that tracks a vendored node_modules: removing it would delete tracked files and break a plugin that ships no lockfile. A field in the state record needs a schema change, and the rename cannot write it at the same moment as the tree.
+58. **A marker write that fails is ignored.** The tree then moves in without a marker, and uninstall keeps it, so that one plugin keeps WR-03's old behavior. A work dir with no node_modules fails the write in the same way, and the existing "nothing to move" arm then runs.
+59. **A shared folder stays.** Uninstall keeps node_modules while another installed plugin of the scope runs from the same folder: two marketplaces that list one git plugin share its clone. The check reads the state that the uninstall saved, outside the lock, as the clone GC does. Lock discipline for post-commit cleanups belongs to Phase 7.
+60. **The removal moves node_modules into `sources-staging` before it deletes it.** The folder keeps all of its node_modules or none. A failed delete leaves the copy under `sources-staging`, which costs disk only, like a leftover work dir. A failed move is only debug-logged (D-19-01), so that plugin keeps its node_modules. On Windows, a loaded native module can block the move. The removal takes `Pick<PackageInstallOps, "newWorkDirName">`, so by type it can never start a package manager (NFR-5 for uninstall).
+61. **A node_modules written before this change has no marker,** so uninstall keeps it. Only this unreleased branch made such installs.
+62. **The autoupdate cascade shows only the package note.** It does not show the outcome's other `notes`, which a direct `/claude:plugin update` also shows. WRN-02 (Phase 1, sibling branch) owns cascade warnings. When it merges, its shared placement must replace this call, or the package note shows twice.
+63. **The note is sent from `orchestrators/marketplace/update.ts`,** in `refreshOneMarketplace`, after the cascade rows and before the MCP config notices. It is not sent from `update.messaging.ts`, whose functions map outcomes to rows and cannot send a second notification. `update.messaging.ts` is unchanged, which Phase 1 also edits. `update.ts` now imports `surfaceDiscoveryWarnings` from `orchestrators/plugin/shared.ts`. That module is not a ledger, and update.ts already reached it type-only. ARCHITECTURE.md's list of the plugin modules that marketplace code reaches is now incomplete (Phase 11, LCDOC-01).
+64. **Byte-order mark: one mark only.** `shared/bom.ts` `stripBom` is reused (FMBOM-01, T-FMBOM-02). It is the same function as Claude Code's `No`. A file that starts with two marks is still refused as not valid JSON.
+65. **The in-use check compares `resolvedSource` strings exactly.** Two records that reach one folder through different spellings of its path (a symlinked parent, a trailing separator) count as two folders, so uninstalling one of them removes the marked node_modules that the other still uses. Every writer of `resolvedSource` stores the resolved plugin root, so the spellings agree in practice. The clone GC also reads `resolvedSource` as stored, with no realpath.
+
 ### Further files outside the Files line (review fixes)
 
 | File | Reason |
@@ -354,6 +373,9 @@ The user reversed D-PL9-08 and decided D-PL9-18 and D-PL9-19 on 2026-10-27. Thes
 | `extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts` | `grownMoveOutcomes`, `surfacePostCommitWarnings`, `postCommitWarningsOf` (CR-02) |
 | `extensions/pi-claude-marketplace/orchestrators/plugin/dependency-move.ts` | `moveRow`, `withPackageNote` (CR-02) |
 | `test/orchestrators/reconcile/{notify,apply,apply-outcomes}.test.ts`, `test/orchestrators/plugin/dependency-move.test.ts` | Paired tests of those sources (100% direct coverage) |
+| `extensions/pi-claude-marketplace/orchestrators/marketplace/update.ts`, `test/orchestrators/marketplace/update.test.ts` | `surfaceCascadePackageNotes`, the autoupdate cascade's package note, and its paired test (D-PL9-21, quick task 261027-b8d) |
+| `extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts`, `test/orchestrators/plugin/uninstall.test.ts` | `removeUnusedPackages` in the post-commit cleanup and `pluginRoot` on `PrunedMember` and the cleanup bag, with the paired test (D-PL9-22, quick task 261027-b8d) |
+| `extensions/pi-claude-marketplace/domain/package-lockfile.ts`, `test/domain/package-lockfile.test.ts` | One leading byte-order mark stripped before the npm and bun lockfile parse, with the paired test (uncertain choice 46, quick task 261027-b8d) |
 
 ### Further follow-ups (review info items)
 

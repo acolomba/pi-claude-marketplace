@@ -56,6 +56,7 @@ import {
   NODE_PACKAGE_MANAGER_HOST,
   NODE_PACKAGE_MANAGER_SPAWN,
 } from "../../platform/package-manager.ts";
+import { stripBom } from "../../shared/bom.ts";
 import { errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
@@ -248,10 +249,11 @@ async function readBoundedFile(pluginRoot: string, name: string): Promise<Checke
 }
 
 // D-PL9-16: a package.json that does not parse is a note, never a throw.
+// Claude Code strips one byte-order mark before its package.json checks too.
 function parseManifest(bytes: Buffer): Checked<Readonly<Record<string, unknown>>> {
   let manifest: unknown;
   try {
-    manifest = JSON.parse(bytes.toString("utf8"));
+    manifest = JSON.parse(stripBom(bytes.toString("utf8")));
   } catch {
     // JSON.parse throws only a SyntaxError, which this check reports as such.
     return { refusal: "its package.json is not valid JSON" };

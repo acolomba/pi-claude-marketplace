@@ -260,6 +260,12 @@ Confidence: **high** for the table, commands, and timeout (literal constants);
   Divergence license: none needed for the behavior (upstream bounds its
   install too); the mechanism is ours because the launcher is.
 
+### Follow-up decisions (2026-10-27)
+
+- **D-PL9-20 (install-time warning, kept):** A failed, timed-out, or refused package install stays a warning that the install shows with the plugin's row (the D-PL9-14 note). The user kept uncertain choice 2. Pi has no log that the user reads, so this note is the only place where the user learns of the failure until PKGDEP-02's load diagnostic exists.
+- **D-PL9-21 (autoupdate cascade note):** When `marketplace update` with autoupdate on updates a plugin, the plugin's package note shows as it does on `/claude:plugin update`. It is one warning diagnostic for each plugin, after the cascade rows and before the MCP config notices, with the header `Plugin "<name>" updated; 1 declared component has a note.` Only the package note shows there. The other notes of the cascade belong to WRN-02, whose shared placement replaces this call when it lands. No Reason member is added.
+- **D-PL9-22 (uninstall removes the step's node_modules):** An uninstall removes the node_modules that the package step wrote into the plugin's folder, so a later install of the plugin runs the step again (D-PL9-06 skips a folder that has node_modules). This applies to `uninstall`, to each plugin that `uninstall --prune` or `prune` removes, and to `apply`'s uninstall step. The folder must lie inside `<scopeRoot>/pi-claude-marketplace/`, with no symlink on the way (NFR-10). The step marks what it wrote: before it moves node_modules into the folder, it writes the file `.pi-claude-marketplace` into that node_modules. Uninstall removes only a node_modules that holds this file as a regular file, and only when no other installed plugin of the scope runs from the same folder. The removal runs after the state save and is best effort (D-19-01). It first moves node_modules into `sources-staging` and then deletes it there, so the folder keeps all of its node_modules or none. A node_modules that git or the user put there has no marker, so it stays. This closes 09-REVIEW WR-03 and PKGDEP-05.
+
 ### Claude's Discretion
 
 - Module names (`orchestrators/plugin/package-install.ts` suggested), the
@@ -314,6 +320,7 @@ Confidence: **high** for the table, commands, and timeout (literal constants);
 2. **Warning at install time (D-PL9-09).** Upstream only logs at install and
    tells the user at the next load. With no load diagnostic yet, we warn on
    the install row. Alternative: stay silent and build the load diagnostic.
+   Kept by the user: D-PL9-20.
 3. **Path-source plugins are not written (D-PL9-03).** Upstream copies every
    plugin into its cache, so it always installs. We run path-source plugins
    from the user's folder, and NFR-10 forbids writing there; we warn instead.

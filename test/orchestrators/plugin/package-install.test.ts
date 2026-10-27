@@ -114,6 +114,7 @@ const REWRITTEN_LOCKFILE = [
 const MODULE_TEXT = 'module.exports = "pkd-dep loaded";\n';
 const SUCCESS: PackageManagerRun = { code: 0, stdout: "", stderr: "", timedOut: false };
 const MARKETPLACE = "tools";
+const BOM = "\uFEFF";
 // D-PL9-22: the marker's name is the on-disk contract that uninstall reads.
 const MARKER = ".pi-claude-marketplace";
 
@@ -1086,6 +1087,45 @@ describe("createPackagesPhase", () => {
     ]);
     verify(runPackageManager);
   });
+
+  for (const { situation, marks, workDirs, notes } of [
+    {
+      situation: "a package.json and a lockfile that each start with one byte-order mark",
+      marks: BOM,
+      workDirs: [
+        { "package-lock.json": REWRITTEN_LOCKFILE, "package.json": REWRITTEN_PACKAGE_JSON },
+      ],
+      notes: [],
+    },
+    {
+      situation: "a package.json that starts with two byte-order marks",
+      marks: BOM + BOM,
+      workDirs: [],
+      notes: ["Skipped installing this plugin's dependencies: its package.json is not valid JSON."],
+    },
+  ]) {
+    test(`D-PL9-08 / D-PL9-16: handles ${situation} as Claude Code does`, async (t) => {
+      // arrange
+      const seeded = await seedPlugin(t, {
+        "package.json": marks + PACKAGE_JSON,
+        "package-lock.json": BOM + LOCKFILE,
+      });
+      const seen: Array<Record<string, string>> = [];
+      const phase = createPackagesPhase(
+        opsWith(async (request) => {
+          seen.push(await filesIn(request.cwd));
+          return SUCCESS;
+        }),
+      );
+
+      // act
+      await phase.do(seeded.context);
+
+      // assert
+      assert.deepStrictEqual(seen, workDirs);
+      assert.deepStrictEqual(seeded.context.discoveryWarnings, notes);
+    });
+  }
 
   for (const packageJson of ["[]", '"text"', "null"]) {
     test(`refuses a package.json of ${packageJson}, which is not a JSON object, and runs nothing`, async (t) => {

@@ -1017,3 +1017,40 @@ test("lets an error that is not about the lockfile propagate", () => {
     },
   );
 });
+
+const BOM = "\uFEFF";
+
+for (const { lockfileName, input, expected } of [
+  {
+    lockfileName: "package-lock.json",
+    input: (marks: string): LockfileInput => npmInput({ lockfileText: marks + npmLockText() }),
+    expected: npmRewrite(DEPENDENCIES, { [DEP_KEY]: npmEntry() }),
+  },
+  {
+    lockfileName: "npm-shrinkwrap.json",
+    input: (marks: string): LockfileInput =>
+      npmInput({ lockfileName: "npm-shrinkwrap.json", lockfileText: marks + npmLockText() }),
+    expected: npmRewrite(DEPENDENCIES, { [DEP_KEY]: npmEntry() }),
+  },
+  {
+    lockfileName: "bun.lock",
+    input: (marks: string): LockfileInput => bunInput({ lockfileText: marks + bunLockText() }),
+    expected: bunRewrite(DEPENDENCIES, { "pkd-dep": bunPackage() }),
+  },
+]) {
+  test(`D-PL9-08: reads ${lockfileName} text that starts with one byte-order mark as Claude Code does`, () => {
+    // act
+    const check = sanitizeLockfile(input(BOM));
+
+    // assert
+    assert.deepStrictEqual(check, expected);
+  });
+
+  test(`D-PL9-08: refuses ${lockfileName} text that starts with two byte-order marks`, () => {
+    // act
+    const check = sanitizeLockfile(input(BOM + BOM));
+
+    // assert
+    assert.deepStrictEqual(check, { refusal: `its ${lockfileName} is not valid JSON` });
+  });
+}

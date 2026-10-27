@@ -11,10 +11,15 @@
 // names the root package `plugin-dependencies` at 0.0.0, so nothing of the
 // plugin's own package.json reaches npm or bun but its dependency lists.
 //
+// One leading byte-order mark is dropped before a lockfile is parsed, as
+// Claude Code does (D-PL9-08).
+//
 // The module is pure: text and objects in, a rewrite or a refusal out.
 
 import { parse, validRange } from "semver";
 import stripJsonComments from "strip-json-comments";
+
+import { stripBom } from "../shared/bom.ts";
 
 type JsonObject = Readonly<Record<string, unknown>>;
 
@@ -396,7 +401,7 @@ function keptPlatformLists(
 function parsedObject(text: string, lockfileName: string): JsonObject {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(text);
+    parsed = JSON.parse(stripBom(text));
   } catch {
     // JSON.parse throws only a SyntaxError for text it cannot read.
     throw new LockfileRefusal(`its ${lockfileName} is not valid JSON`);
@@ -537,7 +542,8 @@ function sanitizeNpm(input: LockfileInput): SanitizedLockfile {
 
 // bun.lock is JSON with trailing commas. A comment is refused, as Claude Code
 // refuses it.
-function parsedBunLockfile(text: string): JsonObject {
+function parsedBunLockfile(markedText: string): JsonObject {
+  const text = stripBom(markedText);
   if (stripJsonComments(text, { trailingCommas: false }) !== text) {
     throw new LockfileRefusal("its bun.lock is not valid JSON");
   }
