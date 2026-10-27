@@ -114,6 +114,10 @@ Upstream contract checked against the Claude Code **2.1.310** binary (`/home/lin
 - **D-PL8-16: `fromVersion` stays optional on the wire** (D-PL8-10); the pass fills it from the outcome, where it is always present today.
 - **Known limit:** the gate has no timeout. A background git fetch that stalls holds a waiting `/claude:plugin` command for as long as it stalls (`platform/git.ts` sets no timeout); the same fetch run by `marketplace update` in the foreground would stall that command the same way.
 
+- **D-PL8-17 (after code review): a pass that ends early still reports what moved.** When the pass stops on an `InvalidGitHubBaseUrlError` after at least one plugin moved, it still raises the `background-update` notice (unless the runtime stopped); D-PL8-06's "ends the pass silently" holds only when nothing moved (review WR-03).
+- **D-PL8-18 (after code review): a mid-cascade opt-out stops the cascade.** Before each plugin update, after the gate lets the step start, the pass re-reads the marketplace's merged `autoupdate`; if a command turned it off during the yield, the remaining plugins of that marketplace are not updated (review WR-04).
+- **Known limit (review IN-04):** the `session_shutdown` wait for the step in flight (D-PL8-03) has no timeout either, so a stalled background fetch also holds `/reload`, new, resume, and fork until it ends.
+
 ### Claude's Discretion
 
 - Module split, names, and test layout, inside the Files line: the gate, the scheduler, the pass, and the env policy live in new `orchestrators/marketplace/` modules (the gate may be its own module).

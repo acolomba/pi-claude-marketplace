@@ -146,6 +146,8 @@ Apply in both places at merge:
 - `AGENTS.md`: the NFR-5 heading today reads "amended by url-source, by D-03-03, by D-MF-04, and by AAP-D1". Make it "amended by url-source, by D-03-03, by D-MF-04, by AAP-D1, and by D-PL8-01".
 - In both, add this sentence after the AAP-D1 sentence (PROJECT.md: after the D-MF-04 sentence): "The background autoupdate pass runs `marketplace update`'s code for each marketplace with autoupdate on, so it may use the network as that command does, with stored credentials only (D-PL8-01, D-PL8-12)."
 - Phase 9 (PKD-03) also amends NFR-5; merge the two amendments in one heading.
+| D-PL8-17: a background pass that ends early on an invalid GitHub base override still raises the notice for plugins already moved. | No Claude Code position (its pass has no such failure); follows AUP-03. | ✓ Good |
+| D-PL8-18: before each plugin update the pass re-reads the marketplace's `autoupdate`; a mid-cascade `noautoupdate` stops the rest of that marketplace. | No Claude Code position (single-process model); follows the user's opt-out. | ✓ Good |
 
 ## Backlog dispositions
 
@@ -195,6 +197,7 @@ Made while planning and executing:
 19. 08-02: the docs H2 is "Variables that control the background update", not "Variables the extension reads", because the extension reads other variables that section does not list.
 20. 08-03 test readings: the pass's notice case uses two marketplaces in two scopes rather than one plugin in both scopes; the stopped-runtime case stops after the last marketplace.
 21. 08-04: the message step returns at the first read that holds any payload after the message, with every payload of that read. A slow second payload arriving after that read is not seen; the notice is the pass's only emission and comes last.
+- Known limit (review IN-04): the shutdown wait for a background step in flight has no timeout, so a stalled fetch also holds `/reload`, new, resume, and fork. Alternative: a wait cap, after which the next runtime may meet `{lock held}` at load.
 
 ## Artifacts this phase produces
 
