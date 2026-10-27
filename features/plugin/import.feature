@@ -918,8 +918,7 @@ Feature: Plugin import
     Then the result lists these plugins:
       | marketplace name | marketplace scope | marketplace status | id            | name | status | reasons          | scope | cause chain                                                  | cause truncated | leaks      | rollback partial                                                                                            |
       | fixtures         | user              | added              | demo@fixtures | demo | failed | rollback partial | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | demo-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
-    Then the installation record of the user scope holds these plugins:
-      | id | version | enabled |
+    Then the installation record of the user scope holds no plugins
     Then the user scope stages these skills and prompts:
       | kind  | name       |
       | skill | demo-skill |
@@ -993,8 +992,7 @@ Feature: Plugin import
       | marketplace name | marketplace scope | marketplace status | id           | name         | status | reasons           | scope | cause chain                                                  | cause truncated | leaks     | rollback partial                                                                                            |
       | fixtures         | user              | added              | app@fixtures | app          | failed | dependency failed | user  |                                                              |                 |           |                                                                                                             |
       | fixtures         | user              | added              | lib@fixtures | lib@fixtures | failed | rollback partial  | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | lib-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
-    Then the installation record of the user scope holds these plugins:
-      | id | version | enabled |
+    Then the installation record of the user scope holds no plugins
 
   Scenario: Importing two plugins whose shared dependency rollback cannot finish names that dependency once
     Given the marketplace "fixtures" offers these plugins with dependencies:
@@ -1030,5 +1028,4 @@ Feature: Plugin import
       | fixtures         | user              | added              | app@fixtures  | app          | failed | dependency failed | user  |                                                              |                 |           |                                                                                                             |
       | fixtures         | user              | added              | lib@fixtures  | lib@fixtures | failed | rollback partial  | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | lib-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
       | fixtures         | user              | added              | tool@fixtures | tool         | failed | dependency failed | user  |                                                              |                 |           |                                                                                                             |
-    Then the installation record of the user scope holds these plugins:
-      | id | version | enabled |
+    Then the installation record of the user scope holds no plugins

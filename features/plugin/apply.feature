@@ -173,13 +173,13 @@ Feature: Plugin apply
     Given a directory blocks the mcp-adapter.json file of the project scope
     When the user runs "/claude:plugin apply --scope project"
     Then the result has these fields:
-      | kind                | reconcile-applied-cascade      |
-      | severity            | error                          |
-      | needs reload        | false                          |
-      | summary             | A plugin operation has failed. |
-      | tally label         | Reconcile                      |
-      | tally failures      | 1                              |
-      | tally warnings      | 0                              |
+      | kind           | reconcile-applied-cascade      |
+      | severity       | error                          |
+      | needs reload   | false                          |
+      | summary        | A plugin operation has failed. |
+      | tally label    | Reconcile                      |
+      | tally failures | 1                              |
+      | tally warnings | 0                              |
     Then the result lists these plugins:
       | marketplace name | marketplace scope | id            | name | status | reasons          | scope   | cause chain                                                  | cause truncated | leaks      | rollback partial                                                                                            |
       | fixtures         | project           | demo@fixtures | demo | failed | rollback partial | project | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           | demo-skill | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
