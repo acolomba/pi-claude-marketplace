@@ -961,10 +961,11 @@ function effectiveRanges(
  * GV-01: the plugins a member's ranges came from, as Claude Code names them
  * when a plugin directory copy falls outside them. The root gets the caller's
  * requirers (MISS-01). Any other member gets every cascade member that
- * declared a range on it, nearest the requested plugin first, which is the
- * reverse of the closure's post order (D-PL3-08). An installed plugin outside
- * the closure is not named, because D-03-10 keeps its range out of the walk
- * and out of the check (D-PL3-13).
+ * declared a range on it, in reverse install order: the closure's post order
+ * reversed, which is the order Claude Code names them in (D-PL3-08). This is
+ * not the order of distance from the requested plugin. An installed plugin
+ * outside the closure is not named, because D-03-10 keeps its range out of the
+ * walk and out of the check (D-PL3-13).
  */
 function rangeRequirers(
   options: MemberConstraintOptions,
