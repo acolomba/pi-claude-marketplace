@@ -330,7 +330,7 @@ export type DependencyDisableStamp = (
 ) => Promise<void>;
 
 /**
- * WR-C: puts a deferred record's pin back to what `before` recorded, in the
+ * Puts a deferred record's pin back to what `before` recorded, in the
  * scope its failed enable left it, for the plugin named `key`.
  */
 export type DeferredPinRestore = (

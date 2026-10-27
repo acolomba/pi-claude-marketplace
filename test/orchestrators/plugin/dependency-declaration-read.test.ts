@@ -711,6 +711,28 @@ test("D-PL2-23: a record pinned to a commit whose copy lies in its marketplace c
   });
 });
 
+test("D-PL2-23: a pinned copy that is the parent of the plugin clones is not under them", () => {
+  // act
+  const options = installedCopyReadOptions(
+    { resolvedSource: "/mp", resolvedSha: "0123456" },
+    { marketplaceRoot: "/mp", pluginClonesDir: "/mp/clones" },
+  );
+
+  // assert
+  assert.equal(options.ownerRoot, "/mp");
+});
+
+test("D-PL2-23: a pinned copy named with a leading double dot is under the plugin clones", () => {
+  // act
+  const options = installedCopyReadOptions(
+    { resolvedSource: "/clones/..alpha", resolvedSha: "0123456" },
+    { marketplaceRoot: "/mp", pluginClonesDir: "/clones" },
+  );
+
+  // assert
+  assert.equal(options.ownerRoot, "/clones");
+});
+
 test("D-PL2-23: plugin clones nested in the marketplace clone own a pinned copy that lies under them", () => {
   // act
   const options = installedCopyReadOptions(

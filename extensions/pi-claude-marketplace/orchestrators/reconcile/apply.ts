@@ -1627,7 +1627,7 @@ function failedMoveRows(move: PlannedMove, reasons: readonly ContentReason[]): P
  * Runs one step and records its rows and whether it landed. A deferred
  * record's move refreshes its pin and its enable then materializes the new
  * version, so a failed enable is a failed move: its pin goes back to what it
- * was (WR-C), and it reports the move's `(failed)` row. A landed one reports
+ * was, and it reports the move's `(failed)` row. A landed one reports
  * the rows `landedStepRows` gives.
  */
 async function runStep(
@@ -1695,11 +1695,9 @@ async function runStep(
 
   await runScopeIsolated(run.scope, run.sink, async () => {
     if (!landed) {
-      await (opts.restoreDeferredPin ?? restorePin.bind(undefined, opts))(
-        run.scope,
-        pluginKey(move),
-        run.before,
-      );
+      await (
+        opts.restoreDeferredPin ?? ((scope, key, before) => restorePin(opts, scope, key, before))
+      )(run.scope, pluginKey(move), run.before);
     }
 
     if (collect.requested) {
@@ -1742,7 +1740,7 @@ function deferCollection(collect: { requested: boolean }): () => Promise<void> {
 }
 
 /**
- * D-19-01 / WR-2: clone cleanup is hygienic, as the runner's own is
+ * D-19-01: clone cleanup is hygienic, as the runner's own is
  * (`update-preflight.ts::refreshDisabledPluginUpdate`): a failure is traced and
  * a later lifecycle operation retries it.
  */
@@ -1784,7 +1782,7 @@ const PIN_FIELDS: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * WR-C: puts back the pin a deferred record had before its move refreshed it,
+ * Puts back the pin a deferred record had before its move refreshed it,
  * when its enable then failed, so the record keeps naming the version it
  * holds, as a record lifted in the toggle step does.
  */

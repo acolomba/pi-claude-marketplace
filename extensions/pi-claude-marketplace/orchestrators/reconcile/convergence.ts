@@ -1105,7 +1105,7 @@ export async function settleMoveCascade(input: MoveCascadeInput): Promise<MoveCa
 }
 
 /**
- * WR-1 / WR-2: the plan, judged by the rules `apply` judges its result by
+ * The plan, judged by the rules `apply` judges its result by
  * (`judgeFinalScope`), over the scope as the plan and its moves leave it. A
  * planned enable that judgement would hold is dropped, so `apply` does not
  * enable and disable it again, and every other enabled record it
@@ -1149,7 +1149,7 @@ async function judgePlannedScope(
   const held = new Set(holds.map((entry) => entry.dependent));
   const keyOf = (op: { readonly plugin: string; readonly marketplace: string }): string =>
     `${op.plugin}@${op.marketplace}`;
-  // WR-1: every enable the judgement would hold is dropped, a config
+  // Every enable the judgement would hold is dropped, a config
   // enable as well as a lift; the record stays as it is, so it gets no row.
   const pluginsToEnable = plan.pluginsToEnable.filter((op) => !held.has(keyOf(op)));
   const planned = new Set(
@@ -1212,7 +1212,8 @@ async function releaseOnLandedMoves(
 
 /**
  * Whether `pluginRoot` is a per-commit copy under the scope's plugin clones.
- * It is the location test `installedCopyReadOptions` applies, so a fault in
+ * The test is lexical, with no symlink resolution; the read still enforces the
+ * owning root, so a linked path cannot widen it. It is the location test `installedCopyReadOptions` applies, so a fault in
  * the copy's path is never read here as "not a copy"; the read of the copy
  * answers it (D-PL2-25).
  */

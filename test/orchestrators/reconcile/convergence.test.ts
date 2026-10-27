@@ -1620,29 +1620,33 @@ test("D-PL2-12 / D-PL2-25: the installed-copy reader fails closed on a copy unde
   assert.deepStrictEqual(describeFailure(read), WIDGET_UNREADABLE_MANIFEST);
 });
 
-test("D-PL2-25: the installed-copy reader fails closed on a pinned copy whose path cannot be inspected", async (t) => {
-  // arrange
-  const fixture = await createFixture(t, "copy-reader-fault");
-  const locked = path.join(fixture.locations.pluginClonesDir, "widget-copy");
-  await mkdir(path.join(locked, "inner"), { recursive: true });
-  const mp = await stageMarketplace(fixture, "tools", []);
-  await chmod(locked, 0o000);
+test(
+  "D-PL2-25: the installed-copy reader fails closed on a pinned copy whose path cannot be inspected",
+  { skip: process.getuid?.() === 0 },
+  async (t) => {
+    // arrange
+    const fixture = await createFixture(t, "copy-reader-fault");
+    const locked = path.join(fixture.locations.pluginClonesDir, "widget-copy");
+    await mkdir(path.join(locked, "inner"), { recursive: true });
+    const mp = await stageMarketplace(fixture, "tools", []);
+    await chmod(locked, 0o000);
 
-  // act
-  let read;
-  try {
-    read = await installedCopyReader(fixture.locations)(
-      { ...mp, plugins: {} },
-      "widget",
-      pluginRecord(path.join(locked, "inner"), { resolvedSha: "a".repeat(40) }),
-    );
-  } finally {
-    await chmod(locked, 0o755);
-  }
+    // act
+    let read;
+    try {
+      read = await installedCopyReader(fixture.locations)(
+        { ...mp, plugins: {} },
+        "widget",
+        pluginRecord(path.join(locked, "inner"), { resolvedSha: "a".repeat(40) }),
+      );
+    } finally {
+      await chmod(locked, 0o755);
+    }
 
-  // assert
-  assert.deepStrictEqual(describeFailure(read), WIDGET_UNREADABLE_MANIFEST);
-});
+    // assert
+    assert.deepStrictEqual(describeFailure(read), WIDGET_UNREADABLE_MANIFEST);
+  },
+);
 
 test("APPLY1-01 / CR-A: a held-down record with a move of its own waits for its move, released or not", async (t) => {
   // arrange -- `widget` was held down after its own move failed; its catalog
