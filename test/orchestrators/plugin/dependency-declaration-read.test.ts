@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
@@ -677,6 +677,82 @@ test("D-PL2-13: an installed copy whose wrapped manifest is a regular file is re
 
   // assert
   assert.deepStrictEqual(read, dependsOn("wrapped"));
+});
+
+test("WR-03: an installed copy whose wrapped manifest path runs through a regular file reads its bare manifest", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await linkedManifestCopy(testContext);
+  await writeFile(path.join(pluginRoot, ".claude-plugin"), "not a directory\n");
+
+  // act
+  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+
+  // assert
+  assert.deepStrictEqual(read, dependsOn("bare"));
+});
+
+/**
+ * An installed copy whose `.claude-plugin/` directory denies every access, so
+ * a lookup inside it fails with EACCES. The permission comes back before the
+ * tree is removed, in the same hook.
+ */
+async function deniedManifestDirectoryCopy(
+  testContext: TestContext,
+): Promise<{ readonly root: string; readonly pluginRoot: string }> {
+  // A 0o000 directory stays readable for uid 0, so the EACCES never happens.
+  if (typeof process.getuid === "function" && process.getuid() === 0) {
+    throw new Error("a denied directory cannot deny root; run this suite as a non-root user");
+  }
+
+  const root = await mkdtemp(path.join(tmpdir(), "installed-copy-denied-"));
+  const pluginRoot = path.join(root, "plugins", "alpha");
+  const denied = path.join(pluginRoot, ".claude-plugin");
+  testContext.after(async () => {
+    await chmod(denied, 0o755);
+    await rm(root, { recursive: true, force: true, maxRetries: 3 });
+  });
+  await mkdir(denied, { recursive: true });
+  await writeFile(path.join(denied, "plugin.json"), JSON.stringify({ dependencies: ["x@mp"] }));
+  await writeFile(
+    path.join(pluginRoot, "plugin.json"),
+    JSON.stringify({ dependencies: ["bare@mp"] }),
+  );
+  await chmod(denied, 0o000);
+  return { root, pluginRoot };
+}
+
+test("WR-03 / D-05-07: an installed copy whose manifest directory cannot be inspected is the fixed-detail refusal", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await deniedManifestDirectoryCopy(testContext);
+
+  // act
+  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+
+  // assert
+  assert.deepStrictEqual(read, {
+    kind: "unusable",
+    detail: "its own manifest is present but cannot be read",
+    ownManifest: true,
+  });
+});
+
+test("WR-03 / D-05-07: an installed copy whose recorded root cannot be inspected is the fixed-detail refusal", async (testContext) => {
+  // arrange
+  const root = await freshRoot(testContext, "installed-copy-nul-");
+  await mkdir(path.join(root, "plugins"));
+
+  // act
+  const read = await readInstalledCopyDeclaration({
+    pluginRoot: path.join(root, "plugins", "al\0pha"),
+    ownerRoot: root,
+  });
+
+  // assert
+  assert.deepStrictEqual(read, {
+    kind: "unusable",
+    detail: "its own manifest is present but cannot be read",
+    ownManifest: true,
+  });
 });
 
 test("UPD-DEP-D1: a resolved candidate's own manifest answers over its marketplace entry", async () => {

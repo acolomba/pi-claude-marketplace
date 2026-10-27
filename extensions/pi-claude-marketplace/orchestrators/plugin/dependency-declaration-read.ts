@@ -52,7 +52,7 @@ import { toClosureLookupResult } from "../../domain/dependency-closure.ts";
 import { MANIFEST_CANDIDATES } from "../../domain/manifest-path.ts";
 import { parsePluginSource } from "../../domain/source.ts";
 import { isErrnoException } from "../../shared/errors.ts";
-import { assertPathInside } from "../../shared/path-safety.ts";
+import { assertPathInside, PathContainmentError } from "../../shared/path-safety.ts";
 
 import { makePresenceProbe } from "./git-source-probe.ts";
 
@@ -360,15 +360,33 @@ export interface InstalledCopyAbsent {
   readonly kind: "absent";
 }
 
-/** Whether `assertPathInside` admits `child` under `parent`. */
-async function isAdmitted(parent: string, child: string, label: string): Promise<boolean> {
+/** What `assertPathInside` answers for `child` under `parent`. */
+type Containment = "admitted" | "refused" | "unusable";
+
+/**
+ * WR-03: only a containment refusal (a symlink, a traversal, a path outside)
+ * is `refused`. An ENOTDIR from its lstat walk is `admitted`, because the read
+ * itself answers it as absence, and every other fault of the walk (EACCES,
+ * EIO) is `unusable`, so the read fails closed (D-05-07).
+ */
+async function containment(parent: string, child: string, label: string): Promise<Containment> {
   try {
     await assertPathInside(parent, child, label);
-    return true;
-  } catch {
-    return false;
+    return "admitted";
+  } catch (err) {
+    if (err instanceof PathContainmentError) {
+      return "refused";
+    }
+
+    return isErrnoException(err) && err.code === "ENOTDIR" ? "admitted" : "unusable";
   }
 }
+
+/** The read a containment check that did not admit its path answers. */
+const NOT_ADMITTED: Readonly<Record<Exclude<Containment, "admitted">, OwnManifestRead>> = {
+  refused: ABSENT,
+  unusable: UNUSABLE,
+};
 
 /**
  * D-PL2-13 / NFR-10: one manifest candidate of an installed copy, opened only
@@ -384,9 +402,8 @@ async function readContainedCandidate(
   pluginRoot: string,
   absPath: string,
 ): Promise<OwnManifestRead | undefined> {
-  return (await isAdmitted(pluginRoot, absPath, "installed plugin manifest"))
-    ? readManifestCandidate(reader, absPath)
-    : ABSENT;
+  const answer = await containment(pluginRoot, absPath, "installed plugin manifest");
+  return answer === "admitted" ? readManifestCandidate(reader, absPath) : NOT_ADMITTED[answer];
 }
 
 /**
@@ -396,19 +413,22 @@ async function readContainedCandidate(
  * entry to fall back on: a copy with no manifest, a missing copy, a recorded
  * root outside the record's owning clone root (NFR-10, D-PL2-12), or a
  * manifest reached through a symlink (D-PL2-13) answers `absent`, and the
- * caller decides what that means. A present-but-unusable manifest is the same
- * refusal `refuseUnusableOwnManifest` gives.
+ * caller decides what that means. A present-but-unusable manifest, or a copy
+ * whose containment check cannot inspect a path segment, is the same refusal
+ * `refuseUnusableOwnManifest` gives.
  */
 export async function readInstalledCopyDeclaration(
   options: InstalledCopyDeclarationReadOptions,
 ): Promise<DeclarationLookupResult | OwnManifestRefusal | InstalledCopyAbsent> {
   const reader = options.reader ?? REAL_DEPENDENCY_DECLARATION_READER;
   const { pluginRoot } = options;
-  const own = (await isAdmitted(options.ownerRoot, pluginRoot, "installed plugin copy"))
-    ? await readOwnManifest(reader, pluginRoot, (absPath) =>
-        readContainedCandidate(reader, pluginRoot, absPath),
-      )
-    : ABSENT;
+  const copy = await containment(options.ownerRoot, pluginRoot, "installed plugin copy");
+  const own =
+    copy === "admitted"
+      ? await readOwnManifest(reader, pluginRoot, (absPath) =>
+          readContainedCandidate(reader, pluginRoot, absPath),
+        )
+      : NOT_ADMITTED[copy];
   switch (own.kind) {
     case "absent":
       return { kind: "absent" };
