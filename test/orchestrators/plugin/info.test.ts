@@ -66,7 +66,10 @@ import {
 } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { softDepStatus } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
-import { InvalidGitHubBaseUrlError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
+import {
+  InvalidGitHubBaseUrlError,
+  StateLockCompromisedError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import {
   buildInstalledPluginRecord,
   materializeMarketplaceTree,
@@ -10315,6 +10318,61 @@ test("GIT-03: `info --fetch` of an installed git plugin under a held state lock 
     assert.match(notifications[0]!.message, /gplug v1\.0\.0 \(failed\) \{lock held\}/);
   });
 });
+
+for (const { title, installed } of [
+  {
+    title:
+      "GLK-05: `info --fetch` of a not-installed git plugin whose lock is lost fails as lock held",
+    installed: {},
+  },
+  {
+    title:
+      "GLK-05: `info --fetch` of an installed git plugin whose lock is lost fails as lock held",
+    installed: { gplug: { version: "1.0.0" } },
+  },
+]) {
+  test(title, async () => {
+    await withHermeticHome(async ({ home, cwd }) => {
+      // arrange
+      const userRoot = path.join(home, ".pi", "agent");
+      await seedPathMarketplace({
+        scope: "user",
+        scopeRoot: userRoot,
+        cwd,
+        mpName: "mp",
+        manifest: {
+          name: "mp",
+          plugins: [{ name: "gplug", source: "https://example.com/repo", version: "1.0.0" }],
+        },
+        installed,
+      });
+      const locations = locationsFor("user", cwd);
+      const lost = new StateLockCompromisedError("user", locations.stateLockFile);
+      const seam: InfoCloneCacheSeam = {
+        resolvePluginPin: () => Promise.reject(lost),
+        materializePluginClone: () => Promise.reject(lost),
+        materializeOrRefreshPluginMirror: () => Promise.reject(lost),
+      };
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await getPluginInfo({
+        ctx,
+        run,
+        marketplace: "mp",
+        plugin: "gplug",
+        scope: "user",
+        cwd,
+        fetch: true,
+        cloneCacheSeam: seam,
+      });
+
+      // assert
+      assert.equal(notifications.length, 1);
+      assert.match(notifications[0]!.message, /gplug v1\.0\.0 \(failed\) \{lock held\}/);
+    });
+  });
+}
 
 /**
  * GLK-05: a reader that records, before each plugin file read, whether the

@@ -74,6 +74,7 @@ import {
   errorMessage,
   isErrnoException,
   rethrowInvalidGitHubBaseUrl,
+  StateLockCompromisedError,
   StateLockHeldError,
 } from "../../shared/errors.ts";
 import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
@@ -2257,7 +2258,7 @@ async function buildInstalledGitRow(opts: {
     // closed-set reason on the recorded row (D-81-04 parity with the
     // not-installed arm) -- otherwise a failed `--fetch` would render
     // byte-identical to bare info.
-    if (err instanceof StateLockHeldError) {
+    if (err instanceof StateLockHeldError || err instanceof StateLockCompromisedError) {
       return lockHeldRow(pluginName, version);
     }
 
@@ -2627,7 +2628,7 @@ async function buildGitNotInstalledRow(opts: {
     // `components: not resolved` arm with an existing closed-set reason
     // (the host ladder, else the probe-error ladder). The `(remote)` token is
     // the not-installed git surface.
-    if (err instanceof StateLockHeldError) {
+    if (err instanceof StateLockHeldError || err instanceof StateLockCompromisedError) {
       return lockHeldRow(pluginName, version);
     }
 
