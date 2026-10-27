@@ -332,12 +332,12 @@ describe("foldDeclaredConstraint", () => {
       title: "invalid",
       holder: dependency({ name: "target", version: "not-a-valid-range" }),
       expectedCause:
-        'a declared range could not be read (not-a-valid-range) -- required by "alpha@mp"',
+        'a declared range could not be read (\u201cnot-a-valid-range\u201d) -- required by "alpha@mp"',
     },
     {
       title: "too-complex",
       holder: dependency({ name: "target", version: "^1.0.0".repeat(700) }),
-      expectedCause: `the declared ranges are too complex to combine (${"^1.0.0".repeat(700).slice(0, 200)}... (+4000 chars)) -- required by "alpha@mp"`,
+      expectedCause: `the declared ranges are too complex to combine (\u201c${"^1.0.0".repeat(700).slice(0, 64)}…\u201d) -- required by "alpha@mp"`,
     },
   ] as const) {
     test(`UPDT-01 / INR-05: a ${title} declared range holds the update, naming the declared range`, () => {

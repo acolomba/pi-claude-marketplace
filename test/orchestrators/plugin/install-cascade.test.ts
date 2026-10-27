@@ -1364,7 +1364,7 @@ for (const { label, declared, expected } of [
     expected: {
       kind: "range-invalid",
       key: `bar@${MARKETPLACE}`,
-      range: "not-a-range",
+      range: "\u201cnot-a-range\u201d",
       detail: "input 1 of 1 is not a valid version range",
     },
   },
@@ -1441,7 +1441,7 @@ test("T-03-19 a declaration past the input-size cap fails as too complex with no
       failure: {
         kind: "range-too-complex",
         key: `bar@${MARKETPLACE}`,
-        range: `${wide.slice(0, 200)}... (+${(wide.length - 200).toString()} chars)`,
+        range: `${wide.slice(0, 200)}… (+${(wide.length - 200).toString()} chars)`,
         detail: `total input ${wide.length.toString()} characters exceeds the 4096 character cap`,
         unmaterialized: [],
       },
@@ -4408,7 +4408,7 @@ for (const { label, declared, failure, unmaterialized } of [
     failure: {
       kind: "range-invalid",
       key: `shared@${MARKETPLACE}`,
-      range: "not-a-range",
+      range: "\u201cnot-a-range\u201d",
       detail: "input 1 of 1 is not a valid version range",
     },
     unmaterialized: [`left@${MARKETPLACE}`],

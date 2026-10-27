@@ -250,7 +250,18 @@ describe("renderConstraintRange", () => {
     assert.deepStrictEqual({ length: range.length, rendered }, { length: 200, rendered: range });
   });
 
-  test("T-03-08 a range past the rendering bound is truncated and names what it dropped", () => {
+  test("D-PL3-10 a range past the rendering bound is truncated and names what it dropped", () => {
+    // arrange
+    const range = ">=1.0.0 ".repeat(30);
+
+    // act
+    const rendered = renderConstraintRange(range);
+
+    // assert
+    assert.equal(rendered, `${range.slice(0, 200)}… (+40 chars)`);
+  });
+
+  test("D-PL3-10 a text that is not a valid range is quoted and cut to 64 code units", () => {
     // arrange
     const range = "x".repeat(250);
 
@@ -258,7 +269,7 @@ describe("renderConstraintRange", () => {
     const rendered = renderConstraintRange(range);
 
     // assert
-    assert.equal(rendered, `${"x".repeat(200)}... (+50 chars)`);
+    assert.equal(rendered, `\u201c${"x".repeat(64)}…\u201d`);
   });
 
   test("T-03-08 a range widened by intersection is bounded before it can reach a reason", () => {
@@ -278,7 +289,7 @@ describe("renderConstraintRange", () => {
       { widenedLength: widened.length, rendered },
       {
         widenedLength: 238,
-        rendered: `${widened.slice(0, 200)}... (+38 chars)`,
+        rendered: `${widened.slice(0, 200)}… (+38 chars)`,
       },
     );
   });
@@ -370,15 +381,30 @@ describe("renderDeclaredRanges", () => {
     assert.equal(rendered, "1.x || 2.x, <2.5.0");
   });
 
-  test("T-03-08 a join past the rendering bound is truncated once and names what it dropped", () => {
+  test("D-PL3-10 a join past the rendering bound is truncated once and names what it dropped", () => {
     // arrange: four 62-character ranges join to 254 characters.
-    const ranges = Array.from({ length: 4 }, (_, index) => `${String(index)}${"x".repeat(61)}`);
+    const ranges = Array.from(
+      { length: 4 },
+      (_, index) => `^${String(index + 1)}.0.0-${"x".repeat(55)}`,
+    );
 
     // act
     const rendered = renderDeclaredRanges(ranges);
 
     // assert
-    assert.equal(rendered, `${ranges.join(", ").slice(0, 200)}... (+54 chars)`);
+    assert.equal(rendered, `${ranges.join(", ").slice(0, 200)}… (+54 chars)`);
+  });
+
+  test("D-PL3-10 a join is cut before a quoted range the bound would split", () => {
+    // arrange: the fourth quoted range opens inside the first 200 characters.
+    const ranges = Array.from({ length: 4 }, (_, index) => `${String(index)}${"x".repeat(61)}`);
+    const quoted = ranges.map((range) => `\u201c${range}\u201d`).join(", ");
+
+    // act
+    const rendered = renderDeclaredRanges(ranges);
+
+    // assert
+    assert.equal(rendered, `${quoted.slice(0, 198)}… (+64 chars)`);
   });
 });
 

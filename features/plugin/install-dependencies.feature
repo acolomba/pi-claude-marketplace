@@ -145,6 +145,26 @@ Feature: Plugin install dependencies
     Then the project scope has no installed plugins
     Then the "claude-plugins.json" file of the project scope declares no plugins
 
+  Scenario: Installing a plugin whose dependencies ask for long versions that do not overlap shows the ranges cut to 200 characters in the version conflict
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies                                                                          |
+      | app   | 1.0.0   | lib@^1.0.0-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, one, two, three |
+      | one   | 1.0.0   | lib@^2.0.0-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa                  |
+      | two   | 1.0.0   | lib@^3.0.0-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa                  |
+      | three | 1.0.0   | lib@^4.0.0-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa                  |
+      | lib   | 1.2.0   |                                                                                       |
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name        | status | reasons           | scope   | cause chain                                                                                                                                                                                                                                                                                                                      | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools   | app         | failed | dependency failed | project |                                                                                                                                                                                                                                                                                                                                  |                 |       |                  |
+      | tools            | project           | lib@tools   | lib@tools   | failed | version conflict  | project | Dependency "lib@tools" has contradictory version constraints ^1.0.0-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, ^2.0.0-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, ^3.0.0-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa, ^4… (+62 chars) (no version satisfies all 4 declared ranges). | false           |       |                  |
+      | tools            | project           | one@tools   | one@tools   | failed | dependency failed | project |                                                                                                                                                                                                                                                                                                                                  |                 |       |                  |
+      | tools            | project           | three@tools | three@tools | failed | dependency failed | project |                                                                                                                                                                                                                                                                                                                                  |                 |       |                  |
+      | tools            | project           | two@tools   | two@tools   | failed | dependency failed | project |                                                                                                                                                                                                                                                                                                                                  |                 |       |                  |
+    Then the project scope has no installed plugins
+
   Scenario: Installing a plugin whose installed dependency is outside its version constraint moves the dependency first
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

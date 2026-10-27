@@ -37,17 +37,21 @@ const MAX_RANGE_INPUT_CHARS = 4096;
 const MAX_RANGE_CONJUNCTS = 1024;
 
 /**
- * The characters a range keeps when it is rendered into a user-visible reason.
- *
- * Also a PROJECT-OWNED cap. An INTERSECTED range is synthesized text, wider
- * than any single declared input, so it does not inherit the 64-character
- * bound `domain/dependencies.ts` puts on a declared version. Its character
- * SET is inherited -- every conjunct is assembled from inputs that already
- * passed that module's allowlist, plus single spaces and the union operator --
- * but its LENGTH is not, and a maximally-wide cross-product would otherwise
- * flood a line-oriented notification row.
+ * D-PL3-10: the characters Claude Code keeps of a range list, or of one range,
+ * rendered into a refusal. A longer text is cut there, never inside a quoted
+ * range, and ends with `… (+N chars)`.
  */
 const MAX_RENDERED_RANGE_CHARS = 200;
+
+/**
+ * D-PL3-10: the UTF-16 code units Claude Code keeps of a range it quotes
+ * because the range is not a valid printable semver range.
+ */
+const MAX_QUOTED_RANGE_CHARS = 64;
+
+/** The curly quotes Claude Code puts around a range it cannot show as written. */
+const OPEN_QUOTE = "\u201c";
+const CLOSE_QUOTE = "\u201d";
 
 /** The operator separating a range's alternative branches. */
 const UNION = "||";
@@ -277,18 +281,42 @@ export function excludingRange(version: string): string | undefined {
 }
 
 /**
- * Bounds a range for a user-visible reason, marking how much was dropped.
- *
- * An intersected range is synthesized rather than declared, so it carries no
- * declared length bound of its own -- see `MAX_RENDERED_RANGE_CHARS`.
+ * Bounds a text for a refusal as Claude Code bounds a range list (D-PL3-10):
+ * at most `MAX_RENDERED_RANGE_CHARS`, cut before a quoted range the bound
+ * would split, followed by `… (+N chars)` naming what was dropped.
  */
-export function renderConstraintRange(range: string): string {
-  if (range.length <= MAX_RENDERED_RANGE_CHARS) {
+export function boundRenderedText(text: string): string {
+  if (text.length <= MAX_RENDERED_RANGE_CHARS) {
+    return text;
+  }
+
+  const head = text.slice(0, MAX_RENDERED_RANGE_CHARS);
+  const open = head.lastIndexOf(OPEN_QUOTE);
+  const kept = open > head.lastIndexOf(CLOSE_QUOTE) ? head.slice(0, open) : head;
+  return `${kept}… (+${text.length - kept.length} chars)`;
+}
+
+/**
+ * D-PL3-10: one range as Claude Code quotes it in a refusal. A valid
+ * printable semver range shows as written; any other text shows in curly
+ * quotes, its whitespace collapsed and cut to `MAX_QUOTED_RANGE_CHARS`.
+ */
+function quoteRange(range: string): string {
+  if (/^[\x20-\x7e]+$/.test(range) && validRange(range) !== null) {
     return range;
   }
 
-  const dropped = range.length - MAX_RENDERED_RANGE_CHARS;
-  return `${range.slice(0, MAX_RENDERED_RANGE_CHARS)}... (+${dropped} chars)`;
+  const collapsed = range.replace(/\s+/g, " ").trim();
+  return `${OPEN_QUOTE}${truncateForRefusal(collapsed, MAX_QUOTED_RANGE_CHARS)}${CLOSE_QUOTE}`;
+}
+
+/**
+ * Renders one range for a user-visible reason as Claude Code renders it
+ * (D-PL3-10). An intersected range is synthesized rather than declared, so
+ * it carries no declared length bound of its own.
+ */
+export function renderConstraintRange(range: string): string {
+  return boundRenderedText(quoteRange(range));
 }
 
 /**
@@ -320,10 +348,10 @@ export function truncateForRefusal(text: string, limit: number): string {
 }
 
 /**
- * INR-05: a dependency's declared ranges as a cause line shows them, joined
- * with `, ` as Claude Code joins them, so a `||` range keeps its meaning, and
- * bounded once like any other rendered range.
+ * INR-05: a dependency's declared ranges as a cause line shows them, each
+ * quoted as Claude Code quotes it, joined with `, ` as Claude Code joins
+ * them, so a `||` range keeps its meaning, and bounded once (D-PL3-10).
  */
 export function renderDeclaredRanges(ranges: readonly string[]): string {
-  return renderConstraintRange(ranges.join(", "));
+  return boundRenderedText(ranges.map(quoteRange).join(", "));
 }
