@@ -201,7 +201,8 @@ None -- no security-relevant surface outside the plan's `<threat_model>` was int
 | ID | Decision | Rationale |
 |----|----------|-----------|
 | D-PL2-12 (amended) | An installed copy is read only inside the one clone root that owns its record. A record with `resolvedSha` (every git-source record since 0.9.0, and a tag-pinned path-source dependency) owns `plugin-clones/`. A record without it owns the marketplace clone. The other root fails closed. The key is `resolvedSha`, not a source kind, because records carry no source-kind field. The whole `plugin-clones/` is the narrowest root, because a delisted git record no longer has the catalog source its clone key hashes. | NFR-10 as re-anchored by url-source: plugin roots resolve inside their owning clone root. |
-| D-PL2-13 | A manifest candidate inside an installed copy that is a symlink, or sits under one, is refused, and the read answers `absent`. This is stricter than Claude Code, which follows a manifest symlink whose real path stays inside the plugin directory (E5). | Licensed by NFR-10. The project's containment check (`assertPathInside`, D-14) refuses every symlink segment. |
+| D-PL2-13 | A manifest candidate inside an installed copy that is a symlink, or sits under one, is refused, and the read answers `absent`. This is stricter than Claude Code, which follows a manifest symlink whose real path stays inside the plugin directory (E5). Reversed 2026-10-27 by user decision: a manifest link (chained, absolute or relative text, on the manifest or a directory above it) whose resolved target stays inside the record's owning root (D-PL2-12) is followed, and the read opens that resolved target; an escaping link is refused as D-PL2-17. | Licensed by NFR-10. The project's containment check (`assertPathInside`, D-14) refuses every symlink segment. |
+| D-PL2-17 | A manifest link whose resolved target leaves the record's owning root, or that cannot be resolved (a loop), answers `unusable`, the D-05-07 fixed-detail refusal, and ends the candidate walk. The installed-first reader fails closed with no catalog fallback; a delisted record's catalog-first read fails as `unreadable manifest`; convergence's fold is unchanged. A dangling link stays absence, and the copy-root refusal (D-PL2-12) still answers absent. | User decision 2026-10-27. D-05-07: a manifest that exists but cannot be used fails closed. Parity with Claude Code, whose load fails on an escaping manifest (E5 refined). |
 
 ## Backlog dispositions
 
@@ -215,8 +216,10 @@ None -- no security-relevant surface outside the plan's `<threat_model>` was int
    - convergence ignores the copy.
 
    The alternative was to answer `unusable` (the D-05-07 refusal). That would fail the installed-first reader closed instead of falling back to the catalog.
-2. **D-PL2-12 and D-PL2-13 are proven by unit cases only.** See "Proof scope" for the harness reason.
-3. **D-PL2-13 refuses even a symlink that stays inside the plugin.** Claude Code accepts such a link (E5); this read is stricter, as decided.
+
+   Resolved 2026-10-27 by user decision (D-PL2-17): a refused manifest answers `unusable`, and the installed-first reader fails closed.
+2. **D-PL2-12 and D-PL2-13 are proven by unit cases only.** See "Proof scope" for the harness reason. The manifest-link behavior is now covered by two `features/plugin/enable.feature` scenarios, "Enabling a git-source plugin follows a manifest that its installed copy links inside the copy" and "Enabling a git-source plugin whose installed manifest links outside its owning clone root fails as unreadable", whose fixture publishes the link in the plugin repository; D-PL2-12's cross-root refusal stays unit-only.
+3. **D-PL2-13 refuses even a symlink that stays inside the plugin.** Claude Code accepts such a link (E5); this read is stricter, as decided. Resolved 2026-10-27 by user decision: D-PL2-13 is reversed; a link whose resolved target stays inside the owning root is followed.
 
 ## Next Phase Readiness
 

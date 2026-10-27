@@ -59,6 +59,15 @@ Minified names: `bae` = resolveMissingDependencies, `lsn` = installResolvedPlugi
 - **E5 Delisted plugins** (high): not loaded at all (`plugin-not-found`);
   install path checked textually against cache/seed/marketplace-source roots;
   manifest symlinks resolved with realpath and must stay inside the plugin dir.
+  E5 refined 2026-10-27 (same binary): the manifest read lstats each segment of
+  the manifest path below the plugin directory and checks nothing when none is
+  a link. When one is, it realpaths the manifest and compares it against
+  realpath'd boundary roots: the plugin directory for a cached copy, and the
+  plugin and marketplace directories for a plugin loaded in place. Inside, it
+  also checks that the spelled and the resolved path are one file (dev and
+  inode). A link that escapes, or that cannot be resolved, is a containment
+  error that fails the plugin's load; a dangling link (ENOENT or ENOTDIR, with
+  `stat` also missing) is no manifest.
 - **E6 One unreadable plugin.json** (high): that plugin is skipped, the check
   continues for the rest (`Promise.allSettled`), its dependents see it as
   `not-found`; prune and the post-uninstall orphan scan abort for the whole
@@ -225,7 +234,15 @@ Minified names: `bae` = resolveMissingDependencies, `lsn` = installResolvedPlugi
   checks the manifest file itself with `assertPathInside(copyRoot, manifestPath)`,
   so a symlinked `plugin.json` is refused (project's NFR-10 convention). Claude
   Code (E5) follows a manifest symlink whose realpath stays inside the plugin
-  dir; this is stricter, licensed by NFR-10.
+  dir; this is stricter, licensed by NFR-10. **Reversed 2026-10-27 by user
+  decision:** the read follows a manifest link (chained, with absolute or
+  relative text, on the manifest or on a directory above it) whose resolved
+  target stays inside the record's owning root (D-PL2-12), and reads that
+  resolved target. A link that escapes the owning root is refused as D-PL2-17.
+  The boundary is the owning root: for a path-source record it equals Claude
+  Code's in-place boundary (plugin and marketplace directories); for a git
+  record (all of `plugin-clones/`) it is wider than Claude Code's
+  plugin-directory boundary for a cached copy.
 - **D-PL2-14 — A record the plan enables counts as released.** Under the new
   order, a dependent whose dependency the user disabled and the config
   re-enables is judged with that dependency enabled, so `apply` agrees with
@@ -242,14 +259,26 @@ Minified names: `bae` = resolveMissingDependencies, `lsn` = installResolvedPlugi
   (enable-disable.ts:816-821), marker lifts and config enables that depend on a
   MISS-01 install run after it (D-09-07 refresh position), not in the pre-move
   toggle step.
+- **D-PL2-17 — A manifest link that containment refuses is unusable.** (user
+  decision 2026-10-27) A manifest link whose resolved target leaves the owning
+  root, or that cannot be resolved (a loop), answers `unusable`, the D-05-07
+  fixed-detail refusal, not `absent`, and ends the candidate walk. Per caller:
+  the installed-first read (`readInstalledRecordDeclarations`) fails closed
+  with no catalog fallback, so enable and update fail `{unreadable}`; the
+  catalog-first read of a delisted record fails as `unreadable manifest`
+  instead of `not in manifest`, and the scope walk still ends (D-PL2-05);
+  convergence's installed-copy fold is unchanged (every answer but `found`
+  folds to the catalog declarations). A dangling link stays absence. The
+  copy-root refusal (D-PL2-12) still answers absent. This matches Claude Code,
+  whose load fails on an escaping manifest (E5 refined).
 - **Add-time MISS-01 lifts no marker-held dependent** (D-PL2-09 as written).
 - **Files outside the ROADMAP line also touched:** `orchestrators/reconcile/{types,notify}.ts`
   (or wherever pending's projection orders rows) so `pending` prints rows in
   `apply`'s order; `orchestrators/marketplace/add.messaging.ts` row policy for
   `installed` rows if needed.
 
-Uncertain additions: D-PL2-13 (refuse vs follow an inside-root symlink, as
-upstream does); D-PL2-14 (alternative: keep apply's old disagreement).
+Uncertain additions: D-PL2-13 (resolved by user decision 2026-10-27: reversed,
+an inside-root symlink is followed; see D-PL2-17); D-PL2-14 (alternative: keep apply's old disagreement).
 
 ### Claude's Discretion
 
