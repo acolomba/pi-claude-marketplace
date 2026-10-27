@@ -174,6 +174,14 @@ For PROJECT.md Key Decisions. Evidence: Claude Code 2.1.310 binary and docs, 05-
 | D-PL5-26 | `PluginInfoRowBase` gains `marketplaceSubject?: true`, read by `wirePluginInfoRow` and never serialized | `marketplace info` rows lacked the marker | -- |
 | PRUNE-GUARD-MR-01 | Closed as decided by D-PL5-14; no code change | See D-PL5-14 | E-5 |
 
+Added by the PR #285 babysit review:
+
+| ID | Decision | Rationale | Evidence |
+| -- | -------- | --------- | -------- |
+| D-PL5-34 | `ResolveContext.marketplaceSource` is required, so every resolver call site (completions, `pending`, `fetch`, the MCP migration, `info`, `list`, install, update) refuses a hosted catalog's relative entries the same way | D-PL5-32 held only where a caller remembered the optional field; completions and `pending` diverged from `list` | review finding |
+| D-PL5-35 | A git or url `marketplace update` refused for its catalog name reports `Failed to update marketplace` with no retry hint, not "clone advanced ... Retry the command" | A retry cannot help a refused name | review finding |
+| D-PL5-36 | `fetchHostedManifest` refuses a non-https start URL itself, as `unreadable`, before any request | Defense in depth behind the D-PL5-04 funnel | review finding |
+
 ### Proposed NFR-5 amendment text (D-PL5-08 + D-PL5-20)
 
 For the network-policy line in AGENTS.md and PROJECT.md, after the D-MF-04 sentence:
@@ -248,12 +256,16 @@ Planning-time and execution choices:
 19. This plan: a staging-cleanup leak after a successful hosted swap does not fail the refresh (the catalog is in place and the leftover directory is empty). A refresh does not check that the downloaded catalog still declares the record's name, as a git refresh does not; a rename to a reserved name on refresh is MKTNAME-01.
 20. The orchestrator's `d134cb49` raised the stored-source read budget in remove.test.ts for 05-03's hosted arm; this plan raised the same case's count from 14 to 15 for the remove narrowing.
 
+21. Babysit: a hosted URL's `#fragment` is dropped from the request and from `info`, but stays in `claude-plugins.json` as the user typed it (a new scenario pins this).
+22. Babysit merge: Phase 6's test "D-PL6-19: a save that fails after the swap removes the new clone" now expects `unreadable`, not `unparseable`, for an EISDIR on the state rename, following D-PL5-18.
+23. Babysit merge: three `install-dependencies.feature` scenarios that add `anthropic-plugin-directory` as a dir source now publish it from the `anthropics` organization (D-PL5-23), since the name is reserved otherwise.
+
 ## Notes for the codebase map
 
 - The `fetch-chokepoint` rule admits two files: `domain/github-auth.ts` and `platform/hosted-manifest-fetch.ts`.
 - `NETWORK_SEAMS` in `eslint.config.js` has 18 entries (adds `orchestrators/marketplace/hosted-catalog.ts`).
 - New modules: `orchestrators/marketplace/hosted-catalog.ts` and `platform/hosted-manifest-fetch.ts`.
-- The repo-wide `fallow-ignore` marker count is 42 (05-07 added one `unused-class-member` for `HostedManifestHttpError.code`).
+- The repo-wide `fallow-ignore` marker count is back to 41: the babysit removed 05-07's `unused-class-member` marker, since `HostedManifestHttpError` now `implements HttpStatusError`.
 - `ParsedSource` has a `hosted` kind; `HostedManifestSource { kind, raw, url }`.
 
 ## Known Stubs
