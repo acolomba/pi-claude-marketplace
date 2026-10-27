@@ -57,6 +57,7 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
+import { seedMarketplaceRecord } from "./marketplace-seed.ts";
 import { materializeCommitCopyWith } from "./mirror-checkout.ts";
 import { retryTree } from "./scope-tree-inventory.ts";
 import {
@@ -931,19 +932,13 @@ test("PDEF-01: reinstall preview detects an agent conflict from a later resolved
       // D-18-17: the dependency walk reads every recorded plugin of the scope,
       // so `world` needs a marketplace that declares it; without one the
       // reinstall fails as unreadable before it reaches the conflict.
-      const otherRoot = path.join(cwd, "other-mp");
-      await writePluginTree(path.join(otherRoot, "plugins", "world"), "world", {});
-      const otherManifestPath = await writeManifest(otherRoot, "other-mp", { world: "1.0.0" });
       const state = await loadState(locations.extensionRoot);
       const installed = state.marketplaces.mp?.plugins.hello;
       assert.ok(installed !== undefined);
-      state.marketplaces["other-mp"] = {
-        name: "other-mp",
+      state.marketplaces["other-mp"] = await seedMarketplaceRecord({
+        cwd,
+        marketplace: "other-mp",
         scope: "project",
-        source: pathSource("./other-mp"),
-        addedFromCwd: cwd,
-        manifestPath: otherManifestPath,
-        marketplaceRoot: otherRoot,
         plugins: {
           world: {
             ...installed,
@@ -953,7 +948,7 @@ test("PDEF-01: reinstall preview detects an agent conflict from a later resolved
             },
           },
         },
-      };
+      });
       await saveState(locations.extensionRoot, state);
       const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
 

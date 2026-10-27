@@ -92,6 +92,7 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded, runWithSoftDeps } from "../../shared/notification-run-seeds.ts";
 
+import { seedMarketplaceRecord } from "./marketplace-seed.ts";
 import { materializeCommitCopyWith } from "./mirror-checkout.ts";
 import { retryTree } from "./scope-tree-inventory.ts";
 
@@ -507,51 +508,6 @@ async function writeWorkflowScripts(
 }
 
 /**
- * PI-6 fixture: a SECOND marketplace whose installed plugin already owns one
- * of the generated names the plugin under test would produce, so the
- * cross-plugin conflict guard has something to collide with.
- */
-function conflictingMarketplaceRecord(
-  cp: {
-    marketplace: string;
-    plugin: string;
-    skillName?: string;
-    commandName?: string;
-    agentName?: string;
-  },
-  scope: "user" | "project",
-  cwd: string,
-): ExtensionState["marketplaces"][string] {
-  return {
-    name: cp.marketplace,
-    scope,
-    source: pathSource("./other-mp"),
-    addedFromCwd: cwd,
-    manifestPath: path.join(cwd, "other-mp.json"),
-    marketplaceRoot: path.join(cwd, "other-mp"),
-    plugins: {
-      [cp.plugin]: {
-        version: "0.0.1",
-        resolvedSource: "/dev/null",
-        compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
-        resources: {
-          skills: cp.skillName === undefined ? [] : [cp.skillName],
-          prompts: cp.commandName === undefined ? [] : [cp.commandName],
-          agents: cp.agentName === undefined ? [] : [cp.agentName],
-          mcpServers: [],
-          hooks: [],
-          workflows: [],
-        },
-        enabled: true,
-        provenance: "explicit",
-        installedAt: "2026-01-01T00:00:00.000Z",
-        updatedAt: "2026-01-01T00:00:00.000Z",
-      },
-    },
-  };
-}
-
-/**
  * The one dependency element every declaring fixture carries, on both the
  * plugin's own manifest and its marketplace entry. It names `some-other-plugin`
  * in the declaring marketplace unless the case addresses another one -- the
@@ -900,11 +856,31 @@ async function seedPathMarketplaceWithPlugin(opts: {
   };
 
   if (opts.conflictingPriorPlugin !== undefined) {
-    state.marketplaces[opts.conflictingPriorPlugin.marketplace] = conflictingMarketplaceRecord(
-      opts.conflictingPriorPlugin,
-      scope,
+    const conflict = opts.conflictingPriorPlugin;
+    state.marketplaces[conflict.marketplace] = await seedMarketplaceRecord({
       cwd,
-    );
+      marketplace: conflict.marketplace,
+      scope,
+      plugins: {
+        [conflict.plugin]: {
+          version: "0.0.1",
+          resolvedSource: "/dev/null",
+          compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+          resources: {
+            skills: conflict.skillName === undefined ? [] : [conflict.skillName],
+            prompts: conflict.commandName === undefined ? [] : [conflict.commandName],
+            agents: conflict.agentName === undefined ? [] : [conflict.agentName],
+            mcpServers: [],
+            hooks: [],
+            workflows: [],
+          },
+          enabled: true,
+          provenance: "explicit",
+          installedAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      },
+    });
   }
 
   await saveState(locations.extensionRoot, state);
