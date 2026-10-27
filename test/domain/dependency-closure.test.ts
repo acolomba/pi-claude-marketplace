@@ -121,6 +121,112 @@ for (const { label, rootKey } of [
   });
 }
 
+const NO_INSTALL_POLICY_EXEMPTIONS = {
+  allowedMarketplaces: new Set<string>(),
+  recordedKeys: new Set<string>(),
+};
+
+for (const { label, rootKey, invalidPart } of [
+  { label: "plugin name", rootKey: "_x@mp", invalidPart: "plugin" },
+  { label: "marketplace name", rootKey: "x@_mp", invalidPart: "marketplace" },
+  { label: "plugin and marketplace names", rootKey: "_x@_mp", invalidPart: "both" },
+] as const) {
+  test(`CAS-02 / D-PL3-14 an install of a listed root whose id breaks the token rule in its ${label} is refused as an invalid id`, async () => {
+    // arrange
+    const { lookup, asked } = catalog({ [rootKey]: [{ name: "dep" }] });
+
+    // act
+    const resolved = await resolveDependencyClosure({
+      rootKey,
+      lookup,
+      installedKeys: new Set(),
+      knownMarketplaces: new Set(["mp", "_mp"]),
+      installPolicy: NO_INSTALL_POLICY_EXEMPTIONS,
+    });
+
+    // assert
+    assert.deepStrictEqual(resolved, {
+      ok: false,
+      reason: "invalid-root-id",
+      key: rootKey,
+      invalidPart,
+    });
+    assert.deepStrictEqual(asked, [rootKey]);
+  });
+}
+
+test("CAS-02 / D-PL3-04 an install of a listed root with an invalid id is refused even when its declaration is unusable", async () => {
+  // arrange
+  const asked: string[] = [];
+  const lookup: ClosureLookup = (subject) => {
+    asked.push(subject.key);
+    return Promise.resolve({ kind: "unusable", detail: "dependencies: expected an array" });
+  };
+
+  // act
+  const resolved = await resolveDependencyClosure({
+    rootKey: "_x@mp",
+    lookup,
+    installedKeys: new Set(),
+    knownMarketplaces: new Set(["mp"]),
+    installPolicy: NO_INSTALL_POLICY_EXEMPTIONS,
+  });
+
+  // assert
+  assert.deepStrictEqual(resolved, {
+    ok: false,
+    reason: "invalid-root-id",
+    key: "_x@mp",
+    invalidPart: "plugin",
+  });
+  assert.deepStrictEqual(asked, ["_x@mp"]);
+});
+
+test("CAS-02 / D-PL3-04 an install of an unlisted root with an invalid id resolves to itself alone, leaving the miss to the caller", async () => {
+  // arrange
+  const { lookup, asked } = catalog({});
+
+  // act
+  const resolved = await resolveDependencyClosure({
+    rootKey: "_x@mp",
+    lookup,
+    installedKeys: new Set(),
+    knownMarketplaces: new Set(["mp"]),
+    installPolicy: NO_INSTALL_POLICY_EXEMPTIONS,
+  });
+
+  // assert
+  assert.deepStrictEqual(resolved, {
+    ok: true,
+    closure: [{ key: "_x@mp", name: "_x", marketplace: "mp", requiredBy: undefined, ranges: [] }],
+    alreadyInstalled: [],
+  });
+  assert.deepStrictEqual(asked, ["_x@mp"]);
+});
+
+test("CAS-02 an install of a root key with no marketplace resolves nothing and is never looked up", async () => {
+  // arrange
+  const { lookup, asked } = catalog({});
+
+  // act
+  const resolved = await resolveDependencyClosure({
+    rootKey: "foo",
+    lookup,
+    installedKeys: new Set(),
+    knownMarketplaces: new Set(["mp"]),
+    installPolicy: NO_INSTALL_POLICY_EXEMPTIONS,
+  });
+
+  // assert
+  assert.deepStrictEqual(resolved, {
+    ok: false,
+    reason: "unusable-declaration",
+    key: "foo",
+    detail: "root: expected <plugin>@<marketplace>",
+  });
+  assert.deepStrictEqual(asked, []);
+});
+
 test("RESV-04 a root that declares itself reports a chain beginning and ending at it", async () => {
   // arrange
   const { lookup } = catalog({ "foo@mp": [{ name: "foo" }] });

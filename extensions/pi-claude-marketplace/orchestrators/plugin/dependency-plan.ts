@@ -112,7 +112,8 @@ export function plannedRangeVersion(candidate: PlannedCandidate): string {
 
 /** One move's verdict, over the candidate type the ports carry. */
 export type PlanJudgement<P extends PlannedCandidate> =
-  { readonly ok: true; readonly prepared: P } | { readonly ok: false; readonly cause: string };
+  | { readonly ok: true; readonly prepared: P }
+  | { readonly ok: false; readonly cause: string; readonly updateBlocked?: true };
 
 /**
  * The operations the plan composes. `P` is the move candidate the judge
@@ -177,7 +178,7 @@ interface Choice<P extends PlannedCandidate> {
 type Refusal = Extract<DependencyPlan, { readonly ok: false }>;
 
 /** RESV-05's subject for a recorded dependency that cannot move into its range. */
-function unmovable(request: DependencyMoveRequest, cause: string): Refusal {
+function unmovable(request: DependencyMoveRequest, cause: string, updateBlocked?: true): Refusal {
   return {
     ok: false,
     subject: {
@@ -191,6 +192,8 @@ function unmovable(request: DependencyMoveRequest, cause: string): Refusal {
         // D-PL4-07 / T-55-02-02: the swap's failed-move row shows only the
         // basename, so the plan's refusal of the same failure reads the same.
         moveRefusal: redactAbsolutePaths(cause),
+        declaredBy: request.requesters.map((requester) => requester.key),
+        ...(updateBlocked && { updateBlocked }),
       },
     },
   };
@@ -289,7 +292,9 @@ async function chooseMoves<P extends PlannedCandidate>(
     const judged = await judge(search, request);
     if (!judged.ok) {
       return {
-        refusal: search.ruledOutBy.get(request.key) ?? unmovable(request, judged.cause),
+        refusal:
+          search.ruledOutBy.get(request.key) ??
+          unmovable(request, judged.cause, judged.updateBlocked),
         involved: request.requesters.map((requester) => requester.key),
       };
     }
