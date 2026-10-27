@@ -3569,7 +3569,7 @@ test("a bare update keeps a failed marketplace registered and refreshes every la
             plugins: [
               {
                 name: "zeta",
-                id: "zeta@zeta",
+                id: "zeta",
                 scope: "project",
                 status: "failed",
                 reasons: ["invalid manifest"],

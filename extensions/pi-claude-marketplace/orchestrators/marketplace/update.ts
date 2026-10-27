@@ -765,6 +765,8 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
       name,
       reasons: refreshFailureReasons(err),
       cause: err as Error,
+      // D-PL5-12: the row stands for the marketplace; its JSON id is the name.
+      marketplaceSubject: true,
       // D-03/D-06: a marketplace-refresh failure -> error, no reload.
       severity: "error",
       needsReload: false,

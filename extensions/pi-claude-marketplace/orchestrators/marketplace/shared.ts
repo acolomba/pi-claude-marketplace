@@ -1004,7 +1004,8 @@ export function recordedManifestPath(record: ExtensionState["marketplaces"][stri
  * The rows of a marketplace-level failure that has a cause: a `(failed)`
  * marketplace header with one failed child of the same name. A marketplace
  * header carries no cause (SNM-10), so the child carries the reason and the
- * cause line.
+ * cause line. The child stands for the marketplace, so its JSON id is the
+ * marketplace name alone (D-PL5-12).
  */
 export function marketplaceFailureRows(
   name: string,
@@ -1024,6 +1025,7 @@ export function marketplaceFailureRows(
           name,
           reasons: [reason],
           cause,
+          marketplaceSubject: true,
           severity: "error",
           needsReload: false,
         },

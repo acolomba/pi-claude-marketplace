@@ -123,10 +123,10 @@ Feature: Marketplace update
       | cascade | info     | false        |                              | Marketplace update | 0              | 0              | 1                   |
       | cascade | info     | false        |                              | Marketplace update | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id        | name | status | reasons          | scope   | leaks | rollback partial | cause chain   | cause truncated |
-      | zeta             | project           | failed             |                     | zeta@zeta | zeta | failed | invalid manifest | project |       |                  | <cause chain> | false           |
-      | alpha            | project           | skipped            | up-to-date          |           |      |        |                  |         |       |                  |               |                 |
-      | beta             | user              | skipped            | up-to-date          |           |      |        |                  |         |       |                  |               |                 |
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id   | name | status | reasons          | scope   | leaks | rollback partial | cause chain   | cause truncated |
+      | zeta             | project           | failed             |                     | zeta | zeta | failed | invalid manifest | project |       |                  | <cause chain> | false           |
+      | alpha            | project           | skipped            | up-to-date          |      |      |        |                  |         |       |                  |               |                 |
+      | beta             | user              | skipped            | up-to-date          |      |      |        |                  |         |       |                  |               |                 |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source                    |
       | zeta  | <source>                  |
@@ -924,8 +924,8 @@ Feature: Marketplace update
       | tally failures | 2                            |
       | tally warnings | 0                            |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons          | scope   | leaks | rollback partial | cause chain   | cause truncated |
-      | tools            | <scope>           | failed             | tools@tools | tools | failed | <reason>         | <scope> |       |                  | <cause chain> | false           |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons  | scope   | leaks | rollback partial | cause chain   | cause truncated |
+      | tools            | <scope>           | failed             | tools | tools | failed | <reason> | <scope> |       |                  | <cause chain> | false           |
     Then the "claude-plugins.json" file of the <scope> scope declares these marketplaces:
       | name  | source   | autoupdate |
       | tools | <source> | true       |
@@ -1000,8 +1000,8 @@ Feature: Marketplace update
       | tally failures | 2                            |
       | tally warnings | 0                            |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons        | scope   | leaks | rollback partial | cause chain                                                                                                                                | cause truncated |
-      | tools            | project           | failed             | tools@tools | tools | failed | source missing | project |       |                  | Failed to update marketplace "tools"., ENOENT: no such file or directory, open '{home}/marketplaces/tools/.claude-plugin/marketplace.json' | false           |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons        | scope   | leaks | rollback partial | cause chain                                                                                                                                | cause truncated |
+      | tools            | project           | failed             | tools | tools | failed | source missing | project |       |                  | Failed to update marketplace "tools"., ENOENT: no such file or directory, open '{home}/marketplaces/tools/.claude-plugin/marketplace.json' | false           |
     Then the "claude-plugins.json" file of the project scope declares these marketplaces:
       | name  | source                    |
       | tools | {home}/marketplaces/tools |

@@ -2350,7 +2350,7 @@ for (const { code, expected } of [
   });
 }
 
-test("marketplaceFailureRows puts the reason and the cause on one failed child of the failed header", () => {
+test("marketplaceFailureRows puts the reason and the cause on one failed marketplace-subject child of the failed header", () => {
   // arrange
   const cause = new Error("lock is held");
 
@@ -2370,6 +2370,7 @@ test("marketplaceFailureRows puts the reason and the cause on one failed child o
           name: "tools",
           reasons: ["lock held"],
           cause,
+          marketplaceSubject: true,
           severity: "error",
           needsReload: false,
         },

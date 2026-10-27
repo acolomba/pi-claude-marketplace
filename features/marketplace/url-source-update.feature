@@ -15,8 +15,8 @@ Feature: Marketplace url source update
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id          | name  | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                  | cause truncated |
-      | tools            | project           | failed             | tools@tools | tools | failed | network error | project |       |                  | <status> on https://{git host}/acme/tools.git, HTTP Error: <status> <phrase> | false           |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                  | cause truncated |
+      | tools            | project           | failed             | tools | tools | failed | network error | project |       |                  | <status> on https://{git host}/acme/tools.git, HTTP Error: <status> <phrase> | false           |
     Then the git host receives these requests:
       | method | path                                              | status   |
       | GET    | /acme/tools.git/info/refs?service=git-upload-pack | <status> |
@@ -40,6 +40,6 @@ Feature: Marketplace url source update
       | cascade | error    | false        | Some operations have failed. | Marketplace update | 2              | 0              |                     |
       | cascade | info     | false        |                              | Marketplace update | 0              | 0              | 1                   |
     Then the results list these marketplaces and plugins:
-      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id          | name  | status | reasons             | scope   | leaks | rollback partial | cause chain                                           | cause truncated |
-      | tools            | project           | failed             |                     | tools@tools | tools | failed | network unreachable | project |       |                  | Failed to update marketplace "tools"., socket hang up | false           |
-      | extras           | project           | skipped            | up-to-date          |             |       |        |                     |         |       |                  |                                                       |                 |
+      | marketplace name | marketplace scope | marketplace status | marketplace reasons | id    | name  | status | reasons             | scope   | leaks | rollback partial | cause chain                                           | cause truncated |
+      | tools            | project           | failed             |                     | tools | tools | failed | network unreachable | project |       |                  | Failed to update marketplace "tools"., socket hang up | false           |
+      | extras           | project           | skipped            | up-to-date          |       |       |        |                     |         |       |                  |                                                       |                 |
