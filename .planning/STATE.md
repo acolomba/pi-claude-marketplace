@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 8
 current_phase_name: Background Autoupdate
 status: executing
-stopped_at: "Phase 29 complete; next: milestone audit (`/gsd-audit-milestone`)"
-last_updated: "2026-10-27T03:05:27.810Z"
+stopped_at: Completed 08-02-PLAN.md
+last_updated: "2026-10-27T03:22:51.731Z"
 last_activity: 2026-10-26
-last_activity_desc: Milestone plugin-lifecycle started
-state_head: 1f9e443595b9e34bea13aec4535b2e262ce8e753
+last_activity_desc: Phase 8 execution started
+state_head: 91237066d1b23f20fba5ce2b728b27f0c779ad25
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 4
-  completed_plans: 0
+  completed_plans: 1
   percent: 0
 ---
 
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-10-22 at the lifecycle-coverage start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 30 — Autoapply Setting
+**Current focus:** Phase 8 — Background Autoupdate
 
 ## Current Position
 
-Phase: 8 (Background Autoupdate) — READY TO EXECUTE
-Plan: —
+Phase: 8 (Background Autoupdate) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-10-26 — Milestone plugin-lifecycle started
+Last activity: 2026-10-26 — Phase 8 execution started
 
 
 ### mcp-4 closeout
@@ -191,8 +191,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-25T12:00:00.000Z
-**Stopped at:** Phase 29 complete; next: milestone audit (`/gsd-audit-milestone`)
+**Last session:** 2026-10-27T03:22:51.589Z
+**Stopped at:** Completed 08-02-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -404,6 +404,7 @@ archived milestone artifacts.
 | Phase 29 P12 | 70 min | 3 tasks | 34 files |
 | Phase 29 P13 | 48 min | 3 tasks | 44 files |
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
+| Phase 08 P02 | 14 min | 2 tasks | 3 files |
 
 ## Decisions
 
@@ -603,6 +604,7 @@ archived milestone artifacts.
 - [Phase 29]: The cascade failure classifier reads the errno a BridgeStagingError carries on its cause, so an unreadable plugin source is permission denied (also in the autoupdate cascade)
 - [Phase 29]: apply runs growth-only moves through convergePlugin with rematerialize (skipSameRevision off, overwrite off) and reports them with the plugin-backfilled row; the load-time backfill, its stamp gate and EXTENSION_VERSION are deleted, lastReconciledExtensionVersion stays readable and nothing writes it (D-10, D-13, D-25)
 - [Phase 29]: README.md's dependents sentence says apply reinstalls an uninstalled dependency a dependent still declares and disables the dependents only if that install fails; the APL-D1 and APL-D2 rows record the read-only load and the NFR-2 amendment
+- [Phase 08]: The env-vars section is titled 'Variables that control the background update', not 'Variables the extension reads', because the extension reads other variables the section does not list
 
 ### mcp-4 decisions
 
