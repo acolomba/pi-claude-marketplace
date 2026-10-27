@@ -230,6 +230,11 @@ Minified names: `bae` = resolveMissingDependencies, `lsn` = installResolvedPlugi
   and a tag-pinned path-source dependency, clone-cache.ts:887-937) owns
   `plugin-clones/` (its own clone-key directory); a record without it owns the
   marketplace clone. One root per record; the other root fails closed.
+  **Amended 2026-10-27 (user decision):** a recorded copy root outside its
+  owning root answers `unusable` (the D-05-07 refusal), not absent. Per
+  caller: the delisted read fails `unreadable manifest`; the enable closure
+  and the update preflight fail `{unreadable}` with no catalog read;
+  convergence fails closed (D-PL2-25). A missing copy is still absent.
 - **D-PL2-13 — Installed-copy manifest symlinks.** The installed-copy read also
   checks the manifest file itself with `assertPathInside(copyRoot, manifestPath)`,
   so a symlinked `plugin.json` is refused (project's NFR-10 convention). Claude
@@ -270,7 +275,58 @@ Minified names: `bae` = resolveMissingDependencies, `lsn` = installResolvedPlugi
   convergence's installed-copy fold is unchanged (every answer but `found`
   folds to the catalog declarations). A dangling link stays absence. The
   copy-root refusal (D-PL2-12) still answers absent. This matches Claude Code,
-  whose load fails on an escaping manifest (E5 refined).
+  whose load fails on an escaping manifest (E5 refined). **Amended 2026-10-27
+  (user decision):** the boundary is Claude Code's, not the owning root: the
+  plugin directory for a copy (a record or a source with a resolved or pinned
+  commit: every git source and a tag-pinned path dependency), and the plugin
+  directory plus its marketplace directory for a path plugin read in place.
+  The installed-copy read uses it too, so a git record's link into another
+  part of `plugin-clones/` is refused. The copy-root check (D-PL2-12) keeps
+  the owning root. Claude Code copies a path plugin of a git-hosted
+  marketplace into its cache, so its boundary there is the plugin directory;
+  this extension reads such a plugin in place, with the wider in-place
+  boundary.
+- **D-PL2-24 — Install-time manifest reads use the same containment.** (user
+  decision 2026-10-27) One helper, `domain/manifest-containment.ts`
+  (`locateManifestCandidate`), locates every plugin manifest candidate inside
+  the D-PL2-17 boundary for the readers on the install, update and reinstall
+  paths, each keeping its own outcome type:
+  - the resolver's `readManifest`: an escaping link is the structural
+    `unavailable` arm with the fixed note "plugin manifest resolves outside the
+    <boundary>", which install, `list` and `info` report as `{unreadable
+    manifest}`; an unresolvable link (a loop) rethrows its errno, the
+    resolver's unreadable-manifest outcome;
+  - `readDeclaredPluginVersion` (and the GV-01 directory pin through it):
+    escaping or unresolvable declares no version (`undefined`);
+  - `readDependencyDeclaration`, `readCandidateDeclaration` and
+    `readInstalledCopyDeclaration`: escaping or unresolvable is `unusable`
+    (D-05-07), which each caller handles by its own rule.
+
+  A dangling link, or one whose target runs through a regular file, is no
+  manifest, and the walk reads the next candidate. `marketplace.json` reads are
+  unchanged: Claude Code reads that file with no containment check. `info`'s
+  own dependency walk is unchanged too: it is read-only and outside the decided
+  scope (follow-up T-a3r-07). Upstream (2.1.310): the plugin load contains the
+  manifest read and fails the plugin on an escape, while the install-time
+  version read passes no boundary. This extension refuses at install because
+  install is where it writes the Pi artifacts, so it is its load. Scenarios:
+  "Installing a git-source plugin whose manifest links outside its plugin
+  directory refuses it and installs nothing" (`git-source.feature`) and
+  "Installing a plugin whose manifest links outside its marketplace refuses it
+  and installs nothing" (`install.feature`).
+- **D-PL2-25 — Convergence fails closed on a refused installed copy.** (user
+  decision 2026-10-27) Convergence's installed-copy read no longer folds
+  `unusable` into "no copy declarations". `judgeFinalScope` ends with the
+  record's failure arm (D-PL2-05), so `apply`'s final judgement disables
+  nothing and the planned judgement leaves the plan as it was.
+  `planConvergenceCascade` plans no catalog move in that scope and carries the
+  failure (`installedCopyFailure`). `apply` reports the declarer once with the
+  REC-05 `plugin-declarer-unreadable` row: `(failed)` at warning severity,
+  `{unreadable manifest}`, cause "cannot read the dependencies of <key>: its
+  own manifest is present but cannot be read". The load verdict and the read
+  pass stay catalog-first (D-PL2-06), so `pending` and the load list no move
+  for that scope and print no row naming the record yet; quick 261027-9oo adds
+  that row.
 - **Add-time MISS-01 lifts no marker-held dependent** (D-PL2-09 as written).
 - **Files outside the ROADMAP line also touched:** `orchestrators/reconcile/{types,notify}.ts`
   (or wherever pending's projection orders rows) so `pending` prints rows in
