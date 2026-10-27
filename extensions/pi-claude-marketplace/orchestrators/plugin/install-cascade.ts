@@ -812,7 +812,7 @@ function toMemberConstraintOutcome(
   declared: string,
   probed:
     | { readonly kind: "pinned"; readonly oid: string; readonly version: string }
-    | { readonly kind: "no-matching-tag"; readonly range: string }
+    | { readonly kind: "no-matching-tag" }
     | {
         readonly kind: "tag-listing-failed";
         readonly classification: DependencyTagListingFailureReason;

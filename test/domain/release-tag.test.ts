@@ -45,7 +45,7 @@ describe("selectHighestSatisfyingTag", () => {
     );
 
     // assert
-    assert.deepStrictEqual(selected, { kind: "no-matching-tag", range: "*" });
+    assert.deepStrictEqual(selected, { kind: "no-matching-tag" });
   });
 
   test("a candidate whose remainder after the prefix is not valid semver is skipped, not an error", () => {
@@ -97,12 +97,12 @@ describe("selectHighestSatisfyingTag", () => {
     });
   });
 
-  test("an empty candidate list yields the no-match arm carrying the rendered range", () => {
+  test("an empty candidate list yields the no-match arm", () => {
     // act
     const selected = selectHighestSatisfyingTag([], `formatter${RELEASE_TAG_SEPARATOR}`, "^1.0.0");
 
     // assert
-    assert.deepStrictEqual(selected, { kind: "no-matching-tag", range: "^1.0.0" });
+    assert.deepStrictEqual(selected, { kind: "no-matching-tag" });
   });
 
   test("a candidate whose name does not carry the plugin's own prefix is not a candidate", () => {
@@ -117,7 +117,7 @@ describe("selectHighestSatisfyingTag", () => {
     );
 
     // assert
-    assert.deepStrictEqual(selected, { kind: "no-matching-tag", range: "*" });
+    assert.deepStrictEqual(selected, { kind: "no-matching-tag" });
   });
 
   test("a candidate whose version does not satisfy the range is not a candidate", () => {
@@ -132,7 +132,7 @@ describe("selectHighestSatisfyingTag", () => {
     );
 
     // assert
-    assert.deepStrictEqual(selected, { kind: "no-matching-tag", range: "^2.0.0" });
+    assert.deepStrictEqual(selected, { kind: "no-matching-tag" });
   });
 
   test("prefix matching is case-sensitive with no Unicode normalization", () => {
@@ -149,6 +149,6 @@ describe("selectHighestSatisfyingTag", () => {
     );
 
     // assert
-    assert.deepStrictEqual(selected, { kind: "no-matching-tag", range: "*" });
+    assert.deepStrictEqual(selected, { kind: "no-matching-tag" });
   });
 });
