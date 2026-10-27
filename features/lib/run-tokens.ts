@@ -20,11 +20,12 @@
  * gives a file call that a step set up to fail, which differs between Node
  * majors; the step reads it back by making the same call. An error token also
  * stands for its message with each quoted path cut to its last segment, which
- * is how import and apply show a redacted cause, and for its message with each
- * quoted path replaced by any path that ends in that segment, which is how
- * install shows a cause a step could not reproduce at the same path. A message
- * can hold a sandbox path, so a result is projected through the error tokens
- * before any other.
+ * is how import and apply show a redacted cause. Only
+ * `{read-only skill directory removal error}` also stands for its message with
+ * each quoted path replaced by any path that ends in that segment, because
+ * install shows that cause at a path where the step cannot make its call
+ * (D-PL6-16). A message can hold a sandbox path, so a result is projected
+ * through the error tokens before any other.
  */
 
 import path from "node:path";
@@ -54,6 +55,14 @@ const PROJECT_DIR_TOKEN = "{project dir}";
 const AGENT_DIR_TOKEN = "{agent dir}";
 const GIT_HOST_TOKEN = "{git host}";
 const SCENARIO_TIME_TOKEN = "{scenario time}";
+
+/**
+ * The error token of a skill file that a read-only skill directory keeps from
+ * being removed. It alone matches a quoted path by its last segment at any
+ * path, because install shows the skills undo cause at the staged copy's
+ * path, where the step cannot make its call (D-PL6-16).
+ */
+export const READ_ONLY_SKILL_REMOVAL_ERROR_TOKEN = "{read-only skill directory removal error}";
 
 // Pi stamps with `toISOString()` on the worker's clock, so a timestamp of
 // this scenario is an exact ISO string inside the window, to the millisecond.
@@ -109,8 +118,9 @@ export function expandTokens(text: string, tokens: RunTokens): string {
  * Projects the result value `value` of the field `key` back to tokens. A
  * `lastUpdatedAt` inside the scenario's window becomes `{scenario time}`;
  * otherwise every occurrence of a recorded error message, then of that
- * message with its quoted paths cut or ending at any path, becomes its error
- * token, then every
+ * message with its quoted paths cut, becomes its error token. For
+ * `{read-only skill directory removal error}` alone, the cut paths can also
+ * stand at any path that ends in the same segment (D-PL6-16). Then every
  * occurrence of a sandbox directory becomes its token, every
  * occurrence of the git host's address becomes `{git host}`, every
  * occurrence of a revision's commit becomes its commit token, and every
@@ -123,9 +133,11 @@ export function projectTokens(key: string, value: string, tokens: RunTokens): st
 
   let projected = value;
   for (const [token, standsFor] of tokens.errors) {
-    projected = projected
-      .replaceAll(standsFor, token)
-      .replaceAll(anyQuotedPathPattern(standsFor), token);
+    const shorter =
+      token === READ_ONLY_SKILL_REMOVAL_ERROR_TOKEN
+        ? anyQuotedPathPattern(standsFor)
+        : cutQuotedPaths(standsFor);
+    projected = projected.replaceAll(standsFor, token).replaceAll(shorter, token);
   }
 
   projected = projected

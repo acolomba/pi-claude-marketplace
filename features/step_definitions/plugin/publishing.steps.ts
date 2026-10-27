@@ -34,6 +34,7 @@ import {
   restoreDirectoryWrites,
   rewritePublishedManifest,
 } from "../../lib/published-marketplace.ts";
+import { READ_ONLY_SKILL_REMOVAL_ERROR_TOKEN } from "../../lib/run-tokens.ts";
 
 import type { GitPluginRepository, RepositoryPlugin } from "../../lib/git-plugin.ts";
 import type { ScenarioWorld } from "../../support/world.ts";
@@ -124,6 +125,6 @@ Given(
     assert.deepStrictEqual(await readdir(directory), ["data.txt"]);
     const error = await readOnlySkillRemovalError(published, plugin, scratch);
     assert.deepStrictEqual([error.code, error.syscall], ["EACCES", "unlink"]);
-    this.recordErrorMessage("{read-only skill directory removal error}", error.message);
+    this.recordErrorMessage(READ_ONLY_SKILL_REMOVAL_ERROR_TOKEN, error.message);
   },
 );
