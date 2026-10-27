@@ -6,6 +6,7 @@ import test from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
+  buildInstalledScopeDeclarationDetail,
   buildScopeDeclarationDetail,
   buildScopeDeclarationIndex,
   readInstalledRecordDeclarations,
@@ -596,7 +597,7 @@ test("T-05-04: the load-failure cause line carries no text of the thrown error a
   );
 });
 
-test("D-05-07: the first unreadable record wins over a later one", async () => {
+test("D-PL2-05 / D-05-07: the index walk ends on the first unreadable record, before a later one", async () => {
   // arrange
   const firstUnreadable = marketplaceRecord("mp", { app: {}, missing: {}, paused: {} });
   const other = otherRecord();
@@ -743,7 +744,7 @@ test("indexes every record in the scope, with no key under decision to exclude",
   });
 });
 
-test("ends the detail walk on the first declarer whose own manifest cannot be read", async () => {
+test("D-PL2-05 / D-05-07: the detail walk ends on the first declarer whose own manifest cannot be read", async () => {
   // arrange
   const mp = marketplaceRecord("mp", { app: {} });
   const loadManifest = manifestLoader({
@@ -1133,4 +1134,64 @@ test("RCN-05: reading one record's installed declarations twice gives the same a
 
   // assert
   assert.deepStrictEqual(second, first);
+});
+
+test("D-PL2-06 / D-PL2-07: the installed detail walk reads a pinned record's copy and a path record's catalog entry", async () => {
+  // arrange
+  const { mp, loadManifest } = pinnedAppScope({
+    app: { dependencies: ["kit"] },
+    lib: { dependencies: ["kit"] },
+  });
+  const reader = ownManifests({
+    [APP_CLONE_MANIFEST]: JSON.stringify({ dependencies: ["lib@^1.0.0"] }),
+  });
+
+  // act
+  const walk = await buildInstalledScopeDeclarationDetail({
+    state: stateOf(mp),
+    locations: LOCATIONS,
+    reader,
+    loadManifest,
+  });
+
+  // assert
+  assert.deepStrictEqual(detailEntries(walk), {
+    "app@mp": [{ name: "lib", version: "^1.0.0", marketplace: "mp" }],
+    "lib@mp": [{ name: "kit", marketplace: "mp" }],
+  });
+});
+
+test("D-PL2-05 / D-05-07: the installed detail walk ends on the first unreadable record, before a later one", async () => {
+  // arrange
+  const mp = marketplaceRecord("mp", {
+    app: { resolvedSource: APP_CLONE, resolvedSha: APP_SHA },
+    lib: {},
+  });
+  const other = otherRecord();
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: {}, lib: {} }),
+    [other.manifestPath]: errno("ENOENT"),
+  });
+  const reader = ownManifests({ [APP_CLONE_MANIFEST]: "{ truncated" });
+
+  // act
+  const walk = await buildInstalledScopeDeclarationDetail({
+    state: stateOf(mp, other),
+    locations: LOCATIONS,
+    reader,
+    loadManifest,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    walk.ok
+      ? undefined
+      : { declarer: walk.declarer, reason: walk.reason, message: walk.cause.message },
+    {
+      declarer: "app@mp",
+      reason: "unreadable manifest",
+      message:
+        "cannot read the dependencies of app@mp: its own manifest is present but cannot be read",
+    },
+  );
 });

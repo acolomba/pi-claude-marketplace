@@ -442,6 +442,8 @@ export async function buildScopeDeclarationIndex(
 
       // eslint-disable-next-line no-await-in-loop -- the first unreadable record stops the index
       const read = await readRecordDeclarations(options, marketplace, name);
+      // D-PL2-05: the whole scope fails closed on the first unreadable record
+      // (D-05-07), as Claude Code aborts prune and the orphan scan (E6).
       if (!read.ok) {
         return read;
       }
@@ -454,18 +456,24 @@ export async function buildScopeDeclarationIndex(
   return { ok: true, index, candidates };
 }
 
+/** One record's declaration read, as the two detail walks pass it. */
+type RecordDeclarationRead = typeof readRecordDeclarations;
+
 /**
- * Maps every record in the scope to what it declares, constraints intact,
- * stopping at the FIRST record whose declarations cannot be established.
+ * Maps every record in the scope to what `readRecord` says it declares,
+ * constraints intact, stopping at the FIRST record whose declarations cannot
+ * be established.
  */
-export async function buildScopeDeclarationDetail(
+async function walkScopeDeclarationDetail(
   options: ScopeDeclarationDetailOptions,
+  readRecord: RecordDeclarationRead,
 ): Promise<ScopeDeclarationDetailResult> {
   const declarations = new Map<string, readonly AddressedDependency[]>();
   for (const marketplace of Object.values(options.state.marketplaces)) {
     for (const name of Object.keys(marketplace.plugins)) {
       // eslint-disable-next-line no-await-in-loop -- the first unreadable record stops the index
-      const read = await readRecordDeclarations(options, marketplace, name);
+      const read = await readRecord(options, marketplace, name);
+      // D-PL2-05: the whole scope fails closed on the first unreadable record.
       if (!read.ok) {
         return read;
       }
@@ -475,6 +483,28 @@ export async function buildScopeDeclarationDetail(
   }
 
   return { ok: true, declarations };
+}
+
+/**
+ * Maps every record in the scope to what it declares, constraints intact,
+ * read catalog-first (D-05-06), stopping at the FIRST record whose
+ * declarations cannot be established.
+ */
+export function buildScopeDeclarationDetail(
+  options: ScopeDeclarationDetailOptions,
+): Promise<ScopeDeclarationDetailResult> {
+  return walkScopeDeclarationDetail(options, readRecordDeclarations);
+}
+
+/**
+ * D-PL2-06: the same walk with each record read from its installed copy
+ * (`readInstalledRecordDeclarations`). The update preflight's holder walk uses
+ * it, so an update is held by the range an installed plugin runs with.
+ */
+export function buildInstalledScopeDeclarationDetail(
+  options: ScopeDeclarationDetailOptions,
+): Promise<ScopeDeclarationDetailResult> {
+  return walkScopeDeclarationDetail(options, readInstalledRecordDeclarations);
 }
 
 /**
