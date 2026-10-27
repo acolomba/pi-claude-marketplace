@@ -2105,12 +2105,21 @@ for (const { title, plugins, text } of [
     text: "Plugin updated: alpha · Run /reload to apply",
   },
   {
-    title: "names a plugin of two marketplaces twice",
+    title: "names a plugin of two marketplaces once",
     plugins: [updatedRow("alpha", "tools", "user"), updatedRow("alpha", "extras", "user")],
-    text: "Plugins updated: alpha and alpha · Run /reload to apply",
+    text: "Plugin updated: alpha · Run /reload to apply",
+  },
+  {
+    title: "names each plugin once in first-seen order",
+    plugins: [
+      updatedRow("alpha", "tools", "user"),
+      updatedRow("alpha", "extras", "user"),
+      updatedRow("beta", "tools", "user"),
+    ],
+    text: "Plugins updated: alpha and beta · Run /reload to apply",
   },
 ] as const) {
-  test(`D-PL8-10: formatRawSurface background-update ${title}`, () => {
+  test(`D-PL8-10 / D-PL8-21: formatRawSurface background-update ${title}`, () => {
     // act
     const notifyArguments = formatRawSurface({ kind: "background-update", plugins });
 

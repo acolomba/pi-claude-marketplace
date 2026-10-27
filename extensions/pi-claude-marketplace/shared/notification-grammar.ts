@@ -1314,16 +1314,13 @@ function composeAutoapplyStatusText(surface: AutoapplyStatusSurface): string {
 
 /**
  * AUP-03 / D-PL8-10: Claude Code's background update notice with Pi's reload
- * command (D-PL8-11). Names are deduplicated by `<name>@<marketplace>` in
- * update order, so a plugin updated in both scopes is named once; two names are
- * joined with "and", three or more are counted.
+ * command (D-PL8-11). D-PL8-21: names are deduplicated by the bare plugin name
+ * in first-seen order, as Claude Code does, so a plugin updated in both scopes
+ * or from two marketplaces is named once; two names are joined with "and",
+ * three or more are counted.
  */
 function composeBackgroundUpdateText(plugins: readonly BackgroundUpdatePlugin[]): string {
-  const names = [
-    ...new Map(
-      plugins.map((plugin) => [`${plugin.name}@${plugin.marketplace}`, plugin.name]),
-    ).values(),
-  ];
+  const names = [...new Set(plugins.map((plugin) => plugin.name))];
   const subject = names.length <= 2 ? names.join(" and ") : `${names.length} plugins`;
   return `${names.length === 1 ? "Plugin" : "Plugins"} updated: ${subject} · Run /reload to apply`;
 }
