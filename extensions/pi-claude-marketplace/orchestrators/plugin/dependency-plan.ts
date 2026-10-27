@@ -36,6 +36,7 @@
 
 import { recordedVersionSatisfies, renderDeclaredRanges } from "../../domain/dependency-range.ts";
 import { withoutTagCommit } from "../../domain/version.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 
 import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
 import type {
@@ -158,7 +159,9 @@ function unmovable(request: DependencyMoveRequest, cause: string): Refusal {
         key: request.key,
         range: renderRequestedRanges(request.requesters),
         recordedVersion: request.recordedVersion,
-        moveRefusal: cause,
+        // D-PL4-07 / T-55-02-02: the swap's failed-move row shows only the
+        // basename, so the plan's refusal of the same failure reads the same.
+        moveRefusal: redactAbsolutePaths(cause),
       },
     },
   };

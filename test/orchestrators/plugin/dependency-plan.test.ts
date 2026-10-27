@@ -117,6 +117,8 @@ function ports(world: {
   readonly walks: Readonly<Record<string, DependencyGraph | GraphWalkFailure>>;
   readonly versions?: (request: DependencyMoveRequest) => string | undefined;
   readonly preview?: (member: ResolvedCascadeMember) => Promise<void>;
+  /** The judge's cause when a request cannot move. */
+  readonly refusalCause?: string;
   /** GV-01: each version lands at a release tag, its commit appended. */
   readonly tagged?: boolean;
 }): DependencyPlanPorts<PlannedCandidate> & { readonly calls: Calls } {
@@ -135,7 +137,7 @@ function ports(world: {
       const version = world.versions?.(judged);
       return Promise.resolve<PlanJudgement<PlannedCandidate>>(
         version === undefined || judged.excludedVersions?.includes(version) === true
-          ? { ok: false, cause: "version 1.5.0 falls outside the range" }
+          ? { ok: false, cause: world.refusalCause ?? "version 1.5.0 falls outside the range" }
           : { ok: true, prepared: landedAt(version, world.tagged === true) },
       );
     },
@@ -445,6 +447,28 @@ describe("planDependencyGraph", () => {
       refusal("lib@mp", "^2.0.0", "version 1.5.0 falls outside the range"),
     );
     assert.deepStrictEqual(bound.calls.judged, [request("lib", requesters)]);
+  });
+
+  test("D-PL4-07: a move refusal reads with each absolute path reduced to its file name", async () => {
+    // arrange
+    const bound = ports({
+      walks: { "": graph([wall("lib", "1.0.0", APP_ASKS_2)], ["lib@mp"]) },
+      refusalCause:
+        "Cannot replace agent target with non-previous content at /scope/.pi/agents/pi-claude-marketplace-lib-helper.md",
+    });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
+
+    // assert
+    assert.deepStrictEqual(
+      plan,
+      refusal(
+        "lib@mp",
+        "^2.0.0",
+        "Cannot replace agent target with non-previous content at pi-claude-marketplace-lib-helper.md",
+      ),
+    );
   });
 
   test("UPD-DEP-D1: refuses a closure the walk cannot resolve", async () => {
