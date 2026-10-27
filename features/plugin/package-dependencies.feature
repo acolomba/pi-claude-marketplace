@@ -283,3 +283,43 @@ Feature: Plugin package dependencies
     Then the plugin "pkp" installed in the project scope has these npm packages:
       | name    | version |
       | pkd-dep | 1.0.0   |
+
+  Scenario: A marketplace update with autoupdate on that moves a plugin whose package install fails reports the warning
+    Given the npm registry serves these packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+      | pkd-dep | 2.0.0   |
+    Given the marketplace "tools" is published as a url source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | pkp  | 1.0.0   |
+    Given the published plugin "pkp" of the marketplace "tools" depends on these npm packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install pkp@tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | pkp  | 2.0.0   |
+    Given the published plugin "pkp" of the marketplace "tools" depends on these npm packages:
+      | name    | version |
+      | pkd-dep | 2.0.0   |
+    Given the npm registry answers 404 for the package "pkd-dep"
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                 | lines                                             |
+      | cascade    | info     | true         |                                                        |                                                   |
+      | diagnostic | warning  | false        | Plugin "pkp" updated; 1 declared component has a note. | Plugin dependency install failed (npm): no output |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id        | name | status  | reasons | scope   | from  | to    |
+      | tools            | project           | updated            | pkp@tools | pkp  | updated |         | project | 1.0.0 | 2.0.0 |
+    Then the npm registry receives these requests:
+      | method | path                         | status |
+      | GET    | /pkd-dep/-/pkd-dep-2.0.0.tgz | 404    |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | pkp@tools | 2.0.0   | true    |
+    Then the plugin "pkp" installed in the project scope has these npm packages:
+      | name    | version |
+      | pkd-dep | 1.0.0   |
