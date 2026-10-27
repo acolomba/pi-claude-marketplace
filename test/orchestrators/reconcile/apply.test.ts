@@ -6396,6 +6396,81 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
+  test("D-PL2-14: a dependency the user disabled and the config enables comes up after the install it waits on, and its dependent stays up", async (t) => {
+    // arrange -- app declares core; core, disabled by the user and enabled by
+    // the config, declares vault, which mp offers and the scope lacks. The
+    // rows match the pending D-21 row for the same shape: vault, then core.
+    const { cwd, project } = await createHermeticScopes(t, "user-disabled-dependency-waits");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      app: { dependencies: ["core"], skill: "clean" },
+      core: { dependencies: ["vault"], skill: "clean" },
+      vault: { skill: "clean" },
+    });
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "app@mp": { enabled: true }, "core@mp": { enabled: true } },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            app: pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "app"),
+            }),
+            core: pluginRecord({
+              enabled: false,
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "core"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● vault v1.0.0 (installed) {dependency installed}\n" +
+          "  ● core v1.0.0 (installed)\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    const records = await Promise.all(
+      ["app", "core", "vault"].map((plugin) => recordFor(project, "mp", plugin)),
+    );
+    assert.deepStrictEqual(
+      records.map((record) => [record?.enabled, Object.hasOwn(record ?? {}, "dependencyDisabled")]),
+      [
+        [true, false],
+        [true, false],
+        [true, false],
+      ],
+    );
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
   test("D-09-07: source-mismatch rows come from the round-1 plan", async (t) => {
     // arrange -- a dangling reference beside the reload's install row.
     const { cwd, project } = await createHermeticScopes(t, "dependency-reload-dangling");
