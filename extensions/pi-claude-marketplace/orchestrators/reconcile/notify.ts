@@ -753,8 +753,8 @@ export async function resolvePendingForceInstalls(
  */
 export function buildReconcilePendingNotification(
   plans: readonly ReconcilePlan[],
-  forceInstallKeys: ReadonlySet<string> = new Set<string>(),
-  recordedVersions: ReadonlyMap<string, string> = new Map<string, string>(),
+  forceInstallKeys: ReadonlySet<string>,
+  recordedVersions: ReadonlyMap<string, string>,
   convergence: ConvergencePlan = NO_CONVERGENCE,
   afterInstalls: readonly CascadeStep[] = [],
   refusedCopies: readonly PluginDeclarerUnreadableOutcome[] = [],

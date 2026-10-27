@@ -325,6 +325,7 @@ function installedOutcome(): InstallOutcome {
     declaresWorkflows: false,
     resourcesChanged: true,
     status: "installed",
+    version: "1.0.0",
   };
 }
 
@@ -404,6 +405,7 @@ function installed(
     readonly workflows?: boolean;
   } = { agents: false, mcp: false },
   resourcesChanged = true,
+  version: string | null = "1.0.0",
 ): Installed {
   return {
     declaresAgents: declares.agents,
@@ -416,6 +418,7 @@ function installed(
     ref: `${plugin}@${marketplace}`,
     resourcesChanged,
     scope,
+    ...(version !== null && { version }),
   };
 }
 
@@ -596,6 +599,7 @@ test("records a marketplace the state does not carry and installs its declared p
         ref: "plugin@mp",
         resourcesChanged: true,
         scope: "user",
+        version: "1.0.0",
       },
     ],
   };
@@ -627,7 +631,7 @@ test("records a marketplace the state does not carry and installs its declared p
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [user] (added)\n  ● plugin (installed)\n\nImport: 2 successes\n\n/reload to pick up changes",
+        "● mp [user] (added)\n  ● plugin v1.0.0 (installed)\n\nImport: 2 successes\n\n/reload to pick up changes",
     },
   ]);
   verifyBoundary();
@@ -790,8 +794,8 @@ for (const { addMarketplace, cause, title } of [
           "⊘ mp-a [user] (failed)\n" +
           "  ⊘ mp-a (failed)\n" +
           `    cause: ${cause}\n\n` +
-          "● mp-b [user] (added)\n  ● b (installed)\n\n" +
-          "● mp-c [user] (added)\n  ● c (installed)\n\n" +
+          "● mp-b [user] (added)\n  ● b v1.0.0 (installed)\n\n" +
+          "● mp-c [user] (added)\n  ● c v1.0.0 (installed)\n\n" +
           "Import: 2 failures, 4 successes\n\n" +
           "/reload to pick up changes",
         severity: "error",
@@ -878,11 +882,11 @@ for (const { addMarketplace, cause, title } of [
       {
         message:
           "Some operations have failed.\n\n" +
-          "● mp-a [user] (added)\n  ● a (installed)\n\n" +
+          "● mp-a [user] (added)\n  ● a v1.0.0 (installed)\n\n" +
           "⊘ mp-b [user] (failed)\n" +
           "  ⊘ mp-b (failed)\n" +
           `    cause: ${cause}\n\n` +
-          "● mp-c [user] (added)\n  ● c (installed)\n\n" +
+          "● mp-c [user] (added)\n  ● c v1.0.0 (installed)\n\n" +
           "Import: 2 failures, 4 successes\n\n" +
           "/reload to pick up changes",
         severity: "error",
@@ -1089,7 +1093,7 @@ for (const { stored, title } of [
       {
         message:
           "● mp [project] (added)\n" +
-          "  ● one (installed)\n" +
+          "  ● one v1.0.0 (installed)\n" +
           "  ⊘ two (skipped) {already installed}\n\n" +
           "Import: 3 successes\n\n" +
           "/reload to pick up changes",
@@ -1411,7 +1415,7 @@ test("MIM-02: adds an extra known marketplace no plugin names after the referenc
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [project] (added)\n  ● plugin (installed)\n\n" +
+        "● mp [project] (added)\n  ● plugin v1.0.0 (installed)\n\n" +
         "● tools [project] (added)\n\n" +
         "Import: 3 successes\n\n" +
         "/reload to pick up changes",
@@ -1728,8 +1732,8 @@ for (const { cause, error, token, title, warning } of [
         message:
           "A plugin operation needs attention.\n\n" +
           "● mp [project] (added)\n" +
-          "  ● before (installed)\n" +
-          "  ● after (installed)\n" +
+          "  ● before v1.0.0 (installed)\n" +
+          "  ● after v1.0.0 (installed)\n" +
           `  ⊘ target (unavailable) {${token}}\n\n` +
           "Import: 1 warning, 3 successes\n\n" +
           "/reload to pick up changes",
@@ -1812,8 +1816,8 @@ for (const { error, faulted, order, title } of [
       {
         message:
           "● mp [user] (added)\n" +
-          `  ● ${surviving[0]} (installed)\n` +
-          `  ● ${surviving[1]} (installed)\n` +
+          `  ● ${surviving[0]} v1.0.0 (installed)\n` +
+          `  ● ${surviving[1]} v1.0.0 (installed)\n` +
           "  ⊘ target (skipped) {already installed}\n\n" +
           "Import: 4 successes\n\n" +
           "/reload to pick up changes",
@@ -1908,8 +1912,8 @@ for (const { cause, installPlugin, order, title } of [
         message:
           "A plugin operation has failed.\n\n" +
           "● mp [user] (added)\n" +
-          `  ● ${surviving[0]} (installed)\n` +
-          `  ● ${surviving[1]} (installed)\n` +
+          `  ● ${surviving[0]} v1.0.0 (installed)\n` +
+          `  ● ${surviving[1]} v1.0.0 (installed)\n` +
           "  ⊘ target (failed)\n" +
           `    cause: ${cause}\n\n` +
           "Import: 1 failure, 3 successes\n\n" +
@@ -2305,8 +2309,8 @@ test("records a dependency-cascade failure with the dependency-failed reason", a
       message:
         "A plugin operation has failed.\n\n" +
         "● mp [user] (added)\n" +
-        `  ● ${surviving[0]} (installed)\n` +
-        `  ● ${surviving[1]} (installed)\n` +
+        `  ● ${surviving[0]} v1.0.0 (installed)\n` +
+        `  ● ${surviving[1]} v1.0.0 (installed)\n` +
         "  ⊘ target (failed) {dependency failed}\n" +
         `    cause: ${redactedCause}\n\n` +
         "Import: 1 failure, 3 successes\n\n" +
@@ -2385,8 +2389,8 @@ test("records a dependency-cascade failure whose ledger error carries a nested c
       message:
         "A plugin operation has failed.\n\n" +
         "● mp [user] (added)\n" +
-        `  ● ${surviving[0]} (installed)\n` +
-        `  ● ${surviving[1]} (installed)\n` +
+        `  ● ${surviving[0]} v1.0.0 (installed)\n` +
+        `  ● ${surviving[1]} v1.0.0 (installed)\n` +
         "  ⊘ target (failed) {dependency failed}\n" +
         `    cause: ${headCause} -> ${redactedNestedMessage}\n\n` +
         "Import: 1 failure, 3 successes\n\n" +
@@ -2650,8 +2654,8 @@ test("records an unexpected plugin failure whose error carries a nested cause wi
       message:
         "A plugin operation has failed.\n\n" +
         "● mp [user] (added)\n" +
-        `  ● ${surviving[0]} (installed)\n` +
-        `  ● ${surviving[1]} (installed)\n` +
+        `  ● ${surviving[0]} v1.0.0 (installed)\n` +
+        `  ● ${surviving[1]} v1.0.0 (installed)\n` +
         "  ⊘ target (failed)\n" +
         `    cause: ${headCause} -> ${redactedNestedMessage}\n\n` +
         "Import: 1 failure, 3 successes\n\n" +
@@ -2755,7 +2759,7 @@ for (const { declaresAgents, declaresMcp, declaresWorkflows, marker } of [
     assert.deepStrictEqual(notifications, [
       {
         message:
-          `● mp [user] (added)\n  ● plugin (installed)${marker}\n\n` +
+          `● mp [user] (added)\n  ● plugin v1.0.0 (installed)${marker}\n\n` +
           "Import: 2 successes\n\n" +
           "/reload to pick up changes",
       },
@@ -2869,7 +2873,7 @@ test("records each post-commit warning the installed outcome carried as its own 
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [user] (added)\n  ● plugin (installed)\n\n" +
+        "● mp [user] (added)\n  ● plugin v1.0.0 (installed)\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -2954,7 +2958,7 @@ test("AFILE-04: import over a commented mcp-adapter.json shows the comments-remo
       message:
         "A plugin operation has failed.\n\n" +
         "● mp [user] (added)\n" +
-        "  ● alpha (installed)\n" +
+        "  ● alpha v1.0.0 (installed)\n" +
         "  ⊘ target (failed)\n" +
         "    cause: disk full\n\n" +
         "Import: 1 failure, 2 successes\n\n" +
@@ -3153,7 +3157,7 @@ test("reports no changed resources when every install left the Pi resource set a
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [user] (added)\n  ● plugin (installed)\n\n" +
+        "● mp [user] (added)\n  ● plugin v1.0.0 (installed)\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -3233,7 +3237,7 @@ test("UPD-DEP-D1 / WR-N5 / WR-3: lists every dependency change an install made b
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [user] (added)\n  ● plugin (installed)\n  ● lib@mp v1.0.0 → v2.0.0 (updated)\n" +
+        "● mp [user] (added)\n  ● plugin v1.0.0 (installed)\n  ● lib@mp v1.0.0 → v2.0.0 (updated)\n" +
         "  ● ggg@mp v1.0.0 (installed)\n\n" +
         "Import: 4 successes\n\n" +
         "/reload to pick up changes",
@@ -3362,7 +3366,7 @@ test("installs only the plugin the state does not already record under a recorde
     {
       message:
         "● mp [user] (skipped) {already added}\n" +
-        "  ● fresh (installed)\n" +
+        "  ● fresh v1.0.0 (installed)\n" +
         "  ⊘ recorded (skipped) {already installed}\n\n" +
         "Import: 3 successes\n\n" +
         "/reload to pick up changes",
@@ -3475,7 +3479,7 @@ test("abandons only the scope whose state cannot be read and records why", async
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp-project [project] (added)\n  ● plugin (installed)\n\n" +
+        "● mp-project [project] (added)\n  ● plugin v1.0.0 (installed)\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -3532,8 +3536,8 @@ test("keeps each selected scope's marketplaces and plugins independent and rende
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [project] (added)\n  ● plugin (installed)\n\n" +
-        "● mp [user] (added)\n  ● plugin (installed)\n\n" +
+        "● mp [project] (added)\n  ● plugin v1.0.0 (installed)\n\n" +
+        "● mp [user] (added)\n  ● plugin v1.0.0 (installed)\n\n" +
         "Import: 4 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -3719,8 +3723,8 @@ test("abandons the post-pass for a scope whose config is invalid and still write
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp-project [project] (added)\n  ● p (installed)\n\n" +
-        "● mp-user [user] (added)\n  ● p (installed)\n\n" +
+        "● mp-project [project] (added)\n  ● p v1.0.0 (installed)\n\n" +
+        "● mp-user [user] (added)\n  ● p v1.0.0 (installed)\n\n" +
         "Import: 4 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -3972,8 +3976,8 @@ test("skips a recorded marketplace the later scope plan never declared when buil
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp-a [project] (added)\n  ● a (installed)\n\n" +
-        "● mp-b [project] (added)\n  ● b (installed)\n\n" +
+        "● mp-a [project] (added)\n  ● a v1.0.0 (installed)\n\n" +
+        "● mp-b [project] (added)\n  ● b v1.0.0 (installed)\n\n" +
         "Import: 4 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -4104,7 +4108,7 @@ test("records a diagnostic and keeps the result when the batched config write fa
   assert.deepStrictEqual(notifications, [
     {
       message:
-        "● mp [project] (added)\n  ● plugin (installed)\n\n" +
+        "● mp [project] (added)\n  ● plugin v1.0.0 (installed)\n\n" +
         "Import: 2 successes\n\n" +
         "/reload to pick up changes",
     },
@@ -5105,7 +5109,7 @@ test("IMP-05: lets a later scope plan's official source mismatch supersede the h
       message:
         "Some operations have failed.\n\n" +
         "⊘ claude-plugins-official [project] (failed)\n" +
-        "  ● p (installed)\n" +
+        "  ● p v1.0.0 (installed)\n" +
         "  ⊘ q (failed) {source mismatch}\n\n" +
         "Import: 2 failures, 1 success\n\n" +
         "/reload to pick up changes",
@@ -5364,7 +5368,11 @@ test("IMP-05: enables a plugin the scope records disabled and declares it enable
         reenabled: true,
         enableSignals: {},
       },
-      { ...installed("beta", "mp", "project"), reenabled: true, enableSignals: {} },
+      {
+        ...installed("beta", "mp", "project", undefined, true, null),
+        reenabled: true,
+        enableSignals: {},
+      },
     ],
     skippedExistingMarketplaces: [skipped("mp", "project")],
   });
@@ -6142,7 +6150,7 @@ test("IMP-10: re-enabling a record with a malformed skill keeps the degraded kin
   // assert
   assert.deepStrictEqual(importResult.installedPlugins, [
     {
-      ...installed("degraded", "mp", "project"),
+      ...installed("degraded", "mp", "project", undefined, true, null),
       reenabled: true,
       enableSignals: { degradedKinds: ["skill"] },
     },

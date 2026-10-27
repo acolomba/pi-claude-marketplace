@@ -2493,7 +2493,7 @@ describe("buildReconcilePendingNotification", () => {
     const plans: readonly ReconcilePlan[] = [];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, { marketplaces: [] });
@@ -2504,7 +2504,7 @@ describe("buildReconcilePendingNotification", () => {
     const plans = [reconcilePlan("project")];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, { marketplaces: [] });
@@ -2521,7 +2521,7 @@ describe("buildReconcilePendingNotification", () => {
     ];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -2552,7 +2552,7 @@ describe("buildReconcilePendingNotification", () => {
     ];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -2578,7 +2578,7 @@ describe("buildReconcilePendingNotification", () => {
     ];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -2674,7 +2674,7 @@ describe("buildReconcilePendingNotification", () => {
     ];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -2763,7 +2763,7 @@ describe("buildReconcilePendingNotification", () => {
       const plans = [reconcilePlan("project", actions)];
 
       // act
-      const pending = buildReconcilePendingNotification(plans);
+      const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
       // assert
       assert.deepStrictEqual(pending, {
@@ -2791,7 +2791,7 @@ describe("buildReconcilePendingNotification", () => {
     ];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -2871,7 +2871,7 @@ describe("buildReconcilePendingNotification", () => {
       const plans = [reconcilePlan("project", { sourceMismatches: [mismatch] })];
 
       // act
-      const pending = buildReconcilePendingNotification(plans);
+      const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
       // assert
       assert.deepStrictEqual(pending, {
@@ -2901,7 +2901,7 @@ describe("buildReconcilePendingNotification", () => {
     ];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -2949,7 +2949,7 @@ describe("buildReconcilePendingNotification", () => {
     ];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -2984,7 +2984,7 @@ describe("buildReconcilePendingNotification", () => {
     ];
 
     // act
-    const pending = buildReconcilePendingNotification(plans);
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -3020,7 +3020,7 @@ describe("buildReconcilePendingNotification", () => {
     const forceInstallKeys = new Set<string>(["project\u0000mp\u0000cr"]);
 
     // act
-    const pending = buildReconcilePendingNotification(plans, forceInstallKeys);
+    const pending = buildReconcilePendingNotification(plans, forceInstallKeys, new Map());
 
     // assert
     assert.deepStrictEqual(pending, {
@@ -3522,7 +3522,7 @@ describe("buildReconcilePendingNotification", () => {
     const forceInstallKeys = new Set<string>(["project\u0000mp\u0000ins"]);
 
     // act
-    const pending = buildReconcilePendingNotification(plans, forceInstallKeys);
+    const pending = buildReconcilePendingNotification(plans, forceInstallKeys, new Map());
 
     // assert
     assert.deepStrictEqual(pending, {

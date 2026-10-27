@@ -792,7 +792,7 @@ export type InstallPluginOutcome =
        * `LedgerDegradationSignals` member, so the COMPAT-01 key-set pin is
        * undisturbed.
        */
-      readonly version?: string;
+      readonly version: string;
       /** Post-commit warnings collected in orchestrated mode instead of firing individually. */
       readonly postCommitWarnings?: readonly string[];
       /**

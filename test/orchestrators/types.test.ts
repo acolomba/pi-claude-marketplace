@@ -347,6 +347,7 @@ const INSTALL_INSTALLED_CLEAN = {
   declaresWorkflows: false,
   resourcesChanged: false,
   status: "installed",
+  version: "1.0.0",
 } satisfies InstallPluginOutcome;
 
 const INSTALL_INSTALLED_FULL = {
@@ -768,6 +769,15 @@ void ({
 } satisfies InstallPluginOutcome);
 
 void ({
+  declaresAgents: false,
+  declaresMcp: false,
+  declaresWorkflows: false,
+  resourcesChanged: false,
+  status: "installed",
+  // @ts-expect-error installed outcomes require the resolved version
+} satisfies InstallPluginOutcome);
+
+void ({
   cause: "install failed",
   error: new Error("install failed"),
   status: "failed",
@@ -808,10 +818,10 @@ void ({
   declaresAgents: false,
   declaresMcp: false,
   declaresWorkflows: false,
+  // @ts-expect-error installed outcomes require a string version
   version: undefined,
   resourcesChanged: false,
   status: "installed",
-  // @ts-expect-error exact optional properties reject a present undefined version
 } satisfies InstallPluginOutcome);
 
 void ({
