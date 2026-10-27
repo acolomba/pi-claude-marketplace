@@ -33,6 +33,7 @@ import {
   invalidateManifest,
   publishAnthropicsMarketplace,
   publishExternalMarketplace,
+  publishHostedMarketplace,
   publishMarketplace,
   publishOfficialMarketplace,
   removePublishedPlugin,
@@ -65,6 +66,23 @@ Given(
     const root = await requireFreeRoot(this.publicationSites, name, kind);
     this.onRelease(() => rm(root, { recursive: true, force: true }));
     this.recordPublished(name, await publishMarketplace(this.publicationSites, name, kind, []));
+  },
+);
+
+// D-PL5-33: Claude Code reads any https URL that names no git repository as a
+// catalog, so the served file name may end in `.json` in any letter case.
+Given(
+  "the marketplace {string} is published as a hosted source served as {string}",
+  async function (this: ScenarioWorld, name: string, file: string) {
+    if (this.publishedMarketplace(name) !== undefined) {
+      assert.fail(`the marketplace ${name} is already published in this scenario`);
+    }
+
+    const root = await requireFreeRoot(this.publicationSites, name, "hosted");
+    this.onRelease(() => rm(root, { recursive: true, force: true }));
+    const published = await publishHostedMarketplace(this.publicationSites, name, file);
+    this.recordPublished(name, published);
+    assert.strictEqual(published.source.endsWith(`/${name}/${file}`), true, published.source);
   },
 );
 

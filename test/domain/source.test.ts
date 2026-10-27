@@ -407,9 +407,32 @@ const PARSE_CASES: readonly ParseCase[] = [
     },
   },
   {
-    name: "parses an https URL ending in an uppercase .JSON as a Git URL",
+    name: "D-PL5-33: parses an https URL ending in an uppercase .JSON as a hosted catalog",
     raw: "https://h.example/m.JSON",
-    source: { kind: "url", raw: "https://h.example/m.JSON", url: "https://h.example/m.JSON" },
+    source: { kind: "hosted", raw: "https://h.example/m.JSON", url: "https://h.example/m.JSON" },
+  },
+  {
+    name: "D-PL5-33: parses a mixed-case .Json catalog URL and drops its fragment",
+    raw: "https://h.example/c/Marketplace.Json#main",
+    source: {
+      kind: "hosted",
+      raw: "https://h.example/c/Marketplace.Json#main",
+      url: "https://h.example/c/Marketplace.Json",
+    },
+  },
+  {
+    name: "D-PL5-33: parses an https URL ending in .JSONL as a Git URL",
+    raw: "https://h.example/m.JSONL",
+    source: { kind: "url", raw: "https://h.example/m.JSONL", url: "https://h.example/m.JSONL" },
+  },
+  {
+    name: "D-PL5-33: parses an https URL whose query names an uppercase .JSON file as a Git URL",
+    raw: "https://h.example/x?file=m.JSON",
+    source: {
+      kind: "url",
+      raw: "https://h.example/x?file=m.JSON",
+      url: "https://h.example/x?file=m.JSON",
+    },
   },
   {
     name: "parses an https URL whose query names a .json file as a Git URL",

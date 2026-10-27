@@ -399,8 +399,9 @@ function parsePathSourceForm(raw: string): ParsedSource | undefined {
 /**
  * D-PL5-04 / D-PL5-05: an `https://` URL whose path, the text after the
  * authority up to the first `?` or `#`, ends in `.json` names a hosted
- * `marketplace.json`. The `.json` match is case-sensitive. `url` drops the
- * fragment, as Claude Code drops it, and keeps the query. Returns undefined
+ * `marketplace.json`. The `.json` match ignores case, as Claude Code reads any
+ * such URL as a catalog (D-PL5-33). `url` drops the fragment, as Claude Code
+ * drops it, and keeps the query. Returns undefined
  * for anything else, so the caller falls through to the URL arm.
  *
  * A catalog URL the WHATWG URL parser refuses, such as one with a space in
@@ -426,7 +427,7 @@ function parseHostedManifestForm(raw: string): HostedManifestSource | UnknownSou
   const pathAndRest = afterScheme.slice(pathStart);
   const pathEnd = pathAndRest.search(/[?#]/);
   const urlPath = pathEnd === -1 ? pathAndRest : pathAndRest.slice(0, pathEnd);
-  if (!urlPath.endsWith(".json")) {
+  if (!urlPath.toLowerCase().endsWith(".json")) {
     return undefined;
   }
 

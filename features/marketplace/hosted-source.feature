@@ -21,6 +21,23 @@ Feature: Marketplace hosted source
       | method | path                         | status |
       | GET    | /acme/tools/marketplace.json | 200    |
 
+  Scenario: Adding a hosted marketplace whose URL ends in an uppercase .JSON downloads its catalog
+    Given the marketplace "tools" is published as a hosted source served as "marketplace.JSON"
+    When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools/marketplace.JSON --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source                                         |
+      | tools | https://{git host}/acme/tools/marketplace.JSON |
+    Then the git host receives these requests:
+      | method | path                         | status |
+      | GET    | /acme/tools/marketplace.JSON | 200    |
+
   Scenario: Adding a hosted marketplace the git host answers with 404 fails as source missing
     Given the marketplace "tools" is published as a hosted source
     Given the git host answers 404 for the marketplace "tools"

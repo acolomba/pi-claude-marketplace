@@ -34,7 +34,7 @@ export type SourceKind = "dir" | "file" | "url" | "github" | "hosted";
 
 const SOURCE_KINDS: readonly SourceKind[] = ["dir", "file", "url", "github", "hosted"];
 
-// The file a hosted marketplace's manifest is served as.
+// The file a hosted marketplace's manifest is served as, unless a scenario names another.
 const HOSTED_MANIFEST = "marketplace.json";
 
 /**
@@ -109,8 +109,8 @@ export interface GitPublication {
 /**
  * A marketplace published as one catalog file the git host serves: `root` is
  * the work tree that holds its files, and `owner` and `directory` are where
- * the host serves its manifest as `marketplace.json`. `host` serves the
- * manifest again after every change.
+ * the host serves its manifest as `file`. `host` serves the manifest again
+ * after every change.
  */
 export interface HostedPublication {
   readonly kind: "hosted";
@@ -119,6 +119,7 @@ export interface HostedPublication {
   readonly manifestPath: string;
   readonly owner: string;
   readonly directory: string;
+  readonly file: string;
   readonly host: Pick<GitRepositoryHost, "serveFile">;
 }
 
@@ -128,7 +129,7 @@ export type PublishedMarketplace = PathPublication | GitPublication | HostedPubl
 /** Has the git host serve the manifest of `published` as it is in the work tree now. */
 async function serveHostedManifest(published: HostedPublication): Promise<void> {
   const bytes = await readFile(published.manifestPath);
-  published.host.serveFile(published.directory, HOSTED_MANIFEST, bytes, published.owner);
+  published.host.serveFile(published.directory, published.file, bytes, published.owner);
 }
 
 /** Returns the source kind `text` names, throwing on any other text. */
@@ -261,22 +262,51 @@ export async function publishMarketplaceIn(
       };
     }
 
-    case "hosted": {
-      const { gitHost } = sites;
-      await writeMarketplace(root, name, plugins, manifestPath);
-      const published: HostedPublication = {
-        kind,
-        root,
-        source: gitHost.fileUrl(directory, HOSTED_MANIFEST),
-        manifestPath,
-        owner: gitHost.defaultOwner,
-        directory,
-        host: gitHost,
-      };
-      await serveHostedManifest(published);
-      return published;
-    }
+    case "hosted":
+      return publishHosted(sites, directory, name, plugins, HOSTED_MANIFEST);
   }
+}
+
+/**
+ * Publishes the marketplace `name` in `directory` at `sites` as a hosted
+ * catalog offering `plugins`, which the git host serves as
+ * `<directory>/<file>` under its default owner.
+ */
+async function publishHosted(
+  sites: PublicationSites,
+  directory: string,
+  name: string,
+  plugins: readonly OfferedPlugin[],
+  file: string,
+): Promise<HostedPublication> {
+  const { gitHost } = sites;
+  const root = path.join(sites.marketplacesRoot, directory);
+  const manifestPath = path.join(root, ".claude-plugin", "marketplace.json");
+  await writeMarketplace(root, name, plugins, manifestPath);
+  const published: HostedPublication = {
+    kind: "hosted",
+    root,
+    source: gitHost.fileUrl(directory, file),
+    manifestPath,
+    owner: gitHost.defaultOwner,
+    directory,
+    file,
+    host: gitHost,
+  };
+  await serveHostedManifest(published);
+  return published;
+}
+
+/**
+ * Publishes the marketplace `name` at `sites` as a hosted catalog that offers
+ * no plugin, which the git host serves as `<name>/<file>`.
+ */
+export function publishHostedMarketplace(
+  sites: PublicationSites,
+  name: string,
+  file: string,
+): Promise<HostedPublication> {
+  return publishHosted(sites, name, name, [], file);
 }
 
 // The GitHub organization Claude Code reserves its official marketplace names
