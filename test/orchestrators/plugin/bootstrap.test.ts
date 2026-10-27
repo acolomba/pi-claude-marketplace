@@ -339,6 +339,42 @@ test("D-PL2-09: hands its missing-dependency step to the add, which runs it in t
   verifyBoundary();
 });
 
+test("a missing-dependency step that throws after the add committed still turns on autoupdate and rethrows instead of reporting a failed add", async (t) => {
+  // arrange
+  const { cwd, locations } = await createHermeticUserScope(t, "dependency-step-throws");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+  const { gitOps } = createBootstrapGitOps();
+  const stepError = Object.assign(new Error("dependency copy vanished"), { code: "ENOENT" });
+
+  // act
+  const bootstrap = bootstrapClaudePlugin({
+    completionCache: createCompletionCache(),
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    gitOps,
+    installMissingDependencies: () => Promise.reject(stepError),
+  });
+
+  // assert
+  await assert.rejects(bootstrap, (err: unknown) => err === stepError);
+  assert.deepStrictEqual(notifications, [
+    { message: "● claude-plugins-official [user] (added)" },
+    { message: "● claude-plugins-official [user] <autoupdate>" },
+  ]);
+  assert.deepStrictEqual(JSON.parse(await readFile(locations.baseConfigJsonPath, "utf8")), {
+    schemaVersion: 1,
+    marketplaces: {
+      "claude-plugins-official": {
+        source: "anthropics/claude-plugins-official",
+        autoupdate: true,
+      },
+    },
+    plugins: {},
+  });
+  verifyBoundary();
+});
+
 test("converges on a second bootstrap without changing the recorded state or the tree", async (t) => {
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "repeat");

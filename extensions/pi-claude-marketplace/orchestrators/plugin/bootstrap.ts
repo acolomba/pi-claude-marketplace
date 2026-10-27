@@ -32,7 +32,9 @@
 //     precondition, a different source under the official name included, is
 //     rendered by `notifyAddFailure`, byte-identical to `marketplace add` for
 //     the same source (reason and cause), and the autoupdate step is skipped.
-//     An error that is not an add precondition propagates.
+//     An error that is not an add precondition propagates. A throw of the
+//     missing-dependency step comes after the add committed, so it is not an
+//     add failure: the autoupdate step runs, then the error propagates.
 //   - ATTR-07: bootstrap passes `rethrowPreconditionErrors: true` so a failed
 //     add reaches the catch below, which is how it knows to skip the
 //     autoupdate step.
@@ -102,6 +104,7 @@ export interface BootstrapOptions {
  * without a clone (LAYER-01).
  */
 export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<void> {
+  const add: { committed: boolean } = { committed: false };
   const addOptions: AddMarketplaceOptions = {
     ctx: opts.ctx,
     run: opts.run,
@@ -110,18 +113,30 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
     rawSource: BOOTSTRAP_SOURCE,
     completionCache: opts.completionCache,
     gitOps: opts.gitOps,
-    installMissingDependencies: opts.installMissingDependencies,
+    installMissingDependencies: (request) => {
+      // The add runs the step only after its state commit.
+      add.committed = true;
+      return opts.installMissingDependencies(request);
+    },
     // ATTR-07: re-throw the typed precondition instead of emitting a
     // `(failed)` row, so the catch below can skip the autoupdate step.
     rethrowPreconditionErrors: true,
   };
+  let stepFailure: { readonly err: unknown } | undefined;
   try {
     await addMarketplace(addOptions);
   } catch (err) {
-    // A failed add reports its reason and cause as `marketplace add` does for
-    // the same source, and there is nothing to autoupdate.
-    notifyAddFailure(addOptions, err);
-    return;
+    if (!add.committed) {
+      // A failed add reports its reason and cause as `marketplace add` does
+      // for the same source, and there is nothing to autoupdate.
+      notifyAddFailure(addOptions, err);
+      return;
+    }
+
+    // WR-02: the add committed and reported `(added)`, so a throw of its
+    // missing-dependency step is not an add failure. The autoupdate step
+    // still runs, and the error then reaches the handler.
+    stepFailure = { err };
   }
 
   await setMarketplaceAutoupdate({
@@ -132,4 +147,7 @@ export async function bootstrapClaudePlugin(opts: BootstrapOptions): Promise<voi
     scope: "user",
     cwd: opts.cwd,
   });
+  if (stepFailure !== undefined) {
+    throw stepFailure.err;
+  }
 }
