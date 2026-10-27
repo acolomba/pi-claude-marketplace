@@ -1166,8 +1166,8 @@ async function collectPostCommitWarnings(
   };
 
   // D-141-03: never gated. In standalone mode these are the only strings the
-  // returned array carries, which is what the caller's notifyDiagnostic
-  // surface renders.
+  // returned array carries; the caller renders the typed
+  // `installCtx.discoveryWarnings` itself (D-PL1-04).
   warnings.push(...installCtx.discoveryWarnings.map((w) => w.message));
 
   // AS-6 / D-08: eager per-plugin data dir mkdir.
@@ -2861,7 +2861,7 @@ async function installPluginWithTransaction(
           plugin,
           scope,
           verb: "installed",
-          warnings: postCommitWarnings,
+          warnings: installCtx.discoveryWarnings,
         });
       }
 

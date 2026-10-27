@@ -83,7 +83,6 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
-import { partitionStagingWarnings } from "../../shared/staging-warnings.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildGitHubAuth } from "../auth-host.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, refreshUrlClone } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
@@ -97,7 +96,7 @@ import {
   namedPluginLayerRefusal,
   resolveInstalledMarketplaceTarget,
   resolveInstalledPluginTarget,
-  surfaceDiscoveryWarnings,
+  surfaceStagingDiagnostics,
 } from "./shared.ts";
 import { composeUpdateCascade } from "./update-cascade.ts";
 import { UPDATE_MATERIALIZATION } from "./update-preflight.ts";
@@ -138,6 +137,7 @@ import type {
   PluginUpdateOutcome,
 } from "../types.ts";
 import type { CandidateReport } from "./materialize-latest.ts";
+import type { StagingDiagnostic } from "./shared.ts";
 
 /** Runs one prepared update target for the update flow. */
 type UpdatePluginRunner = (args: ThreePhaseArgs) => Promise<UpdateRunOutcome>;
@@ -460,10 +460,10 @@ async function updatePluginsWith(
  * the cascade the rows live in -- the user reads the row, then the detail
  * that qualifies it. The header names the target's scope (D-PL1-05).
  *
- * `stagingWarnings` carries both halves (D-PL1-10). Only the discovery half
- * is rendered; the hygiene half rides the outcome for orchestrated readers
- * and is not shown (D-PL1-08), the same property install's standalone arm
- * relies on.
+ * `stagingWarnings` carries both halves (D-PL1-10). The list renderer shows
+ * only the discovery half; the hygiene half rides the outcome for
+ * orchestrated readers and is not shown (D-PL1-08), the same property
+ * install's standalone arm relies on.
  *
  * Deliberately NOT called from `abortUpdateBatch`: an aborted batch has a
  * failure to explain, and a skipped-component note is noise against it.
@@ -473,18 +473,23 @@ function surfaceUpdateDiscoveryWarnings(
   run: NotificationRun,
   outcomes: readonly UpdateCascadeOutcome[],
 ): void {
-  for (const { target, outcome } of outcomes) {
-    if (outcome.partition !== "updated" || outcome.stagingWarnings === undefined) {
-      continue;
-    }
+  surfaceStagingDiagnostics(ctx, run, outcomes.flatMap(updateStagingDiagnostic));
+}
 
-    surfaceDiscoveryWarnings(ctx, run, {
+/** D-PL1-07: the staging diagnostic of an updated outcome; none for any other partition. */
+function updateStagingDiagnostic({ target, outcome }: UpdateCascadeOutcome): StagingDiagnostic[] {
+  if (outcome.partition !== "updated") {
+    return [];
+  }
+
+  return [
+    {
       plugin: outcome.name,
       scope: target.scope,
       verb: "updated",
-      warnings: partitionStagingWarnings(outcome.stagingWarnings).discovery.map((w) => w.message),
-    });
-  }
+      warnings: outcome.stagingWarnings ?? [],
+    },
+  ];
 }
 
 /**

@@ -76,7 +76,7 @@ import {
   keepLocalLayerTargets,
   MarketplaceNotAddedSignal,
   namedPluginLayerRefusal,
-  surfaceDiscoveryWarnings,
+  surfaceStagingDiagnostics,
 } from "./shared.ts";
 
 import type { HooksRouting } from "../../bridges/hooks/index.ts";
@@ -93,6 +93,7 @@ import type { ReinstallFailedOutcome, ReinstallPluginOutcome, RevisionMove } fro
 import type { CandidateReport } from "./materialize-latest.ts";
 import type { ReinstallPhaseFailure } from "./reinstall-record.ts";
 import type { ReinstallPluginsTarget, ReinstallTargetSelection } from "./reinstall-targets.ts";
+import type { StagingDiagnostic } from "./shared.ts";
 import type { MaterializationPolicy, UpdateCloneCacheSeam } from "./update-preflight.ts";
 import type { RmOptions } from "node:fs";
 
@@ -625,10 +626,11 @@ function surfaceReinstallMcpConfigNotices(
  * after the cascade its row lives in -- the user reads the row, then the
  * detail that qualifies it. Mirrors `update.ts::surfaceUpdateDiscoveryWarnings`.
  *
- * This loop, not the `render !== "none"` arm of `reinstallPlugin`, is what a
- * user-invoked reinstall reaches: the edge handler calls `reinstallPlugins`
- * for every target form, and this function drives `reinstallPlugin` with
- * `render: "none"`.
+ * It renders through the list renderer `surfaceStagingDiagnostics`
+ * (D-PL1-07). This function, not the `render !== "none"` arm of
+ * `reinstallPlugin`, is what a user-invoked reinstall reaches: the edge
+ * handler calls `reinstallPlugins` for every target form, and this function
+ * drives `reinstallPlugin` with `render: "none"`.
  *
  * The hygiene half never arrives here: only the DISCOVERY half rides
  * `discoveryWarnings`, typed (D-PL1-11), while `notes` keeps the flat fold
@@ -639,18 +641,23 @@ function surfaceReinstallDiscoveryWarnings(
   run: NotificationRun,
   outcomes: readonly ReinstallPluginOutcome[],
 ): void {
-  for (const outcome of outcomes) {
-    if (outcome.partition !== "reinstalled" || outcome.discoveryWarnings === undefined) {
-      continue;
-    }
+  surfaceStagingDiagnostics(ctx, run, outcomes.flatMap(reinstallStagingDiagnostic));
+}
 
-    surfaceDiscoveryWarnings(ctx, run, {
+/** D-PL1-07: the staging diagnostic of a reinstalled outcome; none for any other partition. */
+function reinstallStagingDiagnostic(outcome: ReinstallPluginOutcome): StagingDiagnostic[] {
+  if (outcome.partition !== "reinstalled") {
+    return [];
+  }
+
+  return [
+    {
       plugin: outcome.name,
       scope: outcome.scope,
       verb: "reinstalled",
-      warnings: outcome.discoveryWarnings.map((w) => w.message),
-    });
-  }
+      warnings: outcome.discoveryWarnings ?? [],
+    },
+  ];
 }
 
 /**

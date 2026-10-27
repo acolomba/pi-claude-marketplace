@@ -51,6 +51,7 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
+import { partitionStagingWarnings } from "../../shared/staging-warnings.ts";
 import { crossScopeFlag, marketplaceInOtherScope } from "../marketplace/shared.ts";
 
 import { readRecordDeclarations } from "./dependency-index.ts";
@@ -71,6 +72,7 @@ import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { CommandContext } from "../../shared/notify-context.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
+import type { DiscoveryWarning, StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -1745,6 +1747,44 @@ export async function emitMarketplaceNotAddedSignal(args: {
   });
 }
 
+/** One plugin's staging warnings, both halves, under the verb that staged them. */
+export interface StagingDiagnostic {
+  readonly plugin: string;
+  readonly scope: Scope;
+  /** D-PL1-06: the seven staging verbs. */
+  readonly verb:
+    | "installed"
+    | "updated"
+    | "reinstalled"
+    | "enabled"
+    | "install failed"
+    | "update failed"
+    | "reinstall failed";
+  readonly warnings: readonly StagingWarning[];
+}
+
+/**
+ * D-PL1-07: the one placement rule every staging verb and cascade calls after
+ * its own rows and before its MCP config notices. Each entry renders as one
+ * diagnostic, in entry order, and an entry with no discovery warning renders
+ * nothing.
+ *
+ * D-PL1-08: it shows the discovery half only. The hygiene half stays on the
+ * orchestrated payload (D-19-01).
+ */
+export function surfaceStagingDiagnostics(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  diagnostics: readonly StagingDiagnostic[],
+): void {
+  for (const diagnostic of diagnostics) {
+    surfaceDiscoveryWarnings(ctx, run, {
+      ...diagnostic,
+      warnings: partitionStagingWarnings(diagnostic.warnings).discovery,
+    });
+  }
+}
+
 /**
  * D-141-03 / D-141-05: render the discovery half to a standalone user, after
  * the verb's own row.
@@ -1768,29 +1808,20 @@ export async function emitMarketplaceNotAddedSignal(args: {
  * D-PL1-05: the header names the plugin's scope in brackets, as the row
  * grammar `<name> [scope]` does. D-PL1-06: the verb is one of the seven
  * staging verbs.
+ *
+ * D-PL1-04: `warnings` takes discovery warnings only, so a hygiene warning
+ * cannot reach a standalone diagnostic without a compile error.
  */
 export function surfaceDiscoveryWarnings(
   ctx: NotificationContext,
   run: NotificationRun,
-  args: {
-    readonly plugin: string;
-    readonly scope: Scope;
-    readonly verb:
-      | "installed"
-      | "updated"
-      | "reinstalled"
-      | "enabled"
-      | "install failed"
-      | "update failed"
-      | "reinstall failed";
-    readonly warnings: readonly string[];
-  },
+  args: Omit<StagingDiagnostic, "warnings"> & { readonly warnings: readonly DiscoveryWarning[] },
 ): void {
   if (args.warnings.length === 0) {
     return;
   }
 
-  const lines = args.warnings.map((w) => redactAbsolutePaths(w));
+  const lines = args.warnings.map((w) => redactAbsolutePaths(w.message));
   const subject = `Plugin "${args.plugin}" [${args.scope}] ${args.verb}`;
   const header =
     lines.length === 1
