@@ -14,7 +14,9 @@
 // AUP-03 / D-PL8-10 / D-PL8-15: after the last marketplace, a pass that
 // updated at least one plugin raises one `background-update` notice through the
 // real context and a load-origin run, unless the runtime stopped. Up-to-date,
-// skipped, and failed plugins stay in the debug log.
+// skipped, and failed plugins stay in the debug log. A pass that an invalid
+// GitHub base override ends early (D-PL8-06) still reports the plugins that
+// moved before it; it is silent only when none did.
 //
 // D-PL8-05: a scope lock that another Pi process holds needs no code here.
 // `updateMarketplace` turns a refresh lock miss into a failed row, and the
@@ -178,6 +180,20 @@ function yieldingPluginUpdate(
   };
 }
 
+/** Updates the autoupdate marketplaces of each scope; returns early when the runtime stops. */
+async function updateEveryScope(step: PassStep): Promise<void> {
+  for (const scope of SCOPES) {
+    // eslint-disable-next-line no-await-in-loop -- MSG-GR-3: the project scope runs before the user scope.
+    const names = await autoupdateMarketplaces(scope, step.cwd);
+    for (const name of names) {
+      // eslint-disable-next-line no-await-in-loop -- each update locks its scope and yields to commands one step at a time.
+      if (!(await updateOneMarketplace(step, name, scope))) {
+        return;
+      }
+    }
+  }
+}
+
 /** Creates the pass; constructing it reads nothing. */
 export function createBackgroundPass(deps: BackgroundPassDeps): BackgroundPass {
   return async ({ ctx, isStopped }) => {
@@ -197,22 +213,13 @@ export function createBackgroundPass(deps: BackgroundPassDeps): BackgroundPass {
       isStopped,
       pluginUpdate: yieldingPluginUpdate(deps.gate, isStopped, updatePlugin, updated),
     };
-    for (const scope of SCOPES) {
-      // eslint-disable-next-line no-await-in-loop -- MSG-GR-3: the project scope runs before the user scope.
-      const names = await autoupdateMarketplaces(scope, cwd);
-      for (const name of names) {
-        // eslint-disable-next-line no-await-in-loop -- each update locks its scope and yields to commands one step at a time.
-        if (!(await updateOneMarketplace(step, name, scope))) {
-          return;
-        }
+    try {
+      await updateEveryScope(step);
+    } finally {
+      // D-PL8-15: a stopped runtime's `pi` is stale, so the run opens after the check.
+      if (updated.length > 0 && !isStopped()) {
+        notifyBackgroundUpdate(ctx, openNotificationRun(deps.pi, { kind: "load" }), updated);
       }
     }
-
-    // D-PL8-15: a stopped runtime's `pi` is stale, so the run opens after the check.
-    if (updated.length === 0 || isStopped()) {
-      return;
-    }
-
-    notifyBackgroundUpdate(ctx, openNotificationRun(deps.pi, { kind: "load" }), updated);
   };
 }

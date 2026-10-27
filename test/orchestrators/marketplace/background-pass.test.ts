@@ -477,7 +477,7 @@ test("an invalid GitHub base override ends the pass", async (t) => {
   // arrange
   const { cwd } = await createHermeticEnvironment(t, "background-pass-base-url-");
   await seedTwoAutoupdateMarketplaces(cwd);
-  const { calls, deps } = createPassUnderTest({
+  const { calls, capture, deps } = createPassUnderTest({
     scripts: new Map([
       [
         "alpha",
@@ -501,6 +501,61 @@ test("an invalid GitHub base override ends the pass", async (t) => {
     },
   );
   assert.deepStrictEqual(updatedTargets(calls), ["alpha [project]"]);
+  assert.deepStrictEqual(capture.entries, []);
+});
+
+test("AUP-03: a pass that an invalid GitHub base override ends still reports the plugins that moved", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-base-url-notice-");
+  await seedTwoAutoupdateMarketplaces(cwd);
+  const { calls, capture, deps } = createPassUnderTest({
+    scripts: new Map([
+      ["alpha", updatesPlugins("alpha", "project", ["one"])],
+      [
+        "gamma",
+        (): Promise<void> =>
+          Promise.reject(
+            new InvalidGitHubBaseUrlError("PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL", "scheme"),
+          ),
+      ],
+    ]),
+    outcomes: new Map([["one", updatedOutcome("one", "1.1.0")]]),
+  });
+  const pass = createBackgroundPass(deps);
+
+  // act & assert
+  await assert.rejects(
+    pass({ ctx: sessionContext(cwd, "rpc"), isStopped: () => false }),
+    (error: unknown) => {
+      assert.ok(error instanceof InvalidGitHubBaseUrlError);
+      assert.strictEqual(error.variable, "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL");
+      assert.strictEqual(error.problem, "scheme");
+      return true;
+    },
+  );
+  assert.deepStrictEqual(updatedTargets(calls), ["alpha [project]", "gamma [user]"]);
+  assert.deepStrictEqual(capture.entries, [
+    {
+      customType: "claude-plugin",
+      payload: {
+        schemaVersion: 1,
+        origin: { kind: "load" },
+        kind: "background-update",
+        severity: "info",
+        needsReload: true,
+        plugins: [
+          {
+            name: "one",
+            marketplace: "alpha",
+            scope: "project",
+            fromVersion: "1.0.0",
+            toVersion: "1.1.0",
+          },
+        ],
+      },
+    },
+  ]);
+  capture.assertValid();
 });
 
 test("a runtime stopped during an update runs no further plugin update", async (t) => {
