@@ -1139,8 +1139,9 @@ function applyMarketplaceOutcomeToBlock(
 }
 
 /**
- * D-05-16 / RESV-06: the cause a REFUSED uninstall or a dependency-cascade
- * install failure carries onto its reconcile row, so a config-driven failure
+ * D-05-16 / RESV-06 / MIM-03: the cause a REFUSED uninstall, a
+ * dependency-cascade install failure, or an install that left rollback
+ * partials carries onto its reconcile row, so a config-driven failure
  * renders the same cause line the standalone command / single-plugin install
  * does. Every other outcome, including a cause-less failure, answers the
  * empty object and keeps the bare row.
@@ -1152,6 +1153,21 @@ function failedRowCause(outcome: PerEntryOutcome): { cause?: Error } {
 
   if (outcome.kind === "plugin-install-failed" && outcome.cause !== undefined) {
     return { cause: outcome.cause };
+  }
+
+  return {};
+}
+
+/**
+ * MIM-03 / D-PL6-05: the undo steps a failed install could not finish, so its
+ * reconcile row shows the per-phase rows the standalone install shows. The
+ * phase causes arrive redacted from apply.ts (D-PL6-12).
+ */
+function failedRowRollback(outcome: PerEntryOutcome): {
+  rollbackPartial?: readonly { readonly phase: string; readonly cause?: Error }[];
+} {
+  if (outcome.kind === "plugin-install-failed" && outcome.rollbackPartials !== undefined) {
+    return { rollbackPartial: outcome.rollbackPartials };
   }
 
   return {};
@@ -1295,9 +1311,11 @@ function applyPluginOutcomeToBlock(
         status: "failed",
         name: outcome.plugin,
         reasons: failedRowReasons(outcome),
-        // D-05-16 / RESV-06: only a refused uninstall or a dependency-cascade
-        // install failure carries a cause onto this row.
+        // D-05-16 / RESV-06 / MIM-03: a refused uninstall, a dependency-cascade
+        // install failure, and an install that left rollback partials carry a
+        // cause onto this row; the last also carries its phases.
         ...failedRowCause(outcome),
+        ...failedRowRollback(outcome),
         // D-03/D-06: a failed reconcile apply row -> error, no reload.
         severity: "error",
         needsReload: false,

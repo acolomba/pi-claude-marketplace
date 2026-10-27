@@ -255,6 +255,12 @@ interface HermeticScopes {
    * a read-only directory cannot be removed.
    */
   readonly denyWrites: (directory: string) => Promise<void>;
+  /**
+   * Make `directory` writable again in the same teardown hook, ahead of the
+   * tree removal, when it still exists then: a copy of a denied directory that
+   * the case leaves behind, such as the one a failed skills undo keeps.
+   */
+  readonly restoreWrites: (directory: string) => void;
 }
 
 /**
@@ -267,9 +273,16 @@ async function createHermeticScopes(t: TestContext, label: string): Promise<Herm
   // Registered before the environment so the permissions come back before its
   // removal runs: after-hooks run in registration order.
   const denied: string[] = [];
+  const copies: string[] = [];
   t.after(async () => {
     for (const directory of denied) {
       await chmod(directory, 0o755);
+    }
+
+    for (const directory of copies) {
+      if (await pathExists(directory)) {
+        await chmod(directory, 0o755);
+      }
     }
   });
   const { cwd, home } = await createHermeticEnvironment(t, `apply-${label}-`);
@@ -289,7 +302,26 @@ async function createHermeticScopes(t: TestContext, label: string): Promise<Herm
       denied.push(directory);
       await chmod(directory, 0o555);
     },
+    restoreWrites: (directory: string): void => {
+      copies.push(directory);
+    },
   };
+}
+
+/**
+ * The message a read of `filePath` fails with, its path cut to the basename as
+ * a redacted row shows it. Node 26 appends the path to an fs error message and
+ * Node 24 does not, so a case reads the wording back from the runtime.
+ */
+async function redactedReadErrorMessage(filePath: string): Promise<string> {
+  try {
+    await readFile(filePath, "utf8");
+  } catch (error) {
+    assert.ok(error instanceof Error);
+    return error.message.replaceAll(filePath, path.basename(filePath));
+  }
+
+  assert.fail(`${filePath} was readable`);
 }
 
 /** Write `bytes` at `filePath`, creating the parent directory first. */
@@ -2386,6 +2418,68 @@ describe("applyReconcile", () => {
     assert.ok(!wholeMessage.includes(marketplaceRoot));
     assert.equal(await recordFor(project, "mp", "hello"), undefined);
     assert.equal(await recordFor(project, "mp", "bar"), undefined);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("MIM-03 / D-PL6-12: an install whose skills undo cannot finish reports the rollback phase, redacted", async (t) => {
+    // arrange
+    const { cwd, denyWrites, project, restoreWrites } = await createHermeticScopes(
+      t,
+      "install-rollback-partial",
+    );
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean" },
+    });
+    const readOnly = path.join(marketplaceRoot, "plugins", "hello", "skills", "tool", "read-only");
+    await writeUnder(path.join(readOnly, "data.txt"), "data\n");
+    await denyWrites(readOnly);
+    restoreWrites(
+      path.join(project.extensionRoot, "resources", "skills", "hello-tool", "read-only"),
+    );
+    await mkdir(project.mcpAdapterJsonPath, { recursive: true });
+    const adapterReadError = await redactedReadErrorMessage(project.mcpAdapterJsonPath);
+    const declaration = configBytes({
+      marketplaces: { mp: { source: marketplaceRoot } },
+      plugins: { "hello@mp": {} },
+    });
+    await writeUnder(project.baseConfigJsonPath, declaration);
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ hello (failed) {rollback partial}\n" +
+          `    cause: ${adapterReadError} -> ${adapterReadError}\n` +
+          "    [skills] (rollback failed)\n" +
+          "      cause: EACCES: permission denied, unlink 'data.txt'\n" +
+          "\n" +
+          "Reconcile: 1 failure",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await recordFor(project, "mp", "hello"), undefined);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
