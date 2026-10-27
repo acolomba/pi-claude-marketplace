@@ -214,6 +214,43 @@ Minified names: `bae` = resolveMissingDependencies, `lsn` = installResolvedPlugi
   whose copy resolves under `plugin-clones/` and a git record whose copy
   resolves under the marketplace clone both fail closed.
 
+### Amendments after research (2026-10-26)
+
+- **D-PL2-12 (amended) — discriminator is `resolvedSha`.** Records carry no
+  source-kind field. A record with `resolvedSha` (every git record since 0.9.0,
+  and a tag-pinned path-source dependency, clone-cache.ts:887-937) owns
+  `plugin-clones/` (its own clone-key directory); a record without it owns the
+  marketplace clone. One root per record; the other root fails closed.
+- **D-PL2-13 — Installed-copy manifest symlinks.** The installed-copy read also
+  checks the manifest file itself with `assertPathInside(copyRoot, manifestPath)`,
+  so a symlinked `plugin.json` is refused (project's NFR-10 convention). Claude
+  Code (E5) follows a manifest symlink whose realpath stays inside the plugin
+  dir; this is stricter, licensed by NFR-10.
+- **D-PL2-14 — A record the plan enables counts as released.** Under the new
+  order, a dependent whose dependency the user disabled and the config
+  re-enables is judged with that dependency enabled, so `apply` agrees with
+  `pending` (pending.test.ts case "a dependency the user disabled, the config
+  enables and the check holds down"). `pending` is the preview contract
+  (APL-D1).
+- **D-PL2-15 — NFR-5 note for add-time MISS-01.** `marketplace add` (any
+  source kind), `bootstrap` and the autoupdate cascade may clone a git-source
+  missing dependency on a cache miss, as any install may; warm sha-pinned
+  caches stay offline. Recorded as an NFR-5 amendment for the parent to carry
+  into PROJECT.md.
+- **D-PL2-16 — Enables a scheduled install releases run after MISS-01.** Since
+  enabling a record whose closure has an uninstalled member is refused
+  (enable-disable.ts:816-821), marker lifts and config enables that depend on a
+  MISS-01 install run after it (D-09-07 refresh position), not in the pre-move
+  toggle step.
+- **Add-time MISS-01 lifts no marker-held dependent** (D-PL2-09 as written).
+- **Files outside the ROADMAP line also touched:** `orchestrators/reconcile/{types,notify}.ts`
+  (or wherever pending's projection orders rows) so `pending` prints rows in
+  `apply`'s order; `orchestrators/marketplace/add.messaging.ts` row policy for
+  `installed` rows if needed.
+
+Uncertain additions: D-PL2-13 (refuse vs follow an inside-root symlink, as
+upstream does); D-PL2-14 (alternative: keep apply's old disagreement).
+
 ### Claude's Discretion
 
 - Function boundaries for the reordered apply driver and the shared
