@@ -210,7 +210,7 @@ export type CascadeMarketplaceLookup = (
  * Why a member's accumulated version constraint produced no install.
  *
  * `range` is the constraint as rendered for a user-visible row, already bounded
- * by `renderConstraintRange`. Every arm carries the member key and that range
+ * by `renderDeclaredRanges`. Every arm carries the member key and that range
  * and nothing else identifying: no arm carries a filesystem path, and the
  * intersection's own `detail` is assembled from measurements and field
  * positions rather than from any declared range's text.
@@ -244,6 +244,8 @@ export type CascadeConstraintFailure =
        * can tell whether the plugin the user named declares it.
        */
       readonly declaredBy?: readonly string[];
+      /** Set when `update` would meet the same refusal, so no hint names it. */
+      readonly updateBlocked?: true;
     }
   | {
       readonly kind: "range-too-complex";
@@ -311,6 +313,12 @@ export interface ResolvedCascadeMember extends ClosureMember {
    * range.
    */
   readonly directoryPin?: DirectoryPinRange;
+  /**
+   * D-PL4-01: the commit the dependency plan's install preview resolved for
+   * this member. The install pins it when no release tag pins the member, so
+   * it installs what the plan previewed and resolves the source once.
+   */
+  readonly previewedCommit?: string;
 }
 
 /**
@@ -848,7 +856,7 @@ function toMemberConstraintOutcome(
   declared: string,
   probed:
     | { readonly kind: "pinned"; readonly oid: string; readonly version: string }
-    | { readonly kind: "no-matching-tag"; readonly range: string }
+    | { readonly kind: "no-matching-tag" }
     | {
         readonly kind: "tag-listing-failed";
         readonly classification: DependencyTagListingFailureReason;

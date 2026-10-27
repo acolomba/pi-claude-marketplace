@@ -311,15 +311,6 @@ function quoteRange(range: string): string {
 }
 
 /**
- * Renders one range for a user-visible reason as Claude Code renders it
- * (D-PL3-10). An intersected range is synthesized rather than declared, so
- * it carries no declared length bound of its own.
- */
-export function renderConstraintRange(range: string): string {
-  return boundRenderedText(quoteRange(range));
-}
-
-/**
  * D-PL3-12: the UTF-16 code units Claude Code keeps of a version it quotes in
  * a refusal.
  */

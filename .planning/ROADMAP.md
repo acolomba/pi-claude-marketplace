@@ -47,7 +47,7 @@ parent session applies them at merge.
 - [ ] **Phase 1: Staging Warning Channels** - every staging verb reports its warnings, on success, on failure, and inside cascades
 - [ ] **Phase 2: Apply Ordering and Installed Declarations** - `pending` and `apply` agree, and dependency reads come from the installed copy
 - [ ] **Phase 3: Dependency Cascade Rows and Status** - cascade rows name every member, declarer, and degraded dependency
-- [ ] **Phase 4: Dependency Resolver Residue** - the resolver installs what it previewed and refuses before it moves
+- [x] **Phase 4: Dependency Resolver Residue** - the resolver installs what it previewed and refuses before it moves (completed 2026-10-27)
 - [ ] **Phase 5: Marketplace Command Parity** - reserved names, hosted manifests, `market` alias, row ids, shorthand, remove reporting
 - [ ] **Phase 6: Import Marketplace Planning** - import plans marketplaces the way Claude Code registers them
 - [ ] **Phase 7: Git Errors and Lock Discipline** - one git-host classifier, and every clone read or cleanup under the lock
@@ -139,6 +139,25 @@ Plans:
 3. An update whose agent target is occupied refuses before any earlier move lands (RSV-04).
 4. The `no-matching-tag` range and the `rollbackPartials` declaration are settled (RSV-05).
 
+**Plans:** 6/6 plans complete
+
+Plans:
+**Wave 1**
+- [x] 04-01-PLAN.md — Tracer: a write-free agents-bridge check refuses an occupied agent target in the move judge, the update's WR-C check and the install preview; the swap stays names-only (RSV-04, D-PL4-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [x] 04-02-PLAN.md — The no-match tag answer drops its unread range; the failed missing-dependency outcome declares `rollbackPartials` (RSV-05, D-PL4-05, D-PL4-06)
+- [x] 04-03-PLAN.md — A move refusal shows file names; the apply refusal and the search limit are recorded and pinned (RSV-02, RSV-03, D-PL4-02, D-PL4-03, D-PL4-07)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- [x] 04-04-PLAN.md — `previewInstall` answers its commit and the plan carries it on each scheduled member and the root (RSV-01, D-PL4-01)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+- [x] 04-05-PLAN.md — Both ledger builders pin the previewed commit, so a previewed git plugin resolves once; the apply rule is documented; the WR-C agent refusal is pinned (RSV-01, RSV-02, RSV-04)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+- [x] 04-06-PLAN.md — Four scenarios (one fetch of a new git dependency; three occupied-agent-target refusals) and the phase gate `npm run check` (RSV-01, RSV-04)
+
 ### Phase 5: Marketplace Command Parity
 
 **Goal:** The marketplace commands match Claude Code on reserved names, hosted manifests, the `market` alias, shorthand parsing, row ids, and remove reporting.
@@ -210,26 +229,29 @@ Plans:
 **Success Criteria** (what must be TRUE):
 
 1. Installing a plugin with `package.json` and `package-lock.json` runs `npm ci --ignore-scripts` (or the bun equivalent) in the staged copy, and its hook or MCP server finds its modules (PKD-01).
-2. A failing, timed-out, or lockfile-less package install leaves the plugin installed with a warning (PKD-02).
+2. A failing or timed-out package install, or one with a lockfile Claude Code refuses (`bun.lockb`, `yarn.lock`, `pnpm-lock.yaml`), leaves the plugin installed with a warning; a `package.json` with no lockfile stays silent, as Claude Code does (PKD-02, D-PL9-02).
 3. The NFR-5 amendment and the spawn rule carry a decision ID, and `npm run check` is green (PKD-03).
 
 ### Phase 10: Lifecycle Test and Harness Gaps
 
 **Goal:** Every behavior lifecycle-coverage left without a scenario or unit case has one, and the harness items are fixed.
 **Depends on:** Phases 1-9 merged
-**Requirements:** TST-01, TST-02, TST-03
+**Requirements:** TST-01, TST-02, TST-03, CAS-08, MIM-05, XPH-01
 **Backlog:** LCTEST-01, LCHARN-01, TEST-PHANTOMMP-01
-**Files:** `features/**`, `test/e2e/_rpc.ts`, `test/edge/handlers/plugin/browse.test.ts`, `test/orchestrators/plugin/install-flow.test.ts`, `.agents/skills/cucumber/rules/*`.
+**Files:** `features/**`, `test/e2e/_rpc.ts`, `test/edge/handlers/plugin/browse.test.ts`, `test/orchestrators/plugin/install-flow.test.ts`, `.agents/skills/cucumber/rules/*`; for CAS-08, the failure-row paths in `orchestrators/plugin/install-flow.ts`, `install-cascade.ts`, `install-cascade.messaging.ts`, and `update-cascade.ts`; for MIM-05, `orchestrators/reconcile/apply.ts` and `apply-outcomes.ts`; both landing before Phase 11 splits `install-flow.ts`.
 **Success Criteria** (what must be TRUE):
 
 1. Each LCTEST-01 item has a scenario or unit case, or a recorded unit-only reason (TST-01).
 2. Each LCHARN-01 item is fixed or recorded as declined (TST-02).
 3. No fixture builds a marketplace record without its manifest (TST-03).
+4. A failed closure on the root-ledger, plan-step, and mid-walk lookup routes shows a row for each member that resolved but did not install, pinned by a cucumber scenario per route (CAS-08).
+5. A partial rollback of `apply`'s missing-dependency install shows install's per-phase detail, pinned by a cucumber scenario (MIM-05).
+6. Each XPH-01 residue item is fixed or pinned by a scenario (XPH-01).
 
 ### Phase 11: Cleanup, Split, and Docs
 
 **Goal:** The milestone ends with no lifecycle dead code, a split install flow, docs that match behavior, and a backlog with every settled entry closed.
-**Depends on:** Phases 1-9 merged
+**Depends on:** Phases 1-9 merged; the CLN-02 split of `install-flow.ts` waits for Phase 10's CAS-08 change to land
 **Requirements:** CLN-01, CLN-02, CLN-03, CLN-04
 **Backlog:** LCCODE-01 b1 b4 b5 b8-b11, UPDDEP-01 b7, LCDOC-01, all entries settled by Phases 1-9
 **Files:** `orchestrators/plugin/install-flow.ts` and new sibling modules, the LCCODE-01 sites, test lock helpers, `docs/**`, `CHANGELOG.md`, `.planning/PROJECT.md`, `.planning/BACKLOG.md`.

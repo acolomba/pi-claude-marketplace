@@ -399,7 +399,8 @@ function closureFailureFacts(
  * RESV-05 / UPD-DEP-D1: the sentence for an installed copy outside the range.
  * When a move was judged and the plugin the user named declares the
  * dependency itself, the cause ends with Claude Code's next step, as Claude
- * Code adds it only under that condition (CAS-06, D-PL3-11). The hint names
+ * Code adds it only under that condition (CAS-06, D-PL3-11). A refusal
+ * `update` would meet too, such as a taken agent target, gets no hint. The hint names
  * only the dependency key, which the walk checked against the token allowlist.
  * The recorded version is cut at 64 code units, as Claude Code cuts every
  * version a refusal quotes (CAS-07, D-PL3-12).
@@ -415,7 +416,7 @@ function installedUnsatisfiedCause(
   }
 
   const refused = `${head}, and cannot move: ${failure.moveRefusal}`;
-  if (failure.declaredBy?.includes(rootKey) !== true) {
+  if (failure.updateBlocked === true || failure.declaredBy?.includes(rootKey) !== true) {
     return refused;
   }
 

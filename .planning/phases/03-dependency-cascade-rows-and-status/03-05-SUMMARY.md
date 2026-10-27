@@ -175,6 +175,7 @@ None - plan executed exactly as written.
 ## Decision rows
 
 | **D-PL3-11 (plugin-lifecycle, uncertain): a `cannot move:` refusal ends with `To look for a version in range, run /claude:plugin update <dependency>.` when the plugin the user named declares the dependency directly, for every source kind** -- a refusal that judged no move gets no hint; `DependencyMoveRequest` gains no source field; the failure carries `declaredBy` | Claude Code adds the same next step under the same condition (2.1.310 `omn`, E5), for any source | Shipped; five messaging unit cases, one new offline git scenario, and every existing pin updated. For user review (alternative: limit the hint to git dependencies refused offline, as the backlog text implied) |
+| **D-PL3-18 (plugin-lifecycle): no version-in-range hint when `update` would meet the same refusal** -- a move refused because the candidate's names or agent targets are taken (PI-6, D-PL4-04) carries `updateBlocked`, and its `cannot move:` cause ends without the D-PL3-11 hint | `update` lands the same candidate, so the hint would send the user to the same refusal; Claude Code has no agent-target refusal, so parity does not decide this case (Pi capability gap) | Shipped in the merge of Phase 4; a messaging unit case, the judge and plan pins, and the Phase 4 `install-dependencies.feature` scenario keeps its hint-free text |
 
 ## Backlog dispositions
 

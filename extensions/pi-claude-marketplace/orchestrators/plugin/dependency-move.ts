@@ -100,10 +100,14 @@ export function freshDependencyMoveMemos(): DependencyMoveMemos {
   return { constraintTagMemo, constraintMarketplaceTagMemo };
 }
 
-/** One move's verdict: the candidate it would land, or why it cannot move. */
+/**
+ * One move's verdict: the candidate it would land, or why it cannot move.
+ * `updateBlocked` marks a refusal `update` would meet too, because it lands
+ * the same candidate.
+ */
 export type DependencyMoveJudgement =
   | { readonly ok: true; readonly prepared: PreparedPluginUpdate }
-  | { readonly ok: false; readonly cause: string };
+  | { readonly ok: false; readonly cause: string; readonly updateBlocked?: true };
 
 /** What one move did: whether it landed, and the row that reports it. */
 export interface DependencyMoveRun {
@@ -156,6 +160,19 @@ function refusalCause(
   return verdict.notes.join(" ");
 }
 
+/** Why the candidate's names or agent targets are taken, if they are (PI-6, D-PL4-04). */
+async function namesTakenCause(
+  args: CascadeThreePhaseArgs,
+  prepared: PreparedPluginUpdate,
+): Promise<string | undefined> {
+  try {
+    await assertUpdateNamesFree(args, prepared);
+    return undefined;
+  } catch (err) {
+    return errorMessage(err);
+  }
+}
+
 /**
  * Judges one move with the update preflight under `judgeOnly`, which writes
  * no state, then the swap's PI-6 name check: the candidate it would land, or
@@ -186,7 +203,11 @@ export async function judgeDependencyMove(
       return { ok: false, cause: `version ${ruledOut} was ruled out by the plan` };
     }
 
-    await assertUpdateNamesFree(args, prepared);
+    const namesTaken = await namesTakenCause(args, prepared);
+    if (namesTaken !== undefined) {
+      return { ok: false, cause: namesTaken, updateBlocked: true };
+    }
+
     return { ok: true, prepared };
   } catch (err) {
     rethrowInvalidGitHubBaseUrl(err);

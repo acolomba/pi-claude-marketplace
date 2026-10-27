@@ -1025,6 +1025,40 @@ describe("composeCascadeFailureMessage", () => {
     });
   });
 
+  test("CAS-06 a move refusal update would meet too names no update", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "installed-unsatisfied",
+        key: "formatter@tools",
+        range: "^2.0.0",
+        recordedVersion: "1.0.0",
+        moveRefusal:
+          "Cannot replace agent target with non-previous content at pi-claude-marketplace-formatter-helper.md",
+        declaredBy: [ROOT_KEY],
+        updateBlocked: true,
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools v1.0.0 (failed) {already installed, version conflict}",
+        '    cause: Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: Cannot replace agent target with non-previous content at pi-claude-marketplace-formatter-helper.md',
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
   test("CAS-06 an installed copy no move was judged for names no update", () => {
     // arrange
     const subject: CascadeFailureSubject = {

@@ -2,20 +2,20 @@
 gsd_state_version: "1.0"
 milestone: plugin-lifecycle
 milestone_name: Marketplace and Plugin Lifecycle Backlog
-current_phase: 3
-current_phase_name: Dependency Cascade Rows and Status
+current_phase: 1
+current_phase_name: Staging Warning Channels
 status: verifying
-stopped_at: Completed 03-06-PLAN.md
-last_updated: "2026-10-27T10:17:12.125Z"
-last_activity: 2026-10-26
-last_activity_desc: Phase 3 execution started
-state_head: 87a37b84cb2819f8e83ab434dd513db55c7baa58
+stopped_at: Phase 4 complete, ready to verify Phase 1
+last_updated: "2026-10-27T11:04:03.605Z"
+last_activity: 2026-10-27
+last_activity_desc: Phase 4 complete, transitioned to Phase 1
+state_head: edac58eb2fb9fccd7212f72307195efa784d73c4
 progress:
   total_phases: 11
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 6
   completed_plans: 6
-  percent: 0
+  percent: 9
 ---
 
 # Project State
@@ -31,10 +31,10 @@ component as a working Pi artifact.
 
 ## Current Position
 
-Phase: 3 (Dependency Cascade Rows and Status) — EXECUTING
-Plan: 6 of 6
+Phase: 1 — Staging Warning Channels
+Plan: 4
 Status: Phase complete — ready for verification
-Last activity: 2026-10-27 — Completed quick task 261027-8h9: Reverse D-PL3-10 (refusal ranges render as Claude Code does)
+Last activity: 2026-10-27 — Completed quick task 261027-9lp: agent-target refusal redaction and update reason
 
 
 ### mcp-4 closeout
@@ -188,12 +188,12 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-gvt | GV-01: record plugins at a range-selected release tag as Claude Code does, the tag semver kept as resolvedVersion | 2026-10-26 | 2638b001 | complete | [261026-gvt-record-plugins-at-release-tags-as-claude-code](./quick/261026-gvt-record-plugins-at-release-tags-as-claude-code/) |
 | 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
-| 261027-8h9 | Reverse D-PL3-10: refusal ranges render as Claude Code does | 2026-10-27 | 87a37b84 | — | [261027-8h9-reverse-d-pl3-10-refusal-range-truncatio](./quick/261027-8h9-reverse-d-pl3-10-refusal-range-truncatio/) |
+| 261027-9lp | D-PL4-08/09: agent-target preview refusals name only the file; a plain update's refusal drops the false "unreadable manifest" reason | 2026-10-27 | edac58eb | complete | [261027-9lp-agent-target-refusal-redaction-and-updat](./quick/261027-9lp-agent-target-refusal-redaction-and-updat/) |
 
 ## Session Continuity
 
-**Last session:** 2026-10-27T06:16:17.604Z
-**Stopped at:** Completed 03-06-PLAN.md
+**Last session:** 2026-10-25T12:00:00.000Z
+**Stopped at:** Phase 4 complete, ready to verify Phase 1
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on

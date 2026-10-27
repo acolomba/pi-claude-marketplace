@@ -22,7 +22,27 @@
 // pick the conflict involves has a version left, or when the choices repeat
 // a state they were in before. Every pick and every ruled-out version comes
 // from a finite catalog, so the search ends. Then each fresh plugin is
-// previewed with the install's own preflight.
+// previewed with the install's own preflight. Each fresh plugin's preview
+// answers the commit it resolved, and the plan carries that commit on the
+// member it schedules, so the install lands what the plan previewed
+// (D-PL4-01).
+//
+// D-PL4-03: the search is not complete. When a conflict involves several
+// tentative picks, the plan rules out the version of the first involved pick
+// in walk order that still has a version left. It does not try the others
+// first, and a ruled-out version stays ruled out. So a graph that only that
+// version solves is refused: for example, `a@3` with `b@2` when `a@3` and
+// `b@3` conflict. Claude Code's resolver is one greedy pass with no
+// backtracking and refuses these graphs too, while a complete search would
+// multiply judge calls and tag reads.
+//
+// D-PL4-02: the plan previews every fresh plugin of the graph, also under
+// `deferMoveDependencies`. That includes one that only a moved dependency's
+// new version needs and that the caller's later step installs. So one fresh
+// plugin that cannot install refuses the plugin being installed before any
+// move lands. Claude Code's install of one plugin is all or nothing over its
+// closure, and `apply`'s config install is that install's counterpart
+// (D-03-07, NFR-3).
 //
 // The answer is the steps that carry the plan out, in dependency order: each
 // move at exactly the version the plan chose, the fresh installs and
@@ -36,6 +56,7 @@
 
 import { recordedVersionSatisfies, renderDeclaredRanges } from "../../domain/dependency-range.ts";
 import { withoutTagCommit } from "../../domain/version.ts";
+import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 
 import type { CascadeFailureSubject } from "./install-cascade.messaging.ts";
 import type {
@@ -91,7 +112,8 @@ export function plannedRangeVersion(candidate: PlannedCandidate): string {
 
 /** One move's verdict, over the candidate type the ports carry. */
 export type PlanJudgement<P extends PlannedCandidate> =
-  { readonly ok: true; readonly prepared: P } | { readonly ok: false; readonly cause: string };
+  | { readonly ok: true; readonly prepared: P }
+  | { readonly ok: false; readonly cause: string; readonly updateBlocked?: true };
 
 /**
  * The operations the plan composes. `P` is the move candidate the judge
@@ -106,8 +128,11 @@ export interface DependencyPlanPorts<P extends PlannedCandidate = PreparedPlugin
    * declarations it involves.
    */
   readonly walk: (moving: ReadonlyMap<string, P>) => Promise<DependencyGraph | GraphWalkFailure>;
-  /** Throws what installing `member` would throw, with no write. */
-  readonly preview: (member: ResolvedCascadeMember) => Promise<void>;
+  /**
+   * Throws what installing `member` would throw, with no write, and answers
+   * the commit its preflight resolved (D-PL4-01).
+   */
+  readonly preview: (member: ResolvedCascadeMember) => Promise<string | undefined>;
 }
 
 /** What the plan carries out: materialize a closure slice, or make one move. */
@@ -136,6 +161,12 @@ export interface DependencyPlanOptions {
    * installed reaches without passing a move. Only `apply` sets it.
    */
   readonly deferMoveDependencies: boolean;
+  /**
+   * D-PL4-01: the commit the preview of the plugin being installed resolved,
+   * which its member in `final` carries. Only an install sets it; an update's
+   * plan has no root.
+   */
+  readonly rootCommit?: string;
 }
 
 /** A move the plan chose: the request it judged and the candidate it lands. */
@@ -147,7 +178,7 @@ interface Choice<P extends PlannedCandidate> {
 type Refusal = Extract<DependencyPlan, { readonly ok: false }>;
 
 /** RESV-05's subject for a recorded dependency that cannot move into its range. */
-function unmovable(request: DependencyMoveRequest, cause: string): Refusal {
+function unmovable(request: DependencyMoveRequest, cause: string, updateBlocked?: true): Refusal {
   return {
     ok: false,
     subject: {
@@ -158,8 +189,11 @@ function unmovable(request: DependencyMoveRequest, cause: string): Refusal {
         key: request.key,
         range: renderRequestedRanges(request.requesters),
         recordedVersion: request.recordedVersion,
-        moveRefusal: cause,
+        // D-PL4-07 / T-55-02-02: the swap's failed-move row shows only the
+        // basename, so the plan's refusal of the same failure reads the same.
+        moveRefusal: redactAbsolutePaths(cause),
         declaredBy: request.requesters.map((requester) => requester.key),
+        ...(updateBlocked && { updateBlocked }),
       },
     },
   };
@@ -258,7 +292,9 @@ async function chooseMoves<P extends PlannedCandidate>(
     const judged = await judge(search, request);
     if (!judged.ok) {
       return {
-        refusal: search.ruledOutBy.get(request.key) ?? unmovable(request, judged.cause),
+        refusal:
+          search.ruledOutBy.get(request.key) ??
+          unmovable(request, judged.cause, judged.updateBlocked),
         involved: request.requesters.map((requester) => requester.key),
       };
     }
@@ -406,11 +442,16 @@ async function settleChoices<P extends PlannedCandidate>(
   }
 }
 
-/** The first fresh plugin the install's own preflight refuses, if any. */
+/**
+ * The first fresh plugin the install's own preflight refuses, or the commit
+ * each fresh plugin's preview resolved, by key. A key whose preview resolved
+ * none is left out.
+ */
 async function previewFresh<P extends PlannedCandidate>(
   graph: DependencyGraph,
   ports: DependencyPlanPorts<P>,
-): Promise<Refusal | undefined> {
+): Promise<Refusal | Map<string, string>> {
+  const commits = new Map<string, string>();
   for (const node of graph.nodes) {
     if (node.kind !== "fresh") {
       continue;
@@ -418,7 +459,10 @@ async function previewFresh<P extends PlannedCandidate>(
 
     try {
       // eslint-disable-next-line no-await-in-loop -- the first refusal ends the plan
-      await ports.preview(node.member);
+      const commit = await ports.preview(node.member);
+      if (commit !== undefined) {
+        commits.set(node.member.key, commit);
+      }
     } catch (err) {
       return {
         ok: false,
@@ -432,13 +476,30 @@ async function previewFresh<P extends PlannedCandidate>(
     }
   }
 
-  return undefined;
+  return commits;
+}
+
+/**
+ * `member` carrying the commit its preview resolved, as a copy: the walks
+ * share a graph node's member, so it is never changed in place.
+ */
+function withPreviewedCommit(
+  member: ResolvedCascadeMember,
+  commit: string | undefined,
+): ResolvedCascadeMember {
+  return commit === undefined ? member : { ...member, previewedCommit: commit };
 }
 
 /** What a node materializes in a cascade, when it materializes anything. */
-function materialized(node: DependencyGraphNode): PlannedCascadeMember | undefined {
+function materialized(
+  node: DependencyGraphNode,
+  commits: ReadonlyMap<string, string>,
+): PlannedCascadeMember | undefined {
   if (node.kind === "fresh") {
-    return { kind: "install", member: node.member };
+    return {
+      kind: "install",
+      member: withPreviewedCommit(node.member, commits.get(node.member.key)),
+    };
   }
 
   return node.walked && node.disabled ? { kind: "re-enable", member: node.member } : undefined;
@@ -484,11 +545,12 @@ function reachable(
 function schedule<P extends PlannedCandidate>(
   graph: DependencyGraph,
   moves: ReadonlyMap<string, Choice<P>>,
+  commits: ReadonlyMap<string, string>,
   options: DependencyPlanOptions,
 ): Extract<DependencyPlan, { readonly ok: true }> {
   const moved = new Set(moves.keys());
   const pending = graph.nodes.flatMap((node) => {
-    const member = materialized(node);
+    const member = materialized(node, commits);
     return member === undefined ? [] : [member];
   });
   const done = new Set<string>();
@@ -529,7 +591,14 @@ function schedule<P extends PlannedCandidate>(
     final: {
       members: [
         ...rest,
-        ...(graph.root === undefined ? [] : [{ kind: "install" as const, member: graph.root }]),
+        ...(graph.root === undefined
+          ? []
+          : [
+              {
+                kind: "install" as const,
+                member: withPreviewedCommit(graph.root, options.rootCommit),
+              },
+            ]),
       ],
       alreadyInstalled: graph.nodes.flatMap((node) =>
         node.kind === "recorded" &&
@@ -556,7 +625,8 @@ export async function planDependencyGraph<P extends PlannedCandidate>(
     return settled;
   }
 
-  return (
-    (await previewFresh(settled.graph, ports)) ?? schedule(settled.graph, settled.moves, options)
-  );
+  const previewed = await previewFresh(settled.graph, ports);
+  return previewed instanceof Map
+    ? schedule(settled.graph, settled.moves, previewed, options)
+    : previewed;
 }

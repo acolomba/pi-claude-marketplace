@@ -241,7 +241,7 @@ test("never considers a tag that carries a satisfying version without the releas
   });
 
   // assert
-  assert.deepStrictEqual(outcome, { kind: "no-matching-tag", range: "^2.0.0" });
+  assert.deepStrictEqual(outcome, { kind: "no-matching-tag" });
 });
 
 test("reports no matching tag for a repository advertising no tags at all", async () => {
@@ -259,10 +259,10 @@ test("reports no matching tag for a repository advertising no tags at all", asyn
   });
 
   // assert
-  assert.deepStrictEqual(outcome, { kind: "no-matching-tag", range: "^2.0.0" });
+  assert.deepStrictEqual(outcome, { kind: "no-matching-tag" });
 });
 
-test("reports no matching tag with the rendered range when no advertised version satisfies", async () => {
+test("reports no matching tag when no advertised version satisfies", async () => {
   // arrange
   const queried: string[] = [];
   const seam = advertising(
@@ -283,7 +283,7 @@ test("reports no matching tag with the rendered range when no advertised version
   });
 
   // assert
-  assert.deepStrictEqual(outcome, { kind: "no-matching-tag", range: ">=3.0.0 <4.0.0" });
+  assert.deepStrictEqual(outcome, { kind: "no-matching-tag" });
 });
 
 test("reports the no-match arm when the query ran against the dependency's own source", async () => {
@@ -301,7 +301,7 @@ test("reports the no-match arm when the query ran against the dependency's own s
   });
 
   // assert
-  assert.deepStrictEqual(outcome, { kind: "no-matching-tag", range: ">=9.0.0" });
+  assert.deepStrictEqual(outcome, { kind: "no-matching-tag" });
   assert.deepStrictEqual(queried, [PLUGIN_REPO_URL]);
 });
 
@@ -320,7 +320,7 @@ test("reports the same no-match arm when the query ran against the marketplace r
   });
 
   // assert
-  assert.deepStrictEqual(outcome, { kind: "no-matching-tag", range: ">=9.0.0" });
+  assert.deepStrictEqual(outcome, { kind: "no-matching-tag" });
   assert.deepStrictEqual(queried, ["https://example.com/acme-marketplace"]);
 });
 

@@ -267,6 +267,7 @@ describe("judgeDependencyMove", () => {
     assert.deepStrictEqual(judgement, {
       ok: false,
       cause: 'Cross-plugin name conflict:\n  - skill "zcore-tool" already owned by plugin "other"',
+      updateBlocked: true,
     });
   });
 
