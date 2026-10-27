@@ -108,6 +108,19 @@
       "message": "D-13: only platform/git.ts imports isomorphic-git. Reach git through its wrappers and the GitOps seam in orchestrators/marketplace/shared.ts."
     },
     {
+      "id": "child-process-chokepoint",
+      "kind": "banned-import",
+      "specifiers": ["node:child_process", "child_process"],
+      "files": ["extensions/pi-claude-marketplace/**"],
+      "exclude": [
+        "extensions/pi-claude-marketplace/platform/git-credential.ts",
+        "extensions/pi-claude-marketplace/bridges/hooks/dispatch-exec.ts",
+        "extensions/pi-claude-marketplace/bridges/hooks/async-rewake/registry.ts",
+        "extensions/pi-claude-marketplace/platform/package-manager.ts"
+      ],
+      "message": "D-21 / D-PL9-11: only the four sanctioned spawn sites import node:child_process: the git credential helper, the two hook executors, and the plugin package manager runner. test/architecture/no-shell-out.test.ts also rejects dynamic import() and require."
+    },
+    {
       "id": "proper-lockfile-chokepoint",
       "kind": "banned-import",
       "specifiers": ["proper-lockfile"],

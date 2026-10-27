@@ -2579,3 +2579,48 @@ test("UPD-DEP-D1: previewInstall throws the PI-6 conflict with a name another pl
     CrossPluginConflictError,
   );
 });
+
+test("D-PL9-05: runs the packages phase after the workflows phase and before the state phase", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-phase-order-");
+  const seeded = await seedPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+  const phaseNames: string[] = [];
+  const transaction = {
+    runPhases: <C>(phases: readonly Phase<C>[], ctx: C) => {
+      phaseNames.push(...phases.map((phase) => phase.name));
+      return runPhases(phases, ctx);
+    },
+  };
+
+  // act
+  const ledgerOutcome = await runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    undefined,
+    transaction,
+  );
+
+  // assert
+  assert.strictEqual(ledgerOutcome.kind, "installed");
+  assert.deepStrictEqual(phaseNames, [
+    "skills",
+    "commands",
+    "agents",
+    "hooks",
+    "mcp",
+    "workflows",
+    "packages",
+    "state",
+  ]);
+});
