@@ -21,7 +21,7 @@ created: "2026-10-26"
 |----------|-------|
 | **Framework** | `node:test` (unit/architecture); `@cucumber/cucumber` (behavioral) |
 | **Config file** | `package.json` scripts; `cucumber.json` |
-| **Quick run command** | `node --test test/orchestrators/plugin/package-install.test.ts test/platform/package-manager.test.ts` | ✅ green |
+| **Quick run command** | `node --test test/orchestrators/plugin/package-install.test.ts test/platform/package-manager.test.ts` |
 | **Full suite command** | `npm run check` |
 | **Estimated runtime** | ~90 seconds (full) |
 
@@ -42,7 +42,7 @@ See `09-RESEARCH.md` § Validation Architecture (Phase Requirements -> Test Map)
 
 | Req | Test Type | Automated Command | Status |
 |-----|-----------|-------------------|--------|
-| PKD-01 | unit | `node --test test/orchestrators/plugin/package-install.test.ts test/platform/package-manager.test.ts` |
+| PKD-01 | unit | `node --test test/orchestrators/plugin/package-install.test.ts test/platform/package-manager.test.ts` | ✅ green |
 | PKD-01 | behavioral | cucumber scenario in `features/plugin/package-dependencies.feature` (9 scenarios) | ✅ green |
 | PKD-02 | unit + behavioral | same files; `node --test test/orchestrators/plugin/materialize-latest.test.ts` | ✅ green |
 | PKD-03 | architecture + lint + fallow | `node --test test/architecture/no-shell-out.test.ts`; `npm run lint`; `npm run fallow` | ✅ green |
