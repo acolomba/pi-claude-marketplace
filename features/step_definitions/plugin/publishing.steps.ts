@@ -133,3 +133,20 @@ Given(
     );
   },
 );
+
+// The generated name of `skills/skill` is `<plugin>-skill`, the name of the
+// plugin's own skill, and `<plugin>-skill/` sorts first, so the install keeps
+// that one and skips the new one.
+Given(
+  "the published plugin {string} of the marketplace {string} has a second skill whose name collides with its first",
+  async function (this: ScenarioWorld, plugin: string, name: string) {
+    const text = "---\nname: skill\ndescription: A colliding skill.\n---\n\nColliding.\n";
+    const file = await writePublishedPluginFile(
+      this.requirePublished(name),
+      plugin,
+      path.join("skills", "skill", "SKILL.md"),
+      text,
+    );
+    assert.strictEqual(await readFile(file, "utf8"), text);
+  },
+);

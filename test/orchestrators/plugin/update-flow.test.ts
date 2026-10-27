@@ -11090,7 +11090,7 @@ for (const mode of ["json", "rpc"]) {
               kind: "diagnostic",
               severity: "warning",
               needsReload: false,
-              header: 'Plugin "hello" updated; 1 declared component has a note.',
+              header: 'Plugin "hello" [project] updated; 1 declared component has a note.',
               lines: [
                 'skill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
               ],
@@ -11135,7 +11135,7 @@ test("D-141-03: a standalone updatePlugins run surfaces the skills discovery war
         },
         {
           message:
-            'Plugin "hello" updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
@@ -11209,7 +11209,7 @@ test("D-141-03: an updateSinglePlugin cascade emits no notification and carries 
           },
           {
             message:
-              'Plugin "hello" updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+              'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
             severity: "warning",
           },
         ]);
@@ -11255,12 +11255,12 @@ test("D-141-03: a bulk update surfaces one diagnostic per updated plugin", async
         },
         {
           message:
-            'Plugin "hello" updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] updated; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
         {
           message:
-            'Plugin "world" updated; 1 declared component has a note.\n\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "world" [project] updated; 1 declared component has a note.\n\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
@@ -11527,7 +11527,7 @@ test("WLIF-02: a workflow version B cannot admit reaches the standalone diagnost
       assert.equal(diagnostics.length, 1, JSON.stringify(notifications));
       assert.match(
         diagnostics[0]?.message ?? "",
-        /Plugin "hello" updated; 1 declared component has a note\./,
+        /Plugin "hello" \[project\] updated; 1 declared component has a note\./,
       );
       assert.match(diagnostics[0]?.message ?? "", /workflow script "broken\.js"/);
       assert.match(diagnostics[0]?.message ?? "", /was not installed/);

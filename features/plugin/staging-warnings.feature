@@ -17,7 +17,34 @@ Feature: Plugin staging warnings
     Then the command reports these results:
       | kind       | severity | needs reload | summary                             | header                                                    | lines                                                                                                                                                                                        |
       | cascade    | warning  | true         | A plugin operation needs attention. |                                                           |                                                                                                                                                                                              |
-      | diagnostic | warning  | false        |                                     | Plugin "demo" installed; 1 declared component has a note. | agent source "helper" at "second.md" duplicates generated name "pi-claude-marketplace-demo-helper" already produced by agent source "helper" at "first.md"; keeping first discovered source. |
+      | diagnostic | warning  | false        |                                     | Plugin "demo" [project] installed; 1 declared component has a note. | agent source "helper" at "second.md" duplicates generated name "pi-claude-marketplace-demo-helper" already produced by agent source "helper" at "first.md"; keeping first discovered source. |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status    | reasons               | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | installed | requires pi-subagents | project | 1.0.0   |
+
+  Scenario: Updating a plugin whose new version has colliding skills reports the skip under a header that names the scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                            | lines                                                                                                                                      |
+      | cascade    | info     | true         |                                                                   |                                                                                                                                            |
+      | diagnostic | warning  | false        | Plugin "demo" [project] updated; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
+      | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
+
+  Scenario: Reinstalling a plugin whose skills collide reports the skip under a header that names the scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    When the user runs "/claude:plugin reinstall demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | header                                                                | lines                                                                                                                                      |
+      | cascade    | info     | true         |                                                                       |                                                                                                                                            |
+      | diagnostic | warning  | false        | Plugin "demo" [project] reinstalled; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
+      | fixtures         | project           | demo@fixtures | demo | reinstalled |         | project | 1.0.0   |

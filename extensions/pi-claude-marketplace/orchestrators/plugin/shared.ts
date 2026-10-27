@@ -1764,13 +1764,25 @@ export async function emitMarketplaceNotAddedSignal(args: {
  * declare -- so a header claiming a disposal would contradict the lines
  * directly beneath it. "Note" is the word the read-only `info` surface already
  * prints for the same facts, so the two surfaces name them the same way.
+ *
+ * D-PL1-05: the header names the plugin's scope in brackets, as the row
+ * grammar `<name> [scope]` does. D-PL1-06: the verb is one of the seven
+ * staging verbs.
  */
 export function surfaceDiscoveryWarnings(
   ctx: NotificationContext,
   run: NotificationRun,
   args: {
     readonly plugin: string;
-    readonly verb: "installed" | "updated" | "reinstalled";
+    readonly scope: Scope;
+    readonly verb:
+      | "installed"
+      | "updated"
+      | "reinstalled"
+      | "enabled"
+      | "install failed"
+      | "update failed"
+      | "reinstall failed";
     readonly warnings: readonly string[];
   },
 ): void {
@@ -1779,10 +1791,11 @@ export function surfaceDiscoveryWarnings(
   }
 
   const lines = args.warnings.map((w) => redactAbsolutePaths(w));
+  const subject = `Plugin "${args.plugin}" [${args.scope}] ${args.verb}`;
   const header =
     lines.length === 1
-      ? `Plugin "${args.plugin}" ${args.verb}; 1 declared component has a note.`
-      : `Plugin "${args.plugin}" ${args.verb}; ${lines.length.toString()} declared components have notes.`;
+      ? `${subject}; 1 declared component has a note.`
+      : `${subject}; ${lines.length.toString()} declared components have notes.`;
   notifyDiagnostic(ctx, run, header, lines);
 }
 

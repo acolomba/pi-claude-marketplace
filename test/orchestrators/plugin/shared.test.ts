@@ -3465,6 +3465,7 @@ describe("surfaceDiscoveryWarnings", () => {
       // act
       surfaceDiscoveryWarnings(ctx, run, {
         plugin: "alpha",
+        scope: "project",
         verb: "installed",
         warnings: [
           "Could not read /private/plugin/skills/alpha-skill",
@@ -3483,7 +3484,7 @@ describe("surfaceDiscoveryWarnings", () => {
             kind: "diagnostic",
             severity: "warning",
             needsReload: false,
-            header: 'Plugin "alpha" installed; 3 declared components have notes.',
+            header: 'Plugin "alpha" [project] installed; 3 declared components have notes.',
             lines: [
               "Could not read alpha-skill",
               "fetch with Bearer *** failed",
@@ -3504,6 +3505,7 @@ describe("surfaceDiscoveryWarnings", () => {
     // act
     surfaceDiscoveryWarnings(ctx, runWithNothingLoaded(), {
       plugin: "alpha",
+      scope: "project",
       verb: "installed",
       warnings: [],
     });
@@ -3513,7 +3515,7 @@ describe("surfaceDiscoveryWarnings", () => {
   });
 
   // eslint-disable-next-line sonarjs/assertions-in-tests -- Explicit strong-mock verify calls assert the complete notification interaction.
-  test("redacts a singular discovery path and emits exact warning bytes", () => {
+  test("D-PL1-05: redacts a singular discovery path under a header that names the project scope", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
@@ -3525,7 +3527,7 @@ describe("surfaceDiscoveryWarnings", () => {
       .once();
     when(() => {
       ui.notify(
-        'Plugin "alpha" installed; 1 declared component has a note.\n\nCould not read alpha-skill',
+        'Plugin "alpha" [project] installed; 1 declared component has a note.\n\nCould not read alpha-skill',
         "warning",
       );
     })
@@ -3535,6 +3537,7 @@ describe("surfaceDiscoveryWarnings", () => {
     // act
     surfaceDiscoveryWarnings(ctx, runWithNothingLoaded(), {
       plugin: "alpha",
+      scope: "project",
       verb: "installed",
       warnings: ["Could not read /private/plugin/skills/alpha-skill"],
     });
@@ -3545,7 +3548,7 @@ describe("surfaceDiscoveryWarnings", () => {
   });
 
   // eslint-disable-next-line sonarjs/assertions-in-tests -- Explicit strong-mock verify calls assert the complete notification interaction.
-  test("emits plural updated diagnostics in caller warning order", () => {
+  test("D-PL1-05: emits plural updated diagnostics in caller warning order under a header that names the user scope", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
     const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
@@ -3557,7 +3560,7 @@ describe("surfaceDiscoveryWarnings", () => {
       .once();
     when(() => {
       ui.notify(
-        'Plugin "alpha" updated; 2 declared components have notes.\n\nfirst warning\nsecond warning',
+        'Plugin "alpha" [user] updated; 2 declared components have notes.\n\nfirst warning\nsecond warning',
         "warning",
       );
     })
@@ -3567,6 +3570,7 @@ describe("surfaceDiscoveryWarnings", () => {
     // act
     surfaceDiscoveryWarnings(ctx, runWithNothingLoaded(), {
       plugin: "alpha",
+      scope: "user",
       verb: "updated",
       warnings: ["first warning", "second warning"],
     });
@@ -3575,6 +3579,49 @@ describe("surfaceDiscoveryWarnings", () => {
     verify(ctx);
     verify(ui);
   });
+
+  for (const verb of [
+    "installed",
+    "updated",
+    "reinstalled",
+    "enabled",
+    "install failed",
+    "update failed",
+    "reinstall failed",
+  ] as const) {
+    // eslint-disable-next-line sonarjs/assertions-in-tests -- Explicit strong-mock verify calls assert the complete notification interaction.
+    test(`D-PL1-06: renders the ${verb} verb verbatim in the header`, () => {
+      // arrange
+      const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+      const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+      when(() => ctx.mode)
+        .thenReturn("tui")
+        .once();
+      when(() => ctx.ui)
+        .thenReturn(ui)
+        .once();
+      when(() => {
+        ui.notify(
+          `Plugin "alpha" [project] ${verb}; 1 declared component has a note.\n\nfirst warning`,
+          "warning",
+        );
+      })
+        .thenReturn(undefined)
+        .once();
+
+      // act
+      surfaceDiscoveryWarnings(ctx, runWithNothingLoaded(), {
+        plugin: "alpha",
+        scope: "project",
+        verb,
+        warnings: ["first warning"],
+      });
+
+      // assert
+      verify(ctx);
+      verify(ui);
+    });
+  }
 });
 
 for (const { previousNames, placedNames, expected } of [

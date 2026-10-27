@@ -1011,9 +1011,17 @@ test("PDEF-01: reinstall stages every agent directory", async () => {
 
       // assert
       assert.strictEqual(outcome.partition, "reinstalled");
-      // The duplicate-name warning is an agents hygiene note, which the shared
-      // swap does not carry in direct mode (D-18-02, D-141-03).
-      assert.ok(!Object.hasOwn(outcome, "notes"), JSON.stringify(outcome));
+      // D-PL1-02: the duplicate-name skip is a discovery warning, so the
+      // direct swap carries it like any other bridge's skip.
+      const pluginRoot = path.join(cwd, "mp-src", "plugins", "hello");
+      const duplicate =
+        `agent source "shared" at "${path.join(pluginRoot, "agents", "shared-later.md")}" duplicates generated name ` +
+        '"pi-claude-marketplace-hello-shared" already produced by agent source "shared" at ' +
+        `"${path.join(pluginRoot, "declared-agents", "shared-first.md")}"; keeping first discovered source.`;
+      assert.deepStrictEqual(
+        { notes: outcome.notes, discoveryWarnings: outcome.discoveryWarnings },
+        { notes: [`warning: ${duplicate}`], discoveryWarnings: [duplicate] },
+      );
       const state = await loadState(locations.extensionRoot);
       assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.agents, [
         "pi-claude-marketplace-hello-shared",
@@ -6524,7 +6532,7 @@ for (const mode of ["json", "rpc"]) {
               kind: "diagnostic",
               severity: "warning",
               needsReload: false,
-              header: 'Plugin "hello" reinstalled; 1 declared component has a note.',
+              header: 'Plugin "hello" [project] reinstalled; 1 declared component has a note.',
               lines: [
                 'skill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
               ],
@@ -6571,7 +6579,7 @@ test("D-141-03: a standalone reinstall surfaces a skills discovery warning after
         },
         {
           message:
-            'Plugin "hello" reinstalled; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] reinstalled; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
@@ -6625,12 +6633,12 @@ test("D-141-03: a bulk reinstall surfaces one diagnostic per plugin, singular an
         },
         {
           message:
-            'Plugin "hello" reinstalled; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "hello" [project] reinstalled; 1 declared component has a note.\n\nskill source "hello-foo" in "skills" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
         {
           message:
-            'Plugin "world" reinstalled; 2 declared components have notes.\n\nskill source "world-bar" in "skills" elides to generated name "world-bar", already produced by skill source "bar"; ignoring duplicate.\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
+            'Plugin "world" [project] reinstalled; 2 declared components have notes.\n\nskill source "world-bar" in "skills" elides to generated name "world-bar", already produced by skill source "bar"; ignoring duplicate.\nskill source "world-foo" in "skills" elides to generated name "world-foo", already produced by skill source "foo"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
@@ -6822,7 +6830,7 @@ test("D-141-03: a reinstall carries its discovery warning on notes and drops the
           message: "● mp [project]\n  ● hello v1.0.0 (reinstalled)\n\n/reload to pick up changes",
         },
         {
-          message: `Plugin "hello" reinstalled; 1 declared component has a note.\n\n${elision("skills")}`,
+          message: `Plugin "hello" [project] reinstalled; 1 declared component has a note.\n\n${elision("skills")}`,
           severity: "warning",
         },
       ]);
@@ -6965,7 +6973,7 @@ test("WGATE-01 / D-115-05: a standalone reinstall renders every workflow discove
       // refuse to load. It is shared by install, update and reinstall.
       assert.equal(
         diagnostic.message,
-        `Plugin "hello" reinstalled; 6 declared components have notes.\n\n${EXPECTED_FAMILY_LINES.join("\n")}`,
+        `Plugin "hello" [project] reinstalled; 6 declared components have notes.\n\n${EXPECTED_FAMILY_LINES.join("\n")}`,
       );
       // WGATE-03: the row itself states no gate. The channel is a second
       // notification precisely so the row is free of it.

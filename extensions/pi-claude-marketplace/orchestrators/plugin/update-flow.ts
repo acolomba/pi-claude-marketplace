@@ -458,11 +458,12 @@ async function updatePluginsWith(
 /**
  * D-141-03 / D-141-05: render each updated plugin's discovery warnings after
  * the cascade the rows live in -- the user reads the row, then the detail
- * that qualifies it.
+ * that qualifies it. The header names the target's scope (D-PL1-05).
  *
- * `cascade` is false on this path, so `collectUpdateWarnings` put the
- * discovery half on `notes` and nothing else; the hygiene half never reaches
- * here. That is the same property install's standalone arm relies on.
+ * `cascade` is false on this path, so `collectUpdateWarnings` put only the
+ * discovery half of its tag partition on `notes` (D-PL1-03); the hygiene half
+ * never reaches here. That is the same property install's standalone arm
+ * relies on.
  *
  * Deliberately NOT called from `abortUpdateBatch`: an aborted batch has a
  * failure to explain, and a skipped-component note is noise against it.
@@ -470,15 +471,16 @@ async function updatePluginsWith(
 function surfaceUpdateDiscoveryWarnings(
   ctx: NotificationContext,
   run: NotificationRun,
-  outcomes: readonly { readonly outcome: PluginUpdateOutcome }[],
+  outcomes: readonly UpdateCascadeOutcome[],
 ): void {
-  for (const { outcome } of outcomes) {
+  for (const { target, outcome } of outcomes) {
     if (outcome.partition !== "updated" || outcome.notes === undefined) {
       continue;
     }
 
     surfaceDiscoveryWarnings(ctx, run, {
       plugin: outcome.name,
+      scope: target.scope,
       verb: "updated",
       warnings: outcome.notes,
     });

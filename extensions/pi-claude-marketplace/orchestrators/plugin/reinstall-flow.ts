@@ -639,6 +639,7 @@ function surfaceReinstallDiscoveryWarnings(
 
     surfaceDiscoveryWarnings(ctx, run, {
       plugin: outcome.name,
+      scope: outcome.scope,
       verb: "reinstalled",
       warnings: outcome.discoveryWarnings,
     });

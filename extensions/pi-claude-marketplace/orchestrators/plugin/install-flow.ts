@@ -2859,6 +2859,7 @@ async function installPluginWithTransaction(
         );
         surfaceDiscoveryWarnings(ctx, run, {
           plugin,
+          scope,
           verb: "installed",
           warnings: postCommitWarnings,
         });

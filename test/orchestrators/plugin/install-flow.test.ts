@@ -1462,7 +1462,7 @@ test("PDEF-01 / D-PL1-02: a standalone install reports a later duplicate agent a
         },
         {
           message:
-            'Plugin "hello" installed; 1 declared component has a note.\n\nagent source "shared" at "shared-later.md" duplicates generated name "pi-claude-marketplace-hello-shared" already produced by agent source "shared" at "shared-first.md"; keeping first discovered source.',
+            'Plugin "hello" [project] installed; 1 declared component has a note.\n\nagent source "shared" at "shared-later.md" duplicates generated name "pi-claude-marketplace-hello-shared" already produced by agent source "shared" at "shared-first.md"; keeping first discovered source.',
           severity: "warning",
         },
       ]);
@@ -12259,7 +12259,7 @@ test("D-141-03: a standalone install surfaces a command discovery warning as a s
         },
         {
           message:
-            'Plugin "hello" installed; 1 declared component has a note.\n\ncommand source "tools/lint" in "commands" elides to generated name "hello:tools:lint", already produced by command source "hello-tools/lint"; ignoring duplicate.',
+            'Plugin "hello" [project] installed; 1 declared component has a note.\n\ncommand source "tools/lint" in "commands" elides to generated name "hello:tools:lint", already produced by command source "hello-tools/lint"; ignoring duplicate.',
           severity: "warning",
         },
       ]);
@@ -12346,7 +12346,7 @@ for (const mode of ["json", "rpc"]) {
               kind: "diagnostic",
               severity: "warning",
               needsReload: false,
-              header: 'Plugin "hello" installed; 1 declared component has a note.',
+              header: 'Plugin "hello" [project] installed; 1 declared component has a note.',
               lines: [
                 'command source "tools/lint" in "commands" elides to generated name "hello:tools:lint", already produced by command source "hello-tools/lint"; ignoring duplicate.',
               ],
@@ -17964,7 +17964,7 @@ test("WGATE-03: a script whose meta carries shapes the gate predicates never exp
   assert.ok(diagnostic !== undefined);
   assert.strictEqual(
     diagnostic,
-    'Plugin "hello" installed; 1 declared component has a note.\n\nworkflow script "greet.js" in "workflows" was installed but the engine will refuse to load it: the engine refuses at its check 8 -- every value inside `meta` must be a plain literal, so no spread, computed key, key written as anything but an identifier, string or number, method, accessor, reserved key name (`__proto__`, `constructor`, `prototype`), array hole, substituted template or computed expression',
+    'Plugin "hello" [project] installed; 1 declared component has a note.\n\nworkflow script "greet.js" in "workflows" was installed but the engine will refuse to load it: the engine refuses at its check 8 -- every value inside `meta` must be a plain literal, so no spread, computed key, key written as anything but an identifier, string or number, method, accessor, reserved key name (`__proto__`, `constructor`, `prototype`), array hole, substituted template or computed expression',
   );
 });
 
@@ -18189,7 +18189,7 @@ test("WGATE-01 / D-115-05: a standalone install renders every workflow discovery
       // refuse to load. It is shared by install, update and reinstall.
       assert.equal(
         diagnostic.message,
-        `Plugin "hello" installed; 6 declared components have notes.\n\n${EXPECTED_DISCOVERY_FAMILY_LINES.join("\n")}`,
+        `Plugin "hello" [project] installed; 6 declared components have notes.\n\n${EXPECTED_DISCOVERY_FAMILY_LINES.join("\n")}`,
       );
       // NFR-9: the temporary marketplace root never reaches the user.
       assert.ok(!diagnostic.message.includes(cwd), diagnostic.message);
