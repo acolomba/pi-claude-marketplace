@@ -194,7 +194,16 @@ export type EnableDegradationSignals = LedgerDegradationSignals;
  * A failed call reports them too, because the file is already rewritten.
  */
 export type EnableDisablePluginOutcome =
-  | ({ readonly status: "enabled"; readonly version?: string } & EnableDisableSubject &
+  | ({
+      readonly status: "enabled";
+      readonly version?: string;
+      /**
+       * D-PL1-12: both halves of the enable root's staging warnings, for an
+       * orchestrated caller to render the discovery half (`apply`, D-PL1-09).
+       * Omitted when empty (NREG-01).
+       */
+      readonly stagingWarnings?: readonly StagingWarning[];
+    } & EnableDisableSubject &
       EnableDegradationSignals &
       McpConfigNoticesCarrier)
   | ({ readonly status: "disabled"; readonly version?: string } & EnableDisableSubject &
@@ -2664,6 +2673,7 @@ async function runSetEnabledOutcome(
     outcome,
     configBasename,
     mcpConfigNotices: sink.mcpConfigNotices,
+    stagingWarnings: sink.stagingWarnings ?? [],
   });
 }
 
@@ -2858,6 +2868,7 @@ function freshOutcomeToTypedResult(
   plugin: string,
   enable: boolean,
   outcome: Extract<SetEnabledOutcome, { kind: "fresh" }>,
+  stagingWarnings: readonly StagingWarning[],
 ): EnableDisablePluginOutcome {
   // WLIF-06: `outcome.staleWorkflowCommand` is deliberately NOT forwarded, on
   // either arm. The exported union is what the load-time reconcile caller
@@ -2883,7 +2894,15 @@ function freshOutcomeToTypedResult(
     ...(outcome.stagedAgents === true && { stagedAgents: true }),
     ...(outcome.stagedMcpServers === true && { stagedMcpServers: true }),
     ...(outcome.stagedWorkflows === true && { stagedWorkflows: true }),
+    ...stagingWarningsMember(stagingWarnings),
   };
+}
+
+/** D-PL1-12 / NREG-01: the `stagingWarnings` member, omitted when empty. */
+function stagingWarningsMember(warnings: readonly StagingWarning[]): {
+  readonly stagingWarnings?: readonly StagingWarning[];
+} {
+  return warnings.length > 0 ? { stagingWarnings: warnings } : {};
 }
 
 /**
@@ -2943,6 +2962,8 @@ function outcomeToTypedResult(args: {
   outcome: SetEnabledOutcome;
   /** AFILE-04: carried on the realized and the failed arms, omitted when empty. */
   mcpConfigNotices: readonly McpConfigNotice[];
+  /** D-PL1-12: carried on the `enabled` arm only, omitted when empty. */
+  stagingWarnings: readonly StagingWarning[];
 }): EnableDisablePluginOutcome {
   const { plugin, enable, configBasename, outcome } = args;
   const notices = mcpConfigNoticesMember(args.mcpConfigNotices);
@@ -2995,7 +3016,10 @@ function outcomeToTypedResult(args: {
     }
 
     case "fresh": {
-      return { ...freshOutcomeToTypedResult(plugin, enable, outcome), ...notices };
+      return {
+        ...freshOutcomeToTypedResult(plugin, enable, outcome, args.stagingWarnings),
+        ...notices,
+      };
     }
   }
 }

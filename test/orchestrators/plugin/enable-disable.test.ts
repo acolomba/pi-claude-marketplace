@@ -4721,6 +4721,12 @@ test("orchestrated enable returns every live degradation and companion signal wi
       orphanRewake: true,
       stagedAgents: true,
       stagedMcpServers: true,
+      stagingWarnings: [
+        {
+          kind: "hygiene",
+          message: "[helper] source description was missing or empty -- using fallback",
+        },
+      ],
       status: "enabled",
       unsupported: ["lspServers"],
       version: "1.2.3",
@@ -9063,7 +9069,7 @@ async function writeCollidingSkill(pluginRoot: string, pluginName: string): Prom
 async function writeToolDroppingAgent(pluginRoot: string): Promise<void> {
   await writeFile(
     path.join(pluginRoot, "agents", "helper.md"),
-    "---\nname: helper\ntools: Read, WebFetch\n---\n\nBody.\n",
+    "---\nname: helper\ndescription: Helps.\ntools: Read, WebFetch\n---\n\nBody.\n",
   );
 }
 
@@ -9219,5 +9225,150 @@ test("D-PL1-12: a standalone enable shows no diagnostic for a re-enabled depende
         ].join("\n"),
       },
     ]);
+  });
+});
+
+test("D-PL1-12: an orchestrated enable carries both halves of the root's staging warnings and sends nothing", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { mpRoot } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+      withAgent: true,
+    });
+    await writeCollidingSkill(path.join(mpRoot, "plugins", "foo"), "foo");
+    await writeToolDroppingAgent(path.join(mpRoot, "plugins", "foo"));
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "enabled",
+      name: "foo",
+      version: "1.2.3",
+      stagedAgents: true,
+      stagingWarnings: [
+        {
+          kind: "discovery",
+          message: `skill source "s1" in "${path.join(mpRoot, "plugins", "foo", "skills")}" elides to generated name "foo-s1", already produced by skill source "foo-s1"; ignoring duplicate.`,
+        },
+        { kind: "hygiene", message: "[helper] dropped tools: WebFetch" },
+      ],
+    });
+    assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("D-PL1-12: an orchestrated enable with no staging warning carries no stagingWarnings member", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    const { ctx } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabled({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, { status: "enabled", name: "foo", version: "1.2.3" });
+  });
+});
+
+test("D-PL1-12: an orchestrated disable of a plugin whose skills collide carries no stagingWarnings member", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { mpRoot } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    await writeCollidingSkill(path.join(mpRoot, "plugins", "foo"), "foo");
+    const options = {
+      ctx: makeCtx(cwd).ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    } as const;
+    await setPluginEnabled({ ...options, enable: true });
+
+    // act
+    const outcome = await setPluginEnabled({ ...options, enable: false });
+
+    // assert
+    assert.deepStrictEqual(outcome, { status: "disabled", name: "foo", version: "1.2.3" });
+  });
+});
+
+test("D-PL1-12: an orchestrated enable whose save fails after the root's ledger carries no stagingWarnings member", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { mpRoot } = await seedRealDisabledMarketplace(home, {
+      marketplaceName: "mp",
+      pluginName: "foo",
+      version: "1.2.3",
+    });
+    await writeCollidingSkill(path.join(mpRoot, "plugins", "foo"), "foo");
+    const failure = new Error("state save denied");
+    const transaction: EnableDisableTransaction = {
+      ...REAL_ENABLE_DISABLE_TRANSACTION,
+      async withLockedStateTransaction(locations, run) {
+        return withLockedStateTransaction(locations, async (tx) =>
+          run({ state: tx.state, save: () => rejectUnknown(failure) }),
+        );
+      },
+    };
+    const setPluginEnabledForOwner = createSetPluginEnabled(
+      transaction,
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+    const { ctx, notifications } = makeCtx(cwd);
+
+    // act
+    const outcome = await setPluginEnabledForOwner({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "mp",
+      plugin: "foo",
+      enable: true,
+      scope: "user",
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      status: "failed",
+      reason: "unreadable",
+      error: failure,
+      cause: "state save denied",
+    });
+    assert.deepStrictEqual(notifications, []);
   });
 });
