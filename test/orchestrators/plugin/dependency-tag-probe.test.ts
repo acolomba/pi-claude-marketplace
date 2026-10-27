@@ -241,7 +241,7 @@ test("never considers a tag that carries a satisfying version without the releas
   });
 
   // assert
-  assert.deepStrictEqual(outcome, { kind: "no-matching-tag", range: "^2.0.0" });
+  assert.deepStrictEqual(outcome, { kind: "no-matching-tag" });
 });
 
 test("reports no matching tag for a repository advertising no tags at all", async () => {
@@ -259,10 +259,10 @@ test("reports no matching tag for a repository advertising no tags at all", asyn
   });
 
   // assert
-  assert.deepStrictEqual(outcome, { kind: "no-matching-tag", range: "^2.0.0" });
+  assert.deepStrictEqual(outcome, { kind: "no-matching-tag" });
 });
 
-test("reports no matching tag with the rendered range when no advertised version satisfies", async () => {
+test("reports no matching tag when no advertised version satisfies", async () => {
   // arrange
   const queried: string[] = [];
   const seam = advertising(
@@ -283,7 +283,7 @@ test("reports no matching tag with the rendered range when no advertised version
   });
 
   // assert
-  assert.deepStrictEqual(outcome, { kind: "no-matching-tag", range: ">=3.0.0 <4.0.0" });
+  assert.deepStrictEqual(outcome, { kind: "no-matching-tag" });
 });
 
 test("reports the no-match arm when the query ran against the dependency's own source", async () => {
@@ -301,7 +301,7 @@ test("reports the no-match arm when the query ran against the dependency's own s
   });
 
   // assert
-  assert.deepStrictEqual(outcome, { kind: "no-matching-tag", range: ">=9.0.0" });
+  assert.deepStrictEqual(outcome, { kind: "no-matching-tag" });
   assert.deepStrictEqual(queried, [PLUGIN_REPO_URL]);
 });
 
@@ -320,7 +320,7 @@ test("reports the same no-match arm when the query ran against the marketplace r
   });
 
   // assert
-  assert.deepStrictEqual(outcome, { kind: "no-matching-tag", range: ">=9.0.0" });
+  assert.deepStrictEqual(outcome, { kind: "no-matching-tag" });
   assert.deepStrictEqual(queried, ["https://example.com/acme-marketplace"]);
 });
 
@@ -389,6 +389,39 @@ test("classifies an unreachable host on the failure arm", async () => {
     classification: "network unreachable",
   });
 });
+
+for (const { statusCode, classification } of [
+  { statusCode: 404, classification: "source missing" },
+  { statusCode: 503, classification: "network error" },
+] as const) {
+  test(`classifies a host HTTP ${statusCode} on the listing as ${classification} (GLK-01)`, async () => {
+    // arrange
+    const queried: string[] = [];
+    const hostFailure = Object.assign(new Error(`HTTP Error: ${statusCode}`), {
+      code: "HttpError",
+      data: { statusCode },
+    });
+    const seam = failingWith(hostFailure, queried);
+
+    // act
+    const outcome = await probeDependencyTags({
+      pluginName: "formatter",
+      source: pluginSource(),
+      range: "^1.0.0",
+      seam,
+      auth: auth(),
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "tag-listing-failed",
+      cause: hostFailure,
+      classification,
+    });
+    assert.ok(outcome.kind === "tag-listing-failed");
+    assert.strictEqual(outcome.cause, hostFailure);
+  });
+}
 
 test("wraps a listing throw that is not an Error before carrying it on the failure arm", async () => {
   // arrange

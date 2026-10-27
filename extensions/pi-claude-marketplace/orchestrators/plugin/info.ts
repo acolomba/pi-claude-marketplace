@@ -74,9 +74,10 @@ import {
   errorMessage,
   isErrnoException,
   rethrowInvalidGitHubBaseUrl,
+  StateLockCompromisedError,
   StateLockHeldError,
 } from "../../shared/errors.ts";
-import { classifyGitTransportFailure } from "../../shared/git-failure-classifiers.ts";
+import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
 import { notify } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import {
@@ -2084,6 +2085,8 @@ type GitProbe = (source: GitBackedSource) => Promise<GitPluginRootResult>;
  * an invalid GitHub base override is rethrown and fails info (GHB-03). Mirrors
  * `install-clone-probe.ts::probeInstallClone`; the pinned/unpinned fork lives inside the
  * callback so info still names no git surface (it reaches the seam only by name).
+ * The probe takes no lock itself: the row builders run it and the row read in
+ * one locked body (`runFetchLocked`, GLK-05).
  */
 function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext): GitProbe {
   const probeUnpinned = async (gitSource: GitBackedSource): Promise<GitPluginRootResult> => {
@@ -2113,13 +2116,33 @@ function makeFetchProbe(locations: ScopedLocations, fetchCtx: InfoFetchContext):
     return resolveGitPluginRootWithSubdir(gitSource, cloneRoot, pin);
   };
 
-  // GIT-03: the mirror refresh runs under the scope's state lock, so no
-  // install copies from a mirror mid-refresh; a held lock fails the read. A
-  // pinned clone is immutable and never touches the mirror, as in `fetch`.
   return (gitSource) =>
-    gitSource.sha === undefined
-      ? withExistingScopeLock(locations, () => probeUnpinned(gitSource))
-      : probePinned(gitSource);
+    gitSource.sha === undefined ? probeUnpinned(gitSource) : probePinned(gitSource);
+}
+
+/**
+ * GIT-03 / GLK-05 / D-PL7-07: probe a git source and build its row from the
+ * probe's result. FTCH-03: `info --fetch` materializes the clone/mirror
+ * (network on cache miss when pinned, on the mirror refresh when unpinned --
+ * D-81-05, MIRR-02) via the fetch probe; bare info uses the fs-only presence
+ * probe. On an unpinned `info --fetch` the probe and the row read run in one
+ * body under the scope's state lock, so no install copies from the mirror
+ * mid-refresh and no cleanup removes the tree the row is read from; a held
+ * lock fails the read. A pinned clone is immutable and never touches the
+ * mirror, as in `fetch`, and bare info never locks, so both run with no lock.
+ */
+function runFetchLocked<T>(
+  locations: ScopedLocations,
+  fetchCtx: InfoFetchContext | undefined,
+  gitSource: GitBackedSource,
+  buildRow: (presence: GitPluginRootResult) => Promise<T>,
+): Promise<T> {
+  const probe =
+    fetchCtx !== undefined ? makeFetchProbe(locations, fetchCtx) : makePresenceProbe(locations);
+  const probeAndBuild = async (): Promise<T> => buildRow(await probe(gitSource));
+  return fetchCtx !== undefined && gitSource.sha === undefined
+    ? withExistingScopeLock(locations, probeAndBuild)
+    : probeAndBuild();
 }
 
 /**
@@ -2139,17 +2162,19 @@ function lockHeldRow(pluginName: string, version: string | undefined): PluginInf
 }
 
 /**
- * FTCH-04 / D-81-04 / T-81-08: fold a git-source fetch/read throw to a
+ * FTCH-04 / D-81-04 / GLK-01: fold a git-source fetch/read throw to a
  * closed-set reason. An `info --fetch` materialize failure narrows through the
- * shared `classifyGitTransportFailure` ladder (HttpError 401/403 and a
- * denied/expired Device Flow's `UserCanceledError` -> `authentication
- * required`, network errnos -> `network unreachable` -- fetch parity with
- * install/update); any other throw (warm-tree disk error, etc.) falls through
- * to the existing `narrowProbeError` ladder. Never returns a new REASONS
- * member.
+ * shared host ladder with the plugin-clone rule (D-PL7-02): HttpError 401/403
+ * and a denied/expired Device Flow's `UserCanceledError` -> `authentication
+ * required`, network errnos -> `network unreachable`, a host 404/410 or a
+ * missing pin -> `source missing`, any other HTTP status -> `network error`,
+ * as `fetch` and install read the same answer. Info rows have no cause slot,
+ * so the reason token is the whole report (D-PL7-03). Any other throw
+ * (warm-tree disk error, etc.) falls through to the existing
+ * `narrowProbeError` ladder. Never returns a new REASONS member.
  */
 function foldFetchOrProbeError(err: unknown): ContentReason {
-  return classifyGitTransportFailure(err) ?? narrowProbeError(err);
+  return classifyGitFailure(err, { notFound: "source missing" })?.reason ?? narrowProbeError(err);
 }
 
 /**
@@ -2165,7 +2190,9 @@ function foldFetchOrProbeError(err: unknown): ContentReason {
  * A COLD/missing clone (`not-cached`) OR a `resolveStrict` /
  * `composeResolvedComponents` throw preserves the D-78-04 degrade -- the
  * recorded `(installed)` / `(partially-installed)` status holds, NEVER `(remote)`
- * (that derives only on the not-installed path) nor `(unavailable)`. No network.
+ * (that derives only on the not-installed path) nor `(unavailable)`. No network
+ * for bare info; on an unpinned `info --fetch` the lock covers the materialize
+ * and the row read (GLK-05).
  */
 async function buildInstalledGitRow(opts: {
   reader: PluginInfoReader;
@@ -2195,31 +2222,31 @@ async function buildInstalledGitRow(opts: {
     locations,
     fetchCtx,
   } = opts;
-  // FTCH-03: `info --fetch` materializes the clone/mirror (network on cache
-  // miss when pinned, on the mirror refresh when unpinned -- D-81-05, MIRR-02)
-  // via the fetch probe; bare info uses the fs-only presence probe. A fetch
-  // throw is caught below and preserves the recorded status (D-78-04).
-  const probe =
-    fetchCtx !== undefined ? makeFetchProbe(locations, fetchCtx) : makePresenceProbe(locations);
+  // A fetch throw is caught below and preserves the recorded status (D-78-04).
   try {
-    const presence = await probe(gitSource);
-    if (presence.kind === "materialized") {
-      const resolved = await resolveStrict(entry, {
-        marketplaceRoot: mpRecord.marketplaceRoot,
-        marketplaceName: mpRecord.name,
-        readFileText: (filePath) => reader.readTextFile(filePath),
-        // The tree the probe just materialized; probing again would fetch twice.
-        resolveGitPluginRoot: () => Promise.resolve(presence),
-      });
-      if (resolved.state === "installable") {
-        return await buildResolvedInstalledRow(reader, env, presence.pluginRoot, resolved, {
-          pluginName,
-          version,
-          description,
-          dependencies,
+    return await runFetchLocked(locations, fetchCtx, gitSource, async (presence) => {
+      if (presence.kind === "materialized") {
+        const resolved = await resolveStrict(entry, {
+          marketplaceRoot: mpRecord.marketplaceRoot,
+          marketplaceName: mpRecord.name,
+          readFileText: (filePath) => reader.readTextFile(filePath),
+          // The tree the probe just materialized; probing again would fetch twice.
+          resolveGitPluginRoot: () => Promise.resolve(presence),
         });
+        if (resolved.state === "installable") {
+          return buildResolvedInstalledRow(reader, env, presence.pluginRoot, resolved, {
+            pluginName,
+            version,
+            description,
+            dependencies,
+          });
+        }
       }
-    }
+
+      // COLD / missing clone or a non-installable warm resolve: preserve the
+      // recorded install status (D-78-04) with `components: not resolved`.
+      return buildNonPathInstalledRow(pluginName, version, description, installedRecord);
+    });
   } catch (err) {
     // GHB-03: an invalid GitHub base override fails the command. Bare info
     // never reads the variable, so this only fires for `info --fetch`.
@@ -2231,7 +2258,7 @@ async function buildInstalledGitRow(opts: {
     // closed-set reason on the recorded row (D-81-04 parity with the
     // not-installed arm) -- otherwise a failed `--fetch` would render
     // byte-identical to bare info.
-    if (err instanceof StateLockHeldError) {
+    if (err instanceof StateLockHeldError || err instanceof StateLockCompromisedError) {
       return lockHeldRow(pluginName, version);
     }
 
@@ -2241,8 +2268,7 @@ async function buildInstalledGitRow(opts: {
     }
   }
 
-  // COLD / missing clone, non-installable warm resolve, or a probe/read throw:
-  // preserve the recorded install status (D-78-04) with `components: not resolved`.
+  // A bare-info probe/read throw: preserve the recorded install status (D-78-04).
   return buildNonPathInstalledRow(pluginName, version, description, installedRecord);
 }
 
@@ -2505,7 +2531,10 @@ function buildRemoteNotInstalledRow(
  *     source gets (`buildNotInstalledPathRow`), with components enumerated from
  *     the warm `pluginRoot`.
  * A `resolveStrict` / `composeResolvedComponents` throw folds to
- * `componentsResolved: false` + `narrowProbeError` (never a throw). No network.
+ * `componentsResolved: false` + `narrowProbeError` (never a throw). No network
+ * for bare info; on an unpinned `info --fetch` the lock covers the materialize
+ * and the row read (GLK-05), and only a probe or lock error reaches the outer
+ * fold.
  */
 async function buildGitNotInstalledRow(opts: {
   reader: PluginInfoReader;
@@ -2533,23 +2562,73 @@ async function buildGitNotInstalledRow(opts: {
     locations,
   } = opts;
   const fetchCtx = opts.fetchCtx;
-  // FTCH-03: `info --fetch` materializes the clone/mirror (network on cache
-  // miss when pinned, on the mirror refresh when unpinned -- D-81-05, MIRR-02)
-  // via the fetch probe; bare info uses the fs-only presence probe.
-  const probe =
-    fetchCtx !== undefined ? makeFetchProbe(locations, fetchCtx) : makePresenceProbe(locations);
-
-  let presence: GitPluginRootResult;
   try {
-    presence = await probe(gitSource);
+    return await runFetchLocked(locations, fetchCtx, gitSource, async (presence) => {
+      if (presence.kind !== "materialized") {
+        return buildRemoteNotInstalledRow(pluginName, version, description, dependencies);
+      }
+
+      const pluginRoot = presence.pluginRoot;
+      // VER-01: the warm tree's version by the rule an install of it records --
+      // the declared version (plugin.json, then the entry), else its commit.
+      const declared = await resolveDeclaredPluginVersion(entry, pluginRoot);
+      const warmVersion =
+        declared === undefined
+          ? shaVersion(presence.resolvedSha, gitSource)
+          : declaredVersionWithPin(declared, gitSource, mpRecord.name);
+      const ctx: ResolveContext = {
+        marketplaceRoot: mpRecord.marketplaceRoot,
+        marketplaceName: mpRecord.name,
+        readFileText: (filePath) => reader.readTextFile(filePath),
+        // The tree the probe just materialized; probing again would fetch twice.
+        resolveGitPluginRoot: () => Promise.resolve(presence),
+      };
+      try {
+        const resolved = await resolveStrict(entry, ctx);
+        if (resolved.state !== "installable") {
+          // `return await` so a `composeResolvedComponents` throw inside the helper
+          // is caught by THIS try/catch and folds to the unreadable arm below.
+          return await buildWarmGitNonInstallableRow(resolved, {
+            reader,
+            env,
+            pluginName,
+            version: warmVersion,
+            description,
+            pluginRoot,
+          });
+        }
+
+        return await buildAvailableRow({
+          reader,
+          env,
+          pluginName,
+          version: warmVersion,
+          description,
+          dependencies,
+          pluginRoot,
+          resolvedForComponents: resolved,
+        });
+      } catch (err) {
+        // Warm-tree disk error -> fold to `componentsResolved: false` on the
+        // `(remote)` token (the clone is present but unreadable); never a throw.
+        return {
+          status: "remote",
+          name: pluginName,
+          version: warmVersion,
+          ...(description !== undefined && { description }),
+          reasons: [narrowProbeError(err)],
+          componentsResolved: false,
+        };
+      }
+    });
   } catch (err) {
     // GHB-03: an invalid GitHub base override fails the command.
     rethrowInvalidGitHubBaseUrl(err);
     // D-81-04: any other fetch materialize throw degrades to the existing
     // `components: not resolved` arm with an existing closed-set reason
-    // (network unreachable / authentication required, else the probe-error
-    // ladder). The `(remote)` token is the not-installed git surface.
-    if (err instanceof StateLockHeldError) {
+    // (the host ladder, else the probe-error ladder). The `(remote)` token is
+    // the not-installed git surface.
+    if (err instanceof StateLockHeldError || err instanceof StateLockCompromisedError) {
       return lockHeldRow(pluginName, version);
     }
 
@@ -2559,63 +2638,6 @@ async function buildGitNotInstalledRow(opts: {
       ...(version !== undefined && { version }),
       ...(description !== undefined && { description }),
       reasons: [foldFetchOrProbeError(err)],
-      componentsResolved: false,
-    };
-  }
-
-  if (presence.kind !== "materialized") {
-    return buildRemoteNotInstalledRow(pluginName, version, description, dependencies);
-  }
-
-  const pluginRoot = presence.pluginRoot;
-  // VER-01: the warm tree's version by the rule an install of it records --
-  // the declared version (plugin.json, then the entry), else its commit.
-  const declared = await resolveDeclaredPluginVersion(entry, pluginRoot);
-  const warmVersion =
-    declared === undefined
-      ? shaVersion(presence.resolvedSha, gitSource)
-      : declaredVersionWithPin(declared, gitSource, mpRecord.name);
-  const ctx: ResolveContext = {
-    marketplaceRoot: mpRecord.marketplaceRoot,
-    marketplaceName: mpRecord.name,
-    readFileText: (filePath) => reader.readTextFile(filePath),
-    // The tree the probe just materialized; probing again would fetch twice.
-    resolveGitPluginRoot: () => Promise.resolve(presence),
-  };
-  try {
-    const resolved = await resolveStrict(entry, ctx);
-    if (resolved.state !== "installable") {
-      // `return await` so a `composeResolvedComponents` throw inside the helper
-      // is caught by THIS try/catch and folds to the unreadable arm below.
-      return await buildWarmGitNonInstallableRow(resolved, {
-        reader,
-        env,
-        pluginName,
-        version: warmVersion,
-        description,
-        pluginRoot,
-      });
-    }
-
-    return await buildAvailableRow({
-      reader,
-      env,
-      pluginName,
-      version: warmVersion,
-      description,
-      dependencies,
-      pluginRoot,
-      resolvedForComponents: resolved,
-    });
-  } catch (err) {
-    // Warm-tree disk error -> fold to `componentsResolved: false` on the
-    // `(remote)` token (the clone is present but unreadable); never a throw.
-    return {
-      status: "remote",
-      name: pluginName,
-      version: warmVersion,
-      ...(description !== undefined && { description }),
-      reasons: [narrowProbeError(err)],
       componentsResolved: false,
     };
   }

@@ -20,9 +20,10 @@
 // Not a plugin ledger and names no git surface: the preflight and the shared
 // runner reach git through their own seams.
 
+import { MAX_REFUSAL_VERSION_CHARS, truncateForRefusal } from "../../domain/dependency-range.ts";
 import { errorMessage, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 import { companionSeverity } from "../../shared/notify-reasons.ts";
-import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
+import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 
 import { plannedRangeVersion } from "./dependency-plan.ts";
 import { materializeLatestVersion } from "./materialize-latest.ts";
@@ -99,10 +100,14 @@ export function freshDependencyMoveMemos(): DependencyMoveMemos {
   return { constraintTagMemo, constraintMarketplaceTagMemo };
 }
 
-/** One move's verdict: the candidate it would land, or why it cannot move. */
+/**
+ * One move's verdict: the candidate it would land, or why it cannot move.
+ * `updateBlocked` marks a refusal `update` would meet too, because it lands
+ * the same candidate.
+ */
 export type DependencyMoveJudgement =
   | { readonly ok: true; readonly prepared: PreparedPluginUpdate }
-  | { readonly ok: false; readonly cause: string };
+  | { readonly ok: false; readonly cause: string; readonly updateBlocked?: true };
 
 /** What one move did: whether it landed, and the row that reports it. */
 export interface DependencyMoveRun {
@@ -148,10 +153,24 @@ function refusalCause(
   verdict: Exclude<UpdateRunOutcome, { readonly partition: "updated" }>,
 ): string {
   if (verdict.partition === "unchanged") {
-    return `version ${verdict.toVersion} is the newest version it can move to`;
+    const newest = truncateForRefusal(verdict.toVersion, MAX_REFUSAL_VERSION_CHARS);
+    return `version ${newest} is the newest version it can move to`;
   }
 
   return verdict.notes.join(" ");
+}
+
+/** Why the candidate's names or agent targets are taken, if they are (PI-6, D-PL4-04). */
+async function namesTakenCause(
+  args: CascadeThreePhaseArgs,
+  prepared: PreparedPluginUpdate,
+): Promise<string | undefined> {
+  try {
+    await assertUpdateNamesFree(args, prepared);
+    return undefined;
+  } catch (err) {
+    return errorMessage(err);
+  }
 }
 
 /**
@@ -180,10 +199,15 @@ export async function judgeDependencyMove(
     // WR-1: a version with no semver form escapes the range that rules the
     // others out, so the plan's own list decides.
     if (request.excludedVersions?.includes(plannedRangeVersion(prepared)) === true) {
-      return { ok: false, cause: `version ${prepared.toVersion} was ruled out by the plan` };
+      const ruledOut = truncateForRefusal(prepared.toVersion, MAX_REFUSAL_VERSION_CHARS);
+      return { ok: false, cause: `version ${ruledOut} was ruled out by the plan` };
     }
 
-    await assertUpdateNamesFree(args, prepared);
+    const namesTaken = await namesTakenCause(args, prepared);
+    if (namesTaken !== undefined) {
+      return { ok: false, cause: namesTaken, updateBlocked: true };
+    }
+
     return { ok: true, prepared };
   } catch (err) {
     rethrowInvalidGitHubBaseUrl(err);
@@ -206,6 +230,27 @@ function moveLanded(outcome: UpdateRunOutcome): boolean {
   );
 }
 
+type MovedRow = ReturnType<typeof updatedRowFromOutcome>;
+
+/**
+ * PKD-02 / D-PL9-14: a moved dependency whose package step had something to
+ * say carries the note on its row's cause line, after any range disclosure,
+ * and warns: the move was carried out, short of its packages. A dependency
+ * reaches the user only as a row, so the cause line is its one channel.
+ */
+function withPackageNote(row: MovedRow, note: string | undefined): MovedRow {
+  if (note === undefined) {
+    return row;
+  }
+
+  const noteCause = new Error(redactAbsolutePaths(note));
+  return {
+    ...row,
+    cause: row.cause === undefined ? noteCause : new Error(row.cause.message, { cause: noteCause }),
+    severity: "warning",
+  };
+}
+
 /**
  * The row a move reports, named by the dependency's full key as cascade rows
  * are: the update row of a move that landed, a failed row with what the update
@@ -224,7 +269,7 @@ function moveRow(
       updated: companionSeverity(outcome, context.softDeps),
       partiallyInstalled: companionSeverity(outcome, context.softDeps),
     });
-    return { ...row, name: request.key };
+    return { ...withPackageNote(row, outcome.packageNote), name: request.key };
   }
 
   if (outcome.partition === "unchanged") {

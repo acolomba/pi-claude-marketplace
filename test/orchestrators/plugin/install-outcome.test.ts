@@ -21,6 +21,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import {
+  AgentTargetOccupiedError,
   McpConfigFileError,
   McpServerKeyCollisionError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
@@ -48,6 +49,7 @@ import type {
   InstallLedgerOptions,
   InstallLedgerSummary,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/install-outcome.ts";
+import type { PackageInstallOps } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
@@ -147,6 +149,8 @@ interface SeedOptions {
   readonly gitSource?: unknown;
   /** The marketplace's own name; defaults to `marketplace`. */
   readonly marketplaceName?: string;
+  /** The plugin's name in its entry and its `plugin.json`; defaults to `empty`. */
+  readonly pluginName?: string;
   /** The marketplace record's stored source; defaults to `./marketplace`. */
   readonly marketplaceSource?: ExtensionState["marketplaces"][string]["source"];
 }
@@ -156,6 +160,7 @@ async function seedPlugin(
   options: SeedOptions = {},
 ): Promise<{ readonly pluginRoot: string; readonly state: ExtensionState }> {
   const marketplaceName = options.marketplaceName ?? "marketplace";
+  const pluginName = options.pluginName ?? "empty";
   const marketplaceRoot = path.join(cwd, "marketplace");
   const pluginRoot =
     options.gitSource === undefined
@@ -166,13 +171,13 @@ async function seedPlugin(
   await mkdir(path.dirname(manifestPath), { recursive: true });
   await writeFile(
     path.join(pluginRoot, ".claude-plugin", "plugin.json"),
-    JSON.stringify({ name: "empty", version: "0.0.1", ...options.pluginJson }),
+    JSON.stringify({ name: pluginName, version: "0.0.1", ...options.pluginJson }),
   );
   await writeFile(
     manifestPath,
     JSON.stringify({
       name: marketplaceName,
-      plugins: [{ name: "empty", source: options.gitSource ?? "./plugins/empty" }],
+      plugins: [{ name: pluginName, source: options.gitSource ?? "./plugins/empty" }],
     }),
   );
   await writeComponents(pluginRoot, options.components ?? {});
@@ -2452,9 +2457,14 @@ test("UPD-DEP-D1: previewInstall admits an installable plugin and writes nothing
   const bytesBefore = await readFile(locations.stateJsonPath, "utf8");
 
   // act
-  await previewInstall(seeded.state, locations, projectInstallOptions(environment.cwd));
+  const commit = await previewInstall(
+    seeded.state,
+    locations,
+    projectInstallOptions(environment.cwd),
+  );
 
   // assert
+  assert.strictEqual(commit, undefined);
   assert.deepStrictEqual(seeded.state, stateBefore);
   assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), bytesBefore);
   await assert.rejects(readdir(locations.skillsTargetDir), { code: "ENOENT" });
@@ -2490,6 +2500,18 @@ for (const { label, pluginJson, requiredBy, message } of [
     message:
       '"empty" from the Anthropic Directory is pinned to its listed commit (no version), which does not satisfy ^1.0.0.',
   },
+  {
+    label: "a 120-character version and requirer",
+    pluginJson: { version: `0.0.1-${"z".repeat(114)}` },
+    requiredBy: [`${"r".repeat(120)}@marketplace`],
+    message: `"empty" from the Anthropic Directory is pinned to its listed commit (version 0.0.1-${"z".repeat(114)}), which does not satisfy ^1.0.0 required by "${"r".repeat(120)}".`,
+  },
+  {
+    label: "a version and a requirer past 120 characters",
+    pluginJson: { version: `0.0.1-${"z".repeat(124)}` },
+    requiredBy: [`${"r".repeat(130)}@marketplace`],
+    message: `"empty" from the Anthropic Directory is pinned to its listed commit (version 0.0.1-${"z".repeat(114)}…), which does not satisfy ^1.0.0 required by "${"r".repeat(120)}…".`,
+  },
 ]) {
   test(`GV-01: a plugin directory copy with ${label} refuses the install as Claude Code does`, async (t) => {
     // arrange
@@ -2511,6 +2533,31 @@ for (const { label, pluginJson, requiredBy, message } of [
     );
   });
 }
+
+test("GV-01 / D-PL3-09: a plugin directory refusal cuts a plugin name past 120 characters at 120", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-directory-long-name-");
+  const pluginName = "p".repeat(130);
+  const seeded = await seedPlugin(environment.cwd, { pluginName });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act & assert
+  await assert.rejects(
+    previewInstall(seeded.state, locations, {
+      ...projectInstallOptions(environment.cwd),
+      plugin: pluginName,
+      directoryPin: { range: ">=1.0.0 <2.0.0-0", declared: "^1.0.0", requiredBy: [] },
+    }),
+    (error: unknown) => {
+      assert.ok(error instanceof DirectoryPinUnsatisfiedError);
+      assert.strictEqual(
+        error.message,
+        `"${"p".repeat(120)}…" from the Anthropic Directory is pinned to its listed commit (version 0.0.1), which does not satisfy ^1.0.0.`,
+      );
+      return true;
+    },
+  );
+});
 
 test("UPD-DEP-D1: previewInstall throws what the gate throws for a plugin pi supports only in part", async (t) => {
   // arrange
@@ -2555,10 +2602,58 @@ test("UPD-DEP-D1: previewInstall leaves a marketplace neither scope records to t
   const state: ExtensionState = { marketplaces: {}, schemaVersion: 2 };
 
   // act
-  await previewInstall(state, locations, projectInstallOptions(environment.cwd));
+  const commit = await previewInstall(state, locations, projectInstallOptions(environment.cwd));
 
   // assert
+  assert.strictEqual(commit, undefined);
   assert.deepStrictEqual(state, { marketplaces: {}, schemaVersion: 2 });
+});
+
+test("D-PL4-01: previewInstall answers the commit a git source's preflight resolved", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-git-");
+  const seeded = await seedPlugin(environment.cwd, {
+    gitSource: { source: "url", url: "https://example.com/org/repo" },
+    components: { skills: ["alpha"] },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const commit = await previewInstall(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    cloneProbe: () =>
+      Promise.resolve({
+        result: { kind: "materialized", pluginRoot: seeded.pluginRoot, resolvedSha: RESOLVED_SHA },
+        resolvedSha: RESOLVED_SHA,
+      }),
+  });
+
+  // assert
+  assert.strictEqual(commit, RESOLVED_SHA);
+});
+
+test("D-PL4-04: previewInstall refuses an agent target a user's file holds and writes nothing", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-agent-");
+  const seeded = await seedPlugin(environment.cwd, { components: { agents: ["gamma"] } });
+  const locations = locationsFor("project", environment.cwd);
+  const target = path.join(locations.agentsDir, "pi-claude-marketplace-empty-gamma.md");
+  await mkdir(locations.agentsDir, { recursive: true });
+  await writeFile(target, "User's own agent.\n");
+  const stateBefore = structuredClone(seeded.state);
+
+  // act & assert
+  await assert.rejects(
+    previewInstall(seeded.state, locations, projectInstallOptions(environment.cwd)),
+    (error: unknown) => {
+      assert.ok(error instanceof AgentTargetOccupiedError);
+      assert.strictEqual(error.targetPath, target);
+      return true;
+    },
+  );
+  assert.strictEqual(await readFile(target, "utf8"), "User's own agent.\n");
+  await assert.rejects(readFile(locations.agentsIndexPath), { code: "ENOENT" });
+  assert.deepStrictEqual(seeded.state, stateBefore);
 });
 
 test("UPD-DEP-D1: previewInstall throws the PI-6 conflict with a name another plugin owns", async (t) => {
@@ -2578,4 +2673,154 @@ test("UPD-DEP-D1: previewInstall throws the PI-6 conflict with a name another pl
     previewInstall(installedState, locations, projectInstallOptions(environment.cwd)),
     CrossPluginConflictError,
   );
+});
+
+test("D-PL9-05: runs the packages phase after the workflows phase and before the state phase", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-phase-order-");
+  const seeded = await seedPlugin(environment.cwd);
+  const locations = locationsFor("project", environment.cwd);
+  const phaseNames: string[] = [];
+  const transaction = {
+    runPhases: <C>(phases: readonly Phase<C>[], ctx: C) => {
+      phaseNames.push(...phases.map((phase) => phase.name));
+      return runPhases(phases, ctx);
+    },
+  };
+
+  // act
+  const ledgerOutcome = await runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    undefined,
+    transaction,
+  );
+
+  // assert
+  assert.strictEqual(ledgerOutcome.kind, "installed");
+  assert.deepStrictEqual(phaseNames, [
+    "skills",
+    "commands",
+    "agents",
+    "hooks",
+    "mcp",
+    "workflows",
+    "packages",
+    "state",
+  ]);
+});
+
+test("D-PL9-03: installs a plugin outside the extension root and notes the package install its folder needs", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-outside-packages-");
+  const seeded = await seedPlugin(environment.cwd);
+  await writeFile(
+    path.join(seeded.pluginRoot, "package.json"),
+    JSON.stringify({ name: "empty", dependencies: { "pkd-dep": "1.0.0" } }),
+  );
+  await writeFile(path.join(seeded.pluginRoot, "package-lock.json"), '{"lockfileVersion":3}');
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const ledgerOutcome = await runInstallLedger(
+    seeded.state,
+    locations,
+    projectInstallOptions(environment.cwd),
+  );
+
+  // assert
+  assert.strictEqual(ledgerOutcome.kind, "installed");
+  assert.deepStrictEqual(ledgerOutcome.summary.discoveryWarnings, [
+    `Skipped installing this plugin's dependencies: its folder in the marketplace "marketplace" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.`,
+  ]);
+  assert.strictEqual(seeded.state.marketplaces.marketplace?.plugins.empty?.version, "0.0.1");
+  assert.deepStrictEqual((await readdir(seeded.pluginRoot)).sort(), [
+    ".claude-plugin",
+    "package-lock.json",
+    "package.json",
+  ]);
+});
+
+test("D-PL9-05: a state phase failure removes the node_modules the packages phase created in a contained plugin", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-packages-undo-");
+  const locations = locationsFor("project", environment.cwd);
+  const seeded = await seedPlugin(path.join(locations.extensionRoot, "sources", "fixture"));
+  await writeFile(
+    path.join(seeded.pluginRoot, "package.json"),
+    JSON.stringify({ name: "empty", dependencies: { "pkd-dep": "1.0.0" } }),
+  );
+  await writeFile(
+    path.join(seeded.pluginRoot, "package-lock.json"),
+    JSON.stringify({
+      lockfileVersion: 3,
+      packages: {
+        "": { dependencies: { "pkd-dep": "1.0.0" } },
+        "node_modules/pkd-dep": {
+          version: "1.0.0",
+          resolved: "https://registry.npmjs.org/pkd-dep/-/pkd-dep-1.0.0.tgz",
+          integrity: "sha512-AAAA",
+        },
+      },
+    }),
+  );
+  const installedBeforeState: string[][] = [];
+  const packageInstallOps: PackageInstallOps = {
+    runPackageManager: async (request) => {
+      await mkdir(path.join(request.cwd, "node_modules", "pkd-dep"), { recursive: true });
+      return { code: 0, stdout: "", stderr: "", timedOut: false };
+    },
+    runRegistryQuery: () => assert.fail("a lockfile without http links queries no registry"),
+    newWorkDirName: () => "work-1",
+  };
+  const transaction = {
+    packageInstallOps,
+    runPhases: <C>(phases: readonly Phase<C>[], ctx: C) =>
+      runPhases(
+        phases.map((phase): Phase<C> =>
+          phase.name === "state"
+            ? {
+                ...phase,
+                do: async () => {
+                  installedBeforeState.push(
+                    (await readdir(path.join(seeded.pluginRoot, "node_modules"))).sort(),
+                  );
+                  throw new Error("state phase failed");
+                },
+              }
+            : phase,
+        ),
+        ctx,
+      ),
+  };
+
+  // act
+  await assert.rejects(
+    runInstallLedger(
+      seeded.state,
+      locations,
+      projectInstallOptions(environment.cwd),
+      undefined,
+      transaction,
+    ),
+    /state phase failed/,
+  );
+
+  // assert
+  assert.deepStrictEqual(installedBeforeState, [[".pi-claude-marketplace", "pkd-dep"]]);
+  assert.deepStrictEqual((await readdir(seeded.pluginRoot)).sort(), [
+    ".claude-plugin",
+    "package-lock.json",
+    "package.json",
+  ]);
 });

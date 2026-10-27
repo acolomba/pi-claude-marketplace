@@ -1928,7 +1928,8 @@ describe("registerClaudePluginCommand", () => {
           message: `● mp [${scope}]\n  ○ orphan v1.0.0 (uninstalled) {dependency pruned}\n\n/reload to pick up changes`,
         },
       ]);
-      assert.strictEqual(lockSpy.mock.callCount(), 1);
+      // The state guard, then the clone cleanup's own scope lock.
+      assert.strictEqual(lockSpy.mock.callCount(), 2);
       verifyBoundary();
       verifyRegistrar();
     });

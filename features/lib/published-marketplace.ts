@@ -392,6 +392,30 @@ export async function publishUnreadableSkillFile(
 }
 
 /**
+ * Adds a command nobody may read to the published plugin `plugin`, and
+ * returns its path. Pi reads the plugin's manifest and dependencies as usual,
+ * then fails to read the command when it stages the update. Only a local
+ * publication can hold such a file: git stores no file mode that denies
+ * reading.
+ */
+export async function publishUnreadableCommandFile(
+  published: PublishedMarketplace,
+  plugin: string,
+): Promise<string> {
+  if (published.kind === "url" || published.kind === "github") {
+    throw new Error("a git repository cannot hold a file nobody may read");
+  }
+
+  const file = ownedTarget(
+    published,
+    path.join(published.root, "plugins", plugin, "commands", "notes.md"),
+  );
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, "Unreadable.\n", { mode: 0o000, flag: "wx" });
+  return file;
+}
+
+/**
  * Lets everyone read the file `publishUnreadableSkillFile` left in the plugin
  * `plugin` again, and returns its path.
  */
@@ -483,6 +507,32 @@ export async function writePublishedPluginFile(
 }
 
 /**
+ * Writes every text of `files`, by its path inside the published plugin
+ * `plugin`, and creates the directories above it. Unlike
+ * `writePublishedPluginFile`, it replaces a file that exists, so a later
+ * revision may replace the files. It refuses a path outside the publication,
+ * and a git publication commits and pushes all the files as one change.
+ */
+export async function writePublishedPluginFiles(
+  published: PublishedMarketplace,
+  plugin: string,
+  files: Readonly<Record<string, string>>,
+): Promise<void> {
+  const targets = Object.entries(files).map(
+    ([file, text]) =>
+      [ownedTarget(published, path.join(published.root, "plugins", plugin, file)), text] as const,
+  );
+  await changePublication(published, async () => {
+    await Promise.all(
+      targets.map(async ([target, text]) => {
+        await mkdir(path.dirname(target), { recursive: true });
+        await writeFile(target, text);
+      }),
+    );
+  });
+}
+
+/**
  * Gives the published plugin `plugin` an output style and returns the path
  * of its file. A plugin's `output-styles` directory holds its output styles,
  * a component Pi does not support, so the plugin becomes partially
@@ -503,6 +553,34 @@ export async function publishOutputStyle(
       "---",
       "",
       "Answer in short sentences.",
+      "",
+    ].join("\n"),
+  );
+}
+
+/**
+ * Gives the published plugin `plugin` the agent `agent` and returns the path
+ * of its file. The agent converts to a Pi agent, which an install writes to
+ * the scope's shared `agents/` directory as
+ * `pi-claude-marketplace-<plugin>-<agent>.md`.
+ */
+export async function publishAgent(
+  published: PublishedMarketplace,
+  plugin: string,
+  agent: string,
+): Promise<string> {
+  return writePublishedPluginFile(
+    published,
+    plugin,
+    path.join("agents", `${agent}.md`),
+    [
+      "---",
+      `name: ${agent}`,
+      `description: An agent of ${plugin}.`,
+      "tools: Read, Grep",
+      "---",
+      "",
+      "Read the files you are asked about.",
       "",
     ].join("\n"),
   );

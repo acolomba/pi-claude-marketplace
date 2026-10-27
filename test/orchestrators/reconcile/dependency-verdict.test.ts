@@ -424,7 +424,7 @@ test("reports out-of-range rather than unconstrained when the fold trips an inpu
       dependent: "app@mp",
       dependency: "vault@mp",
       kind: "out-of-range",
-      range: `${joined.slice(0, 200)}... (+4068 chars)`,
+      range: `${joined.slice(0, 200)}… (+4068 chars)`,
     },
   ]);
 });
@@ -458,7 +458,7 @@ test("INR-05 / T-06-05: declared ranges too long to render are bounded once", as
       dependent: "app@mp",
       dependency: "vault@mp",
       kind: "out-of-range",
-      range: `${joined.slice(0, 200)}... (+42 chars)`,
+      range: `${joined.slice(0, 200)}… (+42 chars)`,
     },
   ]);
 });

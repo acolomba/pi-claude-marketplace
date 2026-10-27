@@ -1426,6 +1426,69 @@ test("UPDT-01: without an injected pathPinProbe, a path-source pin uses the real
   assert.strictEqual(prepared.toVersion, `1.2.0-${oid.slice(0, 12)}`);
 });
 
+const pathPinGate: PreparePluginUpdateOptions["constraintGate"] = () =>
+  Promise.resolve({
+    kind: "admits",
+    range: "^1.0.0",
+    holders: [],
+    pin: { oid: "path-tag-oid", version: "1.2.0" },
+    fellBackToCurrentCopy: false,
+    disclosure: "already the highest version the combined range admits",
+  });
+
+test("GLK-04: a tag-pinned path update copies the marketplace tag while it holds the scope lock", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), version: "1.2.0" });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const lockObservations: boolean[] = [];
+  const pathPinProbe: PreparePluginUpdateOptions["pathPinProbe"] = async () => {
+    lockObservations.push(
+      await lockfile.check(seed.locations.extensionRoot, {
+        lockfilePath: seed.locations.stateLockFile,
+        realpath: false,
+      }),
+    );
+    return { kind: "materialized", pluginRoot: seed.pluginRoot, resolvedSha: "path-tag-oid" };
+  };
+
+  // act
+  const prepared = await prepare(seed, { constraintGate: pathPinGate, pathPinProbe });
+
+  // assert
+  assert.ok(!("partition" in prepared));
+  assert.strictEqual(prepared.resolvedSha, "path-tag-oid");
+  assert.deepStrictEqual(lockObservations, [true]);
+  assert.strictEqual(
+    await lockfile.check(seed.locations.extensionRoot, {
+      lockfilePath: seed.locations.stateLockFile,
+      realpath: false,
+    }),
+    false,
+  );
+});
+
+test("GLK-04: a tag-pinned path update fails as lock held and copies nothing while another holder has the scope lock", async (t) => {
+  // arrange
+  const seed = await seedUpdate({ installed: pluginRecord("1.0.0"), version: "1.2.0" });
+  t.after(() => rm(seed.cwd, { force: true, recursive: true }));
+  const pathPinProbe: PreparePluginUpdateOptions["pathPinProbe"] = () =>
+    assert.fail("the tag copy ran while another holder had the scope lock");
+  const release = await lockfile.lock(seed.locations.extensionRoot, {
+    lockfilePath: seed.locations.stateLockFile,
+    realpath: false,
+  });
+
+  // act & assert
+  try {
+    await assert.rejects(
+      prepare(seed, { constraintGate: pathPinGate, pathPinProbe }),
+      StateLockHeldError,
+    );
+  } finally {
+    await release();
+  }
+});
+
 test("D-10-17: an unconstrained update supplies no path pin to the resolver", async (t) => {
   // arrange -- `resolveStrict` is a hard import with no injection seam of its
   // own (like every other orchestrator that calls it), so the resolver
@@ -1816,6 +1879,8 @@ test("D-18-11: an enabled record at the same version under another root is prepa
 const offline = Object.assign(new Error("offline"), { code: "ENETUNREACH" });
 const refusedWith = (status: number, message: string): Error =>
   new git.Errors.HttpError(status, message, "");
+const notFound = refusedWith(404, "Not Found");
+const unavailable = refusedWith(503, "Service Unavailable");
 const challenge = refusedWith(401, "Unauthorized");
 const leakedChallenge = new CleanupLeakError(challenge, "clone tmp left at /tmp/x");
 
@@ -1827,16 +1892,16 @@ for (const { title, error, reasons, cause } of [
     cause: offline,
   },
   {
-    title: "a 404 fails as source missing",
-    error: refusedWith(404, "Not Found"),
+    title: "a 404 fails as source missing with a cause that names the status and URL",
+    error: notFound,
     reasons: ["source missing"],
-    cause: "same",
+    cause: new Error("404 on https://example.com/private", { cause: notFound }),
   },
   {
-    title: "a 503 fails as network error",
-    error: refusedWith(503, "Service Unavailable"),
+    title: "a 503 fails as network error with a cause that names the status and URL",
+    error: unavailable,
     reasons: ["network error"],
-    cause: "same",
+    cause: new Error("503 on https://example.com/private", { cause: unavailable }),
   },
   {
     title: "an authentication challenge fails bare as authentication required",
@@ -1864,7 +1929,6 @@ for (const { title, error, reasons, cause } of [
       materializeOrRefreshPluginMirror: () => Promise.reject(error),
       materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
     };
-    const expectedCause = cause === "same" ? error : cause;
 
     // act
     const outcome = await prepare(seed, { cloneCacheSeam });
@@ -1876,7 +1940,7 @@ for (const { title, error, reasons, cause } of [
       fromVersion: "sha-000000000000",
       notes: [error.message],
       reasons,
-      ...(expectedCause !== undefined && { cause: expectedCause }),
+      ...(cause !== undefined && { cause }),
       declaresAgents: false,
       declaresMcp: false,
       declaresWorkflows: false,

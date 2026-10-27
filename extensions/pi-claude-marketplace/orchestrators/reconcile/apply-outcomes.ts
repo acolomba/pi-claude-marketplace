@@ -196,6 +196,8 @@ export interface PluginBackfilledOutcome
    * marker alone.
    */
   readonly unsupported: readonly string[];
+  /** PKD-02: the package note of the re-materialization (`carriedPackageNote`). */
+  readonly postCommitWarnings?: readonly string[];
 }
 
 /** Plugin install failure outcome. */
@@ -534,6 +536,8 @@ export interface PluginDeclarerUnreadableOutcome extends PluginOutcomeBase {
 export interface PluginConvergedOutcome extends PluginOutcomeBase {
   readonly kind: "plugin-converged";
   readonly row: ReconcileAppliedMsg;
+  /** PKD-02: the package note of a realized move (`carriedPackageNote`). */
+  readonly postCommitWarnings?: readonly string[];
 }
 
 /**
@@ -840,6 +844,17 @@ export function classifyReadPassThrow(err: unknown): ContentReason {
   }
 
   return narrowProbeError(err);
+}
+
+/**
+ * PKD-02 / D-PL9-14: lift a realized move's package note onto the reconcile
+ * outcome built from it, as a post-install warning `apply` prints after its
+ * cascade. Absent when the package step had nothing to say (NREG-01).
+ */
+export function carriedPackageNote(carrier: { readonly packageNote?: string }): {
+  readonly postCommitWarnings?: readonly string[];
+} {
+  return carrier.packageNote === undefined ? {} : { postCommitWarnings: [carrier.packageNote] };
 }
 
 /**

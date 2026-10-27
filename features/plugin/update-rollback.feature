@@ -37,6 +37,21 @@ Feature: Plugin update rollback
       | kind  | name       |
       | skill | demo-skill |
 
+  Scenario: An autoupdate that fails in its mcp phase reports the cause the direct update reports
+    Given the user has run "/claude:plugin marketplace autoupdate fixtures --scope project"
+    When the user runs "/claude:plugin marketplace update fixtures --scope project"
+    Then the result has these fields:
+      | kind         | cascade                        |
+      | severity     | error                          |
+      | needs reload | false                          |
+      | summary      | A plugin operation has failed. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | status | reasons    | scope   | from  | version | cause chain                   | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | updated            | demo@fixtures | demo | failed | unreadable | project | 1.0.0 | 1.1.0   | {mcp-adapter.json read error} | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id            | version | enabled |
+      | demo@fixtures | 1.0.0   | true    |
+
   Scenario: The plugin list shows the installed version after a failed update
     Given the user has run "/claude:plugin update demo@fixtures --scope project", which failed
     When the user runs "/claude:plugin list --scope project"

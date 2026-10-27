@@ -189,6 +189,13 @@ function publicCloneAuth(): GitAuthBundle {
   };
 }
 
+/** The error isomorphic-git throws when the mirror holds no `ref`. */
+function gitNotFound(ref: string): Error {
+  const error = new Error(`Could not find ${ref}.`);
+  error.name = "NotFoundError";
+  return error;
+}
+
 async function freshLocations(t: TestContext): Promise<ScopedLocations> {
   const cwd = await mkdtemp(path.join(tmpdir(), "clone-cache-"));
   t.after(() => rm(cwd, { recursive: true, force: true }));
@@ -1248,6 +1255,7 @@ void test("D-18-04: refresh: false refreshes a declared ref the mirror never fet
     networkUrl: "https://example.com/repo",
     ref: "dev",
     gitOps,
+    resolveTagOid: () => Promise.reject(gitNotFound("refs/tags/dev")),
     refresh: false,
   });
 
@@ -1258,6 +1266,170 @@ void test("D-18-04: refresh: false refreshes a declared ref the mirror never fet
       mirror: { pluginRoot: mirrorRoot, resolvedSha: devSha },
       clones: [],
       fetches: [{ dir: mirrorRoot, remote: "origin", ref: "dev", auth }],
+    },
+  );
+});
+
+void test("GLK-08 / D-PL7-10: refresh: false answers a declared tag from the mirror's local tag, with no network", async (t) => {
+  // arrange
+  const tagSha = "fedcba9876543210fedcba9876543210fedcba98";
+  const locations = await freshLocations(t);
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+  await mkdir(mirrorRoot, { recursive: true });
+  const { gitOps, state } = createGitOps({
+    head: MIRROR_HEAD,
+    localRefs: { "refs/heads/main": MIRROR_HEAD },
+  });
+  const tagReads: unknown[] = [];
+
+  // act
+  const mirror = await materializeOrRefreshPluginMirror({
+    auth: publicCloneAuth(),
+    locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    ref: "v2.0.0",
+    gitOps,
+    resolveTagOid: (opts) => {
+      tagReads.push(opts);
+      return Promise.resolve(tagSha);
+    },
+    refresh: false,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { mirror, tagReads, clones: state.cloneCalls, fetches: state.fetchCalls },
+    {
+      mirror: { pluginRoot: mirrorRoot, resolvedSha: tagSha },
+      tagReads: [{ dir: mirrorRoot, name: "v2.0.0", cache: {} }],
+      clones: [],
+      fetches: [],
+    },
+  );
+});
+
+for (const { title, resolveTagOid } of [
+  {
+    title: "a declared ref the mirror holds no tag for",
+    resolveTagOid: () => Promise.reject(gitNotFound("refs/tags/v2.0.0")),
+  },
+  {
+    title: "a declared tag that names no commit",
+    resolveTagOid: () => Promise.resolve(undefined),
+  },
+]) {
+  void test(`GLK-08 / D-PL7-10: refresh: false refreshes ${title}, as a cache miss`, async (t) => {
+    // arrange
+    const tagSha = "fedcba9876543210fedcba9876543210fedcba98";
+    const auth = publicCloneAuth();
+    const locations = await freshLocations(t);
+    const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+    await mkdir(mirrorRoot, { recursive: true });
+    const { gitOps, state } = createGitOps({
+      head: MIRROR_HEAD,
+      localRefs: { "refs/heads/main": MIRROR_HEAD },
+      remoteRefs: { "v2.0.0": tagSha },
+    });
+
+    // act
+    const mirror = await materializeOrRefreshPluginMirror({
+      auth,
+      locations,
+      cloneUrl: "https://example.com/repo",
+      networkUrl: "https://example.com/repo",
+      ref: "v2.0.0",
+      gitOps,
+      resolveTagOid,
+      refresh: false,
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      { mirror, clones: state.cloneCalls, fetches: state.fetchCalls },
+      {
+        mirror: { pluginRoot: mirrorRoot, resolvedSha: tagSha },
+        clones: [],
+        fetches: [{ dir: mirrorRoot, remote: "origin", ref: "v2.0.0", auth }],
+      },
+    );
+  });
+}
+
+void test("GLK-08 / D-PL7-10: refresh: false propagates a local tag read that fails for a reason other than a missing tag", async (t) => {
+  // arrange
+  const readFailure = Object.assign(new Error("EIO: i/o error, read"), { code: "EIO" });
+  const locations = await freshLocations(t);
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+  await mkdir(mirrorRoot, { recursive: true });
+  const { gitOps, state } = createGitOps({
+    head: MIRROR_HEAD,
+    localRefs: { "refs/heads/main": MIRROR_HEAD },
+  });
+
+  // act & assert
+  await assert.rejects(
+    materializeOrRefreshPluginMirror({
+      auth: publicCloneAuth(),
+      locations,
+      cloneUrl: "https://example.com/repo",
+      networkUrl: "https://example.com/repo",
+      ref: "v2.0.0",
+      gitOps,
+      resolveTagOid: () => Promise.reject(readFailure),
+      refresh: false,
+    }),
+    (error: unknown) => error === readFailure,
+  );
+  assert.deepStrictEqual(
+    { clones: state.cloneCalls, fetches: state.fetchCalls },
+    { clones: [], fetches: [] },
+  );
+});
+
+void test("GLK-08 / D-PL7-10: refresh: false with no declared ref and no default-branch tracking ref refreshes without a tag read", async (t) => {
+  // arrange
+  const auth = publicCloneAuth();
+  const locations = await freshLocations(t);
+  const mirrorRoot = await locations.pluginCloneDir(pluginMirrorKey("https://example.com/repo"));
+  await mkdir(mirrorRoot, { recursive: true });
+  const { gitOps: baseGitOps, state } = createGitOps({
+    head: MIRROR_HEAD,
+    localRefs: { "refs/heads/main": MIRROR_HEAD },
+    remoteRefs: { "refs/remotes/origin/main": MIRROR_HEAD },
+  });
+  // The mirror has no default-branch tracking ref until the refresh fetch writes one.
+  const gitOps: GitOps = {
+    ...baseGitOps,
+    resolveRef: (options) =>
+      state.fetchCalls.length === 0 && options.ref === "refs/remotes/origin/HEAD"
+        ? Promise.reject(gitNotFound("refs/remotes/origin/HEAD"))
+        : baseGitOps.resolveRef(options),
+  };
+  const tagReads: unknown[] = [];
+
+  // act
+  const mirror = await materializeOrRefreshPluginMirror({
+    auth,
+    locations,
+    cloneUrl: "https://example.com/repo",
+    networkUrl: "https://example.com/repo",
+    gitOps,
+    resolveTagOid: (opts) => {
+      tagReads.push(opts);
+      return Promise.resolve(undefined);
+    },
+    refresh: false,
+  });
+
+  // assert
+  assert.deepStrictEqual(
+    { mirror, tagReads, clones: state.cloneCalls, fetches: state.fetchCalls },
+    {
+      mirror: { pluginRoot: mirrorRoot, resolvedSha: MIRROR_HEAD },
+      tagReads: [],
+      clones: [],
+      fetches: [{ dir: mirrorRoot, remote: "origin", auth }],
     },
   );
 });

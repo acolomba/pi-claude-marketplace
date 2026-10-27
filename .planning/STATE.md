@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 1
 current_phase_name: Staging Warning Channels
 status: verifying
-stopped_at: Phase 8 complete, ready to verify Phase 1
-last_updated: "2026-10-27T12:44:37.155Z"
+stopped_at: Phase 4 complete, ready to verify Phase 1
+last_updated: "2026-10-27T11:04:03.605Z"
 last_activity: 2026-10-27
-last_activity_desc: Phase 8 complete, transitioned to Phase 1
-state_head: 238b15840193e39ddb35c9bbcc601fba1c5c58ba
+last_activity_desc: Phase 4 complete, transitioned to Phase 1
+state_head: edac58eb2fb9fccd7212f72307195efa784d73c4
 progress:
   total_phases: 11
   completed_phases: 1
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 6
+  completed_plans: 6
   percent: 9
 ---
 
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-10-22 at the lifecycle-coverage start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 8 — Background Autoupdate
+**Current focus:** Phase 07 — Git Errors and Lock Discipline
 
 ## Current Position
 
 Phase: 1 — Staging Warning Channels
 Plan: 4
 Status: Phase complete — ready for verification
-Last activity: 2026-10-27 - Completed quick task 261027-9nh: Phase 8 background autoupdate follow-ups
+Last activity: 2026-10-27 — Completed quick task 261027-9lp: agent-target refusal redaction and update reason
 
 
 ### mcp-4 closeout
@@ -188,12 +188,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-gvt | GV-01: record plugins at a range-selected release tag as Claude Code does, the tag semver kept as resolvedVersion | 2026-10-26 | 2638b001 | complete | [261026-gvt-record-plugins-at-release-tags-as-claude-code](./quick/261026-gvt-record-plugins-at-release-tags-as-claude-code/) |
 | 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
-| 261027-9nh | Phase 8 background autoupdate follow-ups: wait cap + abort, official-name default, tui only, notice dedupe, skipped outcome | 2026-10-27 | 238b1584 | — | [261027-9nh-phase-8-background-autoupdate-follow-ups](./quick/261027-9nh-phase-8-background-autoupdate-follow-ups/) |
-
-## Session Continuity
-
-**Last session:** 2026-10-27T04:52:02.280Z
-**Stopped at:** Phase 8 complete, ready to verify Phase 1
+**Stopped at:** Phase 4 complete, ready to verify Phase 1
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -405,10 +400,6 @@ archived milestone artifacts.
 | Phase 29 P12 | 70 min | 3 tasks | 34 files |
 | Phase 29 P13 | 48 min | 3 tasks | 44 files |
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
-| Phase 08 P02 | 14 min | 2 tasks | 3 files |
-| Phase 08 P01 | 34min | 2 tasks | 10 files |
-| Phase 08 P03 | 25min | 2 tasks | 21 files |
-| Phase 08 P04 | 9min | 2 tasks | 7 files |
 
 ## Decisions
 
@@ -608,13 +599,6 @@ archived milestone artifacts.
 - [Phase 29]: The cascade failure classifier reads the errno a BridgeStagingError carries on its cause, so an unreadable plugin source is permission denied (also in the autoupdate cascade)
 - [Phase 29]: apply runs growth-only moves through convergePlugin with rematerialize (skipSameRevision off, overwrite off) and reports them with the plugin-backfilled row; the load-time backfill, its stamp gate and EXTENSION_VERSION are deleted, lastReconciledExtensionVersion stays readable and nothing writes it (D-10, D-13, D-25)
 - [Phase 29]: README.md's dependents sentence says apply reinstalls an uninstalled dependency a dependent still declares and disables the dependents only if that install fails; the APL-D1 and APL-D2 rows record the read-only load and the NFR-2 amendment
-- [Phase 08]: The env-vars section is titled 'Variables that control the background update', not 'Variables the extension reads', because the extension reads other variables the section does not list
-- [Phase 08]: 08-01: every /claude:plugin command runs through one in-process gate per runtime (runForeground on registerClaudePluginCommand); the mode check stays outside it (D-PL8-04)
-- [Phase 08]: 08-01: the background pass reports through a print-mode context into hookDebugLog [autoupdate] and a load-origin run with a dropping sink; a plugin update skipped after shutdown returns a failed outcome with an empty reason list (D-PL8-06, D-PL8-15)
-- [Phase 08]: background-update no-credential-leak row plants the userinfo URL in name and toVersion, because the gate requires the *** marker in the text and the text shows only the name
-- [Phase 08]: background-update resolve arm redacts name, marketplace, fromVersion and toVersion (PMOD-04); scope passes through
-- [Phase 08]: The background update scenario starts its own Pi with delay 0 and reads the result that follows a plain message from the session entries, since Pi refuses the message for want of a model after its input handlers ran
-- [Phase 08]: A background-update result's plugins are a cucumber row array: field steps hide them and the result lists these plugins: compares them
 
 ### mcp-4 decisions
 

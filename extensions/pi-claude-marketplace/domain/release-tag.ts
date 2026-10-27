@@ -13,7 +13,7 @@
 
 import { gt, valid } from "semver";
 
-import { recordedVersionSatisfies, renderConstraintRange } from "./dependency-range.ts";
+import { recordedVersionSatisfies } from "./dependency-range.ts";
 
 /**
  * The separator the plugin-release tooling places between a plugin's name and
@@ -41,7 +41,7 @@ export interface ReleaseTagCandidate {
 /**
  * What selecting among a plugin's release-tag candidates came to.
  *
- * `no-matching-tag` carries the range as rendered for a user-visible reason.
+ * On `no-matching-tag` the caller renders the member's declared ranges (D-PL4-05).
  */
 export type SelectedReleaseTag =
   | {
@@ -50,7 +50,7 @@ export type SelectedReleaseTag =
       readonly oid: string;
       readonly version: string;
     }
-  | { readonly kind: "no-matching-tag"; readonly range: string };
+  | { readonly kind: "no-matching-tag" };
 
 /** The pinned arm alone, so candidate selection can carry one around. */
 type PinnedReleaseTag = Extract<SelectedReleaseTag, { kind: "pinned" }>;
@@ -109,5 +109,5 @@ export function selectHighestSatisfyingTag(
     }
   }
 
-  return highest ?? { kind: "no-matching-tag", range: renderConstraintRange(range) };
+  return highest ?? { kind: "no-matching-tag" };
 }
