@@ -5,6 +5,8 @@
 // refusal categories via instanceof and so user-visible error messages are
 // uniform.
 
+import { redactAbsolutePaths } from "./redact-absolute-paths.ts";
+
 import type { McpConfigNotice } from "./notification-types.ts";
 
 /**
@@ -46,6 +48,24 @@ export class AgentOwnershipConflictError extends Error {
     this.name = "AgentOwnershipConflictError";
     this.conflicts = Object.freeze([...conflicts]);
     this.stagingFor = Object.freeze({ ...stagingFor });
+  }
+}
+
+/**
+ * D-PL4-04 / D-PL4-08 refusal: a new agent's target holds a file the agents
+ * commit would not replace. A dependency plan, an install preview, and an
+ * update's WR-C check throw it before anything lands. The message names the
+ * file through `redactAbsolutePaths`, so every preview refusal reads the same
+ * and no absolute path reaches a row; `targetPath` keeps the full path.
+ */
+export class AgentTargetOccupiedError extends Error {
+  readonly targetPath: string;
+  constructor(targetPath: string) {
+    super(
+      `Cannot replace agent target with non-previous content at ${redactAbsolutePaths(targetPath)}`,
+    );
+    this.name = "AgentTargetOccupiedError";
+    this.targetPath = targetPath;
   }
 }
 

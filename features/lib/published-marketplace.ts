@@ -509,6 +509,34 @@ export async function publishOutputStyle(
 }
 
 /**
+ * Gives the published plugin `plugin` the agent `agent` and returns the path
+ * of its file. The agent converts to a Pi agent, which an install writes to
+ * the scope's shared `agents/` directory as
+ * `pi-claude-marketplace-<plugin>-<agent>.md`.
+ */
+export async function publishAgent(
+  published: PublishedMarketplace,
+  plugin: string,
+  agent: string,
+): Promise<string> {
+  return writePublishedPluginFile(
+    published,
+    plugin,
+    path.join("agents", `${agent}.md`),
+    [
+      "---",
+      `name: ${agent}`,
+      `description: An agent of ${plugin}.`,
+      "tools: Read, Grep",
+      "---",
+      "",
+      "Read the files you are asked about.",
+      "",
+    ].join("\n"),
+  );
+}
+
+/**
  * Deletes the `output-styles` directory of the published plugin `plugin`,
  * which must exist, and returns its path. Re-offering a plugin keeps the files
  * its directory already holds, so this is how a new version stops shipping

@@ -64,7 +64,7 @@
 
 import { locationsFor } from "../../persistence/locations.ts";
 import { loadState } from "../../persistence/state-io.ts";
-import { BridgeStagingError } from "../../shared/errors-bridges.ts";
+import { AgentTargetOccupiedError, BridgeStagingError } from "../../shared/errors-bridges.ts";
 import {
   CleanupContextError,
   cleanupFailuresFromError,
@@ -863,7 +863,7 @@ interface NotifyDirectFailureArgs {
 function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
   const { ctx, run, marketplace, scope, pluginName, err } = args;
   const cause = err instanceof Error ? err : new Error(String(err));
-  const reasons: readonly ContentReason[] = [args.reasonOverride ?? narrowDirectFailReason(cause)];
+  const reasons = directFailReasons(args.reasonOverride, cause);
   // WR-05: row-level `scope` is OMITTED -- it always matched the
   // marketplace block's `scope` at every callsite below, and
   // `renderScopeBracket` (shared/notification-grammar.ts) suppresses the
@@ -909,6 +909,23 @@ function notifyDirectFailure(args: NotifyDirectFailureArgs): void {
  */
 function rollbackPartialCauseSlot(p: UpdatePhase3Failure): { readonly cause: Error } {
   return { cause: p.cause };
+}
+
+/**
+ * D-PL4-09: an occupied agent target has no closed-set reason, so its row
+ * carries none, as the install row for the same refusal does, and its cause
+ * names the file. Every other failure narrows to one reason.
+ */
+function directFailReasons(
+  reasonOverride: ContentReason | undefined,
+  cause: Error,
+): readonly ContentReason[] {
+  if (reasonOverride !== undefined) {
+    return [reasonOverride];
+  }
+
+  const primary = cause instanceof CleanupContextError ? cause.primary : cause;
+  return primary instanceof AgentTargetOccupiedError ? [] : [narrowDirectFailReason(cause)];
 }
 
 /**

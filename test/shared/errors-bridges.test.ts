@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 
 import {
   AgentOwnershipConflictError,
+  AgentTargetOccupiedError,
   BridgeStagingError,
   CommandNameError,
   McpConfigFileError,
@@ -30,6 +31,27 @@ void new BridgeStagingError("staging tmp failed", { reason: "ENOSPC" });
 void new CommandNameError("a", "/commands/a", { cause: new Error("bad segment") });
 // @ts-expect-error the command-name options bag admits `cause` and nothing else
 void new CommandNameError("a", "/commands/a", { cause: new Error("bad segment"), reason: "x" });
+
+describe("AgentTargetOccupiedError", () => {
+  test("D-PL4-08: names the target file only and keeps the full path in a field", () => {
+    // arrange
+    const target = "/home/me/project/.pi/agents/pi-claude-marketplace-acme-bot.md";
+
+    // act
+    const error = new AgentTargetOccupiedError(target);
+
+    // assert
+    assert.deepStrictEqual(
+      { name: error.name, message: error.message, targetPath: error.targetPath },
+      {
+        name: "AgentTargetOccupiedError",
+        message:
+          "Cannot replace agent target with non-previous content at pi-claude-marketplace-acme-bot.md",
+        targetPath: target,
+      },
+    );
+  });
+});
 
 describe("AgentOwnershipConflictError", () => {
   test("exposes an empty ownership conflict collection exactly", () => {
