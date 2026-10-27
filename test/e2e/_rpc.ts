@@ -10,7 +10,8 @@
 // The child environment is an allowlist built from scratch. A prompt that is
 // not an extension command falls through to Pi's model path, and inherited
 // provider credentials would let it reach a real provider over the network.
-// The cucumber run adds a typed git and trust environment and nothing else.
+// The cucumber run adds a typed git and trust environment, plus the background
+// update delay for a scenario's own Pi, and nothing else.
 // `--no-extensions` is never passed, because it also removes `builtin:mcp`.
 import { spawn } from "node:child_process";
 import { realpath } from "node:fs/promises";
@@ -53,6 +54,12 @@ export interface RpcGitEnvironment {
   readonly GIT_CONFIG_NOSYSTEM: "1";
   readonly GIT_CONFIG_GLOBAL: string;
   readonly PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: string;
+  /**
+   * The maximum delay of the background update, set only for a scenario's own
+   * Pi (D-PL8-09). The run's shared Pi never sets it, so its background update
+   * keeps the ten-minute maximum and a new session cancels it.
+   */
+  readonly PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS?: string;
 }
 
 /** What one RPC session runs: the sandbox, the steps in order, and extra extensions. */
@@ -195,6 +202,10 @@ export function rpcChildEnvironment(
     environment.GIT_CONFIG_NOSYSTEM = git.GIT_CONFIG_NOSYSTEM;
     environment.GIT_CONFIG_GLOBAL = git.GIT_CONFIG_GLOBAL;
     environment.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL = git.PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL;
+    if (git.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS !== undefined) {
+      environment.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS =
+        git.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS;
+    }
   }
 
   return environment;

@@ -473,7 +473,7 @@ Feature limits:
 - A user-scope `${CLAUDE_PROJECT_DIR}` stays literal, because it is unknowable at install time.
 - We resolve no dependencies automatically. A declared `dependencies` field produces a manual-install warning only.
 - Custom component-path arrays replace the defaults rather than supplement them. This is an acknowledged deviation from the upstream specification.
-- We have no mutating LLM tools, no interactive selectors, and no JSON output. We also have no dry-run modes, no session-start autoupdate run, and no managed, allowlist, or blocklist policies.
+- We have no mutating LLM tools, no interactive selectors, and no JSON output. We also have no dry-run modes, and no managed, allowlist, or blocklist policies.
 - We have no telemetry and no message catalog, and we are English only, which a test enforces.
 - Uninstall removes the plugin data directory unconditionally after commit (`orchestrators/plugin/uninstall.ts:633`). We have no `--keep-data` equivalent.
 - The reconcile cascade is visible at Pi startup but not after `/reload`, because the host rebuilds the chat from the transcript and drops extension notifications. The workaround is to run `pending` before the reload, or `list` after it.
@@ -689,7 +689,7 @@ Our behavior is per verb:
 
 Our version strings are `hash-<12hex>`, a SHA-256 over a deterministic walk with symlinks skipped and BOM and CRLF normalized, or the commit's first 12 hex characters for a git source, as Claude Code records it (GV-01). The ladder runs from `pinVersionOverride`, to the git `resolvedSha`, to `plugin.json.version`, to the manifest entry version, to the content hash.
 
-Our autoupdate is opt-in and off by default, and it lives in `claude-plugins.json` rather than in state. There is no timer, no interval, and no session-start update run. The flag is consumed only by `marketplace update`. When autoupdate is off, change detection is a conservative manifest content compare with `JSON.stringify` before and after.
+Our autoupdate lives in `claude-plugins.json` rather than in state. A marketplace with no value gets the default for its name: on for an official Claude Code marketplace name other than `knowledge-work-plugins` and `first-party-plugins`, off for any other name (D-PL8-07). In a tui session, after the first message, a background pass waits a random delay of up to ten minutes. Then it updates each marketplace whose autoupdate is on, as `marketplace update` does. `marketplace update` also consumes the flag. When autoupdate is off, change detection is a conservative manifest content compare with `JSON.stringify` before and after.
 
 Our offline guarantee is a lint gate. An ESLint block in `eslint.config.js` checks `install-flow.ts`, `install-outcome.ts`, `list.ts`, `reinstall.ts`, `info.ts`, `fetch.ts`, `enable-disable.ts`, `marketplace/info.ts`, and all three reconcile files for `platform/git`, `DEFAULT_GIT_OPS`, `gitOps`, and `refreshGitHubClone`. Only `update.ts` is exempt, and git access flows through the `clone-cache.ts` seam by entrypoint name.
 

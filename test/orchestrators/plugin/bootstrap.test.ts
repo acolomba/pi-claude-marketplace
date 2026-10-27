@@ -221,7 +221,7 @@ function seededScopeTree(): readonly string[] {
   return ["claude-plugins.json", "pi-claude-marketplace/", "pi-claude-marketplace/state.json"];
 }
 
-test("adds the canonical marketplace and enables autoupdate on a clean user scope", async (t) => {
+test("D-PL8-19: adds the canonical marketplace, whose autoupdate is on by default, on a clean user scope", async (t) => {
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "clean");
   t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-02-03T04:05:06.000Z") });
@@ -266,8 +266,7 @@ test("adds the canonical marketplace and enables autoupdate on a clean user scop
   // assert
   assert.deepStrictEqual(notifications, [
     { message: "● claude-plugins-official [user] (added)" },
-    // UXG-04: a fresh autoupdate enable renders the marker as the outcome.
-    { message: "● claude-plugins-official [user] <autoupdate>" },
+    { message: "● claude-plugins-official [user] <autoupdate> {already autoupdate}" },
   ]);
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
     schemaVersion: 3,
@@ -279,16 +278,12 @@ test("adds the canonical marketplace and enables autoupdate on a clean user scop
       },
     },
   });
-  // WB-04: both composed writes converge on one config entry.
+  // D-PL8-07: the official default holds, so the autoupdate step writes no value.
   assert.deepStrictEqual(JSON.parse(await readFile(locations.baseConfigJsonPath, "utf8")), {
     schemaVersion: 1,
     marketplaces: {
-      "claude-plugins-official": {
-        source: "anthropics/claude-plugins-official",
-        autoupdate: true,
-      },
+      "claude-plugins-official": { source: "anthropics/claude-plugins-official" },
     },
-    plugins: {},
   });
   assert.deepStrictEqual(scopeTree, bootstrappedScopeTree());
   assert.deepStrictEqual(clonedUrls(), [BOOTSTRAP_REMOTE]);
@@ -337,12 +332,12 @@ test("D-PL2-09: hands its missing-dependency step to the add, which runs it in t
         "\n" +
         "/reload to pick up changes",
     },
-    { message: "● claude-plugins-official [user] <autoupdate>" },
+    { message: "● claude-plugins-official [user] <autoupdate> {already autoupdate}" },
   ]);
   verifyBoundary();
 });
 
-test("a missing-dependency step that throws after the add committed still turns on autoupdate and rejects with the step error instead of reporting a failed add", async (t) => {
+test("a missing-dependency step that throws after the add committed still runs the autoupdate step and rejects with the step error instead of reporting a failed add", async (t) => {
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "dependency-step-throws");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
@@ -368,17 +363,13 @@ test("a missing-dependency step that throws after the add committed still turns 
   });
   assert.deepStrictEqual(notifications, [
     { message: "● claude-plugins-official [user] (added)" },
-    { message: "● claude-plugins-official [user] <autoupdate>" },
+    { message: "● claude-plugins-official [user] <autoupdate> {already autoupdate}" },
   ]);
   assert.deepStrictEqual(JSON.parse(await readFile(locations.baseConfigJsonPath, "utf8")), {
     schemaVersion: 1,
     marketplaces: {
-      "claude-plugins-official": {
-        source: "anthropics/claude-plugins-official",
-        autoupdate: true,
-      },
+      "claude-plugins-official": { source: "anthropics/claude-plugins-official" },
     },
-    plugins: {},
   });
   verifyBoundary();
 });
@@ -414,7 +405,7 @@ test("converges on a second bootstrap without changing the recorded state or the
   // assert
   assert.deepStrictEqual(notifications, [
     { message: "● claude-plugins-official [user] (added)" },
-    { message: "● claude-plugins-official [user] <autoupdate>" },
+    { message: "● claude-plugins-official [user] <autoupdate> {already autoupdate}" },
     // MPA-01: the re-run reports the add as a no-op, then the idempotent
     // autoupdate row; both benign reasons route to info, which the renderer
     // emits with no severity argument (UXG-02 / UXG-04).
@@ -526,19 +517,17 @@ test("LAYER-01: declares a marketplace only the local layer holds in the base la
   });
 
   // assert
+  // LAYER-02: the autoupdate step judges the base layer only, where the
+  // official default holds, so it writes no value there (D-PL8-19).
   assert.deepStrictEqual(notifications, [
     { message: "● claude-plugins-official [user] (added)" },
-    { message: "● claude-plugins-official [user] <autoupdate>" },
+    { message: "● claude-plugins-official [user] <autoupdate> {already autoupdate}" },
   ]);
   assert.deepStrictEqual(JSON.parse(await readFile(locations.baseConfigJsonPath, "utf8")), {
     schemaVersion: 1,
     marketplaces: {
-      "claude-plugins-official": {
-        source: "anthropics/claude-plugins-official",
-        autoupdate: true,
-      },
+      "claude-plugins-official": { source: "anthropics/claude-plugins-official" },
     },
-    plugins: {},
   });
   assert.strictEqual(await readFile(locations.localConfigJsonPath, "utf8"), seededLocalConfig);
   assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), seededState);

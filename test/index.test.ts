@@ -16,6 +16,11 @@
 // anything of its own, and a factory that registered its own handler first would
 // hand these cases the bridge's callback and fail them.
 //
+// The same holds for the background update's two listeners: its `input`
+// listener is the THIRD `input` expectation and its `session_shutdown` listener
+// is the SECOND `session_shutdown` one, both declared where `index.ts`
+// registers them, after the session-environment listener.
+//
 // This suite reads `createNotificationBoundary` from `test/edge/`, so it is a
 // cross-tier consumer of that helper alongside the four already recorded ones.
 // Duplicating the helper per tier is what the single definition exists to
@@ -106,6 +111,15 @@ type DiscoverListener = (
   ctx: ExtensionContext,
 ) => Promise<ResourcesDiscoverResult>;
 
+/** The background update's input listener; it reads only these context members. */
+type BackgroundInputListener = (
+  event: InputEvent,
+  ctx: Pick<ExtensionContext, "mode" | "cwd" | "ui">,
+) => void;
+
+/** The background update's shutdown listener, which may wait for a step in flight. */
+type BackgroundShutdownListener = (event: SessionShutdownEvent) => Promise<void>;
+
 /** The options bag `registerCommand` receives, derived from the Pi surface. */
 type CommandRegistration = Parameters<ExtensionAPI["registerCommand"]>[1];
 
@@ -122,6 +136,8 @@ interface LoadedExtension {
   readonly bridgeSessionStart: BridgeSessionStartListener;
   readonly discover: DiscoverListener;
   readonly sessionEnv: EventListener<SessionStartEvent>;
+  readonly backgroundInput: BackgroundInputListener;
+  readonly backgroundShutdown: BackgroundShutdownListener;
   readonly toolCall: ToolCallListener;
   readonly command: CommandRegistration;
   readonly tools: readonly (ToolRegistration | undefined)[];
@@ -407,6 +423,21 @@ async function loadExtension(
   })
     .thenReturn()
     .times(1);
+  const backgroundInputListener =
+    It.willCapture<BackgroundInputListener>("background update input");
+  when(() => {
+    pi.on("input", backgroundInputListener);
+  })
+    .thenReturn()
+    .times(1);
+  const backgroundShutdownListener = It.willCapture<BackgroundShutdownListener>(
+    "background update shutdown",
+  );
+  when(() => {
+    pi.on("session_shutdown", backgroundShutdownListener);
+  })
+    .thenReturn()
+    .times(1);
   const commandRegistration = It.willCapture<CommandRegistration>("claude:plugin registration");
   when(() => {
     pi.registerCommand("claude:plugin", commandRegistration);
@@ -449,6 +480,8 @@ async function loadExtension(
   const discover = discoverListener.value;
   const bridgeSessionStart = bridgeSessionStartListener.value;
   const sessionEnv = sessionEnvListener.value;
+  const backgroundInput = backgroundInputListener.value;
+  const backgroundShutdown = backgroundShutdownListener.value;
   const toolCall = toolCallListener.value;
   const command = commandRegistration.value;
   const publishStatus = statusListener.value;
@@ -457,6 +490,8 @@ async function loadExtension(
     bridgeSessionStart === undefined ||
     discover === undefined ||
     sessionEnv === undefined ||
+    backgroundInput === undefined ||
+    backgroundShutdown === undefined ||
     toolCall === undefined ||
     command === undefined
   ) {
@@ -467,6 +502,8 @@ async function loadExtension(
     bridgeSessionStart,
     discover,
     sessionEnv,
+    backgroundInput,
+    backgroundShutdown,
     toolCall,
     command,
     tools: [firstTool.value, secondTool.value],
@@ -2201,3 +2238,102 @@ test("NFR-2 / AVAR-01: a session context whose cwd cannot be read still empties 
   );
   verifyBoundary();
 });
+
+/** Claude Code's opt-out variables and the Pi-only delay knob (D-PL8-08, D-PL8-09). */
+const BACKGROUND_UPDATE_ENV_KEYS = [
+  "PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS",
+  "DISABLE_UPDATES",
+  "DISABLE_AUTOUPDATER",
+  "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC",
+  "FORCE_AUTOUPDATE_PLUGINS",
+] as const;
+
+/** Clears the opt-outs and sets a zero delay, restoring each variable after the case. */
+function armBackgroundUpdateAtOnce(t: TestContext): void {
+  for (const key of BACKGROUND_UPDATE_ENV_KEYS) {
+    const previous = process.env[key];
+    t.after(() => {
+      restoreEnv(key, previous);
+    });
+    Reflect.deleteProperty(process.env, key);
+  }
+
+  process.env.PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS = "0";
+}
+
+/** Mocks `setTimeout` and counts the delays it schedules and the `unref` calls on them. */
+function countBackgroundTimers(t: TestContext): {
+  readonly delays: number[];
+  readonly unrefCount: () => number;
+} {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const mockedSetTimeout = globalThis.setTimeout;
+  const delays: number[] = [];
+  let unrefCount = 0;
+  t.mock.method(globalThis, "setTimeout", (callback: () => void, delay: number) => {
+    delays.push(delay);
+    const timer = mockedSetTimeout(callback, delay);
+    const unref = timer.unref.bind(timer);
+    t.mock.method(timer, "unref", () => {
+      unrefCount += 1;
+      return unref();
+    });
+    return timer;
+  });
+  return { delays, unrefCount: () => unrefCount };
+}
+
+function backgroundContext(
+  mode: ExtensionContext["mode"],
+  cwd: string,
+): Pick<ExtensionContext, "mode" | "cwd" | "ui"> {
+  return {
+    mode,
+    cwd,
+    get ui(): ExtensionContext["ui"] {
+      throw new Error("the background update must not touch the session UI");
+    },
+  };
+}
+
+test("AUP-01: the first plain message in a tui session arms one unref'd background update that quitting cancels", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScope(t, "background-arm");
+  armBackgroundUpdateAtOnce(t);
+  const { backgroundInput, backgroundShutdown, verifyBoundary } = await loadExtension(0, 0);
+  const timers = countBackgroundTimers(t);
+
+  // act
+  backgroundInput(
+    { type: "input", text: "hello", source: "interactive" },
+    backgroundContext("tui", cwd),
+  );
+  await backgroundShutdown({ type: "session_shutdown", reason: "quit" });
+  t.mock.timers.tick(0);
+
+  // assert
+  assert.deepStrictEqual(timers.delays, [0]);
+  assert.strictEqual(timers.unrefCount(), 1);
+  verifyBoundary();
+});
+
+for (const mode of ["print", "json"] as const) {
+  test(`AUP-01: a plain message in ${mode} arms no background update`, async (t) => {
+    // arrange
+    const { cwd } = await createHermeticScope(t, `background-${mode}`);
+    armBackgroundUpdateAtOnce(t);
+    const { backgroundInput, verifyBoundary } = await loadExtension(0, 0);
+    const timers = countBackgroundTimers(t);
+
+    // act
+    backgroundInput(
+      { type: "input", text: "hello", source: "interactive" },
+      backgroundContext(mode, cwd),
+    );
+    t.mock.timers.tick(0);
+
+    // assert
+    assert.deepStrictEqual(timers.delays, []);
+    verifyBoundary();
+  });
+}

@@ -1,10 +1,10 @@
 Feature: Plugin bootstrap
 
-  Bootstrap adds Claude Code's official marketplace to the user scope and turns
-  on its autoupdate. A loopback https git host stands in for GitHub and serves
-  the official marketplace through the GitHub base override.
+  Bootstrap adds Claude Code's official marketplace to the user scope, where its
+  autoupdate is on by default. A loopback https git host stands in for GitHub and
+  serves the official marketplace through the GitHub base override.
 
-  Scenario: Bootstrapping adds the official marketplace to the user scope and turns on its autoupdate
+  Scenario: Bootstrapping adds the official marketplace to the user scope with its autoupdate on by default
     Given the marketplace "claude-plugins-official" is published as the official marketplace
     When the user runs "/claude:plugin bootstrap"
     Then the command reports these results:
@@ -12,16 +12,16 @@ Feature: Plugin bootstrap
       | cascade | info     | false        |
       | cascade | info     | false        |
     Then the results list these marketplaces and plugins:
-      | marketplace name        | marketplace scope | marketplace status |
-      | claude-plugins-official | user              | added              |
-      | claude-plugins-official | user              | autoupdate enabled |
+      | marketplace name        | marketplace scope | marketplace status | marketplace reasons |
+      | claude-plugins-official | user              | added              |                     |
+      | claude-plugins-official | user              | skipped            | already autoupdate  |
     Then the git host receives these requests:
       | method | path                                                                      | status |
       | GET    | /anthropics/claude-plugins-official.git/info/refs?service=git-upload-pack | 200    |
       | POST   | /anthropics/claude-plugins-official.git/git-upload-pack                   | 200    |
     Then the "claude-plugins.json" file of the user scope declares these marketplaces:
-      | name                    | source                             | autoupdate |
-      | claude-plugins-official | anthropics/claude-plugins-official | true       |
+      | name                    | source                             |
+      | claude-plugins-official | anthropics/claude-plugins-official |
     Then the "claude-plugins.json" file of the project scope does not exist
 
   Scenario: Bootstrapping a second time leaves the official marketplace as it is
@@ -38,8 +38,8 @@ Feature: Plugin bootstrap
       | claude-plugins-official | user              | skipped            | already autoupdate  |
     Then the git host receives no request
     Then the "claude-plugins.json" file of the user scope declares these marketplaces:
-      | name                    | source                             | autoupdate |
-      | claude-plugins-official | anthropics/claude-plugins-official | true       |
+      | name                    | source                             |
+      | claude-plugins-official | anthropics/claude-plugins-official |
 
   Scenario: Bootstrapping installs the missing dependency of an installed plugin that the official marketplace offers
     Given the marketplace "tools" is published as a dir source
@@ -62,9 +62,9 @@ Feature: Plugin bootstrap
       | cascade | info     | true         |
       | cascade | info     | false        |
     Then the results list these marketplaces and plugins:
-      | marketplace name        | marketplace scope | marketplace status | id                          | name                        | status    | reasons              | scope | version |
-      | claude-plugins-official | user              | added              | lib@claude-plugins-official | lib@claude-plugins-official | installed | dependency installed | user  | 1.0.0   |
-      | claude-plugins-official | user              | autoupdate enabled |                             |                             |           |                      |       |         |
+      | marketplace name        | marketplace scope | marketplace status | marketplace reasons | id                          | name                        | status    | reasons              | scope | version |
+      | claude-plugins-official | user              | added              |                     | lib@claude-plugins-official | lib@claude-plugins-official | installed | dependency installed | user  | 1.0.0   |
+      | claude-plugins-official | user              | skipped            | already autoupdate  |                             |                             |           |                      |       |         |
     Then the installation record of the user scope holds these plugins:
       | id                          | version | enabled |
       | app@tools                   | 1.0.0   | true    |

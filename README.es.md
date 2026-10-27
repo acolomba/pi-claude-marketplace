@@ -292,7 +292,7 @@ Elimina un mercado y desinstala sus complementos. Una dependencia que otro compl
 /claude:plugin marketplace rm context7-marketplace
 ```
 
-Activa o desactiva las actualizaciones automáticas de complementos del mercado. Cuando actualizas el mercado manualmente, esta extensión también actualiza los complementos instalados.
+Activa o desactiva las actualizaciones automáticas de complementos del mercado. Cuando actualizas el mercado manualmente, esta extensión también actualiza los complementos instalados. Cuando `autoupdate` está activado, una actualización en segundo plano se ejecuta después del primer mensaje de una sesión tui, con un retraso aleatorio de hasta diez minutos. Los mercados oficiales de Claude tienen `autoupdate` activado de forma predeterminada, excepto `knowledge-work-plugins` y `first-party-plugins`.
 
 ```text
 /claude:plugin marketplace autoupdate context7-marketplace
@@ -415,7 +415,7 @@ El comando `/claude:plugin install` obtiene automáticamente un complemento remo
 
 ### Bootstrap
 
-`Bootstrap` es una configuración en un solo paso. Agrega el mercado oficial de Anthropic en el ámbito de usuario y habilita `autoupdate`.
+`Bootstrap` es una configuración en un solo paso. Agrega el mercado oficial de Anthropic en el ámbito de usuario y se asegura de que `autoupdate` esté activado. El mercado oficial tiene `autoupdate` activado de forma predeterminada, así que `bootstrap` no escribe ningún valor e informa `{already autoupdate}`.
 
 ```text
 /claude:plugin bootstrap

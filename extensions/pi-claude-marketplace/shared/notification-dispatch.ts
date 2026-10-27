@@ -43,6 +43,7 @@ import type {
 } from "./notification-run.ts";
 import type {
   AutoapplyStatusSurface,
+  BackgroundUpdatePlugin,
   CascadeNotificationMessage,
   DeviceFlowPrompt,
   HookSurface,
@@ -96,6 +97,7 @@ function isRawOutcome(presentation: ResolvedRawSurface | CommandErrorPresentatio
     case "stop-override-cap":
     case "mcp-config-notices":
     case "mcp-migration":
+    case "background-update":
       return false;
   }
 }
@@ -257,6 +259,22 @@ export function notifyPluginPathSkipped(
   reason: string,
 ): void {
   emitLoadSurface(ctx, run, { kind: "plugin-path-skipped", scope, reason });
+}
+
+/**
+ * AUP-03 / D-PL8-10: reports the plugins a background update moved. An empty
+ * list emits nothing, so no payload breaks the schema's one-row minimum.
+ */
+export function notifyBackgroundUpdate(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  plugins: readonly BackgroundUpdatePlugin[],
+): void {
+  if (plugins.length === 0) {
+    return;
+  }
+
+  emitLoadSurface(ctx, run, { kind: "background-update", plugins });
 }
 
 /**

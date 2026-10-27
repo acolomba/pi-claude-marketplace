@@ -446,7 +446,7 @@ test("WR-02: lets a missing-dependency step that throws after the add committed 
   );
   assert.deepStrictEqual(notifications, [
     { message: `● ${BOOTSTRAP_MARKETPLACE_NAME} [user] (added)` },
-    { message: `● ${BOOTSTRAP_MARKETPLACE_NAME} [user] <autoupdate>` },
+    { message: `● ${BOOTSTRAP_MARKETPLACE_NAME} [user] <autoupdate> {already autoupdate}` },
   ]);
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
