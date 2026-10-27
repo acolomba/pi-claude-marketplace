@@ -5266,3 +5266,48 @@ test("D-PL2-09: an orchestrated add never runs the step, because its caller runs
     assert.deepStrictEqual(outcome, { status: "added", name: "valid-marketplace" });
   });
 });
+
+test("D-PL2-11: a refused dependency install raises the add's notification to error and keeps the (added) header", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const step = recordingDependencyInstall({
+      rows: [
+        {
+          status: "failed",
+          name: "lib@valid-marketplace",
+          reasons: ["dependency failed"],
+          cause: new Error(
+            'Dependency "core@valid-marketplace" is not declared by its marketplace.',
+          ),
+          severity: "error",
+          needsReload: false,
+        },
+      ],
+      mcpConfigNotices: [],
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: fixtureMarketplaceDir("valid-marketplace"),
+      installMissingDependencies: step.installMissingDependencies,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● valid-marketplace [project] (added)\n" +
+          "  ⊘ lib@valid-marketplace (failed) {dependency failed}\n" +
+          '    cause: Dependency "core@valid-marketplace" is not declared by its marketplace.',
+        severity: "error",
+      },
+    ]);
+  });
+});
