@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 2
 current_phase_name: Apply Ordering and Installed Declarations
 status: executing
-stopped_at: Completed 02-04-PLAN.md
-last_updated: "2026-10-27T06:06:16.542Z"
+stopped_at: Completed 02-05-PLAN.md
+last_updated: "2026-10-27T06:40:19.168Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase 2 execution started
-state_head: d2733f71c2ce0c5e03c1a98276de6ab161f4bd17
+state_head: b29601f6678e86c3dbc4d506b53fba5f7068aa60
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 6
-  completed_plans: 4
+  completed_plans: 5
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 2 (Apply Ordering and Installed Declarations) — EXECUTING
-Plan: 5 of 6
+Plan: 6 of 6
 Status: Ready to execute
 Last activity: 2026-10-26 — Phase 2 execution started
 
@@ -191,8 +191,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-27T06:06:16.352Z
-**Stopped at:** Completed 02-04-PLAN.md
+**Last session:** 2026-10-27T06:40:19.054Z
+**Stopped at:** Completed 02-05-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -408,6 +408,7 @@ archived milestone artifacts.
 | Phase 02 P02 | 29 min | 2 tasks | 9 files |
 | Phase 02 P03 | 81min | 3 tasks | 8 files |
 | Phase 02 P04 | 27 min | 2 tasks | 6 files |
+| Phase 02 P05 | 32min | 2 tasks | 21 files |
 
 ## Decisions
 
@@ -618,6 +619,9 @@ archived milestone artifacts.
 - [Phase 02]: D-PL2-11: disables caused by a MISS-01 refusal print after its (failed) row, dependencies first
 - [Phase 02]: D-PL2-12 (amended): an installed copy is read only under the clone root its record owns, keyed on resolvedSha (plugin-clones/ with it, the marketplace clone without)
 - [Phase 02]: D-PL2-13: a symlinked manifest candidate inside an installed copy is refused and the read answers absent (stricter than Claude Code, NFR-10)
+- [Phase 02]: D-PL2-09: after a standalone marketplace add, the add's scope runs apply's missing-dependency step (injected ScopeDependencyInstallFn) for the dependencies the added marketplace offers; add's scope only
+- [Phase 02]: D-PL2-11 (add call site): a refused add-time install renders apply's (failed) row and cause under the (added) block and raises the notification to error
+- [Phase 02]: D-PL2-15: NFR-5 amendment -- marketplace add (any source kind), bootstrap and autoupdate may clone a git-source missing dependency on a cache miss
 
 ### mcp-4 decisions
 
