@@ -5776,23 +5776,70 @@ const NOTHING_LEFT = {
   staging: [],
 };
 
-const HOSTED_FAILURES: readonly { readonly answer: string | Error; readonly reason: string }[] = [
+/** The bare failed-add row of a hosted add. */
+function failedHostedRow(reason: string): string {
+  return `A marketplace operation has failed.\n\n⊘ ${HOSTED_URL} [project] (failed) {${reason}}`;
+}
+
+/** The failed-add row of a hosted add whose child row carries `cause`. */
+function failedHostedChildRow(reason: string, cause: string): string {
+  return (
+    "Some operations have failed.\n\n" +
+    `⊘ ${HOSTED_URL} [project] (failed)\n` +
+    `  ⊘ ${HOSTED_URL} (failed) {${reason}}\n` +
+    `    cause: ${cause}`
+  );
+}
+
+const HOSTED_FAILURES: readonly {
+  readonly answer: string | Error;
+  readonly reason: string;
+  readonly message: string;
+}[] = [
   {
     answer: new HostedManifestFetchError("network", `Could not connect to ${HOSTED_URL}`, {
       cause: new TypeError("fetch failed"),
     }),
     reason: "network unreachable",
+    message: failedHostedChildRow(
+      "network unreachable",
+      `Could not connect to ${HOSTED_URL} -> fetch failed`,
+    ),
   },
-  { answer: new HostedManifestFetchError("unreadable", "too large"), reason: "unreadable" },
-  { answer: new HostedManifestHttpError(HOSTED_URL, 404), reason: "source missing" },
-  { answer: new HostedManifestHttpError(HOSTED_URL, 410), reason: "source missing" },
-  { answer: new HostedManifestHttpError(HOSTED_URL, 401), reason: "authentication required" },
-  { answer: new HostedManifestHttpError(HOSTED_URL, 403), reason: "authentication required" },
-  { answer: "{", reason: "unparseable" },
-  { answer: '{"name":"tools"}', reason: "invalid manifest" },
+  {
+    answer: new HostedManifestFetchError("unreadable", "too large"),
+    reason: "unreadable",
+    message: failedHostedChildRow("unreadable", "too large"),
+  },
+  {
+    answer: new HostedManifestHttpError(HOSTED_URL, 404),
+    reason: "source missing",
+    message: failedHostedRow("source missing"),
+  },
+  {
+    answer: new HostedManifestHttpError(HOSTED_URL, 410),
+    reason: "source missing",
+    message: failedHostedRow("source missing"),
+  },
+  {
+    answer: new HostedManifestHttpError(HOSTED_URL, 401),
+    reason: "authentication required",
+    message: failedHostedRow("authentication required"),
+  },
+  {
+    answer: new HostedManifestHttpError(HOSTED_URL, 403),
+    reason: "authentication required",
+    message: failedHostedRow("authentication required"),
+  },
+  { answer: "{", reason: "unparseable", message: failedHostedRow("unparseable") },
+  {
+    answer: '{"name":"tools"}',
+    reason: "invalid manifest",
+    message: failedHostedRow("invalid manifest"),
+  },
 ];
 
-for (const { answer, reason } of HOSTED_FAILURES) {
+for (const { answer, reason, message } of HOSTED_FAILURES) {
   const title = answer instanceof Error ? answer.message : answer;
   test(`D-PL5-10: a hosted download answering ${title} fails as ${reason} and leaves nothing`, async () => {
     await withTmpScope(async ({ cwd, locations }) => {
@@ -5811,12 +5858,7 @@ for (const { answer, reason } of HOSTED_FAILURES) {
       });
 
       // assert
-      assert.deepStrictEqual(notifications, [
-        {
-          message: `A marketplace operation has failed.\n\n⊘ ${HOSTED_URL} [project] (failed) {${reason}}`,
-          severity: "error",
-        },
-      ]);
+      assert.deepStrictEqual(notifications, [{ message, severity: "error" }]);
       assert.deepStrictEqual(await scopeLeftovers(locations), NOTHING_LEFT);
     });
   });
@@ -5845,6 +5887,37 @@ for (const { answer, reason } of HOSTED_FAILURES) {
     });
   });
 }
+
+test("D-PL5-10 / PMOD-04: a refused hosted URL with a password shows the refusal and masks the password", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const rawSource = "https://user:secret@catalog.example/acme/marketplace.json";
+    const { ctx, run, notifications } = makeCtx();
+    const { hostedManifestFetch } = createHostedManifestFetch(
+      new HostedManifestFetchError(
+        "unreadable",
+        `Marketplace URL must not contain a user name or password: ${rawSource}`,
+      ),
+    );
+
+    // act
+    await addMarketplace({ ctx, run, scope: "project", cwd, rawSource, hostedManifestFetch });
+
+    // assert
+    const masked = "https://***@catalog.example/acme/marketplace.json";
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n" +
+          `⊘ ${masked} [project] (failed)\n` +
+          `  ⊘ ${masked} (failed) {unreadable}\n` +
+          `    cause: Marketplace URL must not contain a user name or password: ${masked}`,
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await scopeLeftovers(locations), NOTHING_LEFT);
+  });
+});
 
 test("D-PL5-10 / ADD-10: a hosted download answering HTTP 500 renders {network error} with the status on the URL", async () => {
   await withTmpScope(async ({ cwd, locations }) => {

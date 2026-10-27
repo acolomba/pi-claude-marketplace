@@ -63,18 +63,18 @@ Feature: Marketplace hosted source
       | 502    |
       | 503    |
 
-  Scenario: Adding a hosted marketplace whose connection drops fails as network unreachable
+  Scenario: Adding a hosted marketplace whose connection drops fails as network unreachable and says why
     Given the marketplace "tools" is published as a hosted source
     Given the git host drops the connection for the marketplace "tools"
     When the user runs "/claude:plugin marketplace add https://{git host}/acme/tools/marketplace.json --scope project"
     Then the result has these fields:
-      | kind         | cascade                             |
-      | severity     | error                               |
-      | needs reload | false                               |
-      | summary      | A marketplace operation has failed. |
-    Then the result lists these marketplaces:
-      | name                                           | scope   | status | reasons             |
-      | https://{git host}/acme/tools/marketplace.json | project | failed | network unreachable |
+      | kind         | cascade                      |
+      | severity     | error                        |
+      | needs reload | false                        |
+      | summary      | Some operations have failed. |
+    Then the result lists these plugins:
+      | marketplace name                               | marketplace scope | marketplace status | id                                             | name                                           | status | reasons             | scope   | leaks | rollback partial | cause chain                                                                                          | cause truncated |
+      | https://{git host}/acme/tools/marketplace.json | project           | failed             | https://{git host}/acme/tools/marketplace.json | https://{git host}/acme/tools/marketplace.json | failed | network unreachable | project |       |                  | Could not connect to https://{git host}/acme/tools/marketplace.json, fetch failed, other side closed | false           |
     Then the git host receives these requests:
       | method | path                         | status  |
       | GET    | /acme/tools/marketplace.json | dropped |

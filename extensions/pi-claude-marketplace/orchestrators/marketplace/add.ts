@@ -1085,6 +1085,12 @@ function removalAdvisories(err: unknown): readonly string[] | undefined {
  *
  * MKT-01 / D-PL5-02: a reserved marketplace name takes the same child row, so
  * Claude Code's refusal sentence is its cause line.
+ *
+ * D-PL5-10: a hosted download that failed without an HTTP status takes it
+ * too. Its `unreadable` covers a body over the cap, too many redirects, a
+ * refused redirect, and a URL with a user name or password, so the cause line
+ * says which. The presentation layer masks the user name and password in the
+ * subject and the cause (PMOD-04).
  */
 function failedAddRow(
   subject: string,
@@ -1094,10 +1100,12 @@ function failedAddRow(
   hostFrame: string | undefined,
 ): MarketplaceRows<PluginFailedMessage> {
   const cause = hostFrame === undefined ? error : new Error(hostFrame, { cause: error });
+  const unwrapped = unwrapAddError(error);
   if (
     hostFrame === undefined &&
     !hasFetchedUrlCause(error) &&
-    !(unwrapAddError(error) instanceof ReservedMarketplaceNameError)
+    !(unwrapped instanceof ReservedMarketplaceNameError) &&
+    !(unwrapped instanceof HostedManifestFetchError)
   ) {
     // D-03: a failed marketplace add -> error.
     return {
