@@ -116,7 +116,7 @@ interface Calls {
 function ports(world: {
   readonly walks: Readonly<Record<string, DependencyGraph | GraphWalkFailure>>;
   readonly versions?: (request: DependencyMoveRequest) => string | undefined;
-  readonly preview?: (member: ResolvedCascadeMember) => Promise<void>;
+  readonly preview?: (member: ResolvedCascadeMember) => Promise<string | undefined>;
   /** The judge's cause when a request cannot move. */
   readonly refusalCause?: string;
   /** GV-01: each version lands at a release tag, its commit appended. */
@@ -143,7 +143,7 @@ function ports(world: {
     },
     preview: (previewed) => {
       calls.previewed.push(previewed.key);
-      return world.preview?.(previewed) ?? Promise.resolve();
+      return world.preview?.(previewed) ?? Promise.resolve(undefined);
     },
   };
 }
@@ -439,6 +439,59 @@ describe("planDependencyGraph", () => {
       subject: { kind: "member", key: "fff@mp", error, rollbackPartials: [] },
     });
     assert.deepStrictEqual(bound.calls.previewed, ["fff@mp"]);
+  });
+
+  test("D-PL4-01: a fresh dependency is scheduled with the commit its preview resolved, where it lands", async () => {
+    // arrange
+    const commits: Readonly<Record<string, string>> = {
+      "fff@mp": "f".repeat(40),
+      "ggg@mp": "a".repeat(40),
+    };
+    const bound = ports({
+      walks: {
+        "": graph(
+          [wall("aaa", "1.0.0", APP_ASKS_2), fresh("ggg"), fresh("hhh")],
+          ["aaa@mp", "ggg@mp", "hhh@mp"],
+        ),
+        "aaa@mp=2.0.0": graph(
+          [
+            fresh("fff"),
+            walked("aaa", APP_ASKS_2, { dependsOn: ["fff@mp"] }),
+            fresh("ggg"),
+            fresh("hhh"),
+          ],
+          ["aaa@mp", "ggg@mp", "hhh@mp"],
+        ),
+      },
+      versions: () => "2.0.0",
+      preview: (previewed) => Promise.resolve(commits[previewed.key]),
+    });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      ok: true,
+      steps: [
+        {
+          kind: "materialize",
+          members: [
+            { kind: "install", member: { ...member("fff"), previewedCommit: "f".repeat(40) } },
+          ],
+        },
+        { kind: "move", move: { request: request("aaa"), version: "2.0.0" } },
+      ],
+      final: {
+        members: [
+          { kind: "install", member: { ...member("ggg"), previewedCommit: "a".repeat(40) } },
+          { kind: "install", member: member("hhh") },
+          { kind: "install", member: member("app") },
+        ],
+        alreadyInstalled: [],
+      },
+    });
+    assert.deepStrictEqual(bound.calls.previewed, ["fff@mp", "ggg@mp", "hhh@mp"]);
   });
 
   test("UPD-DEP-D1: an update's plan lands its final closure without a root", async () => {
@@ -837,7 +890,7 @@ describe("planDependencyGraph", () => {
     const bound = ports({
       walks: { "": graph([fresh("helper"), fresh("other")], ["helper@mp", "other@mp"]) },
       preview: (previewed) =>
-        previewed.key === "helper@mp" ? Promise.reject(error) : Promise.resolve(),
+        previewed.key === "helper@mp" ? Promise.reject(error) : Promise.resolve(undefined),
     });
 
     // act

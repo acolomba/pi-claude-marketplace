@@ -22,7 +22,10 @@
 // pick the conflict involves has a version left, or when the choices repeat
 // a state they were in before. Every pick and every ruled-out version comes
 // from a finite catalog, so the search ends. Then each fresh plugin is
-// previewed with the install's own preflight.
+// previewed with the install's own preflight. Each fresh plugin's preview
+// answers the commit it resolved, and the plan carries that commit on the
+// member it schedules, so the install lands what the plan previewed
+// (D-PL4-01).
 //
 // D-PL4-03: the search is not complete. When a conflict involves several
 // tentative picks, the plan rules out the version of the first involved pick
@@ -124,8 +127,11 @@ export interface DependencyPlanPorts<P extends PlannedCandidate = PreparedPlugin
    * declarations it involves.
    */
   readonly walk: (moving: ReadonlyMap<string, P>) => Promise<DependencyGraph | GraphWalkFailure>;
-  /** Throws what installing `member` would throw, with no write. */
-  readonly preview: (member: ResolvedCascadeMember) => Promise<void>;
+  /**
+   * Throws what installing `member` would throw, with no write, and answers
+   * the commit its preflight resolved (D-PL4-01).
+   */
+  readonly preview: (member: ResolvedCascadeMember) => Promise<string | undefined>;
 }
 
 /** What the plan carries out: materialize a closure slice, or make one move. */
@@ -425,11 +431,16 @@ async function settleChoices<P extends PlannedCandidate>(
   }
 }
 
-/** The first fresh plugin the install's own preflight refuses, if any. */
+/**
+ * The first fresh plugin the install's own preflight refuses, or the commit
+ * each fresh plugin's preview resolved, by key. A key whose preview resolved
+ * none is left out.
+ */
 async function previewFresh<P extends PlannedCandidate>(
   graph: DependencyGraph,
   ports: DependencyPlanPorts<P>,
-): Promise<Refusal | undefined> {
+): Promise<Refusal | Map<string, string>> {
+  const commits = new Map<string, string>();
   for (const node of graph.nodes) {
     if (node.kind !== "fresh") {
       continue;
@@ -437,7 +448,10 @@ async function previewFresh<P extends PlannedCandidate>(
 
     try {
       // eslint-disable-next-line no-await-in-loop -- the first refusal ends the plan
-      await ports.preview(node.member);
+      const commit = await ports.preview(node.member);
+      if (commit !== undefined) {
+        commits.set(node.member.key, commit);
+      }
     } catch (err) {
       return {
         ok: false,
@@ -451,13 +465,30 @@ async function previewFresh<P extends PlannedCandidate>(
     }
   }
 
-  return undefined;
+  return commits;
+}
+
+/**
+ * `member` carrying the commit its preview resolved, as a copy: the walks
+ * share a graph node's member, so it is never changed in place.
+ */
+function withPreviewedCommit(
+  member: ResolvedCascadeMember,
+  commit: string | undefined,
+): ResolvedCascadeMember {
+  return commit === undefined ? member : { ...member, previewedCommit: commit };
 }
 
 /** What a node materializes in a cascade, when it materializes anything. */
-function materialized(node: DependencyGraphNode): PlannedCascadeMember | undefined {
+function materialized(
+  node: DependencyGraphNode,
+  commits: ReadonlyMap<string, string>,
+): PlannedCascadeMember | undefined {
   if (node.kind === "fresh") {
-    return { kind: "install", member: node.member };
+    return {
+      kind: "install",
+      member: withPreviewedCommit(node.member, commits.get(node.member.key)),
+    };
   }
 
   return node.walked && node.disabled ? { kind: "re-enable", member: node.member } : undefined;
@@ -503,11 +534,12 @@ function reachable(
 function schedule<P extends PlannedCandidate>(
   graph: DependencyGraph,
   moves: ReadonlyMap<string, Choice<P>>,
+  commits: ReadonlyMap<string, string>,
   options: DependencyPlanOptions,
 ): Extract<DependencyPlan, { readonly ok: true }> {
   const moved = new Set(moves.keys());
   const pending = graph.nodes.flatMap((node) => {
-    const member = materialized(node);
+    const member = materialized(node, commits);
     return member === undefined ? [] : [member];
   });
   const done = new Set<string>();
@@ -575,7 +607,8 @@ export async function planDependencyGraph<P extends PlannedCandidate>(
     return settled;
   }
 
-  return (
-    (await previewFresh(settled.graph, ports)) ?? schedule(settled.graph, settled.moves, options)
-  );
+  const previewed = await previewFresh(settled.graph, ports);
+  return previewed instanceof Map
+    ? schedule(settled.graph, settled.moves, previewed, options)
+    : previewed;
 }

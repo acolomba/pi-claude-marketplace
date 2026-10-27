@@ -2452,9 +2452,14 @@ test("UPD-DEP-D1: previewInstall admits an installable plugin and writes nothing
   const bytesBefore = await readFile(locations.stateJsonPath, "utf8");
 
   // act
-  await previewInstall(seeded.state, locations, projectInstallOptions(environment.cwd));
+  const commit = await previewInstall(
+    seeded.state,
+    locations,
+    projectInstallOptions(environment.cwd),
+  );
 
   // assert
+  assert.strictEqual(commit, undefined);
   assert.deepStrictEqual(seeded.state, stateBefore);
   assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), bytesBefore);
   await assert.rejects(readdir(locations.skillsTargetDir), { code: "ENOENT" });
@@ -2555,10 +2560,34 @@ test("UPD-DEP-D1: previewInstall leaves a marketplace neither scope records to t
   const state: ExtensionState = { marketplaces: {}, schemaVersion: 2 };
 
   // act
-  await previewInstall(state, locations, projectInstallOptions(environment.cwd));
+  const commit = await previewInstall(state, locations, projectInstallOptions(environment.cwd));
 
   // assert
+  assert.strictEqual(commit, undefined);
   assert.deepStrictEqual(state, { marketplaces: {}, schemaVersion: 2 });
+});
+
+test("D-PL4-01: previewInstall answers the commit a git source's preflight resolved", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-preview-git-");
+  const seeded = await seedPlugin(environment.cwd, {
+    gitSource: { source: "url", url: "https://example.com/org/repo" },
+    components: { skills: ["alpha"] },
+  });
+  const locations = locationsFor("project", environment.cwd);
+
+  // act
+  const commit = await previewInstall(seeded.state, locations, {
+    ...projectInstallOptions(environment.cwd),
+    cloneProbe: () =>
+      Promise.resolve({
+        result: { kind: "materialized", pluginRoot: seeded.pluginRoot, resolvedSha: RESOLVED_SHA },
+        resolvedSha: RESOLVED_SHA,
+      }),
+  });
+
+  // assert
+  assert.strictEqual(commit, RESOLVED_SHA);
 });
 
 test("D-PL4-04: previewInstall refuses an agent target a user's file holds and writes nothing", async (t) => {

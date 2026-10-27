@@ -303,6 +303,12 @@ export interface ResolvedCascadeMember extends ClosureMember {
    * range.
    */
   readonly directoryPin?: DirectoryPinRange;
+  /**
+   * D-PL4-01: the commit the dependency plan's install preview resolved for
+   * this member. The install pins it when no release tag pins the member, so
+   * it installs what the plan previewed and resolves the source once.
+   */
+  readonly previewedCommit?: string;
 }
 
 /**

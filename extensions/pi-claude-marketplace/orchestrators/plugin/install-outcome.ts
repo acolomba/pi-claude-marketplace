@@ -844,14 +844,16 @@ async function assertDirectoryPinSatisfied(
  * a copy of `state`, and a marketplace only the user scope records is read
  * from the user record rather than added (D-MF-04), so a refused plan adds
  * nothing. A git source clones on a cache miss, as the install it previews
- * would. Throws what the ledger would throw; a marketplace neither scope
- * records resolves quietly, since the ledger reports it.
+ * would. Throws what the ledger would throw. Answers the commit its
+ * preflight resolved, which the install then pins (D-PL4-01), or `undefined`
+ * when the source resolved none (a path source with no pin) or when the
+ * marketplace is one neither scope records, since the ledger reports it.
  */
 export async function previewInstall(
   state: ExtensionState,
   locations: ScopedLocations,
   opts: InstallLedgerOptions,
-): Promise<void> {
+): Promise<string | undefined> {
   const preview = structuredClone(state);
   if (ownValue(preview.marketplaces, opts.marketplace) === undefined) {
     const source = await resolveInstallMarketplaceSource({
@@ -867,7 +869,7 @@ export async function previewInstall(
 
   const preflight = await preflightInstallResolve(preview, locations, opts);
   if (preflight.kind === "marketplace-absent") {
-    return;
+    return undefined;
   }
 
   const generatedNames = await discoverGeneratedNames(opts.plugin, preflight.installable);
@@ -881,6 +883,7 @@ export async function previewInstall(
     { marketplace: opts.marketplace, plugin: opts.plugin },
     generatedNames.agents,
   );
+  return preflight.resolvedSha;
 }
 
 /**
