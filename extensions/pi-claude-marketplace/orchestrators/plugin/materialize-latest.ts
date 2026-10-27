@@ -9,6 +9,7 @@
 import { loadState } from "../../persistence/state-io.ts";
 import { composeErrorWithCauseChain, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 
+import { DEFAULT_PACKAGE_INSTALL_OPS, installUpdatedPackages } from "./package-install.ts";
 import { isUpdatePreflightOutcome, preparePluginUpdate } from "./update-preflight.ts";
 import { preflightMove, swapPluginUpdate } from "./update-swap.ts";
 
@@ -98,10 +99,20 @@ export async function materializeLatestVersion(
   }
 
   if (settled === undefined || settled.rows.length === 0) {
-    return swapPluginUpdate(args, preflight, policy);
+    // D-PL9-07: an updated plugin gets the packages its new version lists.
+    return installUpdatedPackages(
+      DEFAULT_PACKAGE_INSTALL_OPS,
+      await swapPluginUpdate(args, preflight, policy),
+      { locations: args.locations, pluginRoot: preflight.installable.pluginRoot, policy },
+    );
   }
 
-  return swapAfterSettle(args, preflight, policy, settled.rows);
+  // D-PL9-07: an updated plugin gets the packages its new version lists.
+  return installUpdatedPackages(
+    DEFAULT_PACKAGE_INSTALL_OPS,
+    await swapAfterSettle(args, preflight, policy, settled.rows),
+    { locations: args.locations, pluginRoot: preflight.installable.pluginRoot, policy },
+  );
 }
 
 /** The command's context for the preflight's prompts, when it has one. */

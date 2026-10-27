@@ -474,3 +474,71 @@ test("UPD-DEP-D1: a cascade run authenticates in the command's context when it c
   // assert
   assert.strictEqual(outcome.partition, "updated");
 });
+
+async function writePackageFiles(pluginRoot: string): Promise<void> {
+  await writeFile(
+    path.join(pluginRoot, "package.json"),
+    JSON.stringify({ name: "hello", dependencies: { "pkd-dep": "1.0.0" } }),
+  );
+  await writeFile(path.join(pluginRoot, "package-lock.json"), '{"lockfileVersion":3}');
+}
+
+function packageNote(pluginRoot: string): string {
+  return `Skipped installing this plugin's dependencies: its folder ${pluginRoot} is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.`;
+}
+
+test("D-PL9-07: an update whose new version ships a lockfile carries the package note", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { base, pluginRoot } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  await writePackageFiles(pluginRoot);
+
+  // act
+  const outcome = await materializeLatestVersion({ ...base, cascade: true }, UPDATE_POLICY);
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "updated",
+    name: "hello",
+    fromVersion: "1.0.0",
+    toVersion: "1.1.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+    notes: [packageNote(pluginRoot)],
+  });
+});
+
+test("D-PL9-07: an update that settled its dependencies carries the package note too", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const { base, pluginRoot } = await seedRecordedPlugin(t, { recorded: "1.0.0", offered: "1.1.0" });
+  await writePackageFiles(pluginRoot);
+  const settleDependencies: UpdateDependencySettler = () =>
+    Promise.resolve({ kind: "settled", rows: [ZCORE_ROW] });
+
+  // act
+  const outcome = await materializeLatestVersion(
+    { ...base, cascade: true, settleDependencies },
+    UPDATE_POLICY,
+  );
+
+  // assert
+  assert.deepStrictEqual(outcome, {
+    partition: "updated",
+    name: "hello",
+    fromVersion: "1.0.0",
+    toVersion: "1.1.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    constraint: undefined,
+    declaresWorkflows: false,
+    dependencyRows: [ZCORE_ROW],
+    notes: [packageNote(pluginRoot)],
+  });
+});

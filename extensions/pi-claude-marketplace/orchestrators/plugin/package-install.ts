@@ -8,7 +8,9 @@
 // D-PL9-02: the install runs only when the plugin root holds package.json, a
 // lockfile from the table, and a package.json that lists something under
 // dependencies, optionalDependencies, peerDependencies, or workspaces.
-// D-PL9-06: a plugin root that already holds node_modules is left alone.
+// D-PL9-06: the install ledger leaves alone a plugin root that already holds
+// node_modules. After an update that moves to a new revision, the step runs
+// over it, because the new revision may carry a new lockfile (D-PL9-07).
 //
 // NFR-10 / D-PL9-03: the install writes only inside the extension root. A
 // plugin that runs from the user's own folder (a path-source marketplace) is
@@ -19,7 +21,9 @@
 // that holds only package.json and the lockfile, so the plugin's own .npmrc or
 // bunfig.toml is never read. On success its node_modules moves into the plugin
 // root by rename: sources-staging and both clone roots sit under the extension
-// root, on one filesystem. The work dir is removed afterwards.
+// root, on one filesystem. A node_modules it replaces waits inside the work
+// dir, is moved back when the new one cannot move in, and is deleted with the
+// work dir after a success. The work dir is removed afterwards.
 //
 // D-PL9-14 / D-19-01: every note goes to discoveryWarnings, because
 // bridgeWarnings never reaches a standalone user. A failed package install is
@@ -41,6 +45,8 @@ import {
 import { errorMessage, isErrnoException } from "../../shared/errors.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
 
+import type { MaterializationPolicy } from "./update-preflight.ts";
+import type { UpdateRunOutcome } from "./update-swap.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { PackageManagerRun, PackageManagerRunner } from "../../platform/package-manager.ts";
 import type { Phase } from "../../transaction/phase-ledger.ts";
@@ -141,6 +147,8 @@ interface PackageInstallInputs {
   readonly row: RunnableLockfile;
   readonly packageJson: Buffer;
   readonly lockfile: Buffer;
+  /** The plugin root held node_modules when the checks listed it. */
+  readonly replacesNodeModules: boolean;
 }
 
 // What the checks before the run decided: run nothing quietly, run nothing
@@ -241,15 +249,37 @@ async function isInsideExtensionRoot(extensionRoot: string, pluginRoot: string):
   );
 }
 
-function outsideRootNote(pluginRoot: string, row: RunnableLockfile): string {
-  return skippedNote(
-    `its folder ${pluginRoot} is outside the folders this extension manages, so it was not changed. To install them, run "${row.command} ${row.args.join(" ")}" in that folder`,
-  );
+// D-PL9-03: a folder that already holds node_modules gets no note. Only a
+// forced run reaches here with one.
+function outsideRootDetection(
+  pluginRoot: string,
+  row: RunnableLockfile,
+  hasNodeModules: boolean,
+): Detection {
+  if (hasNodeModules) {
+    return SKIP;
+  }
+
+  return {
+    kind: "note",
+    note: skippedNote(
+      `its folder ${pluginRoot} is outside the folders this extension manages, so it was not changed. To install them, run "${row.command} ${row.args.join(" ")}" in that folder`,
+    ),
+  };
 }
 
-async function detectInstall(pluginRoot: string, locations: ScopedLocations): Promise<Detection> {
+async function detectInstall(
+  pluginRoot: string,
+  locations: ScopedLocations,
+  force: boolean,
+): Promise<Detection> {
   const entries = await readEntryNames(pluginRoot);
-  if (entries === undefined || !entries.has("package.json") || entries.has("node_modules")) {
+  if (!entries?.has("package.json")) {
+    return SKIP;
+  }
+
+  const hasNodeModules = entries.has("node_modules");
+  if (hasNodeModules && !force) {
     return SKIP;
   }
 
@@ -273,7 +303,7 @@ async function detectInstall(pluginRoot: string, locations: ScopedLocations): Pr
   }
 
   if (!(await isInsideExtensionRoot(locations.extensionRoot, pluginRoot))) {
-    return { kind: "note", note: outsideRootNote(pluginRoot, row) };
+    return outsideRootDetection(pluginRoot, row, hasNodeModules);
   }
 
   const lockfile = await readBoundedFile(pluginRoot, row.lockfile);
@@ -283,7 +313,13 @@ async function detectInstall(pluginRoot: string, locations: ScopedLocations): Pr
 
   return {
     kind: "run",
-    inputs: { pluginRoot, row, packageJson: packageJson.value, lockfile: lockfile.value },
+    inputs: {
+      pluginRoot,
+      row,
+      packageJson: packageJson.value,
+      lockfile: lockfile.value,
+      replacesNodeModules: hasNodeModules,
+    },
   };
 }
 
@@ -304,19 +340,44 @@ function failureDetail(run: PackageManagerRun): string {
   return detail === undefined || detail === "" ? "no output" : detail;
 }
 
-async function moveNodeModules(workDir: string, pluginRoot: string): Promise<PackageStepOutcome> {
+function ignoreFailure(): undefined {
+  return undefined;
+}
+
+// D-PL9-04: a replaced node_modules waits in the work dir, never in the plugin
+// root, where the content hash walk would read it.
+async function moveNodeModules(
+  workDir: string,
+  inputs: PackageInstallInputs,
+): Promise<PackageStepOutcome> {
+  const liveModules = path.join(inputs.pluginRoot, "node_modules");
+  const parkedModules = path.join(workDir, "previous-node_modules");
+  if (inputs.replacesNodeModules) {
+    await rename(liveModules, parkedModules);
+  }
+
   try {
-    await rename(path.join(workDir, "node_modules"), path.join(pluginRoot, "node_modules"));
+    await rename(path.join(workDir, "node_modules"), liveModules);
   } catch (error: unknown) {
     // A package set that installs nothing leaves no node_modules to move.
     if (isErrnoException(error) && error.code === "ENOENT") {
+      if (inputs.replacesNodeModules) {
+        await rename(parkedModules, liveModules);
+      }
+
       return NOTHING_DONE;
+    }
+
+    if (inputs.replacesNodeModules) {
+      // The failed move is the note the user sees; a restore that fails too
+      // is not reported, and running update again repeats the install.
+      await rename(parkedModules, liveModules).catch(ignoreFailure);
     }
 
     throw error;
   }
 
-  return { createdNodeModules: true };
+  return { createdNodeModules: !inputs.replacesNodeModules };
 }
 
 async function installInWorkDir(
@@ -340,7 +401,7 @@ async function installInWorkDir(
     return { note: failedNote(row.command, failureDetail(run)), createdNodeModules: false };
   }
 
-  return moveNodeModules(workDir, inputs.pluginRoot);
+  return moveNodeModules(workDir, inputs);
 }
 
 async function runInstallStage(
@@ -355,7 +416,7 @@ async function runInstallStage(
     } finally {
       // Claude Code ignores a failed removal too: a leftover work dir costs
       // disk only, and the install itself has already succeeded or failed.
-      await rm(workDir, { recursive: true, force: true }).catch(() => undefined);
+      await rm(workDir, { recursive: true, force: true }).catch(ignoreFailure);
     }
   } catch (error: unknown) {
     return { note: failedNote(inputs.row.command, errorMessage(error)), createdNodeModules: false };
@@ -366,10 +427,11 @@ async function installPluginPackages(
   pluginRoot: string,
   locations: ScopedLocations,
   ops: PackageInstallOps,
+  force: boolean,
 ): Promise<PackageStepOutcome> {
   let detection: Detection;
   try {
-    detection = await detectInstall(pluginRoot, locations);
+    detection = await detectInstall(pluginRoot, locations, force);
   } catch (error: unknown) {
     return { note: skippedNote(errorMessage(error)), createdNodeModules: false };
   }
@@ -394,7 +456,7 @@ export function createPackagesPhase(ops: PackageInstallOps): Phase<PackagesPhase
   return {
     name: "packages",
     do: async (c) => {
-      const outcome = await installPluginPackages(c.resolved.pluginRoot, c.locations, ops);
+      const outcome = await installPluginPackages(c.resolved.pluginRoot, c.locations, ops, false);
       createdNodeModules = outcome.createdNodeModules;
       if (outcome.note !== undefined) {
         c.discoveryWarnings.push(outcome.note);
@@ -409,4 +471,39 @@ export function createPackagesPhase(ops: PackageInstallOps): Phase<PackagesPhase
       }
     },
   };
+}
+
+/** What the update hook needs to run the package step for an updated plugin. */
+export interface UpdatedPackagesTarget {
+  readonly locations: ScopedLocations;
+  readonly pluginRoot: string;
+  readonly policy: MaterializationPolicy;
+}
+
+/**
+ * D-PL9-07: an update's new version gets the package install, and a failure
+ * is a note on the `updated` outcome that never turns it into a failure
+ * (PKD-02). Every other outcome passes through unread.
+ *
+ * D-PL9-06: a policy that skips the recorded revision moves to a new one, so
+ * the step replaces an existing node_modules. A policy that re-materializes
+ * the recorded revision keeps an existing node_modules, so reinstall stays
+ * offline.
+ */
+export async function installUpdatedPackages(
+  ops: PackageInstallOps,
+  outcome: UpdateRunOutcome,
+  target: UpdatedPackagesTarget,
+): Promise<UpdateRunOutcome> {
+  if (outcome.partition !== "updated") {
+    return outcome;
+  }
+
+  const { note } = await installPluginPackages(
+    target.pluginRoot,
+    target.locations,
+    ops,
+    target.policy.skipSameRevision,
+  );
+  return note === undefined ? outcome : { ...outcome, notes: [...(outcome.notes ?? []), note] };
 }

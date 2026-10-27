@@ -16,7 +16,10 @@ import { describe, test } from "node:test";
 
 import { mock, verify } from "strong-mock";
 
-import { createPackagesPhase } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
+import {
+  createPackagesPhase,
+  installUpdatedPackages,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   createPackageManagerRunner,
@@ -28,6 +31,9 @@ import type {
   PackageInstallOps,
   PackagesPhaseContext,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
+import type { MaterializationPolicy } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-preflight.ts";
+import type { UpdateRunOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/update-swap.ts";
+import type { PluginUpdateUpdatedOutcome } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type {
   PackageManagerRequest,
@@ -908,5 +914,284 @@ describe("createPackagesPhase", () => {
     // assert
     assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
     verify(runPackageManager);
+  });
+});
+
+const REVISION_MOVE = {
+  refreshSource: true,
+  skipSameRevision: true,
+  overwrite: false,
+  searchReleaseTags: true,
+} satisfies MaterializationPolicy;
+const SAME_REVISION = {
+  refreshSource: false,
+  skipSameRevision: false,
+  overwrite: true,
+  searchReleaseTags: true,
+} satisfies MaterializationPolicy;
+const FAILED_RUN: PackageManagerRun = { code: 1, stdout: "", stderr: "boom", timedOut: false };
+
+function updatedOutcome(): PluginUpdateUpdatedOutcome {
+  return {
+    partition: "updated",
+    name: "plugin",
+    fromVersion: "1.0.0",
+    toVersion: "1.1.0",
+    stagedAgentNames: [],
+    stagedMcpServerNames: [],
+    declaresAgents: false,
+    declaresMcp: false,
+    declaresWorkflows: false,
+    constraint: undefined,
+  };
+}
+
+function filesWithOldModule(): Readonly<Record<string, string>> {
+  return {
+    "package.json": PACKAGE_JSON,
+    "package-lock.json": LOCKFILE,
+    "node_modules/old-dep/index.js": MODULE_TEXT,
+  };
+}
+
+describe("installUpdatedPackages", () => {
+  for (const { partition, outcome } of [
+    {
+      partition: "unchanged",
+      outcome: (): UpdateRunOutcome => ({
+        partition: "unchanged",
+        name: "plugin",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.0",
+        constraint: undefined,
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+      }),
+    },
+    {
+      partition: "failed",
+      outcome: (): UpdateRunOutcome => ({
+        partition: "failed",
+        name: "plugin",
+        fromVersion: "1.0.0",
+        notes: ["dependency refused"],
+        reasons: ["dependency failed"],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+      }),
+    },
+  ]) {
+    test(`passes a ${partition} outcome through unchanged and runs nothing`, async (t) => {
+      // arrange
+      const seeded = await seedPlugin(t, {
+        "package.json": PACKAGE_JSON,
+        "package-lock.json": LOCKFILE,
+      });
+      const runPackageManager = idleRunner();
+      const expectedOutcome = outcome();
+
+      // act
+      const hookedOutcome = await installUpdatedPackages(
+        opsWith(runPackageManager),
+        expectedOutcome,
+        { locations: seeded.locations, pluginRoot: seeded.pluginRoot, policy: REVISION_MOVE },
+      );
+
+      // assert
+      assert.strictEqual(hookedOutcome, expectedOutcome);
+      assert.deepStrictEqual(await sortedEntries(seeded.pluginRoot), [
+        "package-lock.json",
+        "package.json",
+      ]);
+      verify(runPackageManager);
+    });
+  }
+
+  test("installs the new version's packages over the existing node_modules when the policy skips the recorded revision", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, filesWithOldModule());
+    const requests: PackageManagerRequest[] = [];
+
+    // act
+    const hookedOutcome = await installUpdatedPackages(
+      opsWith(installingRunner(requests)),
+      updatedOutcome(),
+      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, policy: REVISION_MOVE },
+    );
+
+    // assert
+    assert.deepStrictEqual(hookedOutcome, updatedOutcome());
+    assert.deepStrictEqual(requests, [
+      { command: "npm", args: NPM_CI_ARGUMENTS, cwd: seeded.workDir },
+    ]);
+    assert.deepStrictEqual(await sortedEntries(path.join(seeded.pluginRoot, "node_modules")), [
+      "pkd-dep",
+    ]);
+    assert.strictEqual(
+      await readFile(path.join(seeded.pluginRoot, "node_modules", "pkd-dep", "index.js"), "utf8"),
+      MODULE_TEXT,
+    );
+    assert.deepStrictEqual(
+      await readdir(path.join(seeded.locations.extensionRoot, "sources-staging")),
+      [],
+    );
+  });
+
+  test("keeps an installed node_modules and runs nothing when the policy re-materializes the recorded revision", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, filesWithOldModule());
+    const runPackageManager = idleRunner();
+    const expectedOutcome = updatedOutcome();
+
+    // act
+    const hookedOutcome = await installUpdatedPackages(
+      opsWith(runPackageManager),
+      expectedOutcome,
+      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, policy: SAME_REVISION },
+    );
+
+    // assert
+    assert.strictEqual(hookedOutcome, expectedOutcome);
+    assert.deepStrictEqual(await sortedEntries(path.join(seeded.pluginRoot, "node_modules")), [
+      "old-dep",
+    ]);
+    verify(runPackageManager);
+  });
+
+  test("PKD-02: appends the note to the notes the outcome already carries", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, {
+      "package.json": PACKAGE_JSON,
+      "package-lock.json": LOCKFILE,
+    });
+
+    // act
+    const hookedOutcome = await installUpdatedPackages(
+      opsWith(answeringRunner(FAILED_RUN)),
+      { ...updatedOutcome(), notes: ["first"] },
+      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, policy: REVISION_MOVE },
+    );
+
+    // assert
+    assert.deepStrictEqual(hookedOutcome, {
+      ...updatedOutcome(),
+      notes: ["first", "Plugin dependency install failed (npm): boom"],
+    });
+  });
+
+  test("PKD-02: adds a notes list for an outcome that carried none", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, {
+      "package.json": PACKAGE_JSON,
+      "package-lock.json": LOCKFILE,
+    });
+
+    // act
+    const hookedOutcome = await installUpdatedPackages(
+      opsWith(answeringRunner(FAILED_RUN)),
+      updatedOutcome(),
+      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, policy: REVISION_MOVE },
+    );
+
+    // assert
+    assert.deepStrictEqual(hookedOutcome, {
+      ...updatedOutcome(),
+      notes: ["Plugin dependency install failed (npm): boom"],
+    });
+  });
+
+  test("D-PL9-03: leaves an outside folder that has node_modules as it is even when the policy skips the recorded revision", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, filesWithOldModule(), "outside");
+    const runPackageManager = idleRunner();
+    const expectedOutcome = updatedOutcome();
+
+    // act
+    const hookedOutcome = await installUpdatedPackages(
+      opsWith(runPackageManager),
+      expectedOutcome,
+      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, policy: REVISION_MOVE },
+    );
+
+    // assert
+    assert.strictEqual(hookedOutcome, expectedOutcome);
+    assert.deepStrictEqual(await sortedEntries(path.join(seeded.pluginRoot, "node_modules")), [
+      "old-dep",
+    ]);
+    verify(runPackageManager);
+  });
+
+  test("D-PL9-04: restores the replaced node_modules when the move into the plugin root fails", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, {
+      "package.json": PACKAGE_JSON,
+      "package-lock.json": LOCKFILE,
+    });
+    const builtModules = path.join(seeded.workDir, "node_modules");
+    await mkdir(seeded.workDir, { recursive: true });
+    await mkdir(builtModules, { mode: 0o555 });
+    const moveError = await rename(builtModules, path.join(seeded.pluginRoot, "node_modules")).then(
+      () => assert.fail("a read-only directory moved to another parent"),
+      (error: unknown) => error,
+    );
+    assert.ok(moveError instanceof Error);
+    await rm(seeded.workDir, { recursive: true });
+    await mkdir(path.join(seeded.pluginRoot, "node_modules", "old-dep"), { recursive: true });
+    await writeFile(
+      path.join(seeded.pluginRoot, "node_modules", "old-dep", "index.js"),
+      MODULE_TEXT,
+    );
+
+    // act
+    const hookedOutcome = await installUpdatedPackages(
+      opsWith(async (request) => {
+        await mkdir(path.join(request.cwd, "node_modules"), { mode: 0o555 });
+        return SUCCESS;
+      }),
+      updatedOutcome(),
+      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, policy: REVISION_MOVE },
+    );
+
+    // assert
+    assert.deepStrictEqual(hookedOutcome, {
+      ...updatedOutcome(),
+      notes: [`Plugin dependency install failed (npm): ${moveError.message}`],
+    });
+    assert.strictEqual(
+      await readFile(path.join(seeded.pluginRoot, "node_modules", "old-dep", "index.js"), "utf8"),
+      MODULE_TEXT,
+    );
+    assert.deepStrictEqual(
+      await readdir(path.join(seeded.locations.extensionRoot, "sources-staging")),
+      [],
+    );
+  });
+
+  test("D-PL9-04: restores the replaced node_modules when the package manager wrote none", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(t, filesWithOldModule());
+
+    // act
+    const hookedOutcome = await installUpdatedPackages(
+      opsWith(answeringRunner(SUCCESS)),
+      updatedOutcome(),
+      { locations: seeded.locations, pluginRoot: seeded.pluginRoot, policy: REVISION_MOVE },
+    );
+
+    // assert
+    assert.deepStrictEqual(hookedOutcome, updatedOutcome());
+    assert.deepStrictEqual(await sortedEntries(path.join(seeded.pluginRoot, "node_modules")), [
+      "old-dep",
+    ]);
+    assert.strictEqual(
+      await readFile(path.join(seeded.pluginRoot, "node_modules", "old-dep", "index.js"), "utf8"),
+      MODULE_TEXT,
+    );
+    assert.deepStrictEqual(
+      await readdir(path.join(seeded.locations.extensionRoot, "sources-staging")),
+      [],
+    );
   });
 });

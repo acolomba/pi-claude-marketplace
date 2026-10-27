@@ -8342,7 +8342,10 @@ test("a post-commit clone cleanup failure preserves the successful update", asyn
       await chmod(locations.pluginClonesDir, 0o700);
       const record = (await loadState(locations.extensionRoot)).marketplaces["mp"]?.plugins["gp"];
       assert.equal(record?.resolvedSha, SHA_NEW);
-      assert.equal(notifications.length, 1);
+      // The package step cannot list the new plugin root under the unreadable
+      // clones dir either, and reports that in a warning of its own (D-PL9-07).
+      assert.equal(notifications.length, 2);
+      assert.equal(notifications[1]?.severity, "warning");
       assert.equal(await pathExists(oldCloneRoot), true);
     } finally {
       const locations = locationsFor("project", cwd);
