@@ -167,3 +167,30 @@ Feature: Plugin staging warnings
       | marketplace name | marketplace scope | id            | name         | status    | reasons                 | scope   | version | from  | to    |
       | fixtures         | project           | demo@fixtures | demo         | updated   |                         | project |         | 1.0.0 | 1.1.0 |
       | fixtures         | project           | lib@fixtures  | lib@fixtures | installed | requires pi-mcp-adapter | project | 1.0.0   |       |       |
+
+  Scenario: A bare update over two marketplaces reports the skips in the order of the rows
+    Given the marketplace "addons" is published as a dir source
+    Given the marketplace "addons" offers these plugins:
+      | name | version |
+      | tool | 1.0.0   |
+    Given the marketplace "addons" is added to the project scope
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin install tool@addons --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the marketplace "addons" offers these plugins:
+      | name | version |
+      | tool | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    Given the published plugin "tool" of the marketplace "addons" has a second skill whose name collides with its first
+    When the user runs "/claude:plugin update --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | tally label   | tally failures | tally warnings | tally success count | tally success verb | header                                                            | lines                                                                                                                                      |
+      | cascade    | info     | true         | Plugin update | 0              | 0              | 2                   | updated            |                                                                   |                                                                                                                                            |
+      | diagnostic | warning  | false        |               |                |                |                     |                    | Plugin "tool" [project] updated; 1 declared component has a note. | skill source "tool-skill" in "skills" elides to generated name "tool-skill", already produced by skill source "skill"; ignoring duplicate. |
+      | diagnostic | warning  | false        |               |                |                |                     |                    | Plugin "demo" [project] updated; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name | status  | reasons | scope   | from  | to    |
+      | addons           | project           | tool@addons   | tool | updated |         | project | 1.0.0 | 1.1.0 |
+      | fixtures         | project           | demo@fixtures | demo | updated |         | project | 1.0.0 | 1.1.0 |
