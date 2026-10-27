@@ -198,7 +198,7 @@ parent session applies them at merge.
 
 **Goal:** Every behavior lifecycle-coverage left without a scenario or unit case has one, and the harness items are fixed.
 **Depends on:** Phases 1-9 merged
-**Requirements:** TST-01, TST-02, TST-03, CAS-08, MIM-05
+**Requirements:** TST-01, TST-02, TST-03, CAS-08, MIM-05, XPH-01
 **Backlog:** LCTEST-01, LCHARN-01, TEST-PHANTOMMP-01
 **Files:** `features/**`, `test/e2e/_rpc.ts`, `test/edge/handlers/plugin/browse.test.ts`, `test/orchestrators/plugin/install-flow.test.ts`, `.agents/skills/cucumber/rules/*`; for CAS-08, the failure-row paths in `orchestrators/plugin/install-flow.ts`, `install-cascade.ts`, `install-cascade.messaging.ts`, and `update-cascade.ts`; for MIM-05, `orchestrators/reconcile/apply.ts` and `apply-outcomes.ts`; both landing before Phase 11 splits `install-flow.ts`.
 **Success Criteria** (what must be TRUE):
@@ -208,6 +208,7 @@ parent session applies them at merge.
 3. No fixture builds a marketplace record without its manifest (TST-03).
 4. A failed closure on the root-ledger, plan-step, and mid-walk lookup routes shows a row for each member that resolved but did not install, pinned by a cucumber scenario per route (CAS-08).
 5. A partial rollback of `apply`'s missing-dependency install shows install's per-phase detail, pinned by a cucumber scenario (MIM-05).
+6. Each XPH-01 residue item is fixed or pinned by a scenario (XPH-01).
 
 ### Phase 11: Cleanup, Split, and Docs
 

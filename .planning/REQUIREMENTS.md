@@ -52,6 +52,7 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 - [ ] **CAS-07**: A hold row's cause never interpolates an unbounded catalog `version` string (VERSTR-01)
 - [ ] **CAS-08**: The routes D-PL3-15 left with one failed row (the root's own ledger failure, UPD-DEP-D1 plan-step failures, a catalog lookup that throws mid-walk) also give a row to each member that resolved but did not install (CLOSUREROW-01 residue)
 - [ ] **MIM-05**: A partial rollback of `apply`'s missing-dependency (MISS-01) install shows the per-phase detail `install` shows, like the other import and apply rows MIM-03 covers (D-PL6-05 residue; needs Phase 4's outcome type)
+- [ ] **XPH-01**: Wave-1 cross-phase residue is closed after the merge: the add-time MISS-01 step routes its post-commit hygiene warnings through the tagged warning channel (2.30); `import`'s own `<mp>@<mp>` row and the retired D-76-04 citation in `orchestrators/import/marketplaces.ts` are fixed (5.27, 5.28); and scenarios pin the git-revision post-move read (2.19), the reinstall `{status} on {url}` frame (7.16), and completion after `market` (7.15, with the completion harness it needs)
 
 ### Dependency resolver (RSV)
 
@@ -159,6 +160,7 @@ None.
 | CAS-07 | Phase 3 | Pending |
 | CAS-08 | Phase 10 | Pending |
 | MIM-05 | Phase 10 | Pending |
+| XPH-01 | Phase 10 | Pending |
 | RSV-01 | Phase 4 | Pending |
 | RSV-02 | Phase 4 | Pending |
 | RSV-03 | Phase 4 | Pending |
