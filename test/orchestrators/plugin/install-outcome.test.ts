@@ -1792,6 +1792,86 @@ test("D-PL1-03: an agents duplicate joins the discovery warnings and a conversio
   ]);
 });
 
+test("D-PL1-13: an mcp phase failure captures the warnings the agents phase collected", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-failure-warnings-");
+  const seeded = await seedPlugin(environment.cwd);
+  const agentsDir = path.join(seeded.pluginRoot, "agents");
+  await mkdir(agentsDir, { recursive: true });
+  await writeFile(
+    path.join(agentsDir, "first.md"),
+    "---\nname: helper\ndescription: First.\ntools: Read, WebFetch\n---\n\nFirst.\n",
+  );
+  await writeFile(
+    path.join(agentsDir, "second.md"),
+    "---\nname: helper\ndescription: Second.\n---\n\nSecond.\n",
+  );
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation);
+  assert.deepStrictEqual(capture, {
+    rollbackPartials: [],
+    version: "0.0.1",
+    stagingWarnings: [
+      {
+        kind: "discovery",
+        message: `agent source "helper" at "${path.join(agentsDir, "second.md")}" duplicates generated name "pi-claude-marketplace-empty-helper" already produced by agent source "helper" at "${path.join(agentsDir, "first.md")}"; keeping first discovered source.`,
+      },
+      { kind: "hygiene", message: "[helper] dropped tools: WebFetch" },
+    ],
+  });
+});
+
+test("D-PL1-13: an mcp phase failure with no collected warnings captures none", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-failure-no-warnings-");
+  const seeded = await seedPlugin(environment.cwd, { components: { skills: ["alpha"] } });
+  const locations = locationsFor("project", environment.cwd);
+  await mkdir(locations.mcpAdapterJsonPath, { recursive: true });
+  const capture: InstallFailureCapture = { rollbackPartials: [], version: undefined };
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    {
+      ctx: notificationContext(),
+      run: runWithNothingLoaded(),
+      cwd: environment.cwd,
+      marketplace: "marketplace",
+      plugin: "empty",
+      scope: "project",
+      removalOps: createRemovalOps(),
+      env: {},
+    },
+    capture,
+  );
+
+  // assert
+  await assert.rejects(operation);
+  assert.deepStrictEqual(capture, { rollbackPartials: [], version: "0.0.1" });
+});
+
 test("AFILE-04: staging over a commented mcp-adapter.json reports the comments-dropped notice", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-outcome-mcp-comments-");

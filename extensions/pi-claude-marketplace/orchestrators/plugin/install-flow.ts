@@ -100,6 +100,7 @@ import {
   pluginLayerVerdict,
   resolveInstallMarketplaceSource,
   surfaceDiscoveryWarnings,
+  surfaceStagingDiagnostics,
   undeclarableMarketplaceRefusal,
   sweepWorkflowsStaging,
   writeAdoptingConfigEntries,
@@ -1717,6 +1718,12 @@ function handleInstallThrow(args: {
     undefined,
     "single",
   );
+  // D-PL1-13 / D-PL1-24: only a standalone root failure reaches here; a
+  // dependency's failure routes to `handleCascadeThrow`, so the shared
+  // capture's warnings never render under the root's name.
+  surfaceStagingDiagnostics(ctx, run, [
+    { plugin, scope, verb: "install failed", warnings: capture.stagingWarnings ?? [] },
+  ]);
   const wrapped = err instanceof Error ? err : new Error(errorMessage(err));
   return {
     status: "failed",

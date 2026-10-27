@@ -290,10 +290,16 @@ export interface InstallLedgerTransaction {
   readonly runPhases: typeof runPhases;
 }
 
-/** Failure details captured before a formatted ledger error is rethrown. */
+/**
+ * Failure details captured before a formatted ledger error is rethrown.
+ *
+ * D-PL1-13: `stagingWarnings` holds the tagged warnings the phases that ran
+ * before the failure collected, both halves; it is absent when there are none.
+ */
 export interface InstallFailureCapture {
   rollbackPartials: readonly RollbackPartial[];
   version: string | undefined;
+  stagingWarnings?: readonly StagingWarning[];
 }
 
 // SKILL-01 / CMD-01 / WARN-01: one frontmatter-parse degrade record. Shared by
@@ -945,6 +951,17 @@ export async function runInstallLedger(
   return { kind: "installed", summary: toInstallLedgerSummary(result.installCtx) };
 }
 
+/** D-PL1-13: keep a failed ledger's collected warnings, when it has any. */
+function captureStagingWarnings(
+  capture: InstallFailureCapture,
+  context: InstallLedgerContext,
+): void {
+  const warnings = [...context.discoveryWarnings, ...context.bridgeWarnings];
+  if (warnings.length > 0) {
+    capture.stagingWarnings = warnings;
+  }
+}
+
 /** Project the completed ledger context onto its caller-facing summary. */
 function toInstallLedgerSummary(context: InstallLedgerContext): InstallLedgerSummary {
   return {
@@ -1544,6 +1561,7 @@ async function runInstallLedgerBody(
     if (capture !== undefined) {
       capture.rollbackPartials = rollback.rollbackPartials;
       capture.version = ctxLocal.version;
+      captureStagingWarnings(capture, ctxLocal);
     }
 
     throw rollback.error;

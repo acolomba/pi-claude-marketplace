@@ -1472,6 +1472,176 @@ test("PDEF-01 / D-PL1-02: a standalone install reports a later duplicate agent a
   });
 });
 
+/**
+ * Block the project scope's mcp-adapter.json with a directory and return the
+ * runtime's own EISDIR wording for it, which later Node majors extend with the
+ * path.
+ */
+async function blockMcpAdapterJson(cwd: string): Promise<string> {
+  const adapterPath = locationsFor("project", cwd).mcpAdapterJsonPath;
+  await mkdir(adapterPath, { recursive: true });
+  return readFile(adapterPath, "utf8").then(
+    () => assert.fail("the blocked mcp-adapter.json must not read"),
+    (error: unknown) => {
+      const errno = error as NodeJS.ErrnoException;
+      assert.deepStrictEqual(
+        { code: errno.code, syscall: errno.syscall },
+        { code: "EISDIR", syscall: "read" },
+      );
+      return errno.message;
+    },
+  );
+}
+
+/** D-PL1-13: a plugin whose agents collide and whose mcp phase then fails. */
+async function seedCollidingAgentsBehindBlockedMcp(cwd: string): Promise<string> {
+  await seedPathMarketplaceWithPlugin({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    pluginName: "hello",
+    agentDirectories: ["declared-agents"],
+    agents: [
+      {
+        directory: "declared-agents",
+        sourceName: "shared-first",
+        frontmatterName: "shared",
+        description: "First shared agent",
+        body: "First shared agent.\n",
+      },
+      {
+        sourceName: "shared-later",
+        frontmatterName: "shared",
+        description: "Later shared agent",
+        body: "Later shared agent.\n",
+      },
+    ],
+  });
+  return blockMcpAdapterJson(cwd);
+}
+
+test("D-PL1-13: a standalone install that fails in its mcp phase reports the agent skip after its failed row", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-failed-warnings-"));
+    try {
+      // arrange
+      const readFailure = await seedCollidingAgentsBehindBlockedMcp(cwd);
+      const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+      });
+
+      // assert
+      assert.strictEqual(outcome.status, "failed");
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "A plugin operation has failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ hello v0.0.1 (failed)",
+            `    cause: ${readFailure}`,
+          ].join("\n"),
+          severity: "error",
+        },
+        {
+          message:
+            'Plugin "hello" [project] install failed; 1 declared component has a note.\n\nagent source "shared" at "shared-later.md" duplicates generated name "pi-claude-marketplace-hello-shared" already produced by agent source "shared" at "shared-first.md"; keeping first discovered source.',
+          severity: "warning",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL1-13: an orchestrated install that fails in its mcp phase sends nothing and carries no warnings", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-failed-warnings-orch-"));
+    try {
+      // arrange
+      await seedCollidingAgentsBehindBlockedMcp(cwd);
+      const { ctx, run, notifications } = makeCtx({ piSubagentsLoaded: true });
+
+      // act
+      const outcome = await installPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, []);
+      assert.strictEqual(outcome.status, "failed");
+      assert.strictEqual("stagingWarnings" in outcome, false);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL1-24: a dependency whose skills collide and whose mcp phase fails renders no diagnostic under the root", async () => {
+  await withHermeticHome(async ({ installPlugin }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-failed-warnings-dep-"));
+    try {
+      // arrange
+      await seedPathMarketplaceWithPlugin({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        pluginName: "hello",
+        skills: [{ sourceName: "tool" }],
+        declareDependencies: true,
+        siblingPlugins: [{ name: "some-other-plugin" }],
+      });
+      const collidingSkillDir = path.join(
+        cwd,
+        "mp-src",
+        "plugins",
+        "some-other-plugin",
+        "skills",
+        "some-other-plugin-tool",
+      );
+      await mkdir(collidingSkillDir, { recursive: true });
+      await writeFile(path.join(collidingSkillDir, "SKILL.md"), "---\nname: tool\n---\n\nBody.\n");
+      const readFailure = await blockMcpAdapterJson(cwd);
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await installPlugin({ ctx, run, scope: "project", cwd, marketplace: "mp", plugin: "hello" });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: [
+            "Some plugin operations have failed.",
+            "",
+            "● mp [project]",
+            "  ⊘ hello (failed) {dependency failed}",
+            "  ⊘ some-other-plugin@mp (failed)",
+            `    cause: ${readFailure}`,
+          ].join("\n"),
+          severity: "error",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ───────────────────────────────────────────────────────────────────────────
 // PI-7 -- version precedence
 // ───────────────────────────────────────────────────────────────────────────
