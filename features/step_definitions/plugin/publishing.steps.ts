@@ -12,7 +12,7 @@
  */
 
 import assert from "node:assert/strict";
-import { readFile, rm, stat } from "node:fs/promises";
+import { lstat, mkdir, readFile, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { type DataTable, Given } from "@cucumber/cucumber";
@@ -21,9 +21,11 @@ import {
   gitPluginEntry,
   offerGitPlugins,
   publishPluginRepository,
+  pushLinkedManifest,
   pushPluginRepository,
   readGitPluginOffers,
   readRepositoryPlugins,
+  repositoryPluginRoot,
 } from "../../lib/git-plugin.ts";
 import { runGit } from "../../lib/hermetic-git.ts";
 import {
@@ -68,6 +70,62 @@ Given(
       await runGit(repository.bareRepository, repository.gitHome, "rev-parse", "main"),
       repository.revisions.at(-1),
     );
+  },
+);
+
+// Files that a plugin's manifest links to from outside its repository live
+// apart from the work trees, which a later revision replaces.
+const LINKED_MANIFESTS_DIRECTORY = "linked-manifests";
+
+/**
+ * Pushes the manifest of the plugin `plugin` of the git repository `name` as
+ * a link to `target`, records the revision, and checks that the work tree and
+ * the pushed revision both hold the manifest as a link.
+ */
+async function pushLinkedManifestRevision(
+  world: ScenarioWorld,
+  name: string,
+  plugin: string,
+  target: string,
+): Promise<void> {
+  const repository = await pushLinkedManifest(world.requireGitRepository(name), plugin, target);
+  world.recordGitRepository(repository);
+  const manifest = path.posix.join(
+    path.relative(repository.workTree, repositoryPluginRoot(repository, plugin)),
+    ".claude-plugin",
+    "plugin.json",
+  );
+  assert.strictEqual(
+    (await lstat(path.join(repository.workTree, manifest))).isSymbolicLink(),
+    true,
+    `${manifest} of ${name} is not a link`,
+  );
+  const entry = await runGit(
+    repository.bareRepository,
+    repository.gitHome,
+    "ls-tree",
+    "main",
+    "--",
+    manifest,
+  );
+  assert.strictEqual(entry.split(" ")[0], "120000", `${manifest} of ${name} is not a pushed link`);
+}
+
+Given(
+  "the git repository {string} links the manifest of the plugin {string} to a file inside the plugin",
+  async function (this: ScenarioWorld, name: string, plugin: string) {
+    const pluginRoot = repositoryPluginRoot(this.requireGitRepository(name), plugin);
+    await pushLinkedManifestRevision(this, name, plugin, path.join(pluginRoot, "manifest.json"));
+  },
+);
+
+Given(
+  "the git repository {string} links the manifest of the plugin {string} to a file outside the repository",
+  async function (this: ScenarioWorld, name: string, plugin: string) {
+    const directory = path.join(this.tokens.home, LINKED_MANIFESTS_DIRECTORY, name);
+    this.onRelease(() => rm(directory, { recursive: true, force: true }));
+    await mkdir(directory, { recursive: true });
+    await pushLinkedManifestRevision(this, name, plugin, path.join(directory, "plugin.json"));
   },
 );
 

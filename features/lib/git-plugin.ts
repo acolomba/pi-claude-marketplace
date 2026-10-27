@@ -5,14 +5,15 @@
  * A plugin repository is a work tree under the sandbox HOME that holds one or
  * more plugins, each at the repository root or at a path inside it, published
  * as a bare repository the git host serves. Stating its plugins again commits
- * and pushes a new revision. A marketplace offers a plugin of such a
- * repository as a `github` source, which the GitHub base override sends to the
- * git host, or as a `url` or `git-subdir` source that names the host's
- * loopback address, unpinned or pinned to the repository's latest revision.
+ * and pushes a new revision, as does turning a plugin's manifest into a link. A
+ * marketplace offers a plugin of such a repository as a `github` source, which
+ * the GitHub base override sends to the git host, or as a `url` or
+ * `git-subdir` source that names the host's loopback address, unpinned or
+ * pinned to the repository's latest revision.
  */
 
 import assert from "node:assert/strict";
-import { readdir, rm, stat } from "node:fs/promises";
+import { readdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { publishGitRepository, pushGitRepository } from "./git-marketplace.ts";
@@ -203,6 +204,46 @@ export async function pushTagOnlyRevision(
   await runGit(workTree, gitHome, "checkout", "-q", "main");
   await runGit(workTree, gitHome, "branch", "-q", "-D", branch);
   return { ...repository, revisions: [...repository.revisions, revision] };
+}
+
+/** Returns the directory of the plugin `pluginName` in the work tree of `repository`. */
+export function repositoryPluginRoot(repository: GitPluginRepository, pluginName: string): string {
+  const plugin = repository.plugins.find((candidate) => candidate.name === pluginName);
+  if (plugin === undefined) {
+    assert.fail(`the git repository ${repository.name} holds no plugin ${pluginName}`);
+  }
+
+  return path.join(repository.workTree, plugin.path);
+}
+
+/**
+ * Moves the manifest of the plugin `pluginName` of `repository` to the file
+ * `target`, makes its `.claude-plugin/plugin.json` a link to that file, and
+ * pushes the result as a new revision. The link text is relative when `target`
+ * lies in the work tree and absolute otherwise. Returns the repository with
+ * that revision appended; its plugins declare what they did before.
+ */
+export async function pushLinkedManifest(
+  repository: GitPluginRepository,
+  pluginName: string,
+  target: string,
+): Promise<GitPluginRepository> {
+  const { workTree, gitHome } = repository;
+  const manifest = path.join(
+    repositoryPluginRoot(repository, pluginName),
+    ".claude-plugin",
+    "plugin.json",
+  );
+  const relative = path.relative(workTree, target);
+  const insideWorkTree = !relative.startsWith("..") && !path.isAbsolute(relative);
+  await writeFile(target, await readFile(manifest));
+  await rm(manifest);
+  await symlink(insideWorkTree ? path.relative(path.dirname(manifest), target) : target, manifest);
+  await pushGitRepository(workTree, gitHome);
+  return {
+    ...repository,
+    revisions: [...repository.revisions, await runGit(workTree, gitHome, "rev-parse", "HEAD")],
+  };
 }
 
 function parseGitPluginSourceKind(text: string): GitPluginSourceKind {
