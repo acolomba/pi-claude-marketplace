@@ -106,8 +106,8 @@ Feature: Plugin fetch
     Then the git-source plugin "ghp" installed in the project scope runs revision 1 of its repository
     Then the project scope holds these git clones:
       | clone  | origin                          | revision         |
-      | plugin | https://github.com/acme/ghp.git |                  |
       | plugin | https://github.com/acme/ghp.git | {ghp revision 1} |
+      | plugin | https://github.com/acme/ghp.git | {ghp revision 2} |
     When the user starts a new pi session
     Then the session reports these results:
       | kind    | severity | needs reload | needs apply | tally label       | tally failures | tally warnings | tally success count |

@@ -824,7 +824,7 @@ Feature: Plugin install dependencies
       | lib@tools | 1.2.0   | true    |
     Then the project scope holds these git clones:
       | clone  | origin                         | revision |
-      | plugin | https://{git host}/acme/xx.git |          |
+      | plugin | https://{git host}/acme/xx.git | {xx revision 1} |
 
   Scenario: Installing a plugin in the project scope that moves a dependency and needs a marketplace only the user scope holds clones that marketplace once
     Given the marketplace "up" is published as a url source

@@ -35,7 +35,7 @@ Feature: Plugin git source update
     Then the project scope holds these git clones:
       | clone       | origin                           | revision         |
       | marketplace | https://{git host}/acme/gits.git |                  |
-      | plugin      | https://github.com/acme/ghp.git  |                  |
+      | plugin      | https://github.com/acme/ghp.git  | {ghp revision 2} |
       | plugin      | https://github.com/acme/ghp.git  | {ghp revision 2} |
     Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
 
@@ -125,7 +125,7 @@ Feature: Plugin git source update
     Then the git-source plugin "ghp" installed in the project scope runs revision 2 of its repository
     Then the project scope holds these git clones:
       | clone  | origin                          | revision         |
-      | plugin | https://github.com/acme/ghp.git |                  |
+      | plugin | https://github.com/acme/ghp.git | {ghp revision 2} |
       | plugin | https://github.com/acme/ghp.git | {ghp revision 2} |
 
   Scenario: Reinstalling a git-source plugin that a fetch moved to a new commit at the same version names both commits
