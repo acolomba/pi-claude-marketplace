@@ -27,7 +27,7 @@ See: `.planning/PROJECT.md` (updated 2026-10-22 at the lifecycle-coverage start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 30 — Autoapply Setting
+**Current focus:** Phase 07 — Git Errors and Lock Discipline
 
 ## Current Position
 
@@ -188,11 +188,6 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-gvt | GV-01: record plugins at a range-selected release tag as Claude Code does, the tag semver kept as resolvedVersion | 2026-10-26 | 2638b001 | complete | [261026-gvt-record-plugins-at-release-tags-as-claude-code](./quick/261026-gvt-record-plugins-at-release-tags-as-claude-code/) |
 | 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
-| 261027-9lp | D-PL4-08/09: agent-target preview refusals name only the file; a plain update's refusal drops the false "unreadable manifest" reason | 2026-10-27 | edac58eb | complete | [261027-9lp-agent-target-refusal-redaction-and-updat](./quick/261027-9lp-agent-target-refusal-redaction-and-updat/) |
-
-## Session Continuity
-
-**Last session:** 2026-10-25T12:00:00.000Z
 **Stopped at:** Phase 4 complete, ready to verify Phase 1
 **Resume file:** None
 

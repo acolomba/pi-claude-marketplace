@@ -18,6 +18,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
+import lockfile from "proper-lockfile";
 import { mock, verify } from "strong-mock";
 
 import { GENERATED_AGENT_MARKER } from "../../../extensions/pi-claude-marketplace/bridges/agents/marker.ts";
@@ -74,6 +75,7 @@ import type {
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import type { AgentsIndex } from "../../../extensions/pi-claude-marketplace/persistence/agents-index-schema.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { TestContext } from "node:test";
@@ -3197,9 +3199,10 @@ test("WR-03: a post-save routing failure cannot roll back committed uninstall", 
 // ─────────────────────────────────────────────────────────────────────────────
 // PURL-05 / D-78-01: post-state-commit clone garbage-collection.
 //
-// After the uninstall transaction commits, uninstall calls
-// garbageCollectPluginClones(locations) beside the existing
-// rm(pluginDataDir) cleanup (D-19-01 swallow discipline). A git-source
+// After the uninstall transaction commits and releases its lock, uninstall
+// calls collectPluginClonesLocked(locations), which takes a fresh scope lock
+// (D-PL7-05), beside the existing rm(pluginDataDir) cleanup (D-19-01 swallow
+// discipline). A held lock skips the GC and leaves the clone. A git-source
 // clone is reclaimed once no surviving record references it; a shared
 // clone survives while another installed plugin still references it. The
 // GC runs strictly AFTER the state save (T-78-08) and a GC leak never
@@ -3387,6 +3390,68 @@ test("uninstalling the last referencer of a git clone deletes its plugin-clones 
         false,
         "clone dir removed after last referencer gone",
       );
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GLK-03 / D-PL7-05: a held scope lock leaves the last referencer's clone and the uninstall still succeeds", async (t) => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "uninstall-gc-held-"));
+    try {
+      // arrange -- the completion-cache drop runs after the uninstall's lock is
+      // released and before the GC, so a second holder taken there holds the
+      // lock while the GC tries to take it.
+      const locations = locationsFor("project", cwd);
+      await seedGitPlugin(locations, "mp", { solo: "keySolo" }, cwd);
+      const releases: Array<() => Promise<void>> = [];
+      const completionCache: CompletionCache = {
+        ...createCompletionCache(),
+        dropMarketplaceCache: async () => {
+          releases.push(
+            await lockfile.lock(locations.extensionRoot, {
+              lockfilePath: locations.stateLockFile,
+              realpath: false,
+            }),
+          );
+        },
+      };
+      const uninstallPlugin = createUninstallOperation(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        completionCache,
+      );
+      const { ctx, run, notifications } = makeCtx();
+      const logged = captureDebugLog(t);
+
+      // act
+      try {
+        await uninstallPlugin({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          marketplace: "mp",
+          plugin: "solo",
+        });
+      } finally {
+        await Promise.all(releases.map((release) => release()));
+      }
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation needs attention.\n" +
+            "\n● mp [project]\n  ○ solo v0.0.1 (uninstalled) {stale workflow command}\n" +
+            "\n/reload to pick up changes",
+          severity: "warning",
+        },
+      ]);
+      assert.deepStrictEqual(await readdir(locations.pluginClonesDir), ["keySolo"]);
+      assert.deepStrictEqual(logged, [
+        `[hooks] uninstall: clone GC failed for solo@mp: Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes.`,
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

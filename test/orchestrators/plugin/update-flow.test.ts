@@ -51,6 +51,10 @@ import {
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import { AgentTargetOccupiedError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
+  BridgeStagingError,
+  McpServerCollisionError,
+} from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
+import {
   CleanupContextError,
   DependencyDeclarationsUnreadableError,
   InvalidGitHubBaseUrlError,
@@ -58,6 +62,7 @@ import {
   MarketplaceNotFoundError,
   PluginUpdateConcurrencyError,
   PluginUpdatePhase3Error,
+  StateLockCompromisedError,
   StateLockHeldError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { pathExists } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
@@ -1687,6 +1692,153 @@ test("syncClone-fail: an HTTP 401 on the marketplace sync renders {authenticatio
   });
 });
 
+test("GLK-04: a held scope lock refuses the marketplace sync as lock held before any git write", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-lock-held-");
+    try {
+      // arrange
+      await seedGithubMarketplaceForSync(cwd);
+      const locations = locationsFor("project", cwd);
+      const { gitOps, state } = createGitOps({
+        remoteRefs: { "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001" },
+      });
+      const { ctx, run, notifications } = makeCtx();
+      const release = await lockfile.lock(locations.extensionRoot, {
+        lockfilePath: locations.stateLockFile,
+        realpath: false,
+      });
+      try {
+        // act
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "marketplace", marketplace: "official" },
+          gitOps,
+          credentialOps: makeCredentialOps(),
+        });
+      } finally {
+        await release();
+      }
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {lock held}\n    cause: Another pi-claude-marketplace operation is in progress for project scope (${locations.stateLockFile}). Retry after it completes. -> Lock file is already being held\n\nPlugin update: 1 failure`,
+          severity: "error",
+        },
+      ]);
+      assert.deepStrictEqual(state.fetchCalls, []);
+      assert.deepStrictEqual(state.forceUpdateRefCalls, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GLK-04: a scope lock lost during the marketplace sync fails the sync as lock held", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-sync-lock-lost-");
+    try {
+      // arrange
+      await seedGithubMarketplaceForSync(cwd);
+      const locations = locationsFor("project", cwd);
+      const lost = new StateLockCompromisedError("project", locations.stateLockFile, {
+        cause: new Error("Unable to update lock within the stale threshold"),
+      });
+      const { gitOps } = createGitOps({ fetchThrows: lost });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "official" },
+        gitOps,
+        credentialOps: makeCredentialOps(),
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {lock held}\n    cause: The project scope state lock (${locations.stateLockFile}) was lost before the operation finished. Run the command again. -> Unable to update lock within the stale threshold\n\nPlugin update: 1 failure`,
+          severity: "error",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+for (const { title, seed, marketplace, status, statusMessage, message } of [
+  {
+    title:
+      "GLK-01 / D-PL7-14: an HTTP 503 on a github marketplace sync fails as network error framed with the wire url",
+    seed: (cwd: string) => seedGithubMarketplaceForSync(cwd),
+    marketplace: "official",
+    status: 503,
+    statusMessage: "Service Unavailable",
+    message:
+      "A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {network error}\n    cause: 503 on https://github.com/test/repo.git -> HTTP Error: 503 Service Unavailable\n\nPlugin update: 1 failure",
+  },
+  {
+    title:
+      "GLK-01 / D-PL7-14: an HTTP 404 on a github marketplace sync fails as network error framed with the wire url",
+    seed: (cwd: string) => seedGithubMarketplaceForSync(cwd),
+    marketplace: "official",
+    status: 404,
+    statusMessage: "Not Found",
+    message:
+      "A plugin operation has failed.\n\n● official [project]\n  ⊘ official (failed) {network error}\n    cause: 404 on https://github.com/test/repo.git -> HTTP Error: 404 Not Found\n\nPlugin update: 1 failure",
+  },
+  {
+    title:
+      "GLK-01 / D-PL7-14: an HTTP 502 on a url marketplace sync fails as network error framed with the source url",
+    seed: (cwd: string) => seedUrlMarketplaceForSync(cwd, { hello: "1.0.0" }),
+    marketplace: "mp",
+    status: 502,
+    statusMessage: "Bad Gateway",
+    message:
+      "A plugin operation has failed.\n\n● mp [project]\n  ⊘ mp (failed) {network error}\n    cause: 502 on https://example.com/org/repo -> HTTP Error: 502 Bad Gateway\n\nPlugin update: 1 failure",
+  },
+] as const) {
+  test(title, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("update-sync-http-status-");
+      try {
+        // arrange
+        await seed(cwd);
+        const answered = Object.assign(new Error(`HTTP Error: ${status} ${statusMessage}`), {
+          code: "HttpError",
+          data: { statusCode: status, statusMessage },
+        });
+        const { gitOps } = createGitOps({ fetchThrows: answered });
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "marketplace", marketplace },
+          gitOps,
+          credentialOps: makeCredentialOps(),
+        });
+
+        // assert
+        assert.deepStrictEqual(notifications, [{ message, severity: "error" }]);
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
 test("CR-01: an HTTP 401 on a later marketplace sync still reports the earlier target's update", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-sync-401-later-");
@@ -2447,6 +2599,61 @@ test("FLR-02: updateSinglePlugin under a held state lock fails as lock held with
         [lockMessage, "project", locations.stateLockFile],
       );
       assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    } finally {
+      process.chdir(previousCwd);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("FLR-02: an autoupdate cascade fails a plugin whose state lock was lost as lock held with the lock cause", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-cascade-lock-lost-");
+    const previousCwd = process.cwd();
+    try {
+      // arrange
+      const locations = locationsFor("project", cwd);
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.0.1", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      process.chdir(cwd);
+      const lost = new StateLockCompromisedError("project", locations.stateLockFile, {
+        cause: new Error("Unable to update lock within the stale threshold"),
+      });
+      const { ctx, run } = makeCtx();
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+        undefined,
+        {},
+        () => Promise.reject(lost),
+      );
+
+      // act
+      const outcome = await operations.beginPluginUpdateRun({ ctx, run })("hello", "mp", "project");
+
+      // assert
+      assert.ok(outcome.partition === "failed");
+      const { cause, ...failure } = outcome;
+      const lostMessage = `The project scope state lock (${locations.stateLockFile}) was lost before the operation finished. Run the command again.`;
+      assert.deepStrictEqual(failure, {
+        partition: "failed",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.0.1",
+        notes: [
+          `${lostMessage}\n\ncause: ${lostMessage} -> Unable to update lock within the stale threshold`,
+        ],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        reasons: ["lock held"],
+      });
+      assert.strictEqual(cause, lost);
     } finally {
       process.chdir(previousCwd);
       await rm(cwd, { recursive: true, force: true });
@@ -3908,6 +4115,51 @@ test("syncClone-fail: a non-Error injected rejection is normalized at the direct
   });
 });
 
+test("a non-Error rejection from a target's run is normalized at the direct boundary", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await createCaseDir("update-run-non-error-");
+    try {
+      // arrange
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const rejectNonError = Promise.reject.bind(Promise);
+      const operations = createPluginUpdateOperations(
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+        createCompletionCache(),
+        undefined,
+        process.env,
+        () => rejectNonError("dependency string rejection"),
+      );
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await operations.updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        refusedUpdateNotification(
+          "hello v1.0.0 → v1.1.0",
+          "unreadable manifest",
+          "dependency string rejection",
+        ),
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 for (const { title, makeFailure, reason } of [
   {
     title: "classifies EACCES marketplace refresh failures",
@@ -4181,7 +4433,7 @@ test("manifest-load-fail: manifest with invalid entry name type -> notifyError o
 
 // ─── prepareUpdateHandles catch + abortHandles ───────────────────────────────
 
-test("prepare-handles-fail: MCP collision aborts partial handles, outcome=failed", async () => {
+test("prepare-handles-fail / GLK-02 / D-PL7-12: MCP collision aborts partial handles and fails as unreadable manifest with its cause", async () => {
   // prepareStageMcpServers throws McpServerCollisionError (from
   // assertNoMcpCollisions) with three handles already populated -- skills,
   // commands and agents -- and none for mcp or the workflows prepare that
@@ -4249,7 +4501,14 @@ test("prepare-handles-fail: MCP collision aborts partial handles, outcome=failed
       // assert
       assert.equal(outcome.partition, "failed", `expected failed, got ${outcome.partition}`);
       assert.equal(outcome.name, "hello");
-      assert.deepEqual(outcome.reasons, ["not in manifest"]);
+      assert.deepEqual(outcome.reasons, ["unreadable manifest"]);
+      assert.ok(outcome.partition === "failed");
+      // D-PL7-12: the fallback reason carries the collision as its cause.
+      assert.ok(outcome.cause instanceof McpServerCollisionError);
+      assert.deepStrictEqual(
+        [outcome.cause.serverName, outcome.cause.owningPath],
+        ["plugin_hello_rollback-server_", locations.mcpAdapterJsonPath],
+      );
       assert.ok((outcome.notes ?? []).length > 0, "failed outcome must carry error notes");
       for (const stagingRoot of [
         locations.skillsStagingDir,
@@ -13548,7 +13807,9 @@ test("D-26 / PUP-9: a throw inside convergePlugin becomes a failed outcome namin
       });
 
       // assert
-      assert.deepStrictEqual(outcome, {
+      assert.ok(outcome.partition === "failed");
+      const { cause, ...failure } = outcome;
+      assert.deepStrictEqual(failure, {
         partition: "failed",
         name: "hello",
         fromVersion: "1.0.0",
@@ -13559,8 +13820,150 @@ test("D-26 / PUP-9: a throw inside convergePlugin becomes a failed outcome namin
         declaresWorkflows: false,
         reasons: ["permission denied"],
       });
+      // D-PL7-12: an errno reason carries its error as the row's cause.
+      assert.strictEqual(cause, denied);
       const record = (await loadState(locations.extensionRoot)).marketplaces.mp?.plugins.hello;
       assert.strictEqual(record?.version, "1.0.0");
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GLK-02 / D-PL7-12: a convergePlugin swap that fails with EISDIR reads unreadable and carries its cause", async () => {
+  await withHermeticHome(async () => {
+    // arrange -- the swap's intent mark is the first save, after the candidate.
+    const cwd = await createCaseDir("update-converge-eisdir-");
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const blocked = Object.assign(new Error("EISDIR: illegal operation on a directory, read"), {
+        code: "EISDIR",
+      });
+      const operations = convergeOperations({
+        loadState,
+        saveState: () => Promise.reject(blocked),
+      });
+
+      // act
+      const outcome = await operations.convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: false,
+      });
+
+      // assert
+      assert.ok(outcome.partition === "failed");
+      const { cause, ...failure } = outcome;
+      assert.deepStrictEqual(failure, {
+        partition: "failed",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        notes: [`${blocked.message}\n\ncause: ${blocked.message}`],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        reasons: ["unreadable"],
+      });
+      assert.strictEqual(cause, blocked);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GLK-02: a convergePlugin swap that fails with a missing marketplace reads not found, as the direct path does", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-converge-mp-missing-");
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const missing = new MarketplaceNotFoundError("mp", ["project"]);
+      const operations = convergeOperations({
+        loadState,
+        saveState: () => Promise.reject(missing),
+      });
+
+      // act
+      const outcome = await operations.convergePlugin({
+        plugin: "hello",
+        marketplace: "mp",
+        scope: "project",
+        cwd,
+        partial: false,
+        rematerialize: false,
+      });
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "failed",
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        notes: [`${missing.message}\n\ncause: ${missing.message}`],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        reasons: ["not found"],
+      });
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("GLK-02 / D-13: a direct update whose staging error wraps EACCES reads permission denied", async () => {
+  await withHermeticHome(async () => {
+    // arrange
+    const cwd = await createCaseDir("update-direct-staging-denied-");
+    try {
+      await seedPathMarketplace({
+        cwd,
+        marketplaceRoot: path.join(cwd, "mp-src"),
+        marketplaceName: "mp",
+        manifestPlugins: { hello: { version: "1.1.0", hasSkill: true } },
+        installedVersions: { hello: "1.0.0" },
+      });
+      const denied = Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+      const staging = new BridgeStagingError("could not stage hello.md", { cause: denied });
+      const operations = convergeOperations({
+        loadState,
+        saveState: () => Promise.reject(staging),
+      });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await operations.updatePlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "plugin", plugin: "hello", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ⊘ hello v1.0.0 → v1.1.0 (failed) {permission denied}\n    cause: could not stage hello.md -> EACCES: permission denied",
+          severity: "error",
+        },
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }

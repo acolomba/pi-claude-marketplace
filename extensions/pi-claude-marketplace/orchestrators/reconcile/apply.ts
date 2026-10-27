@@ -94,7 +94,7 @@ import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absol
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { MarketplaceRemoveFailureError, removeMarketplace } from "../marketplace/remove.ts";
-import { garbageCollectPluginClones } from "../plugin/clone-gc.ts";
+import { collectPluginClonesLocked } from "../plugin/clone-gc.ts";
 import {
   createConvergeOperation,
   createDependencyInstallOperation,
@@ -1490,11 +1490,12 @@ function deferCollection(collect: { requested: boolean }): () => Promise<void> {
 /**
  * D-19-01 / Review 4 WR-2: clone cleanup is hygienic, as the runner's own is
  * (`update-preflight.ts::refreshDisabledPluginUpdate`): a failure is traced and
- * a later lifecycle operation retries it.
+ * a later lifecycle operation retries it. D-PL7-05: the GC takes a fresh scope
+ * lock, so a held lock is such a failure.
  */
 async function collectClones(locations: ScopedLocations): Promise<void> {
   try {
-    await garbageCollectPluginClones(locations);
+    await collectPluginClonesLocked(locations);
   } catch (err) {
     hookDebugLog(`apply: clone cleanup failed: ${errorMessage(err)}`, "reconcile");
   }

@@ -390,6 +390,39 @@ test("classifies an unreachable host on the failure arm", async () => {
   });
 });
 
+for (const { statusCode, classification } of [
+  { statusCode: 404, classification: "source missing" },
+  { statusCode: 503, classification: "network error" },
+] as const) {
+  test(`classifies a host HTTP ${statusCode} on the listing as ${classification} (GLK-01)`, async () => {
+    // arrange
+    const queried: string[] = [];
+    const hostFailure = Object.assign(new Error(`HTTP Error: ${statusCode}`), {
+      code: "HttpError",
+      data: { statusCode },
+    });
+    const seam = failingWith(hostFailure, queried);
+
+    // act
+    const outcome = await probeDependencyTags({
+      pluginName: "formatter",
+      source: pluginSource(),
+      range: "^1.0.0",
+      seam,
+      auth: auth(),
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      kind: "tag-listing-failed",
+      cause: hostFailure,
+      classification,
+    });
+    assert.ok(outcome.kind === "tag-listing-failed");
+    assert.strictEqual(outcome.cause, hostFailure);
+  });
+}
+
 test("wraps a listing throw that is not an Error before carrying it on the failure arm", async () => {
   // arrange
   const queried: string[] = [];

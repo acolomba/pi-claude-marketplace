@@ -392,6 +392,30 @@ export async function publishUnreadableSkillFile(
 }
 
 /**
+ * Adds a command nobody may read to the published plugin `plugin`, and
+ * returns its path. Pi reads the plugin's manifest and dependencies as usual,
+ * then fails to read the command when it stages the update. Only a local
+ * publication can hold such a file: git stores no file mode that denies
+ * reading.
+ */
+export async function publishUnreadableCommandFile(
+  published: PublishedMarketplace,
+  plugin: string,
+): Promise<string> {
+  if (published.kind === "url" || published.kind === "github") {
+    throw new Error("a git repository cannot hold a file nobody may read");
+  }
+
+  const file = ownedTarget(
+    published,
+    path.join(published.root, "plugins", plugin, "commands", "notes.md"),
+  );
+  await mkdir(path.dirname(file), { recursive: true });
+  await writeFile(file, "Unreadable.\n", { mode: 0o000, flag: "wx" });
+  return file;
+}
+
+/**
  * Lets everyone read the file `publishUnreadableSkillFile` left in the plugin
  * `plugin` again, and returns its path.
  */
