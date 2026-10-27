@@ -56,7 +56,7 @@ Feature: Marketplace hosted source update
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons             | scope   | leaks | rollback partial | cause chain | cause truncated |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons             | scope   | leaks | rollback partial | cause chain                                                                                                                                 | cause truncated |
       | tools            | project           | failed             | tools | tools | failed | network unreachable | project |       |                  | Failed to update marketplace "tools"., Could not connect to https://{git host}/acme/tools/marketplace.json, fetch failed, other side closed | false           |
     Then the git host receives these requests:
       | method | path                         | status  |
@@ -77,7 +77,7 @@ Feature: Marketplace hosted source update
       | needs reload | false                        |
       | summary      | Some operations have failed. |
     Then the result lists these plugins:
-      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                                                                                                                                         | cause truncated |
+      | marketplace name | marketplace scope | marketplace status | id    | name  | status | reasons       | scope   | leaks | rollback partial | cause chain                                                                                                                                                                                              | cause truncated |
       | tools            | project           | failed             | tools | tools | failed | network error | project |       |                  | 404 on https://{git host}/acme/tools/marketplace.json, HTTP 404 error while downloading marketplace from https://{git host}/acme/tools/marketplace.json. The marketplace file may not exist at this URL. | false           |
     Then the git host receives these requests:
       | method | path                         | status |

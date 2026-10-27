@@ -640,7 +640,7 @@ export class HostedManifestHttpError extends Error implements HttpStatusError {
  */
 export interface HttpStatusError extends Error {
   readonly code: "HttpError";
-  readonly data?: { readonly statusCode?: number };
+  readonly data?: { readonly statusCode?: unknown };
 }
 
 /**

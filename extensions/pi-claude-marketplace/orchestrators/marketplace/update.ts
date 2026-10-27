@@ -292,7 +292,7 @@ export async function updateMarketplace(opts: UpdateMarketplaceOptions): Promise
     ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
     ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
     ...(opts.stateTransaction !== undefined && { stateTransaction: opts.stateTransaction }),
-    ...(opts.removalOps !== undefined && { removalOps: opts.removalOps }),
+    removalOps: opts.removalOps ?? createRemovalOps(),
   });
 }
 
@@ -304,6 +304,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
   const gitOps = opts.gitOps ?? DEFAULT_GIT_OPS;
   const credentialOps = opts.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   const hostedManifestFetch = opts.hostedManifestFetch ?? DEFAULT_HOSTED_MANIFEST_FETCH;
+  const removalOps = createRemovalOps();
   // Iteration order is project-first per MSG-GR-3 so same-name cross-scope
   // stable-sort ties render project-before-user.
   const scopes: readonly Scope[] = opts.scope === undefined ? ["project", "user"] : [opts.scope];
@@ -344,6 +345,7 @@ export async function updateAllMarketplaces(opts: UpdateAllMarketplacesOptions):
       gitOps,
       credentialOps,
       hostedManifestFetch,
+      removalOps,
       ...(opts.deviceFlowHttp !== undefined && { deviceFlowHttp: opts.deviceFlowHttp }),
       ...(opts.pluginUpdate !== undefined && { pluginUpdate: opts.pluginUpdate }),
     });
@@ -364,7 +366,7 @@ interface RefreshOneArgs {
   readonly deviceFlowHttp?: DeviceFlowHttp;
   readonly stateTransaction?: LockedStateTransactionDeps;
   readonly hostedManifestFetch: HostedManifestFetch;
-  readonly removalOps?: RemovalOps;
+  readonly removalOps: RemovalOps;
 }
 
 /**
@@ -527,7 +529,7 @@ async function refreshRecord(
         manifestPath: recordedManifestPath(record),
         locations,
         fetchCatalog: args.hostedManifestFetch,
-        removalOps: args.removalOps ?? createRemovalOps(),
+        removalOps: args.removalOps,
       });
     } else if (source.kind !== "path") {
       throw new Error(
