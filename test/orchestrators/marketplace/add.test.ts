@@ -3744,6 +3744,240 @@ test("LAYER-01: a failed re-declaration write keeps the recorded clone and state
   });
 });
 
+const GITHUB_SOURCE = "anthropics/claude-plugins-official";
+
+/** An installed plugin record the D-PL5-17 repair must keep. */
+const INSTALLED_HELLO: ExtensionState["marketplaces"][string]["plugins"][string] = {
+  version: "1.0.0",
+  resolvedSource: "/plugins/hello",
+  compatibility: { installable: true, notes: [], supported: [], unsupported: [] },
+  resources: { skills: [], prompts: [], agents: [], hooks: [], mcpServers: [], workflows: [] },
+  enabled: true,
+  provenance: "explicit",
+  installedAt: "2026-08-31T12:00:00.000Z",
+  updatedAt: "2026-08-31T12:00:00.000Z",
+};
+
+/**
+ * D-PL5-17: records the github marketplace `valid-marketplace` with an
+ * installed plugin and stale manifest metadata, then deletes its checkout.
+ */
+async function arrangeLostCheckout(
+  cwd: string,
+  locations: ScopedLocations,
+): Promise<ExtensionState["marketplaces"][string]> {
+  const first = makeCtx();
+  await addMarketplace({
+    ctx: first.ctx,
+    run: first.run,
+    scope: "project",
+    cwd,
+    rawSource: GITHUB_SOURCE,
+    gitOps: createGitOps({ fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace") }).gitOps,
+  });
+  const state = await loadState(locations.extensionRoot);
+  const recorded = state.marketplaces["valid-marketplace"];
+  assert.ok(recorded);
+  const record = {
+    ...recorded,
+    lastUpdatedAt: "2026-01-01T00:00:00.000Z",
+    lastSuccessfulManifest: "{}",
+    plugins: { hello: INSTALLED_HELLO },
+  };
+  await saveState(locations.extensionRoot, {
+    ...state,
+    marketplaces: { "valid-marketplace": record },
+  });
+  await rm(record.marketplaceRoot, { recursive: true });
+  return record;
+}
+
+test("D-PL5-17: re-adding a github marketplace whose checkout is gone re-clones it and keeps its plugins", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const record = await arrangeLostCheckout(cwd, locations);
+    const configBefore = await readFile(locations.baseConfigJsonPath, "utf8");
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps, state: gitState } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // act
+    await addMarketplace({ ctx, run, scope: "project", cwd, rawSource: GITHUB_SOURCE, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.deepStrictEqual(
+      gitState.cloneCalls.map((call) => call.url),
+      ["https://github.com/anthropics/claude-plugins-official.git"],
+    );
+    const repaired = (await loadState(locations.extensionRoot)).marketplaces["valid-marketplace"];
+    assert.ok(repaired);
+    const { lastUpdatedAt, lastSuccessfulManifest, ...kept } = repaired;
+    const { lastUpdatedAt: _, lastSuccessfulManifest: __, ...recordKept } = record;
+    assert.deepStrictEqual(kept, recordKept);
+    assert.notStrictEqual(lastUpdatedAt, record.lastUpdatedAt);
+    assert.deepStrictEqual(
+      JSON.parse(lastSuccessfulManifest ?? ""),
+      JSON.parse(VALID_MANIFEST_JSON),
+    );
+    assert.strictEqual(await pathExists(record.manifestPath), true);
+    assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), configBefore);
+    assert.strictEqual(await pathExists(locations.localConfigJsonPath), false);
+  });
+});
+
+test("D-PL5-17: a repair into a layer that does not declare the marketplace declares it there", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const record = await arrangeLostCheckout(cwd, locations);
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: GITHUB_SOURCE,
+      gitOps,
+      local: true,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+    assert.strictEqual(
+      await readFile(locations.localConfigJsonPath, "utf8"),
+      declaredMarketplaceBytes("valid-marketplace", GITHUB_SOURCE),
+    );
+    assert.deepStrictEqual(
+      (await loadState(locations.extensionRoot)).marketplaces["valid-marketplace"]?.plugins,
+      record.plugins,
+    );
+    assert.strictEqual(await pathExists(record.marketplaceRoot), true);
+  });
+});
+
+test("D-PL5-17: a re-clone that declares another name fails as a source mismatch and changes nothing", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    await arrangeLostCheckout(cwd, locations);
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("empty-marketplace"),
+    });
+
+    // act
+    await addMarketplace({ ctx, run, scope: "project", cwd, rawSource: GITHUB_SOURCE, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `A marketplace operation has failed.\n\n⊘ ${GITHUB_SOURCE} [project] (failed) {source mismatch}`,
+        severity: "error",
+      },
+    ]);
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    assert.deepStrictEqual(
+      [
+        await readdir(path.join(locations.extensionRoot, "sources")),
+        await readdir(path.join(locations.extensionRoot, "sources-staging")),
+      ],
+      [[], []],
+    );
+  });
+});
+
+test("D-PL5-17 / WR-07: a repair whose state save fails removes the new checkout", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const record = await arrangeLostCheckout(cwd, locations);
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+      onClone: async () => {
+        await rm(locations.stateJsonPath);
+        await mkdir(locations.stateJsonPath);
+      },
+    });
+
+    // act
+    await addMarketplace({ ctx, run, scope: "project", cwd, rawSource: GITHUB_SOURCE, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `A marketplace operation has failed.\n\n⊘ ${GITHUB_SOURCE} [project] (failed) {unreadable}`,
+        severity: "error",
+      },
+    ]);
+    assert.strictEqual(await pathExists(record.marketplaceRoot), false);
+  });
+});
+
+for (const kind of ["dir", "file"] as const) {
+  test(`D-PL5-17: re-adding a ${kind} marketplace whose manifest is gone fails as source missing`, async () => {
+    await withTmpScope(async ({ cwd, locations }) => {
+      // arrange
+      const marketplaceRoot = await writeNamedPathMarketplace(cwd, "tools");
+      const manifestPath = path.join(marketplaceRoot, ".claude-plugin", "marketplace.json");
+      const rawSource = kind === "dir" ? marketplaceRoot : manifestPath;
+      const first = makeCtx();
+      await addMarketplace({ ctx: first.ctx, run: first.run, scope: "project", cwd, rawSource });
+      await rm(manifestPath);
+      const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+      const configBefore = await readFile(locations.baseConfigJsonPath, "utf8");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await addMarketplace({ ctx, run, scope: "project", cwd, rawSource });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message: `A marketplace operation has failed.\n\n⊘ ${rawSource} [project] (failed) {source missing}`,
+          severity: "error",
+        },
+      ]);
+      assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+      assert.strictEqual(await readFile(locations.baseConfigJsonPath, "utf8"), configBefore);
+    });
+  });
+}
+
+test("D-PL5-17 / WR-09: an orchestrated add never repairs a recorded marketplace", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const record = await arrangeLostCheckout(cwd, locations);
+    const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+    const { ctx, run } = makeCtx(0);
+    const { gitOps } = createGitOps({
+      fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
+    });
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: GITHUB_SOURCE,
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.strictEqual(outcome.status, "failed");
+    assert.strictEqual(outcome.reason, "duplicate name");
+    assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+    assert.strictEqual(await pathExists(record.marketplaceRoot), false);
+  });
+});
+
 test("WR-09 / T-56-02-01: orchestrated-mode add SKIPS config write-back (neither base nor local config is created)", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange

@@ -329,6 +329,10 @@ export function classifyAddError(rawErr: unknown): ContentReason | undefined {
     return "permission denied";
   }
 
+  if (err instanceof RecordedNameMismatchError) {
+    return "source mismatch";
+  }
+
   return err instanceof Error ? errorAddReason(err) : undefined;
 }
 
@@ -401,17 +405,40 @@ class ReservedMarketplaceNameError extends InvalidMarketplaceManifestError {
 }
 
 /**
+ * D-PL5-17: a re-materialized checkout of a recorded marketplace declares
+ * another name than the record it repairs. Raised before the rename, so the
+ * record and `sources/` stay untouched.
+ */
+class RecordedNameMismatchError extends Error {
+  readonly expectedName: string;
+  readonly declaredName: string;
+  constructor(expectedName: string, declaredName: string) {
+    super(
+      `the marketplace "${expectedName}" now declares the name "${declaredName}" at its source`,
+    );
+    this.name = "RecordedNameMismatchError";
+    this.expectedName = expectedName;
+    this.declaredName = declaredName;
+  }
+}
+
+/**
  * Reads the manifest at `manifestPath` and returns the marketplace name it
  * declares. A `__proto__` name fails as `invalid manifest` (D-08-07), a name
  * Claude Code reserves for the anthropics organization fails unless `source`
  * is one of its github repositories (MKT-01), and a name the scope already
  * holds fails as a duplicate (MA-8), all before any state mutation.
+ *
+ * D-PL5-17: a repair passes the name of the record it re-materializes. The
+ * manifest must declare that name, and the MA-8 check is skipped for it,
+ * because the scope holds it by design.
  */
 async function newMarketplaceName(
   manifestPath: string,
   marketplaces: ExtensionState["marketplaces"],
   scope: Scope,
   source: ParsedSource,
+  expectedName?: string,
 ): Promise<{ name: string; comparisonJson: string }> {
   const {
     manifest: { name },
@@ -428,7 +455,11 @@ async function newMarketplaceName(
     throw new ReservedMarketplaceNameError(refusal);
   }
 
-  if (ownValue(marketplaces, name) !== undefined) {
+  if (expectedName !== undefined && name !== expectedName) {
+    throw new RecordedNameMismatchError(expectedName, name);
+  }
+
+  if (name !== expectedName && ownValue(marketplaces, name) !== undefined) {
     throw new MarketplaceDuplicateNameError(name, scope);
   }
 
@@ -499,11 +530,14 @@ function resolvesToRecord(
  * (Claude Code: "already added; nothing changed"). A target layer that
  * declares the name with another source refuses as a duplicate.
  *
- * Returns the matched name and whether the add declared it, or `undefined`
- * when no single record matches or the add is orchestrated (reconcile and
- * import never write a config back, WR-09). The caller runs this outside the
- * MA-9 / WR-07 cleanup catch: that cleanup removes a clone the add created,
- * and this path creates none.
+ * D-PL5-17: a matched record whose files are gone is not already added.
+ * See `repairableSource`.
+ *
+ * Returns what the add does with the matched record, or `undefined` when no
+ * single record matches or the add is orchestrated (reconcile and import
+ * never write a config back, WR-09). The reuse arms create no clone, so the
+ * caller returns them before the MA-9 / WR-07 cleanup; a repair clones, so
+ * the caller runs it under that cleanup as it runs a fresh add.
  */
 async function redeclareRecordedSource(args: {
   marketplaces: ExtensionState["marketplaces"];
@@ -513,7 +547,7 @@ async function redeclareRecordedSource(args: {
   rawSource: string;
   cwd: string;
   orchestrated: boolean;
-}): Promise<RecordedAdd | undefined> {
+}): Promise<RecordedSourceAction | undefined> {
   const { current, locations, rawSource } = args;
   if (args.orchestrated) {
     return undefined;
@@ -528,20 +562,71 @@ async function redeclareRecordedSource(args: {
     return undefined;
   }
 
-  const [name] = match;
+  const [name, record] = match;
   const declared = ownValue(current.marketplaces, name);
-  if (declared !== undefined) {
-    if (samePlannedSource(declared.source, rawSource) !== "same") {
-      throw new MarketplaceDuplicateNameError(name, locations.scope);
-    }
+  if (declared !== undefined && samePlannedSource(declared.source, rawSource) !== "same") {
+    throw new MarketplaceDuplicateNameError(name, locations.scope);
+  }
 
-    return { name, alreadyAdded: true };
+  const source = await repairableSource(record);
+  if (source !== undefined) {
+    return { kind: "repair", record, source, declare: declared === undefined };
+  }
+
+  if (declared !== undefined) {
+    return { kind: "reuse", added: { name, alreadyAdded: true } };
   }
 
   await writeMarketplaceConfigEntry(current, args.targetConfigPath, locations.scopeRoot, name, {
     source: rawSource,
   });
-  return { name, alreadyAdded: false };
+  return { kind: "reuse", added: { name, alreadyAdded: false } };
+}
+
+/** A recorded marketplace. */
+type MarketplaceRecord = ExtensionState["marketplaces"][string];
+
+/**
+ * What a standalone add does with the one record of its typed source: reuse
+ * it (MPA-01, LAYER-01) or re-materialize its checkout (D-PL5-17). A repair
+ * declares the marketplace in the target layer only when that layer lacks it.
+ */
+type RecordedSourceAction =
+  | { readonly kind: "reuse"; readonly added: RecordedAdd }
+  | {
+      readonly kind: "repair";
+      readonly record: MarketplaceRecord;
+      readonly source: GitHubSource | UrlSource;
+      readonly declare: boolean;
+    };
+
+/**
+ * D-PL5-17: Claude Code re-fetches a registered marketplace whose cache is
+ * gone. A github or url record whose checkout under `sources/<name>/` is gone
+ * returns the source to re-clone it from. A path record whose recorded
+ * manifest is gone throws an ENOENT error, which reads `source missing`: the
+ * add cannot rebuild a directory the user owns. Any other record is intact
+ * and returns `undefined`.
+ */
+async function repairableSource(
+  record: MarketplaceRecord,
+): Promise<GitHubSource | UrlSource | undefined> {
+  // ST-6 revalidated the stored source when the state loaded.
+  const source = record.source as ParsedSource;
+  if (source.kind === "github" || source.kind === "url") {
+    return (await pathExists(record.marketplaceRoot)) ? undefined : source;
+  }
+
+  const manifestPath = recordedManifestPath(record);
+  if (source.kind === "path" && !(await pathExists(manifestPath))) {
+    const missing: NodeJS.ErrnoException = new Error(
+      `the recorded marketplace manifest ${manifestPath} no longer exists`,
+    );
+    missing.code = "ENOENT";
+    throw missing;
+  }
+
+  return undefined;
 }
 
 /**
@@ -628,6 +713,12 @@ export async function addMarketplaceToState(args: {
    * install passes its own, so its add and its plugin clones share one memo.
    */
   readonly authMemo?: Map<string, AuthAttemptResult> | undefined;
+  /**
+   * D-PL5-17: the record whose checkout a repair re-materializes. The clone
+   * must declare its name, and the record keeps its source and plugins. A
+   * path source is never repaired, so its body ignores this.
+   */
+  readonly previous?: ExtensionState["marketplaces"][string] | undefined;
 }): Promise<{ readonly name: string; readonly cloneDir?: string }> {
   const { state, locations, source, cwd, removalOps, deviceFlowHttp, authMemo } = args;
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
@@ -655,6 +746,7 @@ export async function addMarketplaceToState(args: {
     removalOps,
     auth,
     cwd,
+    previous: args.previous,
   });
   return { name, cloneDir: await locations.sourceCloneDir(name) };
 }
@@ -695,7 +787,7 @@ async function runAddInGuard(args: {
     }
 
     const current: ScopeConfig = cfg.status === "valid" ? cfg.config : { schemaVersion: 1 };
-    const redeclared = await redeclareRecordedSource({
+    const action = await redeclareRecordedSource({
       marketplaces: state.marketplaces,
       current,
       targetConfigPath,
@@ -704,14 +796,15 @@ async function runAddInGuard(args: {
       cwd: opts.cwd,
       orchestrated,
     });
-    if (redeclared !== undefined) {
-      return redeclared;
+    if (action?.kind === "reuse") {
+      return action.added;
     }
 
+    // D-PL5-17: a repair re-materializes through the body a fresh add runs.
     const added = await addMarketplaceToState({
       state,
       locations,
-      source,
+      source: action?.source ?? source,
       cwd: opts.cwd,
       ctx: opts.ctx,
       run: opts.run,
@@ -719,52 +812,78 @@ async function runAddInGuard(args: {
       credentialOps: opts.credentialOps,
       deviceFlowHttp: opts.deviceFlowHttp,
       gitOps: opts.gitOps,
+      previous: action?.record,
     });
 
     // WB-01 / WR-09: write-back the marketplace entry to the user-authored
     // config. SKIPPED in orchestrated mode (reconcile derives desired state
-    // FROM the config; writing back would clobber a per-machine override).
-    // The `source` field is `opts.rawSource` VERBATIM so the reconcile
-    // planner's `samePlannedSource` comparison stays a no-op on the next
-    // load.
-    //
-    // WR-07: by this point a github or url add has ALREADY renamed the clone
-    // into its final `sources/<name>/` path, and the body's own MA-9 cleanup
-    // catch is out of scope. If the config write-back or tx.save() throws
-    // (disk full, EACCES on claude-plugins.json), the state snapshot is
-    // discarded (no save) but the clone would be orphaned -- making every
-    // retry fail MA-6 `{stale clone}` until the user manually deletes the
-    // directory (NFR-3 violation). Mirror the MA-9 discipline: remove the
-    // committed final clone and append any cleanup leak to the rethrown
-    // error. A path source has no clone directory.
-    try {
-      if (!orchestrated) {
-        await writeMarketplaceConfigEntry(
-          current,
-          targetConfigPath,
-          locations.scopeRoot,
-          added.name,
-          { source: opts.rawSource },
-        );
-      }
-
-      await tx.save();
-    } catch (err) {
-      let wrapped: unknown = err;
-      if (added.cloneDir !== undefined) {
-        const leak = await cleanupStaging(
-          removalOps,
-          added.cloneDir,
-          `marketplace final clone ${added.cloneDir}`,
-        );
-        wrapped = appendLeakToError(wrapped, leak);
-      }
-
-      throw wrapped instanceof Error ? wrapped : new Error(errorMessage(wrapped));
-    }
-
+    // FROM the config; writing back would clobber a per-machine override),
+    // and for a repair whose target layer already declares it.
+    await saveAddedMarketplace({
+      save: () => tx.save(),
+      declare: (action?.declare ?? true) && !orchestrated,
+      current,
+      targetConfigPath,
+      locations,
+      rawSource: opts.rawSource,
+      added,
+      removalOps,
+    });
     return { name: added.name, alreadyAdded: false };
   });
+}
+
+/**
+ * Writes the config declaration when `declare` is set, then saves the state.
+ * The declared `source` is the typed source VERBATIM so the reconcile
+ * planner's `samePlannedSource` comparison stays a no-op on the next load.
+ *
+ * WR-07: by this point a github or url add has ALREADY renamed the clone
+ * into its final `sources/<name>/` path, and the body's own MA-9 cleanup
+ * catch is out of scope. If the config write-back or the save throws (disk
+ * full, EACCES on claude-plugins.json), the state snapshot is discarded (no
+ * save) but the clone would be orphaned -- making every retry fail MA-6
+ * `{stale clone}` until the user manually deletes the directory (NFR-3
+ * violation). Mirror the MA-9 discipline: remove the committed final clone
+ * and append any cleanup leak to the rethrown error. A path source has no
+ * clone directory.
+ */
+async function saveAddedMarketplace(args: {
+  save: () => Promise<void>;
+  declare: boolean;
+  current: ScopeConfig;
+  targetConfigPath: string;
+  locations: ScopedLocations;
+  rawSource: string;
+  added: { readonly name: string; readonly cloneDir?: string };
+  removalOps: RemovalOps;
+}): Promise<void> {
+  const { added, removalOps } = args;
+  try {
+    if (args.declare) {
+      await writeMarketplaceConfigEntry(
+        args.current,
+        args.targetConfigPath,
+        args.locations.scopeRoot,
+        added.name,
+        { source: args.rawSource },
+      );
+    }
+
+    await args.save();
+  } catch (err) {
+    let wrapped: unknown = err;
+    if (added.cloneDir !== undefined) {
+      const leak = await cleanupStaging(
+        removalOps,
+        added.cloneDir,
+        `marketplace final clone ${added.cloneDir}`,
+      );
+      wrapped = appendLeakToError(wrapped, leak);
+    }
+
+    throw wrapped instanceof Error ? wrapped : new Error(errorMessage(wrapped));
+  }
 }
 
 /**
@@ -1256,8 +1375,9 @@ async function addGitClonedInGuard(args: {
   gitOps: GitOps;
   auth: GitAuthBundle;
   cwd: string;
+  previous: MarketplaceRecord | undefined;
 }): Promise<string> {
-  const { state, locations, source, gitOps, auth, cwd, removalOps } = args;
+  const { state, locations, source, gitOps, auth, cwd, removalOps, previous } = args;
   const stagingDir = await locations.sourcesStagingDir(randomUUID());
 
   // 1. Clone into staging (NFR-5: only git-cloned kinds reach gitOps.clone).
@@ -1290,6 +1410,7 @@ async function addGitClonedInGuard(args: {
       state.marketplaces,
       locations.scope,
       source,
+      previous?.name,
     );
 
     // 5. MA-6/MA-12/MA-13: recognize-remove-rename on the final destination.
@@ -1321,17 +1442,19 @@ async function addGitClonedInGuard(args: {
     await rename(stagingDir, finalDir);
     stagedAtFinal = true;
 
-    // 7. Mutate state.
+    // 7. Mutate state. D-PL5-17: a repair keeps the record's source, cwd,
+    // and plugins, and replaces only what the new checkout determines.
     setOwn(state.marketplaces, derivedName, {
       name: derivedName,
       scope: locations.scope,
       source,
       addedFromCwd: cwd,
+      plugins: {},
+      ...previous,
       manifestPath: path.join(finalDir, ".claude-plugin", "marketplace.json"),
       marketplaceRoot: finalDir,
       lastUpdatedAt: new Date().toISOString(),
       lastSuccessfulManifest: comparisonJson,
-      plugins: {},
     });
     return derivedName;
   } catch (err) {

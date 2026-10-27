@@ -236,6 +236,62 @@ Feature: Marketplace add
       | source kind | source     |
       | github      | acme/tools |
 
+  Scenario Outline: Adding again a marketplace whose checkout is gone restores it and keeps its installed plugins
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" offers these plugins:
+      | name      | version |
+      | formatter | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install formatter@tools --scope project"
+    Given the project scope has lost the checkout of the marketplace "tools"
+    When the user runs "/claude:plugin marketplace add <source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status |
+      | tools | project | added  |
+    Then the installation record of the project scope holds these plugins:
+      | id              | version | enabled |
+      | formatter@tools | 1.0.0   | true    |
+    Then the git host receives these requests:
+      | method | path                                              | status |
+      | GET    | /acme/tools.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/tools.git/git-upload-pack                   | 200    |
+
+    @url
+    Examples:
+      | source kind | source                            |
+      | url         | https://{git host}/acme/tools.git |
+
+    @github
+    Examples:
+      | source kind | source     |
+      | github      | acme/tools |
+
+  Scenario Outline: Adding again a local marketplace whose manifest is gone fails as source missing
+    Given the marketplace "tools" is published as a <source kind> source
+    Given the marketplace "tools" is added to the project scope
+    Given the published source of the marketplace "tools" is removed
+    When the user runs "/claude:plugin marketplace add <source> --scope project"
+    Then the result has these fields:
+      | kind         | cascade                             |
+      | severity     | error                               |
+      | needs reload | false                               |
+      | summary      | A marketplace operation has failed. |
+    Then the result lists these marketplaces:
+      | name     | scope   | status | reasons        |
+      | <source> | project | failed | source missing |
+    Then the "claude-plugins.json" file of the project scope declares these marketplaces:
+      | name  | source   |
+      | tools | <source> |
+
+    Examples:
+      | source kind | source                                                    |
+      | dir         | {home}/marketplaces/tools                                 |
+      | file        | {home}/marketplaces/tools/.claude-plugin/marketplace.json |
+
   Scenario Outline: Adding a marketplace whose name the scope already holds fails as a duplicate name
     Given the marketplace "tools" is published as a <source kind> source
     Given the marketplace "tools" is added to the project scope
