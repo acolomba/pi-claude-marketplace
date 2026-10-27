@@ -3912,7 +3912,7 @@ test("AFILE-04: a failed dependency cascade still reports the removed comments a
       // arrange
       await seedMcpDependencyCascade(cwd);
       await writeCommentedProjectAdapterFile(cwd);
-      const agentsPath = await seedForeignServer1();
+      await seedForeignServer1();
       const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
       const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
@@ -3924,10 +3924,11 @@ test("AFILE-04: a failed dependency cascade still reports the removed comments a
         {
           severity: "error",
           message:
-            "A plugin operation has failed.\n\n" +
+            "Some plugin operations have failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ hello v0.0.1 (failed)\n" +
-            `    cause: Refusing to stage MCP server "plugin_hello_server1_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+            '    cause: Refusing to stage MCP server "plugin_hello_server1_": mcp.json already defines it, and pi-mcp-adapter would load the definition in mcp-adapter.json.\n' +
+            "  ⊘ some-other-plugin@mp (failed) {dependency failed}",
         },
         PROJECT_COMMENTS_DROPPED_NOTICE,
       ]);
@@ -4021,8 +4022,7 @@ test("AVAR-04: a failed dependency cascade shows no variable notice for the depe
           },
         ],
       });
-      const agentsPath = await seedForeignServer1();
-      const adapterPath = path.join(cwd, ".pi", "mcp-adapter.json");
+      await seedForeignServer1();
       const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
       const installPlugin = createInstallPlugin(transaction, hooksRouting, completionCache, {});
 
@@ -4034,10 +4034,11 @@ test("AVAR-04: a failed dependency cascade shows no variable notice for the depe
         {
           severity: "error",
           message:
-            "A plugin operation has failed.\n\n" +
+            "Some plugin operations have failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ hello v0.0.1 (failed)\n" +
-            `    cause: Refusing to stage MCP server "plugin_hello_server1_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+            '    cause: Refusing to stage MCP server "plugin_hello_server1_": mcp.json already defines it, and pi-mcp-adapter would load the definition in mcp-adapter.json.\n' +
+            "  ⊘ some-other-plugin@mp (failed) {dependency failed}",
         },
       ]);
     } finally {
@@ -4499,7 +4500,7 @@ test("AFILE-06: a failed dependency cascade writes its dependency's override bac
         cwd,
         "plugin_some-other-plugin_server2_",
       );
-      const agentsPath = await seedForeignServer1();
+      await seedForeignServer1();
       const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
 
       // act
@@ -4510,10 +4511,11 @@ test("AFILE-06: a failed dependency cascade writes its dependency's override bac
         {
           severity: "error",
           message:
-            "A plugin operation has failed.\n\n" +
+            "Some plugin operations have failed.\n\n" +
             "● mp [project]\n" +
             "  ⊘ hello v0.0.1 (failed)\n" +
-            `    cause: Refusing to stage MCP server "plugin_hello_server1_": ${agentsPath} already defines it, and pi-mcp-adapter would load the definition in ${adapterPath}.`,
+            '    cause: Refusing to stage MCP server "plugin_hello_server1_": mcp.json already defines it, and pi-mcp-adapter would load the definition in mcp-adapter.json.\n' +
+            "  ⊘ some-other-plugin@mp (failed) {dependency failed}",
         },
       ]);
       assert.equal(await readFile(adapterPath, "utf8"), overrideBytes);
@@ -13102,8 +13104,9 @@ test("GHB-03: an invalid base after a dependency's undo failed reports the rollb
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n" +
+            "Some plugin operations have failed.\n\n" +
             "● mp [project]\n" +
+            "  ⊘ dep@mp (failed) {dependency failed}\n" +
             "  ⊘ gh (failed) {rollback partial}\n" +
             `    cause: ${variableMessage}\n` +
             "    [dep@mp] (rollback failed)\n" +
@@ -13146,8 +13149,9 @@ test("GHB-03: an invalid base after a dependency rewrote the MCP config reports 
       assert.deepStrictEqual(notifications, [
         {
           message:
-            "A plugin operation has failed.\n\n" +
+            "Some plugin operations have failed.\n\n" +
             "● mp [project]\n" +
+            "  ⊘ dep@mp (failed) {dependency failed}\n" +
             "  ⊘ gh (failed)\n" +
             "    cause: PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme.",
           severity: "error",
@@ -18945,8 +18949,9 @@ for (const orchestrated of [false, true]) {
       });
       await installed(owner, cwd, "lib");
       await publishCatalog(marketplaceRoot, {
-        app: { version: "1.0.0", dependencies: ["lib@^2.0.0"] },
+        app: { version: "1.0.0", dependencies: ["lib@^2.0.0", "zzz"] },
         lib: { version: "2.0.0", mcp: true },
+        zzz: { version: "1.0.0" },
       });
       const adapterPath = locationsFor("project", cwd).mcpAdapterJsonPath;
       await rm(adapterPath, { force: true });
@@ -18973,17 +18978,23 @@ for (const orchestrated of [false, true]) {
       );
       // The cause line is the runner's EISDIR, whose text varies across Node releases.
       assert.deepStrictEqual(
-        notifications.map((notification) => notification.message.split("\n").slice(0, 5)),
+        notifications.map((notification) => ({
+          head: notification.message.split("\n").slice(0, 5),
+          listsUnmaterialized: notification.message.includes("zzz@mp (failed) {dependency failed}"),
+        })),
         orchestrated
           ? []
           : [
-              [
-                "Some plugin operations have failed.",
-                "",
-                "● mp [project]",
-                "  ⊘ app (failed) {dependency failed}",
-                "  ⊘ lib@mp v1.2.0 (failed)",
-              ],
+              {
+                head: [
+                  "Some plugin operations have failed.",
+                  "",
+                  "● mp [project]",
+                  "  ⊘ app (failed) {dependency failed}",
+                  "  ⊘ lib@mp v1.2.0 (failed)",
+                ],
+                listsUnmaterialized: true,
+              },
             ],
       );
       assert.deepStrictEqual(await recordedVersions(cwd), { lib: ["1.2.0", true] });

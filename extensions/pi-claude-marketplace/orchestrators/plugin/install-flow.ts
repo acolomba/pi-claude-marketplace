@@ -65,6 +65,7 @@ import {
   composeCascadeFailureMessage,
   composeCascadeMemberRow,
   composeCascadeMemberRows,
+  composeUnmaterializedRows,
 } from "./install-cascade.messaging.ts";
 import {
   runDependencyCascade,
@@ -852,9 +853,10 @@ function installCatalog(args: {
   readonly sink: CascadeFailureSink;
 }): { readonly recordFor: TargetRecordFor; readonly lookup: ClosureLookup } {
   const { state, locations, addOptions, sink } = args;
+  const resolvedKeys: string[] = [];
   const recordFor: TargetRecordFor = (marketplace, plugin) =>
     resolveTargetScopeMarketplace(state, locations, addOptions, marketplace, plugin);
-  return { recordFor, lookup: catalogLookup(recordFor, locations, sink) };
+  return { recordFor, lookup: catalogLookup(recordFor, locations, sink, resolvedKeys) };
 }
 
 /**
@@ -866,24 +868,27 @@ function catalogLookup(
   recordFor: TargetRecordFor,
   locations: ScopedLocations,
   sink: CascadeFailureSink,
+  resolvedKeys: string[] = [],
 ): ClosureLookup {
   return async (subject) => {
-    let record: ExtensionState["marketplaces"][string] | undefined;
     try {
-      record = await recordFor(subject.marketplace);
+      const record = await recordFor(subject.marketplace);
+      const result =
+        record === undefined
+          ? { kind: "absent" as const }
+          : await lookupCascadeDependencies(record, locations, subject);
+      resolvedKeys.push(subject.key);
+      return result;
     } catch (err: unknown) {
       sink.subject = {
         kind: "member",
         key: subject.key,
         error: err as Error,
         rollbackPartials: [],
+        unmaterialized: resolvedKeys,
       };
       throw err;
     }
-
-    return record === undefined
-      ? { kind: "absent" }
-      : lookupCascadeDependencies(record, locations, subject);
   };
 }
 
@@ -1100,10 +1105,10 @@ type CascadeFailureArm = Extract<
  * `undefined`, so the caller returns from inside the lock WITHOUT `tx.save()`),
  * or a throw the guard's own catch composes into failed rows.
  *
- * A `member-failed` whose key is the ROOT records no subject: nothing but the
- * requested plugin failed, so it is a single-plugin install failure and belongs
- * on the existing single-row path, which classifies entity-shape errors and
- * git-auth challenges the cascade block has no arm for.
+ * A `member-failed` whose key is the ROOT records a subject only when the walk
+ * also resolved dependencies. The cascade block then keeps those rolled-back
+ * members visible; a root-only failure stays on the existing single-row path,
+ * which classifies entity-shape errors and git-auth challenges.
  *
  * The cascade's rollback partials are appended to whatever the failing member's
  * OWN bridge-level ledger already captured; both are real undo failures and
@@ -1136,11 +1141,15 @@ function unwrapCascade<S extends Exclude<InstallCascadeResult, CascadeFailureArm
   if (cascade.kind === "member-failed") {
     capture.rollbackPartials = [...capture.rollbackPartials, ...cascade.rollbackPartials];
     sink.mcpConfigNotices = cascade.mcpConfigNotices;
-    if (cascade.key !== rootKey) {
+    if (cascade.key !== rootKey || cascade.unmaterialized.length > 0) {
       sink.subject = {
         kind: "member",
         key: cascade.key,
         error: cascade.error,
+        ...(cascade.key === rootKey &&
+          capture.version !== undefined && {
+            version: capture.version,
+          }),
         rollbackPartials: capture.rollbackPartials,
         unmaterialized: cascade.unmaterialized,
       };
@@ -3628,9 +3637,17 @@ async function installAfterMoves(args: {
       return handleCaughtInstallFailure({ ...failure, ...plan });
     }
 
+    const resolvedMembers = resolvedPlanMemberKeys(plan);
     const ran = await runDependencySteps(plan.steps, dependencyStepPorts(cascade, context));
     if (!ran.ok) {
-      return failedMoveOutcome({ opts, moved: ran.landed, cause: ran.cause, orchestrated });
+      const reported = new Set([root.key, ...ran.landed.map((entry) => entry.key)]);
+      return failedMoveOutcome({
+        opts,
+        moved: ran.landed,
+        cause: ran.cause,
+        orchestrated,
+        unmaterialized: resolvedMembers.filter((key) => !reported.has(key)),
+      });
     }
 
     return await installPluginWithTransaction(
@@ -3645,6 +3662,20 @@ async function installAfterMoves(args: {
     await sweep();
     await discardCarriedAdds(carried, target.locations);
   }
+}
+
+/** Member keys a dependency plan resolved, in its execution order. */
+function resolvedPlanMemberKeys(
+  plan: Extract<DependencyPlan, { readonly ok: true }>,
+): readonly string[] {
+  return [
+    ...plan.steps.flatMap((step) =>
+      step.kind === "move"
+        ? [step.move.request.key]
+        : step.members.map((entry) => entry.member.key),
+    ),
+    ...plan.final.members.map((entry) => entry.member.key),
+  ];
 }
 
 /**
@@ -3703,6 +3734,7 @@ function failedMoveOutcome(args: {
   readonly moved: readonly MovedDependency[];
   readonly cause: Error;
   readonly orchestrated: boolean;
+  readonly unmaterialized: readonly string[];
 }): InstallPluginOutcome {
   const { opts } = args;
   if (!args.orchestrated) {
@@ -3722,6 +3754,10 @@ function failedMoveOutcome(args: {
               severity: "error",
             },
             ...movedRows(args.moved),
+            ...composeUnmaterializedRows(args.unmaterialized, [
+              `${opts.plugin}@${opts.marketplace}`,
+              ...args.moved.map((entry) => entry.key),
+            ]),
           ],
         },
       ],

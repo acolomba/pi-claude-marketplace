@@ -1480,6 +1480,7 @@ describe("composeCascadeFailureMessage", () => {
       kind: "member",
       key: "formatter@tools",
       error: new Error("failed to stage skill a-fmt: EACCES"),
+      version: "1.2.3",
       rollbackPartials: [],
       unmaterialized: ["linter@tools", "aux@tools"],
     };
@@ -1495,7 +1496,7 @@ describe("composeCascadeFailureMessage", () => {
         "",
         "● official [user]",
         "  ⊘ aux@tools (failed) {dependency failed}",
-        "  ⊘ formatter@tools (failed)",
+        "  ⊘ formatter@tools v1.2.3 (failed)",
         "    cause: failed to stage skill a-fmt: EACCES",
         "  ⊘ helper (failed) {dependency failed}",
         "  ⊘ linter@tools (failed) {dependency failed}",
