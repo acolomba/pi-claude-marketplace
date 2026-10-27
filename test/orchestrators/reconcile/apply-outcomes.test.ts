@@ -360,9 +360,9 @@ void ({
   scope: "project",
   marketplace: "official",
   plugin: "formatter",
-  reason: "unreadable",
-  // @ts-expect-error install failure causes are DependencyCascadeError, not a bare Error
+  reason: "rollback partial",
   cause: new Error("boom"),
+  rollbackPartials: [{ phase: "skills", cause: new Error("skill rollback denied") }],
 } satisfies PluginInstallFailedOutcome);
 void ({
   kind: "plugin-uninstalled",

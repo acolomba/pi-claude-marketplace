@@ -264,6 +264,17 @@ Then(
 );
 
 Then(
+  "the installation record of the {word} scope holds no plugins",
+  async function (this: ScenarioWorld, scope: string) {
+    const recorded = await recordedPlugins(extensionRoot(this, scope));
+    assert.deepStrictEqual(
+      recorded.map((plugin) => plugin.id),
+      [],
+    );
+  },
+);
+
+Then(
   "the data directory of {string} in the {word} scope holds these files:",
   async function (this: ScenarioWorld, id: string, scope: string, table: DataTable) {
     assert.deepStrictEqual(await fileRows(pluginDataDirectory(this, scope, id)), table.raw());

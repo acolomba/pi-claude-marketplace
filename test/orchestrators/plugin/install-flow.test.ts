@@ -5335,6 +5335,133 @@ test("RESV-06 / NFR-3: a failed cascade never reaches tx.save() and replays the 
   });
 });
 
+/**
+ * MIM-03: fails the first per-plugin ledger the cascade runs, the
+ * dependency's, in its mcp phase, and makes its skills undo throw
+ * `skillsUndoError` when one is given.
+ */
+function faultDependencyLedger(
+  transactionControl: InstallTransactionControl,
+  skillsUndoError?: Error,
+): void {
+  const faultedLedgers = { remaining: 1 };
+  transactionControl.runPhases = async <C>(phases: readonly Phase<C>[], ctx: C) => {
+    if (phases[0]?.name !== "skills" || faultedLedgers.remaining === 0) {
+      return runPhases(phases, ctx);
+    }
+
+    faultedLedgers.remaining -= 1;
+    return runPhases(
+      phases.map((phase): Phase<C> => {
+        if (phase.name === "mcp") {
+          return {
+            ...phase,
+            do: () => {
+              throw new Error("mcp staging denied");
+            },
+          };
+        }
+
+        return phase.name === "skills" && skillsUndoError !== undefined
+          ? {
+              ...phase,
+              undo: () => {
+                throw skillsUndoError;
+              },
+            }
+          : phase;
+      }),
+      ctx,
+    );
+  };
+}
+
+/** MIM-03: `hello`, which depends on `some-other-plugin`, installed orchestrated. */
+async function installHelloWithDependency(
+  installPlugin: InstallOperation,
+  cwd: string,
+): Promise<{
+  readonly outcome: Awaited<ReturnType<InstallOperation>>;
+  readonly notifications: readonly NotifyRecord[];
+}> {
+  await seedPathMarketplaceWithPlugin({
+    cwd,
+    marketplaceRoot: path.join(cwd, "mp-src"),
+    marketplaceName: "mp",
+    pluginName: "hello",
+    skills: [{ sourceName: "tool" }],
+    declareDependencies: true,
+    siblingPlugins: [{ name: "some-other-plugin" }],
+  });
+  const { ctx, run, notifications } = makeCtx();
+  const outcome = await installPlugin({
+    ctx,
+    cwd,
+    marketplace: "mp",
+    notifications: { mode: "orchestrated" },
+    run,
+    plugin: "hello",
+    scope: "project",
+  });
+  return { outcome, notifications };
+}
+
+test("MIM-03 / D-PL6-04: an orchestrated install whose dependency could not finish its rollback carries that dependency's rollback partials", async () => {
+  await withHermeticHome(async ({ installPlugin, transactionControl }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-mim03-dependency-partial-"));
+    try {
+      // arrange
+      const skillsUndoError = new Error("skills undo denied");
+      faultDependencyLedger(transactionControl, skillsUndoError);
+
+      // act
+      const { outcome, notifications } = await installHelloWithDependency(installPlugin, cwd);
+
+      // assert
+      assert.ok(outcome.status === "failed");
+      const { error, ...failure } = outcome;
+      assert.ok(error instanceof DependencyCascadeError);
+      assert.strictEqual(error.key, "some-other-plugin@mp");
+      assert.strictEqual(error.message, "mcp staging denied");
+      assert.deepStrictEqual(failure, {
+        status: "failed",
+        cause: "mcp staging denied\n\ncause: mcp staging denied -> mcp staging denied",
+        rollbackPartials: [{ phase: "skills", msg: "skills undo denied", cause: skillsUndoError }],
+      });
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("MIM-03 / D-PL6-04: an orchestrated install whose dependency finished its rollback carries no rollback partials", async () => {
+  await withHermeticHome(async ({ installPlugin, transactionControl }) => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "install-mim03-dependency-clean-"));
+    try {
+      // arrange
+      faultDependencyLedger(transactionControl);
+
+      // act
+      const { outcome, notifications } = await installHelloWithDependency(installPlugin, cwd);
+
+      // assert
+      assert.ok(outcome.status === "failed");
+      const { error, ...failure } = outcome;
+      assert.ok(error instanceof DependencyCascadeError);
+      assert.strictEqual(error.key, "some-other-plugin@mp");
+      assert.strictEqual(error.message, "mcp staging denied");
+      assert.deepStrictEqual(failure, {
+        status: "failed",
+        cause: "mcp staging denied\n\ncause: mcp staging denied",
+      });
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 // ───────────────────────────────────────────────────────────────────────────
 // PI-14 -- PathContainmentError bypasses rollback-partial marker
 // ───────────────────────────────────────────────────────────────────────────

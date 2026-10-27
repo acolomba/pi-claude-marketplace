@@ -119,13 +119,16 @@ import {
   ConcurrentInstallError,
   DirectoryPinUnsatisfiedError,
   errorMessage,
+  errorWithManualRecovery,
   InstallMarketplaceAddError,
   InvalidMarketplaceManifestError,
+  ManualRecoveryError,
   PluginShapeError,
 } from "../../shared/errors.ts";
-import { type RemovalOps } from "../../shared/fs-utils.ts";
+import { pathExists, type RemovalOps } from "../../shared/fs-utils.ts";
 import { type DegradeKind } from "../../shared/notify-reasons.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
+import { PathContainmentError } from "../../shared/path-safety.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import {
   runPhases,
@@ -995,6 +998,43 @@ function toInstallLedgerSummary(context: InstallLedgerContext): InstallLedgerSum
 }
 
 /**
+ * AS-7 / D-PL6-20: the error a failed skills undo throws. A containment
+ * refusal passes through unchanged, so the ledger still rethrows it (PI-14).
+ * Any other failure becomes a `ManualRecoveryError` that lists each staged
+ * skill directory still on disk, in place of the bridge error, whose own cause
+ * it keeps so the rendered chain shows the failure once. With
+ * no directory left, or when probing for them fails, the bridge error passes
+ * through, so a probe failure never hides the real unstage failure.
+ */
+async function skillsUndoError(
+  err: unknown,
+  locations: ScopedLocations,
+  names: readonly string[],
+): Promise<Error> {
+  if (err instanceof PathContainmentError) {
+    return err;
+  }
+
+  const dirs = names.map((name) => path.join(locations.skillsTargetDir, name));
+  try {
+    const present = await Promise.all(dirs.map((dir) => pathExists(dir)));
+    const leftovers = dirs.filter((_, index) => present[index] === true);
+    if (leftovers.length === 0) {
+      return errorWithManualRecovery(err, []);
+    }
+
+    const { cause } = errorWithManualRecovery(err, []);
+    return new ManualRecoveryError(
+      errorMessage(err),
+      leftovers,
+      cause === undefined ? undefined : { cause },
+    );
+  } catch {
+    return errorWithManualRecovery(err, []);
+  }
+}
+
+/**
  * The ledger body proper, under the contract documented on `runInstallLedger`.
  * Hands back the working `InstallLedgerContext` to this module's public-result
  * projection. Module-private: only the declaring module holds the mutable
@@ -1134,10 +1174,14 @@ async function runInstallLedgerBody(
 
       // Commit already succeeded -- the dirs are at the target path.
       // unstage* by name removes them.
-      await unstagePluginSkills({
-        locations: c.locations,
-        previousSkillNames: c.stagedSkillNames,
-      });
+      try {
+        await unstagePluginSkills({
+          locations: c.locations,
+          previousSkillNames: c.stagedSkillNames,
+        });
+      } catch (err) {
+        throw await skillsUndoError(err, c.locations, c.stagedSkillNames);
+      }
     },
   };
 
