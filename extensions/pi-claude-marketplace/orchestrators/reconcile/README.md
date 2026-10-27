@@ -80,15 +80,20 @@ The planner and the apply path coordinate via one structural sentinel, plus two 
 
    ```text
    uninstall plugins -> remove marketplaces -> add marketplaces
-                     -> install plugins -> install missing dependencies (MISS-01)
-                     -> [D-09-07 re-plan when something landed]
+                     -> install plugins
+                     -> [D-09-07 re-plan when a config install landed]
                      -> enable plugins -> disable plugins
                      -> dependency-disable plugins (LOAD-01)
                      -> source-mismatch rows (report-only, always round-1)
                      -> converge on the catalog (APL-02)
+                     -> install missing dependencies (MISS-01)
+                     -> the enables that waited on them
+                     -> judge the scope
    ```
 
-   `applyDependencyInstalls` (D-09-06) runs the SAME install cascade `installPlugin` runs, rooted at each missing dependency instead of a user-typed plugin, on every apply (D-02 supersedes D-09-13). When it materialized or found already-present at least one key, `refreshTogglePlan` (D-09-07) re-runs the read pass for this scope and substitutes ONLY `pluginsToEnable`, `pluginsToDisable` and `pluginsToDependencyDisable` from the fresh plan before the toggle steps run -- the uninstall / remove / add / install buckets and the source-mismatch rows always come from round 1, so a round-1 failure is never retried and double-reported. This is what lets a dependent the install just satisfied stay up (or come back up) in the SAME apply.
+   When the install step materialized a plugin, `refreshTogglePlan` (D-09-07) re-runs the read pass for this scope and substitutes ONLY its toggle buckets, its missing-dependency bucket and the enables that wait from the fresh plan before the toggle steps run -- the uninstall / remove / add / install buckets and the source-mismatch rows always come from round 1, so a round-1 failure is never retried and double-reported. The read pass counts every install it plans as landed (D-PL2-02), so the toggle steps hold down no dependent that only waits on one, and it carries the enables that wait on one apart (`enablesAfterInstalls`, D-PL2-16).
+
+   `applyDependencyInstalls` (D-09-06) runs the SAME install cascade `installPlugin` runs, rooted at each missing dependency instead of a user-typed plugin, on every apply (D-02 supersedes D-09-13). It runs after the catalog moves (D-PL2-01), so a dependency a moved version needs, or one that needs a version a move lands, installs in the same apply. Once a move ran, its bucket comes from `read-pass.ts::readPlainPlanForScope`, the read pass without the move settlement. The enables that waited on it then run, each with its own catalog move, and the judgement over the final state disables any dependent an install failed to satisfy, after that install's `(failed)` row (D-PL2-11).
 
    The dependency-disable step runs after both toggle steps, so a record the config already disabled answers it idempotently and keeps its marker off (D-06-02). Its own marker write is wrapped in `runScopeIsolated`, so a transient lock or permission failure becomes one `state.json` row instead of discarding the cascade for both scopes.
 

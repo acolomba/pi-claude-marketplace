@@ -212,6 +212,7 @@ void ({
     },
   ],
   state: extensionState,
+  enablesAfterInstalls: [plannedPluginEnable],
 } satisfies ScopeReadResult);
 
 void ({
@@ -430,6 +431,12 @@ void ({
   invalidOutcomes: [],
   state: undefined,
   // @ts-expect-error exact optional properties reject an explicitly undefined state
+} satisfies ScopeReadResult);
+void ({
+  plan: undefined,
+  invalidOutcomes: [],
+  enablesAfterInstalls: undefined,
+  // @ts-expect-error exact optional properties reject explicitly undefined after-install enables
 } satisfies ScopeReadResult);
 
 type IsMutableArray<T extends readonly unknown[]> = T extends unknown[] ? true : false;

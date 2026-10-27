@@ -4674,18 +4674,22 @@ describe("applyReconcile", () => {
     await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
+    // D-PL2-01: the dependent's own catalog move (its supported set grew)
+    // runs before the missing-dependency install; the judgement disables it
+    // after the install's (failed) row (D-PL2-11).
     assert.deepStrictEqual(notifications, [
       {
         message:
           "A plugin operation has failed.\n" +
           "\n" +
           "\u25cf anthropic-plugin-directory [project]\n" +
+          "  \u25cf deploy-kit v1.0.0 (installed) {components now supported}\n" +
           "  \u2298 secrets-vault (failed) {version conflict}\n" +
           '    cause: "secrets-vault" from the Anthropic Directory is pinned to its listed commit (version 1.0.0), which does not satisfy ^2.0.0 required by "deploy-kit".\n' +
           "  \u25cd deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@anthropic-plugin-directory" or uninstall "deploy-kit@anthropic-plugin-directory"\n' +
           "\n" +
-          "Reconcile: 1 failure, 1 warning\n" +
+          "Reconcile: 1 failure, 1 warning, 1 success\n" +
           "\n" +
           "/reload to pick up changes",
         severity: "error",
@@ -4901,20 +4905,24 @@ describe("applyReconcile", () => {
     // assert -- the exact set and the exact order, not "at least one row": the
     // fixpoint's sorted batch order puts bravo (held by the absent charlie)
     // before alfa (held by bravo), and an assertion that merely counted rows
-    // would pass against an implementation that propagated nothing.
+    // would pass against an implementation that propagated nothing. D-PL2-01:
+    // both moves (their supported sets grew) run before charlie's install,
+    // and both disables follow its (failed) row (D-PL2-11).
     assert.deepStrictEqual(notifications, [
       {
         message:
           "A plugin operation has failed.\n" +
           "\n" +
           "● mp [project]\n" +
+          "  ● bravo v1.0.0 (installed) {components now supported}\n" +
+          "  ● alfa v1.0.0 (installed) {components now supported}\n" +
           "  ⊘ charlie (failed) {not in manifest}\n" +
           "  ◍ bravo v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "charlie@mp" or uninstall "bravo@mp"\n' +
           "  ◍ alfa v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Enable "bravo@mp" or uninstall "alfa@mp"\n' +
           "\n" +
-          "Reconcile: 1 failure, 2 warnings\n" +
+          "Reconcile: 1 failure, 2 warnings, 2 successes\n" +
           "\n" +
           "/reload to pick up changes",
         severity: "error",
@@ -5696,8 +5704,9 @@ describe("applyReconcile", () => {
     });
 
     // assert -- both app and lib reach pluginsToEnable through the D-09-08
-    // record-walk lift; each has a growth move, so `apply` enables them in
-    // cascade order after their moves (APPLY1-01): lib, then app above it.
+    // record-walk lift; each waits on core's install and has a growth move, so
+    // `apply` moves and enables them after that install, dependencies first
+    // (D-PL2-16): lib, then app above it.
     assert.deepStrictEqual(notifications, [
       {
         message:
@@ -5777,12 +5786,13 @@ describe("applyReconcile", () => {
           "A plugin operation has failed.\n" +
           "\n" +
           "● mp [project]\n" +
+          "  ● deploy-kit v1.0.0 (installed) {components now supported}\n" +
           "  ⊘ secrets-vault (failed) {dependency failed}\n" +
           '    cause: Dependency "crypto-core@mp" is not declared by its marketplace.\n' +
           "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 failure, 1 warning\n" +
+          "Reconcile: 1 failure, 1 warning, 1 success\n" +
           "\n" +
           "/reload to pick up changes",
         severity: "error",
@@ -5930,11 +5940,12 @@ describe("applyReconcile", () => {
           "A plugin operation has failed.\n" +
           "\n" +
           "● mp [project]\n" +
+          "  ● deploy-kit v1.0.0 (installed) {components now supported}\n" +
           "  ⊘ secrets-vault (failed) {not in manifest}\n" +
           "  ◍ deploy-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
           '    cause: Install "secrets-vault@mp" or uninstall "deploy-kit@mp"\n' +
           "\n" +
-          "Reconcile: 1 failure, 1 warning\n" +
+          "Reconcile: 1 failure, 1 warning, 1 success\n" +
           "\n" +
           "/reload to pick up changes",
         severity: "error",
@@ -6160,7 +6171,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("D-09-07: a read pass that fails after an install keeps the round-1 toggles and reports state.json", async (t) => {
+  test("D-PL2-01: a read that fails after the missing-dependency install keeps its row, reports state.json, and the scope is still judged", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-reload-reread-fallback");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -6192,17 +6203,28 @@ describe("applyReconcile", () => {
         }),
       },
     });
-    let calls = 0;
+    // The first read of the project scope that records secrets-vault is the
+    // one after the missing-dependency install; it fails once.
+    let failed = false;
+    let readsAfterFailure = 0;
     const applyWithFailingReread = createApplyReconcile({
       async loadState(extensionRoot: string): Promise<ExtensionState> {
-        if (extensionRoot === project.extensionRoot) {
-          calls += 1;
-          if (calls === 2) {
-            throw new Error("second read failed");
-          }
+        const state = await loadState(extensionRoot);
+        if (extensionRoot !== project.extensionRoot) {
+          return state;
         }
 
-        return loadState(extensionRoot);
+        if (failed) {
+          readsAfterFailure += 1;
+          return state;
+        }
+
+        if (state.marketplaces["mp"]?.plugins["secrets-vault"] !== undefined) {
+          failed = true;
+          throw new Error("read after the install failed");
+        }
+
+        return state;
       },
     });
     const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -6220,8 +6242,11 @@ describe("applyReconcile", () => {
     });
 
     // assert -- the install row still renders, plus a synthesized state.json
-    // row for the failed re-read, and deploy-kit ends stamped down by
-    // round-1's toggle plan (the refresh never applied).
+    // row for the failed re-read; the judgement reads the scope once more and
+    // judges it as the install left it, so deploy-kit, whose dependency is now
+    // recorded, stays up unmarked.
+    assert.equal(failed, true);
+    assert.equal(readsAfterFailure, 1);
     assert.equal(notifications.length, 1);
     const message = notifications[0]?.message ?? "";
     assert.ok(message.includes("secrets-vault v1.0.0 (installed) {dependency installed}"));
@@ -6229,7 +6254,144 @@ describe("applyReconcile", () => {
     const secretsVault = await recordFor(project, "mp", "secrets-vault");
     assert.equal(secretsVault?.provenance, "dependency");
     const deployKit = await recordFor(project, "mp", "deploy-kit");
-    assert.equal(deployKit?.dependencyDisabled, true);
+    assert.equal(deployKit?.enabled, true);
+    assert.equal(Object.hasOwn(deployKit ?? {}, "dependencyDisabled"), false);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-09-07: a read pass that fails after a config install keeps the round-1 toggles and reports state.json", async (t) => {
+    // arrange -- the config installs secrets-vault, which deploy-kit declares.
+    const { cwd, project } = await createHermeticScopes(t, "config-install-reread-fallback");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {}, "secrets-vault@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    // The first read of the project scope that records secrets-vault is the
+    // D-09-07 re-read after the config install; it fails once.
+    let failed = false;
+    const applyWithFailingReread = createApplyReconcile({
+      async loadState(extensionRoot: string): Promise<ExtensionState> {
+        const state = await loadState(extensionRoot);
+        const recorded = state.marketplaces["mp"]?.plugins["secrets-vault"] !== undefined;
+        if (extensionRoot === project.extensionRoot && recorded && !failed) {
+          failed = true;
+          throw new Error("read after the install failed");
+        }
+
+        return state;
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyWithFailingReread({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+      completionCache: createCompletionCache(),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    });
+
+    // assert -- the install row still renders, plus a synthesized state.json
+    // row for the failed re-read; round-1's toggles held nothing down, since
+    // they count the planned install as landed (D-PL2-02).
+    assert.equal(failed, true);
+    assert.equal(notifications.length, 1);
+    const message = notifications[0]?.message ?? "";
+    assert.ok(message.includes("secrets-vault v1.0.0 (installed)\n"));
+    assert.ok(message.includes("state.json (failed)"));
+    const deployKit = await recordFor(project, "mp", "deploy-kit");
+    assert.equal(deployKit?.enabled, true);
+    assert.equal(Object.hasOwn(deployKit ?? {}, "dependencyDisabled"), false);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-09-11: a missing dependency an earlier entry's cascade installed answers as present and reports no second row", async (t) => {
+    // arrange -- deploy-kit declares alpha and beta, and alpha declares beta,
+    // so alpha's cascade installs beta before beta's own entry runs.
+    const { cwd, project } = await createHermeticScopes(t, "dependency-installed-by-earlier-entry");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["alpha", "beta"], skill: "clean" },
+      alpha: { dependencies: ["beta"], skill: "clean" },
+      beta: { skill: "clean" },
+    });
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● beta v1.0.0 (installed) {dependency installed}\n" +
+          "  ● alpha v1.0.0 (installed) {dependency installed}\n" +
+          "\n" +
+          "Reconcile: 2 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.equal((await recordFor(project, "mp", "deploy-kit"))?.enabled, true);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
@@ -7665,6 +7827,40 @@ async function declareEnabled(
   );
 }
 
+/** Drops `plugins` from the project scope's record, as if never installed. */
+async function withoutRecords(project: ScopedLocations, plugins: readonly string[]): Promise<void> {
+  const state = await loadState(project.extensionRoot);
+  const mp = state.marketplaces.mp;
+  assert.ok(mp !== undefined);
+  mp.plugins = Object.fromEntries(
+    Object.entries(mp.plugins).filter(([plugin]) => !plugins.includes(plugin)),
+  );
+  await saveState(project.extensionRoot, state);
+}
+
+/**
+ * MISSORDER-01: `widget` 1.1.0 needs `newdep`, which needs ycore ^2.0.0, and
+ * ships with `ycore` 2.0.0; `widget` and `ycore` are recorded at 1.0.0 and
+ * `newdep` is offered but neither recorded nor declared.
+ */
+async function seedMissingAfterMoves(
+  t: TestContext,
+  label: string,
+): Promise<{ readonly cwd: string; readonly project: ScopedLocations }> {
+  const { cwd, project } = await seedConvergenceScope(t, label, {
+    trees: { widget: { skill: "clean" }, ycore: { skill: "clean" }, newdep: { skill: "clean" } },
+    supported: { widget: ["skills"], ycore: ["skills"], newdep: ["skills"] },
+    offered: { widget: "1.1.0", ycore: "2.0.0" },
+    dependencies: {
+      widget: [{ name: "newdep", version: "*" }],
+      newdep: [{ name: "ycore", version: "^2.0.0" }],
+    },
+  });
+  await withoutRecords(project, ["newdep"]);
+  await declareEnabled(project, cwd, ["widget", "ycore"]);
+  return { cwd, project };
+}
+
 describe("applyReconcile catalog convergence", () => {
   test("APPLY1-01: a plugin and the newer dependency it needs move in one apply, the dependency first", async (t) => {
     // arrange
@@ -7689,6 +7885,44 @@ describe("applyReconcile catalog convergence", () => {
       },
     ]);
     assert.equal((await recordFor(project, "mp", "widget"))?.enabled, true);
+    verifyBoundary();
+  });
+
+  test("D-PL2-01: a missing dependency that needs a version a move lands is installed after the moves, in one apply", async (t) => {
+    // arrange
+    const { cwd, project } = await seedMissingAfterMoves(t, "missing-after-moves");
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● widget v1.0.0 → v1.1.0 (updated)\n" +
+          "  ● ycore v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● newdep v1.0.0 (installed) {dependency installed}\n" +
+          "\n" +
+          "Reconcile: 3 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    const records = await Promise.all(
+      ["widget", "ycore", "newdep"].map((plugin) => recordFor(project, "mp", plugin)),
+    );
+    assert.deepStrictEqual(
+      records.map((record) => [record?.version, record?.enabled]),
+      [
+        ["1.1.0", true],
+        ["2.0.0", true],
+        ["1.0.0", true],
+      ],
+    );
+    assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });
 

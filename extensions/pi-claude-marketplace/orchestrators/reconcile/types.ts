@@ -446,4 +446,10 @@ export interface ScopeReadResult {
    * them once the moves they wait on land.
    */
   readonly deferredEnables?: readonly PlannedPluginEnable[];
+  /**
+   * D-PL2-16: the enables of records that wait on an install the plan
+   * schedules. `enable` refuses a record whose closure holds an uninstalled
+   * member, so `apply` runs them after its missing-dependency install.
+   */
+  readonly enablesAfterInstalls?: readonly PlannedPluginEnable[];
 }

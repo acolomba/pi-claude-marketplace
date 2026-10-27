@@ -1176,6 +1176,60 @@ Feature: Plugin apply
       | severity     | info                    |
       | needs reload | false                   |
 
+  Scenario: Apply installs a missing dependency that needs the version the same apply moves to, as pending lists it
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   |              |
+      | ycore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the user has run "/claude:plugin install ycore@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | newdep       |
+      | newdep | 1.0.0   | ycore@^2.0.0 |
+      | ycore  | 2.0.0   |              |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | needs apply         | true              |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 3                 |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status       | reasons | scope   | from  | to    |
+      | tools            | project           | widget@tools | widget | will update  |         | project | 1.0.0 | 1.1.0 |
+      | tools            | project           | ycore@tools  | ycore  | will update  |         | project | 1.0.0 | 2.0.0 |
+      | tools            | project           | newdep@tools | newdep | will install |         | project |       |       |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | true                      |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 3                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status    | reasons              | scope   | version | from  | to    |
+      | tools            | project           | widget@tools | widget | updated   |                      | project |         | 1.0.0 | 1.1.0 |
+      | tools            | project           | ycore@tools  | ycore  | updated   |                      | project |         | 1.0.0 | 2.0.0 |
+      | tools            | project           | newdep@tools | newdep | installed | dependency installed | project | 1.0.0   |       |       |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | newdep@tools | 1.0.0   | true    |
+      | widget@tools | 1.1.0   | true    |
+      | ycore@tools  | 2.0.0   | true    |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+
   Scenario: Apply refuses a missing anthropic-plugin-directory dependency whose listed copy falls outside a plugin's range, naming that plugin
     Given the git repository "dirp" holds these plugins:
       | name | version | path |
