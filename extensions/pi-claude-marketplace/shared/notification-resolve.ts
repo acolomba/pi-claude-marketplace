@@ -571,7 +571,7 @@ function resolveFailure(
   rollbackPartial: NonNullable<PluginFailedMessage["rollbackPartial"]>,
 ): ResolvedFailure {
   const chain = serializeCauseChain(cause);
-  // F-5: a path two causes leak is listed once.
+  // A path two causes leak is listed once.
   const leaks = new Set([
     ...manualRecoveryLeaks(cause),
     ...rollbackPartial.flatMap((entry) => manualRecoveryLeaks(entry.cause)),

@@ -2531,6 +2531,59 @@ test("D-PL6-04: names a dependency two plugins of one marketplace failed on once
   verifyBoundary();
 });
 
+test("D-PL6-04: puts the undo of another member the cascade had installed on the plugin's row, not the dependency's", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "install-sibling-rollback-partial");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const headCause = "failed to stage the MCP servers of lib";
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: () =>
+        Promise.resolve({
+          ...failedInstallOutcome(new DependencyCascadeError(headCause, "lib@mp"), headCause),
+          rollbackPartials: [
+            { phase: "skills", msg: "skills undo failed" },
+            { phase: "sibling@mp", msg: "sibling undo failed" },
+          ],
+        }),
+      loadSettings: () => Promise.resolve(settingsForMp("app")),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    run: runWithNothingLoaded(),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult.unexpectedPluginFailures, [
+    {
+      ...failedDependency("app", "mp", "user", headCause),
+      rollbackPartial: [{ phase: "sibling@mp" }],
+      failedDependency: { key: "lib@mp", rollbackPartial: [{ phase: "skills" }] },
+    },
+  ]);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some plugin operations have failed.\n\n" +
+        "● mp [user] (added)\n" +
+        "  ⊘ app (failed) {dependency failed}\n" +
+        "    [sibling@mp] (rollback failed)\n" +
+        "  ⊘ lib@mp (failed) {rollback partial}\n" +
+        `    cause: ${headCause}\n` +
+        "    [skills] (rollback failed)\n\n" +
+        "Import: 2 failures, 1 success",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
 // The generic `unexpected-failure` fallthrough shares the same defect surface
 // as the dependency-cascade arm: any orchestrated error with a nested cause
 // (e.g. a bridge-staging error wrapping an errno) must render its chain

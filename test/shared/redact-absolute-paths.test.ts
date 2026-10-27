@@ -8,6 +8,8 @@ import {
 import {
   redactAbsolutePaths,
   redactCauseChain,
+  redactedRollbackPartials,
+  splitDependencyPartials,
 } from "../../extensions/pi-claude-marketplace/shared/redact-absolute-paths.ts";
 
 describe("redactAbsolutePaths", () => {
@@ -200,5 +202,45 @@ describe("redactCauseChain", () => {
 
     // assert
     assert.deepStrictEqual(rebuilt, new ManualRecoveryError("undo failed at alpha", ["alpha"]));
+  });
+});
+
+describe("redactedRollbackPartials", () => {
+  test("rebuilds each cause with its paths cut and drops the raw message", () => {
+    // arrange
+    const partials = [
+      { phase: "skills", msg: "raw", cause: new Error("unlink '/srv/a/b/data.txt'") },
+      { phase: "agents", msg: "raw" },
+    ];
+
+    // act
+    const redacted = redactedRollbackPartials(partials);
+
+    // assert
+    assert.deepStrictEqual(redacted, [
+      { phase: "skills", cause: new Error("unlink 'data.txt'") },
+      { phase: "agents" },
+    ]);
+  });
+});
+
+describe("splitDependencyPartials", () => {
+  test("keeps the dependency's own phases apart from another member's undo", () => {
+    // arrange
+    const partials = [
+      { phase: "skills" },
+      { phase: "lib@mp" },
+      { phase: "sibling@mp" },
+      { phase: "app@mp" },
+    ];
+
+    // act
+    const split = splitDependencyPartials("lib@mp", partials);
+
+    // assert
+    assert.deepStrictEqual(split, {
+      dependency: [{ phase: "skills" }, { phase: "lib@mp" }],
+      others: [{ phase: "sibling@mp" }, { phase: "app@mp" }],
+    });
   });
 });

@@ -2622,6 +2622,70 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
+  test("MIM-03: the undo of an earlier member the cascade installed rides the requested plugin's row", async (t) => {
+    // arrange
+    const { cwd, denyWrites, project, restoreWrites } = await createHermeticScopes(
+      t,
+      "install-sibling-rollback-partial",
+    );
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", dependencies: ["alpha", "beta"] },
+      alpha: { skill: "clean" },
+      beta: { hooks: true },
+    });
+    const readOnly = path.join(marketplaceRoot, "plugins", "alpha", "skills", "tool", "read-only");
+    await writeUnder(path.join(readOnly, "data.txt"), "data\n");
+    await denyWrites(readOnly);
+    restoreWrites(
+      path.join(project.extensionRoot, "resources", "skills", "alpha-tool", "read-only"),
+    );
+    await writeUnder(project.hooksDir, "not a directory\n");
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "hello@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ hello (failed) {dependency failed}\n" +
+          "    [alpha@mp] (rollback failed)\n" +
+          "      cause: EACCES: permission denied, unlink 'data.txt'\n" +
+          "\n" +
+          "Reconcile: 1 failure",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await recordFor(project, "mp", "hello"), undefined);
+    assert.equal(await recordFor(project, "mp", "beta"), undefined);
+    verifyBoundary();
+  });
+
   test("D-27: installs through a declared alias under the canonical recorded name and converges on the second pass", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "canonical-alias");

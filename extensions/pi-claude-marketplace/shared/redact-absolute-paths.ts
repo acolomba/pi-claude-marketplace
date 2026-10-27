@@ -96,3 +96,37 @@ export function redactCauseChain(error: unknown): Error | undefined {
 
   return chain;
 }
+
+/**
+ * MIM-03 / D-PL6-12: the undo steps a failed install could not finish, each
+ * cause rebuilt through `redactCauseChain` and the raw ledger message dropped,
+ * so no row shows an absolute path.
+ */
+export function redactedRollbackPartials(
+  partials: readonly { readonly phase: string; readonly cause?: Error }[],
+): { readonly phase: string; readonly cause?: Error }[] {
+  return partials.map((partial) => {
+    const cause = redactCauseChain(partial.cause);
+    return { phase: partial.phase, ...(cause !== undefined && { cause }) };
+  });
+}
+
+/**
+ * MIM-03 / D-PL6-05: splits the undo steps of a failed dependency cascade by
+ * the plugin they belong to. The cascade ledger names each of its phases by a
+ * member key (`name@marketplace`) and the member's own install ledger names
+ * its phases by a bare component, so a phase that holds an `@` and is not the
+ * failed dependency's key is the undo of another member that had already been
+ * materialized.
+ */
+export function splitDependencyPartials<P extends { readonly phase: string }>(
+  dependencyKey: string,
+  partials: readonly P[],
+): { readonly dependency: readonly P[]; readonly others: readonly P[] } {
+  const isOther = (partial: P): boolean =>
+    partial.phase.includes("@") && partial.phase !== dependencyKey;
+  return {
+    dependency: partials.filter((partial) => !isOther(partial)),
+    others: partials.filter(isOther),
+  };
+}

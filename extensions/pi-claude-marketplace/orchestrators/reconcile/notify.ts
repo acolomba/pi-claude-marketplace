@@ -1166,11 +1166,8 @@ function failedRowCause(outcome: PerEntryOutcome): { cause?: Error } {
 function failedRowRollback(outcome: PerEntryOutcome): {
   rollbackPartial?: readonly { readonly phase: string; readonly cause?: Error }[];
 } {
-  if (outcome.kind === "plugin-install-failed" && outcome.rollbackPartials !== undefined) {
-    return { rollbackPartial: outcome.rollbackPartials };
-  }
-
-  return {};
+  const partials = outcome.kind === "plugin-install-failed" ? outcome.rollbackPartials : undefined;
+  return partials !== undefined && partials.length > 0 ? { rollbackPartial: partials } : {};
 }
 
 /** REC-06: a failed install's narrowed reasons when it carries them, else its one reason. */

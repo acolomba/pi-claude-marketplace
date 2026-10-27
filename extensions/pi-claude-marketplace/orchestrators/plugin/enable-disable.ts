@@ -2917,8 +2917,8 @@ function outcomeToTypedResult(args: {
     }
 
     case "enable-failed": {
-      // I4: orchestrated callers get the partials on the outcome and render
-      // the per-phase rows themselves (import does, D-PL6-03), redacting each
+      // MIM-03 / D-PL6-03: orchestrated callers get the partials on the outcome
+      // and render the per-phase rows themselves (import does), redacting each
       // cause first (D-PL6-12). The `rollback partial` reason still selects
       // the catalog `(failed) {rollback partial}` brace.
       const partials = outcome.rollbackPartials ?? [];

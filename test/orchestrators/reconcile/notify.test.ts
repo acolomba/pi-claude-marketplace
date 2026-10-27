@@ -1778,6 +1778,43 @@ describe("buildReconcileAppliedCascade", () => {
     });
   });
 
+  test("MIM-03: gives a plugin-install-failed row with an empty rollback list no phase rows", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "mp",
+        plugin: "hello",
+        reason: "unreadable",
+        rollbackPartials: [],
+      },
+    ];
+
+    // act
+    const cascade = buildReconcileAppliedCascade(outcomes);
+
+    // assert
+    assert.deepStrictEqual(cascade, {
+      kind: "reconcile-applied-cascade",
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            {
+              status: "failed",
+              name: "hello",
+              reasons: ["unreadable"],
+              severity: "error",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   test("omits the version slot from an uninstall row whose outcome carries no version", () => {
     // arrange
     const outcomes: readonly PerEntryOutcome[] = [

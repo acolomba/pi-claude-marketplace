@@ -59,7 +59,12 @@ import {
   type Plural,
 } from "../../shared/notify-context.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
-import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
+import {
+  redactAbsolutePaths,
+  redactCauseChain,
+  redactedRollbackPartials,
+  splitDependencyPartials,
+} from "../../shared/redact-absolute-paths.ts";
 import { withLockedStateTransaction } from "../../transaction/with-state-guard.ts";
 
 import { IMPORT_CONTEXT, type ImportMsg } from "./execute.messaging.ts";
@@ -642,7 +647,7 @@ function unexpectedFailureReasons(
  * install's row does. D-PL6-04: a dependency whose rollback could not finish
  * gets its own row, with the cause and the phases, beside the plugin's bare
  * `{dependency failed}` row, the two ordered by name as install orders them.
- * IN-02: two plugins of one block can fail on the same dependency, so the
+ * Two plugins of one block can fail on the same dependency, so the
  * block shows the dependency's row once, for the first of them;
  * `shownDependencies` holds the block and dependency keys already shown.
  */
@@ -667,6 +672,7 @@ function unexpectedFailureRows(
     status: "failed",
     name: o.plugin,
     reasons: ["dependency failed"],
+    ...(o.rollbackPartial !== undefined && { rollbackPartial: o.rollbackPartial }),
     severity: "error",
     needsReload: false,
   };
@@ -794,8 +800,8 @@ function marketplaceBlocks(result: ClaudeImportExecutionResult): Map<string, Mar
  * "already added" (IMP-06);
  * marketplace failure, source mismatch, or a plugin of a reused marketplace
  * that fails as not added (D-PL6-17) -> "failed"; installed plugin ->
- * PluginInstalledMessage, or reconcile's enable row for an enable (IMP-10); already-installed plugin -> PluginSkippedMessage
- * with "already installed"; failed/unavailable plugin -> PluginFailedMessage
+ * PluginInstalledMessage, or reconcile's enable row for an enable (IMP-10);
+ * already-installed plugin -> PluginSkippedMessage with "already installed"; failed/unavailable plugin -> PluginFailedMessage
  * or PluginUnavailableMessage. Advisory-only warnings and orphan diagnostics
  * are silently dropped (the marketplace status row already carries the
  * structural signal).
@@ -1477,7 +1483,7 @@ type ImportReadPass =
       readonly state: ExtensionState;
       readonly plan: ReconcilePlan;
       /**
-       * CR-01: each recorded marketplace the scope's config claims, mapped to
+       * D-PL6-17: each recorded marketplace the scope's config claims, mapped to
        * the name the config declares it under.
        */
       readonly configNames: ReadonlyMap<string, string>;
@@ -1485,7 +1491,7 @@ type ImportReadPass =
   | { readonly kind: "lock-held"; readonly error: StateLockHeldError };
 
 /**
- * D-PL6-17 / CR-01: the name the scope's merged config uses for each recorded
+ * D-PL6-17: the name the scope's merged config uses for each recorded
  * marketplace it claims, by its own name or by a one-to-one source claim, read
  * with the planner's own claim rule. A claim is one-to-one, so each recorded
  * name maps to one declared name. When the settings name a recorded
@@ -1501,7 +1507,7 @@ function configNamesByRecorded(
   );
 }
 
-/** D-PL6-17 / CR-01: the name the post-pass declares a marketplace and its plugins under. */
+/** D-PL6-17: the name the post-pass declares a marketplace and its plugins under. */
 function declaredNameFor(configNames: ReadonlyMap<string, string>, marketplace: string): string {
   return configNames.get(marketplace) ?? marketplace;
 }
@@ -1860,7 +1866,7 @@ async function executeScopedPlan(
  * Source: verbatim `rawSource` from `scopePlan.marketplacesToEnsure` keyed by
  * marketplace name, preserving the `samePlannedSource` contract.
  *
- * CR-01: each marketplace and plugin key names the marketplace the way the
+ * D-PL6-17: each marketplace and plugin key names the marketplace the way the
  * scope's config already names it (`configNames`). A config that reaches a
  * recorded marketplace through another name is the planner's steady state, so
  * the post-pass keeps that name rather than declaring the recorded name beside
@@ -2173,31 +2179,25 @@ function pushUnexpectedFailure(
 }
 
 /**
- * MIM-03: where the redacted rollback phases ride. A dependency's partial
- * names the dependency (D-PL6-04); any other names the plugin (D-PL6-03).
+ * MIM-03: where the redacted rollback phases ride. A dependency's own partial
+ * names the dependency (D-PL6-04); any other, including the undo of another
+ * member the cascade had materialized, names the plugin (D-PL6-03).
  */
 function partialMember(
   error: Error,
   rollbackPartials: readonly RollbackPartial[],
 ): Pick<UnexpectedPluginFailureOutcome, "rollbackPartial" | "failedDependency"> {
-  const rollbackPartial = redactedRollbackPartials(rollbackPartials);
-  return error instanceof DependencyCascadeError
-    ? { failedDependency: { key: error.key, rollbackPartial } }
-    : { rollbackPartial };
-}
+  if (!(error instanceof DependencyCascadeError)) {
+    return { rollbackPartial: redactedRollbackPartials(rollbackPartials) };
+  }
 
-/**
- * MIM-03 / D-PL6-12 / T-55-02-02: the rollback phases as a failed row shows
- * them, each cause rebuilt through `redactCauseChain` so no absolute path
- * reaches the row.
- */
-function redactedRollbackPartials(
-  partials: readonly RollbackPartial[],
-): NonNullable<PluginFailedMessage["rollbackPartial"]> {
-  return partials.map((partial) => {
-    const cause = redactCauseChain(partial.cause);
-    return { phase: partial.phase, ...(cause !== undefined && { cause }) };
-  });
+  const { dependency, others } = splitDependencyPartials(error.key, rollbackPartials);
+  return {
+    ...(others.length > 0 && { rollbackPartial: redactedRollbackPartials(others) }),
+    ...(dependency.length > 0 && {
+      failedDependency: { key: error.key, rollbackPartial: redactedRollbackPartials(dependency) },
+    }),
+  };
 }
 
 /**

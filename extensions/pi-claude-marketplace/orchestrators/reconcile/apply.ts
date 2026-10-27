@@ -91,7 +91,12 @@ import {
 } from "../../shared/notification-dispatch.ts";
 import { type ContentReason, type Reason } from "../../shared/notification-types.ts";
 import { ownValue } from "../../shared/own-key.ts";
-import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
+import {
+  redactAbsolutePaths,
+  redactCauseChain,
+  redactedRollbackPartials,
+  splitDependencyPartials,
+} from "../../shared/redact-absolute-paths.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
 import { addMarketplace } from "../marketplace/add.ts";
 import { MarketplaceRemoveFailureError, removeMarketplace } from "../marketplace/remove.ts";
@@ -469,20 +474,6 @@ type FailedPluginInstall = Parameters<typeof carriedMcpConfigNotices>[0] & {
 };
 
 /**
- * MIM-03 / D-PL6-12: each undo step a failed install could not finish, with
- * its cause rebuilt through `redactCauseChain`, so no phase row shows an
- * absolute path. The raw ledger `msg` is dropped.
- */
-function redactedRollbackPartials(
-  partials: NonNullable<FailedPluginInstall["rollbackPartials"]>,
-): NonNullable<FailedPluginInstall["rollbackPartials"]> {
-  return partials.map((partial) => {
-    const cause = redactCauseChain(partial.cause);
-    return { phase: partial.phase, ...(cause !== undefined && { cause }) };
-  });
-}
-
-/**
  * MIM-03 / D-PL6-05: the row of a dependency whose undo could not finish,
  * under the dependency's own marketplace and by its bare name, as apply's
  * other dependency rows read. The key splits at its last `@`, as a plugin key
@@ -505,13 +496,14 @@ function dependencyRollbackOutcome(
   };
 }
 
-/** IN-02: whether `outcome` is a failed-install row of the same plugin. */
-function isSameFailedInstall(
+/** Whether `outcome` is a failed-install row of `dependency` that lists its rollback phases. */
+function showsFailedDependency(
   outcome: PerEntryOutcome,
   dependency: PluginInstallFailedOutcome,
 ): boolean {
   return (
     outcome.kind === "plugin-install-failed" &&
+    outcome.rollbackPartials !== undefined &&
     outcome.scope === dependency.scope &&
     outcome.marketplace === dependency.marketplace &&
     outcome.plugin === dependency.plugin
@@ -536,8 +528,14 @@ function isSameFailedInstall(
  * redacting, so `redactedDependencyCascadeError` rebuilds the FULL chain (via
  * `redactCauseChain`) with every link redacted, instead of dropping it.
  *
- * IN-02: two installs can fail on the same dependency, so the dependency's row
- * is left out when `outcomes` already holds a failed-install row for it.
+ * Two installs can fail on the same dependency, so the dependency's row is
+ * left out when `outcomes` already holds one that carries its rollback phases.
+ * An earlier row for it without phases (its own planned install failed) does
+ * not count, so this row still shows the phases.
+ *
+ * The undo steps of the other members the cascade had materialized ride the
+ * requested plugin's row, because they belong to those members and not to the
+ * dependency that failed.
  *
  * D-PL6-15: the requested plugin's row and the dependency's row are ordered by
  * name, as `install` and import order them. The order shows only when the
@@ -572,15 +570,20 @@ function installFailedOutcomes(
     ];
   }
 
-  const phases = redactedRollbackPartials(rollbackPartials);
   if (error instanceof DependencyCascadeError) {
-    const dependency = dependencyRollbackOutcome(op.scope, error, phases);
+    const { dependency: own, others } = splitDependencyPartials(error.key, rollbackPartials);
     const requested: PluginInstallFailedOutcome = {
       ...subject,
       reason: "dependency failed",
+      ...(others.length > 0 && { rollbackPartials: redactedRollbackPartials(others) }),
       ...carriedMcpConfigNotices(result),
     };
-    if (outcomes.some((outcome) => isSameFailedInstall(outcome, dependency))) {
+    if (own.length === 0) {
+      return [requested];
+    }
+
+    const dependency = dependencyRollbackOutcome(op.scope, error, redactedRollbackPartials(own));
+    if (outcomes.some((outcome) => showsFailedDependency(outcome, dependency))) {
       return [requested];
     }
 
@@ -592,6 +595,7 @@ function installFailedOutcomes(
     );
   }
 
+  const phases = redactedRollbackPartials(rollbackPartials);
   const cause = redactCauseChain(error);
   return [
     {
