@@ -1,11 +1,11 @@
 ---
 phase: 07-git-errors-and-lock-discipline
-fixed_at: 2026-10-27T00:00:00Z
+fixed_at: 2026-10-27T08:58:29Z
 review_path: .planning/phases/07-git-errors-and-lock-discipline/07-REVIEW.md
-iteration: 1
-findings_in_scope: 6
-fixed: 3
-skipped: 3
+iteration: 2
+findings_in_scope: 4
+fixed: 2
+skipped: 2
 status: partial
 ---
 
@@ -198,8 +198,137 @@ tree.
 - `npm run fallow`: exit 0.
 - The full `npm run check` was not run; the orchestrator runs it.
 
+## Iteration 2
+
+**Fixed at:** 2026-10-27T08:58:29Z
+**Source review:** .planning/phases/07-git-errors-and-lock-discipline/07-REVIEW.md
+(iteration 2, four Info findings)
+
+**Summary:**
+
+- Findings in scope: 4 (the dispatch named IN-01 and IN-03 to fix, and IN-02
+  and IN-04 to record as skipped)
+- Fixed: 2 (IN-01, IN-03)
+- Skipped: 2 (IN-02, IN-04)
+
+The frontmatter totals count this iteration only.
+
+### Fixed Issues
+
+#### IN-01: A lost lock after a marketplace sync reads `{unreadable manifest}` in `update`
+
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts`,
+`test/orchestrators/plugin/update-flow.test.ts`
+**Commit:** 05614199
+**Status:** fixed
+
+**Applied fix:** `typedUpdateFailReason` maps `StateLockCompromisedError` to
+`lock held`, beside `StateLockHeldError`. That is the shared ladder, so the
+direct row and the cascade rows (autoupdate, apply's converge) both read
+`lock held`. A typed reason drops the cascade row's cause unless
+`cascadeFailureOutcome` names the error. So `StateLockCompromisedError` joins
+the FLR-02 list there. Without it, the cascade row would have lost the cause
+line that it carried as an untyped error.
+
+**Tests:**
+
+- `GLK-04: a scope lock lost during the marketplace sync fails the sync as
+  lock held`: the sync's `gitOps.fetch` throws `StateLockCompromisedError`
+  inside the lock body. The case pins the whole notification:
+  `⊘ official (failed) {lock held}`, with the lock error and its cause on the
+  cause line.
+- `FLR-02: an autoupdate cascade fails a plugin whose state lock was lost as
+  lock held with the lock cause`: the dependency resolver seam rejects with
+  the error. The case pins the whole outcome and checks that the cause is the
+  lock error.
+- With `update-flow.ts` reverted to HEAD, both cases fail. The direct row
+  reads `{unreadable manifest}`.
+- Direct coverage of `update-flow.ts`: 100% (branches 204/204).
+- No cucumber scenario: a lock lost in the middle of an operation is not
+  deterministic from outside the process (07-CONTEXT Tests).
+
+**Other sites checked (not changed, outside the dispatch):** no production
+file except `transaction/with-state-guard.ts` names
+`StateLockCompromisedError`. `fetch` covers a lost lock through `rowRead`.
+Three more lock sites that this phase added map only `StateLockHeldError`:
+
+- `orchestrators/plugin/update-preflight.ts:508-512`. The `probeUnpinned`
+  mirror step (`:333`) and the GLK-04 tag copy (`:479`) run in
+  `withExistingScopeLock` under the preflight's `try`. The catch rethrows
+  only `StateLockHeldError`. So a lost lock there becomes a failed candidate
+  with no reason and its cause, and it never reaches `typedUpdateFailReason`.
+  So the review's claim that the ladder change covers every update lock site
+  does not hold for the preflight. A one-line rethrow of
+  `StateLockCompromisedError` there would close it.
+- `orchestrators/plugin/info.ts:2260` and `:2630`. `info --fetch` runs its
+  unpinned probe and row read in `withExistingScopeLock` (`runFetchLocked`).
+  Both catches turn only `StateLockHeldError` into `lockHeldRow`. A lost lock
+  falls to `foldFetchOrProbeError`, so it shows a fetch or probe reason.
+
+A raw release failure (proper-lockfile's `ERELEASED`, not a compromise) still
+reads `{unreadable manifest}` in `update`. `fetch` maps it through `rowRead`.
+The dispatch scoped the fix to the compromise.
+
+#### IN-03: Two comments no longer match the code
+
+**Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts`,
+`extensions/pi-claude-marketplace/orchestrators/plugin/fetch.ts`
+**Commit:** d7301f35
+**Status:** fixed
+
+**Applied fix:** the `refreshFramed` comment now says that the direct update
+syncs a marketplace only after the previous target's run has released every
+lock it took. The `failedRow` comment limits "did not warm the cache" to a
+throw before the row read. It also says that with `rowRead` true the fetch
+warmed the cache, the lock failed, and the row still stamps `error`. Both
+comments cite no phase or plan.
+
+### Skipped Issues
+
+#### IN-02: The sync reads the marketplace record before it takes the lock
+
+**File:** `extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts:228-261`
+**Reason:** skipped by the dispatch scope. The window lasts milliseconds:
+another process must remove and re-add the same marketplace name with a
+different source between the record read and the lock. The record is read
+before the lock, the same class as the unlocked-record items in
+07-CONTEXT's Deferred list (the unlocked `sources/<name>` deletes and the
+seed copy after the lock).
+**Original issue:** `loadState` and the record lookup run before
+`refreshFramed` takes the lock, so the locked refresh can act on a record
+that it did not read under the lock.
+
+#### IN-04: A body failure plus a release failure loses the git classification
+
+**File:** `extensions/pi-claude-marketplace/transaction/with-state-guard.ts:198-205`
+**Reason:** skipped by the dispatch scope. It needs a work failure and a
+release failure at the same time. The wrapper that drops the classification
+is in `transaction/with-state-guard.ts`, which is not one of this phase's
+files.
+**Original issue:** `releaseStateLock` wraps the body error in a plain
+`Error` with the release suffix. `classifyGitFailure` does not walk `cause`,
+so a host 404/503 during the update sync reads `{unreadable manifest}`, and
+the same failure in `fetch` reads `{source missing}`.
+
+### Verification
+
+All of these ran in the main checkout of the `features/plugin-lifecycle-p7`
+worktree
+(`/home/acolomba/src/pi-claude-marketplace-22442f56d78caa3a/pl-p7-gitlock-745e94`).
+No nested review-fix worktree was made, for the reason that iteration 1
+gives.
+
+- Focused unit tests (`node --test --test-name-pattern` on the two new
+  cases): pass. Against the unfixed `update-flow.ts`: both fail.
+- Direct coverage (`node scripts/test-coverage-direct.mjs`) for
+  `update-flow.ts`: 100%, exit 0. It runs the whole paired test file.
+- The commit hook (`npm run check:commit`) passed on both fix commits.
+- `npm run typecheck`: exit 0.
+- `npm run fallow`: exit 0.
+- The full `npm run check` was not run; the orchestrator runs it.
+
 ______________________________________________________________________
 
 _Fixed: 2026-10-27_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 1_
+_Iteration: 2_
