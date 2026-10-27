@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 8
 current_phase_name: Background Autoupdate
 status: executing
-stopped_at: Completed 08-02-PLAN.md
-last_updated: "2026-10-27T03:22:51.731Z"
+stopped_at: Completed 08-01-PLAN.md
+last_updated: "2026-10-27T04:00:56.695Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase 8 execution started
-state_head: 91237066d1b23f20fba5ce2b728b27f0c779ad25
+state_head: d7922c7d127dc2b5f0fd2b01b004f8d5c22a41a7
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 4
-  completed_plans: 1
+  completed_plans: 2
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 8 (Background Autoupdate) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
 Last activity: 2026-10-26 — Phase 8 execution started
 
@@ -191,8 +191,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-27T03:22:51.589Z
-**Stopped at:** Completed 08-02-PLAN.md
+**Last session:** 2026-10-27T04:00:56.487Z
+**Stopped at:** Completed 08-01-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -405,6 +405,7 @@ archived milestone artifacts.
 | Phase 29 P13 | 48 min | 3 tasks | 44 files |
 | Phase 29 P14 | 20 min | 2 tasks | 9 files |
 | Phase 08 P02 | 14 min | 2 tasks | 3 files |
+| Phase 08 P01 | 34min | 2 tasks | 10 files |
 
 ## Decisions
 
@@ -605,6 +606,8 @@ archived milestone artifacts.
 - [Phase 29]: apply runs growth-only moves through convergePlugin with rematerialize (skipSameRevision off, overwrite off) and reports them with the plugin-backfilled row; the load-time backfill, its stamp gate and EXTENSION_VERSION are deleted, lastReconciledExtensionVersion stays readable and nothing writes it (D-10, D-13, D-25)
 - [Phase 29]: README.md's dependents sentence says apply reinstalls an uninstalled dependency a dependent still declares and disables the dependents only if that install fails; the APL-D1 and APL-D2 rows record the read-only load and the NFR-2 amendment
 - [Phase 08]: The env-vars section is titled 'Variables that control the background update', not 'Variables the extension reads', because the extension reads other variables the section does not list
+- [Phase 08]: 08-01: every /claude:plugin command runs through one in-process gate per runtime (runForeground on registerClaudePluginCommand); the mode check stays outside it (D-PL8-04)
+- [Phase 08]: 08-01: the background pass reports through a print-mode context into hookDebugLog [autoupdate] and a load-origin run with a dropping sink; a plugin update skipped after shutdown returns a failed outcome with an empty reason list (D-PL8-06, D-PL8-15)
 
 ### mcp-4 decisions
 
