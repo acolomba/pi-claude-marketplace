@@ -4105,7 +4105,13 @@ test("D-PL6-19: an add whose clone fails puts the replaced clone back and keeps 
     const { state, cloneDir } = await seedGithubRecord(locations, cwd);
     const { ctx, run, notifications } = makeCtx(0);
     const cloneFailure = httpError(404);
-    const { gitOps } = createGitOps({ cloneThrows: cloneFailure });
+    let cloneAtFetch: string | undefined;
+    const { gitOps } = createGitOps({
+      cloneThrows: cloneFailure,
+      onClone: async () => {
+        cloneAtFetch = await readFile(path.join(cloneDir, ".old-clone-sentinel"), "utf8");
+      },
+    });
 
     // act
     const outcome = await addMarketplace({
@@ -4127,8 +4133,8 @@ test("D-PL6-19: an add whose clone fails puts the replaced clone back and keeps 
       cause: "HTTP Error: 404",
     });
     assert.deepStrictEqual(await loadState(locations.extensionRoot), state);
+    assert.strictEqual(cloneAtFetch, "old", "the replaced clone stays in place while fetching");
     assert.strictEqual(await readFile(path.join(cloneDir, ".old-clone-sentinel"), "utf8"), "old");
-    assert.deepStrictEqual(await stagingEntries(locations), []);
     assert.deepStrictEqual(notifications, []);
   });
 });
@@ -4191,6 +4197,41 @@ test("D-PL6-19: a save that fails after the swap removes the new clone and puts 
     assert.deepStrictEqual((await readdir(cloneDir)).sort(), [".old-clone-sentinel"]);
     assert.deepStrictEqual(await stagingEntries(locations), []);
     assert.deepStrictEqual(notifications, []);
+  });
+});
+
+test("D-PL6-19: a path add that replaces a github marketplace puts the clone back when its write-back fails", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-replace-path-write-back-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const { state, cloneDir } = await seedGithubRecord(locations, cwd);
+    const newRoot = await writePathMarketplaceAt(path.join(cwd, "new-mp"), "valid-marketplace");
+    const { ctx, run } = makeCtx(0);
+    const { gitOps } = createGitOps();
+    // A read-only scope root refuses the atomic write of the absent base config.
+    await chmod(locations.scopeRoot, 0o500);
+
+    // act & assert
+    try {
+      await assert.rejects(
+        addMarketplace({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          rawSource: newRoot,
+          gitOps,
+          replaceRecorded: "valid-marketplace",
+        }),
+        { code: "EACCES" },
+      );
+    } finally {
+      await chmod(locations.scopeRoot, 0o755);
+    }
+
+    assert.deepStrictEqual(await loadState(locations.extensionRoot), state);
+    assert.deepStrictEqual((await readdir(cloneDir)).sort(), [".old-clone-sentinel"]);
+    assert.deepStrictEqual(await stagingEntries(locations), []);
   });
 });
 

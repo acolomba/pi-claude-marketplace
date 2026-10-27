@@ -610,13 +610,18 @@ export async function addMarketplaceToState(args: {
   readonly authMemo?: Map<string, AuthAttemptResult> | undefined;
   /** D-PL6-19: the plugins the new record starts with. Omitted, it starts with none. */
   readonly plugins?: ExtensionState["marketplaces"][string]["plugins"] | undefined;
+  /**
+   * D-PL6-19: runs once the new source is fetched and its manifest validated,
+   * with the name it declares, right before the new clone takes its place.
+   */
+  readonly beforePlace?: ((name: string) => Promise<void>) | undefined;
 }): Promise<{ readonly name: string; readonly cloneDir?: string }> {
-  const { state, locations, source, cwd, removalOps, deviceFlowHttp, authMemo } = args;
+  const { state, locations, source, cwd, removalOps, deviceFlowHttp, authMemo, beforePlace } = args;
   const gitOps = args.gitOps ?? DEFAULT_GIT_OPS;
   const credentialOps = args.credentialOps ?? DEFAULT_CREDENTIAL_OPS;
   const plugins = args.plugins ?? {};
   if (source.kind === "path") {
-    return { name: await addPathInGuard({ state, locations, source, cwd, plugins }) };
+    return { name: await addPathInGuard({ state, locations, source, cwd, plugins, beforePlace }) };
   }
 
   // MURL-01 / D-76-06: source.url is the stored canonical identity; the wire
@@ -639,6 +644,7 @@ export async function addMarketplaceToState(args: {
     auth,
     cwd,
     plugins,
+    beforePlace,
   });
   return { name, cloneDir: await locations.sourceCloneDir(name) };
 }
@@ -703,7 +709,6 @@ async function restoreReplacedClone(
   }
 }
 
-/** The leak of removing the new clone of an add that will not be saved, if it has one. */
 async function discardNewClone(
   removalOps: RemovalOps,
   cloneDir: string | undefined,
@@ -715,44 +720,43 @@ async function discardNewClone(
 
 /**
  * D-PL6-19: the lock-free replace body. The caller holds the scope's state
- * lock, as for `addMarketplaceToState`, and saves nothing on a throw, so the
- * working-state edits here are discarded with it. The replaced record leaves
- * the working state and its clone is set aside, then the add runs with the
- * record's plugins. A failed add, or a new manifest that names another
- * marketplace, puts the set-aside clone back and throws. A replaced name the
- * scope no longer records gets a plain add.
+ * lock, as for `addMarketplaceToState`, and saves nothing on a throw. The
+ * replaced record leaves the working state and the add runs with its plugins.
+ * The replaced clone is set aside only after the new source is fetched and its
+ * manifest names the replaced marketplace, so the clone is missing for two
+ * renames and the save, not for the fetch. A failed add puts the clone and the
+ * record back and throws. A replaced name the scope no longer records gets a
+ * plain add.
  */
 async function replaceMarketplaceInState(
   args: AddToStateArgs,
   replaced: string,
 ): Promise<AddedToState> {
-  const { state, locations, removalOps } = args;
+  const { state, locations } = args;
   const record = ownValue(state.marketplaces, replaced);
   if (record === undefined) {
     return addMarketplaceToState(args);
   }
 
-  const setAside = await setAsideReplacedClone(locations, replaced, record.source);
+  let setAside: string | undefined;
+  const beforePlace = async (name: string): Promise<void> => {
+    if (name !== replaced) {
+      throw new InvalidMarketplaceManifestError(
+        `marketplace.json names the marketplace "${name}", not "${replaced}", which it replaces`,
+      );
+    }
+
+    setAside = await setAsideReplacedClone(locations, replaced, record.source);
+  };
+
   // eslint-disable-next-line @typescript-eslint/no-dynamic-delete -- state.marketplaces is a dynamic-key Record<string, ...>.
   delete state.marketplaces[replaced];
   let added: AddedToState;
   try {
-    added = await addMarketplaceToState({ ...args, plugins: record.plugins });
+    added = await addMarketplaceToState({ ...args, plugins: record.plugins, beforePlace });
   } catch (err) {
+    setOwn(state.marketplaces, replaced, record);
     throw appendLeakToError(err, await restoreReplacedClone(locations, replaced, setAside));
-  }
-
-  if (added.name !== replaced) {
-    const leak = joinLeaks(
-      await discardNewClone(removalOps, added.cloneDir),
-      await restoreReplacedClone(locations, replaced, setAside),
-    );
-    throw appendLeakToError(
-      new InvalidMarketplaceManifestError(
-        `marketplace.json names the marketplace "${added.name}", not "${replaced}", which it replaces`,
-      ),
-      leak,
-    );
   }
 
   return setAside === undefined ? added : { ...added, setAside };
@@ -863,7 +867,7 @@ async function runAddInGuard(args: {
 }
 
 /**
- * WR-07 / D-PL6-19: the error of an add whose save failed, after removing its
+ * D-PL6-19: the error of an add whose save failed, after removing its
  * new clone and putting back any clone a replace set aside, with the cleanup
  * leaks appended (MA-9).
  */
@@ -1387,8 +1391,9 @@ async function addGitClonedInGuard(args: {
   auth: GitAuthBundle;
   cwd: string;
   plugins: RecordedPlugins;
+  beforePlace: ((name: string) => Promise<void>) | undefined;
 }): Promise<string> {
-  const { state, locations, source, gitOps, auth, cwd, removalOps } = args;
+  const { state, locations, source, gitOps, auth, cwd, removalOps, beforePlace } = args;
   const stagingDir = await locations.sourcesStagingDir(randomUUID());
 
   // 1. Clone into staging (NFR-5: only git-cloned kinds reach gitOps.clone).
@@ -1421,6 +1426,10 @@ async function addGitClonedInGuard(args: {
       state.marketplaces,
       locations.scope,
     );
+
+    // D-PL6-19: a replace sets the replaced clone aside here, after the clone
+    // and the manifest have succeeded and before the destination is probed.
+    await beforePlace?.(derivedName);
 
     // 5. MA-6/MA-12/MA-13: recognize-remove-rename on the final destination.
     // A leftover is the extension's own when it carries the ownership marker
@@ -1530,8 +1539,9 @@ async function addPathInGuard(args: {
   source: PathSource;
   cwd: string;
   plugins: RecordedPlugins;
+  beforePlace: ((name: string) => Promise<void>) | undefined;
 }): Promise<string> {
-  const { state, locations, source, cwd } = args;
+  const { state, locations, source, cwd, beforePlace } = args;
 
   // MA-3: source.resolved may point at a directory OR directly at a
   // marketplace.json file. Probe and dispatch.
@@ -1574,6 +1584,7 @@ async function addPathInGuard(args: {
     state.marketplaces,
     locations.scope,
   );
+  await beforePlace?.(derivedName);
 
   // MA-4: source already preserves the user-typed `~` verbatim
   // (ParsedSource.raw) via pathSource() factory. We store the parsed
