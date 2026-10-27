@@ -302,6 +302,9 @@ type HopSender = (hop: GitHttpRequest) => Promise<GitHttpResponse>;
 /** D-PL8-24: the abort signal of the call that runs in the current async context. */
 const gitAbortScope = new AsyncLocalStorage<AbortSignal>();
 
+/** D-PL8-24: signals whose abort cut off a request or a body read that had not settled. */
+const interruptedSignals = new WeakSet<AbortSignal>();
+
 /**
  * D-PL8-24: runs `run` in an abort scope. Each HTTP request that `run` makes
  * through this module rejects with `signal.reason` once `signal` aborts.
@@ -317,11 +320,13 @@ function sendPlainHop(hop: GitHttpRequest): Promise<GitHttpResponse> {
 /**
  * Settles as `pending` does, or rejects with the abort reason when `signal`
  * aborts first, after `onAbort` has released what `pending` holds. The abort
- * listener is removed once `pending` settles.
+ * listener is removed once `pending` settles. An abort that lands after
+ * `pending` settled interrupts nothing and is ignored.
  */
 function raceAbort<T>(signal: AbortSignal, pending: Promise<T>, onAbort: () => void): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const abort = (): void => {
+      interruptedSignals.add(signal);
       onAbort();
       // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- the scope rejects with the reason its owner passed to abort(), as fetch does.
       reject(signal.reason);
@@ -331,8 +336,17 @@ function raceAbort<T>(signal: AbortSignal, pending: Promise<T>, onAbort: () => v
       signal.removeEventListener("abort", abort);
     };
 
-    pending.then(removeAbortListener, removeAbortListener);
-    pending.then(resolve, reject);
+    pending.then(
+      (value) => {
+        removeAbortListener();
+        resolve(value);
+      },
+      (error: unknown) => {
+        removeAbortListener();
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors -- passes on the rejection of `pending` unchanged.
+        reject(error);
+      },
+    );
     if (signal.aborted) {
       abort();
       return;
@@ -342,11 +356,16 @@ function raceAbort<T>(signal: AbortSignal, pending: Promise<T>, onAbort: () => v
   });
 }
 
+/** Ends a body that nobody reads any more; a failure to end it is of no use to anyone. */
+function endBody(body: AsyncIterableIterator<Uint8Array> | undefined): void {
+  Promise.resolve(body?.return?.()).catch(() => undefined);
+}
+
 /** A hop that the abort beat; a response that still arrives has its body ended. */
 function releaseLateHop(pending: Promise<GitHttpResponse>): void {
   pending.then(
     (late) => {
-      void late.body?.return?.();
+      endBody(late.body);
     },
     () => undefined,
   );
@@ -370,7 +389,7 @@ function abortableBody(
   const iterator: AsyncIterableIterator<Uint8Array> = {
     next: () =>
       raceAbort(signal, body.next(), () => {
-        void body.return?.();
+        endBody(body);
       }),
     [Symbol.asyncIterator]: () => iterator,
   };
@@ -506,16 +525,29 @@ async function withFetchedUrlCause<T>(
 
 /**
  * D-PL8-24: runs one network call and fails it with the abort reason when the
- * scope's signal aborted while it ran. isomorphic-git reads a failed
+ * scope's signal cut the call off. isomorphic-git reads a failed
  * ref-advertisement body as the end of the list, so without this check an
- * aborted listing could return a cut-short ref list as a success.
+ * interrupted listing could return a cut-short ref list as a success. A call
+ * that settled before the abort reached it is returned or thrown as it settled.
  */
 async function networkCall<T>(wireUrl: string, url: string, call: () => Promise<T>): Promise<T> {
+  const signal = gitAbortScope.getStore();
+  let result: T;
   try {
-    return await withFetchedUrlCause(wireUrl, url, call);
-  } finally {
-    gitAbortScope.getStore()?.throwIfAborted();
+    result = await withFetchedUrlCause(wireUrl, url, call);
+  } catch (error: unknown) {
+    if (signal !== undefined && interruptedSignals.has(signal)) {
+      signal.throwIfAborted();
+    }
+
+    throw error;
   }
+
+  if (signal !== undefined && interruptedSignals.has(signal)) {
+    signal.throwIfAborted();
+  }
+
+  return result;
 }
 
 /**

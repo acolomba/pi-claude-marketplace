@@ -164,6 +164,61 @@ test("a rejected command rejects its caller with the same error and frees the ga
   assert.deepStrictEqual(log, ["step began"]);
 });
 
+test("a command that throws before it returns a promise rejects its caller and frees the gate", async () => {
+  // arrange
+  const gate = createBackgroundGate();
+  const failure = new Error("command threw");
+  const log: string[] = [];
+
+  // act
+  const command = gate.runForeground(() => {
+    throw failure;
+  });
+  await assert.rejects(command, (error: unknown) => error === failure);
+  await gate.beginStep();
+  log.push("step began");
+
+  // assert
+  assert.deepStrictEqual(log, ["step began"]);
+});
+
+test("a step waits through a command that starts between the wake and the resume", async () => {
+  // arrange
+  const gate = createBackgroundGate();
+  const log: string[] = [];
+  const second = deferred();
+  let secondCommand: Promise<void> = Promise.resolve();
+  const startSecond = (): void => {
+    secondCommand = gate.runForeground(async () => {
+      log.push("second started");
+      await second.promise;
+      log.push("second returned");
+    });
+  };
+
+  // The first command's end wakes the step; this microtask runs after that wake
+  // and before the step resumes.
+  const first = gate.runForeground(async () => {
+    await Promise.resolve();
+    queueMicrotask(() => {
+      queueMicrotask(startSecond);
+    });
+  });
+  const step = gate.beginStep().then(() => {
+    log.push("step began");
+  });
+
+  // act
+  await first;
+  await drain();
+  second.resolve();
+  await secondCommand;
+  await step;
+
+  // assert
+  assert.deepStrictEqual(log, ["second started", "second returned", "step began"]);
+});
+
 test("waitForStep resolves at once with no step in flight, and only after endStep with one", async (t) => {
   // arrange
   t.mock.timers.enable({ apis: ["setTimeout"] });

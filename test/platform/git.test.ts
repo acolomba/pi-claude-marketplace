@@ -2649,6 +2649,19 @@ function isAbortReason(reason: Error): (error: unknown) => boolean {
   };
 }
 
+/**
+ * Runs `run` in this many microtask turns: late enough that a request or body
+ * read that settled just now has already told its abort race, early enough
+ * that the call has not returned to its caller.
+ */
+function afterSettlement(run: () => void): void {
+  queueMicrotask(() => {
+    queueMicrotask(() => {
+      queueMicrotask(run);
+    });
+  });
+}
+
 describe("runWithGitAbortSignal", () => {
   test("D-PL8-24: a fetch whose request never answers rejects with the abort reason and leaves the refs as they were", async (t) => {
     // arrange
@@ -2735,6 +2748,52 @@ describe("runWithGitAbortSignal", () => {
     assert.strictEqual(late.returns(), 1);
   });
 
+  test("D-PL8-24: a late response whose body fails to end raises no unhandled rejection", async (t) => {
+    // arrange
+    const transport = installHeldTransport(t);
+    const controller = new AbortController();
+    const reason = new Error("background step stopped");
+    const listing = runWithGitAbortSignal(controller.signal, () =>
+      listRemoteTags({ url: REMOTE_URL }),
+    );
+    await transport.arrived;
+    controller.abort(reason);
+    await assert.rejects(listing, isAbortReason(reason));
+    let returned = 0;
+    const body: AsyncIterableIterator<Uint8Array> = {
+      next: () => Promise.resolve({ done: true, value: undefined }),
+      return: () => {
+        returned += 1;
+        return Promise.reject(new Error("socket already closed"));
+      },
+      [Symbol.asyncIterator]: () => body,
+    };
+    const unhandled: unknown[] = [];
+    const onUnhandled = (error: unknown): void => {
+      unhandled.push(error);
+    };
+
+    process.on("unhandledRejection", onUnhandled);
+    t.after(() => {
+      process.off("unhandledRejection", onUnhandled);
+    });
+
+    // act
+    transport.answer.resolve({
+      url: BOUND_INFO_URL,
+      statusCode: 200,
+      statusMessage: "OK",
+      headers: { "content-type": "application/x-git-upload-pack-advertisement" },
+      body,
+    });
+    await new Promise((resolve) => {
+      setImmediate(resolve);
+    });
+
+    // assert
+    assert.deepStrictEqual({ returned, unhandled }, { returned: 1, unhandled: [] });
+  });
+
   test("D-PL8-24: a request that fails after its abort still rejects with the abort reason", async (t) => {
     // arrange
     const transport = installHeldTransport(t);
@@ -2751,6 +2810,77 @@ describe("runWithGitAbortSignal", () => {
 
     // assert
     await assert.rejects(listing, isAbortReason(reason));
+  });
+
+  test("D-PL8-24: a call that already failed for another reason rejects with that error when the abort lands afterwards", async (t) => {
+    // arrange
+    const controller = new AbortController();
+    const failure = new Error("socket closed");
+    t.mock.method(http, "request", (): Promise<GitHttpResponse> => {
+      afterSettlement(() => {
+        controller.abort(new Error("background step stopped"));
+      });
+      return Promise.reject(failure);
+    });
+
+    // act
+    const listing = runWithGitAbortSignal(controller.signal, () =>
+      listRemoteTags({ url: REMOTE_URL }),
+    );
+
+    // assert
+    await assert.rejects(listing, (error: unknown) => error === failure);
+  });
+
+  test("D-PL8-24: a call that already completed returns its result when the abort lands afterwards", async (t) => {
+    // arrange
+    const controller = new AbortController();
+    t.mock.method(http, "request", async (request: GitHttpRequest): Promise<GitHttpResponse> => {
+      await collectBody(request.body);
+      const answer = response(
+        request.url,
+        200,
+        "OK",
+        request.method === "GET"
+          ? "application/x-git-upload-pack-advertisement"
+          : "application/x-git-upload-pack-result",
+        request.method === "GET"
+          ? advertisementBody()
+          : refsBody([`${OID_LIGHTWEIGHT} refs/tags/v1.0.0`]),
+      );
+      const { body } = answer;
+      if (request.method !== "POST" || body === undefined) {
+        return answer;
+      }
+
+      const source = body[Symbol.asyncIterator]();
+      return {
+        ...answer,
+        body: {
+          next: async () => {
+            const chunk = await source.next();
+            if (chunk.done === true) {
+              afterSettlement(() => {
+                controller.abort(new Error("background step stopped"));
+              });
+            }
+
+            return chunk;
+          },
+          [Symbol.asyncIterator]() {
+            return this;
+          },
+        },
+      };
+    });
+
+    // act
+    const tags = await runWithGitAbortSignal(controller.signal, () =>
+      listRemoteTags({ url: REMOTE_URL }),
+    );
+
+    // assert
+    assert.deepStrictEqual(tags, [{ name: "v1.0.0", oid: OID_LIGHTWEIGHT }]);
   });
 
   test("D-PL8-24: a tag listing whose tag list is cut off by the abort rejects instead of returning part of it", async (t) => {
