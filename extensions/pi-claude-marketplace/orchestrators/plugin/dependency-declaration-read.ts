@@ -260,14 +260,16 @@ async function readManifestCandidate(
   return parseOwnManifest(raw);
 }
 
-/** Walks the shared candidate ordering under one plugin root. */
+/** Walks the shared candidate ordering under one plugin root, each read by `readCandidate`. */
 async function readOwnManifest(
   reader: DependencyDeclarationReader,
   pluginRoot: string,
+  readCandidate: (absPath: string) => Promise<OwnManifestRead | undefined> = (absPath) =>
+    readManifestCandidate(reader, absPath),
 ): Promise<OwnManifestRead> {
   for (const candidate of MANIFEST_CANDIDATES) {
     // eslint-disable-next-line no-await-in-loop -- the first existing manifest candidate decides the read
-    const read = await readManifestCandidate(reader, path.join(pluginRoot, candidate));
+    const read = await readCandidate(path.join(pluginRoot, candidate));
     if (read !== undefined) {
       return read;
     }
@@ -369,20 +371,43 @@ async function isAdmitted(parent: string, child: string, label: string): Promise
 }
 
 /**
+ * D-PL2-13 / NFR-10: one manifest candidate of an installed copy, opened only
+ * when no segment from the copy's root down to it is a symlink. A refused
+ * candidate ends the walk as `absent` rather than handing off to the next one,
+ * because the first candidate that exists decides the read (D-01-07), and a
+ * read this module may not perform is "no manifest" (the `derivePathPluginRoot`
+ * convention). Claude Code follows a manifest symlink whose real path stays
+ * inside the plugin directory; this read is stricter, as decided.
+ */
+async function readContainedCandidate(
+  reader: DependencyDeclarationReader,
+  pluginRoot: string,
+  absPath: string,
+): Promise<OwnManifestRead | undefined> {
+  return (await isAdmitted(pluginRoot, absPath, "installed plugin manifest"))
+    ? readManifestCandidate(reader, absPath)
+    : ABSENT;
+}
+
+/**
  * DLS-01 / DLS-D1: what an installed plugin declares, read from the copy on
  * disk -- the version actually installed. Pi keeps a plugin its marketplace no
  * longer lists running, so it keeps the dependencies it runs with. There is no
- * entry to fall back on: a copy with no manifest, a missing copy, or a recorded
- * root outside the record's owning clone root (NFR-10, D-PL2-12) answers
- * `absent`, and the caller decides what that means. A present-but-unusable
- * manifest is the same refusal `refuseUnusableOwnManifest` gives.
+ * entry to fall back on: a copy with no manifest, a missing copy, a recorded
+ * root outside the record's owning clone root (NFR-10, D-PL2-12), or a
+ * manifest reached through a symlink (D-PL2-13) answers `absent`, and the
+ * caller decides what that means. A present-but-unusable manifest is the same
+ * refusal `refuseUnusableOwnManifest` gives.
  */
 export async function readInstalledCopyDeclaration(
   options: InstalledCopyDeclarationReadOptions,
 ): Promise<DeclarationLookupResult | OwnManifestRefusal | InstalledCopyAbsent> {
   const reader = options.reader ?? REAL_DEPENDENCY_DECLARATION_READER;
-  const own = (await isAdmitted(options.ownerRoot, options.pluginRoot, "installed plugin copy"))
-    ? await readOwnManifest(reader, options.pluginRoot)
+  const { pluginRoot } = options;
+  const own = (await isAdmitted(options.ownerRoot, pluginRoot, "installed plugin copy"))
+    ? await readOwnManifest(reader, pluginRoot, (absPath) =>
+        readContainedCandidate(reader, pluginRoot, absPath),
+      )
     : ABSENT;
   switch (own.kind) {
     case "absent":

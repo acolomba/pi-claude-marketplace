@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test, { type TestContext } from "node:test";
@@ -593,6 +593,90 @@ test("DLS-01: the production reader reads an installed copy off real disk", asyn
 
   // assert
   assert.deepStrictEqual(read, dependsOn("beta"));
+});
+
+/**
+ * An installed copy on real disk under a fresh owning root: `real.json`
+ * declares `linked@mp`, and the bare `plugin.json` declares `bare@mp`.
+ */
+async function linkedManifestCopy(
+  testContext: TestContext,
+): Promise<{ readonly root: string; readonly pluginRoot: string }> {
+  const root = await freshRoot(testContext, "installed-copy-link-");
+  const pluginRoot = path.join(root, "plugins", "alpha");
+  await mkdir(pluginRoot, { recursive: true });
+  await writeFile(
+    path.join(pluginRoot, "real.json"),
+    JSON.stringify({ dependencies: ["linked@mp"] }),
+  );
+  await writeFile(
+    path.join(pluginRoot, "plugin.json"),
+    JSON.stringify({ dependencies: ["bare@mp"] }),
+  );
+  return { root, pluginRoot };
+}
+
+test("D-PL2-13: an installed copy whose manifest is a symlink inside the plugin answers absent", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await linkedManifestCopy(testContext);
+  await mkdir(path.join(pluginRoot, ".claude-plugin"));
+  await symlink(
+    path.join(pluginRoot, "real.json"),
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+  );
+
+  // act
+  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+
+  // assert: the refused first candidate ends the walk; the bare manifest is not read
+  assert.deepStrictEqual(read, { kind: "absent" });
+});
+
+test("D-PL2-13: an installed copy whose manifest directory is a symlink answers absent", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await linkedManifestCopy(testContext);
+  await mkdir(path.join(pluginRoot, "meta"));
+  await writeFile(
+    path.join(pluginRoot, "meta", "plugin.json"),
+    JSON.stringify({ dependencies: ["linked@mp"] }),
+  );
+  await symlink(path.join(pluginRoot, "meta"), path.join(pluginRoot, ".claude-plugin"));
+
+  // act
+  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+
+  // assert
+  assert.deepStrictEqual(read, { kind: "absent" });
+});
+
+test("D-PL2-13: an installed copy with no wrapped manifest and a symlinked bare one answers absent", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await linkedManifestCopy(testContext);
+  await rm(path.join(pluginRoot, "plugin.json"));
+  await symlink(path.join(pluginRoot, "real.json"), path.join(pluginRoot, "plugin.json"));
+
+  // act
+  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+
+  // assert
+  assert.deepStrictEqual(read, { kind: "absent" });
+});
+
+test("D-PL2-13: an installed copy whose wrapped manifest is a regular file is read beside a symlink elsewhere", async (testContext) => {
+  // arrange
+  const { root, pluginRoot } = await linkedManifestCopy(testContext);
+  await mkdir(path.join(pluginRoot, ".claude-plugin"));
+  await writeFile(
+    path.join(pluginRoot, ".claude-plugin", "plugin.json"),
+    JSON.stringify({ dependencies: ["wrapped@mp"] }),
+  );
+  await symlink(path.join(pluginRoot, "real.json"), path.join(pluginRoot, "linked.json"));
+
+  // act
+  const read = await readInstalledCopyDeclaration({ pluginRoot, ownerRoot: root });
+
+  // assert
+  assert.deepStrictEqual(read, dependsOn("wrapped"));
 });
 
 test("UPD-DEP-D1: a resolved candidate's own manifest answers over its marketplace entry", async () => {

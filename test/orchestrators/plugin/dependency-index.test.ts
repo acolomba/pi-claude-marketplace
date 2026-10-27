@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import {
@@ -1141,6 +1141,79 @@ test("D-PL2-06 / DLS-01: a delisted record pinned to a commit answers its readab
     declared: [{ name: "lib", marketplace: "mp" }],
     delisted: true,
   });
+});
+
+/**
+ * A fresh scope on real disk whose `app` copy at `copyDir` (relative to the
+ * scope root) holds a `.claude-plugin/plugin.json` symlinked to a sibling file
+ * declaring `lib@^2.0.0`.
+ */
+async function linkedManifestScope(
+  t: TestContext,
+  copyDir: (locations: ReturnType<typeof locationsFor>, marketplaceRoot: string) => string,
+): Promise<{
+  readonly locations: ReturnType<typeof locationsFor>;
+  readonly marketplaceRoot: string;
+  readonly copy: string;
+}> {
+  const root = await mkdtemp(path.join(tmpdir(), "dependency-index-link-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const locations = locationsFor("project", root);
+  const marketplaceRoot = path.join(root, "mp");
+  const copy = copyDir(locations, marketplaceRoot);
+  await mkdir(path.join(copy, ".claude-plugin"), { recursive: true });
+  await writeFile(path.join(copy, "real.json"), JSON.stringify({ dependencies: ["lib@^2.0.0"] }));
+  await symlink(path.join(copy, "real.json"), path.join(copy, ".claude-plugin", "plugin.json"));
+  return { locations, marketplaceRoot, copy };
+}
+
+test("D-PL2-13: a delisted record whose copy holds a symlinked manifest fails closed as not in manifest", async (t) => {
+  // arrange
+  const { locations, marketplaceRoot, copy } = await linkedManifestScope(t, (_, mpRoot) =>
+    path.join(mpRoot, "plugins", "app"),
+  );
+  const mp: MarketplaceRecord = {
+    ...marketplaceRecord("mp", { app: { resolvedSource: copy } }),
+    marketplaceRoot,
+  };
+  const loadManifest = manifestLoader({ [mp.manifestPath]: manifestOf("mp", {}) });
+
+  // act
+  const read = await readRecordDeclarations(
+    { state: stateOf(mp), locations, loadManifest },
+    mp,
+    "app",
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    read.ok ? undefined : { reason: read.reason, message: read.cause.message },
+    APP_NOT_IN_MANIFEST,
+  );
+});
+
+test("D-PL2-13: a listed record pinned to a commit whose copy holds a symlinked manifest is answered by the catalog", async (t) => {
+  // arrange
+  const { locations, marketplaceRoot, copy } = await linkedManifestScope(t, (scoped) =>
+    path.join(scoped.pluginClonesDir, "acme-app", "0123456"),
+  );
+  const mp: MarketplaceRecord = {
+    ...marketplaceRecord("mp", { app: { resolvedSource: copy, resolvedSha: APP_SHA } }),
+    marketplaceRoot,
+  };
+  const loadManifest = manifestLoader({
+    [mp.manifestPath]: manifestOf("mp", { app: { dependencies: ["lib"] } }),
+  });
+
+  // act
+  const read = await readInstalledRecordDeclarations(
+    { state: stateOf(mp), locations, loadManifest },
+    mp,
+    "app",
+  );
+
+  // assert
+  assert.deepStrictEqual(read, { ok: true, declared: [{ name: "lib", marketplace: "mp" }] });
 });
 
 test("D-PL2-06 / D-05-07: a marketplace manifest that fails to load fails closed as the catalog read does", async () => {
