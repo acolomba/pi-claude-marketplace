@@ -945,8 +945,9 @@ async function refreshHooksCacheAfterUpdate(
  *    `version` stays at `fromVersion`, and `resolvedSource` stays at
  *    the pre-update install path.
  *
- * `sRecord.updatedAt` is set on BOTH branches: even a failed finalize
- * is a truthful "we touched this record" stamp.
+ * `sRecord.updatedAt` is set on BOTH branches, strictly later than the
+ * intent mark's stamp: even a failed finalize is a truthful "we touched this
+ * record" stamp.
  *
  * LAYER-04 / D-MF-03: finalize changes the installation record only. An update
  * never writes a layer config, so a dependency it updates stays undeclared.
@@ -1001,7 +1002,9 @@ async function finalizeUpdateRecord(
         applyAllSuccessRecordFields(sRecord, preflight);
       }
 
-      sRecord.updatedAt = new Date().toISOString();
+      // D-PL7-08: a run that read the record during this run's window checks
+      // ST-9 against this stamp, so it must differ from the mark's stamp.
+      sRecord.updatedAt = nextUpdateStamp(sRecord.updatedAt);
     },
     args.stateTransaction,
   );

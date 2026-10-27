@@ -246,7 +246,7 @@ async function assertAgentsMigrated(params: {
       hooks: [],
       workflows: [],
     },
-    updatedAt: "2026-01-02T00:00:00.000Z",
+    updatedAt: "2026-01-02T00:00:00.001Z",
   });
   if (!coexist) {
     await assert.rejects(readFile(oldTarget), { code: "ENOENT" });
@@ -512,6 +512,26 @@ test("GLK-06: an intent mark replaces an unparseable updatedAt with the current 
   assert.strictEqual(marked?.updatedAt, "2026-01-03T00:00:00.000Z");
 });
 
+test("GLK-06: a finalize stamps the record one millisecond after the intent mark of the same instant", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+  const args = await seedSameRevisionUpdate(
+    t,
+    "update-swap-finalize-stamp-",
+    "2026-01-01T00:00:00.000Z",
+  );
+  const preflight = await preparePluginUpdate({ ...args, policy: SAME_REVISION_POLICY });
+  assert.ok(!("partition" in preflight));
+
+  // act
+  const outcome = await swapPluginUpdate(args, preflight, SAME_REVISION_POLICY);
+
+  // assert
+  assert.strictEqual(outcome.partition, "updated");
+  const record = (await loadState(args.locations.extensionRoot)).marketplaces.mp?.plugins.hello;
+  assert.strictEqual(record?.updatedAt, "2026-01-02T00:00:00.001Z");
+});
+
 /**
  * Seeds `hello` 2.0.0 shipping agent `bot`, and an install of 1.0.0 whose own
  * agent file at the same target a user edited (an AG-5 preserved row).
@@ -625,7 +645,7 @@ test("D-18-15: an overwrite policy commits over a previous agent file a user edi
     version: "2.0.0",
     resolvedSource: pluginRoot,
     compatibility: { installable: true, notes: [], supported: ["agents"], unsupported: [] },
-    updatedAt: "2026-01-02T00:00:00.000Z",
+    updatedAt: "2026-01-02T00:00:00.001Z",
   });
 });
 
