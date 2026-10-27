@@ -181,3 +181,26 @@ None -- no security-relevant surface outside the plan's `<threat_model>` was int
 - FOUND: extensions/pi-claude-marketplace/orchestrators/import/execute.ts, test/orchestrators/import/execute.test.ts
 - FOUND: 94461694 (an ancestor of HEAD)
 - `npm run check` exit 0 on 94461694.
+
+## Handoff: user decisions on uncertain choices (2026-10-27)
+
+Applied through quick tasks 261027-9e2, 261027-9jj and 261027-ac6 (their SUMMARYs under `.planning/quick/` carry the full decision rows and the new uncertain choices).
+
+| Decision | Rationale | Outcome |
+| -------- | --------- | ------- |
+| **D-PL6-15:** `apply` sorts the requested/dependency failed-row pair by name | Same order as `import` | ✓ Good |
+| **D-PL6-16:** any-directory path matching only for the read-only-skill error token | Keeps every other error-token cell strict | ✓ Good |
+| **D-PL6-17 (reverses D-PL6-02, D-PL6-10):** a settings marketplace whose source is recorded under another name reuses the record silently; each `p@<settings name>` fails `not added` and nothing is installed or declared | Upstream parity: Claude Code's add reuses the source silently and plugin ids are not aliased (E2) | ✓ Good |
+| **D-PL6-18 (reverses the WR-01 fix):** reuse silently even when the settings also declare the recorded name | Upstream parity (E2) | ✓ Good |
+| **D-PL6-19 (reverses D-PL6-09):** a declared source that differs from the record re-adds the marketplace in place; installed plugins are left to the next `pending`/`apply` | Upstream parity (E3: `W7r` `sourceChanged` → `CRn` → `Lle` overwrite) | ✓ Good |
+| **D-PL6-20:** a skill a failed skills undo leaves staged is listed in `leaks` | The user must see what a partial rollback left behind | ✓ Good |
+
+Backlog dispositions:
+- **forceRemoveDeletedPlugins delisting enforcement:** not honored anywhere in the codebase; new backlog candidate.
+
+Cross-phase items (the parent carries these into Phase 10, which owns `reconcile/apply.ts` and `notify.ts`):
+- The official marketplace's `{source mismatch}` rows (upstream treats it as up to date, `sourceIsFallback`).
+- The import post-pass writes only the base config layer.
+- `apply` and the load should re-add a marketplace in place on a declared source change, as `import` now does under D-PL6-19; reconcile still aliases one-to-one source claims, so import and reconcile diverge until then.
+
+Superseded entries above: uncertain choices 1, 2, 6, 11, 12, 21 (reversed or removed), 14 (now D-PL6-20), 17 (now D-PL6-15), 22 (now D-PL6-16). Choice 4 (MISS-01) moves to Phase 10 with the parent.

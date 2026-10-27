@@ -6,10 +6,10 @@ current_phase: 6
 current_phase_name: Import Marketplace Planning
 status: phase-complete
 stopped_at: "Phase 29 complete; next: milestone audit (`/gsd-audit-milestone`)"
-last_updated: "2026-10-27T12:06:27.105Z"
+last_updated: "2026-10-27T12:29:13.495Z"
 last_activity: 2026-10-27
 last_activity_desc: "Phase 6 verified (human_needed: uncertain choices for review)"
-state_head: 29d31b2b37f7bdb2b131f703bc948ee7f68b088b
+state_head: 9ccd88e9c895fb61d34cd063a84d2d08dc9d9ef6
 progress:
   total_phases: 11
   completed_phases: 1
@@ -190,6 +190,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
 | 261027-9e2 | Sort apply rollback row pair and narrow run-tokens path matching (D-PL6-15, D-PL6-16) | 2026-10-27 | fdd1959a | — | [261027-9e2-sort-apply-rollback-row-pair-and-narrow-](./quick/261027-9e2-sort-apply-rollback-row-pair-and-narrow-/) |
 | 261027-9jj | Follow Claude Code for renamed and changed marketplace sources in import (D-PL6-17/18/19) | 2026-10-27 | 29d31b2b | — | [261027-9jj-follow-claude-code-for-renamed-and-chang](./quick/261027-9jj-follow-claude-code-for-renamed-and-chang/) |
+| 261027-ac6 | List a staged skill that a failed skills undo leaves in leaks (D-PL6-20) | 2026-10-27 | 9ccd88e9 | — | [261027-ac6-list-a-staged-skill-that-a-failed-skills](./quick/261027-ac6-list-a-staged-skill-that-a-failed-skills/) |
 
 ## Session Continuity
 
