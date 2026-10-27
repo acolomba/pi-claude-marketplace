@@ -303,6 +303,12 @@ export interface ResolvedCascadeMember extends ClosureMember {
    * range.
    */
   readonly directoryPin?: DirectoryPinRange;
+  /**
+   * D-PL4-01: the commit the dependency plan's install preview resolved for
+   * this member. The install pins it when no release tag pins the member, so
+   * it installs what the plan previewed and resolves the source once.
+   */
+  readonly previewedCommit?: string;
 }
 
 /**
@@ -812,7 +818,7 @@ function toMemberConstraintOutcome(
   declared: string,
   probed:
     | { readonly kind: "pinned"; readonly oid: string; readonly version: string }
-    | { readonly kind: "no-matching-tag"; readonly range: string }
+    | { readonly kind: "no-matching-tag" }
     | {
         readonly kind: "tag-listing-failed";
         readonly classification: DependencyTagListingFailureReason;

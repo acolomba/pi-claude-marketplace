@@ -26,8 +26,7 @@
 //
 // AUTH-09: a credential bundle is composed here and threaded into the listing
 // call, and no credential value is read, stored, or placed on a returned arm.
-// The failure arm carries the classified transport cause and the rendered
-// range only.
+// The failure arm carries the classified transport cause only.
 
 import { canonicalCloneUrl, networkCloneUrl } from "../../domain/clone-key.ts";
 import { RELEASE_TAG_SEPARATOR, selectHighestSatisfyingTag } from "../../domain/release-tag.ts";
@@ -54,8 +53,8 @@ export type DependencyTagListingFailureReason =
 /**
  * What a constrained dependency's tag query came to.
  *
- * `no-matching-tag` carries the range as rendered for a user-visible reason,
- * and is the ONLY no-match answer -- see D-03-09 in the module header.
+ * `no-matching-tag` is the ONLY no-match answer -- see D-03-09 in the module
+ * header. The caller renders the member's declared ranges (D-PL4-05).
  */
 export type DependencyTagProbeResult =
   | {
@@ -64,7 +63,7 @@ export type DependencyTagProbeResult =
       readonly oid: string;
       readonly version: string;
     }
-  | { readonly kind: "no-matching-tag"; readonly range: string }
+  | { readonly kind: "no-matching-tag" }
   | {
       readonly kind: "tag-listing-failed";
       readonly cause: Error;

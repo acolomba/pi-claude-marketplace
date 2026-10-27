@@ -49,6 +49,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { AgentTargetOccupiedError } from "../../../extensions/pi-claude-marketplace/shared/errors-bridges.ts";
 import {
   BridgeStagingError,
   McpServerCollisionError,
@@ -4301,6 +4302,68 @@ for (const { title, makeFailure, reason } of [
         // assert
         assert.equal(notifications.length, 1);
         assert.match(notifications[0]?.message ?? "", new RegExp(`\\{${reason}\\}`));
+        assert.equal(notifications[0]?.severity, "error");
+      } finally {
+        await rm(cwd, { recursive: true, force: true });
+      }
+    });
+  });
+}
+
+for (const { title, makeFailure } of [
+  {
+    title: "D-PL4-09: an occupied agent target fails with no reason, and its cause names the file",
+    makeFailure: () => new AgentTargetOccupiedError("/scope/.pi/agents/pi-claude-marketplace-a.md"),
+  },
+  {
+    title: "D-PL4-09: an occupied agent target under cleanup context fails with no reason",
+    makeFailure: () =>
+      new CleanupContextError(
+        new AgentTargetOccupiedError("/scope/.pi/agents/pi-claude-marketplace-a.md"),
+        [
+          {
+            phase: "abort",
+            artifact: "mcp",
+            path: "/scope/mcp.json",
+            cause: new Error("cleanup failed"),
+          },
+        ],
+      ),
+  },
+] as const) {
+  test(title, async () => {
+    await withHermeticHome(async () => {
+      const cwd = await createCaseDir("update-agent-target-reason-");
+      try {
+        // arrange
+        await seedGithubMarketplaceForSync(cwd);
+        const { gitOps } = createGitOps({
+          fetchThrows: makeFailure(),
+          remoteRefs: {
+            "refs/remotes/origin/main": "abcdef0000000000000000000000000000000001",
+          },
+        });
+        const { ctx, run, notifications } = makeCtx();
+
+        // act
+        await updatePlugins({
+          ctx,
+          run,
+          scope: "project",
+          cwd,
+          target: { kind: "marketplace", marketplace: "official" },
+          gitOps,
+        });
+
+        // assert
+        assert.equal(notifications.length, 1);
+        const message = notifications[0]?.message ?? "";
+        assert.match(message, /\(failed\)(?! \{)/);
+        assert.doesNotMatch(message, /unreadable manifest/);
+        assert.match(
+          message,
+          /Cannot replace agent target with non-previous content at pi-claude-marketplace-a\.md/,
+        );
         assert.equal(notifications[0]?.severity, "error");
       } finally {
         await rm(cwd, { recursive: true, force: true });

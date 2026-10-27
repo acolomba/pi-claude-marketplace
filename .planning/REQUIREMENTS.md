@@ -50,14 +50,17 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 - [ ] **CAS-05**: A refusal for a non-root cascade member names every declarer that required it, and names and ranges in those refusals are truncated as Claude Code truncates them (PARITYGV-01 b2, b3)
 - [ ] **CAS-06**: The offline refusal of an install that would move a git dependency names the next step (UPDDEP-01 b2)
 - [ ] **CAS-07**: A hold row's cause never interpolates an unbounded catalog `version` string (VERSTR-01)
+- [ ] **CAS-08**: The routes D-PL3-15 left with one failed row (the root's own ledger failure, UPD-DEP-D1 plan-step failures, a catalog lookup that throws mid-walk) also give a row to each member that resolved but did not install (CLOSUREROW-01 residue)
+- [ ] **MIM-05**: A partial rollback of `apply`'s missing-dependency (MISS-01) install shows the per-phase detail `install` shows, like the other import and apply rows MIM-03 covers (D-PL6-05 residue; needs Phase 4's outcome type)
+- [ ] **XPH-01**: Wave-1 cross-phase residue is closed after the merge: the add-time MISS-01 step routes its post-commit hygiene warnings through the tagged warning channel (2.30); `import`'s own `<mp>@<mp>` row and the retired D-76-04 citation in `orchestrators/import/marketplaces.ts` are fixed (5.27, 5.28); and scenarios pin the git-revision post-move read (2.19), the reinstall `{status} on {url}` frame (7.16), and completion after `market` (7.15, with the completion harness it needs); `apply` and the load re-add a marketplace in place on a declared source change, as `import` does under D-PL6-19, the official marketplace's fallback source reads as up to date as upstream's `sourceIsFallback` does, and a local-layer declaration of an old source no longer outlives an import re-add; a pty-backed `tui` cucumber driver gives the background autoupdate pass, its wait cap, and its notice dedupe scenarios (D-PL8 follow-ups); and the package-install tree kill gets a scenario
 
 ### Dependency resolver (RSV)
 
-- [ ] **RSV-01**: A fresh unpinned git dependency installs the commit the plan previewed, with one network resolve (UPDDEP-01 b1)
-- [ ] **RSV-02**: Whether one bad dependency refuses the root under `apply` before its moves land is decided against Claude Code and implemented (UPDDEP-01 b4)
-- [ ] **RSV-03**: The greedy resolver's completeness is compared with Claude Code's resolver; it is made complete or its limit is recorded with an ID (UPDDEP-01 b5)
-- [ ] **RSV-04**: An agent-target refusal in an update is found before any move lands (UPDDEP-01 b6)
-- [ ] **RSV-05**: The `no-matching-tag` outcome's range field is read or removed, and the failed arm of `InstallMissingDependencyOutcome` declares `rollbackPartials` (LCCODE-01 b2, b3)
+- [x] **RSV-01**: A fresh unpinned git dependency installs the commit the plan previewed, with one network resolve (UPDDEP-01 b1)
+- [x] **RSV-02**: Whether one bad dependency refuses the root under `apply` before its moves land is decided against Claude Code and implemented (UPDDEP-01 b4)
+- [x] **RSV-03**: The greedy resolver's completeness is compared with Claude Code's resolver; it is made complete or its limit is recorded with an ID (UPDDEP-01 b5)
+- [x] **RSV-04**: An agent-target refusal in an update is found before any move lands (UPDDEP-01 b6)
+- [x] **RSV-05**: The `no-matching-tag` outcome's range field is read or removed, and the failed arm of `InstallMissingDependencyOutcome` declares `rollbackPartials` (LCCODE-01 b2, b3)
 
 ### Marketplace commands (MKT)
 
@@ -155,11 +158,14 @@ None.
 | CAS-05 | Phase 3 | Pending |
 | CAS-06 | Phase 3 | Pending |
 | CAS-07 | Phase 3 | Pending |
-| RSV-01 | Phase 4 | Pending |
-| RSV-02 | Phase 4 | Pending |
-| RSV-03 | Phase 4 | Pending |
-| RSV-04 | Phase 4 | Pending |
-| RSV-05 | Phase 4 | Pending |
+| CAS-08 | Phase 10 | Pending |
+| MIM-05 | Phase 10 | Pending |
+| XPH-01 | Phase 10 | Pending |
+| RSV-01 | Phase 4 | Complete |
+| RSV-02 | Phase 4 | Complete |
+| RSV-03 | Phase 4 | Complete |
+| RSV-04 | Phase 4 | Complete |
+| RSV-05 | Phase 4 | Complete |
 | MKT-01 | Phase 5 | Pending |
 | MKT-02 | Phase 5 | Pending |
 | MKT-03 | Phase 5 | Pending |

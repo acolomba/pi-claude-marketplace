@@ -86,14 +86,14 @@ function request(
   };
 }
 
-/** A walk that failed on `fff@mp`'s contradictory ranges, which `declarers` declare. */
-function contradiction(declarers: readonly string[]): GraphWalkFailure {
+/** A walk that failed on `key`'s contradictory ranges, which `declarers` declare. */
+function contradiction(declarers: readonly string[], key = "fff@mp"): GraphWalkFailure {
   return {
     kind: "constraint-failed",
     failure: {
       kind: "range-conflict",
       why: "contradictory-declarations",
-      key: "fff@mp",
+      key,
       range: "^1.0.0, ^2.0.0",
       detail: "no version satisfies all 2 declared ranges",
     },
@@ -116,7 +116,9 @@ interface Calls {
 function ports(world: {
   readonly walks: Readonly<Record<string, DependencyGraph | GraphWalkFailure>>;
   readonly versions?: (request: DependencyMoveRequest) => string | undefined;
-  readonly preview?: (member: ResolvedCascadeMember) => Promise<void>;
+  readonly preview?: (member: ResolvedCascadeMember) => Promise<string | undefined>;
+  /** The judge's cause when a request cannot move. */
+  readonly refusalCause?: string;
   /** GV-01: each version lands at a release tag, its commit appended. */
   readonly tagged?: boolean;
 }): DependencyPlanPorts<PlannedCandidate> & { readonly calls: Calls } {
@@ -135,13 +137,13 @@ function ports(world: {
       const version = world.versions?.(judged);
       return Promise.resolve<PlanJudgement<PlannedCandidate>>(
         version === undefined || judged.excludedVersions?.includes(version) === true
-          ? { ok: false, cause: "version 1.5.0 falls outside the range" }
+          ? { ok: false, cause: world.refusalCause ?? "version 1.5.0 falls outside the range" }
           : { ok: true, prepared: landedAt(version, world.tagged === true) },
       );
     },
     preview: (previewed) => {
       calls.previewed.push(previewed.key);
-      return world.preview?.(previewed) ?? Promise.resolve();
+      return world.preview?.(previewed) ?? Promise.resolve(undefined);
     },
   };
 }
@@ -407,6 +409,91 @@ describe("planDependencyGraph", () => {
     });
   });
 
+  test("D-PL4-02: a deferring plan refuses a fresh dependency only a move reaches when its preview refuses", async () => {
+    // arrange
+    const error = new Error("fff cannot install");
+    const bound = ports({
+      walks: {
+        "": graph([wall("aaa", "1.0.0", APP_ASKS_2), fresh("ggg")], ["aaa@mp", "ggg@mp"]),
+        "aaa@mp=2.0.0": graph(
+          [
+            wall("kept", "1.0.0", []),
+            fresh("fff", ["kept@mp"]),
+            walked("aaa", APP_ASKS_2, { dependsOn: ["fff@mp"] }),
+            fresh("ggg"),
+          ],
+          ["aaa@mp", "ggg@mp"],
+        ),
+      },
+      versions: () => "2.0.0",
+      preview: (previewed) =>
+        previewed.key === "fff@mp" ? Promise.reject(error) : Promise.resolve(undefined),
+    });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: true });
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      ok: false,
+      subject: { kind: "member", key: "fff@mp", error, rollbackPartials: [] },
+    });
+    assert.deepStrictEqual(bound.calls.previewed, ["fff@mp"]);
+  });
+
+  test("D-PL4-01: a fresh dependency is scheduled with the commit its preview resolved, where it lands", async () => {
+    // arrange
+    const commits: Readonly<Record<string, string>> = {
+      "fff@mp": "f".repeat(40),
+      "ggg@mp": "a".repeat(40),
+    };
+    const bound = ports({
+      walks: {
+        "": graph(
+          [wall("aaa", "1.0.0", APP_ASKS_2), fresh("ggg"), fresh("hhh")],
+          ["aaa@mp", "ggg@mp", "hhh@mp"],
+        ),
+        "aaa@mp=2.0.0": graph(
+          [
+            fresh("fff"),
+            walked("aaa", APP_ASKS_2, { dependsOn: ["fff@mp"] }),
+            fresh("ggg"),
+            fresh("hhh"),
+          ],
+          ["aaa@mp", "ggg@mp", "hhh@mp"],
+        ),
+      },
+      versions: () => "2.0.0",
+      preview: (previewed) => Promise.resolve(commits[previewed.key]),
+    });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      ok: true,
+      steps: [
+        {
+          kind: "materialize",
+          members: [
+            { kind: "install", member: { ...member("fff"), previewedCommit: "f".repeat(40) } },
+          ],
+        },
+        { kind: "move", move: { request: request("aaa"), version: "2.0.0" } },
+      ],
+      final: {
+        members: [
+          { kind: "install", member: { ...member("ggg"), previewedCommit: "a".repeat(40) } },
+          { kind: "install", member: member("hhh") },
+          { kind: "install", member: member("app") },
+        ],
+        alreadyInstalled: [],
+      },
+    });
+    assert.deepStrictEqual(bound.calls.previewed, ["fff@mp", "ggg@mp", "hhh@mp"]);
+  });
+
   test("UPD-DEP-D1: an update's plan lands its final closure without a root", async () => {
     // arrange
     const bound = ports({
@@ -421,6 +508,28 @@ describe("planDependencyGraph", () => {
       ok: true,
       steps: [],
       final: { members: [{ kind: "install", member: member("helper") }], alreadyInstalled: [] },
+    });
+  });
+
+  test("D-PL4-01: the plugin being installed is scheduled with the commit its own preview resolved", async () => {
+    // arrange
+    const rootCommit = "0123456789abcdef0123456789abcdef01234567";
+    const bound = ports({ walks: { "": graph([fresh("helper")], ["helper@mp"]) } });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false, rootCommit });
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      ok: true,
+      steps: [],
+      final: {
+        members: [
+          { kind: "install", member: member("helper") },
+          { kind: "install", member: { ...member("app"), previewedCommit: rootCommit } },
+        ],
+        alreadyInstalled: [],
+      },
     });
   });
 
@@ -445,6 +554,28 @@ describe("planDependencyGraph", () => {
       refusal("lib@mp", "^2.0.0", "version 1.5.0 falls outside the range"),
     );
     assert.deepStrictEqual(bound.calls.judged, [request("lib", requesters)]);
+  });
+
+  test("D-PL4-07: a move refusal reads with each absolute path reduced to its file name", async () => {
+    // arrange
+    const bound = ports({
+      walks: { "": graph([wall("lib", "1.0.0", APP_ASKS_2)], ["lib@mp"]) },
+      refusalCause:
+        "Cannot replace agent target with non-previous content at /scope/.pi/agents/pi-claude-marketplace-lib-helper.md",
+    });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
+
+    // assert
+    assert.deepStrictEqual(
+      plan,
+      refusal(
+        "lib@mp",
+        "^2.0.0",
+        "Cannot replace agent target with non-previous content at pi-claude-marketplace-lib-helper.md",
+      ),
+    );
   });
 
   test("UPD-DEP-D1: refuses a closure the walk cannot resolve", async () => {
@@ -702,6 +833,54 @@ describe("planDependencyGraph", () => {
     assert.strictEqual(bound.calls.walks.length, links.length + 1);
   });
 
+  test("D-PL4-03: refuses a graph only an untried pair of versions solves, after ruling out the first involved pick's versions first", async () => {
+    // arrange
+    const appAsksAtLeast2: readonly GraphRequester[] = [{ key: "app@mp", ranges: [">=2.0.0"] }];
+    const both = ["aaa@mp", "bbb@mp"];
+    const last = contradiction(both, "ccc@mp");
+    const bound = ports({
+      walks: {
+        "": graph(
+          [wall("aaa", "1.0.0", appAsksAtLeast2), wall("bbb", "1.0.0", appAsksAtLeast2)],
+          both,
+        ),
+        "aaa@mp=3.0.0,bbb@mp=3.0.0": contradiction(both, "eee@mp"),
+        "aaa@mp=2.0.0,bbb@mp=3.0.0": contradiction(both, "ddd@mp"),
+        "aaa@mp=2.0.0,bbb@mp=2.0.0": last,
+        "aaa@mp=3.0.0,bbb@mp=2.0.0": graph(
+          [walked("aaa", appAsksAtLeast2), walked("bbb", appAsksAtLeast2)],
+          both,
+        ),
+      },
+      versions: (judged) =>
+        ["3.0.0", "2.0.0"].find((version) => !(judged.excludedVersions ?? []).includes(version)),
+    });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false });
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      ok: false,
+      subject: { kind: "constraint", failure: last.failure },
+    });
+    assert.deepStrictEqual(bound.calls.walks, [
+      "",
+      "aaa@mp=3.0.0,bbb@mp=3.0.0",
+      "aaa@mp=2.0.0,bbb@mp=3.0.0",
+      "aaa@mp=2.0.0,bbb@mp=2.0.0",
+    ]);
+    assert.deepStrictEqual(bound.calls.judged, [
+      request("aaa", appAsksAtLeast2),
+      request("bbb", appAsksAtLeast2),
+      request("aaa", appAsksAtLeast2, ["3.0.0"]),
+      request("aaa", appAsksAtLeast2, ["3.0.0", "2.0.0"]),
+      request("bbb", appAsksAtLeast2, ["3.0.0"]),
+      request("bbb", appAsksAtLeast2, ["3.0.0", "2.0.0"]),
+    ]);
+    assert.deepStrictEqual(bound.calls.previewed, []);
+  });
+
   test("UPD-DEP-D1: refuses a graph whose choices never settle", async () => {
     // arrange
     const bound = ports({
@@ -733,7 +912,7 @@ describe("planDependencyGraph", () => {
     const bound = ports({
       walks: { "": graph([fresh("helper"), fresh("other")], ["helper@mp", "other@mp"]) },
       preview: (previewed) =>
-        previewed.key === "helper@mp" ? Promise.reject(error) : Promise.resolve(),
+        previewed.key === "helper@mp" ? Promise.reject(error) : Promise.resolve(undefined),
     });
 
     // act
