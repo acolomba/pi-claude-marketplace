@@ -898,7 +898,7 @@ async function applyPluginToggles(
         }),
         ...carriedMcpConfigNotices(result),
         // D-PL1-09: a disable stages nothing, so only the enable arm carries them.
-        ...(result.status === "enabled" && carriedStagingWarnings(result)),
+        ...(result.status === "enabled" ? carriedStagingWarnings(result) : {}),
       });
     } else if (result.status === "failed") {
       outcomes.push({

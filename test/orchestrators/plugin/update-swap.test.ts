@@ -663,16 +663,7 @@ for (const [mode, swapArgs] of [
       declaresMcp: false,
       constraint: undefined,
       declaresWorkflows: false,
-      stagingWarnings: [
-        {
-          kind: "discovery",
-          message: `skill source "hello-foo" in "${skillsDir}" elides to generated name "hello-foo", already produced by skill source "foo"; ignoring duplicate.`,
-        },
-        {
-          kind: "hygiene",
-          message: "[bot] source description was missing or empty -- using fallback",
-        },
-      ],
+      stagingWarnings: bothHalvesWarnings(skillsDir),
     });
   });
 }

@@ -423,8 +423,8 @@ export async function commitPreparedAgents(
   // The loop stays parallel here because step 1 has no source to roll back
   // to -- this commit keeps no backup of those files, so rollback would have
   // nothing to restore. The kept rows (foreignPreservedEntries, minus the
-  // re-produced ones when forced) are INTENTIONALLY excluded -- those targets stay untouched on disk
-  // and their rows stay in the index.
+  // re-produced ones when forced) are INTENTIONALLY excluded -- those targets
+  // stay untouched on disk and their rows stay in the index.
   try {
     // The backstop for a file that appeared after the caller's own probe.
     await assertAgentCommitTargets(prepared, options);

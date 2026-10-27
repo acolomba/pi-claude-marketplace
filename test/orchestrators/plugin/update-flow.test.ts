@@ -11283,8 +11283,9 @@ test("D-PL1-07: a bare update renders the diagnostics in the row order of the ma
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-discwarn-order-");
     try {
-      // arrange: the bare form visits the project scope first, the rows sort
-      // the user-scope "alpha" block ahead of the project-scope "zeta" block.
+      // arrange
+      // The bare form visits the project scope first, but the rows sort the
+      // user-scope "alpha" block ahead of the project-scope "zeta" block.
       const zeta = await seedPathMarketplace({
         cwd,
         marketplaceRoot: path.join(cwd, "zeta-src"),

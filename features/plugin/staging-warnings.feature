@@ -15,8 +15,8 @@ Feature: Plugin staging warnings
     Given the published plugin "demo" of the marketplace "fixtures" has two agents named "helper"
     When the user runs "/claude:plugin install demo@fixtures --scope project"
     Then the command reports these results:
-      | kind       | severity | needs reload | summary                             | header                                                    | lines                                                                                                                                                                                        |
-      | cascade    | warning  | true         | A plugin operation needs attention. |                                                           |                                                                                                                                                                                              |
+      | kind       | severity | needs reload | summary                             | header                                                              | lines                                                                                                                                                                                        |
+      | cascade    | warning  | true         | A plugin operation needs attention. |                                                                     |                                                                                                                                                                                              |
       | diagnostic | warning  | false        |                                     | Plugin "demo" [project] installed; 1 declared component has a note. | agent source "helper" at "second.md" duplicates generated name "pi-claude-marketplace-demo-helper" already produced by agent source "helper" at "first.md"; keeping first discovered source. |
     Then the results list these marketplaces and plugins:
       | marketplace name | marketplace scope | id            | name | status    | reasons               | scope   | version |
@@ -49,7 +49,7 @@ Feature: Plugin staging warnings
       | marketplace name | marketplace scope | id            | name | status      | reasons | scope   | version |
       | fixtures         | project           | demo@fixtures | demo | reinstalled |         | project | 1.0.0   |
 
-  Scenario: Enabling a plugin whose skills collide reports the skip install reports, under a header that names the scope
+  Scenario: Enabling a plugin whose skills collide reports the skip under a header that names the scope
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the user has run "/claude:plugin disable demo@fixtures --scope project"
     Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first

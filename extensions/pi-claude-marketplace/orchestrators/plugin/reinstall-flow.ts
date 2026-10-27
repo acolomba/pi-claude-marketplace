@@ -12,12 +12,12 @@
 // Manual-recovery rows are folded into the cascade `plugins[]` array as
 // `PluginManualRecoveryMessage` entries rather than emitted separately.
 // D-141-03 / D-PL1-11: the shared swap carries both halves of the staging
-// warnings, typed, on its `stagingWarnings` (D-PL1-10), and reinstall takes
-// the DISCOVERY half from them; it reaches both modes. The maintenance warnings stay
-// orchestrated-only, because MarketplaceNotificationMessage has no field for
-// one and a standalone user has nothing to do about it (D-19-01). The side
-// effect behind them, the plugin-data rm, runs either way; the completion
-// cache drop happens once, in the shared swap (D-PL1-17).
+// warnings, typed, on its `stagingWarnings` (D-PL1-10). Reinstall takes the
+// DISCOVERY half from them, and it reaches both modes. The maintenance
+// warnings stay orchestrated-only, because MarketplaceNotificationMessage has
+// no field for one and a standalone user has nothing to do about it (D-19-01).
+// The side effect behind them, the plugin-data rm, runs either way; the
+// completion cache drop happens once, in the shared swap (D-PL1-17).
 //
 // The discovery diagnostic is emitted by whichever function renders the row
 // it qualifies, always after that row. The USER-INVOKED entrypoint reaches

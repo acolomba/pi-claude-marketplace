@@ -1376,9 +1376,10 @@ async function runInstallLedgerBody(
       // collects after its commit because its warnings are a member of the
       // commit's result.)
       //
-      // WR-04: the position buys ordering consistency, NOT survival. On a
-      // phase throw `captureStagingWarnings` copies every warning collected so
-      // far onto the failure capture (D-PL1-13), whichever phase collected it.
+      // WR-04: the position buys ordering consistency. Survival of a later
+      // phase's throw comes from `captureStagingWarnings`, which copies every
+      // warning collected so far onto the failure capture (D-PL1-13),
+      // whichever phase collected it.
       collectStagingWarnings(c, prep.result.warnings);
       const leak = await commitPreparedWorkflows(prep, {
         // The whole body is one assignment that cannot throw. The commit
