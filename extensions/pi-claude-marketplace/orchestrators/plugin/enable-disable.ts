@@ -2931,7 +2931,7 @@ function outcomeToTypedResult(args: {
         reason,
         error: outcome.cause,
         cause: errorMessage(outcome.cause),
-        ...(partials.length > 0 && { rollbackPartials: partials }),
+        ...(partials.length > 0 ? { rollbackPartials: partials } : {}),
         ...notices,
       };
     }

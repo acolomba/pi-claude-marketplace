@@ -110,7 +110,7 @@ function planMarketplaceSources(
   const diagnostics: ImportDiagnostic[] = [];
   const unmappableMarketplaces: string[] = [];
   const seen = new Set<string>();
-  const planOne = (marketplace: string, source: string | undefined, fallback = false): void => {
+  function planOne(marketplace: string, source: string | undefined, fallback = false): void {
     seen.add(marketplace);
     if (source === undefined) {
       unmappableMarketplaces.push(marketplace);
@@ -124,7 +124,7 @@ function planMarketplaceSources(
       source,
       ...(fallback && { sourceIsFallback: true }),
     });
-  };
+  }
 
   for (const ref of refs) {
     if (seen.has(ref.marketplace)) {

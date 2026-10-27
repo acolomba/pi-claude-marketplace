@@ -4182,12 +4182,9 @@ test("D-PL6-19: a save that fails after the swap removes the new clone and puts 
 
     // assert
     assert.ok(outcome.status === "failed");
+    assert.ok(outcome.error instanceof Error && "code" in outcome.error);
     assert.deepStrictEqual(
-      {
-        reason: outcome.reason,
-        code: (outcome.error as NodeJS.ErrnoException).code,
-        cause: outcome.cause,
-      },
+      { reason: outcome.reason, code: outcome.error.code, cause: outcome.cause },
       { reason: "unparseable", code: "EISDIR", cause: outcome.error.message },
     );
     assert.deepStrictEqual(await loadState(locations.extensionRoot), state);

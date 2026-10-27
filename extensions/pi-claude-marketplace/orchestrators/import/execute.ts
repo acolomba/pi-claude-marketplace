@@ -1680,9 +1680,9 @@ async function settleRecordedMarketplace(
  * IMP-05 / IMP-06: settle the settings' marketplaces against the read pass's
  * snapshot. A name the scope records is skipped, kept, blocked, or added again
  * from its new source (`settleRecordedMarketplace`, D-PL6-19). A name it does
- * not record, whose source it
- * records under another name, is reused and its plugins fail as not added
- * (D-PL6-17), even when the settings also declare that other name (D-PL6-18).
+ * not record, whose source it records under another name, is reused and its
+ * plugins fail as not added (D-PL6-17), even when the settings also declare
+ * that other name (D-PL6-18).
  * Any other marketplace is added. Answers the names whose plugins may run.
  */
 async function ensurePlannedMarketplaces(

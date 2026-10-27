@@ -5489,15 +5489,17 @@ function notAdded(plugin: string, marketplace: string, scope: Scope): Unexpected
 }
 
 /** D-PL6-17: the cascade of one `plugin@mp` that fails as not added. */
-const NOT_ADDED_CASCADE = {
-  message:
-    "Some operations have failed.\n\n" +
-    "⊘ mp [project] (failed)\n" +
-    "  ⊘ plugin (failed)\n" +
-    '    cause: Marketplace "mp" is not added in the project scope.\n\n' +
-    "Import: 2 failures",
-  severity: "error",
-};
+function notAddedCascade(): { readonly message: string; readonly severity: "error" } {
+  return {
+    message:
+      "Some operations have failed.\n\n" +
+      "⊘ mp [project] (failed)\n" +
+      "  ⊘ plugin (failed)\n" +
+      '    cause: Marketplace "mp" is not added in the project scope.\n\n' +
+      "Import: 2 failures",
+    severity: "error",
+  };
+}
 
 test("D-PL6-17: a settings marketplace the scope records under one other name fails its plugin as not added", async (t) => {
   // arrange
@@ -5527,7 +5529,7 @@ test("D-PL6-17: a settings marketplace the scope records under one other name fa
     ...emptyImportResult(),
     unexpectedPluginFailures: [notAdded("plugin", "mp", "project")],
   });
-  assert.deepStrictEqual(notifications, [NOT_ADDED_CASCADE]);
+  assert.deepStrictEqual(notifications, [notAddedCascade()]);
   await assert.rejects(stat(project.baseConfigJsonPath), { code: "ENOENT" });
   verifyBoundary();
 });
@@ -5595,7 +5597,7 @@ test("D-PL6-17: a settings marketplace whose source two records hold fails its p
     ...emptyImportResult(),
     unexpectedPluginFailures: [notAdded("plugin", "mp", "project")],
   });
-  assert.deepStrictEqual(notifications, [NOT_ADDED_CASCADE]);
+  assert.deepStrictEqual(notifications, [notAddedCascade()]);
   await assert.rejects(stat(project.baseConfigJsonPath), { code: "ENOENT" });
   verifyBoundary();
 });
@@ -5638,7 +5640,7 @@ test("D-PL6-17: two settings marketplaces that give one record's source both reu
     ...emptyImportResult(),
     unexpectedPluginFailures: [notAdded("plugin", "mp", "project")],
   });
-  assert.deepStrictEqual(notifications, [NOT_ADDED_CASCADE]);
+  assert.deepStrictEqual(notifications, [notAddedCascade()]);
   await assert.rejects(stat(project.baseConfigJsonPath), { code: "ENOENT" });
   verifyBoundary();
 });
@@ -5713,7 +5715,7 @@ for (const { diagnostics, entry, recordedName, title } of [
       diagnostics,
       unexpectedPluginFailures: [notAdded("plugin", "mp", "project")],
     });
-    assert.deepStrictEqual(notifications[0], NOT_ADDED_CASCADE);
+    assert.deepStrictEqual(notifications[0], notAddedCascade());
     await assert.rejects(stat(project.baseConfigJsonPath), { code: "ENOENT" });
     verifyBoundary();
   });
@@ -5876,7 +5878,7 @@ test("D-PL6-17: does not enable a disabled plugin of the record a settings marke
     ...emptyImportResult(),
     unexpectedPluginFailures: [notAdded("plugin", "mp", "project")],
   });
-  assert.deepStrictEqual(notifications, [NOT_ADDED_CASCADE]);
+  assert.deepStrictEqual(notifications, [notAddedCascade()]);
   await assert.rejects(stat(project.baseConfigJsonPath), { code: "ENOENT" });
   verifyBoundary();
 });

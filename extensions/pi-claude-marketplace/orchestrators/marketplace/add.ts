@@ -755,7 +755,7 @@ async function replaceMarketplaceInState(
     );
   }
 
-  return { ...added, ...(setAside !== undefined && { setAside }) };
+  return setAside === undefined ? added : { ...added, setAside };
 }
 
 /**

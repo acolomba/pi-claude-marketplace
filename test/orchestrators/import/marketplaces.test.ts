@@ -282,7 +282,7 @@ test("buildClaudeImportPlan diagnoses malformed nested marketplace payloads", ()
           "delta@file": true,
           "epsilon@unknown": true,
         },
-        extraKnownMarketplaces: extraKnownMarketplaces,
+        extraKnownMarketplaces,
       },
     },
   ]);
@@ -435,7 +435,7 @@ test("buildClaudeImportPlan diagnoses nonobject and unsupported flat entries", (
           "zeta@bad-source": true,
           "eta@missing": true,
         },
-        extraKnownMarketplaces: extraKnownMarketplaces,
+        extraKnownMarketplaces,
       },
     },
   ]);
@@ -621,7 +621,7 @@ test("buildClaudeImportPlan maps flat directory and GitHub entries in ref order"
       scope: "project",
       settings: {
         enabledPlugins: { "alpha@private": true, "beta@team": true },
-        extraKnownMarketplaces: extraKnownMarketplaces,
+        extraKnownMarketplaces,
       },
     },
   ]);
@@ -684,7 +684,7 @@ test("buildClaudeImportPlan maps every nested source shape and optional ref", ()
           "delta@github-ref": true,
           "epsilon@directory": true,
         },
-        extraKnownMarketplaces: extraKnownMarketplaces,
+        extraKnownMarketplaces,
       },
     },
   ]);
@@ -814,7 +814,7 @@ test("MIM-02 / D-PL6-01: plans the referenced marketplaces first, then every oth
       scope: "user",
       settings: {
         enabledPlugins: { "tool@gamma": true },
-        extraKnownMarketplaces: extraKnownMarketplaces,
+        extraKnownMarketplaces,
       },
     },
   ]);
@@ -921,7 +921,7 @@ test("D-PL6-08: plans the official source for an official marketplace an enabled
       scope: "user",
       settings: {
         enabledPlugins: { "alpha@claude-plugins-official": true },
-        extraKnownMarketplaces: extraKnownMarketplaces,
+        extraKnownMarketplaces,
       },
     },
   ]);
