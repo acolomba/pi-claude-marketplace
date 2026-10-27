@@ -16,7 +16,8 @@
 // the DISCOVERY half from them; it reaches both modes. The maintenance warnings stay
 // orchestrated-only, because MarketplaceNotificationMessage has no field for
 // one and a standalone user has nothing to do about it (D-19-01). The side
-// effects behind them (dropMarketplaceCache + rm) run either way.
+// effect behind them, the plugin-data rm, runs either way; the completion
+// cache drop happens once, in the shared swap (D-PL1-17).
 //
 // The discovery diagnostic is emitted by whichever function renders the row
 // it qualifies, always after that row. The USER-INVOKED entrypoint reaches
@@ -305,11 +306,7 @@ async function reinstallPluginWith(
     return outcome;
   }
 
-  const maintenanceWarnings = await runPostSuccessMaintenance(
-    opts,
-    locations,
-    bindings.completionCache,
-  );
+  const maintenanceWarnings = await runPostSuccessMaintenance(opts, locations);
   if (render === "none") {
     // D-PL1-11: `notes` keeps its orchestrated string fold of the discovery
     // messages and the maintenance warnings.
@@ -447,40 +444,26 @@ const defaultRemoveDataDir: RemoveDataDirFn = async (dataDir) => {
 };
 
 /**
- * D-18-05: the non-fatal cleanup after a reinstalled outcome. It drops the
- * marketplace's completion cache and removes the plugin-data directory, and
- * returns one deferral warning per step that failed.
+ * D-18-05: the non-fatal cleanup after a reinstalled outcome. It removes the
+ * plugin-data directory and returns one deferral warning when that fails. The
+ * shared swap already dropped the marketplace's completion cache (D-PL1-17).
  */
 async function runPostSuccessMaintenance(
   opts: ReinstallPluginOptions,
   locations: ScopedLocations,
-  completionCache: CompletionCache,
 ): Promise<readonly string[]> {
-  const { scope, marketplace, plugin } = opts;
-  const warnings: string[] = [];
-  try {
-    await completionCache.dropMarketplaceCache(
-      await locations.pluginCacheFile(marketplace),
-      scope,
-      marketplace,
-    );
-  } catch (error) {
-    warnings.push(
-      `Plugin "${plugin}" reinstalled; completion cache refresh deferred: ${errorMessage(error)}`,
-    );
-  }
-
+  const { marketplace, plugin } = opts;
   const dataDir = await locations.pluginDataDir(marketplace, plugin);
   const removeDataDir = opts.removeDataDir ?? defaultRemoveDataDir;
   try {
     await removeDataDir(dataDir, { recursive: true, force: true });
   } catch (error) {
-    warnings.push(
+    return [
       `Plugin "${plugin}" reinstalled; data cleanup deferred at ${dataDir}: ${errorMessage(error)}`,
-    );
+    ];
   }
 
-  return Object.freeze(warnings);
+  return [];
 }
 
 /**

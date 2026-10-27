@@ -1383,7 +1383,7 @@ test("PRL-13 quiet render suppresses per-plugin notifications", async () => {
   });
 });
 
-test("PRL-13 quiet render returns warning notes after successful cleanup warnings", async () => {
+test("PRL-13 / D-PL1-17: quiet render notes the data cleanup deferral and no cache deferral", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-quiet-warnings-"));
     try {
@@ -1394,6 +1394,7 @@ test("PRL-13 quiet render returns warning notes after successful cleanup warning
         resources: { skill: "old skill" },
         install: true,
       });
+      const dataDir = await locationsFor("project", cwd).pluginDataDir("mp", "hello");
       const { ctx, run, notifications } = makeCtx();
 
       // act
@@ -1414,18 +1415,9 @@ test("PRL-13 quiet render returns warning notes after successful cleanup warning
       // assert
       assert.equal(outcome.partition, "reinstalled");
       assert.deepEqual(notifications, []);
-      assert.ok(
-        outcome.notes?.some((n) =>
-          n.includes(
-            'warning: Plugin "hello" reinstalled; completion cache refresh deferred: cache drop failed',
-          ),
-        ),
-      );
-      assert.ok(
-        outcome.notes?.some((n) =>
-          n.includes('warning: Plugin "hello" reinstalled; data cleanup deferred'),
-        ),
-      );
+      assert.deepStrictEqual(outcome.notes, [
+        `warning: Plugin "hello" reinstalled; data cleanup deferred at ${dataDir}: data cleanup failed`,
+      ]);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -2914,14 +2906,9 @@ test("GAP-14 / UPR-04: a reinstall whose record was removed from state fails as 
   });
 });
 
-test("GAP-15: reinstallPlugin with bridge warning emits notifyWarning before success", async () => {
-  // collectStagingWarnings propagates through locked.bridgeWarnings.
-  // When render='default', bridgeWarnings are emitted via notifyWarning
-  // before the success notification. This exercises the
-  // 'for (const warning of locked.bridgeWarnings)' loop body.
-  // We trigger the warning via a dropMarketplaceCache failure with render='default'.
+test("D-PL1-17: a reinstall whose completion-cache drop fails still reinstalls and notes no cache deferral", async () => {
   await withHermeticHome(async () => {
-    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-bridge-warn-"));
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-cache-drop-fails-"));
     try {
       // arrange
       await seedMarketplace({
@@ -2941,14 +2928,15 @@ test("GAP-15: reinstallPlugin with bridge warning emits notifyWarning before suc
           cwd,
           marketplace: "mp",
           plugin: "hello",
+          render: "none",
         },
         createCompletionCacheWithDrop(() => Promise.reject(new Error("cache-drop-warn"))),
       );
 
       // assert
-      // dropMarketplaceCache failure is swallowed; reinstall still succeeds.
       assert.equal(outcome.partition, "reinstalled");
-      assert.ok(notifications.some((n) => n.message.includes("reinstalled")));
+      assert.equal(outcome.notes, undefined);
+      assert.deepStrictEqual(notifications, []);
     } finally {
       await rm(cwd, { recursive: true, force: true });
     }
@@ -7585,10 +7573,10 @@ function retryCauseChain(message: string): string {
 
 /**
  * The schedule of a reinstall that converged: the swap's intent mark and
- * finalize, its completion-cache refresh, then reinstall's own maintenance
- * (D-18-05, D-18-10).
+ * finalize, its completion-cache refresh (the only drop, D-PL1-17), then
+ * reinstall's own maintenance (D-18-05, D-18-10).
  */
-const CONVERGED_SCHEDULE = ["save:state", "save:state", "drop:cache", "drop:cache", "remove:data"];
+const CONVERGED_SCHEDULE = ["save:state", "save:state", "drop:cache", "remove:data"];
 
 // ──────────────────────────────────────────────────────────────────────────
 // NFR-3 failure-then-retry proof: every operation is safe to retry --
@@ -8615,7 +8603,7 @@ test("retry proof: reinstall: an unreadable base layer is left unchanged by a re
   });
 });
 
-test("retry proof: reinstall: a completion-cache maintenance failure notes the deferral and the retry clears it", async () => {
+test("retry proof: reinstall: a completion-cache drop failure notes nothing and the retry converges", async () => {
   await withHermeticHome(async () => {
     const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-retry-cache-maintenance-"));
     const cacheFault = { enabled: true, message: "completion cache refresh refused" };
@@ -8684,17 +8672,15 @@ test("retry proof: reinstall: a completion-cache maintenance failure notes the d
       });
 
       // assert
-      // The swap's own cache refresh fails silently; only reinstall's
-      // maintenance step notes the deferral, once.
+      // The swap's one cache drop fails silently (D-19-01) and reinstall
+      // drops no second time (D-PL1-17), so neither run notes a deferral.
       assert.equal(first.partition, "reinstalled");
-      assert.deepStrictEqual(first.notes, [
-        'warning: Plugin "hello" reinstalled; completion cache refresh deferred: completion cache refresh refused',
-      ]);
+      assert.equal(first.notes, undefined);
       assert.equal(first.discoveryWarnings, undefined);
       assert.equal(second.partition, "reinstalled");
       assert.equal(second.notes, undefined);
       assert.deepStrictEqual(notifications, []);
-      // The data cleanup still runs, so the deferral is cache-only.
+      // The data cleanup still runs after the failed drop.
       assert.deepStrictEqual(firstSchedule, CONVERGED_SCHEDULE);
       assert.deepStrictEqual(secondSchedule, firstSchedule);
       assert.deepStrictEqual(firstTree, [
