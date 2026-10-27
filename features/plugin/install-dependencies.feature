@@ -696,6 +696,43 @@ Feature: Plugin install dependencies
       | fff@up    | 1.0.0   | true    |
       | lib@tools | 2.0.0   | true    |
 
+  Scenario: Installing a plugin whose installed dependency moves fetches the repository of its new git dependency once
+    Given the git repository "util" holds these plugins:
+      | name | version | path |
+      | util | 1.0.0   |      |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 1.2.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install lib@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies    |
+      | app  | 1.0.0   | lib@^2.0.0,util |
+      | lib  | 2.0.0   |                 |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | util | url         | util       | false  |
+    When the user runs "/claude:plugin install app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name       | status    | reasons                 | scope   | version | from  | to    | cause chain                                                           | cause truncated | leaks | rollback partial |
+      | tools            | project           | app@tools  | app        | installed |                         | project | 1.0.0   |       |       |                                                                       |                 |       |                  |
+      | tools            | project           | lib@tools  | lib@tools  | updated   | dependency current copy | project |         | 1.2.0 | 2.0.0 | constrained to the combined range (^2.0.0) -- required by "app@tools" | false           |       |                  |
+      | tools            | project           | util@tools | util@tools | installed |                         | project | 1.0.0   |       |       |                                                                       |                 |       |                  |
+    Then the git host receives these requests:
+      | method | path                                             | status |
+      | GET    | /acme/util.git/info/refs?service=git-upload-pack | 200    |
+      | POST   | /acme/util.git/git-upload-pack                   | 200    |
+    Then the installation record of the project scope holds these plugins:
+      | id         | version | enabled |
+      | app@tools  | 1.0.0   | true    |
+      | lib@tools  | 2.0.0   | true    |
+      | util@tools | 1.0.0   | true    |
+
   Scenario: Installing a plugin whose moved dependency asks a new dependency for a version the plugin excludes fails before anything changes
     Given the git repository "fff" holds these plugins:
       | name | version | path |
