@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 2
 current_phase_name: Apply Ordering and Installed Declarations
 status: executing
-stopped_at: Completed 02-03-PLAN.md
-last_updated: "2026-10-27T05:37:59.886Z"
+stopped_at: Completed 02-04-PLAN.md
+last_updated: "2026-10-27T06:06:16.542Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase 2 execution started
-state_head: c939ad7855511495669131c64fdf371d7da76438
+state_head: d2733f71c2ce0c5e03c1a98276de6ab161f4bd17
 progress:
   total_phases: 11
   completed_phases: 0
   total_plans: 6
-  completed_plans: 3
+  completed_plans: 4
   percent: 0
 ---
 
@@ -32,7 +32,7 @@ component as a working Pi artifact.
 ## Current Position
 
 Phase: 2 (Apply Ordering and Installed Declarations) — EXECUTING
-Plan: 4 of 6
+Plan: 5 of 6
 Status: Ready to execute
 Last activity: 2026-10-26 — Phase 2 execution started
 
@@ -191,8 +191,8 @@ hit the same wall; convert it rather than re-disclosing it.
 
 ## Session Continuity
 
-**Last session:** 2026-10-27T05:37:59.389Z
-**Stopped at:** Completed 02-03-PLAN.md
+**Last session:** 2026-10-27T06:06:16.352Z
+**Stopped at:** Completed 02-04-PLAN.md
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on
@@ -407,6 +407,7 @@ archived milestone artifacts.
 | Phase 02 P01 | 33min | 2 tasks | 8 files |
 | Phase 02 P02 | 29 min | 2 tasks | 9 files |
 | Phase 02 P03 | 81min | 3 tasks | 8 files |
+| Phase 02 P04 | 27 min | 2 tasks | 6 files |
 
 ## Decisions
 
@@ -615,6 +616,8 @@ archived milestone artifacts.
 - [Phase 02]: D-PL2-01: apply runs MISS-01 after the catalog cascade; its bucket comes from readPlainPlanForScope once a cascade step ran
 - [Phase 02]: D-PL2-16: a waiting record's planned move runs with its enable after MISS-01 (runStep), so a failed install leaves it untouched
 - [Phase 02]: D-PL2-11: disables caused by a MISS-01 refusal print after its (failed) row, dependencies first
+- [Phase 02]: D-PL2-12 (amended): an installed copy is read only under the clone root its record owns, keyed on resolvedSha (plugin-clones/ with it, the marketplace clone without)
+- [Phase 02]: D-PL2-13: a symlinked manifest candidate inside an installed copy is refused and the read answers absent (stricter than Claude Code, NFR-10)
 
 ### mcp-4 decisions
 
