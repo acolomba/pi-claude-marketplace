@@ -630,8 +630,14 @@ function unexpectedFailureReasons(
  * install's row does. D-PL6-04: a dependency whose rollback could not finish
  * gets its own row, with the cause and the phases, beside the plugin's bare
  * `{dependency failed}` row, the two ordered by name as install orders them.
+ * IN-02: two plugins of one block can fail on the same dependency, so the
+ * block shows the dependency's row once, for the first of them;
+ * `shownDependencies` holds the block and dependency keys already shown.
  */
-function unexpectedFailureRows(o: UnexpectedPluginFailureOutcome): readonly PluginFailedMessage[] {
+function unexpectedFailureRows(
+  o: UnexpectedPluginFailureOutcome,
+  shownDependencies: Set<string>,
+): readonly PluginFailedMessage[] {
   if (o.failedDependency === undefined) {
     return [unexpectedFailureRow(o)];
   }
@@ -652,6 +658,12 @@ function unexpectedFailureRows(o: UnexpectedPluginFailureOutcome): readonly Plug
     severity: "error",
     needsReload: false,
   };
+  const shownKey = `${o.scope}:${o.marketplace}:${o.failedDependency.key}`;
+  if (shownDependencies.has(shownKey)) {
+    return [requested];
+  }
+
+  shownDependencies.add(shownKey);
   return [dependency, requested].sort((a, b) =>
     compareByNameThenScope({ name: a.name, scope: o.scope }, { name: b.name, scope: o.scope }),
   );
@@ -803,8 +815,9 @@ function buildImportNotificationMarketplaces(
     pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, row);
   }
 
+  const shownDependencies = new Set<string>();
   for (const o of result.unexpectedPluginFailures) {
-    for (const row of unexpectedFailureRows(o)) {
+    for (const row of unexpectedFailureRows(o, shownDependencies)) {
       pushMarketplaceRow(rowsByMp, o.scope, o.marketplace, row);
     }
   }

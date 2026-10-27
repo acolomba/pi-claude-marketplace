@@ -2254,6 +2254,69 @@ test("D-PL6-04: names a dependency whose rollback could not finish on its own ro
   verifyBoundary();
 });
 
+test("D-PL6-04: names a dependency two plugins of one marketplace failed on once", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticScopes(t, "install-shared-dependency-rollback-partial");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+  const headCause = "failed to stage the MCP servers of lib";
+  const undoFailure = new Error("EACCES: permission denied, unlink 'data.txt'");
+  const failedDependencyFields = {
+    key: "lib@mp",
+    rollbackPartial: [{ phase: "skills", cause: new Error(undoFailure.message) }],
+  };
+
+  // act
+  const importResult = await importClaudeSettings({
+    ctx,
+    cwd,
+    deps: collaborators({
+      addMarketplace: () => Promise.resolve(addedOutcome("mp")),
+      installPlugin: () =>
+        Promise.resolve({
+          ...failedInstallOutcome(new DependencyCascadeError(headCause, "lib@mp"), headCause),
+          rollbackPartials: [{ phase: "skills", msg: undoFailure.message, cause: undoFailure }],
+        }),
+      loadSettings: () => Promise.resolve(settingsForMp("app", "tool")),
+      loadState: () => Promise.resolve(recordedState([])),
+    }),
+    run: runWithNothingLoaded(),
+    hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    selectedScopes: ["user"],
+  });
+
+  // assert
+  assert.deepStrictEqual(importResult, {
+    ...emptyImportResult(),
+    addedMarketplaces: [added("mp", "user")],
+    unexpectedPluginFailures: [
+      {
+        ...failedDependency("app", "mp", "user", headCause),
+        failedDependency: failedDependencyFields,
+      },
+      {
+        ...failedDependency("tool", "mp", "user", headCause),
+        failedDependency: failedDependencyFields,
+      },
+    ],
+  });
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "Some plugin operations have failed.\n\n" +
+        "● mp [user] (added)\n" +
+        "  ⊘ app (failed) {dependency failed}\n" +
+        "  ⊘ lib@mp (failed) {rollback partial}\n" +
+        `    cause: ${headCause}\n` +
+        "    [skills] (rollback failed)\n" +
+        `      cause: ${undoFailure.message}\n` +
+        "  ⊘ tool (failed) {dependency failed}\n\n" +
+        "Import: 3 failures, 1 success",
+      severity: "error",
+    },
+  ]);
+  verifyBoundary();
+});
+
 // The generic `unexpected-failure` fallthrough shares the same defect surface
 // as the dependency-cascade arm: any orchestrated error with a nested cause
 // (e.g. a bridge-staging error wrapping an errno) must render its chain

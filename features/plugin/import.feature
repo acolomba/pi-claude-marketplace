@@ -914,3 +914,40 @@ Feature: Plugin import
       | fixtures         | user              | added              | lib@fixtures | lib@fixtures | failed | rollback partial  | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
     Then the installation record of the user scope holds these plugins:
       | id | version | enabled |
+
+  Scenario: Importing two plugins whose shared dependency rollback cannot finish names that dependency once
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib          |
+      | tool | 1.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "fixtures" has a read-only skill directory
+    Given a directory blocks the mcp-adapter.json file of the user scope
+    Given the claude code settings file of the user scope holds this text:
+      """
+      {
+        "enabledPlugins": { "app@fixtures": true, "tool@fixtures": true },
+        "extraKnownMarketplaces": {
+          "fixtures": {
+            "source": { "source": "directory", "path": "{home}/marketplaces/fixtures" }
+          }
+        }
+      }
+      """
+    When the user runs "/claude:plugin import --scope user"
+    Then the result has these fields:
+      | kind                | cascade                             |
+      | severity            | error                               |
+      | needs reload        | false                               |
+      | summary             | Some plugin operations have failed. |
+      | tally label         | Import                              |
+      | tally failures      | 3                                   |
+      | tally warnings      | 0                                   |
+      | tally success count | 1                                   |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name         | status | reasons           | scope | cause chain                                                  | cause truncated | leaks | rollback partial                                                                                         |
+      | fixtures         | user              | added              | app@fixtures  | app          | failed | dependency failed | user  |                                                              |                 |       |                                                                                                          |
+      | fixtures         | user              | added              | lib@fixtures  | lib@fixtures | failed | rollback partial  | user  | {mcp-adapter.json read error}, {mcp-adapter.json read error} | false           |       | [{"phase":"skills","cause":{"causeChain":["{read-only skill directory removal error}"],"truncated":false}}] |
+      | fixtures         | user              | added              | tool@fixtures | tool         | failed | dependency failed | user  |                                                              |                 |       |                                                                                                          |
+    Then the installation record of the user scope holds these plugins:
+      | id | version | enabled |

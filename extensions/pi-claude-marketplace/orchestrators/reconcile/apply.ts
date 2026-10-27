@@ -135,6 +135,7 @@ import type {
   PluginConvergedOutcome,
   PluginDependencyDisabledOutcome,
   PluginEnableFailedOutcome,
+  PluginInstallFailedOutcome,
 } from "./apply-outcomes.ts";
 import type { ConvergenceCascade, PlannedMove } from "./convergence.ts";
 import type { ScopeSatisfactionVerdict, UnsatisfiedDeclaration } from "./dependency-verdict.ts";
@@ -490,7 +491,7 @@ function dependencyRollbackOutcome(
   scope: Scope,
   error: DependencyCascadeError,
   rollbackPartials: NonNullable<FailedPluginInstall["rollbackPartials"]>,
-): PerEntryOutcome {
+): PluginInstallFailedOutcome {
   const at = error.key.lastIndexOf("@");
   return {
     kind: "plugin-install-failed",
@@ -501,6 +502,19 @@ function dependencyRollbackOutcome(
     cause: redactedDependencyCascadeError(error),
     rollbackPartials,
   };
+}
+
+/** IN-02: whether `outcome` is a failed-install row of the same plugin. */
+function isSameFailedInstall(
+  outcome: PerEntryOutcome,
+  dependency: PluginInstallFailedOutcome,
+): boolean {
+  return (
+    outcome.kind === "plugin-install-failed" &&
+    outcome.scope === dependency.scope &&
+    outcome.marketplace === dependency.marketplace &&
+    outcome.plugin === dependency.plugin
+  );
 }
 
 /**
@@ -521,12 +535,16 @@ function dependencyRollbackOutcome(
  * redacting, so `redactedDependencyCascadeError` rebuilds the FULL chain (via
  * `redactCauseChain`) with every link redacted, instead of dropping it.
  *
+ * IN-02: two installs can fail on the same dependency, so the dependency's row
+ * is left out when `outcomes` already holds a failed-install row for it.
+ *
  * AFILE-04: dependencies that committed before the failure rewrote the MCP
  * config, so their notices ride the requested plugin's failed row.
  */
 function installFailedOutcomes(
   op: ReconcilePlan["pluginsToInstall"][number],
   result: FailedPluginInstall,
+  outcomes: readonly PerEntryOutcome[],
 ): PerEntryOutcome[] {
   const { error, rollbackPartials = [] } = result;
   const subject = {
@@ -550,9 +568,10 @@ function installFailedOutcomes(
 
   const phases = redactedRollbackPartials(rollbackPartials);
   if (error instanceof DependencyCascadeError) {
+    const dependency = dependencyRollbackOutcome(op.scope, error, phases);
     return [
       { ...subject, reason: "dependency failed", ...carriedMcpConfigNotices(result) },
-      dependencyRollbackOutcome(op.scope, error, phases),
+      ...(outcomes.some((outcome) => isSameFailedInstall(outcome, dependency)) ? [] : [dependency]),
     ];
   }
 
@@ -714,7 +733,7 @@ async function applyPluginInstalls(
         ...carriedMcpConfigNotices(result),
       });
     } else {
-      outcomes.push(...installFailedOutcomes(op, result));
+      outcomes.push(...installFailedOutcomes(op, result, outcomes));
     }
   }
 
