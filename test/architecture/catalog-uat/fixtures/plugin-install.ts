@@ -793,7 +793,7 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 version: "1.0.0",
                 reasons: ["already installed", "version conflict"],
                 cause: new Error(
-                  'Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "helper@official"',
+                  'Dependency "formatter@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0, and cannot move: version 1.5.0 falls outside what the combined range admits (^2.0.0) -- required by "helper@official". To look for a version in range, run /claude:plugin update formatter@tools.',
                 ),
                 severity: "error",
                 needsReload: false,
