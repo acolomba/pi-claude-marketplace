@@ -53,6 +53,7 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 - [ ] **CAS-08**: The routes D-PL3-15 left with one failed row (the root's own ledger failure, UPD-DEP-D1 plan-step failures, a catalog lookup that throws mid-walk) also give a row to each member that resolved but did not install (CLOSUREROW-01 residue)
 - [ ] **MIM-05**: A partial rollback of `apply`'s missing-dependency (MISS-01) install shows the per-phase detail `install` shows, like the other import and apply rows MIM-03 covers (D-PL6-05 residue; needs Phase 4's outcome type)
 - [ ] **XPH-01**: Wave-1 cross-phase residue is closed after the merge: the add-time MISS-01 step routes its post-commit hygiene warnings through the tagged warning channel (2.30); `import`'s own `<mp>@<mp>` row and the retired D-76-04 citation in `orchestrators/import/marketplaces.ts` are fixed (5.27, 5.28); and scenarios pin the git-revision post-move read (2.19), the reinstall `{status} on {url}` frame (7.16), and completion after `market` (7.15, with the completion harness it needs); `apply` and the load re-add a marketplace in place on a declared source change, as `import` does under D-PL6-19, the official marketplace's fallback source reads as up to date as upstream's `sourceIsFallback` does, and a local-layer declaration of an old source no longer outlives an import re-add; a pty-backed `tui` cucumber driver gives the background autoupdate pass, its wait cap, and its notice dedupe scenarios (D-PL8 follow-ups); and the package-install tree kill gets a scenario
+- [ ] **XPH-02**: The babysit-review residue across phases is closed: the `marketplace update` cascade gives an occupied agent target no reason, as the direct update path does (D-PL4-09); `fetch` and `update` read an unrecognised network error the same way; a dependency move during `update` or `apply` keeps its staging warnings and MCP notices; a forced reinstall keeps or reports a foreign agents-index row whose generated name it stages; a failed install's root cause redacts absolute paths as its members' causes do; the commit-time occupied-agent refusal is typed and shows the file name only, as the preview refusal does; install-cascade members show their package note (WRN-02); a post-clone invalid manifest no longer suggests retrying; and a plugin with only a `yarn.lock` or `pnpm-lock.yaml` behaves as Claude Code does
 
 ### Dependency resolver (RSV)
 
@@ -111,9 +112,9 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 ### Cleanup and docs (CLN)
 
-- [ ] **CLN-01**: The LCCODE-01 dead code, optional fields, duplicates, misplacements, the `prototypeReads` pin, and the over-long literals are fixed (LCCODE-01 b1, b4, b5, b8-b11)
+- [ ] **CLN-01**: The LCCODE-01 dead code, optional fields, duplicates, misplacements, the `prototypeReads` pin, and the over-long literals are fixed (LCCODE-01 b1, b4, b5, b8-b11); the test-only `ApplyReconcileOptions.restoreDeferredPin` option is replaced by an injected collaborator
 - [ ] **CLN-02**: `orchestrators/plugin/install-flow.ts` is split so no module passes the size the project's other split verbs keep (UPDDEP-01 b7)
-- [ ] **CLN-03**: CHANGELOG, the PRD, the output catalog, stale comments, the feature descriptions, and PROJECT.md decision rows match the shipped behavior (LCDOC-01)
+- [ ] **CLN-03**: CHANGELOG, the PRD, the output catalog, stale comments, the feature descriptions, and PROJECT.md decision rows match the shipped behavior, including PROJECT.md's NFR-5 constraint line (AAP-D1, D-PL5-08, D-PL8-01, D-PL9-10) and ARCHITECTURE.md's rule-pack list (`child-process-chokepoint`, D-PL9-11) and `fetch` chokepoint (`platform/hosted-manifest-fetch.ts`, D-PL5-07) (LCDOC-01)
 - [ ] **CLN-04**: Every lifecycle backlog entry this milestone settles is closed in `BACKLOG.md` with its disposition
 
 ## Future Requirements
@@ -161,6 +162,7 @@ None.
 | CAS-08 | Phase 10 | Pending |
 | MIM-05 | Phase 10 | Pending |
 | XPH-01 | Phase 10 | Pending |
+| XPH-02 | Phase 10 | Pending |
 | RSV-01 | Phase 4 | Complete |
 | RSV-02 | Phase 4 | Complete |
 | RSV-03 | Phase 4 | Complete |

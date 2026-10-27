@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+- Autoupdate marketplaces now update in the background, plugins get their npm or bun packages, and marketplace, import, dependency, and `apply` behavior moves closer to Claude Code. (#NNN)
+
+  - After your first message in the terminal UI, Pi updates the plugins of each autoupdate marketplace in the background. One notice names them and asks for `/reload`. `DISABLE_AUTOUPDATER` and Claude Code's other opt-out variables turn this off.
+  - Claude Code's official marketplaces now have autoupdate on by default. A config file that Pi cannot read turns autoupdate off for its whole scope.
+  - A plugin with `package.json` and a `package-lock.json`, `npm-shrinkwrap.json`, or `bun.lock` gets its npm or bun packages on install and update, as in Claude Code. A failed or refused package install leaves the plugin installed, with a note.
+  - `uninstall` and `prune` remove the packages that Pi installed for a plugin.
+  - `marketplace add` accepts an https URL to a hosted `marketplace.json`, and `marketplace update` downloads it again. A plugin that a hosted marketplace lists by a relative path is unavailable, as in Claude Code.
+  - `marketplace add` and `update` refuse every name that Claude Code reserves. Each load reports a marketplace recorded under such a name until you remove it.
+  - `/claude:plugin market` works as an alias of `marketplace`, the `owner/repo@ref` shorthand splits at the first `@` or `#`, and adding a marketplace again restores a missing checkout.
+  - `import` now adds every marketplace your Claude settings list. A marketplace whose source you added under another name is reused, and its plugins fail as not added. A changed source is added again in place.
+  - `import` and `apply` now name each step of a failed install whose rollback failed, as `install` does. All three name the skill that a failed rollback leaves behind.
+  - Staging warnings now show for `enable`, failed installs, updates, reinstalls, `marketplace update`, autoupdate, and `apply`, under a header that names the plugin's scope. `update` also shows its dependencies' MCP config notices.
+  - `pending` and `apply` now list and make catalog moves, missing dependency installs, and enables in the same order. One `apply` installs a missing dependency that needs a version the same `apply` moves to.
+  - `marketplace add`, `bootstrap`, and autoupdate now install the missing dependencies of installed plugins, and report any they cannot install.
+  - `enable` and `update` now read an installed git plugin's dependencies from its installed copy, as Claude Code does. A plugin whose manifest link leads outside the plugin fails to install.
+  - A failed install now lists each new dependency it did not install as `{dependency failed}`. Its errors show file names, not absolute paths.
+  - Dependency refusals now name every plugin that asked for a range, cut long versions and ranges as Claude Code does, and suggest `/claude:plugin update <dependency>` when that can help.
+  - Installing a plugin whose name breaks the plugin id rule now gets Claude Code's invalid-id refusal.
+  - An install fetches each new git dependency once and installs the commit it checked. An install or update fails and changes nothing when your own file in `agents/` has the name of a new agent.
+  - `update`, `fetch`, `info --fetch`, and dependency range checks report a git host 404 or 5xx as `install` does. `fetch` and completion show `list`'s version.
+
 - A new session now lists pending plugin changes, the new `/claude:plugin apply` makes them, and several plugin commands behave more like Claude Code. (#274)
 
   - A new session or `/reload` lists the changes your configs and marketplaces need. `apply` makes them and moves plugins to the version their marketplace offers. Run `/reload` after it.
