@@ -278,8 +278,9 @@ export interface ResolvedRollbackPhase {
  * row, or the constraint disclosure of an `updated` or `reinstalled` row
  * (D-10-13 / D-10-17a).
  * `cause` is absent when the row carries no cause. `leaks` names the paths the
- * user must clean up by hand. `rollbackPartial` lists the phases whose undo
- * failed; it is empty on a manual-recovery row.
+ * user must clean up by hand: those of the row's cause, then those of each
+ * rollback phase's cause (D-PL6-20). `rollbackPartial` lists the phases whose
+ * undo failed; it is empty on a manual-recovery row.
  */
 export interface ResolvedFailure {
   readonly cause?: SerializedCauseChain;
@@ -570,9 +571,14 @@ function resolveFailure(
   rollbackPartial: NonNullable<PluginFailedMessage["rollbackPartial"]>,
 ): ResolvedFailure {
   const chain = serializeCauseChain(cause);
+  // F-5: a path two causes leak is listed once.
+  const leaks = new Set([
+    ...manualRecoveryLeaks(cause),
+    ...rollbackPartial.flatMap((entry) => manualRecoveryLeaks(entry.cause)),
+  ]);
   return {
     ...(chain === undefined ? {} : { cause: chain }),
-    leaks: manualRecoveryLeaks(cause).map((leak) => redactCredentials(leak)),
+    leaks: [...leaks].map((leak) => redactCredentials(leak)),
     rollbackPartial: rollbackPartial.map((entry) => {
       const phaseChain = serializeCauseChain(entry.cause);
       return phaseChain === undefined
