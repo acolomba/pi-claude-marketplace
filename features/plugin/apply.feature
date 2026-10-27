@@ -189,6 +189,43 @@ Feature: Plugin apply
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
 
+  Scenario: Apply that an invalid GitHub base address stops keeps a plugin enabled whose missing dependency it installed first
+    Given pi runs with the github base address "http://example.invalid"
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | app    | 1.0.0   |              |
+      | audit  | 1.0.0   |              |
+      | avault | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin install audit@tools --scope project"
+    Given the git repository "zvault" holds these plugins:
+      | name   | version | path |
+      | zvault | 1.0.0   |      |
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | app    | 1.0.0   | avault       |
+      | audit  | 1.0.0   | zvault       |
+      | avault | 1.0.0   |              |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name   | source kind | repository | pinned |
+      | zvault | github      | zvault     | false  |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the command reports these results:
+      | kind                      | severity | needs reload | summary                             | cause chain                                                       | cause truncated | tally label | tally failures | tally warnings | tally success count |
+      | reconcile-applied-cascade | warning  | true         | A plugin operation needs attention. |                                                                   |                 | Reconcile   | 0              | 1              | 1                   |
+      | internal-error            | error    | true         | Command failed unexpectedly.        | PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme. | false           |             |                |                |                     |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id           | name   | status    | reasons                | scope   | version | cause chain                                       | cause truncated | leaks | rollback partial |
+      | tools            | project           | avault@tools | avault | installed | dependency installed   | project | 1.0.0   |                                                   |                 |       |                  |
+      | tools            | project           | audit@tools  | audit  | disabled  | dependency unsatisfied | project | 1.0.0   | Install "zvault@tools" or uninstall "audit@tools" | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | app@tools    | 1.0.0   | true    |
+      | audit@tools  | 1.0.0   | false   |
+      | avault@tools | 1.0.0   | true    |
+
   Scenario: Apply disables a plugin whose marketplace now declares a newer version of its dependency
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:

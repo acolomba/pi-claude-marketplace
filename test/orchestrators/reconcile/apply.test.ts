@@ -93,6 +93,7 @@ import { createJsonCapture } from "../../edge/json-capture.ts";
 import { createNotificationBoundary } from "../../edge/notification-boundary.ts";
 import { createGitOpsFake } from "../../platform/git-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
+import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 import { retryTree } from "../plugin/scope-tree-inventory.ts";
 
@@ -6263,6 +6264,99 @@ describe("applyReconcile", () => {
     const deployKit = await recordFor(project, "mp", "deploy-kit");
     assert.equal(deployKit?.enabled, true);
     assert.equal(Object.hasOwn(deployKit ?? {}, "dependencyDisabled"), false);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-PL2-01 / GHB-03: a dependency installed before a later install throws keeps its dependent enabled", async (t) => {
+    // arrange
+    setGitHubBaseUrl(t, "http://mirror.example");
+    const { cwd, project } = await createHermeticScopes(t, "dependency-install-then-throw");
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      "deploy-kit": { dependencies: ["alpha-vault"], skill: "clean" },
+      "audit-kit": { dependencies: ["zeta-vault"], skill: "clean" },
+      "alpha-vault": { skill: "clean" },
+    });
+    const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as {
+      plugins: unknown[];
+    };
+    manifest.plugins.push({
+      name: "zeta-vault",
+      version: "1.0.0",
+      source: { source: "github", repo: "acme/zeta-vault", sha: "a".repeat(40) },
+    });
+    await writeFile(manifestPath, JSON.stringify(manifest), "utf8");
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "deploy-kit@mp": {}, "audit-kit@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+          plugins: {
+            "deploy-kit": pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "deploy-kit"),
+            }),
+            "audit-kit": pluginRecord({
+              supported: ["skills"],
+              pluginRoot: path.join(marketplaceRoot, "plugins", "audit-kit"),
+            }),
+          },
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    const pass = applyReconcile({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+    });
+
+    // assert
+    await assert.rejects(pass, InvalidGitHubBaseUrlError);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation needs attention.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● alpha-vault v1.0.0 (installed) {dependency installed}\n" +
+          "  ◍ audit-kit v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "zeta-vault@mp" or uninstall "audit-kit@mp"\n' +
+          "\n" +
+          "Reconcile: 1 warning, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "warning",
+      },
+    ]);
+    const records = await Promise.all(
+      ["alpha-vault", "deploy-kit", "audit-kit"].map((plugin) => recordFor(project, "mp", plugin)),
+    );
+    assert.deepStrictEqual(
+      records.map((record) => [record?.enabled, record?.dependencyDisabled]),
+      [
+        [true, undefined],
+        [true, undefined],
+        [false, true],
+      ],
+    );
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });

@@ -1264,7 +1264,10 @@ async function convergeScope(
   }
 }
 
-/** The rows the steps after the catalog moves report, and whether one changed the scope. */
+/**
+ * The rows the steps after the catalog moves report, and whether one may have
+ * changed the scope.
+ */
 interface AfterMoves {
   readonly rows: PerEntryOutcome[];
   landed: boolean;
@@ -1296,12 +1299,11 @@ async function installAfterMoves(
     run.reports.length > 0
       ? (await readPlainPlan(reader, opts, scope, after.rows)).plan?.pluginsToDependencyInstall
       : undefined;
-  const satisfied = await applyDependencyInstalls(
-    opts,
-    installs ?? toggles.plan.pluginsToDependencyInstall,
-    after.rows,
-  );
-  after.landed = satisfied;
+  const bucket = installs ?? toggles.plan.pluginsToDependencyInstall;
+  // WR-01: an install can commit before a later one throws (GHB-03), so the
+  // judgement reads the scope again once any install or enable is tried.
+  after.landed = bucket.length > 0;
+  const satisfied = await applyDependencyInstalls(opts, bucket, after.rows);
   if (!satisfied && run.waiting.size === 0) {
     return;
   }
@@ -1318,6 +1320,7 @@ async function installAfterMoves(
   const moves = new Map(run.cascade.plan.moves.map((move) => [pluginKey(move), move]));
   const convergePlugin = createConvergeOperation(opts.hooksRouting, opts.completionCache);
   const reports: StepReport[] = [];
+  after.landed ||= enables.length > 0;
   for (const enable of dependenciesFirst(enables, pluginKey, run.cascade.declarations)) {
     const key = pluginKey(enable);
     const move = moves.get(key);
@@ -1327,7 +1330,6 @@ async function installAfterMoves(
   }
 
   after.rows.push(...reports.flatMap((report) => report.rows));
-  after.landed ||= enables.length > 0;
 }
 
 /**
