@@ -74,6 +74,35 @@ Given(
   },
 );
 
+Given(
+  "the git repository {string} holds these plugins with no manifest:",
+  async function (this: ScenarioWorld, name: string, table: DataTable) {
+    const plugins = readRepositoryPlugins(table).map((plugin) => ({
+      ...plugin,
+      withoutManifest: true as const,
+    }));
+    const repository = await publishRepositoryRevision(this, name, plugins);
+    this.recordGitRepository(repository);
+    const pushed = await Promise.all(
+      plugins.map((plugin) =>
+        runGit(
+          repository.bareRepository,
+          repository.gitHome,
+          "ls-tree",
+          "main",
+          "--",
+          path.posix.join(plugin.path, ".claude-plugin", "plugin.json"),
+        ),
+      ),
+    );
+    assert.deepStrictEqual(
+      pushed,
+      plugins.map(() => ""),
+      `a plugin of ${name} still has a pushed manifest`,
+    );
+  },
+);
+
 // Files that a plugin's manifest links to from outside its repository live
 // apart from the work trees, which a later revision replaces.
 const LINKED_MANIFESTS_DIRECTORY = "linked-manifests";

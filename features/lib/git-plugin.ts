@@ -6,10 +6,11 @@
  * more plugins, each at the repository root or at a path inside it, published
  * as a bare repository the git host serves. Stating its plugins again commits
  * and pushes a new revision, as does turning a plugin's manifest into a link. A
- * marketplace offers a plugin of such a repository as a `github` source, which
- * the GitHub base override sends to the git host, or as a `url` or
- * `git-subdir` source that names the host's loopback address, unpinned or
- * pinned to the repository's latest revision.
+ * plugin may also be published with no manifest at all. A marketplace offers a
+ * plugin of such a repository as a `github` source, which the GitHub base
+ * override sends to the git host, or as a `url` or `git-subdir` source that
+ * names the host's loopback address, unpinned or pinned to the repository's
+ * latest revision, and its entry may declare dependencies.
  */
 
 import assert from "node:assert/strict";
@@ -20,13 +21,17 @@ import { publishGitRepository, pushGitRepository } from "./git-marketplace.ts";
 import { runGit } from "./hermetic-git.ts";
 import { readDependencyCell, requireColumns, writePluginFiles } from "./path-marketplace.ts";
 
-import type { OfferedPlugin } from "./path-marketplace.ts";
+import type { OfferedPlugin, RangedDependency } from "./path-marketplace.ts";
 import type { GitRepositoryHost } from "./published-marketplace.ts";
 import type { DataTable } from "@cucumber/cucumber";
 
-/** One plugin a git repository holds, at `path` inside it; an empty path is the root. */
+/**
+ * One plugin a git repository holds, at `path` inside it; an empty path is the
+ * root. `withoutManifest` publishes it with no `.claude-plugin` directory.
+ */
 export interface RepositoryPlugin extends OfferedPlugin {
   readonly path: string;
+  readonly withoutManifest?: true;
 }
 
 /**
@@ -52,13 +57,15 @@ const GIT_PLUGIN_SOURCE_KINDS: readonly GitPluginSourceKind[] = ["github", "url"
 
 /**
  * A plugin a marketplace offers from the git repository `repository`, as a
- * `kind` source, pinned or not to the repository's latest revision.
+ * `kind` source, pinned or not to the repository's latest revision, with the
+ * dependencies its entry declares, if any.
  */
 export interface GitPluginOffer {
   readonly name: string;
   readonly kind: GitPluginSourceKind;
   readonly repository: string;
   readonly pinned: boolean;
+  readonly dependencies?: readonly (string | RangedDependency)[];
 }
 
 /** The `source` object of a marketplace entry that offers a git plugin. */
@@ -74,6 +81,7 @@ export interface GitPluginSource {
 export interface GitPluginEntry {
   readonly name: string;
   readonly source: GitPluginSource;
+  readonly dependencies?: readonly (string | RangedDependency)[];
 }
 
 const REPOSITORY_COLUMNS = ["name", "version", "path"] as const;
@@ -117,7 +125,13 @@ async function writeRepositoryPlugins(
   plugins: readonly RepositoryPlugin[],
 ): Promise<void> {
   await Promise.all(
-    plugins.map((plugin) => writePluginFiles(path.join(workTree, plugin.path), plugin)),
+    plugins.map(async (plugin) => {
+      const pluginRoot = path.join(workTree, plugin.path);
+      await writePluginFiles(pluginRoot, plugin);
+      if (plugin.withoutManifest === true) {
+        await rm(path.join(pluginRoot, ".claude-plugin"), { recursive: true });
+      }
+    }),
   );
 }
 
@@ -268,19 +282,27 @@ function parsePinned(text: string): boolean {
   }
 }
 
+const OFFER_COLUMNS = ["name", "source kind", "repository", "pinned"] as const;
+
 /**
- * Reads a `| name | source kind | repository | pinned |` table, throwing on a
+ * Reads a `| name | source kind | repository | pinned |` table, or one with a
+ * last `dependencies` column that `readDependencyCell` reads, throwing on a
  * missing or unknown column, a source kind other than `github`, `url`, and
  * `git-subdir`, and a pinned cell other than `true` and `false`.
  */
 export function readGitPluginOffers(table: DataTable): GitPluginOffer[] {
-  requireColumns(table, ["name", "source kind", "repository", "pinned"]);
-  return table.hashes().map((row) => ({
-    name: String(row.name),
-    kind: parseGitPluginSourceKind(String(row["source kind"])),
-    repository: String(row.repository),
-    pinned: parsePinned(String(row.pinned)),
-  }));
+  const declaresDependencies = table.raw()[0]?.length === OFFER_COLUMNS.length + 1;
+  requireColumns(table, declaresDependencies ? [...OFFER_COLUMNS, "dependencies"] : OFFER_COLUMNS);
+  return table.hashes().map((row) => {
+    const dependencies = declaresDependencies ? readDependencyCell(String(row.dependencies)) : [];
+    return {
+      name: String(row.name),
+      kind: parseGitPluginSourceKind(String(row["source kind"])),
+      repository: String(row.repository),
+      pinned: parsePinned(String(row.pinned)),
+      ...(dependencies.length > 0 && { dependencies }),
+    };
+  });
 }
 
 function latestRevision(repository: GitPluginRepository): string {
@@ -296,7 +318,8 @@ function latestRevision(repository: GitPluginRepository): string {
  * Returns the marketplace entry that offers the plugin of `offer` from
  * `repository` on `host`. A github or url source clones the whole repository,
  * so it needs the plugin at the root; a git-subdir source names the plugin's
- * path. A pinned offer carries the repository's latest revision as its `sha`.
+ * path. A pinned offer carries the repository's latest revision as its `sha`,
+ * and an offer that declares dependencies carries them on the entry.
  */
 export function gitPluginEntry(
   offer: GitPluginOffer,
@@ -314,22 +337,32 @@ export function gitPluginEntry(
     );
   }
 
+  return {
+    name: offer.name,
+    source: gitPluginSource(offer, repository, host, plugin.path),
+    ...(offer.dependencies !== undefined && { dependencies: offer.dependencies }),
+  };
+}
+
+function gitPluginSource(
+  offer: GitPluginOffer,
+  repository: GitPluginRepository,
+  host: GitRepositoryHost,
+  pluginPath: string,
+): GitPluginSource {
   const sha = offer.pinned ? { sha: latestRevision(repository) } : {};
   const url = host.repositoryUrl(repository.name, repository.owner);
   switch (offer.kind) {
     case "github":
       return {
-        name: offer.name,
-        source: {
-          source: offer.kind,
-          repo: host.repositoryShorthand(repository.name, repository.owner),
-          ...sha,
-        },
+        source: offer.kind,
+        repo: host.repositoryShorthand(repository.name, repository.owner),
+        ...sha,
       };
     case "url":
-      return { name: offer.name, source: { source: offer.kind, url, ...sha } };
+      return { source: offer.kind, url, ...sha };
     case "git-subdir":
-      return { name: offer.name, source: { source: offer.kind, url, path: plugin.path, ...sha } };
+      return { source: offer.kind, url, path: pluginPath, ...sha };
   }
 }
 

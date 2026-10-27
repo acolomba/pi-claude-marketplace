@@ -1076,9 +1076,29 @@ test("D-PL2-06 / D-05-07: an installed copy whose manifest is present but unusab
   );
 });
 
-test("D-PL2-06: an installed copy that holds no manifest falls back to the catalog read", async () => {
+test("D-PL2-22: an installed copy that holds no manifest answers its marketplace entry alone, not the catalog copy's manifest", async () => {
   // arrange
   const { mp, loadManifest } = pinnedAppScope({ app: { dependencies: ["lib"] }, lib: {} });
+  const reader = ownManifests({
+    [path.join(copyRoot("app"), ".claude-plugin", "plugin.json")]: JSON.stringify({
+      dependencies: ["kit"],
+    }),
+  });
+
+  // act
+  const read = await readInstalledRecordDeclarations(
+    { state: stateOf(mp), locations: LOCATIONS, reader, loadManifest },
+    mp,
+    "app",
+  );
+
+  // assert
+  assert.deepStrictEqual(read, { ok: true, declared: [{ name: "lib", marketplace: "mp" }] });
+});
+
+test("D-PL2-22 / D-05-07: an installed copy that holds no manifest beside an unusable entry declaration fails as invalid manifest", async () => {
+  // arrange
+  const { mp, loadManifest } = pinnedAppScope({ app: { dependencies: [42] }, lib: {} });
 
   // act
   const read = await readInstalledRecordDeclarations(
@@ -1088,10 +1108,44 @@ test("D-PL2-06: an installed copy that holds no manifest falls back to the catal
   );
 
   // assert
-  assert.deepStrictEqual(read, { ok: true, declared: [{ name: "lib", marketplace: "mp" }] });
+  assert.deepStrictEqual(
+    read.ok
+      ? undefined
+      : { declarer: read.declarer, reason: read.reason, message: read.cause.message },
+    {
+      declarer: "app@mp",
+      reason: "invalid manifest",
+      message: "cannot read the dependencies of app@mp: dependencies.0: Invalid input",
+    },
+  );
 });
 
-test("D-PL2-06: an installed copy that is gone falls back to the catalog read on real disk", async (t) => {
+test("D-PL2-22 / D-05-07: a delisted record pinned to a commit whose copy holds no manifest fails as not in manifest", async () => {
+  // arrange
+  const { mp, loadManifest } = pinnedAppScope({ lib: {} });
+
+  // act
+  const read = await readInstalledRecordDeclarations(
+    { state: stateOf(mp), locations: LOCATIONS, reader: ownManifests(), loadManifest },
+    mp,
+    "app",
+  );
+
+  // assert
+  assert.deepStrictEqual(
+    read.ok
+      ? undefined
+      : { declarer: read.declarer, reason: read.reason, message: read.cause.message },
+    {
+      declarer: "app@mp",
+      reason: "not in manifest",
+      message:
+        "cannot read the dependencies of app@mp: not declared by its marketplace, and its installed copy cannot be read",
+    },
+  );
+});
+
+test("D-PL2-22: an installed copy that is gone answers its marketplace entry alone on real disk", async (t) => {
   // arrange
   const root = await mkdtemp(path.join(tmpdir(), "dependency-index-gone-"));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -1106,6 +1160,15 @@ test("D-PL2-06: an installed copy that is gone falls back to the catalog read on
       plugins: [{ name: "app", source: "./plugins/app", dependencies: ["lib"] }],
     }),
   );
+  const catalogManifest = path.join(
+    marketplaceRoot,
+    "plugins",
+    "app",
+    ".claude-plugin",
+    "plugin.json",
+  );
+  await mkdir(path.dirname(catalogManifest), { recursive: true });
+  await writeFile(catalogManifest, JSON.stringify({ dependencies: ["kit"] }));
   const mp: MarketplaceRecord = {
     ...marketplaceRecord("mp", {}),
     manifestPath,

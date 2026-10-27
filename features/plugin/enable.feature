@@ -235,6 +235,44 @@ Feature: Plugin enable
       | app@tools | 1.0.0   | true    |
       | lib@tools | 1.2.0   | true    |
 
+  Scenario: Enabling a git-source plugin whose installed copy has no manifest enables the dependency its marketplace entry declares
+    Given the git repository "app" holds these plugins with no manifest:
+      | name | version | path |
+      | app  | 1.0.0   |      |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | lib  | 1.2.0   |              |
+      | kit  | 1.0.0   |              |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned | dependencies |
+      | app  | url         | app        | false  | lib          |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install lib@tools --scope project"
+    Given the user has run "/claude:plugin install kit@tools --scope project"
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the git repository "app" holds these plugins:
+      | name | version | path | dependencies |
+      | app  | 2.0.0   |      | kit          |
+    Given the user has run "/claude:plugin fetch app@tools --scope project"
+    Given the user has run "/claude:plugin disable app@tools --scope project"
+    Given the user has run "/claude:plugin disable lib@tools --scope project"
+    Given the user has run "/claude:plugin disable kit@tools --scope project"
+    When the user runs "/claude:plugin enable app@tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name      | status    | reasons            | scope   | version          |
+      | tools            | project           | app@tools | app       | installed |                    | project | {app revision 1} |
+      | tools            | project           | lib@tools | lib@tools | installed | dependency enabled | project | 1.2.0            |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version          | enabled |
+      | app@tools | {app revision 1} | true    |
+      | kit@tools | 1.0.0            | false   |
+      | lib@tools | 1.2.0            | true    |
+
   Scenario: Enabling a git-source plugin follows a manifest that its installed copy links inside the copy
     Given the git repository "app" holds these plugins:
       | name | version | path | dependencies |

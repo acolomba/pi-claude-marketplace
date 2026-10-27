@@ -70,6 +70,8 @@
 // rather than a flag on the neighbour, and keeping it in this file inherits
 // the file's network-free gate entry.
 
+import { parseDeclaredDependencies } from "../../domain/dependencies.ts";
+import { toClosureLookupResult } from "../../domain/dependency-closure.ts";
 import { lookupDeclaredPlugin } from "../../domain/manifest-lookup.ts";
 import { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
@@ -90,6 +92,7 @@ import type {
 import type { DeclaredDependency } from "../../domain/dependencies.ts";
 import type { DeclarationLookupResult } from "../../domain/dependency-closure.ts";
 import type { DeclarationIndex, OrphanCandidate } from "../../domain/dependency-orphans.ts";
+import type { ManifestPluginEntry } from "../../domain/manifest-lookup.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -272,6 +275,18 @@ export function unusableDeclaration(
   );
 }
 
+/**
+ * D-05-07: the failure of a record its marketplace does not list and whose
+ * installed copy answers nothing.
+ */
+function notInManifest(key: string): IndexFailure {
+  return unreadableDeclarer(
+    key,
+    "not in manifest",
+    "not declared by its marketplace, and its installed copy cannot be read",
+  );
+}
+
 /** `dependencies`, each addressed in the declaring record's marketplace where it names none. */
 function addressedDeclarations(
   dependencies: readonly DeclaredDependency[],
@@ -312,11 +327,7 @@ async function readCatalogDeclarations(
           refuseUnusableOwnManifest: true,
         });
   if (read.kind === "absent") {
-    return unreadableDeclarer(
-      key,
-      "not in manifest",
-      "not declared by its marketplace, and its installed copy cannot be read",
-    );
+    return notInManifest(key);
   }
 
   if (read.kind === "unusable") {
@@ -324,6 +335,18 @@ async function readCatalogDeclarations(
   }
 
   return addressedDeclarations(read.dependencies, marketplace, declared.kind === "absent");
+}
+
+/** D-PL2-22: what one marketplace entry's `dependencies` declare, read alone. */
+function entryDeclarations(
+  key: string,
+  entry: ManifestPluginEntry,
+  marketplace: MarketplaceStateRecord,
+): RecordDeclarations {
+  const read = toClosureLookupResult(parseDeclaredDependencies(entry.dependencies));
+  return read.kind === "unusable"
+    ? unusableDeclaration(key, read)
+    : addressedDeclarations(read.dependencies, marketplace, false);
 }
 
 /**
@@ -351,18 +374,19 @@ export async function readRecordDeclarations(
  * enable closure and the update preflight's holder walk read this way; every
  * other caller keeps `readRecordDeclarations`.
  *
- * A record with `resolvedSha` installed a per-commit clone of that commit
- * under `plugin-clones/` (every git source, and a tag-pinned path-source
- * dependency), so its `resolvedSource` is read, admitted only inside
- * `plugin-clones/` (NFR-10) and bounded by its plugin directory (D-PL2-17).
- * A recorded root outside `plugin-clones/` fails closed (D-PL2-12). A
- * readable copy answers, still flagged
- * `delisted` when the loaded manifest no longer lists the record, so the
- * enable root's DLS-01 exemption keeps working. A present-but-unusable copy
- * fails closed (D-05-07). A copy that answers `absent` -- gone, or holding no
- * manifest -- falls back to the catalog read. That fallback is the whole
- * catalog read (the catalog copy's own manifest first, the entry second), so
- * it is slightly broader than E2's "the entry stands in".
+ * A record with `resolvedSha` has its `resolvedSource` read, admitted only
+ * inside the one clone root that owns the record, as `installedCopyReadOptions`
+ * chooses it (NFR-10), and bounded as D-PL2-17 says. A readable copy answers,
+ * still flagged `delisted` when the loaded manifest no longer lists the
+ * record, so the enable root's DLS-01 exemption keeps working. A
+ * present-but-unusable copy, or a refused one, fails closed (D-05-07).
+ *
+ * D-PL2-22: a copy that holds no manifest answers its marketplace entry's
+ * `dependencies` alone. Claude Code makes the entry the whole manifest of a
+ * copy with no `plugin.json` (E2), so the catalog copy's own manifest is never
+ * read. A copy that is gone takes the same answer, because this read cannot
+ * download it again (NFR-5). A delisted record has no entry, so it fails as
+ * `not in manifest` (D-05-07).
  *
  * D-PL2-07: a record without `resolvedSha` is a path source whose installed
  * copy IS the marketplace tree; this extension keeps no copy of its old
@@ -380,27 +404,27 @@ export async function readInstalledRecordDeclarations(
   }
 
   const record = ownValue(marketplace.plugins, name);
-  const copy =
-    record?.resolvedSha === undefined
-      ? ({ kind: "absent" } as const)
-      : await readInstalledCopyDeclaration({
-          ...installedCopyReadOptions(record, {
-            marketplaceRoot: marketplace.marketplaceRoot,
-            pluginClonesDir: options.locations.pluginClonesDir,
-          }),
-          ...(options.reader !== undefined && { reader: options.reader }),
-        });
+  if (record?.resolvedSha === undefined) {
+    return readCatalogDeclarations(options, marketplace, name, loaded.manifest);
+  }
+
+  const copy = await readInstalledCopyDeclaration({
+    ...installedCopyReadOptions(record, {
+      marketplaceRoot: marketplace.marketplaceRoot,
+      pluginClonesDir: options.locations.pluginClonesDir,
+    }),
+    ...(options.reader !== undefined && { reader: options.reader }),
+  });
+  const declared = lookupDeclaredPlugin(loaded.manifest, name);
   switch (copy.kind) {
     case "absent":
-      return readCatalogDeclarations(options, marketplace, name, loaded.manifest);
+      return declared.kind === "absent"
+        ? notInManifest(key)
+        : entryDeclarations(key, declared.entry, marketplace);
     case "unusable":
       return unusableDeclaration(key, copy);
     case "found":
-      return addressedDeclarations(
-        copy.dependencies,
-        marketplace,
-        lookupDeclaredPlugin(loaded.manifest, name).kind === "absent",
-      );
+      return addressedDeclarations(copy.dependencies, marketplace, declared.kind === "absent");
   }
 }
 
