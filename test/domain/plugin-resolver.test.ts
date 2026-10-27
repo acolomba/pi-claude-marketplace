@@ -4647,6 +4647,159 @@ test("parallel strict resolution keep independent deterministic outcomes", async
   }
 });
 
+const HOSTED_ENTRY_REFUSED_NOTE =
+  "its marketplace entry path does not stay inside the marketplace directory (an absolute, climbing, network-shaped, backslash-containing or link-traversing entry, an entry of a fetched marketplace that resolves or opens outside its tree \u2014 or a relative entry in a url-catalog marketplace, which has no local directory)";
+const HOSTED_CATALOG_URL = "https://h.example/acme/tools/marketplace.json";
+const hostedRecordSource = { kind: "hosted", raw: HOSTED_CATALOG_URL, url: HOSTED_CATALOG_URL };
+const demoRoot = pathUnderMarketplace("./plugins/demo");
+
+for (const { label, entrySource, marketplaceSource } of [
+  { label: "./plugins/demo", entrySource: "./plugins/demo", marketplaceSource: hostedRecordSource },
+  { label: "./", entrySource: "./", marketplaceSource: hostedRecordSource },
+  { label: "../demo", entrySource: "../demo", marketplaceSource: hostedRecordSource },
+  { label: "/abs/demo", entrySource: "/abs/demo", marketplaceSource: hostedRecordSource },
+  {
+    label: "./plugins/demo under a string-form hosted source",
+    entrySource: "./plugins/demo",
+    marketplaceSource: HOSTED_CATALOG_URL,
+  },
+]) {
+  test(`MKT-02 / D-PL5-32: a hosted marketplace's path entry ${label} resolves unavailable with Claude Code's reason`, async () => {
+    // arrange
+    const context: ResolveContext = {
+      ...resolveContext(marketplaceRoot, { [marketplaceRoot]: "dir", [demoRoot]: "dir" }),
+      marketplaceSource,
+    };
+
+    // act
+    const resolvedPlugin = await resolveStrict(pluginEntry({ source: entrySource }), context);
+
+    // assert
+    assert.deepStrictEqual(resolvedPlugin, {
+      state: "unavailable",
+      installable: false,
+      name: "p1",
+      notes: [HOSTED_ENTRY_REFUSED_NOTE],
+    });
+  });
+}
+
+test("MKT-02 / D-PL5-32: a hosted marketplace's pinned path entry is refused without materializing the pin", async () => {
+  // arrange
+  const pinnedRoots: string[] = [];
+  const context: ResolveContext = {
+    ...resolveContext(marketplaceRoot, { [CLONE_ROOT]: "dir" }),
+    marketplaceSource: hostedRecordSource,
+    resolvePathPluginRoot(source): Promise<GitPluginRootResult> {
+      pinnedRoots.push(source.raw);
+      return Promise.resolve({
+        kind: "materialized",
+        pluginRoot: CLONE_ROOT,
+        resolvedSha: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+      });
+    },
+    pathPluginPin: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  };
+
+  // act
+  const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./plugins/demo" }), context);
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "unavailable",
+    installable: false,
+    name: "p1",
+    notes: [HOSTED_ENTRY_REFUSED_NOTE],
+  });
+  assert.deepStrictEqual(pinnedRoots, []);
+});
+
+for (const { label, marketplaceSource } of [
+  { label: "a path", marketplaceSource: { kind: "path", raw: marketplaceRoot } },
+  { label: "a github", marketplaceSource: "acme/tools" },
+  { label: "a url", marketplaceSource: "https://h.example/acme/tools.git" },
+  { label: "no", marketplaceSource: undefined },
+]) {
+  test(`MKT-02 / D-PL5-32: a path entry of a marketplace with ${label} recorded source resolves under the marketplace root`, async () => {
+    // arrange
+    const context: ResolveContext = {
+      ...resolveContext(marketplaceRoot, { [demoRoot]: "dir" }),
+      marketplaceSource,
+    };
+
+    // act
+    const resolvedPlugin = await resolveStrict(pluginEntry({ source: "./plugins/demo" }), context);
+
+    // assert
+    assert.deepStrictEqual(resolvedPlugin, {
+      state: "installable",
+      installable: true,
+      name: "p1",
+      pluginRoot: demoRoot,
+      supported: [],
+      unsupported: [],
+      notes: [],
+      componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+      mcpServers: {},
+      defaultEnabled: true,
+    });
+  });
+}
+
+test("MKT-02 / D-PL5-32: a hosted marketplace's url entry still resolves through the git resolver", async () => {
+  // arrange
+  const context: ResolveContext = {
+    ...gitCtx({
+      kind: "materialized",
+      pluginRoot: CLONE_ROOT,
+      resolvedSha: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+    }),
+    marketplaceSource: hostedRecordSource,
+  };
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: { source: "url", url: "https://gitlab.com/o/p.git" } }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "installable",
+    installable: true,
+    name: "p1",
+    pluginRoot: CLONE_ROOT,
+    supported: [],
+    unsupported: [],
+    notes: [],
+    componentPaths: { skills: [], commands: [], agents: [], workflows: [] },
+    mcpServers: {},
+    defaultEnabled: true,
+  });
+});
+
+test("MKT-02 / D-PL5-32: a hosted marketplace's npm entry keeps its unsupported-source note", async () => {
+  // arrange
+  const context: ResolveContext = {
+    ...resolveContext(marketplaceRoot, {}),
+    marketplaceSource: hostedRecordSource,
+  };
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: { source: "npm", package: "some-plugin" } }),
+    context,
+  );
+
+  // assert
+  assert.deepStrictEqual(resolvedPlugin, {
+    state: "unavailable",
+    installable: false,
+    name: "p1",
+    notes: ["unsupported source kind: npm"],
+  });
+});
+
 declare const resolvedPluginContract: ResolvedPlugin;
 
 function gateNarrowsForce(): string {

@@ -947,6 +947,41 @@ test("D-PL5-28: installing from a marketplace recorded under a reserved name fro
   assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
 });
 
+test("D-PL5-32: installing a relative entry of a hosted marketplace fails as not installable and writes nothing", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-outcome-hosted-relative-");
+  const catalogUrl = "https://h.example/acme/tools/marketplace.json";
+  const seeded = await seedPlugin(environment.cwd, {
+    marketplaceSource: { kind: "hosted", raw: catalogUrl, url: catalogUrl },
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const stateBefore = await readFile(locations.stateJsonPath, "utf8");
+
+  // act
+  const operation = runInstallLedger(
+    seeded.state,
+    locations,
+    projectInstallOptions(environment.cwd),
+  );
+
+  // assert
+  await assert.rejects(operation, (error: unknown) => {
+    assert.ok(error instanceof PluginShapeError);
+    assert.deepStrictEqual(error.shape, {
+      kind: "not-installable",
+      plugin: "empty",
+      reasons: [
+        "its marketplace entry path does not stay inside the marketplace directory (an absolute, climbing, network-shaped, backslash-containing or link-traversing entry, an entry of a fetched marketplace that resolves or opens outside its tree \u2014 or a relative entry in a url-catalog marketplace, which has no local directory)",
+      ],
+      partialable: false,
+      unsupportedKinds: [],
+    });
+    return true;
+  });
+  assert.deepStrictEqual(seeded.state.marketplaces.marketplace?.plugins, {});
+  assert.equal(await readFile(locations.stateJsonPath, "utf8"), stateBefore);
+});
+
 test("CMP-3 / LAYER-07: a project install adds the user-scope marketplace to the project and installs from the project record", async (t) => {
   // arrange: the user record's tree carries version 0.0.1, and the project
   // record the add writes points at a second tree carrying 0.0.2.

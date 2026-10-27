@@ -746,6 +746,7 @@ async function preflightInstallResolve(
   const resolved = await resolveStrict(entry, {
     marketplaceRoot: targetMp.marketplaceRoot,
     marketplaceName: marketplace,
+    marketplaceSource: targetMp.source,
     resolveGitPluginRoot: async (gitSource) => {
       const clone = await (opts.cloneProbe ?? probeInstallClone)({
         // RESV-03: a pinned dependency materializes the exact commit its

@@ -199,6 +199,13 @@ export interface ResolveContext {
    * `<marketplace>` in `<plugin>@<marketplace>`.
    */
   readonly marketplaceName: string;
+  /**
+   * D-PL5-32: the recorded source of the marketplace that lists the plugin
+   * (`MarketplaceRecord.source`). A hosted catalog holds no plugin files, so
+   * the resolver refuses every path entry of such a marketplace. When this is
+   * absent, path entries resolve under `marketplaceRoot`.
+   */
+  readonly marketplaceSource?: unknown;
   readonly readFileText?: (path: string) => Promise<string>;
   readonly statKind?: StatKindReader;
   readonly resolveGitPluginRoot?: (

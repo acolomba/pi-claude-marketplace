@@ -27,6 +27,10 @@
 // discovery path is the convention file `<pluginRoot>/hooks/hooks.json`,
 // parsed through `parseHooksConfig` (D-57-04: a parse failure is structural
 // and resolves `unavailable`).
+//
+// MKT-02 / D-PL5-32: a hosted marketplace is one downloaded catalog file with
+// no plugin directory, so every path entry it lists resolves `unavailable`
+// with Claude Code's own reason.
 
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -236,6 +240,15 @@ function classifySourceSupport(parsedSource: ParsedSource): SourceSupport {
   }
 }
 
+// Claude Code's reason for refusing a relative entry of a url-catalog
+// marketplace, verbatim.
+const HOSTED_PATH_ENTRY_NOTE =
+  "its marketplace entry path does not stay inside the marketplace directory (an absolute, climbing, network-shaped, backslash-containing or link-traversing entry, an entry of a fetched marketplace that resolves or opens outside its tree \u2014 or a relative entry in a url-catalog marketplace, which has no local directory)";
+
+function listedByHostedCatalog(ctx: ResolveContext): boolean {
+  return parsePluginSource(ctx.marketplaceSource).kind === "hosted";
+}
+
 async function sourceEscapeReason(
   ctx: ResolveContext,
   pluginRoot: string,
@@ -420,6 +433,10 @@ type SourcePluginRoot =
  *
  * `parsedSource` is pre-narrowed by the caller's `sourceUnsupportedReason` gate,
  * so `npm` / `unknown` never reach here.
+ *
+ * D-PL5-32: a hosted catalog has no plugin directory, so the `path` arm of a
+ * marketplace whose recorded source is hosted refuses first, before the
+ * pinned callback and the escape check, with Claude Code's reason.
  */
 async function deriveSourcePluginRoot(
   entry: PluginEntry,
@@ -428,6 +445,13 @@ async function deriveSourcePluginRoot(
   partial: PartialResolution,
 ): Promise<SourcePluginRoot> {
   if (parsedSource.kind === "path") {
+    if (listedByHostedCatalog(ctx)) {
+      return {
+        kind: "unavailable",
+        result: unavailable(entry.name, [...partial.notes, HOSTED_PATH_ENTRY_NOTE]),
+      };
+    }
+
     if (ctx.resolvePathPluginRoot !== undefined && ctx.pathPluginPin !== undefined) {
       const r = await ctx.resolvePathPluginRoot(parsedSource, ctx.pathPluginPin);
       return pluginRootFromResult(entry, partial, r);
