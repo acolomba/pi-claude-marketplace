@@ -14,7 +14,10 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-import { bootstrapClaudePlugin } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts";
+import {
+  bootstrapClaudePlugin,
+  BootstrapStepError,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/bootstrap.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import {
   loadState,
@@ -29,9 +32,14 @@ import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 import { retryTree } from "./scope-tree-inventory.ts";
 
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type {
+  ScopeDependencyInstallFn,
+  ScopeDependencyInstallResult,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 import type { TestContext } from "node:test";
 
 type MarketplaceRecord = ExtensionState["marketplaces"][string];
@@ -90,6 +98,50 @@ function createBootstrapGitOps(options: BootstrapGitOptions = {}): {
     gitOps,
     clonedUrls: () => git.state.calls.clone.map((call) => call.url),
   };
+}
+
+/** A missing-dependency step that finds nothing to install in the user scope. */
+const noDependencyInstalls: ScopeDependencyInstallFn = () =>
+  Promise.resolve({ rows: [], mcpConfigNotices: [] });
+
+interface DependencyInstallCall {
+  readonly scope: Scope;
+  readonly cwd: string;
+  readonly selects: readonly boolean[];
+}
+
+/**
+ * A recording missing-dependency step (D-PL2-09). Each call records the
+ * request's scope and cwd, and what `select` answers for an entry of the
+ * official marketplace and one of another marketplace.
+ */
+function recordingDependencyInstall(result: ScopeDependencyInstallResult): {
+  readonly installMissingDependencies: ScopeDependencyInstallFn;
+  readonly calls: DependencyInstallCall[];
+} {
+  const calls: DependencyInstallCall[] = [];
+  const installMissingDependencies: ScopeDependencyInstallFn = (request) => {
+    calls.push({
+      scope: request.scope,
+      cwd: request.cwd,
+      selects: [
+        request.select({
+          plugin: "lib",
+          marketplace: "claude-plugins-official",
+          declarers: ["app@tools"],
+        }),
+        request.select({ plugin: "lib", marketplace: "other", declarers: ["app@tools"] }),
+      ],
+    });
+    return Promise.resolve(result);
+  };
+
+  return { installMissingDependencies, calls };
+}
+
+/** A missing-dependency step a case promises is never reached. */
+function unreachedDependencyInstall(): ScopeDependencyInstallFn {
+  return () => Promise.reject(new Error("the missing-dependency step must not run"));
 }
 
 async function createHermeticUserScope(
@@ -195,6 +247,7 @@ test("D-PL8-19: adds the canonical marketplace, whose autoupdate is on by defaul
     run: runWithNothingLoaded(),
     cwd,
     gitOps,
+    installMissingDependencies: noDependencyInstalls,
   });
   const scopeTree = await retryTree(locations.scopeRoot);
   const ownerRows = await completionCache.getPluginIndex(
@@ -239,6 +292,88 @@ test("D-PL8-19: adds the canonical marketplace, whose autoupdate is on by defaul
   verifyBoundary();
 });
 
+test("D-PL2-09: hands its missing-dependency step to the add, which runs it in the user scope for the official marketplace and lists its rows under the added row", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticUserScope(t, "dependency-step");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+  const { gitOps } = createBootstrapGitOps();
+  const step = recordingDependencyInstall({
+    rows: [
+      {
+        status: "installed",
+        name: "lib@claude-plugins-official",
+        version: "1.0.0",
+        dependencies: [],
+        reasons: ["dependency installed"],
+        severity: "info",
+        needsReload: true,
+      },
+    ],
+    mcpConfigNotices: [],
+  });
+
+  // act
+  await bootstrapClaudePlugin({
+    completionCache: createCompletionCache(),
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    gitOps,
+    installMissingDependencies: step.installMissingDependencies,
+  });
+
+  // assert
+  assert.deepStrictEqual(step.calls, [{ scope: "user", cwd, selects: [true, false] }]);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "● claude-plugins-official [user] (added)\n" +
+        "  ● lib@claude-plugins-official v1.0.0 (installed) {dependency installed}\n" +
+        "\n" +
+        "/reload to pick up changes",
+    },
+    { message: "● claude-plugins-official [user] <autoupdate> {already autoupdate}" },
+  ]);
+  verifyBoundary();
+});
+
+test("a missing-dependency step that throws after the add committed still runs the autoupdate step and rejects with the step error instead of reporting a failed add", async (t) => {
+  // arrange
+  const { cwd, locations } = await createHermeticUserScope(t, "dependency-step-throws");
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+  const { gitOps } = createBootstrapGitOps();
+  const stepError = Object.assign(new Error("dependency copy vanished"), { code: "ENOENT" });
+
+  // act
+  const bootstrap = bootstrapClaudePlugin({
+    completionCache: createCompletionCache(),
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    gitOps,
+    installMissingDependencies: () => Promise.reject(stepError),
+  });
+
+  // assert
+  await assert.rejects(bootstrap, (err: unknown) => {
+    assert.ok(err instanceof BootstrapStepError);
+    assert.strictEqual(err.name, "BootstrapStepError");
+    assert.strictEqual(err.cause, stepError);
+    return true;
+  });
+  assert.deepStrictEqual(notifications, [
+    { message: "● claude-plugins-official [user] (added)" },
+    { message: "● claude-plugins-official [user] <autoupdate> {already autoupdate}" },
+  ]);
+  assert.deepStrictEqual(JSON.parse(await readFile(locations.baseConfigJsonPath, "utf8")), {
+    schemaVersion: 1,
+    marketplaces: {
+      "claude-plugins-official": { source: "anthropics/claude-plugins-official" },
+    },
+  });
+  verifyBoundary();
+});
+
 test("converges on a second bootstrap without changing the recorded state or the tree", async (t) => {
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "repeat");
@@ -253,6 +388,7 @@ test("converges on a second bootstrap without changing the recorded state or the
     run: runWithNothingLoaded(),
     cwd,
     gitOps,
+    installMissingDependencies: noDependencyInstalls,
   });
   const stateAfterFirst = await readFile(locations.stateJsonPath, "utf8");
   const configAfterFirst = await readFile(locations.baseConfigJsonPath, "utf8");
@@ -263,6 +399,7 @@ test("converges on a second bootstrap without changing the recorded state or the
     run: runWithNothingLoaded(),
     cwd,
     gitOps,
+    installMissingDependencies: noDependencyInstalls,
   });
 
   // assert
@@ -302,6 +439,7 @@ test("MPA-01: reports an already added marketplace and an idempotent autoupdate 
     run: runWithNothingLoaded(),
     cwd,
     gitOps,
+    installMissingDependencies: unreachedDependencyInstall(),
   });
 
   // assert
@@ -333,6 +471,7 @@ test("flips autoupdate on when the marketplace is added but autoupdate is off", 
     run: runWithNothingLoaded(),
     cwd,
     gitOps,
+    installMissingDependencies: unreachedDependencyInstall(),
   });
 
   // assert
@@ -374,6 +513,7 @@ test("LAYER-01: declares a marketplace only the local layer holds in the base la
     run: runWithNothingLoaded(),
     cwd,
     gitOps,
+    installMissingDependencies: noDependencyInstalls,
   });
 
   // assert
@@ -424,6 +564,7 @@ test("preserves the committed add when the real autoupdate child rejects its con
     run: runWithNothingLoaded(),
     cwd,
     gitOps,
+    installMissingDependencies: noDependencyInstalls,
   });
 
   // assert
@@ -471,6 +612,7 @@ test("writes into the user scope only and leaves the project scope absent", asyn
     run: runWithNothingLoaded(),
     cwd,
     gitOps,
+    installMissingDependencies: noDependencyInstalls,
   });
 
   // assert
@@ -492,7 +634,14 @@ test("propagates a clone failure silently and never reaches the autoupdate step"
 
   // act & assert
   await assert.rejects(
-    bootstrapClaudePlugin({ completionCache, ctx, run: runWithNothingLoaded(), cwd, gitOps }),
+    bootstrapClaudePlugin({
+      completionCache,
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      gitOps,
+      installMissingDependencies: unreachedDependencyInstall(),
+    }),
     (error: unknown) => {
       assert.ok(error instanceof Error);
       assert.strictEqual(error.message, "network down");
@@ -509,7 +658,7 @@ test("propagates a clone failure silently and never reaches the autoupdate step"
   verifyBoundary();
 });
 
-test("renders a failed add as marketplace add does and never reaches the autoupdate step", async (t) => {
+test("renders a failed add as marketplace add does and never reaches the missing-dependency or autoupdate step", async (t) => {
   // arrange
   const { cwd, locations } = await createHermeticUserScope(t, "missing-source");
   const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
@@ -521,7 +670,14 @@ test("renders a failed add as marketplace add does and never reaches the autoupd
   const completionCache = createCompletionCache();
 
   // act
-  await bootstrapClaudePlugin({ completionCache, ctx, run: runWithNothingLoaded(), cwd, gitOps });
+  await bootstrapClaudePlugin({
+    completionCache,
+    ctx,
+    run: runWithNothingLoaded(),
+    cwd,
+    gitOps,
+    installMissingDependencies: unreachedDependencyInstall(),
+  });
 
   // assert
   assert.deepStrictEqual(notifications, [
@@ -571,6 +727,7 @@ test("MPA-01: refuses a different source under the official name as a duplicate 
     run: runWithNothingLoaded(),
     cwd,
     gitOps,
+    installMissingDependencies: unreachedDependencyInstall(),
   });
 
   // assert

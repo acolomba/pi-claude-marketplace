@@ -44,6 +44,7 @@ import type {
   PluginUpdateSkippedOutcome,
   PluginUpdateUnchangedOutcome,
   PluginUpdateUpdatedOutcome,
+  ScopeDependencyInstallFn,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type {
   NotificationContext,
@@ -129,6 +130,10 @@ function skippedOutcome(name: string): PluginUpdateSkippedOutcome {
   };
 }
 
+/** A missing-dependency step the doubled `updateMarketplace` never runs. */
+const missingDependencyStep: ScopeDependencyInstallFn = () =>
+  Promise.resolve({ rows: [], mcpConfigNotices: [] });
+
 function failedOutcome(name: string): PluginUpdateFailedOutcome {
   return {
     partition: "failed",
@@ -181,6 +186,7 @@ function createPassUnderTest(options: {
       notifications.push(notification);
       return pluginUpdate;
     },
+    installMissingDependencies: missingDependencyStep,
     updateMarketplace: async (opts) => {
       calls.push(opts);
       await options.scripts?.get(opts.name)?.(opts);
@@ -335,6 +341,24 @@ test("updates each recorded marketplace whose merged autoupdate is true, project
   assert.deepStrictEqual(
     calls.map((call) => call.cwd),
     [cwd, cwd],
+  );
+});
+
+test("D-PL2-10: hands each autoupdate cascade the missing-dependency step", async (t) => {
+  // arrange
+  const { cwd } = await createHermeticEnvironment(t, "background-pass-dependency-step-");
+  await seedMarketplace(cwd, "project", "alpha", true);
+  await seedMarketplace(cwd, "user", "gamma", true);
+  const { calls, deps } = createPassUnderTest({});
+  const pass = createBackgroundPass(deps);
+
+  // act
+  await pass({ ctx: sessionContext(cwd), isStopped: () => false });
+
+  // assert
+  assert.deepStrictEqual(
+    calls.map((call) => call.installMissingDependencies),
+    [missingDependencyStep, missingDependencyStep],
   );
 });
 

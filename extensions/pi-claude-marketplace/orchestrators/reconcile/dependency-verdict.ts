@@ -34,12 +34,13 @@
 //
 // WR-07: the coercion costs more here than it does at install time. Install
 // time spends it on a candidate the user is watching; this walk spends it on a
-// dependent that is installed and working, and disables it on the next reload
-// with a remedy naming a semver version the dependency does not have. The
-// behaviour is kept -- the walk is not the place to special-case one version
-// form the single evaluator accepts -- and `docs/dependency-resolution.md`
-// describes the case under "The load-time check" so an operator who hits it
-// can recognize it.
+// dependent that is installed and working. The load only reports it and
+// changes nothing (APL-D1); `apply` disables the dependent, with a remedy
+// naming a semver version the dependency does not have. The behaviour is
+// kept -- the walk is not the place to special-case one version form the
+// single evaluator accepts -- and `docs/dependency-resolution.md` describes
+// the case under "The load-time check" so an operator who hits it can
+// recognize it.
 //
 // D-05-07: the walk inherits the declaration read's fail-closed posture. A
 // declarer whose manifest cannot be read ends the walk with the typed failure
@@ -64,7 +65,11 @@ import type { loadMarketplaceManifest } from "../../domain/manifest.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { DependencyDeclarationReader } from "../plugin/dependency-declaration-read.ts";
-import type { AddressedDependency, DeclarerReadFailure } from "../plugin/dependency-index.ts";
+import type {
+  AddressedDependency,
+  DeclarerReadFailure,
+  RecordDeclarations,
+} from "../plugin/dependency-index.ts";
 
 /** Inputs of one scope-wide satisfaction verdict. */
 export interface ScopeSatisfactionOptions {
@@ -80,6 +85,11 @@ export interface ScopeSatisfactionOptions {
    * start the walk held, so their own dependents are held too.
    */
   readonly seeded?: readonly UnsatisfiedDeclaration[];
+  /**
+   * D-21 / MISS-01 / D-PL2-02: plugins the same `apply` installs, which a
+   * declaration naming them counts as met.
+   */
+  readonly scheduled?: ReadonlySet<string>;
 }
 
 /**
@@ -345,6 +355,7 @@ export async function buildScopeSatisfactionVerdict(
       detail.declarations,
       recordedPlugins(options.state),
       options.seeded ?? [],
+      options.scheduled,
     ),
   };
 }
@@ -435,10 +446,14 @@ function heldDependents(verdict: ScopeSatisfactionVerdict & { readonly ok: true 
  * or one this same verdict holds down. A dependency that is missing, or that
  * the user or a config disabled, no move can bring back, so its dependents
  * stay held. An empty set when the walk failed.
+ *
+ * D-PL2-02: a missing dependency in `scheduled` is one the same `apply`
+ * installs, so it does not keep its dependent held.
  */
 export function releasableDependents(
   verdict: ScopeSatisfactionVerdict,
   state: ExtensionState,
+  scheduled: ReadonlySet<string> = new Set(),
 ): ReadonlySet<string> {
   if (!verdict.ok) {
     return new Set();
@@ -450,7 +465,7 @@ export function releasableDependents(
     verdict.unsatisfied
       .filter(
         (entry) =>
-          entry.kind === "missing" ||
+          (entry.kind === "missing" && !scheduled.has(entry.dependency)) ||
           (entry.kind === "disabled" &&
             (!held.has(entry.dependency) || recorded.get(entry.dependency)?.disabled === true)),
       )
@@ -462,10 +477,16 @@ export function releasableDependents(
 /**
  * APPLY1-01: `verdict` with the dependents in `released` no longer held, so a
  * declaration naming one of them as a held dependency is satisfied too.
+ *
+ * D-PL2-02: a released dependent keeps each `missing` entry whose dependency
+ * is in `scheduled`, because the planner derives the missing-dependency
+ * install from that entry. The planned install then releases the dependent
+ * again when the plan counts it as landed.
  */
 export function verdictWithout(
   verdict: ScopeSatisfactionVerdict,
   released: ReadonlySet<string>,
+  scheduled: ReadonlySet<string> = new Set(),
 ): ScopeSatisfactionVerdict {
   if (!verdict.ok) {
     return verdict;
@@ -473,10 +494,10 @@ export function verdictWithout(
 
   return {
     ok: true,
-    unsatisfied: verdict.unsatisfied.filter(
-      (entry) =>
-        !released.has(entry.dependent) &&
-        !(entry.kind === "disabled" && released.has(entry.dependency)),
+    unsatisfied: verdict.unsatisfied.filter((entry) =>
+      released.has(entry.dependent)
+        ? entry.kind === "missing" && scheduled.has(entry.dependency)
+        : !(entry.kind === "disabled" && released.has(entry.dependency)),
     ),
   };
 }
@@ -531,20 +552,20 @@ export function stillHeld(
   return new Set([...released].filter((dependent) => held.has(dependent)));
 }
 
-/** What a record's installed copy declares, or `undefined` when its copy is the catalog's. */
+/**
+ * What the record `plugin`'s installed copy adds to its declarations: none when
+ * its copy is the catalog's or holds no manifest, or the failure arm that
+ * names it when the copy cannot be used (D-PL2-25).
+ */
 export type InstalledDeclarationsReader = (
   marketplace: ExtensionState["marketplaces"][string],
+  plugin: string,
   record: ExtensionState["marketplaces"][string]["plugins"][string],
-) => Promise<readonly AddressedDependency[] | undefined>;
+) => Promise<RecordDeclarations>;
 
 /** Inputs of the judgement `apply` makes once its cascade has run. */
 export interface FinalScopeOptions extends ScopeSatisfactionOptions {
   readonly installedDeclarations: InstalledDeclarationsReader;
-  /**
-   * D-21 / MISS-01: plugins the same `apply` installs, which a declaration
-   * naming them counts as met.
-   */
-  readonly scheduled?: ReadonlySet<string>;
 }
 
 /**
@@ -554,7 +575,8 @@ export interface FinalScopeOptions extends ScopeSatisfactionOptions {
  * version and enabled state. Unlike the load-time verdict, a record held down
  * by the marker is disabled here (no LOAD-02 optimism): the pass runs after
  * every lift `apply` makes. A record that cannot be read ends the judgement
- * with the walk's failure arm, as the load-time check does (D-05-07).
+ * with the walk's failure arm, as the load-time check does (D-05-07), and so
+ * does a record whose installed copy cannot be used (D-PL2-25).
  */
 export async function judgeFinalScope(
   options: FinalScopeOptions,
@@ -574,13 +596,19 @@ export async function judgeFinalScope(
 
       // eslint-disable-next-line no-await-in-loop -- the first unreadable record ends the judgement
       const read = await readRecordDeclarations(options, marketplace, name);
+      // D-PL2-05: the whole scope fails closed on the first unreadable record
+      // (D-05-07), as Claude Code's removal guards abort for the whole scope.
       if (!read.ok) {
         return read;
       }
 
       // eslint-disable-next-line no-await-in-loop -- one installed-copy read per enabled record
-      const installed = (await options.installedDeclarations(marketplace, record)) ?? [];
-      declarations.set(key, [...read.declared, ...installed]);
+      const installed = await options.installedDeclarations(marketplace, name, record);
+      if (!installed.ok) {
+        return installed;
+      }
+
+      declarations.set(key, [...read.declared, ...installed.declared]);
     }
   }
 

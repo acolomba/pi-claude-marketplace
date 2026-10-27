@@ -1128,6 +1128,19 @@ describe("resolver reason narrowing through the install failure row", () => {
     assert.deepStrictEqual(narrowedReasons, ["source missing"]);
   });
 
+  test("D-PL2-24: maps a manifest link outside its boundary to unreadable manifest", () => {
+    // arrange
+    const reasons = [
+      "plugin manifest resolves outside the plugin directory and its marketplace directory",
+    ];
+
+    // act
+    const narrowedReasons = installFailureReasons(reasons);
+
+    // assert
+    assert.deepStrictEqual(narrowedReasons, ["unreadable manifest"]);
+  });
+
   test("maps a source note to unsupported source", () => {
     // arrange
     const reasons = ["unsupported source kind: npm"];

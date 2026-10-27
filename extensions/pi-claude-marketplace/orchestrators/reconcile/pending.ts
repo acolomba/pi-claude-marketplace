@@ -72,8 +72,20 @@ import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { scanRetainedWorkflowsStaging } from "../plugin/workflows-staging-gc.ts";
 
-import { planConvergence, settleMoveCascade } from "./convergence.ts";
-import { buildScopeSatisfactionVerdict, verdictAfterToggles } from "./dependency-verdict.ts";
+import {
+  installedCopyReader,
+  movesAfterInstalls,
+  planConvergenceCascade,
+  settleMoveCascade,
+  stepsAfterInstalls,
+  withPlannedInstallsLanded,
+} from "./convergence.ts";
+import { reportDeclarerFailure } from "./delisted-plugins.ts";
+import {
+  buildScopeSatisfactionVerdict,
+  judgeFinalScope,
+  verdictAfterToggles,
+} from "./dependency-verdict.ts";
 import {
   buildReconcilePendingNotification,
   isReconcilePlanListEmpty,
@@ -89,8 +101,15 @@ import {
   type PendingMsg,
 } from "./reconcile.messaging.ts";
 
-import type { PlannedDecline, PlannedHold, PlannedMove } from "./convergence.ts";
-import type { ScopeSatisfactionVerdict, UnsatisfiedDeclaration } from "./dependency-verdict.ts";
+import type { PerEntryOutcome, PluginDeclarerUnreadableOutcome } from "./apply-outcomes.ts";
+import type {
+  CascadeStep,
+  ConvergenceCascade,
+  PlannedDecline,
+  PlannedHold,
+  PlannedMove,
+} from "./convergence.ts";
+import type { ScopeSatisfactionVerdict } from "./dependency-verdict.ts";
 import type { PlannedPluginInstall, ReconcilePlan } from "./types.ts";
 import type { MergedConfig, ScopeLoadOutcome } from "../../persistence/config-merge.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
@@ -259,96 +278,6 @@ function mergedViewForPlanning(outcome: ScopeLoadOutcome, state: ExtensionState)
   return mergeScopeConfigs(buildConfigFromState(state, local), local);
 }
 
-/** Every recorded `name@marketplace` key disabled by something other than the check. */
-function independentlyDisabledKeys(state: ExtensionState): ReadonlySet<string> {
-  const keys = new Set<string>();
-  for (const marketplace of Object.values(state.marketplaces)) {
-    for (const [name, record] of Object.entries(marketplace.plugins)) {
-      if (isRecordedButDisabled(record) && record.dependencyDisabled !== true) {
-        keys.add(`${name}@${marketplace.name}`);
-      }
-    }
-  }
-
-  return keys;
-}
-
-/**
- * The dependents whose every unsatisfied declaration the planned installs
- * satisfy, run to a fixpoint: a `missing` dependency is satisfied once a
- * planned install names it, and a `disabled` one once the check releases it
- * and nothing else disabled it.
- */
-function releasedDependents(
-  unsatisfied: readonly UnsatisfiedDeclaration[],
-  installed: ReadonlySet<string>,
-  state: ExtensionState,
-): ReadonlySet<string> {
-  const disabled = independentlyDisabledKeys(state);
-  const released = new Set<string>();
-  const isSatisfied = (entry: UnsatisfiedDeclaration): boolean =>
-    entry.kind === "missing"
-      ? installed.has(entry.dependency)
-      : entry.kind === "disabled" &&
-        released.has(entry.dependency) &&
-        !disabled.has(entry.dependency);
-  const dependents = [...new Set(unsatisfied.map((entry) => entry.dependent))];
-  let batch: readonly string[];
-  do {
-    batch = dependents.filter(
-      (dependent) =>
-        !released.has(dependent) &&
-        unsatisfied.every((entry) => entry.dependent !== dependent || isSatisfied(entry)),
-    );
-    for (const dependent of batch) {
-      released.add(dependent);
-    }
-  } while (batch.length > 0);
-
-  return released;
-}
-
-/**
- * D-21 / D-09-07: the toggle buckets `apply` drives after its installs land.
- * `apply` reads the scope again after it installs a plugin or a missing
- * dependency and takes the fresh plan's enable, disable and dependency-disable
- * buckets, so a dependent whose missing dependency it just installed stays up,
- * or comes back up. `pending` installs nothing, so it removes from the verdict
- * each dependent the planned installs satisfy and plans again. The other
- * buckets stay the first plan's, as in `apply`, which also reads again only
- * when it installs something.
- */
-function withPlannedInstallsLanded(
-  plan: ReconcilePlan,
-  verdict: ScopeSatisfactionVerdict,
-  state: ExtensionState,
-  replan: (verdict: ScopeSatisfactionVerdict) => ReconcilePlan,
-): ReconcilePlan {
-  if (
-    (plan.pluginsToInstall.length === 0 && plan.pluginsToDependencyInstall.length === 0) ||
-    !verdict.ok
-  ) {
-    return plan;
-  }
-
-  const installed = new Set(
-    [...plan.pluginsToInstall, ...plan.pluginsToDependencyInstall].map(
-      (install) => `${install.plugin}@${install.marketplace}`,
-    ),
-  );
-  const released = releasedDependents(verdict.unsatisfied, installed, state);
-  const fresh = replan({
-    ok: true,
-    unsatisfied: verdict.unsatisfied.filter((entry) => !released.has(entry.dependent)),
-  });
-  return {
-    ...plan,
-    pluginsToEnable: fresh.pluginsToEnable,
-    pluginsToDisable: fresh.pluginsToDisable,
-    pluginsToDependencyDisable: fresh.pluginsToDependencyDisable,
-  };
-}
-
 /**
  * D-21: drops each planned dependency disable of a record that is already
  * disabled. The planner keeps such a record so `apply` reaches its
@@ -403,6 +332,44 @@ export interface PendingReport {
 }
 
 /**
+ * D-PL2-25 / REC-05: the row of each record whose installed copy cannot be
+ * used, as `apply` reports it: the one that ended the catalog moves, then the
+ * one the judgement after them meets over the scope as it stands. A record
+ * gets one row.
+ */
+async function refusedCopyRows(
+  scope: Scope,
+  state: ExtensionState,
+  locations: ScopedLocations,
+  cascade: ConvergenceCascade,
+): Promise<PluginDeclarerUnreadableOutcome[]> {
+  const failures = [cascade.installedCopyFailure];
+  const readCopy = installedCopyReader(locations);
+  await judgeFinalScope({
+    state,
+    locations,
+    installedDeclarations: async (mp, plugin, record) => {
+      const copy = await readCopy(mp, plugin, record);
+      if (!copy.ok) {
+        failures.push(copy);
+      }
+
+      return copy;
+    },
+  });
+  const rows: PerEntryOutcome[] = [];
+  for (const failure of failures) {
+    if (failure !== null) {
+      reportDeclarerFailure(scope, failure, rows);
+    }
+  }
+
+  return rows.filter(
+    (row): row is PluginDeclarerUnreadableOutcome => row.kind === "plugin-declarer-unreadable",
+  );
+}
+
+/**
  * D-05 / D-06: reads each scope's config and state, plans it the way `apply`
  * would, and folds the plans and the failed blocks into one report. Offline
  * (NFR-5) and write-free. `scopes` is read in the order given (MSG-GR-3).
@@ -423,6 +390,8 @@ export async function composePendingReport(opts: {
     { readonly marketplaceRoot: string; readonly manifestPath: string }
   >();
   const recordedVersions: (readonly [string, string])[] = [];
+  const afterInstalls: CascadeStep[] = [];
+  const refusedCopies: PluginDeclarerUnreadableOutcome[] = [];
   const convergence: {
     readonly moves: PlannedMove[];
     readonly holds: PlannedHold[];
@@ -533,14 +502,36 @@ export async function composePendingReport(opts: {
     });
     // APL-02 / D-10 / D-14: the catalog moves `apply` would make once the plan
     // has run, offline (NFR-5).
-    const scoped =
-      settled.cascade?.plan ??
+    const cascade =
+      settled.cascade ??
       // eslint-disable-next-line no-await-in-loop -- at most two scopes, one convergence plan each
-      (await planConvergence({ scope, state, locations: loc, plan: settled.plan }));
+      (await planConvergenceCascade({ scope, state, locations: loc, plan: settled.plan }));
+    // D-PL2-25: a record whose installed copy cannot be used lists the row
+    // `apply` reports for it.
+    // eslint-disable-next-line no-await-in-loop -- at most two scopes, one final judgement each
+    refusedCopies.push(...(await refusedCopyRows(scope, state, loc, cascade)));
     // WR-02: a held-down record `apply` moves and then enables lists one row.
     const scopePlan = settled.preview;
     plans.push(scopePlan);
-    convergence.moves.push(...scoped.moves);
+    // WR-07 / D-PL2-02: the moves `apply` defers to after its
+    // missing-dependency install are listed there, with the enables that wait
+    // on it, in the order `apply` runs them. A waiting record that moves lists
+    // its move and then its enable, as `apply` reports them (D-PL2-18).
+    const waiting = new Set(
+      settled.enablesAfterInstalls.map((op) => `${op.plugin}@${op.marketplace}`),
+    );
+    const movedAfter = movesAfterInstalls(cascade, waiting);
+    afterInstalls.push(
+      ...stepsAfterInstalls(
+        cascade,
+        { waiting, afterInstalls: movedAfter, deferred: settled.deferredEnables },
+        settled.enablesAfterInstalls,
+      ),
+    );
+    const scoped = cascade.plan;
+    convergence.moves.push(
+      ...scoped.moves.filter((move) => !movedAfter.has(`${move.plugin}@${move.marketplace}`)),
+    );
     convergence.holds.push(...scoped.holds);
     convergence.declines.push(...scoped.declines);
   }
@@ -562,7 +553,8 @@ export async function composePendingReport(opts: {
   if (
     invalidBlocks.length === 0 &&
     isReconcilePlanListEmpty(plans) &&
-    moves.length + holds.length + declines.length === 0
+    moves.length + holds.length + declines.length + afterInstalls.length === 0 &&
+    refusedCopies.length === 0
   ) {
     return { marketplaces: [], retained, needsApply: false };
   }
@@ -606,6 +598,8 @@ export async function composePendingReport(opts: {
     forceInstallKeys,
     new Map(recordedVersions),
     convergence,
+    afterInstalls,
+    refusedCopies,
   );
   // D-12 / OUT-07: the pending diff is bulk (it spans both scopes and many
   // marketplaces) -> Plural row cardinality. D-02: thread PENDING_CONTEXT so the
@@ -625,7 +619,7 @@ export async function composePendingReport(opts: {
   return {
     marketplaces,
     retained,
-    needsApply: planListNeedsApply(plans) || moves.length > 0,
+    needsApply: planListNeedsApply(plans) || moves.length + afterInstalls.length > 0,
   };
 }
 

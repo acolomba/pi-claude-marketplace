@@ -6160,7 +6160,16 @@ async function writeEdepPluginRoot(
  */
 async function seedEnableCascadeFixture(
   home: string,
-  opts: { readonly declareDependency: boolean; readonly dependencyEnabled?: boolean },
+  opts: {
+    readonly declareDependency: boolean;
+    readonly dependencyEnabled?: boolean;
+    /**
+     * D-PL2-06: record `helper` at a commit whose per-commit clone under the
+     * scope's `plugin-clones/` declares `formatter@tools`, whatever the
+     * catalog tree declares.
+     */
+    readonly installedCopyDeclaresDependency?: true;
+  },
 ): Promise<{
   statePath: string;
   baseConfigPath: string;
@@ -6203,6 +6212,15 @@ async function seedEnableCascadeFixture(
     }),
   );
 
+  const helperClone = path.join(extRoot, "plugin-clones", "acme-helper", "0123456");
+  if (opts.installedCopyDeclaresDependency !== undefined) {
+    await writeEdepPluginRoot(helperClone, {
+      name: "helper",
+      version: "1.0.0",
+      dependencies: [{ name: "formatter", marketplace: "tools" }],
+    });
+  }
+
   const statePath = path.join(extRoot, "state.json");
   const state = {
     schemaVersion: 2,
@@ -6215,11 +6233,17 @@ async function seedEnableCascadeFixture(
         marketplaceRoot: officialRoot,
         manifestPath: officialManifestPath,
         plugins: {
-          helper: edepCascadeRecord({
-            resolvedSource: helperRoot,
-            version: "1.0.0",
-            enabled: false,
-          }),
+          helper: {
+            ...edepCascadeRecord({
+              resolvedSource:
+                opts.installedCopyDeclaresDependency === undefined ? helperRoot : helperClone,
+              version: "1.0.0",
+              enabled: false,
+            }),
+            ...(opts.installedCopyDeclaresDependency !== undefined && {
+              resolvedSha: "0123456789abcdef0123456789abcdef01234567",
+            }),
+          },
         },
       },
       tools: {
@@ -6295,6 +6319,63 @@ test("EDEP-01 / EDEP-03: enabling a plugin turns on its one disabled dependency 
     assert.equal(await fileExists(localConfigPath), false);
     const cfg = (await readConfig(baseConfigPath)) as { plugins?: Record<string, unknown> };
     assert.deepEqual(Object.keys(cfg.plugins ?? {}), ["helper@official"]);
+  });
+});
+
+test("D-PL2-06: enabling a root pinned to a commit turns on the dependency its installed copy declares, though its catalog entry declares none", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const { statePath } = await seedEnableCascadeFixture(home, {
+      declareDependency: false,
+      dependencyEnabled: false,
+      installedCopyDeclaresDependency: true,
+    });
+    const { ctx, notifications } = makeCtx(cwd);
+    // The fixture's catalog tree is no git checkout, so the ledger
+    // materializes it without the recorded commit; the closure, decided
+    // before any ledger runs, is what this case observes.
+    const enable = createSetPluginEnabled(
+      {
+        ...REAL_ENABLE_DISABLE_TRANSACTION,
+        runInstallLedger(state, locations, { sourcePinOverride: _pin, ...options }, capture) {
+          return REAL_ENABLE_DISABLE_TRANSACTION.runInstallLedger(
+            state,
+            locations,
+            options,
+            capture,
+          );
+        },
+      },
+      createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    );
+
+    // act
+    await enable({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      marketplace: "official",
+      plugin: "helper",
+      enable: true,
+      scope: "user",
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      notifications.map((notification) => notification.message),
+      [
+        [
+          "● official [user]",
+          "  ● formatter@tools v2.1.0 (installed) {dependency enabled}",
+          "  ● helper v1.0.0 (installed)",
+          "",
+          "/reload to pick up changes",
+        ].join("\n"),
+      ],
+    );
+    const state = JSON.parse(await readFile(statePath, "utf8")) as EdepStateShape;
+    assert.equal(state.marketplaces.official!.plugins.helper!.enabled, true);
+    assert.equal(state.marketplaces.tools!.plugins.formatter!.enabled, true);
   });
 });
 
@@ -9040,6 +9121,8 @@ test("GIT-01: enable re-materializes the commit the record names", async () => {
     const record = state.marketplaces["mp"]?.plugins["foo"];
     assert.ok(record !== undefined);
     record["resolvedSha"] = recordedSha;
+    // D-PL2-12: a record pinned to a commit owns a copy under the plugin clones.
+    record["resolvedSource"] = path.join(locationsFor("user", cwd).pluginClonesDir, "foo-copy");
     await writeFile(statePath, JSON.stringify(state), "utf8");
     const pins: (string | undefined)[] = [];
     const transaction: EnableDisableTransaction = {
@@ -9087,6 +9170,8 @@ test("GIT-01 / GV-01: enable keeps the release tag version the record holds", as
     assert.ok(record !== undefined);
     record["version"] = "1.2.3-111111111111";
     record["resolvedSha"] = recordedSha;
+    // D-PL2-12: a record pinned to a commit owns a copy under the plugin clones.
+    record["resolvedSource"] = path.join(locationsFor("user", cwd).pluginClonesDir, "foo-copy");
     record["resolvedVersion"] = "1.2.3";
     await writeFile(statePath, JSON.stringify(state), "utf8");
     const pins: (string | undefined)[][] = [];

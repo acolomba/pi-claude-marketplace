@@ -80,6 +80,7 @@ for (const { note, reason } of [
     note: "source dir does not exist: /home/u/lspServers-kit/plugins/ghost",
     reason: "source missing",
   },
+  { note: "plugin manifest resolves outside the plugin directory", reason: "unreadable manifest" },
   { note: "some other unsupported source detail", reason: "unsupported source" },
 ] as const) {
   test(`keeps the install and read-only note surfaces equal for ${reason}: ${note}`, () => {

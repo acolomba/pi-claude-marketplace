@@ -81,7 +81,8 @@ export type UnsupportedReason =
  * It widens `UnsupportedReason` with the failure-class `malformed mcp` and
  * `source missing` tokens. The sibling typed-kind helpers never emit either.
  */
-export type ResolverNoteReason = UnsupportedReason | "malformed mcp" | "source missing";
+export type ResolverNoteReason =
+  UnsupportedReason | "malformed mcp" | "source missing" | "unreadable manifest";
 
 /**
  * Narrow resolver `notes` strings to closed-set REASONS members.
@@ -126,6 +127,14 @@ export function narrowResolverNotes(notes: readonly string[]): readonly Resolver
 export const SOURCE_DIR_MISSING_NOTE = "source dir does not exist";
 
 /**
+ * D-PL2-24: the prefix of `domain/plugin-resolver.ts`'s note for a plugin
+ * manifest whose link resolves outside its boundary. The note ends with the
+ * boundary's name. Both reason classifiers read it as `unreadable manifest`,
+ * the reason a refused own manifest already answers (REC-05).
+ */
+export const MANIFEST_ESCAPE_NOTE = "plugin manifest resolves outside the";
+
+/**
  * Classify a single resolver note into exactly one closed-set bucket. The arm
  * order is significant -- the `malformed mcp reference` and `malformed mcp
  * server ` arms match their FULL prefixes BEFORE the permissive catch-all
@@ -162,6 +171,10 @@ function classifyResolverNote(note: string): ResolverNoteReason {
   // embeds the plugin path, so it too must run before the `lspServers` arm.
   if (note.startsWith(SOURCE_DIR_MISSING_NOTE)) {
     return "source missing";
+  }
+
+  if (note.startsWith(MANIFEST_ESCAPE_NOTE)) {
+    return "unreadable manifest";
   }
 
   if (note.includes("lspServers")) {

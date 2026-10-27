@@ -10,6 +10,7 @@ import {
   buildReconcileAppliedCascade,
   buildReconcilePendingNotification,
   convergedMoveOutcomes,
+  dependencyInstallRows,
   enabledMoveOutcome,
   isReconcilePlanListEmpty,
   planListNeedsApply,
@@ -3190,6 +3191,264 @@ describe("buildReconcilePendingNotification", () => {
     });
   });
 
+  test("D-PL2-02: lists a config install before the moves and a dependency install after them", () => {
+    // arrange
+    const plans = [
+      reconcilePlan("project", {
+        pluginsToInstall: [
+          { scope: "project", plugin: "fresh", marketplace: "mp", configSource: "base" },
+        ],
+        pluginsToDependencyInstall: [
+          {
+            scope: "project",
+            plugin: "extra",
+            marketplace: "mp",
+            ranges: [],
+            requiredBy: "zcore@mp",
+            declarers: ["zcore@mp"],
+          },
+        ],
+      }),
+    ];
+    const convergence = {
+      moves: [
+        {
+          scope: "project",
+          marketplace: "mp",
+          plugin: "zcore",
+          fromVersion: "1.0.0",
+          toVersion: "2.0.0",
+          revisionChanged: true,
+          grew: false,
+          partial: false,
+        },
+      ],
+      holds: [
+        {
+          scope: "project",
+          marketplace: "mp",
+          plugin: "lib",
+          version: "1.0.0",
+          cause: "held by app@mp",
+        },
+      ],
+      declines: [],
+    } as const;
+
+    // act
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), convergence);
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            { status: "will install", name: "fresh" },
+            { status: "will update", name: "zcore", from: "1.0.0", to: "2.0.0" },
+            { status: "will install", name: "extra" },
+            {
+              status: "skipped",
+              name: "lib",
+              version: "1.0.0",
+              reasons: ["dependents constrain"],
+              cause: new Error("held by app@mp"),
+              severity: "warning",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("D-PL2-16: lists an enable that waits on a dependency install after it and before the holds", () => {
+    // arrange
+    const plans = [
+      reconcilePlan("project", {
+        pluginsToEnable: [{ scope: "project", plugin: "ready", marketplace: "mp" }],
+        pluginsToDependencyInstall: [
+          {
+            scope: "project",
+            plugin: "vault",
+            marketplace: "mp",
+            ranges: [],
+            requiredBy: "app@mp",
+            declarers: ["app@mp"],
+          },
+        ],
+      }),
+    ];
+    const convergence = {
+      moves: [],
+      holds: [
+        { scope: "project", marketplace: "mp", plugin: "lib", version: "1.0.0", cause: "held" },
+      ],
+      declines: [],
+    } as const;
+
+    // act
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), convergence, [
+      { key: "app@mp", enable: { scope: "project", plugin: "app", marketplace: "mp" } },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            { status: "will enable", name: "ready" },
+            { status: "will install", name: "vault" },
+            { status: "will enable", name: "app" },
+            {
+              status: "skipped",
+              name: "lib",
+              version: "1.0.0",
+              reasons: ["dependents constrain"],
+              cause: new Error("held"),
+              severity: "warning",
+              needsReload: false,
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("D-PL2-18: lists a waiting record's move and its enable as two rows after the dependency install, and a deferred move with its enable as one", () => {
+    // arrange
+    const plans = [
+      reconcilePlan("project", {
+        pluginsToDependencyInstall: [
+          {
+            scope: "project",
+            plugin: "cdep",
+            marketplace: "mp",
+            ranges: [],
+            requiredBy: "alib@mp",
+            declarers: ["alib@mp"],
+          },
+        ],
+      }),
+    ];
+    const move = (plugin: string) =>
+      ({
+        scope: "project",
+        marketplace: "mp",
+        plugin,
+        fromVersion: "1.0.0",
+        toVersion: "2.0.0",
+        revisionChanged: true,
+        grew: false,
+        partial: false,
+      }) as const;
+    const convergence = { moves: [move("ready")], holds: [], declines: [] } as const;
+
+    // act
+    const pending = buildReconcilePendingNotification(plans, new Set(), new Map(), convergence, [
+      {
+        key: "alib@mp",
+        move: move("alib"),
+        enable: { scope: "project", plugin: "alib", marketplace: "mp" },
+        waiting: true,
+      },
+      { key: "bapp@mp", move: move("bapp") },
+      {
+        key: "capp@mp",
+        move: move("capp"),
+        enable: { scope: "project", plugin: "capp", marketplace: "mp" },
+      },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            { status: "will update", name: "ready", from: "1.0.0", to: "2.0.0" },
+            { status: "will install", name: "cdep" },
+            { status: "will update", name: "alib", from: "1.0.0", to: "2.0.0" },
+            { status: "will enable", name: "alib" },
+            { status: "will update", name: "bapp", from: "1.0.0", to: "2.0.0" },
+            { status: "will update", name: "capp", from: "1.0.0", to: "2.0.0" },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("D-PL2-25: lists a record whose installed copy cannot be used as its failed row, after the plan's rows and before the catalog moves", () => {
+    // arrange
+    const plans = [
+      reconcilePlan("project", {
+        pluginsToEnable: [{ scope: "project", plugin: "ready", marketplace: "mp" }],
+      }),
+    ];
+    const convergence = {
+      moves: [
+        {
+          scope: "project",
+          marketplace: "mp",
+          plugin: "zcore",
+          fromVersion: "1.0.0",
+          toVersion: "2.0.0",
+          revisionChanged: true,
+          grew: false,
+          partial: false,
+        },
+      ],
+      holds: [],
+      declines: [],
+    } as const;
+    const cause = new Error("widget copy refused");
+
+    // act
+    const pending = buildReconcilePendingNotification(
+      plans,
+      new Set(),
+      new Map(),
+      convergence,
+      [],
+      [
+        {
+          kind: "plugin-declarer-unreadable",
+          scope: "project",
+          marketplace: "mp",
+          plugin: "widget",
+          reason: "unreadable manifest",
+          cause,
+        },
+      ],
+    );
+
+    // assert
+    assert.deepStrictEqual(pending, {
+      marketplaces: [
+        {
+          name: "mp",
+          scope: "project",
+          plugins: [
+            { status: "will enable", name: "ready" },
+            {
+              status: "failed",
+              name: "widget",
+              reasons: ["unreadable manifest"],
+              cause,
+              severity: "warning",
+              needsReload: false,
+            },
+            { status: "will update", name: "zcore", from: "1.0.0", to: "2.0.0" },
+          ],
+        },
+      ],
+    });
+  });
+
   test("D-14 / UPR-02: a same-version move names its commits after the plan's rows", () => {
     // arrange
     const fromCommit = "a".repeat(40);
@@ -3592,5 +3851,114 @@ describe("resolvePendingForceInstalls", () => {
 
     // assert
     assert.deepStrictEqual(forceInstallKeys, new Set());
+  });
+});
+
+describe("dependencyInstallRows", () => {
+  test("D-PL2-09: an installed dependency becomes apply's installed row under its full key", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-installed",
+        scope: "project",
+        marketplace: "other",
+        plugin: "lib",
+        version: "1.0.0",
+        dependencies: ["mcp"],
+        dependencyInstalled: true,
+        orphanRewake: true,
+      },
+    ];
+
+    // act
+    const rows = dependencyInstallRows(outcomes);
+
+    // assert
+    assert.deepStrictEqual(rows, [
+      {
+        status: "installed",
+        name: "lib@other",
+        version: "1.0.0",
+        dependencies: ["mcp"],
+        reasons: ["dependency installed", "orphan rewake"],
+        severity: "info",
+        needsReload: true,
+      },
+    ]);
+  });
+
+  test("D-PL2-11: a refused dependency install becomes apply's failed row with its cause, under its full key", () => {
+    // arrange
+    const cause = new DependencyCascadeError(
+      'Dependency "missing@other" is not declared by its marketplace.',
+      "missing@other",
+    );
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "other",
+        plugin: "lib",
+        reason: "dependency failed",
+        cause,
+      },
+    ];
+
+    // act
+    const rows = dependencyInstallRows(outcomes);
+
+    // assert
+    assert.deepStrictEqual(rows, [
+      {
+        status: "failed",
+        name: "lib@other",
+        reasons: ["dependency failed"],
+        cause,
+        severity: "error",
+        needsReload: false,
+      },
+    ]);
+  });
+
+  test("D-PL2-20: a scope read that threw becomes apply's failed state.json row with its cause", () => {
+    // arrange
+    const cause = new Error("state lock held");
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "invalid-block",
+        scope: "project",
+        basename: "state.json",
+        reason: "lock held",
+        cause,
+      },
+    ];
+
+    // act
+    const rows = dependencyInstallRows(outcomes);
+
+    // assert
+    assert.deepStrictEqual(rows, [
+      {
+        status: "failed",
+        name: "state.json",
+        reasons: ["lock held"],
+        cause,
+        severity: "error",
+        needsReload: false,
+      },
+    ]);
+  });
+
+  test("maps an outcome the step does not produce to no row", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      { kind: "plugin-uninstalled", scope: "project", marketplace: "other", plugin: "lib" },
+    ];
+
+    // act
+    const rows = dependencyInstallRows(outcomes);
+
+    // assert
+    assert.deepStrictEqual(rows, []);
   });
 });

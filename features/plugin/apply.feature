@@ -264,6 +264,43 @@ Feature: Plugin apply
       | id            | version | enabled |
       | demo@fixtures | 1.0.0   | true    |
 
+  Scenario: Apply that an invalid GitHub base address stops keeps a plugin enabled whose missing dependency it installed first
+    Given pi runs with the github base address "http://example.invalid"
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | app    | 1.0.0   |              |
+      | audit  | 1.0.0   |              |
+      | avault | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the user has run "/claude:plugin install audit@tools --scope project"
+    Given the git repository "zvault" holds these plugins:
+      | name   | version | path |
+      | zvault | 1.0.0   |      |
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | app    | 1.0.0   | avault       |
+      | audit  | 1.0.0   | zvault       |
+      | avault | 1.0.0   |              |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name   | source kind | repository | pinned |
+      | zvault | github      | zvault     | false  |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the command reports these results:
+      | kind                      | severity | needs reload | summary                             | cause chain                                                       | cause truncated | tally label | tally failures | tally warnings | tally success count |
+      | reconcile-applied-cascade | warning  | true         | A plugin operation needs attention. |                                                                   |                 | Reconcile   | 0              | 1              | 1                   |
+      | internal-error            | error    | true         | Command failed unexpectedly.        | PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme. | false           |             |                |                |                     |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id           | name   | status    | reasons                | scope   | version | cause chain                                       | cause truncated | leaks | rollback partial |
+      | tools            | project           | avault@tools | avault | installed | dependency installed   | project | 1.0.0   |                                                   |                 |       |                  |
+      | tools            | project           | audit@tools  | audit  | disabled  | dependency unsatisfied | project | 1.0.0   | Install "zvault@tools" or uninstall "audit@tools" | false           |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | app@tools    | 1.0.0   | true    |
+      | audit@tools  | 1.0.0   | false   |
+      | avault@tools | 1.0.0   | true    |
+
   Scenario: Apply disables a plugin whose marketplace now declares a newer version of its dependency
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
@@ -821,7 +858,7 @@ Feature: Plugin apply
       | core@tools | 1.0.0   | true    |
       | lib@tools  | 1.0.0   | false   |
 
-  Scenario: Pending lists the disable of a plugin whose dependency a config drops, as apply makes it
+  Scenario: Apply disables a plugin whose dependency a config drops in the same run, as pending lists it
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name   | version | dependencies |
@@ -1250,6 +1287,328 @@ Feature: Plugin apply
       | kind         | reconcile-pending-empty |
       | severity     | info                    |
       | needs reload | false                   |
+
+  Scenario: Apply installs a missing dependency that needs the version the same apply moves to, as pending lists it
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   |              |
+      | ycore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the user has run "/claude:plugin install ycore@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | newdep       |
+      | newdep | 1.0.0   | ycore@^2.0.0 |
+      | ycore  | 2.0.0   |              |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | needs apply         | true              |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 3                 |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status       | reasons | scope   | from  | to    |
+      | tools            | project           | widget@tools | widget | will update  |         | project | 1.0.0 | 1.1.0 |
+      | tools            | project           | ycore@tools  | ycore  | will update  |         | project | 1.0.0 | 2.0.0 |
+      | tools            | project           | newdep@tools | newdep | will install |         | project |       |       |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | true                      |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 3                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status    | reasons              | scope   | version | from  | to    |
+      | tools            | project           | widget@tools | widget | updated   |                      | project |         | 1.0.0 | 1.1.0 |
+      | tools            | project           | ycore@tools  | ycore  | updated   |                      | project |         | 1.0.0 | 2.0.0 |
+      | tools            | project           | newdep@tools | newdep | installed | dependency installed | project | 1.0.0   |       |       |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | newdep@tools | 1.0.0   | true    |
+      | widget@tools | 1.1.0   | true    |
+      | ycore@tools  | 2.0.0   | true    |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+
+  Scenario: Apply moves a plugin whose moved dependency needs a missing plugin, as pending lists it
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.1.0   | zcore@^2.0.0 |
+      | zcore  | 2.0.0   | extra        |
+      | extra  | 1.0.0   |              |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | needs apply         | true              |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 3                 |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status       | reasons | scope   | from  | to    |
+      | tools            | project           | zcore@tools  | zcore  | will update  |         | project | 1.0.0 | 2.0.0 |
+      | tools            | project           | widget@tools | widget | will update  |         | project | 1.0.0 | 1.1.0 |
+      | tools            | project           | extra@tools  | extra  | will install |         | project |       |       |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | true                      |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 3                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id           | name   | status    | reasons              | scope   | version | from  | to    |
+      | tools            | project           | zcore@tools  | zcore  | updated   |                      | project |         | 1.0.0 | 2.0.0 |
+      | tools            | project           | widget@tools | widget | updated   |                      | project |         | 1.0.0 | 1.1.0 |
+      | tools            | project           | extra@tools  | extra  | installed | dependency installed | project | 1.0.0   |       |       |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | extra@tools  | 1.0.0   | true    |
+      | widget@tools | 1.1.0   | true    |
+      | zcore@tools  | 2.0.0   | true    |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+
+  Scenario: Apply moves a plugin after the held-down dependency it needs, once that dependency's missing dependency is installed, as pending lists it
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | alib | 1.0.0   |              |
+      | bapp | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install alib@tools --scope project"
+    Given the user has run "/claude:plugin install bapp@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | alib | 1.0.0   | cdep         |
+      | bapp | 1.0.0   |              |
+    Given the user has run "/claude:plugin apply --scope project", which failed
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | alib | 2.0.0   | cdep         |
+      | bapp | 2.0.0   | alib@^2.0.0  |
+      | cdep | 1.0.0   |              |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | needs apply         | true              |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 4                 |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status       | reasons | scope   | from  | to    |
+      | tools            | project           | cdep@tools | cdep | will install |         | project |       |       |
+      | tools            | project           | alib@tools | alib | will update  |         | project | 1.0.0 | 2.0.0 |
+      | tools            | project           | alib@tools | alib | will enable  |         | project |       |       |
+      | tools            | project           | bapp@tools | bapp | will update  |         | project | 1.0.0 | 2.0.0 |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | true                      |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 4                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status    | reasons              | scope   | version | from  | to    |
+      | tools            | project           | cdep@tools | cdep | installed | dependency installed | project | 1.0.0   |       |       |
+      | tools            | project           | alib@tools | alib | updated   |                      | project |         | 1.0.0 | 2.0.0 |
+      | tools            | project           | alib@tools | alib | installed |                      | project | 2.0.0   |       |       |
+      | tools            | project           | bapp@tools | bapp | updated   |                      | project |         | 1.0.0 | 2.0.0 |
+    Then the installation record of the project scope holds these plugins:
+      | id         | version | enabled |
+      | alib@tools | 2.0.0   | true    |
+      | bapp@tools | 2.0.0   | true    |
+      | cdep@tools | 1.0.0   | true    |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+
+  Scenario: Apply reports a plugin it moves after a missing dependency's install as skipped when its other dependency's move fails
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alib  | 1.0.0   |              |
+      | xapp  | 1.0.0   |              |
+      | ycore | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install alib@tools --scope project"
+    Given the user has run "/claude:plugin install xapp@tools --scope project"
+    Given the user has run "/claude:plugin install ycore@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alib  | 1.0.0   | cdep         |
+      | xapp  | 1.0.0   |              |
+      | ycore | 1.0.0   |              |
+    Given the user has run "/claude:plugin apply --scope project", which failed
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alib  | 2.0.0   | cdep         |
+      | xapp  | 2.0.0   | alib, ycore  |
+      | ycore | 2.0.0   |              |
+      | cdep  | 1.0.0   |              |
+    Given the published plugin "ycore" of the marketplace "tools" has an unreadable skill file
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade      |
+      | severity            | error                          |
+      | needs reload        | true                           |
+      | summary             | A plugin operation has failed. |
+      | tally label         | Reconcile                      |
+      | tally failures      | 1                              |
+      | tally warnings      | 1                              |
+      | tally success count | 3                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id          | name  | status    | reasons              | scope   | version | from  | to    | leaks | rollback partial |
+      | tools            | project           | ycore@tools | ycore | failed    | permission denied    | project | 2.0.0   | 1.0.0 |       |       |                  |
+      | tools            | project           | cdep@tools  | cdep  | installed | dependency installed | project | 1.0.0   |       |       |       |                  |
+      | tools            | project           | alib@tools  | alib  | updated   |                      | project |         | 1.0.0 | 2.0.0 |       |                  |
+      | tools            | project           | alib@tools  | alib  | installed |                      | project | 2.0.0   |       |       |       |                  |
+      | tools            | project           | xapp@tools  | xapp  | skipped   | dependency failed    | project | 1.0.0   |       |       |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id          | version | enabled |
+      | alib@tools  | 2.0.0   | true    |
+      | cdep@tools  | 1.0.0   | true    |
+      | xapp@tools  | 1.0.0   | true    |
+      | ycore@tools | 1.0.0   | true    |
+
+  Scenario: Apply moves a held-down plugin and then enables it once the missing dependency it waits on is installed, as pending lists both
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | alib | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install alib@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | alib | 1.0.0   | cdep         |
+    Given the user has run "/claude:plugin apply --scope project", which failed
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | alib | 2.0.0   | cdep         |
+      | cdep | 1.0.0   |              |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | needs apply         | true              |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 3                 |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status       | reasons | scope   | from  | to    |
+      | tools            | project           | cdep@tools | cdep | will install |         | project |       |       |
+      | tools            | project           | alib@tools | alib | will update  |         | project | 1.0.0 | 2.0.0 |
+      | tools            | project           | alib@tools | alib | will enable  |         | project |       |       |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | true                      |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 3                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status    | reasons              | scope   | version | from  | to    |
+      | tools            | project           | cdep@tools | cdep | installed | dependency installed | project | 1.0.0   |       |       |
+      | tools            | project           | alib@tools | alib | updated   |                      | project |         | 1.0.0 | 2.0.0 |
+      | tools            | project           | alib@tools | alib | installed |                      | project | 2.0.0   |       |       |
+    Then the installation record of the project scope holds these plugins:
+      | id         | version | enabled |
+      | alib@tools | 2.0.0   | true    |
+      | cdep@tools | 1.0.0   | true    |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+
+  Scenario: Apply reports the move of a held-down plugin as skipped when the install of the missing dependency it waits on is refused
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alib  | 1.0.0   |              |
+      | ycore | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install alib@tools --scope project"
+    Given the user has run "/claude:plugin install ycore@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alib  | 1.0.0   | cdep         |
+      | ycore | 1.0.0   |              |
+    Given the user has run "/claude:plugin apply --scope project", which failed
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name  | version | dependencies |
+      | alib  | 2.0.0   | cdep         |
+      | cdep  | 1.0.0   | ycore@^2.0.0 |
+      | ycore | 1.0.0   |              |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind                | cascade           |
+      | severity            | info              |
+      | needs reload        | false             |
+      | needs apply         | true              |
+      | tally label         | Reconcile pending |
+      | tally failures      | 0                 |
+      | tally warnings      | 0                 |
+      | tally success count | 3                 |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status       | reasons | scope   | from  | to    |
+      | tools            | project           | cdep@tools | cdep | will install |         | project |       |       |
+      | tools            | project           | alib@tools | alib | will update  |         | project | 1.0.0 | 2.0.0 |
+      | tools            | project           | alib@tools | alib | will enable  |         | project |       |       |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind           | reconcile-applied-cascade      |
+      | severity       | error                          |
+      | needs reload   | false                          |
+      | summary        | A plugin operation has failed. |
+      | tally label    | Reconcile                      |
+      | tally failures | 1                              |
+      | tally warnings | 1                              |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status  | reasons           | scope   | version | cause chain                                                                            | cause truncated | leaks | rollback partial |
+      | tools            | project           | cdep@tools | cdep | failed  | dependency failed | project |         | Dependency "ycore@tools" is installed at version 1.0.0, which does not satisfy ^2.0.0. | false           |       |                  |
+      | tools            | project           | alib@tools | alib | skipped | dependency failed | project | 1.0.0   |                                                                                        |                 |       |                  |
+    Then the installation record of the project scope holds these plugins:
+      | id          | version | enabled |
+      | alib@tools  | 1.0.0   | false   |
+      | ycore@tools | 1.0.0   | true    |
 
   Scenario: Apply refuses a missing anthropic-plugin-directory dependency whose listed copy falls outside a plugin's range, naming that plugin
     Given the git repository "dirp" holds these plugins:

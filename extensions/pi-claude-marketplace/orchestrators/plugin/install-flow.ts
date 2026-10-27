@@ -3326,11 +3326,20 @@ interface PlanRoot {
   readonly prepared?: PreparedPluginUpdate;
 }
 
-/** A candidate's declarations, read from the tree its update lands (CR-04). */
-function candidateLookup(prepared: PreparedPluginUpdate): ReturnType<ClosureLookup> {
+/**
+ * A candidate's declarations, read from the tree its update lands (CR-04),
+ * inside the boundary that tree was resolved with (D-PL2-17): its
+ * marketplace's record bounds a `path` tree read in place.
+ */
+function candidateLookup(
+  prepared: PreparedPluginUpdate,
+  subject: ClosureSubject,
+): ReturnType<ClosureLookup> {
   return readCandidateDeclaration({
     pluginRoot: prepared.installable.pluginRoot,
     entry: prepared.entry,
+    marketplace: ownValue(prepared.state.marketplaces, subject.marketplace),
+    pin: prepared.resolvedVersion,
   });
 }
 
@@ -3375,7 +3384,9 @@ async function planningPorts(args: {
         rootAllowedMarketplaces,
         lookup: (subject) => {
           const prepared = subject.key === root.key ? root.prepared : moving.get(subject.key);
-          return prepared === undefined ? catalog.lookup(subject) : candidateLookup(prepared);
+          return prepared === undefined
+            ? catalog.lookup(subject)
+            : candidateLookup(prepared, subject);
         },
         marketplaceRecordFor: catalog.recordFor,
         installedKeys: collectInstalledKeys(state),
@@ -3447,7 +3458,7 @@ async function lockedRootCascade<S extends Exclude<InstallCascadeResult, Cascade
           ...shared,
           lookup: (subject) =>
             subject.key === root.key && prepared !== undefined
-              ? candidateLookup(prepared)
+              ? candidateLookup(prepared, subject)
               : shared.lookup(subject),
           tagMemo: args.memos.constraintTagMemo,
           marketplaceTagMemo: args.memos.constraintMarketplaceTagMemo,

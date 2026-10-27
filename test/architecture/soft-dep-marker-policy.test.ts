@@ -233,7 +233,10 @@ const MARKER_POLICY_TABLE = [
   },
   {
     name: "ADD_CONTEXT (marketplace/add.messaging.ts)",
-    markers: { failed: { markers: false, contentReasons: true } },
+    markers: {
+      failed: { markers: false, contentReasons: true },
+      installed: { markers: true, contentReasons: true },
+    },
   },
   {
     name: "MARKETPLACE_LIST_CONTEXT (marketplace/list.messaging.ts)",

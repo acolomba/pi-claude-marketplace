@@ -12,7 +12,7 @@
 // made. A load with nothing to report promises zero.
 
 import assert from "node:assert/strict";
-import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, stat, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 
@@ -348,6 +348,50 @@ test("D-18 / REC-05: a declarer whose own manifest cannot be read gets its warni
         "    cause: cannot read the dependencies of broken@mp: its own manifest is present but cannot be read\n" +
         "\n" +
         "Reconcile: 1 warning",
+      severity: "warning",
+    },
+  ]);
+  assert.deepStrictEqual(await scopeFiles(scope.project), before);
+  verifyBoundary();
+});
+
+test("D-PL2-25: an enabled record whose installed copy cannot be used is listed in pending's block, as apply reports it", async (t) => {
+  // arrange -- `widget` runs a per-commit copy whose manifest links outside
+  // its plugin directory
+  const scope = await createLoadScope(t, "refused-copy");
+  await seedInstalled(scope, scope.project, { widget: {} }, ["widget"]);
+  const copy = path.join(scope.project.pluginClonesDir, "widget-copy");
+  const outside = path.join(scope.cwd, "outside-plugin.json");
+  await writeUnder(outside, JSON.stringify({ name: "widget", version: "1.0.0" }));
+  await mkdir(path.join(copy, ".claude-plugin"), { recursive: true });
+  await symlink(outside, path.join(copy, ".claude-plugin", "plugin.json"));
+  const seeded = await loadState(scope.project.extensionRoot);
+  const widget = seeded.marketplaces["mp"]?.plugins["widget"];
+  assert.ok(widget !== undefined);
+  widget.resolvedSource = copy;
+  widget.resolvedSha = "a".repeat(40);
+  await saveState(scope.project.extensionRoot, seeded);
+  await writeUnder(
+    scope.project.baseConfigJsonPath,
+    declaring(scope.marketplaceRoot, { "widget@mp": {} }),
+  );
+  const before = await scopeFiles(scope.project);
+  const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+
+  // act
+  await load({ ctx, cwd: scope.cwd });
+
+  // assert
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        "A plugin operation needs attention.\n" +
+        "\n" +
+        "● mp [project]\n" +
+        "  ⊘ widget (failed) {unreadable manifest}\n" +
+        "    cause: cannot read the dependencies of widget@mp: its own manifest is present but cannot be read\n" +
+        "\n" +
+        "Reconcile pending: 1 warning",
       severity: "warning",
     },
   ]);

@@ -10,7 +10,9 @@
 import { type ContentReason } from "../shared/notification-types.ts";
 
 import type { ScopedLocations } from "../persistence/locations.ts";
+import type { NotificationContext } from "../platform/pi-api.ts";
 import type { CleanupFailure } from "../shared/errors.ts";
+import type { NotificationRun } from "../shared/notification-run.ts";
 import type {
   McpConfigNotice,
   PluginFailedMessage,
@@ -636,6 +638,50 @@ export type PluginUpdateFn = (
   marketplace: string,
   scope: Scope,
 ) => Promise<PluginUpdateOutcome>;
+
+/**
+ * D-PL2-09: a row the missing-dependency step reports after a marketplace
+ * add: one `(installed) {dependency installed}` row per materialized member,
+ * the `(failed)` row of a refused install (D-PL2-11), or the `state.json`
+ * `(failed)` row of a scope read that threw (D-PL2-20).
+ */
+export type ScopeDependencyInstallRow = PluginInstalledMessage | PluginFailedMessage;
+
+/** D-PL2-09: one scope's missing-dependency step, as the add that ran it asks for it. */
+export interface ScopeDependencyInstallRequest {
+  readonly ctx: NotificationContext;
+  readonly run: NotificationRun;
+  /** The scope the command targeted; the step reads and installs in it only (SC-1, D-29). */
+  readonly scope: Scope;
+  readonly cwd: string;
+  /** Keeps the planned installs the caller serves, such as those of the added marketplace. */
+  readonly select: (install: {
+    readonly plugin: string;
+    readonly marketplace: string;
+    readonly declarers: readonly string[];
+  }) => boolean;
+}
+
+/**
+ * D-PL2-09: the rows of the installs the step ran, or of its read that threw
+ * (D-PL2-20), and the MCP config notices its installs produced.
+ */
+export interface ScopeDependencyInstallResult {
+  readonly rows: readonly ScopeDependencyInstallRow[];
+  readonly mcpConfigNotices: readonly McpConfigNotice[];
+}
+
+/**
+ * D-PL2-09 / D-PL2-10 function-injection seam: `apply`'s missing-dependency
+ * step over one scope. `marketplace add`, `bootstrap` and the autoupdate
+ * cascade receive it as a parameter, because BLOCK C and the
+ * add -> operations -> install-outcome -> add cycle forbid them to import
+ * `reconcile/apply.ts`, which ships the real operation. The extension
+ * factory (`index.ts`) wires it through `createScopeDependencyInstall`.
+ */
+export type ScopeDependencyInstallFn = (
+  request: ScopeDependencyInstallRequest,
+) => Promise<ScopeDependencyInstallResult>;
 
 /**
  * D-26: one catalog move `apply` materializes. `cwd` is explicit, because the

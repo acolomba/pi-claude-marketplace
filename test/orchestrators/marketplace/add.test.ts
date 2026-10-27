@@ -70,6 +70,11 @@ import type {
   AddMarketplaceOutcome,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/add.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
+import type {
+  ScopeDependencyInstallFn,
+  ScopeDependencyInstallResult,
+  ScopeDependencyInstallRow,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { AuthAttemptResult } from "../../../extensions/pi-claude-marketplace/platform/git-auth-callbacks.ts";
@@ -80,6 +85,7 @@ import type {
 import type { ExtensionContext } from "../../../extensions/pi-claude-marketplace/platform/pi-api.ts";
 import type { CompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import type { Scope } from "../../../extensions/pi-claude-marketplace/shared/types.ts";
 
 type FailedAddOutcome = Extract<AddMarketplaceOutcome, { status: "failed" }>;
 
@@ -5568,5 +5574,285 @@ test("MPA-02: a path manifest nobody may read renders (failed) {permission denie
       },
     ]);
     assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-PL2-09: the missing-dependency step a standalone add runs after it records
+// the marketplace, in the add's scope, for dependencies the added marketplace
+// offers.
+// ---------------------------------------------------------------------------
+
+const DEPENDENCY_INSTALLED_ROW = {
+  status: "installed",
+  name: "lib@valid-marketplace",
+  version: "1.0.0",
+  dependencies: [],
+  reasons: ["dependency installed"],
+  severity: "info",
+  needsReload: true,
+} as const satisfies ScopeDependencyInstallRow;
+
+interface DependencyInstallCall {
+  readonly scope: Scope;
+  readonly cwd: string;
+  readonly selects: readonly boolean[];
+  readonly recorded: boolean;
+  readonly lockHeld: boolean;
+}
+
+/**
+ * A recording missing-dependency step. Each call records the request, what
+ * `select` answers for an entry of the added marketplace and one of another,
+ * whether the add's record is already durable, and whether the scope lock is
+ * held while the step runs.
+ */
+function recordingDependencyInstall(result: ScopeDependencyInstallResult): {
+  readonly installMissingDependencies: ScopeDependencyInstallFn;
+  readonly calls: DependencyInstallCall[];
+} {
+  const calls: DependencyInstallCall[] = [];
+  const installMissingDependencies: ScopeDependencyInstallFn = async (request) => {
+    const locations = locationsFor(request.scope, request.cwd);
+    const state = await loadState(locations.extensionRoot);
+    calls.push({
+      scope: request.scope,
+      cwd: request.cwd,
+      selects: [
+        request.select({ plugin: "lib", marketplace: "valid-marketplace", declarers: ["app@x"] }),
+        request.select({ plugin: "lib", marketplace: "other", declarers: ["app@x"] }),
+      ],
+      recorded: Object.hasOwn(state.marketplaces, "valid-marketplace"),
+      lockHeld: await lockfile.check(locations.extensionRoot, {
+        lockfilePath: locations.stateLockFile,
+        realpath: false,
+      }),
+    });
+    return result;
+  };
+
+  return { installMissingDependencies, calls };
+}
+
+/** A missing-dependency step a case promises is never reached. */
+function unreachedDependencyInstall(): ScopeDependencyInstallFn {
+  return () => Promise.reject(new Error("the missing-dependency step must not run"));
+}
+
+test("D-PL2-09: a standalone add runs the missing-dependency step once, after its commit, and renders its rows under the added marketplace", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const step = recordingDependencyInstall({
+      rows: [DEPENDENCY_INSTALLED_ROW],
+      mcpConfigNotices: [],
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: fixtureMarketplaceDir("valid-marketplace"),
+      installMissingDependencies: step.installMissingDependencies,
+    });
+
+    // assert
+    assert.deepStrictEqual(step.calls, [
+      { scope: "project", cwd, selects: [true, false], recorded: true, lockHeld: false },
+    ]);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● valid-marketplace [project] (added)\n" +
+          "  ● lib@valid-marketplace v1.0.0 (installed) {dependency installed}\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+  });
+});
+
+test("AFILE-04 / D-PL2-09: the MCP config notices of the step's installs follow the add's notification", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx(2);
+    const step = recordingDependencyInstall({
+      rows: [DEPENDENCY_INSTALLED_ROW],
+      mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" }],
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: fixtureMarketplaceDir("valid-marketplace"),
+      installMissingDependencies: step.installMissingDependencies,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● valid-marketplace [project] (added)\n" +
+          "  ● lib@valid-marketplace v1.0.0 (installed) {dependency installed}\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+      {
+        message:
+          "MCP config comments removed.\n\n" +
+          "The project-scope mcp-adapter.json was rewritten to update plugin MCP servers; " +
+          "its JSONC comments were removed and everything else in it was kept.",
+        severity: "warning",
+      },
+    ]);
+  });
+});
+
+test("D-PL2-09: a step that throws still reports the committed add before the throw reaches the caller", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    // GHB-03: the one throw the dependency install lets through.
+    const failure = new InvalidGitHubBaseUrlError(
+      "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+      "not-a-url",
+    );
+
+    // act
+    const added = addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: fixtureMarketplaceDir("valid-marketplace"),
+      installMissingDependencies: () => Promise.reject(failure),
+    });
+
+    // assert
+    await assert.rejects(added, (err) => err === failure);
+    assert.deepStrictEqual(notifications, [{ message: "● valid-marketplace [project] (added)" }]);
+  });
+});
+
+test("D-PL2-09: an add of a marketplace the scope already holds never runs the step", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const rawSource = fixtureMarketplaceDir("valid-marketplace");
+    const first = makeCtx();
+    await addMarketplace({ ctx: first.ctx, run: first.run, scope: "project", cwd, rawSource });
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource,
+      installMissingDependencies: unreachedDependencyInstall(),
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● valid-marketplace [project] (skipped) {already added}" },
+    ]);
+  });
+});
+
+test("D-PL2-09: a failed add never runs the step", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+
+    const rawSource = fixtureMarketplaceDir("invalid-manifest");
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource,
+      installMissingDependencies: unreachedDependencyInstall(),
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `A marketplace operation has failed.\n\n⊘ ${rawSource} [project] (failed) {unparseable}`,
+        severity: "error",
+      },
+    ]);
+  });
+});
+
+test("D-PL2-09: an orchestrated add never runs the step, because its caller runs its own", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run } = makeCtx(0);
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: fixtureMarketplaceDir("valid-marketplace"),
+      notifications: { mode: "orchestrated" },
+      installMissingDependencies: unreachedDependencyInstall(),
+    });
+
+    // assert
+    assert.deepStrictEqual(outcome, { status: "added", name: "valid-marketplace" });
+  });
+});
+
+test("D-PL2-11: a refused dependency install raises the add's notification to error and keeps the (added) header", async () => {
+  await withTmpScope(async ({ cwd }) => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const step = recordingDependencyInstall({
+      rows: [
+        {
+          status: "failed",
+          name: "lib@valid-marketplace",
+          reasons: ["dependency failed"],
+          cause: new Error(
+            'Dependency "core@valid-marketplace" is not declared by its marketplace.',
+          ),
+          severity: "error",
+          needsReload: false,
+        },
+      ],
+      mcpConfigNotices: [],
+    });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: fixtureMarketplaceDir("valid-marketplace"),
+      installMissingDependencies: step.installMissingDependencies,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● valid-marketplace [project] (added)\n" +
+          "  ⊘ lib@valid-marketplace (failed) {dependency failed}\n" +
+          '    cause: Dependency "core@valid-marketplace" is not declared by its marketplace.',
+        severity: "error",
+      },
+    ]);
   });
 });

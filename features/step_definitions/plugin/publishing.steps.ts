@@ -12,7 +12,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readdir, readFile, readlink, rm, stat } from "node:fs/promises";
 import path from "node:path";
 
 import { type DataTable, Given } from "@cucumber/cucumber";
@@ -21,12 +21,15 @@ import {
   gitPluginEntry,
   offerGitPlugins,
   publishPluginRepository,
+  pushLinkedManifest,
   pushPluginRepository,
   readGitPluginOffers,
   readRepositoryPlugins,
+  repositoryPluginRoot,
 } from "../../lib/git-plugin.ts";
 import { runGit } from "../../lib/hermetic-git.ts";
 import {
+  linkPublishedManifest,
   publishAgent,
   publishOutputStyle,
   publishReadOnlySkillDirectory,
@@ -78,6 +81,91 @@ Given(
 );
 
 Given(
+  "the git repository {string} holds these plugins with no manifest:",
+  async function (this: ScenarioWorld, name: string, table: DataTable) {
+    const plugins = readRepositoryPlugins(table).map((plugin) => ({
+      ...plugin,
+      withoutManifest: true as const,
+    }));
+    const repository = await publishRepositoryRevision(this, name, plugins);
+    this.recordGitRepository(repository);
+    const pushed = await Promise.all(
+      plugins.map((plugin) =>
+        runGit(
+          repository.bareRepository,
+          repository.gitHome,
+          "ls-tree",
+          "main",
+          "--",
+          path.posix.join(plugin.path, ".claude-plugin", "plugin.json"),
+        ),
+      ),
+    );
+    assert.deepStrictEqual(
+      pushed,
+      plugins.map(() => ""),
+      `a plugin of ${name} still has a pushed manifest`,
+    );
+  },
+);
+
+// Files that a plugin's manifest links to from outside its repository live
+// apart from the work trees, which a later revision replaces.
+const LINKED_MANIFESTS_DIRECTORY = "linked-manifests";
+
+/**
+ * Pushes the manifest of the plugin `plugin` of the git repository `name` as
+ * a link to `target`, records the revision, and checks that the work tree and
+ * the pushed revision both hold the manifest as a link.
+ */
+async function pushLinkedManifestRevision(
+  world: ScenarioWorld,
+  name: string,
+  plugin: string,
+  target: string,
+): Promise<void> {
+  const repository = await pushLinkedManifest(world.requireGitRepository(name), plugin, target);
+  world.recordGitRepository(repository);
+  const manifest = path.posix.join(
+    path.relative(repository.workTree, repositoryPluginRoot(repository, plugin)),
+    ".claude-plugin",
+    "plugin.json",
+  );
+  assert.strictEqual(
+    (await lstat(path.join(repository.workTree, manifest))).isSymbolicLink(),
+    true,
+    `${manifest} of ${name} is not a link`,
+  );
+  const entry = await runGit(
+    repository.bareRepository,
+    repository.gitHome,
+    "ls-tree",
+    "main",
+    "--",
+    manifest,
+  );
+  assert.strictEqual(entry.split(" ")[0], "120000", `${manifest} of ${name} is not a pushed link`);
+}
+
+Given(
+  "the git repository {string} links the manifest of the plugin {string} to a file inside the plugin",
+  async function (this: ScenarioWorld, name: string, plugin: string) {
+    const pluginRoot = repositoryPluginRoot(this.requireGitRepository(name), plugin);
+    await pushLinkedManifestRevision(this, name, plugin, path.join(pluginRoot, "manifest.json"));
+  },
+);
+
+Given(
+  "the git repository {string} links the manifest of the plugin {string} to a file outside the repository",
+  async function (this: ScenarioWorld, name: string, plugin: string) {
+    const directory = path.join(this.tokens.home, LINKED_MANIFESTS_DIRECTORY, name);
+    this.onRelease(() => rm(directory, { recursive: true, force: true }));
+    await mkdir(directory, { recursive: true });
+    await pushLinkedManifestRevision(this, name, plugin, path.join(directory, "plugin.json"));
+  },
+);
+
+Given(
   "the marketplace {string} offers these plugins from git repositories:",
   async function (this: ScenarioWorld, name: string, table: DataTable) {
     const published = this.requirePublished(name);
@@ -101,6 +189,27 @@ Given(
   async function (this: ScenarioWorld, plugin: string, name: string) {
     const file = await publishOutputStyle(this.requirePublished(name), plugin);
     assert.strictEqual((await stat(file)).isFile(), true, `${file} is not a file`);
+  },
+);
+
+Given(
+  "the published plugin {string} of the marketplace {string} links its manifest to a file outside the marketplace",
+  async function (this: ScenarioWorld, plugin: string, name: string) {
+    const published = this.requirePublished(name);
+    const directory = path.join(this.tokens.home, LINKED_MANIFESTS_DIRECTORY, name);
+    this.onRelease(() => rm(directory, { recursive: true, force: true }));
+    const manifest = await linkPublishedManifest(
+      published,
+      plugin,
+      path.join(directory, `${plugin}.json`),
+    );
+    assert.strictEqual((await lstat(manifest)).isSymbolicLink(), true, `${manifest} is not a link`);
+    const relative = path.relative(published.root, await readlink(manifest));
+    assert.strictEqual(
+      relative.startsWith(`..${path.sep}`),
+      true,
+      `the manifest link of ${plugin} stays inside the marketplace ${name}`,
+    );
   },
 );
 

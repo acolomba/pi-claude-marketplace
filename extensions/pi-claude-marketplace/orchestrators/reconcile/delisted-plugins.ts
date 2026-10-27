@@ -22,6 +22,7 @@ import type { ScopeReadResult } from "./types.ts";
 import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
+import type { DeclarerReadFailure } from "../plugin/dependency-index.ts";
 
 /**
  * RECON-04 single-emit: the outcomes after which a load-time warning about the
@@ -115,9 +116,30 @@ export function reportUnreadableDeclarer(
     return;
   }
 
-  const at = verdict.declarer.lastIndexOf("@");
-  const marketplace = verdict.declarer.slice(at + 1);
-  const plugin = verdict.declarer.slice(0, at);
+  reportDeclarerFailure(scope, verdict, outcomes);
+}
+
+/** The failure arm of a declaration walk: the declarer it names and why. */
+export interface DeclarerFailure {
+  readonly declarer: string;
+  readonly reason: DeclarerReadFailure;
+  readonly cause: Error;
+}
+
+/**
+ * REC-05: pushes the `plugin-declarer-unreadable` row for `failure`, with the
+ * suppression `reportUnreadableDeclarer` describes. A declarer that already
+ * has that row gets no second one, so `apply` can report an installed copy it
+ * could not use (D-PL2-25) before the read pass reports the same declarer.
+ */
+export function reportDeclarerFailure(
+  scope: Scope,
+  failure: DeclarerFailure,
+  outcomes: PerEntryOutcome[],
+): void {
+  const at = failure.declarer.lastIndexOf("@");
+  const marketplace = failure.declarer.slice(at + 1);
+  const plugin = failure.declarer.slice(0, at);
   if (hasSuppressingRow(outcomes, scope, marketplace, plugin)) {
     return;
   }
@@ -127,8 +149,8 @@ export function reportUnreadableDeclarer(
     scope,
     marketplace,
     plugin,
-    reason: verdict.reason,
-    cause: verdict.cause,
+    reason: failure.reason,
+    cause: failure.cause,
   });
 }
 

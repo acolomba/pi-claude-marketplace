@@ -201,6 +201,30 @@ function unchangedHello(): PluginUpdateOutcome {
   };
 }
 
+/** One request the missing-dependency step received, reduced to what a case can spell. */
+interface DependencyStepRequest {
+  readonly scope: Scope;
+  readonly cwd: string;
+}
+
+/**
+ * A missing-dependency step that records each request and installs nothing, so
+ * every row stays the `(skipped) {up-to-date}` no-op (D-PL2-10).
+ */
+function createDependencyStep(): {
+  readonly installMissingDependencies: EdgeDeps["installMissingDependencies"];
+  readonly requests: DependencyStepRequest[];
+} {
+  const requests: DependencyStepRequest[] = [];
+  return {
+    installMissingDependencies: (request) => {
+      requests.push({ scope: request.scope, cwd: request.cwd });
+      return Promise.resolve({ rows: [], mcpConfigNotices: [] });
+    },
+    requests,
+  };
+}
+
 /**
  * One temporary working directory and one temporary home per case, with the
  * agent-directory variable cleared: `getAgentDir()` reads it before `homedir()`,
@@ -295,10 +319,12 @@ test("updates every recorded marketplace in both scopes when no name is supplied
   const git = createGitOpsFake({ boundary: "memory" });
   const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
   when(() => pluginUpdate("hello", "alpha", "project")).thenResolve(unchangedHello());
+  const dependencyStep = createDependencyStep();
   const marketplaceUpdateHandler = makeMarketplaceUpdateHandler({
     completionCache: createCompletionCache(),
     gitOps: git.gitOps,
     beginPluginUpdateRun: () => pluginUpdate,
+    installMissingDependencies: dependencyStep.installMissingDependencies,
   });
 
   // act
@@ -315,6 +341,8 @@ test("updates every recorded marketplace in both scopes when no name is supplied
     fetchOf(clones.projectBeta),
     fetchOf(clones.userAlpha),
   ]);
+  // D-PL2-10: only the project `alpha` cascades, so the step runs once, there.
+  assert.deepStrictEqual(dependencyStep.requests, [{ scope: "project", cwd }]);
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
   verify(pluginUpdate);
@@ -331,10 +359,12 @@ test("updates the named marketplace alone and leaves its siblings untouched", as
   const git = createGitOpsFake({ boundary: "memory" });
   const pluginUpdate = mock<PluginUpdate>({ exactParams: true, name: "plugin update" });
   when(() => pluginUpdate("hello", "alpha", "project")).thenResolve(unchangedHello());
+  const dependencyStep = createDependencyStep();
   const marketplaceUpdateHandler = makeMarketplaceUpdateHandler({
     completionCache: createCompletionCache(),
     gitOps: git.gitOps,
     beginPluginUpdateRun: () => pluginUpdate,
+    installMissingDependencies: dependencyStep.installMissingDependencies,
   });
 
   // act
@@ -343,6 +373,8 @@ test("updates the named marketplace alone and leaves its siblings untouched", as
   // assert
   assert.deepStrictEqual(notifications, [{ message: PROJECT_ALPHA_ROW }]);
   assert.deepStrictEqual(git.state.calls.fetch.map(describeFetch), [fetchOf(clones.projectAlpha)]);
+  // D-PL2-10: only the project `alpha` cascades, so the step runs once, there.
+  assert.deepStrictEqual(dependencyStep.requests, [{ scope: "project", cwd }]);
   assert.strictEqual(networkCallCount(), 0);
   verifyBoundary();
   verify(pluginUpdate);
@@ -374,6 +406,7 @@ test("D-10-18: begins one cascade run per command and none when the handler is b
       runs += 1;
       return pluginUpdate;
     },
+    installMissingDependencies: createDependencyStep().installMissingDependencies,
   });
   const atBuild = runs;
 
@@ -436,6 +469,7 @@ for (const { emissions, expectCascade, rows, scope, touched } of [
       completionCache: createCompletionCache(),
       gitOps: git.gitOps,
       beginPluginUpdateRun: () => pluginUpdate,
+      installMissingDependencies: createDependencyStep().installMissingDependencies,
     });
 
     // act
@@ -464,6 +498,8 @@ test("reports an unrecognised scope value with the update usage block and never 
     completionCache: createCompletionCache(),
     gitOps: git.gitOps,
     beginPluginUpdateRun: () => pluginUpdate,
+    installMissingDependencies: () =>
+      Promise.reject(new Error("a rejected command must not run the missing-dependency step")),
   });
 
   // act
@@ -501,6 +537,8 @@ for (const { args, diagnostic } of [
       completionCache: createCompletionCache(),
       gitOps: git.gitOps,
       beginPluginUpdateRun: () => pluginUpdate,
+      installMissingDependencies: () =>
+        Promise.reject(new Error("a rejected command must not run the missing-dependency step")),
     });
 
     // act
@@ -568,6 +606,7 @@ for (const { args, tally } of [
       completionCache,
       gitOps: git.gitOps,
       beginPluginUpdateRun: operations.beginPluginUpdateRun,
+      installMissingDependencies: createDependencyStep().installMissingDependencies,
     });
 
     // act

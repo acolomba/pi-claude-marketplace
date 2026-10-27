@@ -7,8 +7,9 @@
 // JavaScript to measure.
 //
 // The one contract `EdgeDeps` carries is its required-versus-optional split:
-// the completion cache, the MCP status reader, the git/update operations and the
-// reconcile apply step are required, while `importClaudeSettings` is optional. The hooks runtime stays at its direct
+// the completion cache, the MCP status reader, the git/update operations, the
+// reconcile apply step and the missing-dependency step are required, while
+// `importClaudeSettings` is optional. The hooks runtime stays at its direct
 // root-to-bridge boundary because edge cannot import bridge contracts.
 // D-116-12: this owner does NOT enumerate the member set and does NOT assert the
 // module's export surface. A test observes shape; whether a member is READ
@@ -36,7 +37,10 @@ import type {
 } from "../../extensions/pi-claude-marketplace/orchestrators/import/index.ts";
 import type { GitOps } from "../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type { ApplyReconcileOptions } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
-import type { PluginUpdateFn } from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
+import type {
+  PluginUpdateFn,
+  ScopeDependencyInstallFn,
+} from "../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { McpStatusReader } from "../../extensions/pi-claude-marketplace/platform/mcp-status.ts";
 import type { CompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
 
@@ -69,6 +73,9 @@ const mcpStatus = { lookup: () => "no-snapshot" } satisfies McpStatusReader;
 
 const applyReconcile = (_opts: ApplyReconcileOptions): Promise<void> => Promise.resolve();
 
+const installMissingDependencies = (() =>
+  Promise.resolve({ rows: [], mcpConfigNotices: [] })) satisfies ScopeDependencyInstallFn;
+
 const IMPORT_RESULT = {
   addedMarketplaces: [],
   changedResources: false,
@@ -93,6 +100,7 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
     beginPluginUpdateRun,
     completionCache,
     gitOps,
+    installMissingDependencies,
     mcpStatus,
   } satisfies EdgeDeps);
   void ({
@@ -101,6 +109,7 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
     completionCache,
     gitOps,
     importClaudeSettings,
+    installMissingDependencies,
     mcpStatus,
   } satisfies EdgeDeps);
 
@@ -111,6 +120,7 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
     applyReconcile,
     beginPluginUpdateRun,
     completionCache,
+    installMissingDependencies,
     mcpStatus,
     // @ts-expect-error the edge dependency bundle always carries its git operations
   } satisfies EdgeDeps);
@@ -119,6 +129,7 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
     applyReconcile,
     completionCache,
     gitOps,
+    installMissingDependencies,
     mcpStatus,
     // @ts-expect-error the edge dependency bundle always carries its plugin update run factory
   } satisfies EdgeDeps);
@@ -127,6 +138,7 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
     applyReconcile,
     beginPluginUpdateRun,
     gitOps,
+    installMissingDependencies,
     mcpStatus,
     // @ts-expect-error the edge dependency bundle always carries its completion cache
   } satisfies EdgeDeps);
@@ -136,6 +148,7 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
     beginPluginUpdateRun,
     completionCache,
     gitOps,
+    installMissingDependencies,
     // @ts-expect-error the edge dependency bundle always carries its MCP status reader
   } satisfies EdgeDeps);
 
@@ -143,8 +156,18 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
     beginPluginUpdateRun,
     completionCache,
     gitOps,
+    installMissingDependencies,
     mcpStatus,
     // @ts-expect-error the edge dependency bundle always carries its reconcile apply step (APL-01)
+  } satisfies EdgeDeps);
+
+  void ({
+    applyReconcile,
+    beginPluginUpdateRun,
+    completionCache,
+    gitOps,
+    mcpStatus,
+    // @ts-expect-error the edge dependency bundle always carries its missing-dependency step (D-PL2-09)
   } satisfies EdgeDeps);
 
   const applyWithWrongParameter = (_scope: string): Promise<void> => Promise.resolve();
@@ -153,6 +176,7 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
     beginPluginUpdateRun,
     completionCache,
     gitOps,
+    installMissingDependencies,
     mcpStatus,
     // @ts-expect-error the reconcile apply step takes the reconcile apply options bundle
     applyReconcile: applyWithWrongParameter,
@@ -166,6 +190,7 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
     beginPluginUpdateRun,
     completionCache,
     gitOps,
+    installMissingDependencies,
     mcpStatus,
     // @ts-expect-error the import hook takes the import orchestrator's options bundle
     importClaudeSettings: importWithWrongParameter,
@@ -179,6 +204,7 @@ function proveEdgeDepsShape(completionCache: CompletionCache): void {
     beginPluginUpdateRun,
     completionCache,
     gitOps,
+    installMissingDependencies,
     mcpStatus,
     // @ts-expect-error the import hook resolves the import orchestrator's execution result
     importClaudeSettings: importWithWrongReturn,
@@ -200,6 +226,8 @@ function proveEdgeDepsReadonly(deps: EdgeDeps, completionCache: CompletionCache)
   deps.mcpStatus = mcpStatus;
   // @ts-expect-error the injected reconcile apply step is readonly
   deps.applyReconcile = applyReconcile;
+  // @ts-expect-error the injected missing-dependency step is readonly
+  deps.installMissingDependencies = installMissingDependencies;
 }
 
 void proveEdgeDepsReadonly;
