@@ -3170,8 +3170,9 @@ describe("removePluginRecord", () => {
 });
 
 describe("applyPartialCascadeFold", () => {
-  test("subtracts every dropped artifact while preserving retained artifacts", () => {
-    // arrange
+  test("D-PL5-15: subtracts every dropped axis from its record field and keeps the rest", () => {
+    // arrange -- each axis drops one recorded name, keeps one, and names one
+    // the record never held; `commands` lands in `prompts`.
     const installed = {
       resources: {
         skills: ["drop-skill", "keep-skill"],
@@ -3179,63 +3180,15 @@ describe("applyPartialCascadeFold", () => {
         agents: ["drop-agent", "keep-agent"],
         mcpServers: ["drop-mcp", "keep-mcp"],
         hooks: ["drop-hook", "keep-hook"],
-        workflows: [],
-      },
-    };
-    const dropped = {
-      skills: ["drop-skill", "missing-skill"],
-      commands: ["drop-command", "missing-command"],
-      agents: ["drop-agent", "missing-agent"],
-      hooks: ["drop-hook", "missing-hook"],
-      mcpServers: ["drop-mcp", "missing-mcp"],
-      workflows: [],
-    };
-
-    // act
-    applyPartialCascadeFold(installed, dropped);
-
-    // assert
-    assert.deepStrictEqual(installed, {
-      resources: {
-        skills: ["keep-skill"],
-        prompts: ["keep-command"],
-        agents: ["keep-agent"],
-        mcpServers: ["keep-mcp"],
-        hooks: ["keep-hook"],
-        workflows: [],
-      },
-    });
-    assert.deepStrictEqual(dropped, {
-      skills: ["drop-skill", "missing-skill"],
-      commands: ["drop-command", "missing-command"],
-      agents: ["drop-agent", "missing-agent"],
-      hooks: ["drop-hook", "missing-hook"],
-      mcpServers: ["drop-mcp", "missing-mcp"],
-      workflows: [],
-    });
-  });
-
-  test("subtracts the dropped workflow envelope and leaves the other four axes alone", () => {
-    // arrange -- the workflows axis is NOT compile-forced here: `dropped` is a
-    // structural parameter, so an argument carrying an extra axis satisfies a
-    // narrower shape and the filter can go missing in silence. This case is
-    // what fails when the filter line is absent.
-    const installed = {
-      resources: {
-        skills: ["keep-skill"],
-        prompts: ["keep-command"],
-        agents: ["keep-agent"],
-        mcpServers: ["keep-mcp"],
-        hooks: ["keep-hook"],
         workflows: ["sample:drop", "sample:keep"],
       },
     };
     const dropped = {
-      skills: [],
-      commands: [],
-      agents: [],
-      hooks: [],
-      mcpServers: [],
+      skills: ["drop-skill", "missing-skill"],
+      commands: ["drop-command", "missing-command"],
+      agents: ["drop-agent", "missing-agent"],
+      hooks: ["drop-hook", "missing-hook"],
+      mcpServers: ["drop-mcp", "missing-mcp"],
       workflows: ["sample:drop", "sample:never-recorded"],
     };
 
@@ -3252,6 +3205,14 @@ describe("applyPartialCascadeFold", () => {
         hooks: ["keep-hook"],
         workflows: ["sample:keep"],
       },
+    });
+    assert.deepStrictEqual(dropped, {
+      skills: ["drop-skill", "missing-skill"],
+      commands: ["drop-command", "missing-command"],
+      agents: ["drop-agent", "missing-agent"],
+      hooks: ["drop-hook", "missing-hook"],
+      mcpServers: ["drop-mcp", "missing-mcp"],
+      workflows: ["sample:drop", "sample:never-recorded"],
     });
   });
 });

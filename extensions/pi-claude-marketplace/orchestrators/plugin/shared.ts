@@ -51,7 +51,11 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue, setOwn } from "../../shared/own-key.ts";
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
-import { crossScopeFlag, marketplaceInOtherScope } from "../marketplace/shared.ts";
+import {
+  crossScopeFlag,
+  marketplaceInOtherScope,
+  type UnstageOutcome,
+} from "../marketplace/shared.ts";
 
 import { readRecordDeclarations } from "./dependency-index.ts";
 import { garbageCollectWorkflowsStaging } from "./workflows-staging-gc.ts";
@@ -1559,60 +1563,45 @@ export function removePluginRecord(
   return cloned;
 }
 
+type RecordResources = PluginInstallRecord["resources"];
+
+/**
+ * D-PL5-15: the record field each axis of a cascade's dropped names lives in.
+ * The `satisfies` clause is the exhaustiveness gate: an axis added to
+ * `UnstageOutcome["dropped"]` fails the typecheck here until it is mapped.
+ * TR-03 renames only `commands`, to `prompts`. D-63-04 and WLIF-03: hooks and
+ * workflows are subtracted like the rest, so a partial cascade leaves no row
+ * naming a hook or a workflow envelope it already deleted.
+ */
+const DROPPED_AXIS_FIELDS = {
+  skills: "skills",
+  commands: "prompts",
+  agents: "agents",
+  hooks: "hooks",
+  mcpServers: "mcpServers",
+  workflows: "workflows",
+} as const satisfies Record<keyof UnstageOutcome["dropped"], keyof RecordResources>;
+
 /**
  * I3 / TR-03: subtract a non-AG-5 partial-cascade's dropped artifacts from
  * the state record in place so the persisted row reflects only artifacts
- * still on disk (NFR-3 fail-clean, no ghost record). Shared by the
- * `uninstall` partial-cascade arm and the `disable` partial-cascade arm.
- *
- * The asymmetric `dropped.commands -> resources.prompts` mapping is per
- * TR-03 (cascade primitive naming): the other three axes are name-identical.
+ * still on disk (NFR-3 fail-clean, no ghost record). Shared by every
+ * partial-cascade arm: uninstall, disable, the install cascades, and
+ * `marketplace remove`.
  */
 export function applyPartialCascadeFold(
-  installed: {
-    resources: {
-      skills: string[];
-      prompts: string[];
-      agents: string[];
-      mcpServers: string[];
-      hooks: string[];
-      workflows: string[];
-    };
-  },
-  dropped: {
-    readonly skills: readonly string[];
-    readonly commands: readonly string[];
-    readonly agents: readonly string[];
-    readonly hooks: readonly string[];
-    readonly mcpServers: readonly string[];
-    readonly workflows: readonly string[];
-  },
+  installed: { resources: PluginInstallRecord["resources"] },
+  dropped: UnstageOutcome["dropped"],
 ): void {
-  installed.resources.skills = installed.resources.skills.filter(
-    (n) => !dropped.skills.includes(n),
-  );
-  installed.resources.prompts = installed.resources.prompts.filter(
-    (n) => !dropped.commands.includes(n),
-  );
-  installed.resources.agents = installed.resources.agents.filter(
-    (n) => !dropped.agents.includes(n),
-  );
-  installed.resources.mcpServers = installed.resources.mcpServers.filter(
-    (n) => !dropped.mcpServers.includes(n),
-  );
-  // D-63-04: the cascade primitive (cascadeUnstagePlugin) surfaces
-  // dropped.hooks alongside the other four axes; the partial-cascade fold
-  // must subtract them so a disable / uninstall partial-cascade failure
-  // does not leave a stale hooks entry in the in-memory record.
-  installed.resources.hooks = installed.resources.hooks.filter((n) => !dropped.hooks.includes(n));
-  // WLIF-03: name-identical, unlike the commands-to-prompts mapping. The
-  // parameter shapes are structural, so nothing here is compile-forced -- a
-  // caller passing a wider bundle satisfies a narrower parameter and this
-  // subtraction can go missing in silence. The behavioral case in the owner
-  // test is what holds it in place.
-  installed.resources.workflows = installed.resources.workflows.filter(
-    (n) => !dropped.workflows.includes(n),
-  );
+  // Object.keys widens to string[]; the table's keys are exactly the dropped
+  // axes, which the `satisfies` clause above holds.
+  const axes = Object.keys(DROPPED_AXIS_FIELDS) as (keyof typeof DROPPED_AXIS_FIELDS)[];
+  for (const axis of axes) {
+    const field = DROPPED_AXIS_FIELDS[axis];
+    installed.resources[field] = installed.resources[field].filter(
+      (name) => !dropped[axis].includes(name),
+    );
+  }
 }
 
 /**
