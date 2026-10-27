@@ -191,7 +191,7 @@ parent session applies them at merge.
 **Success Criteria** (what must be TRUE):
 
 1. Installing a plugin with `package.json` and `package-lock.json` runs `npm ci --ignore-scripts` (or the bun equivalent) in the staged copy, and its hook or MCP server finds its modules (PKD-01).
-2. A failing, timed-out, or lockfile-less package install leaves the plugin installed with a warning (PKD-02).
+2. A failing or timed-out package install, or one with a lockfile Claude Code refuses (`bun.lockb`, `yarn.lock`, `pnpm-lock.yaml`), leaves the plugin installed with a warning; a `package.json` with no lockfile stays silent, as Claude Code does (PKD-02, D-PL9-02).
 3. The NFR-5 amendment and the spawn rule carry a decision ID, and `npm run check` is green (PKD-03).
 
 ### Phase 10: Lifecycle Test and Harness Gaps
