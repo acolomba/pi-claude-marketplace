@@ -173,9 +173,9 @@ const MARKETPLACE_REFRESH_RULE: Parameters<typeof classifyGitFailure>[1] = {
  *
  * GLK-04: the refresh writes the marketplace `.git`, so it runs under the
  * scope lock that `marketplace update` and the update preflight's tag copy
- * take on that `.git`. The direct update syncs each marketplace before it
- * runs any target, so no lock is held yet and this one does not nest. A held
- * lock throws StateLockHeldError, which reads `lock held`.
+ * take on that `.git`. The direct update syncs a marketplace only after the
+ * previous target's run has released every lock it took, so this one does
+ * not nest. A held lock throws StateLockHeldError, which reads `lock held`.
  */
 async function refreshFramed(
   locations: ScopedLocations,

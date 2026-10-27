@@ -555,12 +555,13 @@ function resolvedRow(
  * `{status} on {url}`, the status and the URL the fetch sent (`remoteUrl`, the
  * source's wire URL), as `marketplace update` frames a refused refresh
  * (D-PL7-03, D-PL7-14). `severity` is REQUIRED on a failed row (GATE-01) -- a
- * fetch that threw did not warm the cache (the desired state was not carried
- * out), so it stamps `error`, at parity with the install / update / reinstall
- * per-plugin failed rows.
+ * fetch that threw before it read its row did not warm the cache (the desired
+ * state was not carried out), so it stamps `error`, at parity with the
+ * install / update / reinstall per-plugin failed rows.
  *
- * `rowRead` is true when the locked body already read its row, so the throw
- * came from the lock: it was lost or could not be released.
+ * `rowRead` is true when the locked body already read its row. The fetch
+ * warmed the cache, and the throw came from the lock: it was lost or could
+ * not be released. The row still stamps `error`.
  */
 function failedRow(
   entry: ManifestEntry,
