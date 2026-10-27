@@ -88,6 +88,12 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly stagedAgentNames: readonly string[];
   readonly stagedMcpServerNames: readonly string[];
   /**
+   * D-PL1-18: mirrors the shared runner's `resourcesChanged`. The reinstall
+   * row keeps `needsReload: true` (the byte-pinned D-03/D-06 row), so no
+   * renderer reads it.
+   */
+  readonly resourcesChanged: boolean;
+  /**
    * CMC-13: per-row soft-dep predicate inputs. `true` iff
    * the plugin's resolved manifest declared the kind AND it was actually
    * staged at reinstall time (the orchestrator already tracks

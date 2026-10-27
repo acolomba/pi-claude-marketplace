@@ -436,6 +436,7 @@ describe("reinstallOutcomeFromRun", () => {
     // assert
     assert.deepStrictEqual(outcome, {
       partition: "reinstalled",
+      resourcesChanged: true,
       name: "hello",
       marketplace: "mp",
       scope: "project",
@@ -473,6 +474,7 @@ describe("reinstallOutcomeFromRun", () => {
     // assert
     assert.deepStrictEqual(outcome, {
       partition: "reinstalled",
+      resourcesChanged: true,
       name: "hello",
       marketplace: "mp",
       scope: "project",
@@ -514,6 +516,7 @@ describe("reinstallOutcomeFromRun", () => {
     // assert
     assert.deepStrictEqual(outcome, {
       partition: "reinstalled",
+      resourcesChanged: true,
       name: "hello",
       marketplace: "mp",
       scope: "project",
@@ -556,6 +559,7 @@ describe("reinstallOutcomeFromRun", () => {
     // assert
     assert.deepStrictEqual(outcome, {
       partition: "reinstalled",
+      resourcesChanged: true,
       name: "hello",
       marketplace: "mp",
       scope: "project",
@@ -570,6 +574,44 @@ describe("reinstallOutcomeFromRun", () => {
       declaresWorkflows: false,
     });
   });
+
+  for (const resourcesChanged of [true, false]) {
+    test(`D-PL1-18: a swapped candidate reporting resourcesChanged ${resourcesChanged} is reinstalled with the same value`, () => {
+      // arrange
+      const run: UpdateRunOutcome = {
+        partition: "updated",
+        resourcesChanged,
+        name: "hello",
+        fromVersion: "1.0.0",
+        toVersion: "1.1.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+        constraint: undefined,
+      };
+
+      // act
+      const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, undefined);
+
+      // assert
+      assert.deepStrictEqual(outcome, {
+        partition: "reinstalled",
+        resourcesChanged,
+        name: "hello",
+        marketplace: "mp",
+        scope: "project",
+        version: "1.1.0",
+        fromVersion: "1.0.0",
+        stagedAgentNames: [],
+        stagedMcpServerNames: [],
+        declaresAgents: false,
+        declaresMcp: false,
+        declaresWorkflows: false,
+      });
+    });
+  }
 
   test("ENBL-05: an unchanged run is an already-disabled skip", () => {
     // arrange

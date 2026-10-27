@@ -34,6 +34,7 @@ const REINSTALL_REINSTALLED_CLEAN = {
   marketplace: "official",
   name: "alpha",
   partition: "reinstalled",
+  resourcesChanged: false,
   scope: "project",
   stagedAgentNames: [],
   stagedMcpServerNames: [],
@@ -55,6 +56,7 @@ const REINSTALL_REINSTALLED_FULL = {
   name: "alpha",
   notes: ["warning: skill alpha could not be read", "warning: command beta could not be read"],
   partition: "reinstalled",
+  resourcesChanged: true,
   scope: "user",
   stagedAgentNames: ["alpha-agent"],
   stagedMcpServerNames: ["alpha-mcp"],
@@ -363,11 +365,28 @@ void ({
   marketplace: "official",
   name: "alpha",
   partition: "reinstalled",
+  resourcesChanged: true,
   scope: "project",
   stagedAgentNames: [],
   stagedMcpServerNames: [],
   version: "1.0.0",
   // @ts-expect-error the reinstalled partition requires explicit companion predicates
+} satisfies ReinstallReinstalledOutcome);
+
+// D-PL1-18: a reinstalled outcome carries the runner's resourcesChanged.
+void ({
+  declaresAgents: false,
+  declaresMcp: false,
+  declaresWorkflows: false,
+  fromVersion: "1.0.0",
+  marketplace: "official",
+  name: "alpha",
+  partition: "reinstalled",
+  scope: "project",
+  stagedAgentNames: [],
+  stagedMcpServerNames: [],
+  version: "1.0.0",
+  // @ts-expect-error the reinstalled partition requires resourcesChanged
 } satisfies ReinstallReinstalledOutcome);
 
 void ({
@@ -408,6 +427,7 @@ void ({
   name: "alpha",
   notes: undefined,
   partition: "reinstalled",
+  resourcesChanged: true,
   scope: "project",
   stagedAgentNames: [],
   stagedMcpServerNames: [],
@@ -424,6 +444,7 @@ void ({
   marketplace: "official",
   name: "alpha",
   partition: "reinstalled",
+  resourcesChanged: true,
   scope: "project",
   stagedAgentNames: [],
   stagedMcpServerNames: [],

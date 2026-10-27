@@ -96,6 +96,7 @@ export function reinstallOutcomeFromRun(
         ...knownCommits(run),
         stagedAgentNames: run.stagedAgentNames,
         stagedMcpServerNames: run.stagedMcpServerNames,
+        resourcesChanged: run.resourcesChanged,
         declaresAgents: run.declaresAgents,
         declaresMcp: run.declaresMcp,
         declaresWorkflows: run.declaresWorkflows,

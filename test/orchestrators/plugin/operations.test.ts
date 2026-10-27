@@ -870,6 +870,7 @@ test("reinstallPlugin replaces the staged artifacts in place and re-routes the p
   // assert
   assert.deepStrictEqual(outcome, {
     partition: "reinstalled",
+    resourcesChanged: false,
     name: "p1",
     marketplace: "mp",
     scope: "project",

@@ -641,6 +641,7 @@ for (const coexist of [false, true]) {
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "hello",
         marketplace: "mp",
         scope: "project",
@@ -1619,6 +1620,7 @@ test("REI-04: a reinstall after the marketplace offers a newer version records a
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "hello",
         marketplace: "mp",
         scope: "project",
@@ -3743,6 +3745,7 @@ test("LAYER-04: the unnamed flagless reinstall the load-time backfill runs on a 
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "hello",
         marketplace: "mp",
         scope: "project",
@@ -5210,6 +5213,7 @@ test("GIT-01 / D-18-04 / D-18-11: an unpinned reinstall of a record on the mirro
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "gp",
         marketplace: "mp",
         scope: "project",
@@ -5292,6 +5296,7 @@ test("REI-04 / D-18-04: an unpinned reinstall copies the commit the mirror last 
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "gp",
         marketplace: "mp",
         scope: "project",
@@ -6765,6 +6770,7 @@ test("NREG-01: a hygiene-only reinstall carries neither notes nor discoveryWarni
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "hello",
         marketplace: "mp",
         scope: "project",
@@ -7690,6 +7696,7 @@ test("retry proof: reinstall: skills prepare failure with no prepared handles co
         marketplace: "mp",
         name: "hello",
         partition: "reinstalled",
+        resourcesChanged: true,
         scope: "project",
         stagedAgentNames: [],
         stagedMcpServerNames: [],
@@ -7832,6 +7839,7 @@ test("retry proof: reinstall: commands prepare failure aborts the one prepared h
         marketplace: "mp",
         name: "hello",
         partition: "reinstalled",
+        resourcesChanged: true,
         scope: "project",
         stagedAgentNames: [],
         stagedMcpServerNames: [],
@@ -8292,6 +8300,7 @@ test("retry proof: reinstall: a refused finalize save after every commit fails r
       assert.ok(markedStamp > readStamp, `${markedStamp} is not later than ${readStamp}`);
       assert.deepStrictEqual(second, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "hello",
         marketplace: "mp",
         scope: "project",
@@ -9711,6 +9720,7 @@ test("PRL-08 / PRL-11 / REI-04: a reinstall records the version its source now d
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "hello",
         marketplace: "mp",
         scope: "project",
@@ -9981,6 +9991,7 @@ test("AFILE-04: an orchestrated reinstall returns the notice on its outcome and 
       // assert
       assert.deepStrictEqual(outcome, {
         partition: "reinstalled",
+        resourcesChanged: true,
         name: "hello",
         marketplace: "mp",
         scope: "project",
