@@ -4,9 +4,10 @@
  *
  * A field name becomes lower-case words (`needsReload` is `needs reload`), a
  * nested object adds its own words (`tally.success.count` is
- * `tally success count`), and a list joins with commas. Each cell carries the
- * run tokens in place of run-specific values. A table's columns come in the
- * table's order, followed by any column the table leaves out.
+ * `tally success count`), and a list joins with commas. Any other value, such
+ * as a list of objects, is its JSON text. Each cell, the JSON text too,
+ * carries the run tokens in place of run-specific values. A table's columns
+ * come in the table's order, followed by any column the table leaves out.
  */
 
 import { projectTokens } from "./run-tokens.ts";
@@ -30,13 +31,15 @@ function isStringArray(value: unknown): value is string[] {
 }
 
 // Each string, and each string of a list, is projected to tokens before a
-// list is joined.
+// list is joined. Any other value is projected as its JSON text.
 function cell(key: string, value: unknown, tokens: RunTokens): string {
   if (isStringArray(value)) {
     return value.map((item) => projectTokens(key, item, tokens)).join(", ");
   }
 
-  return typeof value === "string" ? projectTokens(key, value, tokens) : JSON.stringify(value);
+  return typeof value === "string"
+    ? projectTokens(key, value, tokens)
+    : projectTokens(key, JSON.stringify(value), tokens);
 }
 
 /** Flattens `record` into one `[name, cell]` pair per leaf field. */

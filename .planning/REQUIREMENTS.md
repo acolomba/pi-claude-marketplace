@@ -75,10 +75,10 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 ### Import (MIM)
 
-- [ ] **MIM-01**: `import` handles a settings marketplace whose source the scope records under another name as Claude Code does (IMPNAME-01)
-- [ ] **MIM-02**: `import` adds the `extraKnownMarketplaces` entries Claude Code adds, referenced or not (IMPEXTRA-01)
-- [ ] **MIM-03**: `import` and `apply` report a partial rollback with the detail `install` shows (LCORCH-01 b2)
-- [ ] **MIM-04**: The import enable outcome carries the companion facts once (LCCODE-01 b7)
+- [x] **MIM-01**: `import` handles a settings marketplace whose source the scope records under another name as Claude Code does (IMPNAME-01)
+- [x] **MIM-02**: `import` adds the `extraKnownMarketplaces` entries Claude Code adds, referenced or not (IMPEXTRA-01)
+- [x] **MIM-03**: `import` and `apply` report a partial rollback with the detail `install` shows (LCORCH-01 b2)
+- [x] **MIM-04**: The import enable outcome carries the companion facts once (LCCODE-01 b7)
 
 ### Git errors and lock discipline (GLK)
 
@@ -174,10 +174,10 @@ None.
 | MKT-06 | Phase 5 | Pending |
 | MKT-07 | Phase 5 | Pending |
 | MKT-08 | Phase 5 | Pending |
-| MIM-01 | Phase 6 | Pending |
-| MIM-02 | Phase 6 | Pending |
-| MIM-03 | Phase 6 | Pending |
-| MIM-04 | Phase 6 | Pending |
+| MIM-01 | Phase 6 | Complete |
+| MIM-02 | Phase 6 | Complete |
+| MIM-03 | Phase 6 | Complete |
+| MIM-04 | Phase 6 | Complete |
 | GLK-01 | Phase 7 | Complete |
 | GLK-02 | Phase 7 | Complete |
 | GLK-03 | Phase 7 | Complete |

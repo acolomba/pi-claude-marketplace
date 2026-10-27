@@ -319,6 +319,19 @@ void ({
   marketplace: "official",
   source: "https://example.test",
 } satisfies PlannedMarketplaceSource);
+void ({
+  scope: "user",
+  marketplace: "claude-plugins-official",
+  source: "anthropics/claude-plugins-official",
+  sourceIsFallback: true,
+} satisfies PlannedMarketplaceSource);
+void ({
+  scope: "user",
+  marketplace: "claude-plugins-official",
+  source: "anthropics/claude-plugins-official",
+  // @ts-expect-error the fallback flag is only ever present as true
+  sourceIsFallback: false,
+} satisfies PlannedMarketplaceSource);
 // @ts-expect-error planned plugin imports always carry a parsed reference
 void ({ scope: "user" } satisfies PlannedPluginImport);
 void ({

@@ -10,7 +10,10 @@ import {
   githubSource,
   pathSource,
 } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
-import { planReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
+import {
+  marketplaceSourceClaims,
+  planReconcile,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
 import { emptyReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
 import { mergeScopeConfigs } from "../../../extensions/pi-claude-marketplace/persistence/config-merge.ts";
 
@@ -2015,5 +2018,82 @@ describe("planReconcile", () => {
 
     // assert
     assert.deepStrictEqual(plan, emptyReconcilePlan("project"));
+  });
+});
+
+describe("marketplaceSourceClaims", () => {
+  test("maps a declaration recorded under its own name to itself", () => {
+    // arrange
+    const declared = mergedConfig({ tools: { source: "acme/tools" } }).marketplaces;
+    const recorded = stateWith({
+      tools: marketplaceRecord("tools", githubSource("acme/tools")),
+    }).marketplaces;
+
+    // act
+    const claims = marketplaceSourceClaims(declared, recorded);
+
+    // assert
+    assert.deepStrictEqual(claims, new Map([["tools", "tools"]]));
+  });
+
+  test("maps a declaration to the one undeclared record that holds its source", () => {
+    // arrange
+    const declared = mergedConfig({ alias: { source: "acme/actual" } }).marketplaces;
+    const recorded = stateWith({
+      other: marketplaceRecord("other", githubSource("acme/other")),
+      actual: marketplaceRecord("actual", githubSource("acme/actual")),
+    }).marketplaces;
+
+    // act
+    const claims = marketplaceSourceClaims(declared, recorded);
+
+    // assert
+    assert.deepStrictEqual(claims, new Map([["alias", "actual"]]));
+  });
+
+  test("maps nothing for a source two records hold", () => {
+    // arrange
+    const declared = mergedConfig({ alias: { source: "acme/actual" } }).marketplaces;
+    const recorded = stateWith({
+      zeta: marketplaceRecord("zeta", githubSource("acme/actual")),
+      alpha: marketplaceRecord("alpha", githubSource("acme/actual")),
+    }).marketplaces;
+
+    // act
+    const claims = marketplaceSourceClaims(declared, recorded);
+
+    // assert
+    assert.deepStrictEqual(claims, new Map());
+  });
+
+  test("maps nothing for a record two declarations claim", () => {
+    // arrange
+    const declared = mergedConfig({
+      "alias-a": { source: "acme/actual" },
+      "alias-b": { source: "acme/actual" },
+    }).marketplaces;
+    const recorded = stateWith({
+      actual: marketplaceRecord("actual", githubSource("acme/actual")),
+    }).marketplaces;
+
+    // act
+    const claims = marketplaceSourceClaims(declared, recorded);
+
+    // assert
+    assert.deepStrictEqual(claims, new Map());
+  });
+
+  test("maps nothing for a declaration with no record and no source match", () => {
+    // arrange
+    const declared = mergedConfig({ fresh: { source: "./fresh" } }).marketplaces;
+    const recorded = stateWith({
+      other: marketplaceRecord("other", pathSource("./other")),
+    }).marketplaces;
+
+    // act
+    const claims = marketplaceSourceClaims(declared, recorded);
+
+    // assert
+    assert.deepStrictEqual(claims, new Map());
   });
 });
