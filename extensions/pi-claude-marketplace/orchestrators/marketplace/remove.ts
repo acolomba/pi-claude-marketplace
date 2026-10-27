@@ -121,7 +121,7 @@ import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
-type RecordedSourceKind = "github" | "url" | "path" | "unknown";
+type RecordedSourceKind = "github" | "url" | "hosted" | "path" | "unknown";
 
 /**
  * AFILE-04: an orchestrated removal whose state transaction threw after its
@@ -883,7 +883,11 @@ async function runRemoveLockBody(args: {
 
   const src = record.source as { kind?: unknown };
   const sourceKind: RecordedSourceKind | undefined =
-    src.kind === "github" || src.kind === "url" || src.kind === "path" || src.kind === "unknown"
+    src.kind === "github" ||
+    src.kind === "url" ||
+    src.kind === "hosted" ||
+    src.kind === "path" ||
+    src.kind === "unknown"
       ? src.kind
       : undefined;
 
@@ -1145,8 +1149,9 @@ function surfaceRemoveStop(
 }
 
 /**
- * MR-7 / MURL-04: the marketplace data dir and, for github and url sources, the
- * `sources/<name>/` clone of a marketplace whose state record is gone.
+ * MR-7 / MURL-04 / D-PL5-06: the marketplace data dir and, for github, url,
+ * and hosted sources, the `sources/<name>/` checkout or stored catalog of a
+ * marketplace whose state record is gone.
  */
 async function removeMarketplaceFootprint(
   locations: ScopedLocations,
@@ -1155,7 +1160,7 @@ async function removeMarketplaceFootprint(
 ): Promise<void> {
   await removePath(locations.marketplaceDataDir(name));
 
-  if (sourceKind === "github" || sourceKind === "url") {
+  if (sourceKind === "github" || sourceKind === "url" || sourceKind === "hosted") {
     await removePath(locations.sourceCloneDir(name));
   }
 }

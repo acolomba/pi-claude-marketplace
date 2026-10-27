@@ -692,6 +692,11 @@ const SOURCE_CASES = [
     source: () => parsePluginSource("https://gitlab.example.com/team/marketplace"),
     cloneRemains: false,
   },
+  {
+    kind: "hosted",
+    source: () => parsePluginSource("https://catalog.example/acme/tools/marketplace.json"),
+    cloneRemains: false,
+  },
 ] as const;
 
 for (const sourceCase of SOURCE_CASES) {
@@ -866,7 +871,7 @@ test("retains the source clone when a forward-compatible recorded kind is unavai
   // assert
   assert.strictEqual(outcome, undefined);
   assert.deepStrictEqual(notification.calls, [{ message: "● future-source [project] (removed)" }]);
-  assert.strictEqual(sourceKindReads, 14);
+  assert.strictEqual(sourceKindReads, 15);
   assert.strictEqual(await readFile(path.join(cloneDir, "sentinel"), "utf8"), "clone");
   assert.deepStrictEqual(await loadState(locations.extensionRoot), {
     schemaVersion: 3,

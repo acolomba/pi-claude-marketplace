@@ -526,6 +526,49 @@ test("MURL-05: an explicit user URL source omits absent optional fields", async 
   });
 });
 
+test("D-PL5-05: a hosted source renders as a url source with its catalog URL", async () => {
+  await withHermeticHome(async ({ cwd, home }) => {
+    // arrange
+    const locations = locationsFor("user", cwd);
+    const manifestPath = path.join(locations.extensionRoot, "tools.json");
+    await writeMarketplaceJson(manifestPath, "tools", "A hosted catalog.");
+    await saveMarketplace(
+      locations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        lastUpdatedAt: "2026-10-27T00:00:00Z",
+        manifestPath,
+        marketplaceRoot: "/home/user/marketplaces/tools",
+        name: "tools",
+        scope: "user",
+        source: parsePluginSource("https://catalog.example/acme/tools/marketplace.json"),
+      }),
+    );
+    const before = await snapshotEnvironment(home, cwd);
+    const boundary = notificationBoundary({
+      message: [
+        "● tools [user] <no autoupdate>",
+        "url: https://catalog.example/acme/tools/marketplace.json",
+        "last_updated: 2026-10-27T00:00:00Z",
+        "description: A hosted catalog.",
+      ].join("\n"),
+    });
+
+    // act
+    await getMarketplaceInfo({
+      ctx: boundary.ctx,
+      run: boundary.run,
+      name: "tools",
+      scope: "user",
+      cwd,
+    });
+
+    // assert
+    assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
+    boundary.verifyAll();
+  });
+});
+
 test("INFO-01: an explicit project path source renders its minimal block", async () => {
   await withHermeticHome(async ({ cwd, home }) => {
     // arrange

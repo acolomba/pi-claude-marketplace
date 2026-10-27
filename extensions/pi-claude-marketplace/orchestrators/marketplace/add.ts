@@ -1177,13 +1177,11 @@ function surfaceLockHeldAdd(
   orchestrated: boolean,
 ): AddMarketplaceOutcome {
   if (!orchestrated) {
-    const [block] = marketplaceFailureRows(opts.rawSource, opts.scope, "lock held", err);
-    const plugins = block.plugins.map((row) => ({ ...row, marketplaceSubject: true as const }));
     notifyWithContext(
       opts.ctx,
       opts.run,
       ADD_CONTEXT,
-      [{ ...block, plugins }],
+      marketplaceFailureRows(opts.rawSource, opts.scope, "lock held", err),
       undefined,
       "single",
     );

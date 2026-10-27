@@ -53,7 +53,8 @@ type MarketplaceRecord = ExtensionState["marketplaces"][string];
  * Casting to that discriminated union lets the discriminator narrow
  * `kind === "github"` / `kind === "url"` without re-checking `typeof` on
  * each field. `github`, `url` (D-76-09), and recorded path sources get
- * dedicated projections. Every OTHER kind coerces to the `path` arm with
+ * dedicated projections, and a hosted source shows as `url` with its catalog
+ * URL (D-PL5-05). Every OTHER kind coerces to the `path` arm with
  * `record.marketplaceRoot` -- surfacing a bare row beats refusing to render
  * (NFR-12).
  *
@@ -87,6 +88,10 @@ async function buildBlock(
       url: src.url,
       ...(src.ref !== undefined && { ref: src.ref }),
     };
+  } else if (src.kind === "hosted") {
+    // D-PL5-05: a hosted catalog shows its URL and last update time as a url
+    // source does, so the info message and its schema keep three kinds.
+    source = { sourceKind: "url", url: src.url };
   } else if (src.kind === "path") {
     source = {
       sourceKind: "path",

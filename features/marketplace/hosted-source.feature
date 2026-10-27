@@ -171,3 +171,37 @@ Feature: Marketplace hosted source
     Then the git host receives these requests:
       | method | path                         | status |
       | GET    | /acme/tools/marketplace.json | 200    |
+
+  Scenario: Removing a hosted marketplace deletes its stored catalog without a request
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin marketplace remove tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | false   |
+    Then the result lists these marketplaces:
+      | name  | scope   | status  |
+      | tools | project | removed |
+    Then the git host receives no request
+    Then the project scope holds no marketplace checkout
+
+  Scenario: Marketplace info shows a hosted marketplace's URL without a request
+    Given the marketplace "tools" is published as a hosted source
+    Given the marketplace "tools" is added to the project scope
+    When the user runs "/claude:plugin marketplace info tools --scope project"
+    Then the marketplace info result has these fields:
+      | kind                    | marketplace-info                               |
+      | name                    | tools                                          |
+      | scope                   | project                                        |
+      | details autoupdate      | false                                          |
+      | details last updated at | {scenario time}                                |
+      | source kind             | url                                            |
+      | source abs path         |                                                |
+      | source url              | https://{git host}/acme/tools/marketplace.json |
+      | source owner            |                                                |
+      | source repo             |                                                |
+      | source ref              |                                                |
+      | severity                | info                                           |
+      | needs reload            | false                                          |
+    Then the git host receives no request
