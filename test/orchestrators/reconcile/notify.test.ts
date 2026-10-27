@@ -10,6 +10,7 @@ import {
   buildReconcileAppliedCascade,
   buildReconcilePendingNotification,
   convergedMoveOutcomes,
+  dependencyInstallRows,
   enabledMoveOutcome,
   isReconcilePlanListEmpty,
   planListNeedsApply,
@@ -3552,5 +3553,85 @@ describe("resolvePendingForceInstalls", () => {
 
     // assert
     assert.deepStrictEqual(forceInstallKeys, new Set());
+  });
+});
+
+describe("dependencyInstallRows", () => {
+  test("D-PL2-09: an installed dependency becomes apply's installed row under its full key", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-installed",
+        scope: "project",
+        marketplace: "other",
+        plugin: "lib",
+        version: "1.0.0",
+        dependencies: ["mcp"],
+        dependencyInstalled: true,
+        orphanRewake: true,
+      },
+    ];
+
+    // act
+    const rows = dependencyInstallRows(outcomes);
+
+    // assert
+    assert.deepStrictEqual(rows, [
+      {
+        status: "installed",
+        name: "lib@other",
+        version: "1.0.0",
+        dependencies: ["mcp"],
+        reasons: ["dependency installed", "orphan rewake"],
+        severity: "info",
+        needsReload: true,
+      },
+    ]);
+  });
+
+  test("D-PL2-11: a refused dependency install becomes apply's failed row with its cause, under its full key", () => {
+    // arrange
+    const cause = new DependencyCascadeError(
+      'Dependency "missing@other" is not declared by its marketplace.',
+      "missing@other",
+    );
+    const outcomes: readonly PerEntryOutcome[] = [
+      {
+        kind: "plugin-install-failed",
+        scope: "project",
+        marketplace: "other",
+        plugin: "lib",
+        reason: "dependency failed",
+        cause,
+      },
+    ];
+
+    // act
+    const rows = dependencyInstallRows(outcomes);
+
+    // assert
+    assert.deepStrictEqual(rows, [
+      {
+        status: "failed",
+        name: "lib@other",
+        reasons: ["dependency failed"],
+        cause,
+        severity: "error",
+        needsReload: false,
+      },
+    ]);
+  });
+
+  test("maps an outcome the step does not produce to no row", () => {
+    // arrange
+    const outcomes: readonly PerEntryOutcome[] = [
+      { kind: "plugin-uninstalled", scope: "project", marketplace: "other", plugin: "lib" },
+    ];
+
+    // act
+    const rows = dependencyInstallRows(outcomes);
+
+    // assert
+    assert.deepStrictEqual(rows, []);
   });
 });

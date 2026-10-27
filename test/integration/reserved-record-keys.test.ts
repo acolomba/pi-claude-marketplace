@@ -29,7 +29,10 @@ import {
 } from "../../extensions/pi-claude-marketplace/bridges/hooks/index.ts";
 import { registerClaudePluginCommand } from "../../extensions/pi-claude-marketplace/edge/register.ts";
 import { createPluginUpdateOperations } from "../../extensions/pi-claude-marketplace/orchestrators/plugin/update-flow.ts";
-import { createApplyReconcile } from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import {
+  createApplyReconcile,
+  createScopeDependencyInstall,
+} from "../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { locationsFor } from "../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { loadState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
@@ -106,6 +109,10 @@ function registeredCommand(cwd: string): (args: string) => Promise<NotifyRecord[
       gitOps: createGitOpsFake({ boundary: "memory" }).gitOps,
       beginPluginUpdateRun: pluginUpdates.beginPluginUpdateRun,
       applyReconcile: createApplyReconcile({ loadState }),
+      installMissingDependencies: createScopeDependencyInstall(
+        { loadState },
+        { hooksRouting, completionCache },
+      ),
     },
     hooksRouting,
     pluginUpdates.updatePlugins,

@@ -355,6 +355,8 @@ async function seedPrunableScope(scope: Scope, cwd: string): Promise<ExtensionSt
  * The injected dependency bag. The git operations are a memory-boundary fake and
  * the three orchestrator entrypoints refuse to run: no case here dispatches a
  * subcommand that reaches them, so a call is a defect rather than a fixture gap.
+ * The missing-dependency step installs nothing, because the registered
+ * `marketplace add` runs it.
  */
 function createEdgeDeps(
   completionCache: CompletionCache,
@@ -372,6 +374,7 @@ function createEdgeDeps(
     applyReconcile: (): Promise<void> => {
       throw new Error("the registration glue must not run a reconcile apply");
     },
+    installMissingDependencies: () => Promise.resolve({ rows: [], mcpConfigNotices: [] }),
     importClaudeSettings:
       importClaudeSettings ??
       ((): Promise<ClaudeImportExecutionResult> => {

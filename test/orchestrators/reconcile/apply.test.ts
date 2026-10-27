@@ -68,7 +68,10 @@ import {
 import { asAbsolutePluginRoot } from "../../../extensions/pi-claude-marketplace/domain/plugin-root.ts";
 import { pathSource } from "../../../extensions/pi-claude-marketplace/domain/source.ts";
 import { createUninstallOperation } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/operations.ts";
-import { createApplyReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
+import {
+  createApplyReconcile,
+  createScopeDependencyInstall,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts";
 import { buildScopeSatisfactionVerdict } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/dependency-verdict.ts";
 import { planReconcile } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/plan.ts";
 import { emptyReconcilePlan } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
@@ -103,6 +106,10 @@ import type {
   McpMigrationStep,
   ReconcilePlan,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/reconcile/types.ts";
+import type {
+  ScopeDependencyInstallFn,
+  ScopeDependencyInstallResult,
+} from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { NotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
@@ -791,7 +798,7 @@ test("D-05-02: the source and owner-test census contains exactly the two approve
   ]);
 });
 
-test("apply.ts exposes the reconcile factory and no composed value", async () => {
+test("apply.ts exposes the reconcile factories and no composed value", async () => {
   // arrange
   const applyModule =
     await import("../../../extensions/pi-claude-marketplace/orchestrators/reconcile/apply.ts");
@@ -800,7 +807,7 @@ test("apply.ts exposes the reconcile factory and no composed value", async () =>
   const exportNames = Object.keys(applyModule);
 
   // assert
-  assert.deepStrictEqual(exportNames, ["createApplyReconcile"]);
+  assert.deepStrictEqual(exportNames, ["createApplyReconcile", "createScopeDependencyInstall"]);
 });
 
 describe("applyReconcile", () => {
@@ -9083,5 +9090,189 @@ describe("applyReconcile catalog convergence", () => {
     assert.deepStrictEqual(notifications, [APPLY_EMPTY_NOTICE]);
     assert.equal(await pathExists(project.stateJsonPath), false);
     verifyBoundary();
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// D-PL2-09: the missing-dependency step over one scope that a marketplace add
+// runs. It drives the same `applyDependencyInstalls` the apply pass drives, so
+// these cases prove the read, the selection, the rows, and the read failure.
+// ───────────────────────────────────────────────────────────────────────────
+
+describe("createScopeDependencyInstall", () => {
+  /** The step bound to `reader` and a fresh lifecycle, as the entry point binds it. */
+  function scopeDependencyInstall(
+    reader: ReconcileStateReader = { loadState },
+  ): ScopeDependencyInstallFn {
+    return createScopeDependencyInstall(reader, {
+      completionCache: createCompletionCache(),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    });
+  }
+
+  /** A project scope recording `deploy-kit@mp`, whose declared dependency is not installed. */
+  async function seedDeployKitScope(
+    t: TestContext,
+    label: string,
+    trees: Readonly<Record<string, PluginTree>>,
+  ): Promise<Pick<HermeticScopes, "cwd" | "project">> {
+    const { cwd, project } = await seedCommentedAdapterScope(t, label, {
+      trees,
+      declared: { "deploy-kit@mp": {} },
+      recorded: { "deploy-kit": { supported: ["skills"] } },
+      owners: [],
+    });
+    return { cwd, project };
+  }
+
+  /** Runs the step over the project scope; it emits nothing of its own. */
+  async function runStep(
+    step: ScopeDependencyInstallFn,
+    cwd: string,
+    select: (install: { readonly plugin: string; readonly marketplace: string }) => boolean,
+  ): Promise<ScopeDependencyInstallResult> {
+    const { ctx, verifyBoundary } = createNotificationBoundary(0);
+    const result = await step({ ctx, run: runWithNothingLoaded(), scope: "project", cwd, select });
+    verifyBoundary();
+    return result;
+  }
+
+  test("installs a selected missing dependency and reports it by its full key", async (t) => {
+    // arrange
+    const { cwd, project } = await seedDeployKitScope(t, "scope-step-install", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    const selected: string[] = [];
+
+    // act
+    const result = await runStep(scopeDependencyInstall(), cwd, (install) => {
+      selected.push(`${install.plugin}@${install.marketplace}`);
+      return true;
+    });
+
+    // assert
+    assert.deepStrictEqual(selected, ["secrets-vault@mp"]);
+    assert.deepStrictEqual(result, {
+      rows: [
+        {
+          status: "installed",
+          name: "secrets-vault@mp",
+          version: "1.0.0",
+          dependencies: [],
+          reasons: ["dependency installed"],
+          severity: "info",
+          needsReload: true,
+        },
+      ],
+      mcpConfigNotices: [],
+    });
+    const secretsVault = await recordFor(project, "mp", "secrets-vault");
+    assert.equal(secretsVault?.provenance, "dependency");
+    assert.equal(secretsVault?.enabled, true);
+  });
+
+  test("leaves a missing dependency the request does not select uninstalled", async (t) => {
+    // arrange
+    const { cwd, project } = await seedDeployKitScope(t, "scope-step-unselected", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+
+    // act
+    const result = await runStep(scopeDependencyInstall(), cwd, () => false);
+
+    // assert
+    assert.deepStrictEqual(result, { rows: [], mcpConfigNotices: [] });
+    assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
+  });
+
+  test("reports nothing for a scope with neither a state file nor a config", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "scope-step-pristine");
+
+    // act
+    const result = await runStep(scopeDependencyInstall(), cwd, () => true);
+
+    // assert
+    assert.deepStrictEqual(result, { rows: [], mcpConfigNotices: [] });
+    assert.equal(await pathExists(project.stateJsonPath), false);
+  });
+
+  test("reports nothing for a scope whose config is invalid", async (t) => {
+    // arrange
+    const { cwd, project } = await createHermeticScopes(t, "scope-step-invalid-config");
+    await writeUnder(project.baseConfigJsonPath, "{");
+
+    // act
+    const result = await runStep(scopeDependencyInstall(), cwd, () => true);
+
+    // assert
+    assert.deepStrictEqual(result, { rows: [], mcpConfigNotices: [] });
+  });
+
+  test("D-PL2-11: a refused install reports the failed row apply reports, with its cause", async (t) => {
+    // arrange -- secrets-vault declares crypto-core, which mp does not declare.
+    const { cwd, project } = await seedDeployKitScope(t, "scope-step-refused", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { dependencies: ["crypto-core"], skill: "clean" },
+    });
+
+    // act
+    const result = await runStep(scopeDependencyInstall(), cwd, () => true);
+
+    // assert
+    const [row, ...rest] = result.rows;
+    assert.deepStrictEqual(rest, []);
+    assert.equal(row?.status, "failed");
+    const { cause, ...fields } = row;
+    assert.deepStrictEqual(fields, {
+      status: "failed",
+      name: "secrets-vault@mp",
+      reasons: ["dependency failed"],
+      severity: "error",
+      needsReload: false,
+    });
+    assert.equal(cause?.message, 'Dependency "crypto-core@mp" is not declared by its marketplace.');
+    assert.deepStrictEqual(result.mcpConfigNotices, []);
+    assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
+  });
+
+  test("NFR-3: a read that fails reports nothing and installs nothing", async (t) => {
+    // arrange
+    const { cwd, project } = await seedDeployKitScope(t, "scope-step-read-fails", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { skill: "clean" },
+    });
+    const step = scopeDependencyInstall({
+      loadState: () => Promise.reject(new Error("state.json is mid-write")),
+    });
+
+    // act
+    const result = await runStep(step, cwd, () => true);
+
+    // assert
+    assert.deepStrictEqual(result, { rows: [], mcpConfigNotices: [] });
+    assert.equal(await recordFor(project, "mp", "secrets-vault"), undefined);
+  });
+
+  test("AFILE-04: returns the MCP config notices its installs produced", async (t) => {
+    // arrange
+    const { cwd } = await seedDeployKitScope(t, "scope-step-notices", {
+      "deploy-kit": { dependencies: ["secrets-vault"], skill: "clean" },
+      "secrets-vault": { mcpServer: true },
+    });
+
+    // act
+    const result = await runStep(scopeDependencyInstall(), cwd, () => true);
+
+    // assert
+    assert.deepStrictEqual(result.mcpConfigNotices, [
+      { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+    ]);
+    assert.deepStrictEqual(
+      result.rows.map((row) => [row.status, row.name]),
+      [["installed", "secrets-vault@mp"]],
+    );
   });
 });

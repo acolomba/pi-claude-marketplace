@@ -98,7 +98,11 @@ import {
   notifyDiagnostic,
   notifyMcpConfigNotices,
 } from "../../shared/notification-dispatch.ts";
-import { type ContentReason, type Reason } from "../../shared/notification-types.ts";
+import {
+  type ContentReason,
+  type McpConfigNotice,
+  type Reason,
+} from "../../shared/notification-types.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 import { withStateGuard } from "../../transaction/with-state-guard.ts";
@@ -131,7 +135,12 @@ import {
   planConvergenceCascade,
 } from "./convergence.ts";
 import { buildScopeSatisfactionVerdict, judgeFinalScope } from "./dependency-verdict.ts";
-import { blockedMoveOutcomes, convergedMoveOutcomes, enabledMoveOutcome } from "./notify.ts";
+import {
+  blockedMoveOutcomes,
+  convergedMoveOutcomes,
+  dependencyInstallRows,
+  enabledMoveOutcome,
+} from "./notify.ts";
 import {
   closeScopePass,
   notifyScopePasses,
@@ -164,7 +173,7 @@ import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { EnableDegradationSignals } from "../plugin/enable-disable.ts";
 import type { UninstallPluginOperation } from "../plugin/uninstall.ts";
-import type { MovedDependency, PluginUpdateOutcome } from "../types.ts";
+import type { MovedDependency, PluginUpdateOutcome, ScopeDependencyInstallFn } from "../types.ts";
 
 /**
  * Apply one plan's marketplacesToRemove bucket. NO outer lock around the
@@ -2104,6 +2113,51 @@ export function createApplyReconcile(
   };
 }
 
+/**
+ * D-PL2-09: creates `apply`'s missing-dependency step over one scope, for the
+ * commands that run it after a marketplace add. It plans the scope as `apply`
+ * does once its moves ran (`readPlainPlanForScope`), keeps the planned
+ * installs the request selects, and drives them through
+ * `applyDependencyInstalls`, so the eligibility rule (D-09-01), the operation
+ * and the rows are `apply`'s, a refusal's `(failed)` row included (D-PL2-11).
+ * It installs only: a dependent a marker holds down stays down, and the next
+ * `apply` enables it.
+ *
+ * The caller's state commit already happened, so a read that throws answers
+ * no rows and leaves a debug line; the next `apply` installs the dependency
+ * (NFR-3). The single production composition lives in the extension entry
+ * point, beside `createApplyReconcile`.
+ */
+export function createScopeDependencyInstall(
+  reader: ReconcileStateReader,
+  lifecycle: Pick<ApplyReconcileOptions, "hooksRouting" | "completionCache">,
+): ScopeDependencyInstallFn {
+  return async function installMissingDependencies(request) {
+    let installs: readonly PlannedDependencyInstall[];
+    try {
+      const read = await readPlainPlanForScope(reader, request.scope, request.cwd);
+      installs = (read.plan?.pluginsToDependencyInstall ?? []).filter(request.select);
+    } catch (err) {
+      hookDebugLog(
+        `installMissingDependencies: cannot read the ${request.scope} scope: ${errorMessage(err)}`,
+        "reconcile",
+      );
+      return { rows: [], mcpConfigNotices: [] };
+    }
+
+    const outcomes: PerEntryOutcome[] = [];
+    await applyDependencyInstalls(
+      { ctx: request.ctx, run: request.run, cwd: request.cwd, ...lifecycle },
+      installs,
+      outcomes,
+    );
+    return {
+      rows: dependencyInstallRows(outcomes),
+      mcpConfigNotices: carriedOutcomeNotices(outcomes),
+    };
+  };
+}
+
 function surfacePostCommitWarnings(
   opts: ApplyReconcileOptions,
   outcomes: readonly PerEntryOutcome[],
@@ -2157,15 +2211,16 @@ function surfaceMcpConfigNotices(
   opts: ApplyReconcileOptions,
   outcomes: readonly PerEntryOutcome[],
 ): void {
-  notifyMcpConfigNotices(
-    opts.ctx,
-    opts.run,
-    outcomes.flatMap((outcome) =>
-      outcome.kind === "invalid-block" ||
-      outcome.kind === "layer-marketplace-gap" ||
-      outcome.kind === "source-mismatch"
-        ? []
-        : (outcome.mcpConfigNotices ?? []),
-    ),
+  notifyMcpConfigNotices(opts.ctx, opts.run, carriedOutcomeNotices(outcomes));
+}
+
+/** AFILE-04: the MCP config notices the outcomes carry, in outcome order. */
+function carriedOutcomeNotices(outcomes: readonly PerEntryOutcome[]): McpConfigNotice[] {
+  return outcomes.flatMap((outcome) =>
+    outcome.kind === "invalid-block" ||
+    outcome.kind === "layer-marketplace-gap" ||
+    outcome.kind === "source-mismatch"
+      ? []
+      : (outcome.mcpConfigNotices ?? []),
   );
 }

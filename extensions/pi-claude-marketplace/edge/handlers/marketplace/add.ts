@@ -2,7 +2,8 @@
 //
 // Thin-shim handler factory for `marketplace add`; its usage line comes from
 // `marketplaceUsage("add")`.
-// Delegates to `addMarketplace` orchestrator, threading deps.gitOps through.
+// Delegates to `addMarketplace` orchestrator, threading deps.gitOps and the
+// missing-dependency step (D-PL2-09) through.
 //
 // D-05: the orchestrator renders from the router's notification run, which
 // the handler forwards.
@@ -27,7 +28,7 @@ import type { EdgeDeps } from "../../types.ts";
 const USAGE = marketplaceUsage("add");
 
 export function makeAddHandler(
-  deps: Pick<EdgeDeps, "completionCache" | "gitOps">,
+  deps: Pick<EdgeDeps, "completionCache" | "gitOps" | "installMissingDependencies">,
 ): SubcommandHandler {
   return async (args, ctx, run): Promise<void> => {
     const opened = openMarketplaceCommand(args, ctx, run, {
@@ -47,6 +48,7 @@ export function makeAddHandler(
       rawSource: opened.source,
       completionCache: deps.completionCache,
       gitOps: deps.gitOps,
+      installMissingDependencies: deps.installMissingDependencies,
       ...(opened.local && { local: true }),
     });
   };

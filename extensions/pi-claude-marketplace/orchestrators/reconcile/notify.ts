@@ -68,6 +68,7 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import {
   type MarketplaceNotificationMessage,
   type MarketplaceStatus,
+  type PluginFailedMessage,
   type PluginInstalledMessage,
   type PluginNotificationMessage,
   type PluginPartiallyInstalledMessage,
@@ -106,7 +107,7 @@ import type { MarketplaceManifest } from "../../domain/manifest.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
 import type { MarketplaceRows } from "../../shared/notify-context.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { PluginUpdateOutcome } from "../types.ts";
+import type { PluginUpdateOutcome, ScopeDependencyInstallRow } from "../types.ts";
 
 /**
  * S8 (PR #51): `status` is narrowed to the closed set the pending /
@@ -1195,6 +1196,57 @@ function failedRowReasons(
   return reasonAsContent(outcome.reason);
 }
 
+/** The `(failed)` row of a failed reconcile install, uninstall, enable or disable. */
+function failedRowFromOutcome(
+  outcome: Extract<
+    PerEntryOutcome,
+    {
+      kind:
+        | "plugin-install-failed"
+        | "plugin-uninstall-failed"
+        | "plugin-enable-failed"
+        | "plugin-disable-failed";
+    }
+  >,
+): PluginFailedMessage {
+  return {
+    status: "failed",
+    name: outcome.plugin,
+    reasons: failedRowReasons(outcome),
+    // D-05-16 / RESV-06: only a refused uninstall or a dependency-cascade
+    // install failure carries a cause onto this row.
+    ...failedRowCause(outcome),
+    // D-03/D-06: a failed reconcile apply row -> error, no reload.
+    severity: "error",
+    needsReload: false,
+  };
+}
+
+/**
+ * D-PL2-09 / D-PL2-11: the rows of the missing-dependency step a marketplace
+ * add runs, built as `apply` builds them and named by their full
+ * `plugin@marketplace` keys, because they render under the added
+ * marketplace's block rather than under their own. The step produces only
+ * installs and install refusals, so every other kind maps to no row.
+ */
+export function dependencyInstallRows(
+  outcomes: readonly PerEntryOutcome[],
+): ScopeDependencyInstallRow[] {
+  return outcomes.flatMap((outcome): ScopeDependencyInstallRow[] => {
+    if (outcome.kind === "plugin-installed") {
+      const name = `${outcome.plugin}@${outcome.marketplace}`;
+      return [{ ...installedRowFromOutcome(outcome), name }];
+    }
+
+    if (outcome.kind === "plugin-install-failed") {
+      const name = `${outcome.plugin}@${outcome.marketplace}`;
+      return [{ ...failedRowFromOutcome(outcome), name }];
+    }
+
+    return [];
+  });
+}
+
 /**
  * Apply a PLUGIN-subject outcome: one row pushed onto the block's children.
  *
@@ -1318,17 +1370,7 @@ function applyPluginOutcomeToBlock(
     case "plugin-uninstall-failed":
     case "plugin-enable-failed":
     case "plugin-disable-failed":
-      block.plugins.push({
-        status: "failed",
-        name: outcome.plugin,
-        reasons: failedRowReasons(outcome),
-        // D-05-16 / RESV-06: only a refused uninstall or a dependency-cascade
-        // install failure carries a cause onto this row.
-        ...failedRowCause(outcome),
-        // D-03/D-06: a failed reconcile apply row -> error, no reload.
-        severity: "error",
-        needsReload: false,
-      });
+      block.plugins.push(failedRowFromOutcome(outcome));
       return block;
     case "plugin-declarer-unreadable":
       block.plugins.push({

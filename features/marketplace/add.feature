@@ -358,3 +358,31 @@ Feature: Marketplace add
       | manifest problem           | source kind | source                            | reason           |
       | is not valid json          | url         | https://{git host}/acme/tools.git | unparseable      |
       | breaks the manifest schema | url         | https://{git host}/acme/tools.git | invalid manifest |
+
+  Scenario: Adding a marketplace installs the missing dependency of an installed plugin that it offers
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins:
+      | name | version |
+      | app  | 1.0.0   |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install app@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | app  | 1.0.0   | lib@other    |
+    Given the marketplace "tools" allows dependencies on the marketplace "other"
+    Given the marketplace "other" is published as a dir source
+    Given the marketplace "other" offers these plugins:
+      | name | version |
+      | lib  | 1.0.0   |
+    When the user runs "/claude:plugin marketplace add {home}/marketplaces/other --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | marketplace status | id        | name      | status    | reasons              | scope   | version |
+      | other            | project           | added              | lib@other | lib@other | installed | dependency installed | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id        | version | enabled |
+      | app@tools | 1.0.0   | true    |
+      | lib@other | 1.0.0   | true    |
