@@ -5261,7 +5261,7 @@ test("RESV-03 regression: an unreadable version constraint still fails the insta
       // ledger phase, so state.json and the scope root are byte-identical.
       assertRetryFailure(
         outcome,
-        'Dependency "some-other-plugin@mp" declares an unparseable version constraint not-a-version-range (input 1 of 1 is not a valid version range).',
+        'Dependency "some-other-plugin@mp" declares an unparseable version constraint \u201cnot-a-version-range\u201d (input 1 of 1 is not a valid version range).',
       );
       assert.deepStrictEqual(notifications, []);
       assert.strictEqual(await readFile(locations.stateJsonPath, "utf8"), stateBytes);
