@@ -6,14 +6,22 @@
 // hosted tree has no `.git/`, so its ownership marker sits at the tree root
 // and records the URL the catalog came from.
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 
+import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
 import { fetchHostedManifest } from "../../platform/hosted-manifest-fetch.ts";
 import { atomicWriteJson } from "../../shared/atomic-json.ts";
-import { StaleSourceCloneError, UnreadableSourceCloneError } from "../../shared/errors.ts";
+import {
+  StaleSourceCloneError,
+  UnreadableSourceCloneError,
+  appendLeakToError,
+} from "../../shared/errors.ts";
 import { cleanupStaging, pathExists, type RemovalOps } from "../../shared/fs-utils.ts";
 import { assertPathInside } from "../../shared/path-safety.ts";
+
+import type { ScopedLocations } from "../../persistence/locations.ts";
 
 /** D-PL5-07: downloads the catalog at a URL and returns its bytes. */
 export type HostedManifestFetch = (url: string) => Promise<Uint8Array>;
@@ -54,6 +62,44 @@ export async function downloadHostedCatalog(args: {
   const markerPath = hostedMarkerPath(stagingDir);
   await assertPathInside(stagingDir, markerPath, "hosted marketplace ownership marker");
   await atomicWriteJson(markerPath, { generatedBy: GENERATED_BY, url });
+}
+
+/**
+ * D-PL5-09: downloads the catalog at `url` again and puts it in place of the
+ * stored one at `manifestPath`. The bytes go to a fresh directory under
+ * `sources-staging/`, on the filesystem of `sources/` (D-09), and are read
+ * through the one manifest reader (NFR-8) before a rename replaces the stored
+ * file. A failed download, an invalid catalog, or a failed rename leaves the
+ * stored file as it was, and a staging cleanup that leaks is appended to the
+ * thrown error (MA-9).
+ */
+export async function refreshHostedCatalog(args: {
+  readonly url: string;
+  readonly manifestPath: string;
+  readonly locations: ScopedLocations;
+  readonly fetchCatalog: HostedManifestFetch;
+  readonly removalOps: RemovalOps;
+}): Promise<void> {
+  const { url, manifestPath, locations, removalOps } = args;
+  await assertPathInside(locations.sourcesDir, manifestPath, "hosted marketplace catalog");
+  const bytes = await args.fetchCatalog(url);
+  const stagingDir = await locations.sourcesStagingDir(randomUUID());
+  const stagedPath = path.join(stagingDir, CATALOG_FILE);
+  try {
+    await mkdir(stagingDir, { recursive: true });
+    await writeFile(stagedPath, bytes);
+    await loadMarketplaceManifestDocument(stagedPath);
+    await rename(stagedPath, manifestPath);
+  } catch (err) {
+    throw appendLeakToError(
+      err,
+      await cleanupStaging(removalOps, stagingDir, "marketplace catalog staging"),
+    );
+  }
+
+  // The catalog is in place, so a staging directory left behind holds nothing
+  // and does not fail the refresh.
+  await cleanupStaging(removalOps, stagingDir, "marketplace catalog staging");
 }
 
 /** Whether `text` is the hosted ownership marker of a download of `url`. */

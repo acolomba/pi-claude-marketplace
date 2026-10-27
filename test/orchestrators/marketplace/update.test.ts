@@ -34,6 +34,8 @@ import { createCompletionCache } from "../../../extensions/pi-claude-marketplace
 import {
   CrossOriginChallengeError,
   FetchedUrlCause,
+  HostedManifestFetchError,
+  HostedManifestHttpError,
   InvalidGitHubBaseUrlError,
   PluginShapeError,
   StoredCredentialRejectedError,
@@ -49,6 +51,7 @@ import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts"
 import { setGitHubBaseUrl } from "../../shared/github-base-url-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
+import type { HostedManifestFetch } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/hosted-catalog.ts";
 import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/shared.ts";
 import type {
   PluginUpdateFn,
@@ -5892,5 +5895,263 @@ test("silently stops when the marketplace vanishes after preflight", async () =>
       marketplaces: {},
     });
     assert.deepStrictEqual(git.calls, []);
+  });
+});
+
+const HOSTED_URL = "https://catalog.example/acme/tools/marketplace.json";
+const HOSTED_CATALOG = JSON.stringify({ name: "tools", owner: { name: "acme" }, plugins: [] });
+const CHANGED_HOSTED_CATALOG = JSON.stringify({
+  name: "tools",
+  owner: { name: "acme" },
+  plugins: [{ name: "hello", source: "./plugins/hello" }],
+});
+
+/** A `tools` marketplace stored as a hosted add stores it (D-PL5-06). */
+async function seedHostedMarketplace(opts: {
+  cwd: string;
+  autoupdate?: boolean;
+  plugins?: Record<string, ExtensionState["marketplaces"][string]["plugins"][string]>;
+}): Promise<{ manifestPath: string; record: ExtensionState["marketplaces"][string] }> {
+  const locations = locationsFor("project", opts.cwd);
+  await mkdir(locations.extensionRoot, { recursive: true });
+  const cloneDir = await locations.sourceCloneDir("tools");
+  const manifestPath = path.join(cloneDir, ".claude-plugin", "marketplace.json");
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(manifestPath, HOSTED_CATALOG);
+  const record: ExtensionState["marketplaces"][string] = {
+    name: "tools",
+    scope: "project",
+    source: parsePluginSource(HOSTED_URL),
+    addedFromCwd: opts.cwd,
+    manifestPath,
+    marketplaceRoot: cloneDir,
+    plugins: opts.plugins ?? {},
+    lastUpdatedAt: "2026-01-01T00:00:00.000Z",
+    lastSuccessfulManifest: HOSTED_CATALOG,
+  };
+  await saveState(locations.extensionRoot, { schemaVersion: 1, marketplaces: { tools: record } });
+  if (opts.autoupdate !== undefined) {
+    await saveConfig(
+      locations.baseConfigJsonPath,
+      { schemaVersion: 1, marketplaces: { tools: { source: HOSTED_URL, autoupdate: true } } },
+      locations.scopeRoot,
+    );
+  }
+
+  return { manifestPath, record };
+}
+
+function hostedServing(bytes: string): {
+  readonly urls: string[];
+  readonly fetchCatalog: HostedManifestFetch;
+} {
+  const urls: string[] = [];
+  return {
+    urls,
+    fetchCatalog: (url) => {
+      urls.push(url);
+      return Promise.resolve(Buffer.from(bytes));
+    },
+  };
+}
+
+test("D-PL5-09: a hosted refresh with a changed catalog replaces it and records the change", async (testContext) => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const now = new Date("2026-10-27T09:00:00.000Z");
+    testContext.mock.timers.enable({ apis: ["Date"], now });
+    const { manifestPath, record } = await seedHostedMarketplace({ cwd });
+    const { ctx, run, notifications } = makeCtx();
+    const { urls, fetchCatalog } = hostedServing(CHANGED_HOSTED_CATALOG);
+    const forbidden = makeForbiddenGitOps();
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "tools",
+      scope: "project",
+      cwd,
+      gitOps: forbidden.gitOps,
+      hostedManifestFetch: fetchCatalog,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [{ message: "● tools [project] (updated)" }]);
+    assert.deepStrictEqual(urls, [HOSTED_URL]);
+    assert.deepStrictEqual(forbidden.calls, []);
+    assert.strictEqual(await readFile(manifestPath, "utf8"), CHANGED_HOSTED_CATALOG);
+    const state = await loadState(locationsFor("project", cwd).extensionRoot);
+    assert.deepStrictEqual(state.marketplaces.tools, {
+      ...record,
+      lastUpdatedAt: now.toISOString(),
+      lastSuccessfulManifest: CHANGED_HOSTED_CATALOG,
+    });
+  });
+});
+
+test("D-PL5-09: a hosted refresh with an unchanged catalog reports up-to-date", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedHostedMarketplace({ cwd });
+    const { ctx, run, notifications } = makeCtx();
+    const { urls, fetchCatalog } = hostedServing(HOSTED_CATALOG);
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "tools",
+      scope: "project",
+      cwd,
+      hostedManifestFetch: fetchCatalog,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● tools [project] (skipped) {up-to-date}" },
+    ]);
+    assert.deepStrictEqual(urls, [HOSTED_URL]);
+  });
+});
+
+for (const { title, fetchCatalog, row } of [
+  {
+    title: "a 404 answer reads network error with its status frame",
+    fetchCatalog: (): Promise<Uint8Array> =>
+      Promise.reject(new HostedManifestHttpError(HOSTED_URL, 404)),
+    row: `{network error}\n    cause: 404 on ${HOSTED_URL} -> HTTP 404 error while downloading marketplace from ${HOSTED_URL}. The marketplace file may not exist at this URL.`,
+  },
+  {
+    title: "a 403 answer reads authentication required",
+    fetchCatalog: (): Promise<Uint8Array> =>
+      Promise.reject(new HostedManifestHttpError(HOSTED_URL, 403)),
+    row: `{authentication required}\n    cause: Failed to update marketplace "tools". -> HTTP 403 error while downloading marketplace from ${HOSTED_URL}. The marketplace file may not exist at this URL.`,
+  },
+  {
+    title: "a connection that fails reads network unreachable",
+    fetchCatalog: (): Promise<Uint8Array> =>
+      Promise.reject(new HostedManifestFetchError("network", "fetch failed")),
+    row: '{network unreachable}\n    cause: Failed to update marketplace "tools". -> fetch failed',
+  },
+  {
+    title: "an answer the download refuses reads unreadable",
+    fetchCatalog: (): Promise<Uint8Array> =>
+      Promise.reject(new HostedManifestFetchError("unreadable", "too large")),
+    row: '{unreadable}\n    cause: Failed to update marketplace "tools". -> too large',
+  },
+  {
+    title: "a malformed catalog reads unparseable",
+    fetchCatalog: hostedServing("{").fetchCatalog,
+    row: "{unparseable}",
+  },
+  {
+    title: "a schema-invalid catalog reads invalid manifest",
+    fetchCatalog: hostedServing('{"name":"tools","plugins":"none"}').fetchCatalog,
+    row: "{invalid manifest}",
+  },
+]) {
+  test(`D-PL5-21: a failed hosted refresh where ${title} keeps the stored catalog and record`, async () => {
+    await withHermeticHome(async ({ cwd }) => {
+      // arrange
+      const { manifestPath, record } = await seedHostedMarketplace({ cwd });
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      await updateMarketplace({
+        completionCache: createCompletionCache(),
+        ctx,
+        run,
+        name: "tools",
+        scope: "project",
+        cwd,
+        hostedManifestFetch: fetchCatalog,
+      });
+
+      // assert
+      assert.strictEqual(notifications.length, 1);
+      const [first] = notifications;
+      assert.ok(first !== undefined);
+      assert.strictEqual(first.severity, "error");
+      assert.ok(
+        first.message.startsWith(
+          `Some operations have failed.\n\n⊘ tools [project] (failed)\n  ⊘ tools (failed) ${row}`,
+        ),
+        first.message,
+      );
+      assert.strictEqual(await readFile(manifestPath, "utf8"), HOSTED_CATALOG);
+      const state = await loadState(locationsFor("project", cwd).extensionRoot);
+      assert.deepStrictEqual(state.marketplaces.tools, record);
+    });
+  });
+}
+
+test("D-PL5-09: a changed hosted refresh with autoupdate on runs the plugin cascade", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedHostedMarketplace({
+      cwd,
+      autoupdate: true,
+      plugins: { hello: makePluginRecord() },
+    });
+    const { ctx, run } = makeCtx();
+    const { fetchCatalog } = hostedServing(CHANGED_HOSTED_CATALOG);
+    const calls: { plugin: string; marketplace: string; scope: Scope }[] = [];
+    const pluginUpdate: PluginUpdateFn = (plugin, marketplace, scope) => {
+      calls.push({ plugin, marketplace, scope });
+      return Promise.resolve({
+        partition: "unchanged",
+        name: plugin,
+        fromVersion: "0.0.1",
+        toVersion: "0.0.1",
+        declaresAgents: false,
+        declaresMcp: false,
+        constraint: undefined,
+        declaresWorkflows: false,
+      });
+    };
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "tools",
+      scope: "project",
+      cwd,
+      hostedManifestFetch: fetchCatalog,
+      pluginUpdate,
+    });
+
+    // assert
+    assert.deepStrictEqual(calls, [{ plugin: "hello", marketplace: "tools", scope: "project" }]);
+  });
+});
+
+test("D-PL5-09: a bare update refreshes a hosted marketplace through the injected download", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const { manifestPath } = await seedHostedMarketplace({ cwd });
+    const { ctx, run, notifications } = makeCtx();
+    const { urls, fetchCatalog } = hostedServing(CHANGED_HOSTED_CATALOG);
+
+    // act
+    await updateAllMarketplaces({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      hostedManifestFetch: fetchCatalog,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● tools [project] (updated)\n\nMarketplace update: 1 success" },
+    ]);
+    assert.deepStrictEqual(urls, [HOSTED_URL]);
+    assert.strictEqual(await readFile(manifestPath, "utf8"), CHANGED_HOSTED_CATALOG);
   });
 });

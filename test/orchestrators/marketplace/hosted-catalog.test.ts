@@ -1,5 +1,14 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
@@ -8,9 +17,13 @@ import {
   DEFAULT_HOSTED_MANIFEST_FETCH,
   downloadHostedCatalog,
   recognizeHostedLeftover,
+  refreshHostedCatalog,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/hosted-catalog.ts";
+import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { fetchHostedManifest } from "../../../extensions/pi-claude-marketplace/platform/hosted-manifest-fetch.ts";
 import {
+  CleanupLeakError,
+  InvalidMarketplaceManifestError,
   StaleSourceCloneError,
   UnreadableSourceCloneError,
 } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
@@ -21,6 +34,7 @@ import {
 } from "../../../extensions/pi-claude-marketplace/shared/fs-utils.ts";
 
 import type { HostedManifestFetch } from "../../../extensions/pi-claude-marketplace/orchestrators/marketplace/hosted-catalog.ts";
+import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 
 const CATALOG_URL = "https://catalog.example/acme/marketplace.json";
 const CATALOG = '{"name":"tools","owner":{"name":"acme"},"plugins":[]}';
@@ -254,5 +268,152 @@ describe("recognizeHostedLeftover", () => {
         return true;
       },
     );
+  });
+});
+
+/** A project scope whose `tools` marketplace stores `CATALOG` like a hosted add. */
+async function storedCatalog(
+  t: TestContext,
+): Promise<{ locations: ScopedLocations; manifestPath: string }> {
+  const locations = locationsFor("project", await realpath(await scratchDir(t)));
+  const manifestPath = path.join(
+    await locations.sourceCloneDir("tools"),
+    ".claude-plugin",
+    "marketplace.json",
+  );
+  await mkdir(path.dirname(manifestPath), { recursive: true });
+  await writeFile(manifestPath, CATALOG);
+  return { locations, manifestPath };
+}
+
+/** The entries left under `sources-staging/`, none when it was never made. */
+async function stagingEntries(locations: ScopedLocations): Promise<string[]> {
+  const stagingRoot = path.join(locations.extensionRoot, "sources-staging");
+  return (await pathExists(stagingRoot)) ? readdir(stagingRoot) : [];
+}
+
+function serving(bytes: string, urls: string[] = []): HostedManifestFetch {
+  return (url) => {
+    urls.push(url);
+    return Promise.resolve(Buffer.from(bytes));
+  };
+}
+
+describe("refreshHostedCatalog", () => {
+  test("replaces the stored catalog with a changed download and leaves no staging", async (t) => {
+    // arrange
+    const { locations, manifestPath } = await storedCatalog(t);
+    const changed =
+      '{"name":"tools","owner":{"name":"acme"},"plugins":[{"name":"hello","source":"./hello"}]}';
+    const urls: string[] = [];
+
+    // act
+    await refreshHostedCatalog({
+      url: CATALOG_URL,
+      manifestPath,
+      locations,
+      fetchCatalog: serving(changed, urls),
+      removalOps: createRemovalOps(),
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      {
+        urls,
+        catalog: await readFile(manifestPath, "utf8"),
+        staging: await stagingEntries(locations),
+      },
+      { urls: [CATALOG_URL], catalog: changed, staging: [] },
+    );
+  });
+
+  test("keeps the stored catalog and writes nothing when the download fails", async (t) => {
+    // arrange
+    const { locations, manifestPath } = await storedCatalog(t);
+    const failure = new Error("download failed");
+
+    // act & assert
+    await assert.rejects(
+      refreshHostedCatalog({
+        url: CATALOG_URL,
+        manifestPath,
+        locations,
+        fetchCatalog: () => Promise.reject(failure),
+        removalOps: createRemovalOps(),
+      }),
+      failure,
+    );
+    assert.strictEqual(await readFile(manifestPath, "utf8"), CATALOG);
+    assert.deepStrictEqual(await stagingEntries(locations), []);
+  });
+
+  for (const { title, bytes } of [
+    { title: "malformed", bytes: "{" },
+    { title: "schema-invalid", bytes: '{"name":"tools","plugins":"none"}' },
+  ]) {
+    test(`keeps the stored catalog and removes the staging of a ${title} download`, async (t) => {
+      // arrange
+      const { locations, manifestPath } = await storedCatalog(t);
+
+      // act & assert
+      await assert.rejects(
+        refreshHostedCatalog({
+          url: CATALOG_URL,
+          manifestPath,
+          locations,
+          fetchCatalog: serving(bytes),
+          removalOps: createRemovalOps(),
+        }),
+        InvalidMarketplaceManifestError,
+      );
+      assert.strictEqual(await readFile(manifestPath, "utf8"), CATALOG);
+      assert.deepStrictEqual(await stagingEntries(locations), []);
+    });
+  }
+
+  test("appends the leak of a staging cleanup that fails to the refresh error", async (t) => {
+    // arrange
+    const { locations, manifestPath } = await storedCatalog(t);
+    const removalOps: RemovalOps = {
+      rm: () => Promise.reject(Object.assign(new Error("denied"), { code: "EACCES" })),
+    };
+
+    // act & assert
+    await assert.rejects(
+      refreshHostedCatalog({
+        url: CATALOG_URL,
+        manifestPath,
+        locations,
+        fetchCatalog: serving("{"),
+        removalOps,
+      }),
+      (error: unknown) => {
+        assert.ok(error instanceof CleanupLeakError);
+        assert.ok(error.cause instanceof InvalidMarketplaceManifestError);
+        assert.match(error.message, /failed to clean up marketplace catalog staging at .*: denied/);
+        return true;
+      },
+    );
+    assert.strictEqual(await readFile(manifestPath, "utf8"), CATALOG);
+  });
+
+  test("refuses a stored catalog path outside the scope's sources before any request", async (t) => {
+    // arrange
+    const { locations } = await storedCatalog(t);
+    const outside = path.join(locations.extensionRoot, "elsewhere", "marketplace.json");
+    const urls: string[] = [];
+
+    // act & assert
+    await assert.rejects(
+      refreshHostedCatalog({
+        url: CATALOG_URL,
+        manifestPath: outside,
+        locations,
+        fetchCatalog: serving(CATALOG, urls),
+        removalOps: createRemovalOps(),
+      }),
+      /hosted marketplace catalog/,
+    );
+    assert.deepStrictEqual(urls, []);
   });
 });
