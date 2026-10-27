@@ -197,10 +197,19 @@ parent session applies them at merge.
 **Plans:** 5 plans
 
 Plans:
+**Wave 1**
 - [ ] 09-01-PLAN.md — tracer: the package step through the install ledger, the spawn module and its gates, then Claude Code's lockfile refusals
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 09-02-PLAN.md — D-PL9-17 spike, loopback npm registry stand-in, and the install success, failure, and hook-proof scenarios
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 09-03-PLAN.md — the local-folder note (D-PL9-03) and the update hook in the shared runner (D-PL9-07)
+
+**Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 09-04-PLAN.md — scenarios for the local-folder note, the lockfile refusals, the update, and the offline reinstall
+
+**Wave 5** *(blocked on Wave 4 completion)*
 - [ ] 09-05-PLAN.md — full `npm run check` on the combined tree and the parent's merge handoff
 
 ### Phase 10: Lifecycle Test and Harness Gaps
