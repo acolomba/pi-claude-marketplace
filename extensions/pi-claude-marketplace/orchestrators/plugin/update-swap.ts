@@ -609,6 +609,15 @@ const PHASE3_FAILURE_PHASES = [
 ] as const;
 type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
 
+// D-PL7-08: the stamp is strictly later than the one it replaces, even within
+// one millisecond, so a rival run that read the replaced stamp fails ST-9. An
+// unparseable stamp is replaced by the current time.
+function nextUpdateStamp(previous: string): string {
+  const prior = Date.parse(previous);
+  const now = Date.now();
+  return new Date(Number.isNaN(prior) ? now : Math.max(now, prior + 1)).toISOString();
+}
+
 /**
  * TR-04: pre-commit intent-mark.
  *
@@ -633,9 +642,9 @@ type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
  * rewrites them on the all-success branch.
  *
  * No mutation to `sRecord.version` or `sRecord.resolvedSource` -- those are
- * the finalize step's responsibility. `sRecord.updatedAt` is restamped here
- * so the ST-9 check sees an overlapping run even when the version and the sha
- * stay the same, and `sRecord.resources.workflows` is widened, as CR-02 below
+ * the finalize step's responsibility. `sRecord.updatedAt` is restamped here,
+ * strictly later than the stamp it replaces, so the ST-9 check sees an
+ * overlapping run even when the version and the sha stay the same, and `sRecord.resources.workflows` is widened, as CR-02 below
  * says.
  */
 async function markUpdateInProgress(
@@ -674,7 +683,7 @@ async function markUpdateInProgress(
         });
       }
 
-      sRecord.updatedAt = new Date().toISOString();
+      sRecord.updatedAt = nextUpdateStamp(sRecord.updatedAt);
 
       sRecord.compatibility = {
         installable: false,
