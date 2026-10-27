@@ -149,6 +149,8 @@ Choices that executor SUMMARYs reported:
 18. **06-02: the standalone `handleCascadeThrow` return is unchanged.** Nothing reads it, and the standalone rows already render the partials.
 19. **06-06: a new unit case beside the expectation change.** The plan limited the test diff to `enableSignals` expectations. The new `degradedKinds` branch needed a case for 100% direct coverage, so one case was added. No existing rendered string changed.
 20. **06-06: the CHANGELOG line says "a failed install".** Import also names the phases of a failed enable. The line keeps to install so that it does not imply apply's enable rows changed (they did not).
+21. **Review fix WR-01, no alias to a name the settings declare.** When the settings also declare the recorded name, import does not alias another settings name to it, and that name's add fails with `already exists`. Claude Code reuses the record with no error (E2). Import fails closed because the claim is ambiguous.
+22. **Review fix IN-05, error-token path matching.** `features/lib/run-tokens.ts` now matches a quoted path in any error token's message by its last segment, not only in the new read-only-skill token. This loosens every error-token cell; all 914 scenarios pass.
 
 ## Requirements completed by this phase
 
