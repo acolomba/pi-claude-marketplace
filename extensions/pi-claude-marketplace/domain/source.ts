@@ -405,7 +405,8 @@ function parsePathSourceForm(raw: string): ParsedSource | undefined {
  *
  * A catalog URL the WHATWG URL parser refuses, such as one with a space in
  * its host or a port over 65535, is unknown: the download could not request
- * it.
+ * it. So is one with an empty authority: the parser reads `https:///m.json`
+ * as the host `m.json` with the path `/`, which is not the catalog it names.
  *
  * D-76-02: a github.com URL is never a catalog; it stays on the github arm.
  * Manifest url objects reach `parseUrlSourceForm` through `gatedUrlField` and
@@ -429,7 +430,7 @@ function parseHostedManifestForm(raw: string): HostedManifestSource | UnknownSou
     return undefined;
   }
 
-  if (!URL.canParse(raw)) {
+  if (pathStart === 0 || !URL.canParse(raw)) {
     return { kind: "unknown", raw, reason: `${raw} is not a valid https URL` };
   }
 

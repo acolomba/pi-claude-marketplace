@@ -3,7 +3,7 @@ Feature: Marketplace unsupported source
   A refused source form fails before any network access, and the git host receives nothing.
   That check can fail only for forms that would reach the host: http and ssh on its port,
   and GitHub through the base override. The scp-style, home-relative, and invalid catalog URL
-  rows pin the refusal.
+  rows pin the refusal; an empty authority would send the request to another host.
 
   Scenario Outline: Adding a refused source form fails as unsupported source and reaches no host
     When the user runs "/claude:plugin marketplace add <source> --scope project"
@@ -25,6 +25,7 @@ Feature: Marketplace unsupported source
       | git@127.0.0.1:acme/tools.git                        |
       | ~other/marketplaces/tools                           |
       | https://127.0.0.1:99999/acme/tools/marketplace.json |
+      | https:///acme/tools/marketplace.json                |
 
     @github
     Examples:

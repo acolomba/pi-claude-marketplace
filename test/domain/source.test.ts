@@ -616,6 +616,15 @@ const UNKNOWN_PARSE_CASES: readonly ParseCase[] = [
     source: { kind: "unknown", raw, reason: `${raw} is not a valid https URL` },
   })),
   {
+    name: "rejects a catalog URL with an empty authority",
+    raw: "https:///m.json",
+    source: {
+      kind: "unknown",
+      raw: "https:///m.json",
+      reason: "https:///m.json is not a valid https URL",
+    },
+  },
+  {
     name: "rejects a stored hosted source whose raw text is a Git URL",
     raw: { kind: "hosted", raw: "https://h.example/repo.git" },
     source: {
