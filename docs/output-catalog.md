@@ -897,7 +897,7 @@ A plugin that declares `dependencies` installs as a CASCADE: the requesting plug
 
 **Cardinality.** The cascade emits `single`, not `plural`: the user named ONE plugin, and the members are that install's transitive consequence rather than a bulk operation. So no trailing tally line appears, and a plugin that declares nothing renders exactly as it always did.
 
-**Failure attribution.** One failing dependency fails the whole install, and the row that carries the reason is the DEPENDENCY's, never only the requesting plugin's. The requesting plugin still gets its own row, stamped `{dependency failed}`, so the command the user typed is visibly accounted for. Both rows stamp `error`, so the summary line counts two operations. No cascade row interpolates a filesystem path: every rendered value is a token-allowlisted key, a bounded rendered constraint, a recorded version, or a closed-set reason.
+**Failure attribution.** One failing dependency fails the whole install, and the row that carries the reason is the DEPENDENCY's, never only the requesting plugin's. The requesting plugin still gets its own row, stamped `{dependency failed}`, so the command the user typed is visibly accounted for. Every other dependency the install would have installed, and did not, because it was rolled back or never reached, also gets a `{dependency failed}` row with no cause line, as Claude Code names every member on success (CAS-01, D-PL3-01). A dependency that was already installed and is left alone gets no row, and a dependency that a moved row already reports gets no second row. Every row stamps `error`, so the summary line counts each one. Three routes still show one failure row (D-PL3-15): the requesting plugin's own install failing, a step of a dependency move failing, and a catalog read that fails during the walk. No cascade row interpolates a filesystem path: every rendered value is a token-allowlisted key, a bounded rendered constraint, a recorded version, or a closed-set reason.
 
 ### Dependency cascade -- success (RESV-01 / RESV-05)
 
@@ -968,9 +968,10 @@ Some plugin operations have failed.
   ⊘ formatter@tools (failed) {version conflict}
     cause: Dependency "formatter@tools" has contradictory version constraints ^1.0.0, ^2.0.0 (inputs 1 and 2 do not overlap).
   ⊘ helper (failed) {dependency failed}
+  ⊘ linter@tools (failed) {dependency failed}
 ```
 
-Two plugins in one graph declared version sets for `formatter` that do not overlap, so the intersection is empty and no version can satisfy both. The cause names the JOINED DECLARED ranges rather than a combined one, because an intersection that failed produced no combined range to report. The parenthesised detail is the evaluator's own measurement (which inputs, by position), never a declaration's prose.
+`helper` asks for `formatter@tools` at ^1.0.0 and depends on `linter@tools`, which asks for it at ^2.0.0. The two version sets do not overlap, so the intersection is empty and no version can satisfy both. `linter` was resolved but not installed, so it gets its own `{dependency failed}` row. The cause names the JOINED DECLARED ranges rather than a combined one, because an intersection that failed produced no combined range to report. The parenthesised detail is the evaluator's own measurement (which inputs, by position), never a declaration's prose.
 
 ### Dependency cascade -- an installed copy the constraint rejects (RESV-05)
 
@@ -1108,9 +1109,10 @@ Some plugin operations have failed.
   ⊘ formatter@tools (failed) {dependency cycle}
     cause: Dependency cycle: helper@official -> formatter@tools -> linter@tools -> formatter@tools.
   ⊘ helper (failed) {dependency failed}
+  ⊘ linter@tools (failed) {dependency failed}
 ```
 
-The subject is the key the walk met a second time on its own ancestor chain, and the cause renders the whole chain in walk order with that key shown where it recurs -- a cycle is a property of the PATH, so a row alone cannot state it. A legal diamond (two siblings depending on the same third plugin) is deduped by the walk's visited memo and never reaches this row (D-03-11).
+The subject is the key the walk met a second time on its own ancestor chain, and the cause renders the whole chain in walk order with that key shown where it recurs -- a cycle is a property of the PATH, so a row alone cannot state it. The walk reached `linter` before it found the cycle, so `linter` gets its own `{dependency failed}` row. A legal diamond (two siblings depending on the same third plugin) is deduped by the walk's visited memo and never reaches this row (D-03-11).
 
 ### Dependency cascade -- an unusable `dependencies` declaration (RESV-01)
 
@@ -1153,7 +1155,7 @@ Some plugin operations have failed.
   ⊘ helper (failed) {dependency failed}
 ```
 
-The dependency resolved cleanly and its own six-phase ledger then failed. There is no cascade reason to add -- the ledger's error IS the fact -- so the row carries an empty reasons array and the renderer suppresses the brace. The requesting plugin's row still says why it is there. Everything this command had already materialized is unwound; a dependency installed BEFORE the command ran is not touched (D-03-07). Re-running the same command after fixing the cause starts from the same state as the first attempt.
+The dependency resolved cleanly and its own six-phase ledger then failed. There is no cascade reason to add -- the ledger's error IS the fact -- so the row carries an empty reasons array and the renderer suppresses the brace. The requesting plugin's row still says why it is there. Any other dependency the command would have installed gets a `{dependency failed}` row. Everything this command had already materialized is unwound; a dependency installed BEFORE the command ran is not touched (D-03-07). Re-running the same command after fixing the cause starts from the same state as the first attempt.
 
 ### Dependency cascade -- a plugin directory copy outside the constraint (GV-01)
 

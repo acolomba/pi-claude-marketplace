@@ -761,6 +761,13 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
                 severity: "error",
                 needsReload: false,
               },
+              {
+                status: "failed",
+                name: "linter@tools",
+                reasons: ["dependency failed"],
+                severity: "error",
+                needsReload: false,
+              },
             ],
           },
         ],
@@ -1078,6 +1085,13 @@ export const PLUGIN_INSTALL_FIXTURES: FixtureMap = {
               {
                 status: "failed",
                 name: "helper",
+                reasons: ["dependency failed"],
+                severity: "error",
+                needsReload: false,
+              },
+              {
+                status: "failed",
+                name: "linter@tools",
                 reasons: ["dependency failed"],
                 severity: "error",
                 needsReload: false,

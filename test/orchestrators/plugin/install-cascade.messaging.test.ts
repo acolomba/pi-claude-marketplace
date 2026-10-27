@@ -523,6 +523,7 @@ describe("composeCascadeFailureMessage", () => {
         ok: false,
         reason: "cycle",
         chain: [ROOT_KEY, "formatter@tools", "linter@tools", "formatter@tools"],
+        unmaterialized: ["linter@tools"],
       },
     };
 
@@ -539,6 +540,7 @@ describe("composeCascadeFailureMessage", () => {
         "  ⊘ formatter@tools (failed) {dependency cycle}",
         "    cause: Dependency cycle: helper@official -> formatter@tools -> linter@tools -> formatter@tools.",
         "  ⊘ helper (failed) {dependency failed}",
+        "  ⊘ linter@tools (failed) {dependency failed}",
       ].join("\n"),
     });
   });
@@ -784,6 +786,7 @@ describe("composeCascadeFailureMessage", () => {
         key: "formatter@tools",
         range: "^1.0.0, ^2.0.0",
         detail: "inputs 1 and 2 do not overlap",
+        unmaterialized: ["linter@tools"],
       },
     };
 
@@ -800,6 +803,7 @@ describe("composeCascadeFailureMessage", () => {
         "  ⊘ formatter@tools (failed) {version conflict}",
         '    cause: Dependency "formatter@tools" has contradictory version constraints ^1.0.0, ^2.0.0 (inputs 1 and 2 do not overlap).',
         "  ⊘ helper (failed) {dependency failed}",
+        "  ⊘ linter@tools (failed) {dependency failed}",
       ].join("\n"),
     });
   });
