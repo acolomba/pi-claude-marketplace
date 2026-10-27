@@ -1376,10 +1376,9 @@ async function runInstallLedgerBody(
       // collects after its commit because its warnings are a member of the
       // commit's result.)
       //
-      // WR-04: the position buys ordering consistency, NOT survival. A phase
-      // throw unwinds `runPhases` and the whole `InstallLedgerContext` is
-      // discarded, so these warnings are lost on the failure path wherever
-      // they are collected. That is true of every bridge's warnings alike.
+      // WR-04: the position buys ordering consistency, NOT survival. On a
+      // phase throw `captureStagingWarnings` copies every warning collected so
+      // far onto the failure capture (D-PL1-13), whichever phase collected it.
       collectStagingWarnings(c, prep.result.warnings);
       const leak = await commitPreparedWorkflows(prep, {
         // The whole body is one assignment that cannot throw. The commit

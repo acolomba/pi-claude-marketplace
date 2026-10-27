@@ -28,9 +28,9 @@
 // each reinstalled outcome. The self-rendering `render !== "none"` arm emits
 // no discovery diagnostic at all -- no production caller reaches it, so it
 // carries no copy of the call to drift out of step with this one. Its
-// outcomes also leave `discoveryWarnings` undefined, which is a separate
-// fact: it is what would keep `surfaceReinstallDiscoveryWarnings` from
-// double-rendering, not the reason that arm is silent.
+// reinstalled outcome leaves `discoveryWarnings` undefined. A failed outcome
+// carries the member on both arms (D-PL1-11), so the arm is silent because it
+// never calls the renderer, not because its outcomes hold nothing to render.
 //
 // The user-invoked reinstall is the only production path. Its single-plugin
 // operation is the one `operations.ts::createReinstallOperation` binds, and
@@ -329,8 +329,8 @@ async function reinstallPluginWith(
 
   // IN-01 / D-19-01: the maintenance warnings are NOT surfaced -- there is no
   // clean MarketplaceNotificationMessage representation for a post-success
-  // soft warning. The underlying side effects (cache drop + data-dir rm) still
-  // fire above; the orchestrated-mode `notes` field at the `render === "none"`
+  // soft warning. The underlying side effect (the data-dir rm) still fires
+  // above; the orchestrated-mode `notes` field at the `render === "none"`
   // arm still carries the warning strings for consumers outside the notify
   // path. The DISCOVERY warnings are the D-141-03 exception, but this arm does
   // not render them either: no production caller reaches it, and

@@ -348,9 +348,9 @@ type PluginPreflight = PreparedPluginUpdate;
  * cleanup-leak descriptors.
  *
  * D-141-03 / D-PL1-02: each returned handle carries a tagged
- * `result.warnings` array. Those are read once the swap succeeds, by
- * `collectUpdateWarnings` below -- not here, because a prepare that later
- * fails has no row to hang a warning off.
+ * `result.warnings` array. A throw here reports the warnings of the handles
+ * prepared so far through `reportStagingWarnings` before it rethrows
+ * (D-PL1-14); on success the caller reports the full set (D-PL1-24).
  */
 async function prepareUpdateHandles(
   ops: RemovalOps,
