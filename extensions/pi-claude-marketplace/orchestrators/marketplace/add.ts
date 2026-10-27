@@ -56,7 +56,7 @@ import path from "node:path";
 
 import { networkCloneUrl, originMatchesSource } from "../../domain/clone-key.ts";
 import { loadMarketplaceManifestDocument } from "../../domain/manifest.ts";
-import { isReservedRecordKey } from "../../domain/name.ts";
+import { isReservedRecordKey, reservedMarketplaceNameRefusal } from "../../domain/name.ts";
 import { parsePluginSource, samePlannedSource } from "../../domain/source.ts";
 import { loadConfig } from "../../persistence/config-io.ts";
 import { writeMarketplaceConfigEntry } from "../../persistence/config-write-back.ts";
@@ -118,7 +118,7 @@ import {
 } from "./shared.ts";
 
 import type { DeviceFlowHttp } from "../../domain/github-auth.ts";
-import type { GitHubSource, PathSource, UrlSource } from "../../domain/source.ts";
+import type { GitHubSource, ParsedSource, PathSource, UrlSource } from "../../domain/source.ts";
 import type { ScopeConfig } from "../../persistence/config-io.ts";
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -379,15 +379,30 @@ async function readManifestDocument(
 }
 
 /**
+ * MKT-01 / D-PL5-02: a manifest declared a name Claude Code reserves for the
+ * anthropics GitHub organization, from another source. The message is Claude
+ * Code's refusal sentence. As an `InvalidMarketplaceManifestError` it reads
+ * `invalid manifest` wherever an add failure is classified.
+ */
+class ReservedMarketplaceNameError extends InvalidMarketplaceManifestError {
+  constructor(refusal: string) {
+    super(refusal);
+    this.name = "ReservedMarketplaceNameError";
+  }
+}
+
+/**
  * Reads the manifest at `manifestPath` and returns the marketplace name it
- * declares. A `__proto__` name fails as `invalid manifest` (D-08-07), and a
- * name the scope already holds fails as a duplicate (MA-8), both before any
- * state mutation.
+ * declares. A `__proto__` name fails as `invalid manifest` (D-08-07), a name
+ * Claude Code reserves for the anthropics organization fails unless `source`
+ * is one of its github repositories (MKT-01), and a name the scope already
+ * holds fails as a duplicate (MA-8), all before any state mutation.
  */
 async function newMarketplaceName(
   manifestPath: string,
   marketplaces: ExtensionState["marketplaces"],
   scope: Scope,
+  source: ParsedSource,
 ): Promise<{ name: string; comparisonJson: string }> {
   const {
     manifest: { name },
@@ -397,6 +412,11 @@ async function newMarketplaceName(
     throw new InvalidMarketplaceManifestError(
       `marketplace.json schema invalid: name "${name}" is reserved`,
     );
+  }
+
+  const refusal = reservedMarketplaceNameRefusal(name, source);
+  if (refusal !== undefined) {
+    throw new ReservedMarketplaceNameError(refusal);
   }
 
   if (ownValue(marketplaces, name) !== undefined) {
@@ -814,6 +834,9 @@ function removalAdvisories(err: unknown): readonly string[] | undefined {
  *
  * ADD-10: the child names the source, not a plugin, so its JSON id is that
  * source alone.
+ *
+ * MKT-01 / D-PL5-02: a reserved marketplace name takes the same child row, so
+ * Claude Code's refusal sentence is its cause line.
  */
 function failedAddRow(
   subject: string,
@@ -823,7 +846,11 @@ function failedAddRow(
   hostFrame: string | undefined,
 ): MarketplaceRows<PluginFailedMessage> {
   const cause = hostFrame === undefined ? error : new Error(hostFrame, { cause: error });
-  if (hostFrame === undefined && !hasFetchedUrlCause(error)) {
+  if (
+    hostFrame === undefined &&
+    !hasFetchedUrlCause(error) &&
+    !(unwrapAddError(error) instanceof ReservedMarketplaceNameError)
+  ) {
     // D-03: a failed marketplace add -> error.
     return {
       name: subject,
@@ -1253,6 +1280,7 @@ async function addGitClonedInGuard(args: {
       manifestPath,
       state.marketplaces,
       locations.scope,
+      source,
     );
 
     // 5. MA-6/MA-12/MA-13: recognize-remove-rename on the final destination.
@@ -1405,6 +1433,7 @@ async function addPathInGuard(args: {
     manifestPath,
     state.marketplaces,
     locations.scope,
+    source,
   );
 
   // MA-4: source already preserves the user-typed `~` verbatim

@@ -40,6 +40,7 @@ import {
   CleanupLeakError,
   FetchedUrlCause,
   InvalidGitHubBaseUrlError,
+  InvalidMarketplaceManifestError,
   MarketplaceDuplicateNameError,
   StaleSourceCloneError,
   StateLockHeldError,
@@ -1461,6 +1462,125 @@ test("D-08-07: refuses a cloned marketplace named __proto__ as an invalid manife
         severity: "error",
       },
     ]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+  });
+});
+
+test("MKT-01: refuses a path marketplace named claude-plugins-official with Claude Code's sentence", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-reserved-path-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = await writeNamedPathMarketplace(cwd, "claude-plugins-official");
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps();
+
+    // act
+    await addMarketplace({ ctx, run, scope: "project", cwd, rawSource: marketplaceRoot, gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n" +
+          `⊘ ${marketplaceRoot} [project] (failed)\n` +
+          `  ⊘ ${marketplaceRoot} (failed) {invalid manifest}\n` +
+          "    cause: The name 'claude-plugins-official' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the 'anthropics' organization.",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+    assert.deepStrictEqual(await readdir(locations.scopeRoot, { recursive: true }), [
+      "pi-claude-marketplace",
+    ]);
+  });
+});
+
+test("MKT-01: refuses a reserved name cloned from another github owner and leaves no clone", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-reserved-github-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const fixtureSourceDir = await writeNamedPathMarketplace(cwd, "healthcare");
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({ fixtureSourceDir });
+
+    // act
+    await addMarketplace({ ctx, run, scope: "project", cwd, rawSource: "acme/mp", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n\n" +
+          "⊘ acme/mp [project] (failed)\n" +
+          "  ⊘ acme/mp (failed) {invalid manifest}\n" +
+          "    cause: The name 'healthcare' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/anthropics/' can use this name.",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+    assert.deepStrictEqual((await readdir(locations.scopeRoot, { recursive: true })).sort(), [
+      "pi-claude-marketplace",
+      path.join("pi-claude-marketplace", "sources-staging"),
+    ]);
+  });
+});
+
+test("MKT-01: records a reserved name cloned from the anthropics organization", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-reserved-anthropics-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const fixtureSourceDir = await writeNamedPathMarketplace(cwd, "claude-plugins-official");
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps } = createGitOps({ fixtureSourceDir });
+
+    // act
+    await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: "anthropics/claude-plugins-official",
+      gitOps,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● claude-plugins-official [project] (added)" },
+    ]);
+    assert.deepStrictEqual(Object.keys((await loadState(locations.extensionRoot)).marketplaces), [
+      "claude-plugins-official",
+    ]);
+  });
+});
+
+test("MKT-01: orchestrated mode fails a reserved name as an invalid manifest", async (t) => {
+  await createHermeticEnvironment(t, "mp-add-reserved-orchestrated-home-");
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = await writeNamedPathMarketplace(cwd, "Claude-Plugin-Directory");
+    const { ctx, run, notifications } = makeCtx(0);
+    const { gitOps } = createGitOps();
+    const expectedCause =
+      "The name 'Claude-Plugin-Directory' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the 'anthropics' organization.";
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: marketplaceRoot,
+      gitOps,
+      notifications: { mode: "orchestrated" },
+    });
+
+    // assert
+    assert.ok(outcome.status === "failed");
+    assert.strictEqual(outcome.reason, "invalid manifest");
+    assert.ok(outcome.error instanceof InvalidMarketplaceManifestError);
+    assert.strictEqual(outcome.error.message, expectedCause);
+    assert.strictEqual(outcome.cause, expectedCause);
+    assert.deepStrictEqual(notifications, []);
     assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces, {});
   });
 });

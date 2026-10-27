@@ -1,5 +1,7 @@
 import path from "node:path";
 
+import { OFFICIAL_MARKETPLACE_NAMES } from "./name.ts";
+
 import type { PluginEntry } from "./components/plugin.ts";
 import type { StatKindReader } from "./resolver-types.ts";
 
@@ -69,28 +71,6 @@ const EXPERIMENTAL_KINDS: ReadonlySet<UnsupportedComponentKind> = new Set([
   "monitors",
   "outputStyles",
   "syntaxHighlighting",
-]);
-
-/**
- * The official marketplace names of Claude Code 2.1.291, copied
- * from the binary. Upstream lowercases a marketplace name before it checks
- * this set.
- */
-const OFFICIAL_MARKETPLACE_NAMES: ReadonlySet<string> = new Set([
-  "claude-code-marketplace",
-  "claude-code-plugins",
-  "claude-plugins-official",
-  "anthropic-marketplace",
-  "anthropic-plugins",
-  "agent-skills",
-  "anthropic-agent-skills",
-  "life-sciences",
-  "knowledge-work-plugins",
-  "claude-for-legal",
-  "claude-for-financial-services",
-  "financial-services-plugins",
-  "first-party-plugins",
-  "claude-tag-plugins",
 ]);
 
 function isNonEmptyMap(value: unknown): boolean {

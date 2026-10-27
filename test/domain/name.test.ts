@@ -12,9 +12,12 @@ import {
   generatedWorkflowName,
   isReservedRecordKey,
   mcpServerDisplayName,
+  reservedMarketplaceNameRefusal,
 } from "../../extensions/pi-claude-marketplace/domain/name.ts";
 import { UnsafeGeneratedNameError } from "../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { setCasePlatform } from "../platform/case-platform.ts";
+
+import type { ParsedSource } from "../../extensions/pi-claude-marketplace/domain/source.ts";
 
 describe("assertSafeName", () => {
   for (const name of ["a", "Foo.Bar_Baz-123", "acme:foo", "pi-claude-marketplace-acme-bot"]) {
@@ -204,6 +207,116 @@ describe("isReservedRecordKey", () => {
       assert.strictEqual(reserved, false);
     });
   }
+});
+
+const pathMarketplaceSource = {
+  kind: "path",
+  raw: "./tools",
+  logical: "./tools",
+} as const satisfies ParsedSource;
+
+const ORGANIZATION_REFUSAL = (name: string): string =>
+  `The name '${name}' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the 'anthropics' organization.`;
+
+const GITHUB_REFUSAL = (name: string): string =>
+  `The name '${name}' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/anthropics/' can use this name.`;
+
+describe("reservedMarketplaceNameRefusal", () => {
+  for (const name of [
+    "claude-code-marketplace",
+    "claude-code-plugins",
+    "claude-plugins-official",
+    "anthropic-marketplace",
+    "anthropic-plugins",
+    "agent-skills",
+    "anthropic-agent-skills",
+    "life-sciences",
+    "knowledge-work-plugins",
+    "claude-for-legal",
+    "claude-for-financial-services",
+    "financial-services-plugins",
+    "first-party-plugins",
+    "claude-tag-plugins",
+    "claude-community",
+    "claude-plugins-community",
+    "healthcare",
+    "anthropic-plugin-directory",
+    "claude-plugin-directory",
+  ]) {
+    test(`MKT-01: refuses ${name} from a path source`, () => {
+      // arrange
+      const declaredName = name;
+
+      // act
+      const refusal = reservedMarketplaceNameRefusal(declaredName, pathMarketplaceSource);
+
+      // assert
+      assert.strictEqual(refusal, ORGANIZATION_REFUSAL(name));
+    });
+  }
+
+  test("MKT-01: refuses a reserved name in another case and echoes its declared spelling", () => {
+    // arrange
+    const declaredName = "Claude-Plugins-Official";
+
+    // act
+    const refusal = reservedMarketplaceNameRefusal(declaredName, pathMarketplaceSource);
+
+    // assert
+    assert.strictEqual(
+      refusal,
+      "The name 'Claude-Plugins-Official' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the 'anthropics' organization.",
+    );
+  });
+
+  for (const owner of ["anthropics", "Anthropics"]) {
+    test(`MKT-01: lets the github owner ${owner} use a reserved name`, () => {
+      // arrange
+      const source = {
+        kind: "github",
+        raw: `${owner}/claude-plugins-official`,
+        owner,
+        repo: "claude-plugins-official",
+      } satisfies ParsedSource;
+
+      // act
+      const refusal = reservedMarketplaceNameRefusal("claude-plugins-official", source);
+
+      // assert
+      assert.strictEqual(refusal, undefined);
+    });
+  }
+
+  for (const source of [
+    { kind: "github", raw: "acme/tools", owner: "acme", repo: "tools" },
+    {
+      kind: "url",
+      raw: "https://git.example.com/anthropics/tools.git",
+      url: "https://git.example.com/anthropics/tools",
+    },
+  ] satisfies ParsedSource[]) {
+    test(`MKT-01: refuses a reserved name from the ${source.kind} source ${source.raw} with the github sentence`, () => {
+      // arrange
+      const declaredName = "healthcare";
+
+      // act
+      const refusal = reservedMarketplaceNameRefusal(declaredName, source);
+
+      // assert
+      assert.strictEqual(refusal, GITHUB_REFUSAL("healthcare"));
+    });
+  }
+
+  test("MKT-01: leaves a name outside the reserved set to any source", () => {
+    // arrange
+    const declaredName = "claude-plugins-officialx";
+
+    // act
+    const refusal = reservedMarketplaceNameRefusal(declaredName, pathMarketplaceSource);
+
+    // assert
+    assert.strictEqual(refusal, undefined);
+  });
 });
 
 describe("generatedSkillName", () => {

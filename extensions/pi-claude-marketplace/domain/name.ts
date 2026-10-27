@@ -10,6 +10,8 @@ import { createHash } from "node:crypto";
 import { commandNamespaceSeparator } from "../platform/os.ts";
 import { errorMessage, UnsafeGeneratedNameError } from "../shared/errors.ts";
 
+import type { ParsedSource } from "./source.ts";
+
 /**
  * RN-2: validate that a name is safe to use as a path basename / generated
  * resource name. Throws Error with descriptive message on failure.
@@ -65,6 +67,66 @@ export function assertSafeName(name: string, label?: string): void {
  */
 export function isReservedRecordKey(name: string): boolean {
   return name === "__proto__";
+}
+
+/**
+ * The official marketplace names of Claude Code 2.1.291, copied
+ * from the binary. Upstream lowercases a marketplace name before it checks
+ * this set.
+ */
+export const OFFICIAL_MARKETPLACE_NAMES: ReadonlySet<string> = new Set([
+  "claude-code-marketplace",
+  "claude-code-plugins",
+  "claude-plugins-official",
+  "anthropic-marketplace",
+  "anthropic-plugins",
+  "agent-skills",
+  "anthropic-agent-skills",
+  "life-sciences",
+  "knowledge-work-plugins",
+  "claude-for-legal",
+  "claude-for-financial-services",
+  "financial-services-plugins",
+  "first-party-plugins",
+  "claude-tag-plugins",
+]);
+
+/**
+ * MKT-01: the marketplace names Claude Code 2.1.310 reserves for the
+ * anthropics GitHub organization, the official names plus the community and
+ * plugin-directory names.
+ */
+const RESERVED_MARKETPLACE_NAMES: ReadonlySet<string> = new Set([
+  ...OFFICIAL_MARKETPLACE_NAMES,
+  "claude-community",
+  "claude-plugins-community",
+  "healthcare",
+  "anthropic-plugin-directory",
+  "claude-plugin-directory",
+]);
+
+/**
+ * MKT-01 / D-PL5-01 / D-PL5-02: Claude Code's refusal of a reserved
+ * marketplace `name` declared by a manifest from `source`, or undefined when
+ * the name is not reserved or the source is a github repository of the
+ * anthropics organization. Both comparisons ignore case, as upstream's do.
+ */
+export function reservedMarketplaceNameRefusal(
+  name: string,
+  source: ParsedSource,
+): string | undefined {
+  if (!RESERVED_MARKETPLACE_NAMES.has(name.toLowerCase())) {
+    return undefined;
+  }
+
+  if (source.kind === "github" && source.owner.toLowerCase() === "anthropics") {
+    return undefined;
+  }
+
+  return source.kind === "github" || source.kind === "url"
+    ? // eslint-disable-next-line local/no-github-literal -- GHB-02: Claude Code's user-facing refusal names github.com verbatim
+      `The name '${name}' is reserved for official Anthropic marketplaces. Only repositories from 'github.com/anthropics/' can use this name.`
+    : `The name '${name}' is reserved for official Anthropic marketplaces and can only be used with GitHub sources from the 'anthropics' organization.`;
 }
 
 /**
