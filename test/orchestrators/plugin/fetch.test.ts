@@ -2557,6 +2557,59 @@ for (const { title, sha, expectedLockObservations } of [
   });
 }
 
+test("GLK-05: a lock lost after the locked fetch read its row fails the row as lock held", async () => {
+  await withWorkspace(async ({ cwd }) => {
+    // arrange
+    const cloneUrl = "https://example.com/lost-lock";
+    const marketplace = await marketplaceRecord({
+      cwd,
+      entries: [{ name: "lost-lock", source: { source: "url", url: cloneUrl } }],
+      name: "marketplace",
+      scope: "project",
+    });
+    const locations = await saveMarketplaces(cwd, "project", [marketplace]);
+    const lockOptions = { lockfilePath: locations.stateLockFile, realpath: false };
+    const fetchWithStatus = createFetchPlugins({
+      makePresenceProbe,
+      async resolveListCandidate(entry, marketplaceContext, statusLocations) {
+        const candidate = await resolveListCandidate(entry, marketplaceContext, statusLocations);
+        await lockfile.unlock(locations.extensionRoot, lockOptions);
+        return candidate;
+      },
+    });
+    const seam: FetchCloneCacheSeam = {
+      materializeOrRefreshPluginMirror: () =>
+        Promise.resolve({ pluginRoot: path.join(cwd, "absent"), resolvedSha: "6".repeat(40) }),
+      materializePluginClone: () => assert.fail("an unpinned fetch never clones by sha"),
+      resolvePluginPin: () => assert.fail("an unpinned fetch never resolves a pin"),
+    };
+    const credentials = createCredentialOpsFake({ boundary: "memory" });
+    const boundary = notificationBoundary("lost lock");
+
+    // act
+    await fetchWithStatus({
+      cloneCacheSeam: seam,
+      credentialOps: credentials.credentialOps,
+      ctx: boundary.ctx,
+      cwd,
+      run: boundary.run,
+      scope: "project",
+      target: { kind: "plugin", marketplace: "marketplace", plugin: "lost-lock" },
+    });
+
+    // assert
+    assert.deepStrictEqual(boundary.notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n\n● marketplace [project]\n  ⊘ lost-lock (failed) {lock held}\n    cause: Lock is already released",
+        severity: "error",
+      },
+    ]);
+    assert.strictEqual(await lockfile.check(locations.extensionRoot, lockOptions), false);
+    verifyNotifications(boundary);
+  });
+});
+
 test("GLK-07: a fetched row shows the version its plugin.json declares over its entry's", async () => {
   await withWorkspace(async ({ cwd }) => {
     // arrange

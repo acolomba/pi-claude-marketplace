@@ -377,9 +377,12 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
   }
 
   const gitSource: GitBackedSource = source;
+  let rowRead = false;
   const fetchAndRead = async (): Promise<FetchMsg> => {
     await materializeThroughSeam(gitSource, deps, locations);
-    return freshRow(entry, await readCandidate());
+    const row = freshRow(entry, await readCandidate());
+    rowRead = true;
+    return row;
   };
 
   try {
@@ -402,7 +405,7 @@ async function fetchOne(target: FetchTargetEntry, deps: FetchOneDeps): Promise<F
     return await withExistingScopeLock(locations, fetchAndRead);
   } catch (err) {
     rethrowInvalidGitHubBaseUrl(err);
-    return failedRow(entry, err, networkCloneUrl(gitSource));
+    return failedRow(entry, err, networkCloneUrl(gitSource), rowRead);
   }
 }
 
@@ -555,10 +558,18 @@ function resolvedRow(
  * fetch that threw did not warm the cache (the desired state was not carried
  * out), so it stamps `error`, at parity with the install / update / reinstall
  * per-plugin failed rows.
+ *
+ * `rowRead` is true when the locked body already read its row, so the throw
+ * came from the lock: it was lost or could not be released.
  */
-function failedRow(entry: ManifestEntry, err: unknown, remoteUrl: string): FetchMsg {
+function failedRow(
+  entry: ManifestEntry,
+  err: unknown,
+  remoteUrl: string,
+  rowRead: boolean,
+): FetchMsg {
   const error = err instanceof Error ? err : new Error(errorMessage(err));
-  const { reason, frame } = narrowFetchFailure(err, remoteUrl);
+  const { reason, frame } = narrowFetchFailure(err, remoteUrl, rowRead);
   return {
     status: "failed",
     severity: "error",
@@ -571,19 +582,22 @@ function failedRow(entry: ManifestEntry, err: unknown, remoteUrl: string): Fetch
 
 /**
  * Narrow a fetch throw into an EXISTING closed-set REASON -- no new token. The
- * ladder: a held scope lock is `lock held`; then `classifyGitFailure` with the
- * plugin-clone rule (D-PL7-02), so a host 404/410 is `source missing`, any
- * other non-auth HTTP status `network error` (with its frame), and the
- * credential and network-errno arms keep their reasons; then the fs errno arms
- * of `reasonsFromTypedError` (EACCES/EPERM -> `permission denied`); and any
- * other throw folds to `source missing` (the fail-clean default -- the tree
- * could not be produced).
+ * ladder: a held scope lock is `lock held`, and so is a lock lost or not
+ * released after the locked body read its row (`rowRead`), because the fetch
+ * itself succeeded and the source is not missing; then `classifyGitFailure`
+ * with the plugin-clone rule (D-PL7-02), so a host 404/410 is `source
+ * missing`, any other non-auth HTTP status `network error` (with its frame),
+ * and the credential and network-errno arms keep their reasons; then the fs
+ * errno arms of `reasonsFromTypedError` (EACCES/EPERM -> `permission denied`);
+ * and any other throw folds to `source missing` (the fail-clean default -- the
+ * tree could not be produced).
  */
 function narrowFetchFailure(
   err: unknown,
   remoteUrl: string,
+  rowRead: boolean,
 ): { readonly reason: ContentReason; readonly frame?: string } {
-  if (err instanceof StateLockHeldError) {
+  if (rowRead || err instanceof StateLockHeldError) {
     return { reason: "lock held" };
   }
 
