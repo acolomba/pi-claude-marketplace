@@ -6,10 +6,10 @@ current_phase: 1
 current_phase_name: Staging Warning Channels
 status: verifying
 stopped_at: Phase 5 complete, ready to verify Phase 1
-last_updated: "2026-10-27T11:16:10.846Z"
+last_updated: "2026-10-27T13:03:09.842Z"
 last_activity: 2026-10-27
 last_activity_desc: Phase 5 complete, transitioned to Phase 1
-state_head: 51256937db134910241b3306bb18a07a33f0be28
+state_head: 02839041a86f6c4b75f8d3f61e01228ca4cb1a4a
 progress:
   total_phases: 11
   completed_phases: 1
@@ -189,6 +189,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
 | 261027-92u | Recheck reserved marketplace names on refresh (D-PL5-27) | 2026-10-27 | 51256937 | — | [261027-92u-refresh-rechecks-reserved-marketplace-na](./quick/261027-92u-refresh-rechecks-reserved-marketplace-na/) |
+| 261027-a3p | Port Claude Code's full reserved marketplace name rules (D-PL5-28) | 2026-10-27 | 02839041 | — | [261027-a3p-port-claude-code-full-reserved-marketpla](./quick/261027-a3p-port-claude-code-full-reserved-marketpla/) |
 
 ## Session Continuity
 
