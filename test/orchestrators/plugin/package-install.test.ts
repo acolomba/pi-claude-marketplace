@@ -267,11 +267,48 @@ describe("createPackagesPhase", () => {
     });
   }
 
-  test("D-PL9-03: skips a plugin root outside the extension root and runs nothing", async (t) => {
+  for (const { lockfile, manager, command } of [
+    {
+      lockfile: "package-lock.json",
+      manager: "npm",
+      command: `npm ${NPM_CI_ARGUMENTS.join(" ")}`,
+    },
+    { lockfile: "bun.lock", manager: "bun", command: `bun ${BUN_INSTALL_ARGUMENTS.join(" ")}` },
+  ]) {
+    test(`D-PL9-03: names the ${manager} command for a ${lockfile} plugin outside the extension root and writes nothing`, async (t) => {
+      // arrange
+      const seeded = await seedPlugin(
+        t,
+        { "package.json": PACKAGE_JSON, [lockfile]: LOCKFILE },
+        "outside",
+      );
+      const runPackageManager = idleRunner();
+      const phase = createPackagesPhase(opsWith(runPackageManager));
+
+      // act
+      await phase.do(seeded.context);
+
+      // assert
+      assert.deepStrictEqual(seeded.context.discoveryWarnings, [
+        `Skipped installing this plugin's dependencies: its folder ${seeded.pluginRoot} is outside the folders this extension manages, so it was not changed. To install them, run "${command}" in that folder.`,
+      ]);
+      assert.deepStrictEqual(
+        await sortedEntries(seeded.pluginRoot),
+        [lockfile, "package.json"].sort(),
+      );
+      verify(runPackageManager);
+    });
+  }
+
+  test("D-PL9-03: gives no note for a plugin outside the extension root that already has node_modules", async (t) => {
     // arrange
     const seeded = await seedPlugin(
       t,
-      { "package.json": PACKAGE_JSON, "package-lock.json": LOCKFILE },
+      {
+        "package.json": PACKAGE_JSON,
+        "package-lock.json": LOCKFILE,
+        "node_modules/kept/index.js": MODULE_TEXT,
+      },
       "outside",
     );
     const runPackageManager = idleRunner();
@@ -282,6 +319,44 @@ describe("createPackagesPhase", () => {
 
     // assert
     assert.deepStrictEqual(seeded.context.discoveryWarnings, []);
+    assert.deepStrictEqual(await sortedEntries(path.join(seeded.pluginRoot, "node_modules")), [
+      "kept",
+    ]);
+    assert.strictEqual(
+      await readFile(path.join(seeded.pluginRoot, "node_modules", "kept", "index.js"), "utf8"),
+      MODULE_TEXT,
+    );
+    verify(runPackageManager);
+  });
+
+  test("T-09-15: treats a plugin root reached through a symlinked folder as outside and does not write it", async (t) => {
+    // arrange
+    const seeded = await seedPlugin(
+      t,
+      { "package.json": PACKAGE_JSON, "package-lock.json": LOCKFILE },
+      "outside",
+    );
+    const linkTarget = path.dirname(seeded.pluginRoot);
+    const link = path.join(seeded.locations.extensionRoot, "plugin-clones", "link");
+    await mkdir(path.dirname(link), { recursive: true });
+    await symlink(linkTarget, link);
+    const linkedRoot = path.join(link, path.basename(seeded.pluginRoot));
+    const runPackageManager = idleRunner();
+    const phase = createPackagesPhase(opsWith(runPackageManager));
+    const context: PackagesPhaseContext = {
+      locations: seeded.locations,
+      resolved: { pluginRoot: linkedRoot },
+      discoveryWarnings: [],
+    };
+
+    // act
+    await phase.do(context);
+
+    // assert
+    assert.deepStrictEqual(context.discoveryWarnings, [
+      `Skipped installing this plugin's dependencies: its folder ${linkedRoot} is outside the folders this extension manages, so it was not changed. To install them, run "npm ${NPM_CI_ARGUMENTS.join(" ")}" in that folder.`,
+    ]);
+    assert.deepStrictEqual(await sortedEntries(linkTarget), [path.basename(seeded.pluginRoot)]);
     assert.deepStrictEqual(await sortedEntries(seeded.pluginRoot), [
       "package-lock.json",
       "package.json",

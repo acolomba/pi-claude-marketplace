@@ -12,7 +12,8 @@
 //
 // NFR-10 / D-PL9-03: the install writes only inside the extension root. A
 // plugin that runs from the user's own folder (a path-source marketplace) is
-// never written to.
+// never written to: when that folder has no node_modules, a note names the
+// folder and the command to run there.
 //
 // D-PL9-04: the package manager runs in a fresh work dir under sources-staging
 // that holds only package.json and the lockfile, so the plugin's own .npmrc or
@@ -232,12 +233,17 @@ async function readEntryNames(pluginRoot: string): Promise<ReadonlySet<string> |
 }
 
 // Any rejection means the root is not ours to write: it lies outside the
-// extension root, or a segment on the way is a symlink. The note for a root
-// outside the extension root is a separate decision (D-PL9-03).
+// extension root, or a segment on the way is a symlink.
 async function isInsideExtensionRoot(extensionRoot: string, pluginRoot: string): Promise<boolean> {
   return assertPathInside(extensionRoot, pluginRoot, "plugin package install").then(
     () => true,
     () => false,
+  );
+}
+
+function outsideRootNote(pluginRoot: string, row: RunnableLockfile): string {
+  return skippedNote(
+    `its folder ${pluginRoot} is outside the folders this extension manages, so it was not changed. To install them, run "${row.command} ${row.args.join(" ")}" in that folder`,
   );
 }
 
@@ -262,11 +268,12 @@ async function detectInstall(pluginRoot: string, locations: ScopedLocations): Pr
     return { kind: "note", note: skippedNote(manifest.refusal) };
   }
 
-  if (
-    !listsPackages(manifest.value) ||
-    !(await isInsideExtensionRoot(locations.extensionRoot, pluginRoot))
-  ) {
+  if (!listsPackages(manifest.value)) {
     return SKIP;
+  }
+
+  if (!(await isInsideExtensionRoot(locations.extensionRoot, pluginRoot))) {
+    return { kind: "note", note: outsideRootNote(pluginRoot, row) };
   }
 
   const lockfile = await readBoundedFile(pluginRoot, row.lockfile);
