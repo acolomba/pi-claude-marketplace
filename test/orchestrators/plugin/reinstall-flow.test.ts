@@ -2636,6 +2636,120 @@ test("GAP-06: an MCP collision at prepare aborts the prepared handles and fails 
   });
 });
 
+/**
+ * D-PL1-14: give the installed `pluginName` a second skill whose generated
+ * name collides with `tool`'s, and return the discovery message it yields.
+ */
+async function seedCollidingSkill(marketplaceRoot: string, pluginName: string): Promise<string> {
+  const skillsDir = path.join(marketplaceRoot, "plugins", pluginName, "skills");
+  const collidingDir = path.join(skillsDir, `${pluginName}-tool`);
+  await mkdir(collidingDir, { recursive: true });
+  await writeFile(path.join(collidingDir, "SKILL.md"), "---\nname: tool\n---\n\nBody.\n");
+  return `skill source "tool" in "${skillsDir}" elides to generated name "${pluginName}-tool", already produced by skill source "${pluginName}-tool"; ignoring duplicate.`;
+}
+
+/** D-PL1-14: a foreign definition under `pluginName`'s `server1` key fails its mcp prepare. */
+async function seedForeignServerKey(cwd: string, pluginName: string): Promise<void> {
+  const mcpPath = locationsFor("project", cwd).mcpAdapterJsonPath;
+  const mcpDoc = JSON.parse(await readFile(mcpPath, "utf8")) as {
+    mcpServers: Record<string, unknown>;
+  };
+  mcpDoc.mcpServers[`plugin_${pluginName}_server1_`] = { command: "node", args: ["other.js"] };
+  await writeFile(mcpPath, JSON.stringify(mcpDoc));
+}
+
+test("D-PL1-14: a reinstall whose prepare throws carries the discovery half of the warnings it prepared", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-failed-warnings-"));
+    try {
+      // arrange
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      await seedMarketplace({
+        cwd,
+        marketplaceRoot,
+        resources: { skill: "old skill", agent: "bot", mcp: true },
+        install: true,
+      });
+      const duplicate = await seedCollidingSkill(marketplaceRoot, "hello");
+      await seedForeignServerKey(cwd, "hello");
+      const { ctx, run, notifications } = makeCtx();
+
+      // act
+      const outcome = await reinstallPlugin({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        marketplace: "mp",
+        plugin: "hello",
+        render: "none",
+      });
+
+      // assert
+      assert.ok(outcome.partition === "failed");
+      assert.deepStrictEqual(outcome.discoveryWarnings, [
+        { kind: "discovery", message: duplicate },
+      ]);
+      assert.deepStrictEqual(notifications, []);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
+test("D-PL1-14: a bulk reinstall renders each reinstalled and failed plugin's diagnostic in row order after its cascade", async () => {
+  await withHermeticHome(async () => {
+    const cwd = await mkdtemp(path.join(tmpdir(), "reinstall-failed-warnings-bulk-"));
+    try {
+      // arrange
+      const marketplaceRoot = path.join(cwd, "mp-src");
+      for (const pluginName of ["aaa", "zzz"]) {
+        await seedMarketplace({
+          cwd,
+          marketplaceRoot,
+          pluginName,
+          resources: { skill: "old skill", mcp: true },
+          install: true,
+        });
+        await seedCollidingSkill(marketplaceRoot, pluginName);
+      }
+
+      await seedForeignServerKey(cwd, "zzz");
+      const { ctx, run, notifications } = makeCtx({ piMcpAdapterLoaded: true });
+
+      // act
+      await reinstallPlugins({
+        ctx,
+        run,
+        scope: "project",
+        cwd,
+        target: { kind: "marketplace", marketplace: "mp" },
+      });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "A plugin operation has failed.\n\n● mp [project]\n  ● aaa v1.0.0 (reinstalled)\n  ⊘ zzz v1.0.0 (failed) {unreadable}\n\nPlugin reinstall: 1 failure, 1 success\n\n/reload to pick up changes",
+          severity: "error",
+        },
+        {
+          message:
+            'Plugin "aaa" [project] reinstalled; 1 declared component has a note.\n\nskill source "tool" in "skills" elides to generated name "aaa-tool", already produced by skill source "aaa-tool"; ignoring duplicate.',
+          severity: "warning",
+        },
+        {
+          message:
+            'Plugin "zzz" [project] reinstall failed; 1 declared component has a note.\n\nskill source "zzz-tool" in "skills" elides to generated name "zzz-tool", already produced by skill source "tool"; ignoring duplicate.',
+          severity: "warning",
+        },
+      ]);
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+});
+
 test("GAP-07: a reinstall that fails as not installed does not trigger runPostSuccessMaintenance", async () => {
   // When the plugin is not installed, the reinstall returns
   // partition='failed' without calling runPostSuccessMaintenance (so no

@@ -246,6 +246,12 @@ export interface ReinstallFailedOutcome extends ReinstallOutcomeBase {
    * Omitted when there are none (NREG-01).
    */
   readonly mcpConfigNotices?: readonly McpConfigNotice[];
+  /**
+   * D-PL1-11 / D-PL1-14: the DISCOVERY half of the staging warnings the
+   * failed reinstall prepared before it failed, rendered after the cascade
+   * with `reinstall failed`. Omitted when empty (NREG-01).
+   */
+  readonly discoveryWarnings?: readonly DiscoveryWarning[];
 }
 
 export type ReinstallPluginOutcome =

@@ -723,6 +723,58 @@ describe("reinstallOutcomeFromRun", () => {
     });
   });
 
+  test("D-PL1-14: a failed run with tagged warnings carries their discovery half", () => {
+    // arrange
+    const discovery = { kind: "discovery", message: "skill source collides" } as const;
+    const run: UpdateRunOutcome = {
+      partition: "failed",
+      name: "hello",
+      fromVersion: "1.0.0",
+      notes: ["disk full"],
+      reasons: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+      stagingWarnings: [{ kind: "hygiene", message: "[bot] dropped tools: WebFetch" }, discovery],
+    };
+
+    // act
+    const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, undefined);
+
+    // assert
+    assert.deepStrictEqual(outcome, {
+      partition: "failed",
+      name: "hello",
+      marketplace: "mp",
+      scope: "project",
+      fromVersion: "1.0.0",
+      notes: ["disk full"],
+      reasons: [],
+      discoveryWarnings: [discovery],
+    });
+  });
+
+  test("D-PL1-14: a failed run with only hygiene warnings carries no discovery warnings", () => {
+    // arrange
+    const run: UpdateRunOutcome = {
+      partition: "failed",
+      name: "hello",
+      fromVersion: "1.0.0",
+      notes: ["disk full"],
+      reasons: [],
+      declaresAgents: false,
+      declaresMcp: false,
+      declaresWorkflows: false,
+      stagingWarnings: [{ kind: "hygiene", message: "[bot] dropped tools: WebFetch" }],
+    };
+
+    // act
+    const outcome = reinstallOutcomeFromRun(RUN_TARGET, run, undefined);
+
+    // assert
+    assert.strictEqual("discoveryWarnings" in outcome, false);
+  });
+
   test("D-18-10: a commit failure carries the captured aggregate error and one child per failed bridge", () => {
     // arrange
     const skillsCause = new Error("skills refused");

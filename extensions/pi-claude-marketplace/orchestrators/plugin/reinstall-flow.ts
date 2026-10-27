@@ -61,6 +61,7 @@ import { type LockedStateTransactionDeps } from "../../transaction/with-state-gu
 import { garbageCollectPluginClones } from "./clone-gc.ts";
 import { materializeLatestVersion, recordCandidate } from "./materialize-latest.ts";
 import {
+  discoveryWarningsMember,
   recordReinstallOutcome,
   reinstallOutcomeFromRun,
   reinstallReasonsFromError,
@@ -90,7 +91,7 @@ import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
-import type { ReinstallFailedOutcome, ReinstallPluginOutcome, RevisionMove } from "../types.ts";
+import type { ReinstallFailedOutcome, ReinstallPluginOutcome } from "../types.ts";
 import type { CandidateReport } from "./materialize-latest.ts";
 import type { ReinstallPhaseFailure } from "./reinstall-record.ts";
 import type { ReinstallPluginsTarget, ReinstallTargetSelection } from "./reinstall-targets.ts";
@@ -290,7 +291,7 @@ async function reinstallPluginWith(
     // GHB-03 / D-18-16: an invalid GitHub base override fails the command,
     // warm cache or not.
     rethrowInvalidGitHubBaseUrl(err);
-    return failReinstall(owners, opts, err, render, candidate.move);
+    return failReinstall(owners, opts, err, render, candidate);
   }
 
   const { outcome } = reached;
@@ -470,22 +471,29 @@ async function runPostSuccessMaintenance(
  * Composes a thrown reinstall's failed outcome and, unless the caller renders,
  * its row. The row comes from the same mapper the bulk cascade uses, so the
  * standalone and bulk failure rows cannot differ.
+ *
+ * D-PL1-14: the outcome carries the discovery half of the warnings `candidate`
+ * holds, the handles the swap prepared before it threw.
  */
 function failReinstall(
   owners: ReinstallFlowOwners,
   opts: ReinstallPluginOptions,
   err: unknown,
   render: "default" | "none",
-  move?: Partial<RevisionMove>,
+  candidate: CandidateReport,
 ): ReinstallFailedOutcome {
-  const outcome = owners.recordReinstallOutcome({
-    partition: "failed",
-    name: opts.plugin,
-    marketplace: opts.marketplace,
-    scope: opts.scope,
-    error: err,
-    ...(move !== undefined && { move }),
-  });
+  const { move } = candidate;
+  const outcome: ReinstallFailedOutcome = {
+    ...owners.recordReinstallOutcome({
+      partition: "failed",
+      name: opts.plugin,
+      marketplace: opts.marketplace,
+      scope: opts.scope,
+      error: err,
+      ...(move !== undefined && { move }),
+    }),
+    ...discoveryWarningsMember(candidate.stagingWarnings),
+  };
   if (render !== "none") {
     renderReinstallPartitionAndNotify(opts.ctx, opts.run, [outcome], "single");
   }
@@ -627,20 +635,33 @@ function surfaceReinstallDiscoveryWarnings(
   surfaceStagingDiagnostics(ctx, run, outcomes.flatMap(reinstallStagingDiagnostic));
 }
 
-/** D-PL1-07: the staging diagnostic of a reinstalled outcome; none for any other partition. */
+/**
+ * D-PL1-07 / D-PL1-14: the staging diagnostic of a reinstalled or failed
+ * outcome; none for a skipped one.
+ */
 function reinstallStagingDiagnostic(outcome: ReinstallPluginOutcome): StagingDiagnostic[] {
-  if (outcome.partition !== "reinstalled") {
-    return [];
+  switch (outcome.partition) {
+    case "reinstalled":
+      return [
+        {
+          plugin: outcome.name,
+          scope: outcome.scope,
+          verb: "reinstalled",
+          warnings: outcome.discoveryWarnings ?? [],
+        },
+      ];
+    case "failed":
+      return [
+        {
+          plugin: outcome.name,
+          scope: outcome.scope,
+          verb: "reinstall failed",
+          warnings: outcome.discoveryWarnings ?? [],
+        },
+      ];
+    case "skipped":
+      return [];
   }
-
-  return [
-    {
-      plugin: outcome.name,
-      scope: outcome.scope,
-      verb: "reinstalled",
-      warnings: outcome.discoveryWarnings ?? [],
-    },
-  ];
 }
 
 /**
