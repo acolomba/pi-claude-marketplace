@@ -210,6 +210,15 @@ export async function sendMessage(
   assertQuiet(exchange);
   const { command, success } = exchange.response;
   assert.deepStrictEqual({ command, success }, { command: "prompt", success: false }, message);
+  // D-PL8-02: Pi refuses the message right after its input handlers return,
+  // and the background update still has file and git work to do before it
+  // can append anything. A payload inside the exchange means the update ran
+  // before Pi answered, not in the background.
+  assert.deepStrictEqual(
+    claudePluginPayloads(exchange.entries),
+    [],
+    `the background update ran before Pi answered the message ${JSON.stringify(message)}`,
+  );
   const deadline = Date.now() + BACKGROUND_RESULT_TIMEOUT_MS;
   let payloads: readonly NotificationPayload[] = [];
   let quietSince = Date.now();
