@@ -18,6 +18,7 @@ import {
   lacksStoredCredential,
   marketplaceFailureRows,
   marketplaceInOtherScope,
+  marketplaceNotAddedMessage,
   marketplaceLayerVerdict,
   narrowCascadeFailure,
   recordedManifestPath,
@@ -102,6 +103,25 @@ void ({
   ok: true,
   dropped: { skills: [], commands: [], agents: [], hooks: [], mcpServers: [], workflows: [] },
 } satisfies UnstageOutcome);
+
+test("marketplaceNotAddedMessage omits optional fields when both scopes miss", () => {
+  assert.deepStrictEqual(marketplaceNotAddedMessage({ name: "tools", scope: undefined }), {
+    kind: "marketplace-not-added",
+    name: "tools",
+  });
+});
+
+test("marketplaceNotAddedMessage includes the requested scope and cross-scope hint", () => {
+  assert.deepStrictEqual(
+    marketplaceNotAddedMessage({ name: "tools", scope: "user", presentInOtherScope: true }),
+    {
+      kind: "marketplace-not-added",
+      name: "tools",
+      scope: "user",
+      presentInOtherScope: true,
+    },
+  );
+});
 
 function createGitOps(scenario: GitScenario): {
   readonly gitOps: GitOps;

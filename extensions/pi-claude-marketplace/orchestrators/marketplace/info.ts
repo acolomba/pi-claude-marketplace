@@ -22,7 +22,7 @@ import {
 import { narrowProbeError } from "../../shared/probe-classifiers.ts";
 import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
 
-import { crossScopeFlag, recordedManifestPath } from "./shared.ts";
+import { crossScopeFlag, marketplaceNotAddedMessage, recordedManifestPath } from "./shared.ts";
 
 import type { ParsedSource } from "../../domain/source.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -145,15 +145,11 @@ async function buildNotAddedMessage(
   name: string,
   scope: Scope | undefined,
 ): Promise<NotificationMessage> {
-  return {
-    kind: "marketplace-not-added",
+  return marketplaceNotAddedMessage({
     name,
-    // `scope` is set when a single `--scope` was requested (renders the
-    // `[scope]` bracket); OMITTED when `--scope` was undefined and BOTH scopes
-    // missed (D-03: "absent from both scopes" body has no `[scope]` bracket).
-    ...(scope !== undefined && { scope }),
+    scope,
     ...(await crossScopeFlag({ cwd, marketplace: name, scope })),
-  };
+  });
 }
 
 /**

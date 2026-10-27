@@ -72,7 +72,11 @@ import type { CredentialOps } from "../../platform/git-credential.ts";
 import type { ListRemotesResult } from "../../platform/git.ts";
 import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
-import type { McpConfigNotice, PluginFailedMessage } from "../../shared/notification-types.ts";
+import type {
+  MarketplaceNotAddedMessage,
+  McpConfigNotice,
+  PluginFailedMessage,
+} from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
 
 /**
@@ -931,6 +935,20 @@ export async function marketplaceInOtherScope(opts: {
 }): Promise<boolean> {
   const other: Scope = opts.scope === "user" ? "project" : "user";
   return await marketplaceRecordedIn(other, () => locationsFor(other, opts.cwd), opts.marketplace);
+}
+
+/** Build the shared marketplace-absence message without reading state. */
+export function marketplaceNotAddedMessage(opts: {
+  readonly name: string;
+  readonly scope: Scope | undefined;
+  readonly presentInOtherScope?: true;
+}): MarketplaceNotAddedMessage {
+  return {
+    kind: "marketplace-not-added",
+    name: opts.name,
+    ...(opts.scope !== undefined && { scope: opts.scope }),
+    ...(opts.presentInOtherScope === true && { presentInOtherScope: true }),
+  };
 }
 
 /**

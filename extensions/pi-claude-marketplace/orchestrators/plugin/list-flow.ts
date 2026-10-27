@@ -83,7 +83,7 @@ import {
 } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
 import { narrowProbeError as sharedNarrowProbeError } from "../../shared/probe-classifiers.ts";
-import { crossScopeFlag } from "../marketplace/shared.ts";
+import { crossScopeFlag, marketplaceNotAddedMessage } from "../marketplace/shared.ts";
 import { collectMarketplaceRecordsByScope } from "../scope-fanout.ts";
 
 import { availableRowMessage, type FilterBucket } from "./list-candidate-row.ts";
@@ -828,16 +828,19 @@ export async function listPlugins(opts: ListPluginsOptions): Promise<void> {
   const { ctx, run } = opts;
   try {
     if (opts.marketplace !== undefined && !(await marketplaceAdded(opts, opts.marketplace))) {
-      notify(ctx, run, {
-        kind: "marketplace-not-added",
-        name: opts.marketplace,
-        ...(opts.scope !== undefined && { scope: opts.scope }),
-        ...(await crossScopeFlag({
-          cwd: opts.cwd,
-          marketplace: opts.marketplace,
+      notify(
+        ctx,
+        run,
+        marketplaceNotAddedMessage({
+          name: opts.marketplace,
           scope: opts.scope,
-        })),
-      });
+          ...(await crossScopeFlag({
+            cwd: opts.cwd,
+            marketplace: opts.marketplace,
+            scope: opts.scope,
+          })),
+        }),
+      );
       return;
     }
 

@@ -106,7 +106,7 @@ import {
 import { redactAbsolutePaths } from "../../shared/redact-absolute-paths.ts";
 import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildCloneAuth } from "../auth-host.ts";
-import { crossScopeFlag } from "../marketplace/shared.ts";
+import { crossScopeFlag, marketplaceNotAddedMessage } from "../marketplace/shared.ts";
 import { collectMarketplaceRecordsByScope, type ScopedMarketplaceRecord } from "../scope-fanout.ts";
 
 import {
@@ -3187,16 +3187,15 @@ async function getPluginInfoWithReader(
     // `[user]` / `[project]`); OMITTED when `--scope` was undefined and BOTH
     // scopes missed (the bracket suppresses). `renderMarketplaceNotAdded`
     // emits the bare column-0 row `⊘ <name> [scope?] (failed) {marketplace not added}`.
-    const message: NotificationMessage = {
-      kind: "marketplace-not-added",
+    const message: NotificationMessage = marketplaceNotAddedMessage({
       name: opts.marketplace,
-      ...(opts.scope !== undefined && { scope: opts.scope }),
+      scope: opts.scope,
       ...(await crossScopeFlag({
         cwd: opts.cwd,
         marketplace: opts.marketplace,
         scope: opts.scope,
       })),
-    };
+    });
     notify(opts.ctx, opts.run, message);
     return;
   }
