@@ -746,7 +746,7 @@ Feature: Plugin apply
       | core@tools | 1.0.0   | true    |
       | lib@tools  | 1.0.0   | false   |
 
-  Scenario: Pending lists the disable of a plugin whose dependency a config drops, as apply makes it
+  Scenario: Apply disables a plugin whose dependency a config drops in the same run, as pending lists it
     Given the marketplace "tools" is published as a dir source
     Given the marketplace "tools" offers these plugins with dependencies:
       | name   | version | dependencies |
