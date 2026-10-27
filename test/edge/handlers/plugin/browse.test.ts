@@ -36,6 +36,30 @@ interface HermeticScope {
   readonly cwd: string;
 }
 
+interface RenderBarrier {
+  readonly rendered: Promise<void>;
+  readonly requestRender: () => void;
+}
+
+function pluginRenderBarrier(): RenderBarrier {
+  let resolveRendered = (): void => {};
+
+  const rendered = new Promise<void>((resolve) => {
+    resolveRendered = resolve;
+  });
+
+  let requests = 0;
+  return {
+    rendered,
+    requestRender: () => {
+      requests += 1;
+      if (requests === 2) {
+        resolveRendered();
+      }
+    },
+  };
+}
+
 async function createHermeticScope(t: TestContext, name: string): Promise<HermeticScope> {
   const environment = await createHermeticEnvironment(t, `browse-test-${name}-`);
   return { cwd: environment.cwd };
@@ -432,7 +456,8 @@ test("TUI mode exercises custom UI factory, render, invalidate, handleInput, and
   const factory = customFactory.value;
   assert.ok(factory !== undefined);
   let capturedResult: unknown;
-  const tui = { requestRender: () => {} } as unknown as Parameters<typeof factory>[0];
+  const plugins = pluginRenderBarrier();
+  const tui = { requestRender: plugins.requestRender } as unknown as Parameters<typeof factory>[0];
   const theme = {
     fg: (_c: string, s: string) => s,
     bold: (s: string) => s,
@@ -446,7 +471,7 @@ test("TUI mode exercises custom UI factory, render, invalidate, handleInput, and
   comp.invalidate();
   // Press Enter to open the marketplace and execute pluginLoader
   comp.handleInput?.("\r");
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await plugins.rendered;
   // Press Enter to open actions for test-plugin
   comp.handleInput?.("\r");
   // Press Enter on first action (Uninstall) to trigger onSelect -> done(r)
@@ -494,7 +519,8 @@ test("TUI mode pluginLoader fallback when marketplace block is missing", async (
 
   const factory = customFactory.value;
   assert.ok(factory !== undefined);
-  const tui = { requestRender: () => {} } as unknown as Parameters<typeof factory>[0];
+  const plugins = pluginRenderBarrier();
+  const tui = { requestRender: plugins.requestRender } as unknown as Parameters<typeof factory>[0];
   const theme = {
     fg: (_c: string, s: string) => s,
     bold: (s: string) => s,
@@ -508,7 +534,7 @@ test("TUI mode pluginLoader fallback when marketplace block is missing", async (
   await rm(path.join(locations.extensionRoot, "state.json"));
 
   comp.handleInput?.("\r");
-  await new Promise((resolve) => setTimeout(resolve, 50));
+  await plugins.rendered;
 
   verify(ctx);
   verify(ui);
