@@ -756,6 +756,42 @@ test("RESV-06 / D-03-07 three members whose LAST fails leave no trace of the fir
   assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
 });
 
+test("CAS-01 / D-PL3-03 a member whose ledger fails lists the members rolled back and never reached", async (t) => {
+  // arrange: `bbb` is already recorded, so its own ledger throws after `aaa`
+  // materialized and before `ccc` runs.
+  const environment = await createHermeticEnvironment(t, "install-cascade-middle-fails-");
+  const state = await seedMarketplace(environment.cwd, ["aaa", "bbb", "ccc", "foo"], {
+    preinstalled: ["bbb"],
+  });
+  const locations = locationsFor("project", environment.cwd);
+  const before = await twoScopeFootprint(environment.cwd, state);
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations,
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "aaa" }, { name: "bbb" }, { name: "ccc" }],
+      [`aaa@${MARKETPLACE}`]: [],
+      [`bbb@${MARKETPLACE}`]: [],
+      [`ccc@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+  });
+
+  // assert
+  assert.ok(cascade.kind === "member-failed");
+  assert.deepStrictEqual(
+    [cascade.key, cascade.unmaterialized],
+    [`bbb@${MARKETPLACE}`, [`aaa@${MARKETPLACE}`, `ccc@${MARKETPLACE}`]],
+  );
+  assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
+});
+
 /**
  * AFILE-04: give each named fixture plugin one MCP server and put a commented
  * project-scope mcp-adapter.json in place, so the first member to stage
@@ -1192,7 +1228,41 @@ test("a scheduler reporting failure with no error names the root and a generic c
     error: new Error("Install cascade failed."),
     rollbackPartials: [],
     mcpConfigNotices: [],
+    unmaterialized: [],
   });
+});
+
+test("CAS-01 / D-PL3-03 a scheduler that fails before any phase runs lists every dependency", async (t) => {
+  // arrange
+  const environment = await createHermeticEnvironment(t, "install-cascade-bare-closure-");
+  const state = await seedMarketplace(environment.cwd, ["bar", "baz", "foo"]);
+  const transaction: InstallLedgerTransaction = {
+    runPhases: () => Promise.resolve({ ok: false, rollbackPartials: [], leaks: [] }),
+  };
+
+  // act
+  const cascade = await runInstallCascade({
+    state,
+    locations: locationsFor("project", environment.cwd),
+    rootKey: `foo@${MARKETPLACE}`,
+    lookup: catalog({
+      [`foo@${MARKETPLACE}`]: [{ name: "bar" }, { name: "baz" }],
+      [`bar@${MARKETPLACE}`]: [],
+      [`baz@${MARKETPLACE}`]: [],
+    }),
+    ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+    rootAllowedMarketplaces: new Set<string>(),
+    installedKeys: new Set(),
+    knownMarketplaces: new Set([MARKETPLACE]),
+    transaction,
+  });
+
+  // assert
+  assert.ok(cascade.kind === "member-failed");
+  assert.deepStrictEqual(
+    [cascade.key, cascade.unmaterialized],
+    [`foo@${MARKETPLACE}`, [`bar@${MARKETPLACE}`, `baz@${MARKETPLACE}`]],
+  );
 });
 
 for (const { label, declared } of [
@@ -4748,6 +4818,7 @@ test("UPD-DEP-D1: a recorded root's cascade whose member fails reports it failed
     error: failure,
     rollbackPartials: [],
     mcpConfigNotices: [],
+    unmaterialized: [`bar@${MARKETPLACE}`],
   });
 });
 

@@ -616,6 +616,12 @@ export type InstallCascadeResult =
       readonly error: Error;
       readonly rollbackPartials: readonly RollbackPartial[];
       /**
+       * CAS-01 / D-PL3-03: the members this run rolled back or never reached,
+       * in phase order, the root and the failing member excluded. REQUIRED on
+       * the D-07 rationale `Unmaterialized` states.
+       */
+      readonly unmaterialized: readonly string[];
+      /**
        * AFILE-04: the notices of the members that committed before the
        * failure, then those of their undo. The undo unstages from the
        * rewritten file rather than restoring its bytes, so removed comments
@@ -1436,23 +1442,29 @@ interface MaterializedCascade {
   readonly result: RunPhasesResult;
   readonly run: CascadeRun;
   readonly alreadyInstalled: readonly CascadeSkippedMember[];
+  /** The key of every member the run built a phase for, in phase order. */
+  readonly phaseKeys: readonly string[];
 }
 
 /** The failure arms a ledger run can reach. */
 function failedCascade(
   options: InstallCascadeOptions,
-  { result, run }: MaterializedCascade,
+  { result, run, phaseKeys }: MaterializedCascade,
 ): Extract<InstallCascadeResult, { readonly kind: "marketplace-absent" | "member-failed" }> {
   if (run.marketplaceAbsent) {
     return { kind: "marketplace-absent" };
   }
 
+  const key = run.attempting ?? options.rootKey;
   return {
     kind: "member-failed",
-    key: run.attempting ?? options.rootKey,
+    key,
     error: result.error ?? new Error("Install cascade failed."),
     rollbackPartials: result.rollbackPartials,
     mcpConfigNotices: run.mcpConfigNotices,
+    unmaterialized: phaseKeys.filter(
+      (phaseKey) => phaseKey !== options.rootKey && phaseKey !== key,
+    ),
   };
 }
 
@@ -1676,7 +1688,12 @@ async function materializeCascade(
     }),
   );
 
-  return { result: await transaction.runPhases(phases, run), run, alreadyInstalled };
+  return {
+    result: await transaction.runPhases(phases, run),
+    run,
+    alreadyInstalled,
+    phaseKeys: members.map((entry) => entry.member.key),
+  };
 }
 
 /**

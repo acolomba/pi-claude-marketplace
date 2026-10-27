@@ -1118,6 +1118,7 @@ function unwrapCascade<S extends Exclude<InstallCascadeResult, CascadeFailureArm
         key: cascade.key,
         error: cascade.error,
         rollbackPartials: capture.rollbackPartials,
+        unmaterialized: cascade.unmaterialized,
       };
     }
 
@@ -1800,6 +1801,7 @@ function handleCascadeThrow(args: {
     return { status: "failed", error, cause, ...movedMember(args.moved) };
   }
 
+  const moved = movedRows(args.moved);
   notifyWithContext(
     ctx,
     run,
@@ -1809,8 +1811,8 @@ function handleCascadeThrow(args: {
         name: marketplace,
         scope,
         plugins: [
-          ...composeCascadeFailureMessage({ scope, rootKey, rootName: plugin, subject }),
-          ...movedRows(args.moved),
+          ...composeCascadeFailureMessage({ scope, rootKey, rootName: plugin, subject, moved }),
+          ...moved,
         ],
       },
     ],

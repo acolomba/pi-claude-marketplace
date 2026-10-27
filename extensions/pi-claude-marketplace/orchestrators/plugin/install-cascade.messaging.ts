@@ -7,6 +7,7 @@ import {
 import { classifyGitHostFailure } from "../../shared/git-failure-classifiers.ts";
 import { printable } from "../../shared/notification-mcp.ts";
 import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts";
+import { redactAbsolutePaths, redactCauseChain } from "../../shared/redact-absolute-paths.ts";
 
 import { INSTALL_CONTEXT } from "./install.messaging.ts";
 
@@ -170,6 +171,7 @@ export type CascadeFailureSubject =
       readonly key: string;
       readonly error: Error;
       readonly rollbackPartials: readonly RollbackPartial[];
+      readonly unmaterialized?: readonly string[];
     };
 
 /** The subject key, brace and cause one cascade failure resolves to. */
@@ -487,7 +489,9 @@ function constraintFailureFacts(failure: CascadeConstraintFailure): CascadeFailu
  * directly would repeat its message as two consecutive links, because
  * `causeChainTrailer` renders a link's own message before walking its cause.
  * Skipping to `subject.error`'s cause keeps the rendered cause-chain trailer
- * byte-identical to `subject.error`'s own.
+ * the same as `subject.error`'s own, except that every absolute path is cut to
+ * its basename, as a dependency move's failure row cuts it (T-03-48): a
+ * dependency's ledger error can name a path inside the scope's staging area.
  */
 function memberCause(
   subject: Extract<CascadeFailureSubject, { readonly kind: "member" }>,
@@ -497,10 +501,11 @@ function memberCause(
     return subject.error;
   }
 
+  const cause = redactCauseChain(subject.error.cause);
   return new DependencyCascadeError(
-    subject.error.message,
+    redactAbsolutePaths(subject.error.message),
     subject.key,
-    subject.error.cause === undefined ? undefined : { cause: subject.error.cause },
+    cause === undefined ? undefined : { cause },
   );
 }
 
@@ -566,21 +571,22 @@ export function cascadeFailureCause(subject: CascadeFailureSubject, rootKey: str
 
 /** CAS-01: the members a subject lists as never installed; none when it carries no list. */
 function unmaterializedOf(subject: CascadeFailureSubject): readonly string[] {
-  return subject.kind === "member" ? [] : (subject.failure.unmaterialized ?? []);
+  const listed =
+    subject.kind === "member" ? subject.unmaterialized : subject.failure.unmaterialized;
+  return listed ?? [];
 }
 
 /**
  * CAS-01 / D-PL3-02: one cause-less `{dependency failed}` row per member the
- * install would have installed and did not, the failing member and the root
- * excluded because each already has its row.
+ * install would have installed and did not. The failing member, the root, and
+ * every `moved` key are excluded, because each already has its row (D-PL3-15).
  */
 function unmaterializedRows(
   subject: CascadeFailureSubject,
-  failingKey: string,
-  rootKey: string,
+  reported: readonly string[],
 ): PluginFailedMessage[] {
   return unmaterializedOf(subject)
-    .filter((key) => key !== failingKey && key !== rootKey)
+    .filter((key) => !reported.includes(key))
     .map((key) => ({
       status: "failed",
       name: key,
@@ -600,12 +606,16 @@ function unmaterializedRows(
  * the requesting plugin (an unusable declaration on its own manifest, or its
  * own ledger throwing), because there is no dependency to distinguish it from
  * and one subject cannot be the reason for itself.
+ *
+ * `moved` holds the moved rows the caller appends beside these rows; the key
+ * each one names gets no second, `{dependency failed}` row (D-PL3-15).
  */
 export function composeCascadeFailureMessage(args: {
   readonly scope: Scope;
   readonly rootKey: string;
   readonly rootName: string;
   readonly subject: CascadeFailureSubject;
+  readonly moved?: readonly { readonly name: string }[];
 }): readonly CascadeMsg[] {
   const facts = failureFacts(args.subject, args.rootKey);
   const isRoot = facts.key === args.rootKey;
@@ -624,7 +634,11 @@ export function composeCascadeFailureMessage(args: {
     severity: "error",
     needsReload: false,
   };
-  const members = unmaterializedRows(args.subject, facts.key, args.rootKey);
+  const members = unmaterializedRows(args.subject, [
+    facts.key,
+    args.rootKey,
+    ...(args.moved ?? []).map((row) => row.name),
+  ]);
   if (isRoot) {
     return sortRows([failed, ...members], args.scope);
   }

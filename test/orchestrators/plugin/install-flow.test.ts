@@ -5119,6 +5119,7 @@ for (const allowGamma of [false, true]) {
                 "Some plugin operations have failed.\n\n" +
                 "● alpha [project]\n" +
                 "  ⊘ hello (failed) {dependency failed}\n" +
+                "  ⊘ some-other-plugin@beta (failed) {dependency failed}\n" +
                 "  ⊘ some-other-plugin@gamma (failed) {cross-marketplace}\n" +
                 '    cause: Dependency "some-other-plugin@gamma", declared by "some-other-plugin@beta", is from marketplace "gamma", which root marketplace "alpha" does not allow. Install "some-other-plugin@gamma" manually first, or add "gamma" to allowCrossMarketplaceDependenciesOn in the marketplace.json for root marketplace "alpha".',
             },

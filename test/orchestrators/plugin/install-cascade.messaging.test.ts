@@ -1248,6 +1248,92 @@ describe("composeCascadeFailureMessage", () => {
       ].join("\n"),
     });
   });
+
+  test("CAS-01 / D-PL3-03 a member failure gives the members it rolled back or never reached a dependency-failed row", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "member",
+      key: "formatter@tools",
+      error: new Error("failed to stage skill a-fmt: EACCES"),
+      rollbackPartials: [],
+      unmaterialized: ["linter@tools", "aux@tools"],
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ aux@tools (failed) {dependency failed}",
+        "  ⊘ formatter@tools (failed)",
+        "    cause: failed to stage skill a-fmt: EACCES",
+        "  ⊘ helper (failed) {dependency failed}",
+        "  ⊘ linter@tools (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("D-PL3-15 a listed member whose move another row reports gets no dependency-failed row", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "member",
+      key: "formatter@tools",
+      error: new Error("failed to stage skill a-fmt: EACCES"),
+      rollbackPartials: [],
+      unmaterialized: ["linter@tools", "aux@tools"],
+    };
+
+    // act
+    const rows = composeCascadeFailureMessage({
+      scope: "user",
+      rootKey: ROOT_KEY,
+      rootName: "helper",
+      subject,
+      moved: [{ name: "linter@tools" }],
+    });
+
+    // assert
+    assert.deepStrictEqual(
+      rows.map((row) => row.name),
+      ["aux@tools", "formatter@tools", "helper"],
+    );
+  });
+
+  test("T-03-48 a dependency's ledger failure names no absolute path", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "member",
+      key: "formatter@tools",
+      error: new Error(
+        "EACCES: permission denied, copyfile '/home/u/p/.pi/staging/a-fmt/notes.md'",
+        {
+          cause: new Error("open '/home/u/p/.pi/staging/a-fmt/notes.md'"),
+        },
+      ),
+      rollbackPartials: [],
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools (failed)",
+        "    cause: EACCES: permission denied, copyfile 'notes.md' -> open 'notes.md'",
+        "  ⊘ helper (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
 });
 
 describe("cascadeFailureCause", () => {
