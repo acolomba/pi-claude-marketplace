@@ -8102,6 +8102,74 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
+  test("D-PL2-01: a read that fails after the moves installs no missing dependency from the plan made before them", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "moves-then-read-fails", {
+      trees: { widget: { skill: "clean" }, ycore: { skill: "clean" }, newdep: { skill: "clean" } },
+      supported: { widget: ["skills"], ycore: ["skills"], newdep: ["skills"] },
+      offered: { ycore: "2.0.0" },
+      dependencies: { widget: [{ name: "newdep", version: "*" }] },
+    });
+    await withoutRecords(project, ["newdep"]);
+    await declareEnabled(project, cwd, ["widget", "ycore"]);
+    // The first read of the project scope after ycore moved fails.
+    let failed = false;
+    const applyWithFailingRead = createApplyReconcile({
+      async loadState(extensionRoot: string): Promise<ExtensionState> {
+        const state = await loadState(extensionRoot);
+        if (
+          !failed &&
+          extensionRoot === project.extensionRoot &&
+          state.marketplaces["mp"]?.plugins["ycore"]?.version === "2.0.0"
+        ) {
+          failed = true;
+          throw new Error("read after the moves failed");
+        }
+
+        return state;
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyWithFailingRead({
+      ctx,
+      run: runWithNothingLoaded(),
+      cwd,
+      scope: "project",
+      gitOps,
+      completionCache: createCompletionCache(),
+      hooksRouting: createHooksRouting(createHooksRuntime(), { readHooksJson }),
+    });
+
+    // assert
+    assert.equal(failed, true);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some operations have failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ● ycore v1.0.0 → v2.0.0 (updated)\n" +
+          "  ◍ widget v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Install "newdep@mp" or uninstall "widget@mp"\n' +
+          "\n" +
+          "⊘ state.json [project] (failed) {unreadable}\n" +
+          "  ⊘ state.json (failed) {unreadable}\n" +
+          "    cause: read after the moves failed\n" +
+          "\n" +
+          "Reconcile: 2 failures, 1 warning, 1 success\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await recordFor(project, "mp", "newdep"), undefined);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
   test("UPD-DEP-D1: a config install that moves its out-of-range dependency first reports the move as pending lists it", async (t) => {
     // arrange
     const { cwd, project } = await seedConvergenceScope(

@@ -1295,11 +1295,18 @@ async function installAfterMoves(
   run: AfterMovesRun,
 ): Promise<void> {
   const { after, scope } = run;
-  const installs =
-    run.reports.length > 0
-      ? (await readPlainPlan(reader, opts, scope, after.rows)).plan?.pluginsToDependencyInstall
-      : undefined;
-  const bucket = installs ?? toggles.plan.pluginsToDependencyInstall;
+  let bucket = toggles.plan.pluginsToDependencyInstall;
+  if (run.reports.length > 0) {
+    const moved = await readPlainPlan(reader, opts, scope, after.rows);
+    // WR-05: the toggles plan's bucket predates the moves, so a read that
+    // fails installs nothing; its row reports it once.
+    if (moved.plan === undefined) {
+      return;
+    }
+
+    bucket = moved.plan.pluginsToDependencyInstall;
+  }
+
   // WR-01: an install can commit before a later one throws (GHB-03), so the
   // judgement reads the scope again once any install or enable is tried.
   after.landed = bucket.length > 0;
