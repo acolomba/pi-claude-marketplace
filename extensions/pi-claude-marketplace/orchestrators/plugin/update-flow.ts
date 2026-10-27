@@ -32,11 +32,10 @@
 //  PluginUpdatePhase3Error with RECOVERY_PLUGIN_REINSTALL_PREFIX hint.
 //  Else: success outcome carries WR-04 stagedAgentNames/stagedMcpServerNames.
 //
-// D-141-03 / D-PL1-03: the five bridges' tagged staging warnings are READ and
-// partitioned by tag through `partitionStagingWarnings`, the classifier install
-// uses. The DISCOVERY half always rides the `updated` outcome's `notes`; the
-// HYGIENE half joins it in cascade mode only. The direct path renders the
-// discovery half through `surfaceDiscoveryWarnings` AFTER the cascade, since
+// D-141-03 / D-PL1-10: the five bridges' tagged staging warnings ride the
+// `updated` outcome's `stagingWarnings`, both halves, in bridge order. The
+// direct path takes the discovery half through `partitionStagingWarnings`, the
+// classifier install uses (D-PL1-03), and renders it AFTER the cascade, since
 // the runner that produces a warning finishes long before the row it
 // qualifies exists.
 //
@@ -84,6 +83,7 @@ import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
 import { notifyUpdateNoOpWithContext, notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { partitionStagingWarnings } from "../../shared/staging-warnings.ts";
 import { DEFAULT_CREDENTIAL_OPS, buildGitHubAuth } from "../auth-host.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, refreshUrlClone } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
@@ -460,9 +460,9 @@ async function updatePluginsWith(
  * the cascade the rows live in -- the user reads the row, then the detail
  * that qualifies it. The header names the target's scope (D-PL1-05).
  *
- * `cascade` is false on this path, so `collectUpdateWarnings` put only the
- * discovery half of its tag partition on `notes` (D-PL1-03); the hygiene half
- * never reaches here. That is the same property install's standalone arm
+ * `stagingWarnings` carries both halves (D-PL1-10). Only the discovery half
+ * is rendered; the hygiene half rides the outcome for orchestrated readers
+ * and is not shown (D-PL1-08), the same property install's standalone arm
  * relies on.
  *
  * Deliberately NOT called from `abortUpdateBatch`: an aborted batch has a
@@ -474,7 +474,7 @@ function surfaceUpdateDiscoveryWarnings(
   outcomes: readonly UpdateCascadeOutcome[],
 ): void {
   for (const { target, outcome } of outcomes) {
-    if (outcome.partition !== "updated" || outcome.notes === undefined) {
+    if (outcome.partition !== "updated" || outcome.stagingWarnings === undefined) {
       continue;
     }
 
@@ -482,7 +482,7 @@ function surfaceUpdateDiscoveryWarnings(
       plugin: outcome.name,
       scope: target.scope,
       verb: "updated",
-      warnings: outcome.notes,
+      warnings: partitionStagingWarnings(outcome.stagingWarnings).discovery.map((w) => w.message),
     });
   }
 }

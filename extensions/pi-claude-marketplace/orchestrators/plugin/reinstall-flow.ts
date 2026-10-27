@@ -11,9 +11,9 @@
 // notify() owns severity, the reload-hint trailer, and the cause-chain.
 // Manual-recovery rows are folded into the cascade `plugins[]` array as
 // `PluginManualRecoveryMessage` entries rather than emitted separately.
-// D-141-03 / D-141-05: the shared swap carries only the DISCOVERY half of the
-// staging warnings (skills, commands, workflows) in direct mode, as it does
-// for a direct `update`; they reach both modes. The maintenance warnings stay
+// D-141-03 / D-PL1-11: the shared swap carries both halves of the staging
+// warnings, typed, on its `stagingWarnings` (D-PL1-10), and reinstall takes
+// the DISCOVERY half from them; it reaches both modes. The maintenance warnings stay
 // orchestrated-only, because MarketplaceNotificationMessage has no field for
 // one and a standalone user has nothing to do about it (D-19-01). The side
 // effects behind them (dropMarketplaceCache + rm) run either way.
@@ -54,6 +54,7 @@ import {
 } from "../../shared/notification-types.ts";
 import { notifyWithContext } from "../../shared/notify-context.ts";
 import { ownValue } from "../../shared/own-key.ts";
+import { partitionStagingWarnings } from "../../shared/staging-warnings.ts";
 import { type LockedStateTransactionDeps } from "../../transaction/with-state-guard.ts";
 
 import { garbageCollectPluginClones } from "./clone-gc.ts";
@@ -85,6 +86,7 @@ import type { NotificationContext } from "../../platform/pi-api.ts";
 import type { CompletionCache } from "../../shared/completion-cache.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
+import type { DiscoveryWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { ReinstallFailedOutcome, ReinstallPluginOutcome, RevisionMove } from "../types.ts";
@@ -252,8 +254,8 @@ export function createNodeReinstallPlugins(reinstallPlugin: ReinstallPluginFn): 
 /** What one reinstall reached, before maintenance and rendering. */
 interface ReinstallReached {
   readonly outcome: ReinstallPluginOutcome;
-  /** D-141-03: the discovery half of the staging warnings; reaches both modes. */
-  readonly discoveryWarnings: readonly string[];
+  /** D-141-03 / D-PL1-11: the discovery half of the staging warnings; reaches both modes. */
+  readonly discoveryWarnings: readonly DiscoveryWarning[];
   /**
    * AFILE-04: the MCP commit's file notices. Empty unless the MCP commit ran:
    * on a reinstalled plugin, or on a failure after the commit rewrote the file.
@@ -308,7 +310,9 @@ async function reinstallPluginWith(
     bindings.completionCache,
   );
   if (render === "none") {
-    const notes = [...reached.discoveryWarnings, ...maintenanceWarnings].map(
+    // D-PL1-11: `notes` keeps its orchestrated string fold of the discovery
+    // messages and the maintenance warnings.
+    const notes = [...reached.discoveryWarnings.map((w) => w.message), ...maintenanceWarnings].map(
       (w) => `warning: ${w}`,
     );
     // NREG-01: each carrier key stays absent when it is empty, so a clean
@@ -423,7 +427,10 @@ async function runReinstall(
   );
   return {
     outcome: reinstallOutcomeFromRun(target, run, phaseFailure),
-    discoveryWarnings: run.partition === "updated" ? (run.notes ?? []) : [],
+    discoveryWarnings:
+      run.partition === "updated"
+        ? partitionStagingWarnings(run.stagingWarnings ?? []).discovery
+        : [],
     mcpConfigNotices:
       run.partition === "updated" || run.partition === "failed" ? (run.mcpConfigNotices ?? []) : [],
   };
@@ -624,8 +631,8 @@ function surfaceReinstallMcpConfigNotices(
  * `render: "none"`.
  *
  * The hygiene half never arrives here: only the DISCOVERY half rides
- * `discoveryWarnings`, while `notes` keeps the flat fold for orchestrated
- * consumers.
+ * `discoveryWarnings`, typed (D-PL1-11), while `notes` keeps the flat fold
+ * for orchestrated consumers.
  */
 function surfaceReinstallDiscoveryWarnings(
   ctx: NotificationContext,
@@ -641,7 +648,7 @@ function surfaceReinstallDiscoveryWarnings(
       plugin: outcome.name,
       scope: outcome.scope,
       verb: "reinstalled",
-      warnings: outcome.discoveryWarnings,
+      warnings: outcome.discoveryWarnings.map((w) => w.message),
     });
   }
 }

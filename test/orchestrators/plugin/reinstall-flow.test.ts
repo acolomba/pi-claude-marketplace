@@ -1020,7 +1020,10 @@ test("PDEF-01: reinstall stages every agent directory", async () => {
         `"${path.join(pluginRoot, "declared-agents", "shared-first.md")}"; keeping first discovered source.`;
       assert.deepStrictEqual(
         { notes: outcome.notes, discoveryWarnings: outcome.discoveryWarnings },
-        { notes: [`warning: ${duplicate}`], discoveryWarnings: [duplicate] },
+        {
+          notes: [`warning: ${duplicate}`],
+          discoveryWarnings: [{ kind: "discovery", message: duplicate }],
+        },
       );
       const state = await loadState(locations.extensionRoot);
       assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.agents, [
@@ -6688,8 +6691,9 @@ test("D-141-03: an orchestrated reinstall carries the discovery half on notes an
       // The unprefixed carrier is what `reinstallPlugins` renders from.
       const carried = outcome.partition === "reinstalled" ? (outcome.discoveryWarnings ?? []) : [];
       assert.equal(carried.length, 1, JSON.stringify(carried));
-      assert.ok(carried[0]?.includes('"hello-foo"'));
-      assert.ok(!carried[0]?.startsWith("warning: "));
+      assert.equal(carried[0]?.kind, "discovery");
+      assert.ok(carried[0].message.includes('"hello-foo"'));
+      assert.ok(!carried[0].message.startsWith("warning: "));
       verifyBoundary();
     } finally {
       await rm(cwd, { recursive: true, force: true });
@@ -6823,7 +6827,9 @@ test("D-141-03: a reinstall carries its discovery warning on notes and drops the
       // assert
       assert.ok(orchestratedOutcome.partition === "reinstalled");
       assert.deepStrictEqual(orchestratedOutcome.notes, [`warning: ${discovery}`]);
-      assert.deepStrictEqual(orchestratedOutcome.discoveryWarnings, [discovery]);
+      assert.deepStrictEqual(orchestratedOutcome.discoveryWarnings, [
+        { kind: "discovery", message: discovery },
+      ]);
       assert.deepStrictEqual(orchestrated.notifications, []);
       assert.deepStrictEqual(standalone.notifications, [
         {

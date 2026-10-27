@@ -45,7 +45,10 @@ const REINSTALL_REINSTALLED_FULL = {
   declaresMcp: true,
   declaresWorkflows: false,
   degradedKinds: ["skill", "command"],
-  discoveryWarnings: ["skill alpha could not be read", "command beta could not be read"],
+  discoveryWarnings: [
+    { kind: "discovery", message: "skill alpha could not be read" },
+    { kind: "discovery", message: "command beta could not be read" },
+  ],
   fromCommit: "1111111111111111111111111111111111111111",
   fromVersion: "1.0.0",
   marketplace: "official",
@@ -157,7 +160,6 @@ const PLUGIN_UPDATE_UPDATED_FULL = {
   degradedKinds: ["skill", "command"],
   fromVersion: "1.0.0",
   name: "alpha",
-  notes: ["warning: skill alpha could not be read"],
   orphanRewake: true,
   partialDegrade: {
     kinds: ["hooks", "lsp"],
@@ -166,6 +168,10 @@ const PLUGIN_UPDATE_UPDATED_FULL = {
   partition: "updated",
   stagedAgentNames: ["alpha-agent"],
   stagedMcpServerNames: ["alpha-mcp"],
+  stagingWarnings: [
+    { kind: "discovery", message: "skill alpha could not be read" },
+    { kind: "hygiene", message: "agents index entry was corrupt" },
+  ],
   toVersion: "2.0.0",
 } satisfies PluginUpdateUpdatedOutcome;
 

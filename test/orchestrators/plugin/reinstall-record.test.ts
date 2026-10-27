@@ -426,7 +426,7 @@ describe("reinstallOutcomeFromRun", () => {
       declaresMcp: true,
       declaresWorkflows: false,
       constraint: undefined,
-      notes: ["skill tool could not be read"],
+      stagingWarnings: [{ kind: "discovery", message: "skill tool could not be read" }],
     };
 
     // act

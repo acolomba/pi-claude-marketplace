@@ -19,6 +19,7 @@ import type {
   PluginUpdatedMessage,
 } from "../shared/notification-types.ts";
 import type { DegradeKind } from "../shared/notify-reasons.ts";
+import type { DiscoveryWarning, StagingWarning } from "../shared/staging-warnings.ts";
 import type { Scope } from "../shared/types.ts";
 import type { RollbackPartial } from "../transaction/phase-ledger.ts";
 import type { LedgerDegradationSignals } from "./plugin/shared.ts";
@@ -126,13 +127,13 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
   readonly degradedKinds?: readonly DegradeKind[];
   readonly notes?: readonly string[];
   /**
-   * D-141-03 / D-141-05: the DISCOVERY half of this reinstall's staging
-   * warnings, unprefixed, carried separately from `notes`.
+   * D-141-03 / D-PL1-11: the DISCOVERY half of this reinstall's staging
+   * warnings, typed, carried separately from `notes`.
    *
-   * `notes` folds the discovery half and the maintenance warnings behind a
+   * `notes` folds the discovery messages and the maintenance warnings behind a
    * `warning: ` prefix for orchestrated consumers, so a reader cannot tell
-   * them apart again. The agents and MCP hygiene half is not carried: the
-   * shared swap drops it in direct mode, as it does for `update`.
+   * them apart again. The hygiene half is not carried: reinstall takes only
+   * the discovery half of the shared runner's `stagingWarnings`.
    * `reinstallPlugins` needs exactly the discovery half to render after its
    * cascade, and the boundary forces the carrier: the warnings originate
    * inside the shared runner while the rows are not rendered until
@@ -151,7 +152,7 @@ export interface ReinstallReinstalledOutcome extends ReinstallOutcomeBase {
    * Omitted when empty, so a clean reinstall's outcome shape is unchanged
    * (NREG-01).
    */
-  readonly discoveryWarnings?: readonly string[];
+  readonly discoveryWarnings?: readonly DiscoveryWarning[];
   /**
    * AFILE-04 / AFILE-02: the MCP config file notices from this reinstall's
    * MCP commit. The outcome carries them because the rows render after the
@@ -444,30 +445,23 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
     readonly newlyDegraded: boolean;
   };
   /**
-   * D-141-03 / D-141-05: the bridge staging warnings this update produced,
-   * already split -- the discovery half always, plus the hygiene half in
-   * cascade mode only. Mirrors the optional `notes?` that
-   * `ReinstallReinstalledOutcome` carries.
+   * D-PL1-10: the bridge staging warnings this update's prepare produced, both
+   * halves, tagged, in bridge order (skills, commands, agents, mcp,
+   * workflows). The direct update, reinstall and the cascades render the
+   * discovery half after their rows (D-PL1-07, D-PL1-08); the hygiene half
+   * stays on the payload for orchestrated readers (D-19-01).
    *
-   * This partition needs the carrier because the update path puts a boundary
+   * The outcome is the carrier because the update path puts a boundary
    * between a warning and the row it qualifies: the warnings originate inside
    * the three-phase runner, while the direct path renders no row until
    * `renderUpdateCascadeAndNotify` at the very end of `updatePlugins`. A
    * diagnostic fired from inside the runner would print the detail BEFORE
-   * that row, so the outcome is the only thing that crosses the boundary.
+   * that row.
    *
    * Omitted when empty, so a clean update's outcome shape is unchanged
    * (NREG-01).
-   *
-   * NOT dead. `update.ts::surfaceUpdateDiscoveryWarnings` reads this field on
-   * this partition to render the standalone diagnostic, and the cascade
-   * consumers carry it onward. What no consumer does is NARROW it to a
-   * closed-set `Reason` the way the `skipped` and `failed` arms do -- the two
-   * `notes` narrowers (`narrowSkipReasons`, `narrowFailReasons`) are each
-   * typed on their own partition's arm, so a cascade ROW renderer never
-   * reads this one.
    */
-  readonly notes?: readonly string[];
+  readonly stagingWarnings?: readonly StagingWarning[];
   /**
    * D-10-17a: the constraint gate's disclosure, forwarded from the
    * preflight's `PreparedPluginUpdate.constraint` by a plain assignment --

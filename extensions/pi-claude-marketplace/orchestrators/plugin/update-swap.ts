@@ -29,13 +29,12 @@
 //  PluginUpdatePhase3Error with RECOVERY_PLUGIN_REINSTALL_PREFIX hint.
 //  Else: success outcome carries WR-04 stagedAgentNames/stagedMcpServerNames.
 //
-// D-141-03 / D-PL1-03: the five bridges' tagged staging warnings are READ and
-// partitioned by tag through `partitionStagingWarnings`, the classifier install
-// uses. The DISCOVERY half always rides the `updated` outcome's `notes`; the
-// HYGIENE half joins it in cascade mode only. The direct path renders the
-// discovery half through `surfaceDiscoveryWarnings` AFTER the cascade, since
-// the runner that produces a warning finishes long before the row it
-// qualifies exists.
+// D-141-03 / D-PL1-10: the five bridges' tagged staging warnings ride the
+// `updated` outcome's `stagingWarnings`, both halves, in bridge order, in
+// direct and cascade mode alike. Readers take the discovery half through
+// `partitionStagingWarnings`, the classifier install uses (D-PL1-03). The
+// direct path renders it AFTER the cascade, since the runner that produces a
+// warning finishes long before the row it qualifies exists.
 //
 // PUP-9 routing:
 //  updateSinglePlugin -- cascade path -- catches into partition='failed'
@@ -109,7 +108,6 @@ import { createRemovalOps, type RemovalOps } from "../../shared/fs-utils.ts";
 import { RECOVERY_PLUGIN_REINSTALL_PREFIX } from "../../shared/markers.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { ownValue } from "../../shared/own-key.ts";
-import { partitionStagingWarnings } from "../../shared/staging-warnings.ts";
 import {
   withStateGuard,
   type LockedStateTransactionDeps,
@@ -137,6 +135,7 @@ import type { HookSummaryEntry } from "../../shared/concerns/hooks.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { McpConfigNotice } from "../../shared/notification-types.ts";
 import type { DegradeKind } from "../../shared/notify-reasons.ts";
+import type { StagingWarning } from "../../shared/staging-warnings.ts";
 import type { Scope } from "../../shared/types.ts";
 import type { AuthAttemptResult, CredentialOps, DeviceFlowHttp } from "../auth-host.ts";
 import type { UpdateHooksRouting } from "./update-cascade.ts";
@@ -424,24 +423,22 @@ async function prepareUpdateHandles(
 }
 
 /**
- * D-141-03 / D-PL1-03: fold the five bridges' tagged staging warnings onto the
- * `updated` outcome, partitioned by tag in bridge order (skills, commands,
- * agents, mcp, workflows). The DISCOVERY half reaches both modes; the HYGIENE
- * half is orchestrated-only. `args.cascade` is the mode seam.
+ * D-PL1-10: the five bridges' tagged staging warnings for the `updated`
+ * outcome, both halves, in bridge order (skills, commands, agents, mcp,
+ * workflows). No mode seam: each reader takes the half it renders.
  *
  * Its own function rather than a few lines inside the finalize window:
  * `prepareUpdateHandles` and that window already sit near the fallow
  * `maxCognitive: 15` ceiling.
  */
-function collectUpdateWarnings(handles: PrepHandles, cascade: boolean): readonly string[] {
-  const { discovery, hygiene } = partitionStagingWarnings([
+function collectUpdateWarnings(handles: PrepHandles): readonly StagingWarning[] {
+  return Object.freeze([
     ...handles.skills.result.warnings,
     ...handles.commands.result.warnings,
     ...handles.agents.result.warnings,
     ...handles.mcp.result.warnings,
     ...handles.workflows.result.warnings,
   ]);
-  return Object.freeze([...discovery, ...(cascade ? hygiene : [])].map((w) => w.message));
 }
 
 async function abortPartialHandles(
@@ -1535,7 +1532,7 @@ export async function swapPluginUpdate(
     preflight.record.resources.workflows,
     handles.workflows.result.stagedNames,
   );
-  const updateWarnings = collectUpdateWarnings(handles, args.cascade);
+  const stagingWarnings = collectUpdateWarnings(handles);
   await dropPluginCompletionCache(args);
 
   return {
@@ -1583,9 +1580,9 @@ export async function swapPluginUpdate(
         newlyDegraded: preflight.record.compatibility.unsupported.length === 0,
       },
     }),
-    // D-141-03 / D-141-05: same NREG-01 spread rule as `degradedKinds` -- a
-    // clean update's outcome keeps the key absent.
-    ...(updateWarnings.length > 0 && { notes: updateWarnings }),
+    // D-PL1-10: same NREG-01 spread rule as `degradedKinds` -- a clean
+    // update's outcome keeps the key absent.
+    ...(stagingWarnings.length > 0 && { stagingWarnings }),
     // AFILE-04: same NREG-01 spread rule; the caller that renders the row
     // routes these through `notifyMcpConfigNotices`.
     ...(mcpConfigNotices.length > 0 && { mcpConfigNotices }),

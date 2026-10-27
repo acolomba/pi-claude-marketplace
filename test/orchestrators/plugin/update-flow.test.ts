@@ -1382,7 +1382,9 @@ test("PDEF-01: update stages every agent directory and warns on a later duplicat
     const outcome = await updateSinglePlugin("hello", "mp", "project");
 
     assert.strictEqual(outcome.partition, "updated");
-    assert.deepStrictEqual(outcome.notes, [expectedWarning]);
+    assert.deepStrictEqual(outcome.stagingWarnings, [
+      { kind: "discovery", message: expectedWarning },
+    ]);
     const state = await loadState(locations.extensionRoot);
     assert.deepStrictEqual(state.marketplaces.mp?.plugins.hello?.resources.agents, [
       "pi-claude-marketplace-hello-shared",
@@ -11007,7 +11009,10 @@ test("a disabled update accepts a concurrent writer that already stored the next
  * (D-141-04), so discovery keeps the localeCompare-first source and reports
  * the loser.
  */
-async function seedCollidingSkills(marketplaceRoot: string, pluginName = "hello"): Promise<void> {
+export async function seedCollidingSkills(
+  marketplaceRoot: string,
+  pluginName = "hello",
+): Promise<void> {
   const skillsDir = path.join(marketplaceRoot, "plugins", pluginName, "skills");
   for (const dir of [`${pluginName}-foo`, "foo"]) {
     await mkdir(path.join(skillsDir, dir), { recursive: true });
@@ -11146,7 +11151,7 @@ test("D-141-03: a standalone updatePlugins run surfaces the skills discovery war
   });
 });
 
-test("D-141-03: an updateSinglePlugin cascade emits no notification and carries both halves on notes", async () => {
+test("D-PL1-10: an updateSinglePlugin cascade emits no notification and carries both halves on stagingWarnings", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-discwarn-casc-");
     try {
@@ -11171,14 +11176,17 @@ test("D-141-03: an updateSinglePlugin cascade emits no notification and carries 
       }
 
       assert.equal(outcome.partition, "updated");
-      const notes = outcome.partition === "updated" ? (outcome.notes ?? []) : [];
+      const warnings = outcome.partition === "updated" ? (outcome.stagingWarnings ?? []) : [];
       assert.ok(
-        notes.some((n) => n.includes('"hello-foo"')),
-        `expected the discovery warning on notes; got: ${JSON.stringify(notes)}`,
+        warnings.some((w) => w.kind === "discovery" && w.message.includes('"hello-foo"')),
+        `expected the discovery warning; got: ${JSON.stringify(warnings)}`,
       );
       assert.ok(
-        notes.some((n) => n.includes("source description was missing or empty")),
-        `expected the agents warning on notes; got: ${JSON.stringify(notes)}`,
+        warnings.some(
+          (w) =>
+            w.kind === "hygiene" && w.message.includes("source description was missing or empty"),
+        ),
+        `expected the agents hygiene warning; got: ${JSON.stringify(warnings)}`,
       );
 
       // The agents half must NOT reach a standalone run's notifications.
@@ -11537,7 +11545,7 @@ test("WLIF-02: a workflow version B cannot admit reaches the standalone diagnost
   });
 });
 
-test("WLIF-02: the same workflow warning rides the cascade outcome's notes", async () => {
+test("WLIF-02: the same workflow warning rides the cascade outcome's stagingWarnings", async () => {
   await withHermeticHome(async () => {
     const cwd = await createCaseDir("update-workflows-warn-cascade-");
     const previousCwd = process.cwd();
@@ -11560,13 +11568,16 @@ test("WLIF-02: the same workflow warning rides the cascade outcome's notes", asy
 
       // assert
       assert.equal(outcome.partition, "updated");
+      const warnings = outcome.partition === "updated" ? (outcome.stagingWarnings ?? []) : [];
       assert.equal(
-        (outcome.notes ?? []).some(
-          (note) =>
-            note.includes('workflow script "broken.js"') && note.includes("was not installed"),
+        warnings.some(
+          (w) =>
+            w.kind === "discovery" &&
+            w.message.includes('workflow script "broken.js"') &&
+            w.message.includes("was not installed"),
         ),
         true,
-        JSON.stringify(outcome.notes),
+        JSON.stringify(warnings),
       );
     } finally {
       process.chdir(previousCwd);
