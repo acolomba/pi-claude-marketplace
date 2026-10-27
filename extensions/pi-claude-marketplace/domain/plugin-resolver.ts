@@ -226,7 +226,8 @@ function classifySourceSupport(parsedSource: ParsedSource): SourceSupport {
     case "git-subdir":
       return { kind: "supported", source: parsedSource };
     case "npm":
-      return { kind: "rejected", reason: `unsupported source kind: npm` };
+    case "hosted":
+      return { kind: "rejected", reason: `unsupported source kind: ${parsedSource.kind}` };
     case "unknown":
       return {
         kind: "rejected",

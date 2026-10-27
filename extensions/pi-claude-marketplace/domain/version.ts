@@ -168,6 +168,7 @@ function sourcePin(source: ParsedSource): string | undefined {
       return source.sha;
     case "path":
     case "npm":
+    case "hosted":
     case "unknown":
       return undefined;
   }

@@ -405,6 +405,7 @@ test("NFR-5: a github source whose presence probe throws is answered by the entr
 
 for (const { label, source } of [
   { label: "an npm", source: { kind: "npm", package: "@scope/alpha" } },
+  { label: "a hosted", source: { kind: "hosted", raw: "https://h.example/alpha.json" } },
   { label: "an unrecognized", source: "ftp://example.com/alpha" },
 ]) {
   test(`NFR-5: ${label} source has no readable tree, so the entry answers`, async () => {

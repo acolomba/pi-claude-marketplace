@@ -991,6 +991,47 @@ test("INFO-05: external source (npm) emits `    components: not resolved` marker
   });
 });
 
+test("D-PL5-05: a hosted plugin source emits `    components: not resolved` like an external source", async () => {
+  await withHermeticHome(async ({ home, cwd }) => {
+    // arrange
+    const userRoot = path.join(home, ".pi", "agent");
+    await seedPathMarketplace({
+      scope: "user",
+      scopeRoot: userRoot,
+      cwd,
+      mpName: "mp",
+      manifest: {
+        name: "mp",
+        plugins: [
+          {
+            name: "remote",
+            source: "https://h.example/remote/marketplace.json",
+            version: "1.0.0",
+            description: "Remote plugin sourced from a hosted catalog URL.",
+          },
+        ],
+      },
+      installed: { remote: { version: "1.0.0" } },
+    });
+
+    const { ctx, run, notifications } = makeCtx();
+    // act
+    await getPluginInfo({ ctx, run, marketplace: "mp", plugin: "remote", scope: "user", cwd });
+    // assert
+    assert.equal(notifications.length, 1);
+    assert.equal(notifications[0]!.severity, undefined);
+    assert.equal(
+      notifications[0]!.message,
+      [
+        "● mp [user] <no autoupdate>",
+        "  ● remote v1.0.0 (installed)",
+        "    Remote plugin sourced from a hosted catalog URL.",
+        "    components: not resolved",
+      ].join("\n"),
+    );
+  });
+});
+
 // ---------------------------------------------------------------------------
 // (e) both-scopes fan-out -- project-first per MSG-GR-3 / INFO-03.
 // ---------------------------------------------------------------------------

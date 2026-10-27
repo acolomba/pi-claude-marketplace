@@ -254,6 +254,7 @@ function isLocallyResolvable(src: ParsedSource): src is PathSource {
     case "url":
     case "git-subdir":
     case "npm":
+    case "hosted":
     case "unknown":
       return false;
   }

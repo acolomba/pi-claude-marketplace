@@ -209,6 +209,7 @@ async function resolvePluginRootFsOnly(
     case "github":
       return probeGitPluginRoot(reader, options.locations, source);
     case "npm":
+    case "hosted":
     case "unknown":
       return undefined;
   }

@@ -383,6 +383,75 @@ const PARSE_CASES: readonly ParseCase[] = [
     raw: { source: "github", repo: "o/r", sha: "../../../../etc/passwd" },
     source: { kind: "github", raw: "o/r", owner: "o", repo: "r" },
   },
+  {
+    name: "parses an https URL to a .json file as a hosted catalog",
+    raw: "https://h.example/m.json",
+    source: { kind: "hosted", raw: "https://h.example/m.json", url: "https://h.example/m.json" },
+  },
+  {
+    name: "drops the fragment from a hosted catalog url",
+    raw: "https://h.example/c/marketplace.json#main",
+    source: {
+      kind: "hosted",
+      raw: "https://h.example/c/marketplace.json#main",
+      url: "https://h.example/c/marketplace.json",
+    },
+  },
+  {
+    name: "keeps the query string of a hosted catalog url",
+    raw: "https://h.example/m.json?v=2",
+    source: {
+      kind: "hosted",
+      raw: "https://h.example/m.json?v=2",
+      url: "https://h.example/m.json?v=2",
+    },
+  },
+  {
+    name: "parses an https URL ending in an uppercase .JSON as a Git URL",
+    raw: "https://h.example/m.JSON",
+    source: { kind: "url", raw: "https://h.example/m.JSON", url: "https://h.example/m.JSON" },
+  },
+  {
+    name: "parses an https URL whose query names a .json file as a Git URL",
+    raw: "https://h.example/x?file=m.json",
+    source: {
+      kind: "url",
+      raw: "https://h.example/x?file=m.json",
+      url: "https://h.example/x?file=m.json",
+    },
+  },
+  {
+    name: "parses an https URL whose query precedes its first slash as a Git URL",
+    raw: "https://h.example?x=/m.json",
+    source: {
+      kind: "url",
+      raw: "https://h.example?x=/m.json",
+      url: "https://h.example?x=/m.json",
+    },
+  },
+  {
+    name: "parses an https host ending in .json with no path as a Git URL",
+    raw: "https://h.example.json",
+    source: { kind: "url", raw: "https://h.example.json", url: "https://h.example.json" },
+  },
+  {
+    name: "keeps a manifest url object ending in .json a Git URL",
+    raw: { source: "url", url: "https://h.example/x.json" },
+    source: { kind: "url", raw: "https://h.example/x.json", url: "https://h.example/x.json" },
+  },
+  {
+    name: "re-parses a stored hosted source through the string form",
+    raw: {
+      kind: "hosted",
+      raw: "https://h.example/c/marketplace.json#main",
+      url: "stale",
+    },
+    source: {
+      kind: "hosted",
+      raw: "https://h.example/c/marketplace.json#main",
+      url: "https://h.example/c/marketplace.json",
+    },
+  },
 ];
 
 const UNKNOWN_PARSE_CASES: readonly ParseCase[] = [
@@ -515,6 +584,44 @@ const UNKNOWN_PARSE_CASES: readonly ParseCase[] = [
       kind: "unknown",
       raw: "acme/tools@",
       reason: "non-relative string source acme/tools@ cannot be classified",
+    },
+  },
+  {
+    name: "never parses a github.com URL ending in .json as a hosted catalog",
+    raw: "https://github.com/acme/tools/raw/main/marketplace.json",
+    source: {
+      kind: "unknown",
+      raw: "https://github.com/acme/tools/raw/main/marketplace.json",
+      reason:
+        "https://github.com/acme/tools/raw/main/marketplace.json must be https://github.com/<owner>/<repo>[.git][#<ref>]",
+    },
+  },
+  {
+    name: "rejects an HTTP URL to a .json file",
+    raw: "http://h.example/m.json",
+    source: {
+      kind: "unknown",
+      raw: "http://h.example/m.json",
+      reason:
+        "http://h.example/m.json is not supported; http:// URLs are rejected -- only https:// URLs and local paths are accepted",
+    },
+  },
+  {
+    name: "rejects a stored hosted source whose raw text is a Git URL",
+    raw: { kind: "hosted", raw: "https://h.example/repo.git" },
+    source: {
+      kind: "unknown",
+      raw: '{"kind":"hosted","raw":"https://h.example/repo.git"}',
+      reason: "hosted source raw https://h.example/repo.git is not an https URL to a .json file",
+    },
+  },
+  {
+    name: "rejects a stored hosted source without raw text",
+    raw: { kind: "hosted" },
+    source: {
+      kind: "unknown",
+      raw: '{"kind":"hosted"}',
+      reason: "hosted source is missing raw",
     },
   },
   {
@@ -1475,6 +1582,24 @@ describe("samePlannedSource", () => {
       sourceOutcome: "different",
     },
     {
+      name: "matches hosted sources with the same url",
+      stored: { kind: "hosted", raw: "https://h.example/m.json", url: "https://h.example/m.json" },
+      plannedRaw: "https://h.example/m.json",
+      sourceOutcome: "same",
+    },
+    {
+      name: "ignores the fragment when comparing hosted sources",
+      stored: { kind: "hosted", raw: "https://h.example/m.json#main" },
+      plannedRaw: "https://h.example/m.json#dev",
+      sourceOutcome: "same",
+    },
+    {
+      name: "distinguishes hosted sources with different urls",
+      stored: { kind: "hosted", raw: "https://h.example/m.json" },
+      plannedRaw: "https://h.example/other.json",
+      sourceOutcome: "different",
+    },
+    {
       name: "reports an unrecognized stored source",
       stored: { kind: "future-thing", raw: "x" },
       plannedRaw: "acme/tools",
@@ -1572,6 +1697,15 @@ describe("sourceLogical", () => {
       name: "builds an npm label with a version",
       source: { kind: "npm", raw: "@scope/pkg", package: "@scope/pkg", version: "1.2.3" },
       logical: "npm:@scope/pkg@1.2.3",
+    },
+    {
+      name: "labels a hosted source with its url",
+      source: {
+        kind: "hosted",
+        raw: "https://h.example/m.json#main",
+        url: "https://h.example/m.json",
+      },
+      logical: "https://h.example/m.json",
     },
     {
       name: "returns the raw text for an unknown source",

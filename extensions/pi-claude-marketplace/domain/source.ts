@@ -61,6 +61,16 @@ export interface NpmSource {
   readonly registry?: string;
 }
 
+/**
+ * D-PL5-04 / D-PL5-05: a marketplace published as one `marketplace.json` at an
+ * https URL. `url` is `raw` without its `#fragment`; the query string stays.
+ */
+export interface HostedManifestSource {
+  readonly kind: "hosted";
+  readonly raw: string;
+  readonly url: string;
+}
+
 export interface UnknownSource {
   readonly kind: "unknown";
   readonly raw: string;
@@ -68,7 +78,13 @@ export interface UnknownSource {
 }
 
 export type ParsedSource =
-  PathSource | GitHubSource | UrlSource | GitSubdirSource | NpmSource | UnknownSource;
+  | PathSource
+  | GitHubSource
+  | UrlSource
+  | GitSubdirSource
+  | NpmSource
+  | HostedManifestSource
+  | UnknownSource;
 
 /**
  * The git-clonable source kinds (url / git-subdir / github): the sources that
@@ -264,6 +280,22 @@ function npmObjectSource(obj: Record<string, unknown>): ParsedSource {
   };
 }
 
+/**
+ * D-PL5-05 / ST-6: a stored hosted source re-parses its `raw` through the
+ * string funnel, so a record whose `raw` is not a hosted URL is unknown.
+ */
+function hostedObjectSource(obj: Record<string, unknown>): ParsedSource {
+  const raw = optionalString(obj, "raw");
+  if (raw === undefined) {
+    return unknownObjectSource(obj, "hosted source is missing raw");
+  }
+
+  const parsed = parsePluginSource(raw);
+  return parsed.kind === "hosted"
+    ? parsed
+    : unknownObjectSource(obj, `hosted source raw ${raw} is not an https URL to a .json file`);
+}
+
 function parseKindObjectSource(raw: Record<string, unknown>, kind: string): ParsedSource {
   switch (kind) {
     case "path": {
@@ -288,6 +320,9 @@ function parseKindObjectSource(raw: Record<string, unknown>, kind: string): Pars
 
     case "npm":
       return npmObjectSource(raw);
+
+    case "hosted":
+      return hostedObjectSource(raw);
 
     case "unknown":
       return {
@@ -359,6 +394,38 @@ function parsePathSourceForm(raw: string): ParsedSource | undefined {
   }
 
   return undefined;
+}
+
+/**
+ * D-PL5-04 / D-PL5-05: an `https://` URL whose path, the text after the
+ * authority up to the first `?` or `#`, ends in `.json` names a hosted
+ * `marketplace.json`. The `.json` match is case-sensitive. `url` drops the
+ * fragment, as Claude Code drops it, and keeps the query. Returns undefined
+ * for anything else, so the caller falls through to the URL arm.
+ *
+ * D-76-02: a github.com URL is never a catalog; it stays on the github arm.
+ * Manifest url objects reach `parseUrlSourceForm` through `gatedUrlField` and
+ * never this arm, so a plugin entry's `{ source: "url" }` stays a git source.
+ */
+function parseHostedManifestForm(raw: string): HostedManifestSource | undefined {
+  if (!raw.startsWith("https://") || gitHubUrlPath(raw) !== undefined) {
+    return undefined;
+  }
+
+  const afterScheme = raw.slice("https://".length);
+  const pathStart = afterScheme.search(/[/?#]/);
+  if (pathStart === -1 || afterScheme[pathStart] !== "/") {
+    return undefined;
+  }
+
+  const pathAndRest = afterScheme.slice(pathStart);
+  const pathEnd = pathAndRest.search(/[?#]/);
+  const urlPath = pathEnd === -1 ? pathAndRest : pathAndRest.slice(0, pathEnd);
+  if (!urlPath.endsWith(".json")) {
+    return undefined;
+  }
+
+  return { kind: "hosted", raw, url: splitUrlFragment(raw).path };
 }
 
 /**
@@ -439,9 +506,14 @@ export function parsePluginSource(raw: unknown): ParsedSource {
     return { kind: "unknown", raw: String(raw), reason: "source must be a string or object" };
   }
 
-  // Arm order is load-bearing: paths, then URL schemes, then the scheme-less
-  // shorthands as the catch-all.
-  return parsePathSourceForm(raw) ?? parseUrlSourceForm(raw) ?? parseShorthandSourceForm(raw);
+  // Arm order is load-bearing: paths, then hosted catalogs, then URL schemes,
+  // then the scheme-less shorthands as the catch-all.
+  return (
+    parsePathSourceForm(raw) ??
+    parseHostedManifestForm(raw) ??
+    parseUrlSourceForm(raw) ??
+    parseShorthandSourceForm(raw)
+  );
 }
 
 /**
@@ -749,6 +821,9 @@ export function samePlannedSource(stored: unknown, plannedRaw: string): SamePlan
     case "git-subdir":
     case "npm":
       return sourceLogical(planned) === sourceLogical(current) ? "same" : "different";
+    // D-PL5-05: a hosted catalog is its fragment-free url.
+    case "hosted":
+      return current.kind === "hosted" && planned.url === current.url ? "same" : "different";
   }
 }
 
@@ -788,6 +863,9 @@ export function sourceLogical(source: ParsedSource): string {
       const versionSuffix = source.version === undefined ? "" : `@${source.version}`;
       return `npm:${source.package}${versionSuffix}`;
     }
+
+    case "hosted":
+      return source.url;
 
     case "unknown":
       return source.raw;

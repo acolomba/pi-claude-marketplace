@@ -2903,6 +2903,28 @@ test("PURL-01: npm source stays unavailable with unsupported-source note", async
   );
 });
 
+test("D-PL5-05: hosted source stays unavailable with unsupported-source note", async () => {
+  // arrange
+  const context = gitCtx({
+    kind: "materialized",
+    pluginRoot: CLONE_ROOT,
+    resolvedSha: "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef",
+  });
+
+  // act
+  const resolvedPlugin = await resolveStrict(
+    pluginEntry({ source: "https://h.example/m.json" }),
+    context,
+  );
+
+  // assert
+  assert.strictEqual(resolvedPlugin.state, "unavailable");
+  assert.ok(
+    resolvedPlugin.notes.includes("unsupported source kind: hosted"),
+    `notes: ${resolvedPlugin.notes.join(" / ")}`,
+  );
+});
+
 test("PURL-01: url source with NO resolveGitPluginRoot injected -> unavailable (path-only back-compat)", async () => {
   // arrange
   const context = resolveContext(marketplaceRoot, {});
