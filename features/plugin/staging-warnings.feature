@@ -136,6 +136,23 @@ Feature: Plugin staging warnings
       | marketplace name | marketplace scope | marketplace status | id            | name | status  | reasons               | scope   | from  | to    |
       | fixtures         | project           | updated            | demo@fixtures | demo | updated | requires pi-subagents | project | 1.0.0 | 1.1.0 |
 
+  Scenario: A marketplace update with autoupdate on reports a moved plugin that fails in its mcp phase under an update failed header
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.1.0   |
+    Given the published plugin "demo" of the marketplace "fixtures" has a second skill whose name collides with its first
+    Given a directory blocks the mcp-adapter.json file of the project scope
+    When the user runs "/claude:plugin marketplace update fixtures --scope project"
+    Then the command reports these results:
+      | kind       | severity | needs reload | summary                        | header                                                                  | lines                                                                                                                                      |
+      | cascade    | error    | false        | A plugin operation has failed. |                                                                         |                                                                                                                                            |
+      | diagnostic | warning  | false        |                                | Plugin "demo" [project] update failed; 1 declared component has a note. | skill source "skill" in "skills" elides to generated name "demo-skill", already produced by skill source "demo-skill"; ignoring duplicate. |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id            | name | status | reasons         | scope   | from  | version | leaks | rollback partial |
+      | fixtures         | project           | updated            | demo@fixtures | demo | failed | not in manifest | project | 1.0.0 | 1.1.0   |       |                  |
+
   Scenario: Apply that moves a plugin to its catalog version reports the moved plugin's skip under its header
     Given the user has run "/claude:plugin install demo@fixtures --scope project"
     Given the marketplace "fixtures" offers these plugins:
@@ -200,6 +217,32 @@ Feature: Plugin staging warnings
       | marketplace name | marketplace scope | id            | name         | status    | reasons                 | scope   | version | from  | to    |
       | fixtures         | project           | demo@fixtures | demo         | updated   |                         | project |         | 1.0.0 | 1.1.0 |
       | fixtures         | project           | lib@fixtures  | lib@fixtures | installed | requires pi-mcp-adapter | project | 1.0.0   |       |       |
+
+  Scenario: Updating a plugin whose dependency settle is refused still reports the MCP config notice of the dependency it installed first
+    Given the marketplace "fixtures" offers these plugins:
+      | name | version |
+      | demo | 1.0.0   |
+      | zbad | 1.0.0   |
+    Given the user has run "/claude:plugin install demo@fixtures --scope project"
+    Given the user has run "/claude:plugin install zbad@fixtures --scope project"
+    Given the marketplace "fixtures" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | demo | 1.1.0   | zbad@^2.0.0  |
+      | zbad | 2.0.0   | lib          |
+      | lib  | 1.0.0   |              |
+    Given the published plugin "lib" of the marketplace "fixtures" declares the mcp server "lib-server"
+    Given the published plugin "zbad" of the marketplace "fixtures" has an unreadable skill file
+    Given the mcp-adapter.json file of the project scope holds a comment
+    When the user runs "/claude:plugin update demo@fixtures --scope project"
+    Then the command reports these results:
+      | kind               | severity | needs reload | summary | notices |
+      | cascade            | error    | true         | Some plugin operations have failed. |         |
+      | mcp-config-notices | warning  | false        |         | [{"kind":"comments-dropped","scope":"project","file":"mcp-adapter.json"}] |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | id            | name          | status    | reasons                 | scope   | version | cause chain                        | cause truncated | leaks | rollback partial |
+      | fixtures         | project           | demo@fixtures | demo          | failed    | dependency failed       | project | 1.0.0   |                                    |                 |       |                  |
+      | fixtures         | project           | lib@fixtures  | lib@fixtures  | installed | requires pi-mcp-adapter | project | 1.0.0   |                                    |                 |       |                  |
+      | fixtures         | project           | zbad@fixtures | zbad@fixtures | failed    |                         | project | 1.0.0   | {unreadable skill file copy error} | false           |       |                  |
 
   Scenario: A bare update over two marketplaces reports the skips in the order of the rows
     Given the marketplace "addons" is published as a dir source

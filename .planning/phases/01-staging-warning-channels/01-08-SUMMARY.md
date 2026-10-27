@@ -285,6 +285,32 @@ installed-copy containment bullets.
    updated; 1 declared component has a note; 1 staging warning.` The
    alternatives were a second diagnostic for the hygiene half, or one
    generic `N staging warnings` header over all lines.
+9. **A dependency move reports no staging warnings (found in PR review).**
+   Shipped: when an update or `apply` moves a dependency to a new version,
+   `dependency-move.ts::runDependencyMove` drops the staging warnings and MCP
+   notices of that move, so no diagnostic shows them. D-PL1-16 covers only
+   the dependencies a settle installs. Carrying them needs a member on
+   `DependencyMoveRun`, the settle step, `UpdateDependencySettlement` and
+   `UpdateDependencyRow`, and `dependency-move.ts` is outside this phase's
+   files. Proposed as a backlog entry for the parent to record.
+10. **A forced commit can drop a foreign row whose target path differs
+    (D-PL1-15, found in PR review, not reproduced).** Under `force`, a
+    foreign-preserved agents-index row whose `generatedName` this staging
+    produces but whose `targetPath` differs from the new entry's falls in
+    neither the replaced nor the kept set of
+    `bridges/agents/stage.ts::partitionPreviousEntries`. The row leaves the
+    index and its file stays on disk untracked. It needs a hand-edited index.
+    Proposed as a backlog entry: either remove the file as D-PL1-15 states,
+    or keep the row and warn.
+11. **A cascade move that fails in its mcp phase shows `not in manifest`
+    (pre-existing, found while adding a scenario).** In a `marketplace
+    update` cascade, a runner `failed` outcome with no typed reason goes
+    through `update.messaging.ts::narrowFailReason`, whose fallback is
+    `not in manifest`. A direct `update` of the same failure shows
+    `unreadable`. The scenario "A marketplace update with autoupdate on
+    reports a moved plugin that fails in its mcp phase under an update failed
+    header" pins today's value. Proposed as a backlog entry: carry typed
+    reasons on the runner's `failed` arm, then update that table cell.
 
 ## Docs note for CLN-03
 
