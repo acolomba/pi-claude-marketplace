@@ -116,7 +116,7 @@ async function listUnreferencedPluginClones(
  *      enforce NFR-10 BEFORE any delete) then `rm(dir, { recursive, force })`
  *      inside a try/catch that records `<key>: <message>` leaks (D-19-01 swallow).
  */
-export async function garbageCollectPluginClones(
+async function garbageCollectPluginClones(
   locations: ScopedLocations,
   keep: ReadonlySet<string> = new Set(),
 ): Promise<string[]> {

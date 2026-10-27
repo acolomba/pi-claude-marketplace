@@ -89,7 +89,7 @@ import { DEFAULT_CREDENTIAL_OPS, buildGitHubAuth } from "../auth-host.ts";
 import { DEFAULT_GIT_OPS, refreshGitHubClone, refreshUrlClone } from "../marketplace/shared.ts";
 import { marketplaceInOtherScope } from "../marketplace/shared.ts";
 
-import { garbageCollectPluginClones } from "./clone-gc.ts";
+import { collectPluginClonesLocked } from "./clone-gc.ts";
 import { materializeLatestVersion, recordCandidate } from "./materialize-latest.ts";
 import {
   emitMarketplaceNotAddedSignal,
@@ -273,7 +273,7 @@ function buildDirectThreePhaseArgs(
     // would be listed once per target instead of once per run.
     constraintTagMemo,
     constraintMarketplaceTagMemo,
-    cleanupClones: garbageCollectPluginClones,
+    cleanupClones: collectPluginClonesLocked,
     ...recordCandidate(report),
     notifyPhaseFailure: (error, failures) => {
       notifyDirectFailure({
@@ -675,7 +675,7 @@ async function updateSinglePluginWith(
     // and not beside the binding.
     constraintTagMemo: constraintMemos.tagMemo,
     constraintMarketplaceTagMemo: constraintMemos.marketplaceTagMemo,
-    cleanupClones: garbageCollectPluginClones,
+    cleanupClones: collectPluginClonesLocked,
   });
 }
 
@@ -701,7 +701,7 @@ function convergePluginWith(
     // D-26 / WCONV-01: only a record already installed partial admits a
     // partial candidate; a clean record's consent guard declines it.
     partial: target.partial,
-    cleanupClones: target.cleanupClones ?? garbageCollectPluginClones,
+    cleanupClones: target.cleanupClones ?? collectPluginClonesLocked,
   });
 }
 
