@@ -447,6 +447,9 @@ async function runInstallStage(
     } finally {
       // Claude Code ignores a failed removal too: a leftover work dir costs
       // disk only, and the install itself has already succeeded or failed.
+      // A run settled at its deadline may leave the package manager writing
+      // here; the removal then fails or races it, and the plugin root stays
+      // untouched, because a timed-out run moves nothing.
       await rm(workDir, { recursive: true, force: true }).catch(ignoreFailure);
     }
   } catch (error: unknown) {

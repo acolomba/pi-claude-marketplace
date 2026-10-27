@@ -25,7 +25,7 @@ interface PackageManagerProcessControl {
   writeStdout(text: string): void;
 }
 
-function createPackageManagerProcess(): PackageManagerProcessControl {
+function createPackageManagerProcess(pid?: number): PackageManagerProcessControl {
   const stdoutListeners: Array<(chunk: Buffer) => void> = [];
   const stderrListeners: Array<(chunk: Buffer) => void> = [];
   const errorListeners: Array<(error: Error) => void> = [];
@@ -33,6 +33,7 @@ function createPackageManagerProcess(): PackageManagerProcessControl {
   const signals: string[] = [];
   return {
     process: {
+      pid,
       stdout: {
         on: (_event, listener) => {
           stdoutListeners.push(listener);
@@ -268,6 +269,54 @@ test("sends SIGKILL when the process ignores SIGTERM for the grace period", asyn
 
   // assert
   assert.deepStrictEqual(kills, ["SIGTERM", "SIGKILL"]);
+  assert.deepStrictEqual(run, { code: null, stdout: "", stderr: "", timedOut: true });
+});
+
+test("settles the run one grace after SIGKILL when the process never closes", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const control = createPackageManagerProcess(42);
+  const runPackageManager = runnerFor(control);
+  let settled = false;
+
+  // act
+  const pending = runPackageManager(request);
+  void pending.then(() => {
+    settled = true;
+  });
+  control.writeStderr("still running");
+  t.mock.timers.tick(TIMEOUT_MS);
+  t.mock.timers.tick(KILL_GRACE_MS);
+  await Promise.resolve();
+  const settledBeforeDeadline = settled;
+  t.mock.timers.tick(KILL_GRACE_MS);
+  const run = await pending;
+
+  // assert
+  assert.strictEqual(settledBeforeDeadline, false);
+  assert.deepStrictEqual(control.kills(), ["SIGTERM", "SIGKILL"]);
+  assert.deepStrictEqual(run, {
+    code: null,
+    stdout: "",
+    stderr: "still running",
+    timedOut: true,
+  });
+});
+
+test("keeps a running process's run open when a signal cannot be sent to it", async (t) => {
+  // arrange
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const control = createPackageManagerProcess(42);
+  const runPackageManager = runnerFor(control);
+
+  // act
+  const pending = runPackageManager(request);
+  t.mock.timers.tick(TIMEOUT_MS);
+  control.fail(new Error("kill EPERM"));
+  control.close(null);
+  const run = await pending;
+
+  // assert
   assert.deepStrictEqual(run, { code: null, stdout: "", stderr: "", timedOut: true });
 });
 

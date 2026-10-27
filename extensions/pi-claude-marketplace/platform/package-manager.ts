@@ -4,6 +4,10 @@
 // install. The launcher, the timeout, the kill grace, and the environment are
 // parameters. A run never rejects for a process failure: a process that cannot
 // start, exits non-zero, or outlives the timeout resolves with what happened.
+// A run that outlives the timeout settles one kill grace after its SIGKILL
+// even when the process never closes, because a child it started may hold the
+// output pipes open, or the kill may fail. The process may then still be
+// running, so its work dir may be busy when the caller removes it.
 //
 // D-PL9-15: the argv passes through verbatim, with no shell. The child
 // environment adds `npm_config_update_notifier=false`, so npm neither asks the
@@ -21,6 +25,8 @@ import { spawn } from "node:child_process";
 
 /** The slice of Node's `ChildProcess` a run reads. */
 export interface PackageManagerProcess {
+  /** Absent when the process could not start. */
+  readonly pid?: number | undefined;
   readonly stdout: { on(event: "data", listener: (chunk: Buffer) => void): void };
   readonly stderr: { on(event: "data", listener: (chunk: Buffer) => void): void };
   kill(signal: "SIGTERM" | "SIGKILL"): boolean;
@@ -93,25 +99,32 @@ function appendCapped(captured: string, chunk: Buffer): string {
   return (captured + chunk.toString("utf8")).slice(0, OUTPUT_LIMIT);
 }
 
-// SIGTERM at the timeout, then SIGKILL once the grace runs out. Both timers
-// are unref'd so a pending one never keeps the Pi process alive. Returns the
-// function that cancels both.
+// SIGTERM at the timeout, SIGKILL once the grace runs out, and `abandon` one
+// more grace later. Every timer is unref'd so a pending one never keeps the Pi
+// process alive. Returns the function that cancels them all.
 function startKillTimers(
   child: PackageManagerProcess,
   options: PackageManagerRunnerOptions,
   captured: CapturedOutput,
+  abandon: () => void,
 ): () => void {
   let graceTimer: NodeJS.Timeout | undefined;
+  let deadlineTimer: NodeJS.Timeout | undefined;
   const timeoutTimer = setTimeout(() => {
     captured.timedOut = true;
     child.kill("SIGTERM");
-    graceTimer = setTimeout(() => child.kill("SIGKILL"), options.killGraceMs);
+    graceTimer = setTimeout(() => {
+      child.kill("SIGKILL");
+      deadlineTimer = setTimeout(abandon, options.killGraceMs);
+      deadlineTimer.unref();
+    }, options.killGraceMs);
     graceTimer.unref();
   }, options.timeoutMs);
   timeoutTimer.unref();
   return () => {
     clearTimeout(timeoutTimer);
     clearTimeout(graceTimer);
+    clearTimeout(deadlineTimer);
   };
 }
 
@@ -127,11 +140,13 @@ function watchProcess(
   child.stderr.on("data", (chunk: Buffer) => {
     captured.stderr = appendCapped(captured.stderr, chunk);
   });
-  const stopTimers = startKillTimers(child, options, captured);
   // Node emits `close` after `error` for a process that cannot start; the
   // first event settles the run and the rest are ignored.
   let settled = false;
-  const settle = (code: number | null, error?: Error): void => {
+  const stopTimers = startKillTimers(child, options, captured, () => {
+    settle(null);
+  });
+  function settle(code: number | null, error?: Error): void {
     if (settled) {
       return;
     }
@@ -139,10 +154,15 @@ function watchProcess(
     settled = true;
     stopTimers();
     resolve({ code, ...captured, ...(error !== undefined && { error }) });
-  };
+  }
 
+  // Node also emits `error` for a signal it could not send to a running
+  // process. That process is still running, so only a process that never
+  // started (no pid) settles here; the kill timers bound a running one.
   child.on("error", (error: Error) => {
-    settle(null, error);
+    if (child.pid === undefined) {
+      settle(null, error);
+    }
   });
   child.on("close", (code: number | null) => {
     settle(code);
