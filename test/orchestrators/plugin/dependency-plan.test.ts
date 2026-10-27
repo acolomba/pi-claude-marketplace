@@ -511,6 +511,28 @@ describe("planDependencyGraph", () => {
     });
   });
 
+  test("D-PL4-01: the plugin being installed is scheduled with the commit its own preview resolved", async () => {
+    // arrange
+    const rootCommit = "0123456789abcdef0123456789abcdef01234567";
+    const bound = ports({ walks: { "": graph([fresh("helper")], ["helper@mp"]) } });
+
+    // act
+    const plan = await planDependencyGraph(bound, { deferMoveDependencies: false, rootCommit });
+
+    // assert
+    assert.deepStrictEqual(plan, {
+      ok: true,
+      steps: [],
+      final: {
+        members: [
+          { kind: "install", member: member("helper") },
+          { kind: "install", member: { ...member("app"), previewedCommit: rootCommit } },
+        ],
+        alreadyInstalled: [],
+      },
+    });
+  });
+
   test("UPD-DEP-D1: refuses a dependency no version moves into range, before anything else is judged", async () => {
     // arrange
     const requesters: readonly GraphRequester[] = [

@@ -160,6 +160,12 @@ export interface DependencyPlanOptions {
    * installed reaches without passing a move. Only `apply` sets it.
    */
   readonly deferMoveDependencies: boolean;
+  /**
+   * D-PL4-01: the commit the preview of the plugin being installed resolved,
+   * which its member in `final` carries. Only an install sets it; an update's
+   * plan has no root.
+   */
+  readonly rootCommit?: string;
 }
 
 /** A move the plan chose: the request it judged and the candidate it lands. */
@@ -580,7 +586,14 @@ function schedule<P extends PlannedCandidate>(
     final: {
       members: [
         ...rest,
-        ...(graph.root === undefined ? [] : [{ kind: "install" as const, member: graph.root }]),
+        ...(graph.root === undefined
+          ? []
+          : [
+              {
+                kind: "install" as const,
+                member: withPreviewedCommit(graph.root, options.rootCommit),
+              },
+            ]),
       ],
       alreadyInstalled: graph.nodes.flatMap((node) =>
         node.kind === "recorded" &&
