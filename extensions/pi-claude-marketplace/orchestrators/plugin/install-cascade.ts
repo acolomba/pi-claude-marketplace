@@ -555,6 +555,20 @@ export interface InstallCascadeOptions {
   readonly marketplaceRecordFor?: CascadeMarketplaceLookup;
 }
 
+/**
+ * CAS-01 / D-PL3-01: the closure members this run would have materialized and
+ * did not, in the order the walk first looked them up. The root, the failing
+ * member, and the members a plan moves are never listed: each already has a
+ * row of its own.
+ *
+ * REQUIRED on every failure the cascade produces, on the D-07 rationale of
+ * `CascadeMemberOutcome.fellBackToCurrentCopy`: a producer that omits it is a
+ * compile error rather than a silently missing row.
+ */
+export interface Unmaterialized {
+  readonly unmaterialized: readonly string[];
+}
+
 /** The cascade's outcome. */
 export type InstallCascadeResult =
   | {
@@ -590,9 +604,12 @@ export type InstallCascadeResult =
   | { readonly kind: "marketplace-absent" }
   | {
       readonly kind: "closure-failed";
-      readonly failure: Extract<DependencyClosureResult, { readonly ok: false }>;
+      readonly failure: Extract<DependencyClosureResult, { readonly ok: false }> & Unmaterialized;
     }
-  | { readonly kind: "constraint-failed"; readonly failure: CascadeConstraintFailure }
+  | {
+      readonly kind: "constraint-failed";
+      readonly failure: CascadeConstraintFailure & Unmaterialized;
+    }
   | {
       readonly kind: "member-failed";
       readonly key: string;
@@ -1532,6 +1549,7 @@ function plannedCascade(options: InstallCascadeOptions, planned: PlannedClosure)
 async function resolveCascade(
   options: InstallCascadeOptions,
   moveOutOfRange: boolean,
+  declared: DeclaredEdges,
 ): Promise<ResolvedCascade | CascadeResolutionFailure> {
   if (options.planned !== undefined) {
     return plannedCascade(options, options.planned);
@@ -1549,7 +1567,7 @@ async function resolveCascade(
   const walls = options.treatDisabledAsWall === true ? options.installedKeys : live;
   const closure = await resolveDependencyClosure({
     rootKey: options.rootKey,
-    lookup: options.lookup,
+    lookup: recordingLookup(options.lookup, declared),
     installedKeys: new Set([...walls].filter((key) => !readThrough.has(key))),
     knownMarketplaces: options.knownMarketplaces,
     // XMKT-02: only an enabled record is exempt from the root's allowlist, as
@@ -1561,7 +1579,11 @@ async function resolveCascade(
     },
   });
   if (!closure.ok) {
-    return { kind: "closure-failed", failure: closure };
+    const failing = closure.reason === "cycle" ? closure.chain.slice(-1) : [closure.key];
+    return {
+      kind: "closure-failed",
+      failure: { ...closure, ...unmaterialized(options.rootKey, failing, declared, readThrough) },
+    };
   }
 
   // RESV-03 / RESV-05: decided here, between the walk and the phase array, so
@@ -1590,7 +1612,14 @@ async function resolveCascade(
     }),
   });
   if (!constraints.ok) {
-    return { kind: "constraint-failed", failure: constraints.failure };
+    const failing = [constraints.failure.key];
+    return {
+      kind: "constraint-failed",
+      failure: {
+        ...constraints.failure,
+        ...unmaterialized(options.rootKey, failing, declared, readThrough),
+      },
+    };
   }
 
   return {
@@ -1658,7 +1687,7 @@ async function materializeCascade(
 export async function runInstallCascade(
   options: InstallCascadeOptions,
 ): Promise<RootCascadeResult> {
-  const resolved = await resolveCascade(options, false);
+  const resolved = await resolveCascade(options, false, new Map());
   return resolved.kind === "resolved"
     ? rootCascadeResult(options, await materializeCascade(options, resolved, false))
     : resolved;
@@ -1671,7 +1700,7 @@ export async function runInstallCascade(
 export async function runInstallCascadeOrPlanMoves(
   options: InstallCascadeOptions,
 ): Promise<RootCascadeResult | CascadePlan> {
-  const resolved = await resolveCascade(options, true);
+  const resolved = await resolveCascade(options, true, new Map());
   if (resolved.kind !== "resolved") {
     return resolved;
   }
@@ -1689,7 +1718,7 @@ export async function runInstallCascadeOrPlanMoves(
 export async function runDependencyCascade(
   options: InstallCascadeOptions,
 ): Promise<DependencyCascadeResult> {
-  const resolved = await resolveCascade(options, false);
+  const resolved = await resolveCascade(options, false, new Map());
   return resolved.kind === "resolved"
     ? dependencyCascadeResult(options, await materializeCascade(options, resolved, true))
     : resolved;
@@ -1702,7 +1731,7 @@ export async function runDependencyCascade(
 export async function runDependencyCascadeOrPlanMoves(
   options: InstallCascadeOptions,
 ): Promise<DependencyCascadeResult | CascadePlan> {
-  const resolved = await resolveCascade(options, true);
+  const resolved = await resolveCascade(options, true, new Map());
   if (resolved.kind !== "resolved") {
     return resolved;
   }
@@ -1714,6 +1743,41 @@ export async function runDependencyCascadeOrPlanMoves(
 
 /** UPD-DEP-D1: what each plugin the walk read declares, by key. */
 type DeclaredEdges = Map<string, readonly { readonly key: string; readonly range?: string }[]>;
+
+/** Wraps `lookup` so every plugin it finds lands in `declared` with its declarations. */
+function recordingLookup(lookup: ClosureLookup, declared: DeclaredEdges): ClosureLookup {
+  return async (subject) => {
+    const looked = await lookup(subject);
+    if (looked.kind === "found") {
+      declared.set(
+        subject.key,
+        looked.dependencies.map((dependency) => ({
+          key: `${dependency.name}@${dependency.marketplace ?? subject.marketplace}`,
+          ...(dependency.version !== undefined && { range: dependency.version }),
+        })),
+      );
+    }
+
+    return looked;
+  };
+}
+
+/**
+ * CAS-01 / D-PL3-01: every plugin the walk found before it failed, minus the
+ * root, the failing member, and the members a plan moves (`Unmaterialized`).
+ */
+function unmaterialized(
+  rootKey: string,
+  failing: readonly string[],
+  declared: DeclaredEdges,
+  readThrough: ReadonlySet<string>,
+): Unmaterialized {
+  return {
+    unmaterialized: [...declared.keys()].filter(
+      (key) => key !== rootKey && !failing.includes(key) && !readThrough.has(key),
+    ),
+  };
+}
 
 /** Every plugin the walk read that declares `key`, with the ranges it declares, in walk order. */
 function requestersOf(declared: DeclaredEdges, key: string): GraphRequester[] {
@@ -1801,26 +1865,7 @@ export async function walkDependencyGraph(
   options: InstallCascadeOptions,
 ): Promise<DependencyGraph | GraphWalkFailure> {
   const declared: DeclaredEdges = new Map();
-  const resolved = await resolveCascade(
-    {
-      ...options,
-      lookup: async (subject) => {
-        const looked = await options.lookup(subject);
-        if (looked.kind === "found") {
-          declared.set(
-            subject.key,
-            looked.dependencies.map((dependency) => ({
-              key: `${dependency.name}@${dependency.marketplace ?? subject.marketplace}`,
-              ...(dependency.version !== undefined && { range: dependency.version }),
-            })),
-          );
-        }
-
-        return looked;
-      },
-    },
-    true,
-  );
+  const resolved = await resolveCascade(options, true, declared);
   if (resolved.kind !== "resolved") {
     return { ...resolved, declarers: failureDeclarers(resolved, declared) };
   }

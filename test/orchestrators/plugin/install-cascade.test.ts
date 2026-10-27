@@ -479,7 +479,7 @@ test("a materialized member's outcome carries what its own ledger summary report
   );
 });
 
-test("RESV-06 a closure failure materializes nothing and returns the failure verbatim", async (t) => {
+test("RESV-06 a closure failure materializes nothing and returns the walk's failure", async (t) => {
   // arrange
   const environment = await createHermeticEnvironment(t, "install-cascade-closure-");
   const state = await seedMarketplace(environment.cwd, ["foo"]);
@@ -506,10 +506,152 @@ test("RESV-06 a closure failure materializes nothing and returns the failure ver
       reason: "not-found",
       key: `ghost@${MARKETPLACE}`,
       requiredBy: `foo@${MARKETPLACE}`,
+      unmaterialized: [],
     },
   });
   assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
 });
+
+const key = (name: string): string => `${name}@${MARKETPLACE}`;
+
+for (const { label, root, plugins, graph, recorded, readThrough, expected } of [
+  {
+    label: "a walk failure below a found dependency lists that dependency",
+    root: "app",
+    plugins: ["app", "lib"],
+    graph: { [key("app")]: [{ name: "lib" }], [key("lib")]: [{ name: "base" }] },
+    recorded: [],
+    readThrough: [],
+    expected: {
+      kind: "closure-failed",
+      failure: {
+        ok: false,
+        reason: "not-found",
+        key: key("base"),
+        requiredBy: key("lib"),
+        unmaterialized: [key("lib")],
+      },
+    },
+  },
+  {
+    label: "a cycle lists every chain member but the root and the key that closes it",
+    root: "helper",
+    plugins: ["formatter", "helper", "linter"],
+    graph: {
+      [key("helper")]: [{ name: "formatter" }],
+      [key("formatter")]: [{ name: "linter" }],
+      [key("linter")]: [{ name: "formatter" }],
+    },
+    recorded: [],
+    readThrough: [],
+    expected: {
+      kind: "closure-failed",
+      failure: {
+        ok: false,
+        reason: "cycle",
+        chain: [key("helper"), key("formatter"), key("linter"), key("formatter")],
+        unmaterialized: [key("linter")],
+      },
+    },
+  },
+  {
+    label: "a constraint failure lists the dependency that declared the other range",
+    root: "app",
+    plugins: ["app", "lib", "mid"],
+    graph: {
+      [key("app")]: [{ name: "lib", version: "^1.0.0" }, { name: "mid" }],
+      [key("mid")]: [{ name: "lib", version: "^2.0.0" }],
+      [key("lib")]: [],
+    },
+    recorded: [],
+    readThrough: [],
+    expected: {
+      kind: "constraint-failed",
+      failure: {
+        kind: "range-conflict",
+        why: "contradictory-declarations",
+        key: key("lib"),
+        range: "^1.0.0, ^2.0.0",
+        detail: "no version satisfies all 2 declared ranges",
+        unmaterialized: [key("mid")],
+      },
+    },
+  },
+  {
+    label: "an enabled recorded dependency the walk stops at is not listed",
+    root: "app",
+    plugins: ["app", "bar", "lib"],
+    graph: {
+      [key("app")]: [{ name: "bar" }, { name: "lib" }],
+      [key("bar")]: [],
+      [key("lib")]: [{ name: "base" }],
+    },
+    recorded: ["bar"],
+    readThrough: [],
+    expected: {
+      kind: "closure-failed",
+      failure: {
+        ok: false,
+        reason: "not-found",
+        key: key("base"),
+        requiredBy: key("lib"),
+        unmaterialized: [key("lib")],
+      },
+    },
+  },
+  {
+    label: "a recorded dependency a plan moves is not listed",
+    root: "app",
+    plugins: ["app", "bar", "lib"],
+    graph: {
+      [key("app")]: [{ name: "bar" }, { name: "lib" }],
+      [key("bar")]: [],
+      [key("lib")]: [{ name: "base" }],
+    },
+    recorded: ["bar"],
+    readThrough: ["bar"],
+    expected: {
+      kind: "closure-failed",
+      failure: {
+        ok: false,
+        reason: "not-found",
+        key: key("base"),
+        requiredBy: key("lib"),
+        unmaterialized: [key("lib")],
+      },
+    },
+  },
+] satisfies readonly {
+  label: string;
+  root: string;
+  plugins: readonly string[];
+  graph: Graph;
+  recorded: readonly string[];
+  readThrough: readonly string[];
+  expected: InstallCascadeResult;
+}[]) {
+  test(`CAS-01 / D-PL3-01 ${label}`, async (t) => {
+    // arrange
+    const environment = await createHermeticEnvironment(t, "install-cascade-unmaterialized-");
+    const state = await seedMarketplace(environment.cwd, plugins, { preinstalled: recorded });
+
+    // act
+    const cascade = await runInstallCascade({
+      state,
+      locations: locationsFor("project", environment.cwd),
+      rootKey: key(root),
+      lookup: catalog(graph),
+      ledgerOptionsFor: ledgerOptionsFor(environment.cwd),
+      rootAllowedMarketplaces: new Set<string>(),
+      installedKeys: new Set(recorded.map(key)),
+      readThrough: new Set(readThrough.map(key)),
+      knownMarketplaces: new Set([MARKETPLACE]),
+    });
+
+    // assert
+    assert.deepStrictEqual(cascade, expected);
+  });
+}
 
 test("a member whose marketplace is absent reports the marketplace, not a plugin failure", async (t) => {
   // arrange: an empty snapshot, so the requested plugin's own ledger misses its
@@ -1183,7 +1325,10 @@ for (const { label, declared, expected } of [
     });
 
     // assert
-    assert.deepStrictEqual(cascade, { kind: "constraint-failed", failure: expected });
+    assert.deepStrictEqual(cascade, {
+      kind: "constraint-failed",
+      failure: { ...expected, unmaterialized: [] },
+    });
     assert.deepStrictEqual(seen, []);
     assert.deepStrictEqual(
       await twoScopeFootprint(environment.cwd, state),
@@ -1228,6 +1373,7 @@ test("T-03-19 a declaration past the input-size cap fails as too complex with no
         key: `bar@${MARKETPLACE}`,
         range: `${wide.slice(0, 200)}... (+${(wide.length - 200).toString()} chars)`,
         detail: `total input ${wide.length.toString()} characters exceeds the 4096 character cap`,
+        unmaterialized: [],
       },
     },
     "the reported constraint is bounded, so a wide range cannot flood a row",
@@ -1536,6 +1682,7 @@ test("D-09-05 / T-06-10: contradictory root ranges fail the cascade as a range c
       key: `bar@${MARKETPLACE}`,
       range: ">=2.0.0, <1.0.0",
       detail: "no version satisfies all 2 declared ranges",
+      unmaterialized: [],
     },
   });
   assert.deepStrictEqual(seen, [], "the fold fails before any query is made");
@@ -1994,7 +2141,12 @@ test("RESV-03 a constrained dependency whose marketplace entry is npm-sourced re
   // assert
   assert.deepStrictEqual(cascade, {
     kind: "constraint-failed",
-    failure: { kind: "no-matching-tag", key: `bar@${MARKETPLACE}`, range: "^1.0.0" },
+    failure: {
+      kind: "no-matching-tag",
+      key: `bar@${MARKETPLACE}`,
+      range: "^1.0.0",
+      unmaterialized: [],
+    },
   });
 });
 
@@ -2109,6 +2261,7 @@ test("RESV-03 a no-matching-tag answer fails the cascade with the constraint nam
       kind: "no-matching-tag",
       key: `bar@${MARKETPLACE}`,
       range: "^3.0.0",
+      unmaterialized: [],
     },
   });
   assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
@@ -2148,6 +2301,7 @@ test("RESV-03 a listing failure surfaces as its own arm carrying the transport c
       key: `bar@${MARKETPLACE}`,
       range: "^1.0.0",
       classification: "network unreachable",
+      unmaterialized: [],
     },
   });
 });
@@ -2203,7 +2357,12 @@ for (const { label, pluginNames, gitSourced, knownMarketplaces, dependencyMarket
     // parsed and no fallthrough to a repository head.
     assert.deepStrictEqual(cascade, {
       kind: "constraint-failed",
-      failure: { kind: "no-matching-tag", key: dependencyKey, range: "^1.0.0" },
+      failure: {
+        kind: "no-matching-tag",
+        key: dependencyKey,
+        range: "^1.0.0",
+        unmaterialized: [],
+      },
     });
     assert.deepStrictEqual(
       seen,
@@ -2384,6 +2543,7 @@ test("D-09-04 / RESV-05: a walled disabled record still answers to the root's co
       key: `bar@${MARKETPLACE}`,
       range: "^2.0.0",
       recordedVersion: "0.0.1",
+      unmaterialized: [],
     },
   });
   assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
@@ -2524,6 +2684,7 @@ test("CR-07: a disabled dependency absent from its own manifest fails closed nam
     reason: "not-found",
     key: `qux@${MARKETPLACE}`,
     requiredBy: `foo@${MARKETPLACE}`,
+    unmaterialized: [`bar@${MARKETPLACE}`, `baz@${MARKETPLACE}`],
   });
   assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.bar?.enabled, false);
   assert.strictEqual(state.marketplaces[MARKETPLACE]?.plugins.baz?.enabled, false);
@@ -2780,6 +2941,7 @@ test("RESV-05 / EDEP-03 a disabled dependency's recorded version answers to a co
       key: `baz@${MARKETPLACE}`,
       range: "^1.0.0",
       recordedVersion: "0.0.1",
+      unmaterialized: [`bar@${MARKETPLACE}`],
     },
   });
   assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
@@ -2823,6 +2985,7 @@ test("RESV-03 / EDEP-03 contradictory ranges two disabled dependencies declare o
       key: `qux@${MARKETPLACE}`,
       range: "^1.0.0, ^2.0.0",
       detail: "no version satisfies all 2 declared ranges",
+      unmaterialized: [`bar@${MARKETPLACE}`, `baz@${MARKETPLACE}`],
     },
   });
   assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
@@ -2862,6 +3025,7 @@ test("EDEP-03 a disabled dependency declaring a plugin its marketplace does not 
       reason: "not-found",
       key: `qux@${MARKETPLACE}`,
       requiredBy: `bar@${MARKETPLACE}`,
+      unmaterialized: [`bar@${MARKETPLACE}`],
     },
   });
   assert.deepStrictEqual(await twoScopeFootprint(environment.cwd, state), before);
@@ -2914,6 +3078,7 @@ test("XMKT-02 a recorded disabled foreign dependency needs the root marketplace'
       requiredBy: `foo@${MARKETPLACE}`,
       marketplace: "beta",
       rootMarketplace: MARKETPLACE,
+      unmaterialized: [],
     },
   });
   assert.deepStrictEqual(seen, []);
@@ -3362,6 +3527,7 @@ test("EDEP-03 a constraint conflict on a disabled already-installed member fails
       key: `bar@${MARKETPLACE}`,
       range: "^2.0.0",
       recordedVersion: "1.0.0",
+      unmaterialized: [],
     },
   });
   assert.deepStrictEqual(await twoScopeFootprint(environmentCwd, state), before);
@@ -3785,6 +3951,7 @@ for (const { label, declared, recorded, expectedRange } of [
         key: `bar@${MARKETPLACE}`,
         range: expectedRange,
         recordedVersion: recorded,
+        unmaterialized: [],
       },
     });
     assert.deepStrictEqual(seen, [], "an already-installed member is never queried for tags");
@@ -3859,6 +4026,7 @@ test("RESV-05 an already-installed dependency's contradictory declarations fail 
       key: `shared@${MARKETPLACE}`,
       range: "^1.0.0, ^2.0.0",
       detail: "no version satisfies all 2 declared ranges",
+      unmaterialized: [`left@${MARKETPLACE}`, `right@${MARKETPLACE}`],
     },
   });
   assert.deepStrictEqual(seen, []);
@@ -3897,6 +4065,7 @@ test("INR-05 a conflict names each declared range apart, so a range with || keep
       key: `shared@${MARKETPLACE}`,
       range: "^1.0.0 || ^2.0.0, ^3.0.0",
       detail: "no version satisfies all 2 declared ranges",
+      unmaterialized: [`left@${MARKETPLACE}`, `right@${MARKETPLACE}`],
     },
   });
 });
@@ -3943,7 +4112,10 @@ for (const { label, probed, failure } of [
     });
 
     // assert
-    assert.deepStrictEqual(cascade, { kind: "constraint-failed", failure });
+    assert.deepStrictEqual(cascade, {
+      kind: "constraint-failed",
+      failure: { ...failure, unmaterialized: [] },
+    });
   });
 }
 
@@ -4007,11 +4179,16 @@ test("UPD-DEP-D1: a cascade that may plan moves: a fresh member that cannot reso
   // assert
   assert.deepStrictEqual(cascade, {
     kind: "constraint-failed",
-    failure: { kind: "no-matching-tag", key: `baz@${MARKETPLACE}`, range: "^1.0.0" },
+    failure: {
+      kind: "no-matching-tag",
+      key: `baz@${MARKETPLACE}`,
+      range: "^1.0.0",
+      unmaterialized: [],
+    },
   });
 });
 
-for (const { label, declared, failure } of [
+for (const { label, declared, failure, unmaterialized } of [
   {
     label: "contradictory declarations",
     declared: [
@@ -4025,6 +4202,7 @@ for (const { label, declared, failure } of [
       range: "^1.0.0, ^2.0.0",
       detail: "no version satisfies all 2 declared ranges",
     },
+    unmaterialized: [`left@${MARKETPLACE}`, `right@${MARKETPLACE}`],
   },
   {
     label: "an unparseable declaration",
@@ -4035,11 +4213,13 @@ for (const { label, declared, failure } of [
       range: "not-a-range",
       detail: "input 1 of 1 is not a valid version range",
     },
+    unmaterialized: [`left@${MARKETPLACE}`],
   },
 ] satisfies readonly {
   label: string;
   declared: readonly { readonly name: string; readonly version: string }[];
   failure: CascadeConstraintFailure;
+  unmaterialized: readonly string[];
 }[]) {
   test(`UPD-DEP-D1: a cascade that may plan moves: a recorded member with ${label} still fails the cascade`, async (t) => {
     // arrange
@@ -4070,7 +4250,10 @@ for (const { label, declared, failure } of [
     });
 
     // assert
-    assert.deepStrictEqual(cascade, { kind: "constraint-failed", failure });
+    assert.deepStrictEqual(cascade, {
+      kind: "constraint-failed",
+      failure: { ...failure, unmaterialized },
+    });
   });
 }
 
@@ -4524,7 +4707,13 @@ test("CAS-02: a graph walk of a listed root whose id breaks the token rule fails
     [
       "closure-failed",
       [],
-      { ok: false, reason: "invalid-root-id", key: `_app@${MARKETPLACE}`, invalidPart: "plugin" },
+      {
+        ok: false,
+        reason: "invalid-root-id",
+        key: `_app@${MARKETPLACE}`,
+        invalidPart: "plugin",
+        unmaterialized: [],
+      },
     ],
   );
 });

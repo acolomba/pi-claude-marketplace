@@ -10,7 +10,11 @@ import { companionSeverity, skipSeverity } from "../../shared/notify-reasons.ts"
 
 import { INSTALL_CONTEXT } from "./install.messaging.ts";
 
-import type { CascadeConstraintFailure, CascadeSkippedMember } from "./install-cascade.ts";
+import type {
+  CascadeConstraintFailure,
+  CascadeSkippedMember,
+  Unmaterialized,
+} from "./install-cascade.ts";
 import type { InstallMsg } from "./install.messaging.ts";
 import type { DependencyClosureResult } from "../../domain/dependency-closure.ts";
 import type { SoftDepStatus } from "../../platform/pi-api.ts";
@@ -57,7 +61,10 @@ import type { UpdateDependencyRow } from "../types.ts";
  *   Failure attribution (RESV-06). The row carrying the reason is the
  *   DEPENDENCY's. The requesting plugin still gets its own row, stamped
  *   `{dependency failed}`, so the command the user typed is visibly accounted
- *   for instead of vanishing behind a dependency's name.
+ *   for instead of vanishing behind a dependency's name. Every other member
+ *   the install would have installed and did not gets the same
+ *   `{dependency failed}` row with no cause, as Claude Code names every member
+ *   on success (CAS-01, D-PL3-02).
  *
  * Every value a row interpolates is a token-allowlisted plugin key, a bounded
  * rendered constraint, a recorded version, a validator field path, or a
@@ -143,13 +150,21 @@ export interface CascadeInstalledRow {
  * text rendering of it, so its cause chain reaches the user intact -- the row is
  * reporting exactly the failure a single-plugin install of that dependency would
  * have reported.
+ *
+ * A `closure` or `constraint` failure may list the members the install would
+ * have installed and did not (CAS-01). The list is optional here because a
+ * subject built outside the cascade has none to give.
  */
 export type CascadeFailureSubject =
   | {
       readonly kind: "closure";
-      readonly failure: Extract<DependencyClosureResult, { readonly ok: false }>;
+      readonly failure: Extract<DependencyClosureResult, { readonly ok: false }> &
+        Partial<Unmaterialized>;
     }
-  | { readonly kind: "constraint"; readonly failure: CascadeConstraintFailure }
+  | {
+      readonly kind: "constraint";
+      readonly failure: CascadeConstraintFailure & Partial<Unmaterialized>;
+    }
   | {
       readonly kind: "member";
       readonly key: string;
@@ -549,14 +564,42 @@ export function cascadeFailureCause(subject: CascadeFailureSubject, rootKey: str
   return failureFacts(subject, rootKey).cause;
 }
 
+/** CAS-01: the members a subject lists as never installed; none when it carries no list. */
+function unmaterializedOf(subject: CascadeFailureSubject): readonly string[] {
+  return subject.kind === "member" ? [] : (subject.failure.unmaterialized ?? []);
+}
+
+/**
+ * CAS-01 / D-PL3-02: one cause-less `{dependency failed}` row per member the
+ * install would have installed and did not, the failing member and the root
+ * excluded because each already has its row.
+ */
+function unmaterializedRows(
+  subject: CascadeFailureSubject,
+  failingKey: string,
+  rootKey: string,
+): PluginFailedMessage[] {
+  return unmaterializedOf(subject)
+    .filter((key) => key !== failingKey && key !== rootKey)
+    .map((key) => ({
+      status: "failed",
+      name: key,
+      reasons: ["dependency failed"],
+      severity: "error",
+      needsReload: false,
+    }));
+}
+
 /**
  * RESV-06: the failing dependency as the row's subject, with the requesting
- * plugin's own row beside it.
+ * plugin's own row beside it, and a `{dependency failed}` row with no cause for
+ * every other member the install would have installed and did not (CAS-01,
+ * D-PL3-01).
  *
- * The second row is omitted when the failing subject IS the requesting plugin
- * (an unusable declaration on its own manifest, or its own ledger throwing),
- * because there is no dependency to distinguish it from and one subject cannot
- * be the reason for itself.
+ * The requesting plugin's second row is omitted when the failing subject IS
+ * the requesting plugin (an unusable declaration on its own manifest, or its
+ * own ledger throwing), because there is no dependency to distinguish it from
+ * and one subject cannot be the reason for itself.
  */
 export function composeCascadeFailureMessage(args: {
   readonly scope: Scope;
@@ -581,8 +624,9 @@ export function composeCascadeFailureMessage(args: {
     severity: "error",
     needsReload: false,
   };
+  const members = unmaterializedRows(args.subject, facts.key, args.rootKey);
   if (isRoot) {
-    return [failed];
+    return sortRows([failed, ...members], args.scope);
   }
 
   const root: PluginFailedMessage = {
@@ -592,5 +636,5 @@ export function composeCascadeFailureMessage(args: {
     severity: "error",
     needsReload: false,
   };
-  return sortRows([failed, root], args.scope);
+  return sortRows([failed, root, ...members], args.scope);
 }

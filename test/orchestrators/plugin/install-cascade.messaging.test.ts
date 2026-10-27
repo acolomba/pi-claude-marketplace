@@ -1152,6 +1152,102 @@ describe("composeCascadeFailureMessage", () => {
       ].join("\n"),
     });
   });
+
+  test("CAS-01 / D-PL3-02 a walk failure gives each listed dependency a cause-less dependency-failed row", () => {
+    // arrange: the list also names the failing key and the root, which keep
+    // their own rows and get no second one.
+    const subject: CascadeFailureSubject = {
+      kind: "closure",
+      failure: {
+        ok: false,
+        reason: "not-found",
+        key: "base@tools",
+        requiredBy: "lib@tools",
+        unmaterialized: ["lib@tools", "base@tools", ROOT_KEY],
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ base@tools (failed) {not in manifest}",
+        '    cause: Dependency "base@tools" is not declared by its marketplace.',
+        "  ⊘ helper (failed) {dependency failed}",
+        "  ⊘ lib@tools (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("CAS-01 / D-PL3-02 a constraint failure gives each listed dependency a dependency-failed row in name order", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "contradictory-declarations",
+        key: "lib@tools",
+        range: "^1.0.0, ^2.0.0",
+        detail: "no version satisfies all 2 declared ranges",
+        unmaterialized: ["mid@tools", "aux@tools"],
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ aux@tools (failed) {dependency failed}",
+        "  ⊘ helper (failed) {dependency failed}",
+        "  ⊘ lib@tools (failed) {version conflict}",
+        '    cause: Dependency "lib@tools" has contradictory version constraints ^1.0.0, ^2.0.0 (no version satisfies all 2 declared ranges).',
+        "  ⊘ mid@tools (failed) {dependency failed}",
+      ].join("\n"),
+    });
+  });
+
+  test("CAS-01 a failure of the requesting plugin itself renders its row beside the listed dependencies", () => {
+    // arrange
+    const subject: CascadeFailureSubject = {
+      kind: "constraint",
+      failure: {
+        kind: "range-conflict",
+        why: "contradictory-declarations",
+        key: ROOT_KEY,
+        range: ">=2.0.0, <1.0.0",
+        detail: "no version satisfies all 2 declared ranges",
+        unmaterialized: ["formatter@tools"],
+      },
+    };
+
+    // act
+    const emitted = emit(failureRows(subject), PROBE_BOTH_LOADED);
+
+    // assert
+    assert.deepStrictEqual(emitted, {
+      severity: "error",
+      message: [
+        "Some plugin operations have failed.",
+        "",
+        "● official [user]",
+        "  ⊘ formatter@tools (failed) {dependency failed}",
+        "  ⊘ helper (failed) {version conflict}",
+        '    cause: Dependency "helper@official" has contradictory version constraints >=2.0.0, <1.0.0 (no version satisfies all 2 declared ranges).',
+      ].join("\n"),
+    });
+  });
 });
 
 describe("cascadeFailureCause", () => {

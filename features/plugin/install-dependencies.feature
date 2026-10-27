@@ -86,6 +86,7 @@ Feature: Plugin install dependencies
       | marketplace name | marketplace scope | id         | name       | status | reasons           | scope   | cause chain                                                 | cause truncated | leaks | rollback partial |
       | tools            | project           | app@tools  | app        | failed | dependency failed | project |                                                             |                 |       |                  |
       | tools            | project           | base@tools | base@tools | failed | not in manifest   | project | Dependency "base@tools" is not declared by its marketplace. | false           |       |                  |
+      | tools            | project           | lib@tools  | lib@tools  | failed | dependency failed | project |                                                             |                 |       |                  |
     Then the project scope has no installed plugins
     Then the "claude-plugins.json" file of the project scope declares no plugins
 
@@ -140,6 +141,7 @@ Feature: Plugin install dependencies
       | marketplace name | marketplace scope | id        | name      | status | reasons           | scope   | cause chain                                                                                                               | cause truncated | leaks | rollback partial |
       | tools            | project           | app@tools | app       | failed | dependency failed | project |                                                                                                                           |                 |       |                  |
       | tools            | project           | lib@tools | lib@tools | failed | version conflict  | project | Dependency "lib@tools" has contradictory version constraints ^1.0.0, ^2.0.0 (no version satisfies all 2 declared ranges). | false           |       |                  |
+      | tools            | project           | mid@tools | mid@tools | failed | dependency failed | project |                                                                                                                           |                 |       |                  |
     Then the project scope has no installed plugins
     Then the "claude-plugins.json" file of the project scope declares no plugins
 

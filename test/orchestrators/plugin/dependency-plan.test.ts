@@ -96,6 +96,7 @@ function contradiction(declarers: readonly string[]): GraphWalkFailure {
       key: "fff@mp",
       range: "^1.0.0, ^2.0.0",
       detail: "no version satisfies all 2 declared ranges",
+      unmaterialized: [],
     },
     declarers,
   };
@@ -449,7 +450,12 @@ describe("planDependencyGraph", () => {
 
   test("UPD-DEP-D1: refuses a closure the walk cannot resolve", async () => {
     // arrange
-    const failure = { ok: false, reason: "cycle", chain: ["app@mp", "aaa@mp", "app@mp"] } as const;
+    const failure = {
+      ok: false,
+      reason: "cycle",
+      chain: ["app@mp", "aaa@mp", "app@mp"],
+      unmaterialized: [],
+    } as const;
     const bound = ports({ walks: { "": { kind: "closure-failed", failure, declarers: [] } } });
 
     // act
