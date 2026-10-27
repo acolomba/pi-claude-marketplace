@@ -111,6 +111,7 @@ import { seedSameRepoPluginMirrors } from "../plugin/clone-cache.ts";
 import { ADD_CONTEXT } from "./add.messaging.ts";
 import {
   DEFAULT_GIT_OPS,
+  fsErrnoReason,
   marketplaceFailureRows,
   recordedManifestPath,
   type GitAuthBundle,
@@ -331,11 +332,19 @@ export function classifyAddError(rawErr: unknown): ContentReason | undefined {
   return err instanceof Error ? errorAddReason(err) : undefined;
 }
 
-/** The `classifyAddError` reason of an errno-bearing or git clone error. */
+/**
+ * The `classifyAddError` reason of an errno-bearing or git clone error.
+ *
+ * D-PL5-18: the errno half is `fsErrnoReason`, the mapping `list` and `info`
+ * read, so a manifest path that is a directory reads `unreadable`. Its
+ * `permission denied` result is dropped here: MPA-02 confines that token to
+ * the manifest read (`ManifestReadDeniedError`), so a refused state or config
+ * write keeps its own error.
+ */
 function errorAddReason(err: Error): ContentReason | undefined {
-  const code = (err as NodeJS.ErrnoException).code;
-  if (code === "ENOENT" || code === "ENOTDIR") {
-    return "source missing";
+  const errnoReason = fsErrnoReason((err as NodeJS.ErrnoException).code);
+  if (errnoReason === "source missing" || errnoReason === "unreadable") {
+    return errnoReason;
   }
 
   // GAUTH-02 / D-76-09: delegate git clone errors to the source-access

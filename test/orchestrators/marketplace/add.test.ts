@@ -2566,6 +2566,40 @@ test("ATTR-07: a missing path source (ENOENT) renders (failed) {source missing}"
   });
 });
 
+test("D-PL5-18: a path marketplace whose manifest is a directory renders (failed) {unreadable}", async () => {
+  await withTmpScope(async ({ cwd, locations }) => {
+    // arrange
+    const marketplaceRoot = path.join(cwd, "dir-manifest");
+    await mkdir(path.join(marketplaceRoot, ".claude-plugin", "marketplace.json"), {
+      recursive: true,
+    });
+    const { ctx, run, notifications } = makeCtx();
+    const { gitOps, state } = createGitOps();
+
+    // act
+    const outcome = await addMarketplace({
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      rawSource: marketplaceRoot,
+      gitOps,
+    });
+
+    // assert
+    assert.strictEqual(outcome, undefined);
+    assert.deepStrictEqual(notifications, [
+      {
+        message: `A marketplace operation has failed.\n\n⊘ ${marketplaceRoot} [project] (failed) {unreadable}`,
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual((await loadState(locations.extensionRoot)).marketplaces, {});
+    assert.strictEqual(await pathExists(locations.baseConfigJsonPath), false);
+    assert.deepStrictEqual(state.cloneCalls, []);
+  });
+});
+
 test("MPA-01 (path source): a same-source add in the same scope is skipped as already added", async () => {
   await withTmpScope(async ({ cwd }) => {
     // arrange
@@ -3836,7 +3870,7 @@ test("WR-07: config write failure after the clone rename cleans up the final clo
 test("cleans a URL clone after state-save failure and a second invocation converges", async () => {
   await withTmpScope(async ({ cwd, locations }) => {
     // arrange
-    const firstBoundary = makeCtx(0);
+    const firstBoundary = makeCtx();
     const firstGit = createGitOps({
       fixtureSourceDir: fixtureMarketplaceDir("valid-marketplace"),
       onClone: async () => {
@@ -3844,22 +3878,17 @@ test("cleans a URL clone after state-save failure and a second invocation conver
       },
     });
     const firstCache = createCompletionCacheRecorder();
-    let firstError: unknown;
 
     // act
-    try {
-      await addMarketplaceWithCache({
-        ctx: firstBoundary.ctx,
-        run: firstBoundary.run,
-        scope: "project",
-        cwd,
-        rawSource: "https://gitlab.example.com/team/mp",
-        gitOps: firstGit.gitOps,
-        completionCache: firstCache.cache,
-      });
-    } catch (error) {
-      firstError = error;
-    }
+    const firstOutcome = await addMarketplaceWithCache({
+      ctx: firstBoundary.ctx,
+      run: firstBoundary.run,
+      scope: "project",
+      cwd,
+      rawSource: "https://gitlab.example.com/team/mp",
+      gitOps: firstGit.gitOps,
+      completionCache: firstCache.cache,
+    });
 
     const configAfterFailure = await readFile(locations.baseConfigJsonPath, "utf8");
     const finalClone = await locations.sourceCloneDir("valid-marketplace");
@@ -3879,8 +3908,7 @@ test("cleans a URL clone after state-save failure and a second invocation conver
     });
 
     // assert
-    assert.ok(firstError instanceof Error);
-    assert.strictEqual((firstError as NodeJS.ErrnoException).code, "EISDIR");
+    assert.strictEqual(firstOutcome, undefined);
     assert.deepStrictEqual(firstCache.calls, []);
     assert.strictEqual(finalCloneAfterFailure, false);
     assert.strictEqual(
@@ -3891,7 +3919,14 @@ test("cleans a URL clone after state-save failure and a second invocation conver
     assert.deepStrictEqual(secondBoundary.notifications, [
       { message: "● valid-marketplace [project] (added)" },
     ]);
-    assert.deepStrictEqual(firstBoundary.notifications, []);
+    // D-PL5-18: the save's EISDIR reads `unreadable`, as `list` and `info` read it.
+    assert.deepStrictEqual(firstBoundary.notifications, [
+      {
+        message:
+          "A marketplace operation has failed.\n\n⊘ https://gitlab.example.com/team/mp [project] (failed) {unreadable}",
+        severity: "error",
+      },
+    ]);
     assert.deepStrictEqual(
       firstGit.state.cloneCalls.map(({ url }) => url),
       ["https://gitlab.example.com/team/mp"],
@@ -5072,6 +5107,61 @@ test("notifyAddFailure rethrows an error that is not an add precondition", () =>
     (error: unknown) => error === unexpected,
   );
 });
+
+for (const code of ["EISDIR", "EIO", "EBADF"]) {
+  test(`D-PL5-18: notifyAddFailure renders a ${code} failure as (failed) {unreadable}`, () => {
+    // arrange
+    const { ctx, run, notifications } = makeCtx();
+    const failure = Object.assign(new Error(`${code}: read failed`), { code });
+
+    // act
+    notifyAddFailure(
+      {
+        ctx,
+        run,
+        scope: "user",
+        cwd: "/unused",
+        rawSource: "acme/tools",
+        completionCache: createCompletionCache(),
+      },
+      failure,
+    );
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message: "A marketplace operation has failed.\n\n⊘ acme/tools [user] (failed) {unreadable}",
+        severity: "error",
+      },
+    ]);
+  });
+}
+
+for (const code of ["EACCES", "EPERM"]) {
+  test(`MPA-02: notifyAddFailure rethrows a ${code} write failure instead of reading permission denied`, () => {
+    // arrange
+    const { ctx, run } = makeCtx(0);
+    const refused = Object.assign(new Error(`${code}: write refused`), { code });
+
+    // act & assert
+    assert.throws(
+      () => {
+        notifyAddFailure(
+          {
+            ctx,
+            run,
+            scope: "user",
+            cwd: "/unused",
+            rawSource: "acme/tools",
+            completionCache: createCompletionCache(),
+          },
+          refused,
+        );
+      },
+      (error: unknown) => error === refused,
+    );
+  });
+}
 
 test("MPA-01 / D-03: a same-source add refuses as a duplicate name when the target layer declares the name with another source", async () => {
   await withTmpScope(async ({ cwd, locations }) => {

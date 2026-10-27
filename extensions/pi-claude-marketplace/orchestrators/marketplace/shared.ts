@@ -855,24 +855,33 @@ export function narrowCascadeFailure(cause: Error): ContentReason {
     return "not in manifest";
   }
 
-  if (isErrnoException(cause)) {
-    switch (cause.code) {
-      case "EACCES":
-      case "EPERM":
-        return "permission denied";
-      case "ENOENT":
-      case "ENOTDIR":
-        return "source missing";
-      case "EBADF":
-      case "EIO":
-      case "EISDIR":
-        return "unreadable";
-      default:
-        break;
-    }
-  }
+  const errnoReason = isErrnoException(cause) ? fsErrnoReason(cause.code) : undefined;
+  return errnoReason ?? "not in manifest";
+}
 
-  return "not in manifest";
+/**
+ * D-PL5-18: the one filesystem errno mapping `narrowCascadeFailure` and
+ * `marketplace add` share, so `list`, `info`, and `add` read a code alike.
+ * Undefined for a code it does not name.
+ */
+export function fsErrnoReason(
+  code: string | undefined,
+): "permission denied" | "source missing" | "unreadable" | undefined {
+  switch (code) {
+    case "EACCES":
+    case "EPERM":
+      return "permission denied";
+    case "ENOENT":
+    case "ENOTDIR":
+      return "source missing";
+    case "EBADF":
+    case "EIO":
+    case "EISDIR":
+      return "unreadable";
+    case undefined:
+    default:
+      return undefined;
+  }
 }
 
 /**

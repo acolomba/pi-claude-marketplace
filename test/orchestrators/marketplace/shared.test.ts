@@ -14,6 +14,7 @@ import {
   loadVisibleMarketplaces,
   crossScopeFlag,
   foldUnstageNotices,
+  fsErrnoReason,
   lacksStoredCredential,
   marketplaceFailureRows,
   marketplaceInOtherScope,
@@ -2320,6 +2321,32 @@ for (const { title, cause, expected } of [
 
     // assert
     assert.equal(reason, expectedReason);
+  });
+}
+
+for (const { code, expected } of [
+  { code: "EACCES", expected: "permission denied" },
+  { code: "EPERM", expected: "permission denied" },
+  { code: "ENOENT", expected: "source missing" },
+  { code: "ENOTDIR", expected: "source missing" },
+  { code: "EBADF", expected: "unreadable" },
+  { code: "EIO", expected: "unreadable" },
+  { code: "EISDIR", expected: "unreadable" },
+  { code: "ECONNABORTED", expected: undefined },
+  { code: undefined, expected: undefined },
+] satisfies readonly {
+  readonly code: string | undefined;
+  readonly expected: ReturnType<typeof fsErrnoReason>;
+}[]) {
+  test(`fsErrnoReason maps ${String(code)} to ${String(expected)}`, () => {
+    // arrange
+    const errnoCode = code;
+
+    // act
+    const reason = fsErrnoReason(errnoCode);
+
+    // assert
+    assert.equal(reason, expected);
   });
 }
 
