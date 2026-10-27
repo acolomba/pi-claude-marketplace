@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -13,7 +13,7 @@ import { resolvePiRuntime } from "../pi-runtime.ts";
 import { withHermeticEnvironment } from "../platform/hermetic-environment.ts";
 
 import { PINNED_SHA } from "./_pinned-sha.ts";
-import { targetByPlugin } from "./_targets.ts";
+import { E2E_MARKETPLACE_NAME, targetByPlugin } from "./_targets.ts";
 
 import type { ExtensionState } from "../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type {
@@ -126,7 +126,23 @@ async function prepareUpstreamCheckout(root: string): Promise<string> {
     timeout: 120_000,
   });
   await execFileAsync("git", ["-C", dir, "checkout", "FETCH_HEAD"]);
+  await renameUpstreamMarketplace(dir);
   return dir;
+}
+
+/**
+ * D-PL5-23: rewrites the `name` the checkout's manifest declares to
+ * `E2E_MARKETPLACE_NAME`, keeping the pinned commit and every other field.
+ * The checkout is added as a path source, which may not declare the reserved
+ * `claude-plugins-official`.
+ */
+async function renameUpstreamMarketplace(dir: string): Promise<void> {
+  const manifestPath = path.join(dir, ".claude-plugin", "marketplace.json");
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify({ ...manifest, name: E2E_MARKETPLACE_NAME }, null, 2)}\n`,
+  );
 }
 
 export async function withE2EEnvironment<T>(fn: (env: E2EEnvironment) => Promise<T>): Promise<T> {

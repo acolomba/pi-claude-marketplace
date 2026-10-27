@@ -1,10 +1,17 @@
 import path from "node:path";
 
+/**
+ * D-PL5-23: the name the e2e checkout of the official marketplace declares.
+ * The add is a path source, and `marketplace add` refuses Claude Code's
+ * reserved names from any source but the anthropics GitHub organization.
+ */
+export const E2E_MARKETPLACE_NAME = "upstream-e2e";
+
 export type E2ETargetKind = "skills" | "commands" | "agents" | "mcp";
 
 export interface E2ETarget {
   readonly plugin: string;
-  readonly marketplace: "claude-plugins-official";
+  readonly marketplace: typeof E2E_MARKETPLACE_NAME;
   readonly kind: E2ETargetKind;
   readonly sourceDirectory: string;
   readonly fixtureDirectory: string;
@@ -15,7 +22,7 @@ export interface E2ETarget {
 export const TARGETS: readonly E2ETarget[] = [
   {
     plugin: "frontend-design",
-    marketplace: "claude-plugins-official",
+    marketplace: E2E_MARKETPLACE_NAME,
     kind: "skills",
     sourceDirectory: "plugins/frontend-design",
     fixtureDirectory: "plugins/frontend-design",
@@ -24,7 +31,7 @@ export const TARGETS: readonly E2ETarget[] = [
   },
   {
     plugin: "code-review",
-    marketplace: "claude-plugins-official",
+    marketplace: E2E_MARKETPLACE_NAME,
     kind: "commands",
     sourceDirectory: "plugins/code-review",
     fixtureDirectory: "plugins/code-review",
@@ -33,7 +40,7 @@ export const TARGETS: readonly E2ETarget[] = [
   },
   {
     plugin: "code-simplifier",
-    marketplace: "claude-plugins-official",
+    marketplace: E2E_MARKETPLACE_NAME,
     kind: "agents",
     sourceDirectory: "plugins/code-simplifier",
     fixtureDirectory: "plugins/code-simplifier",
@@ -42,7 +49,7 @@ export const TARGETS: readonly E2ETarget[] = [
   },
   {
     plugin: "context7",
-    marketplace: "claude-plugins-official",
+    marketplace: E2E_MARKETPLACE_NAME,
     kind: "mcp",
     sourceDirectory: "external_plugins/context7",
     fixtureDirectory: "plugins/context7",
