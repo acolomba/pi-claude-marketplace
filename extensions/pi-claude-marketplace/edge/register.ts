@@ -142,6 +142,7 @@ export function registerClaudePluginCommand(
       completionCache: deps.completionCache,
       gitOps: deps.gitOps,
       beginPluginUpdateRun: deps.beginPluginUpdateRun,
+      installMissingDependencies: deps.installMissingDependencies,
     }),
     marketplaceAutoupdate: makeAutoupdateHandler(true),
     marketplaceNoautoupdate: makeAutoupdateHandler(false),

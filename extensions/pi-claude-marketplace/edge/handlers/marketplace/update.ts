@@ -34,7 +34,10 @@ import type { EdgeDeps } from "../../types.ts";
 const USAGE = marketplaceUsage("update");
 
 export function makeMarketplaceUpdateHandler(
-  deps: Pick<EdgeDeps, "beginPluginUpdateRun" | "completionCache" | "gitOps">,
+  deps: Pick<
+    EdgeDeps,
+    "beginPluginUpdateRun" | "completionCache" | "gitOps" | "installMissingDependencies"
+  >,
 ): SubcommandHandler {
   return async (args, ctx, run): Promise<void> => {
     const parsed = parseCommandArgs(
@@ -65,6 +68,7 @@ export function makeMarketplaceUpdateHandler(
         cwd: ctx.cwd,
         gitOps: deps.gitOps,
         pluginUpdate,
+        installMissingDependencies: deps.installMissingDependencies,
         ...(parsed.scope !== undefined && { scope: parsed.scope }),
       });
       return;
@@ -78,6 +82,7 @@ export function makeMarketplaceUpdateHandler(
       cwd: ctx.cwd,
       gitOps: deps.gitOps,
       pluginUpdate,
+      installMissingDependencies: deps.installMissingDependencies,
       ...(parsed.scope !== undefined && { scope: parsed.scope }),
     });
   };

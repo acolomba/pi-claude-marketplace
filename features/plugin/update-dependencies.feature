@@ -161,6 +161,33 @@ Feature: Plugin update dependencies
       | widget@tools | 1.1.0   | true    |
       | zcore@tools  | 1.0.0   | true    |
 
+  Scenario: Autoupdating a marketplace installs a missing dependency an unchanged plugin now declares
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   |              |
+      | zcore  | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | widget | 1.0.0   | zcore        |
+      | zcore  | 1.0.0   |              |
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the result has these fields:
+      | kind         | cascade |
+      | severity     | info    |
+      | needs reload | true    |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id           | name        | status    | reasons              | scope   | version |
+      | tools            | project           | updated            | widget@tools | widget      | skipped   | up-to-date           | project |         |
+      | tools            | project           | updated            | zcore@tools  | zcore@tools | installed | dependency installed | project | 1.0.0   |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | widget@tools | 1.0.0   | true    |
+      | zcore@tools  | 1.0.0   | true    |
+
   Scenario: Updating a plugin whose new version needs a newer version of a git-source dependency moves the dependency first
     Given the git repository "lib" holds these plugins:
       | name | version | path |

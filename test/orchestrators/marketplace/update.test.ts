@@ -53,6 +53,9 @@ import type { GitOps } from "../../../extensions/pi-claude-marketplace/orchestra
 import type {
   PluginUpdateFn,
   PluginUpdateOutcome,
+  ScopeDependencyInstallFn,
+  ScopeDependencyInstallResult,
+  ScopeDependencyInstallRow,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/types.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import type { GitCredentials } from "../../../extensions/pi-claude-marketplace/platform/git.ts";
@@ -5892,5 +5895,332 @@ test("silently stops when the marketplace vanishes after preflight", async () =>
       marketplaces: {},
     });
     assert.deepStrictEqual(git.calls, []);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// D-PL2-10: after the autoupdate cascade's plugin updates, the
+// missing-dependency step runs in the marketplace's scope for missing
+// dependencies that a plugin of the refreshed marketplace declares.
+// ---------------------------------------------------------------------------
+
+const AUTOUPDATE_DEPENDENCY_ROW = {
+  status: "installed",
+  name: "lib@deps-mp",
+  version: "1.0.0",
+  dependencies: [],
+  reasons: ["dependency installed"],
+  severity: "info",
+  needsReload: true,
+} as const satisfies ScopeDependencyInstallRow;
+
+/** A recorded call of the step, with what its `select` answers for four entries. */
+interface AutoupdateStepCall {
+  readonly scope: Scope;
+  readonly cwd: string;
+  readonly selects: readonly boolean[];
+}
+
+/**
+ * A recording missing-dependency step that pushes `"step"` onto `events`, so
+ * a case can order it against the plugin updates. `select` is asked about a
+ * declarer of the refreshed marketplace, one of another marketplace, a mixed
+ * list, and a marketplace whose name only ends with the refreshed one's.
+ */
+function recordingAutoupdateStep(
+  result: ScopeDependencyInstallResult,
+  events: string[],
+): {
+  readonly installMissingDependencies: ScopeDependencyInstallFn;
+  readonly calls: AutoupdateStepCall[];
+} {
+  const calls: AutoupdateStepCall[] = [];
+  const installMissingDependencies: ScopeDependencyInstallFn = (request) => {
+    events.push("step");
+    calls.push({
+      scope: request.scope,
+      cwd: request.cwd,
+      selects: [
+        request.select({ plugin: "lib", marketplace: "other", declarers: ["app@deps-mp"] }),
+        request.select({ plugin: "lib", marketplace: "deps-mp", declarers: ["app@other"] }),
+        request.select({
+          plugin: "lib",
+          marketplace: "other",
+          declarers: ["tool@other", "app@deps-mp"],
+        }),
+        request.select({ plugin: "lib", marketplace: "other", declarers: ["app@my-deps-mp"] }),
+      ],
+    });
+    return Promise.resolve(result);
+  };
+
+  return { installMissingDependencies, calls };
+}
+
+/** A missing-dependency step a case promises is never reached. */
+function unreachedAutoupdateStep(): ScopeDependencyInstallFn {
+  return () => Promise.reject(new Error("the missing-dependency step must not run"));
+}
+
+/** A plugin update that records `update:<plugin>` and answers `partition`. */
+function recordingPluginUpdate(
+  partition: "unchanged" | "updated",
+  events: string[],
+): PluginUpdateFn {
+  return (plugin) => {
+    events.push(`update:${plugin}`);
+    return Promise.resolve(
+      partition === "unchanged"
+        ? {
+            partition,
+            name: plugin,
+            fromVersion: "0.0.1",
+            toVersion: "0.0.1",
+            declaresAgents: false,
+            declaresMcp: false,
+            constraint: undefined,
+            declaresWorkflows: false,
+          }
+        : {
+            partition,
+            name: plugin,
+            fromVersion: "0.0.1",
+            toVersion: "0.0.2",
+            stagedAgentNames: [],
+            stagedMcpServerNames: [],
+            declaresAgents: false,
+            declaresMcp: false,
+            constraint: undefined,
+            declaresWorkflows: false,
+            mcpConfigNotices: [{ kind: "comments-dropped", scope: "project", file: "mcp.json" }],
+          },
+    );
+  };
+}
+
+/** Seeds `deps-mp`, a path marketplace whose manifest the refresh finds unchanged. */
+async function seedDependencyStepMarketplace(cwd: string, autoupdate: boolean): Promise<void> {
+  const marketplaceRoot = path.join(cwd, "deps-marketplace");
+  await cp(fixtureMarketplaceDir("valid-marketplace"), marketplaceRoot, { recursive: true });
+  await seedPathMarketplace({
+    cwd,
+    name: "deps-mp",
+    marketplaceRoot,
+    autoupdate,
+    plugins: { alpha: makePluginRecord(), beta: makePluginRecord() },
+  });
+}
+
+test("D-PL2-10: the autoupdate cascade runs the missing-dependency step once, after every plugin update, and lists its rows and notices after the updates'", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedDependencyStepMarketplace(cwd, true);
+    const { ctx, run, notifications } = makeCtx();
+    const events: string[] = [];
+    const step = recordingAutoupdateStep(
+      {
+        rows: [AUTOUPDATE_DEPENDENCY_ROW],
+        mcpConfigNotices: [
+          { kind: "comments-dropped", scope: "project", file: "mcp-adapter.json" },
+        ],
+      },
+      events,
+    );
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "deps-mp",
+      scope: "project",
+      cwd,
+      pluginUpdate: recordingPluginUpdate("updated", events),
+      installMissingDependencies: step.installMissingDependencies,
+    });
+
+    // assert
+    assert.deepStrictEqual(events, ["update:alpha", "update:beta", "step"]);
+    assert.deepStrictEqual(step.calls, [
+      { scope: "project", cwd, selects: [true, false, true, false] },
+    ]);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● deps-mp [project] (updated)\n" +
+          "  ● alpha v0.0.1 → v0.0.2 (updated)\n" +
+          "  ● beta v0.0.1 → v0.0.2 (updated)\n" +
+          "  ● lib@deps-mp v1.0.0 (installed) {dependency installed}\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+      {
+        message:
+          "MCP config comments removed.\n\n" +
+          "The project-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.\n" +
+          "The project-scope mcp-adapter.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        severity: "warning",
+      },
+    ]);
+  });
+});
+
+test("D-PL2-10: an unchanged autoupdate whose step installs nothing still reports up to date", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedDependencyStepMarketplace(cwd, true);
+    const { ctx, run, notifications } = makeCtx();
+    const events: string[] = [];
+    const step = recordingAutoupdateStep({ rows: [], mcpConfigNotices: [] }, events);
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "deps-mp",
+      scope: "project",
+      cwd,
+      pluginUpdate: recordingPluginUpdate("unchanged", events),
+      installMissingDependencies: step.installMissingDependencies,
+    });
+
+    // assert
+    assert.deepStrictEqual(events, ["update:alpha", "update:beta", "step"]);
+    assert.deepStrictEqual(notifications, [
+      { message: "● deps-mp [project] (skipped) {up-to-date}" },
+    ]);
+  });
+});
+
+test("D-PL2-10: an unchanged autoupdate whose step installs a dependency reports the marketplace updated", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedDependencyStepMarketplace(cwd, true);
+    const { ctx, run, notifications } = makeCtx();
+    const events: string[] = [];
+    const step = recordingAutoupdateStep(
+      { rows: [AUTOUPDATE_DEPENDENCY_ROW], mcpConfigNotices: [] },
+      events,
+    );
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "deps-mp",
+      scope: "project",
+      cwd,
+      pluginUpdate: recordingPluginUpdate("unchanged", events),
+      installMissingDependencies: step.installMissingDependencies,
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● deps-mp [project] (updated)\n" +
+          "  ⊘ alpha (skipped) {up-to-date}\n" +
+          "  ⊘ beta (skipped) {up-to-date}\n" +
+          "  ● lib@deps-mp v1.0.0 (installed) {dependency installed}\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+  });
+});
+
+test("D-PL2-10: a marketplace with autoupdate off runs no missing-dependency step", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedDependencyStepMarketplace(cwd, false);
+    const { ctx, run, notifications } = makeCtx();
+    const events: string[] = [];
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "deps-mp",
+      scope: "project",
+      cwd,
+      pluginUpdate: recordingPluginUpdate("updated", events),
+      installMissingDependencies: unreachedAutoupdateStep(),
+    });
+
+    // assert
+    assert.deepStrictEqual(events, []);
+    assert.deepStrictEqual(notifications, [
+      { message: "● deps-mp [project] (skipped) {up-to-date}" },
+    ]);
+  });
+});
+
+test("D-PL2-10: an update with no plugin-update seam runs no missing-dependency step", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedDependencyStepMarketplace(cwd, true);
+    const { ctx, run, notifications } = makeCtx();
+
+    // act
+    await updateMarketplace({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      name: "deps-mp",
+      scope: "project",
+      cwd,
+      installMissingDependencies: unreachedAutoupdateStep(),
+    });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      { message: "● deps-mp [project] (skipped) {up-to-date}" },
+    ]);
+  });
+});
+
+test("D-PL2-10: updateAllMarketplaces forwards the missing-dependency step to each autoupdate cascade", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedDependencyStepMarketplace(cwd, true);
+    const { ctx, run, notifications } = makeCtx();
+    const events: string[] = [];
+    const step = recordingAutoupdateStep(
+      { rows: [AUTOUPDATE_DEPENDENCY_ROW], mcpConfigNotices: [] },
+      events,
+    );
+
+    // act
+    await updateAllMarketplaces({
+      completionCache: createCompletionCache(),
+      ctx,
+      run,
+      scope: "project",
+      cwd,
+      pluginUpdate: recordingPluginUpdate("unchanged", events),
+      installMissingDependencies: step.installMissingDependencies,
+    });
+
+    // assert
+    assert.deepStrictEqual(events, ["update:alpha", "update:beta", "step"]);
+    assert.deepStrictEqual(step.calls, [
+      { scope: "project", cwd, selects: [true, false, true, false] },
+    ]);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● deps-mp [project] (updated)\n" +
+          "  ⊘ alpha (skipped) {up-to-date}\n" +
+          "  ⊘ beta (skipped) {up-to-date}\n" +
+          "  ● lib@deps-mp v1.0.0 (installed) {dependency installed}\n" +
+          "\n" +
+          "Marketplace update: 4 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
   });
 });
