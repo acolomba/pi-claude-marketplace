@@ -113,20 +113,20 @@ interface PendingMarketplaceClaim {
   readonly candidateMarketplace: string;
 }
 
-interface MarketplaceClaimConflict extends PlannedSourceDetail {
+interface DeclaredClaimConflict extends PlannedSourceDetail {
   readonly declaredMarketplace: string;
 }
 
 interface MarketplaceClaims {
   readonly recordedByDeclared: ReadonlyMap<string, string>;
-  readonly conflicts: readonly MarketplaceClaimConflict[];
+  readonly conflicts: readonly DeclaredClaimConflict[];
   readonly conflictedDeclared: ReadonlySet<string>;
   readonly conflictedRecorded: ReadonlySet<string>;
 }
 
 interface MarketplaceClaimAccumulator {
   readonly recordedByDeclared: Map<string, string>;
-  readonly conflicts: MarketplaceClaimConflict[];
+  readonly conflicts: DeclaredClaimConflict[];
   readonly pending: PendingMarketplaceClaim[];
   readonly conflictedRecorded: Set<string>;
 }
@@ -245,6 +245,20 @@ function buildMarketplaceClaims(
     conflictedDeclared: new Set(acc.conflicts.map((conflict) => conflict.declaredMarketplace)),
     conflictedRecorded: acc.conflictedRecorded,
   };
+}
+
+/**
+ * D-PL6-17 / CR-01: the recorded marketplace each config declaration claims,
+ * by its own name or by a one-to-one source match, read from the planner's own
+ * claim rule. A declaration in a conflicted claim, or with no recorded match,
+ * maps to nothing. Import reads it to keep the name the config uses for a
+ * recorded marketplace when the settings name that marketplace directly.
+ */
+export function marketplaceSourceClaims(
+  declared: MergedConfig["marketplaces"],
+  recorded: ExtensionState["marketplaces"],
+): ReadonlyMap<string, string> {
+  return buildMarketplaceClaims(declared, recorded).recordedByDeclared;
 }
 
 /**

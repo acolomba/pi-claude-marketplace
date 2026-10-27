@@ -41,7 +41,10 @@
 //     the candidate version the one version rule derives offline
 //     (plugin.json, then the entry, then the tree's commit version for an
 //     undeclared git plugin), falling back to the entry version when no
-//     candidate resolves (VER-01, VER-02). NOT semver.
+//     candidate resolves (VER-01, VER-02). NOT semver. Claude Code's `list`
+//     shows no upgrade state for any source, so this state is a recorded
+//     divergence, kept for git sources too because `fetch` exists to feed it
+//     (D-PL3-07).
 //   - PL-6 manifest soft-fail: per-marketplace manifest load failure
 //     surfaces as a `(failed)` MarketplaceNotificationMessage with
 //     `status: "failed"` and `plugins: []`. No marketplace-level cause

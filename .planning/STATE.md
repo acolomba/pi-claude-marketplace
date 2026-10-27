@@ -5,16 +5,16 @@ milestone_name: Marketplace and Plugin Lifecycle Backlog
 current_phase: 1
 current_phase_name: Staging Warning Channels
 status: verifying
-stopped_at: Phase 5 complete, ready to verify Phase 1
-last_updated: "2026-10-27T14:04:33.412Z"
+stopped_at: Phase 4 complete, ready to verify Phase 1
+last_updated: "2026-10-27T11:04:03.605Z"
 last_activity: 2026-10-27
-last_activity_desc: Phase 5 complete, transitioned to Phase 1
-state_head: 475f2af676bb56d1a8240c51621d17da4fad4be9
+last_activity_desc: Phase 4 complete, transitioned to Phase 1
+state_head: edac58eb2fb9fccd7212f72307195efa784d73c4
 progress:
   total_phases: 11
   completed_phases: 1
-  total_plans: 9
-  completed_plans: 9
+  total_plans: 6
+  completed_plans: 6
   percent: 9
 ---
 
@@ -27,14 +27,14 @@ See: `.planning/PROJECT.md` (updated 2026-10-22 at the lifecycle-coverage start)
 **Core value:** A Pi user can install a Claude plugin and load each supported
 component as a working Pi artifact.
 
-**Current focus:** Phase 5 — Marketplace Command Parity
+**Current focus:** Phase 07 — Git Errors and Lock Discipline
 
 ## Current Position
 
 Phase: 1 — Staging Warning Channels
 Plan: 4
 Status: Phase complete — ready for verification
-Last activity: 2026-10-27 — Phase 5 complete, transitioned to Phase 1
+Last activity: 2026-10-27 — Completed quick task 261027-9lp: agent-target refusal redaction and update reason
 
 
 ### mcp-4 closeout
@@ -188,14 +188,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-gvt | GV-01: record plugins at a range-selected release tag as Claude Code does, the tag semver kept as resolvedVersion | 2026-10-26 | 2638b001 | complete | [261026-gvt-record-plugins-at-release-tags-as-claude-code](./quick/261026-gvt-record-plugins-at-release-tags-as-claude-code/) |
 | 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
-| 261027-92u | Recheck reserved marketplace names on refresh (D-PL5-27) | 2026-10-27 | 51256937 | — | [261027-92u-refresh-rechecks-reserved-marketplace-na](./quick/261027-92u-refresh-rechecks-reserved-marketplace-na/) |
-| 261027-a3p | Port Claude Code's full reserved marketplace name rules (D-PL5-28) | 2026-10-27 | 02839041 | — | [261027-a3p-port-claude-code-full-reserved-marketpla](./quick/261027-a3p-port-claude-code-full-reserved-marketpla/) |
-| 261027-ckr | Refuse hosted relative entries; match .json in any case (D-PL5-32, D-PL5-33) | 2026-10-27 | 475f2af6 | — | [261027-ckr-refuse-hosted-relative-entries-and-match](./quick/261027-ckr-refuse-hosted-relative-entries-and-match/) |
-
-## Session Continuity
-
-**Last session:** 2026-10-25T12:00:00.000Z
-**Stopped at:** Phase 5 complete, ready to verify Phase 1
+**Stopped at:** Phase 4 complete, ready to verify Phase 1
 **Resume file:** None
 
 **lifecycle-coverage (2026-10-22):** requirements and roadmap are defined on

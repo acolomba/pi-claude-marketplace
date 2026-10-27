@@ -19,12 +19,14 @@
 // there, and calling `semver` directly from this leaf would bypass both.
 
 import {
+  boundRenderedText,
   excludingRange,
   intersectDependencyRanges,
   isUnconstrainedRange,
+  MAX_REFUSAL_VERSION_CHARS,
   recordedVersionSatisfies,
-  renderConstraintRange,
   renderDeclaredRanges,
+  truncateForRefusal,
 } from "../../domain/dependency-range.ts";
 import { isRecordedButDisabled } from "../../persistence/state-io.ts";
 import { DependencyDeclarationsUnreadableError } from "../../shared/errors.ts";
@@ -170,14 +172,15 @@ function nameHolder(holder: ConstraintHolder): string {
  * range or a holder that repeats is named once. Each
  * declared range passed `domain/dependencies.ts`' allowlist and 64-character
  * bound at parse time, and the join is bounded again here. The `transport`
- * arm's classification is bounded the same way. A stage-two `version` is
- * interpolated with NO transformation (a resolved version is never
- * attacker-controlled length the way a declared range is).
+ * arm's classification is not a range, so it is bounded but never quoted. A
+ * stage-two `version` is cut to 64 code units, as Claude Code cuts a version
+ * (VERSTR-01, D-PL3-12): the marketplace sets that string, and nothing bounds
+ * its length at parse time.
  */
 function describeConstraint(holders: readonly ConstraintHolder[], line: ConstraintLine): string {
   const detail =
     line.arm === "transport"
-      ? renderConstraintRange(line.classification)
+      ? boundRenderedText(line.classification)
       : renderDeclaredRanges([
           ...new Set(
             holders.flatMap((holder) => (holder.range === undefined ? [] : [holder.range])),
@@ -185,7 +188,9 @@ function describeConstraint(holders: readonly ConstraintHolder[], line: Constrai
         ]);
   const required = [...new Set(holders.map(nameHolder))].join(", ");
   const fetched =
-    line.arm === "transport" || line.version === undefined ? "" : `version ${line.version} `;
+    line.arm === "transport" || line.version === undefined
+      ? ""
+      : `version ${truncateForRefusal(line.version, MAX_REFUSAL_VERSION_CHARS)} `;
   return `${fetched}${ARM_CLAUSE[line.arm]} (${detail}) -- required by ${required}`;
 }
 

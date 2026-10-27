@@ -5,6 +5,7 @@ import { discoverPluginAgents as definingDiscoverPluginAgents } from "../../../e
 import {
   abortPreparedAgents,
   assertAgentCommitTargets,
+  assertAgentTargetsFree,
   commitPreparedAgents,
   discoverPluginAgents,
   prepareStagePluginAgents,
@@ -16,6 +17,7 @@ import {
   commitPreparedAgents as definingCommitPreparedAgents,
   prepareStagePluginAgents as definingPrepareStagePluginAgents,
 } from "../../../extensions/pi-claude-marketplace/bridges/agents/stage.ts";
+import { assertAgentTargetsFree as definingAssertAgentTargetsFree } from "../../../extensions/pi-claude-marketplace/bridges/agents/target-check.ts";
 import { unstagePluginAgents as definingUnstagePluginAgents } from "../../../extensions/pi-claude-marketplace/bridges/agents/unstage.ts";
 
 import type * as AgentsBarrel from "../../../extensions/pi-claude-marketplace/bridges/agents/index.ts";
@@ -70,6 +72,19 @@ describe("assertAgentCommitTargets", () => {
 
     // assert
     assert.strictEqual(agentsAssertAgentCommitTargets, expectedAssertAgentCommitTargets);
+  });
+});
+
+describe("assertAgentTargetsFree", () => {
+  test("re-exports the defining binding", () => {
+    // arrange
+    const expectedAssertAgentTargetsFree = definingAssertAgentTargetsFree;
+
+    // act
+    const agentsAssertAgentTargetsFree = assertAgentTargetsFree;
+
+    // assert
+    assert.strictEqual(agentsAssertAgentTargetsFree, expectedAssertAgentTargetsFree);
   });
 });
 

@@ -256,6 +256,12 @@ interface HermeticScopes {
    * a read-only directory cannot be removed.
    */
   readonly denyWrites: (directory: string) => Promise<void>;
+  /**
+   * Make `directory` writable again in the same teardown hook, ahead of the
+   * tree removal, when it still exists then: a copy of a denied directory that
+   * the case leaves behind, such as the one a failed skills undo keeps.
+   */
+  readonly restoreWrites: (directory: string) => void;
 }
 
 /**
@@ -268,9 +274,16 @@ async function createHermeticScopes(t: TestContext, label: string): Promise<Herm
   // Registered before the environment so the permissions come back before its
   // removal runs: after-hooks run in registration order.
   const denied: string[] = [];
+  const copies: string[] = [];
   t.after(async () => {
     for (const directory of denied) {
       await chmod(directory, 0o755);
+    }
+
+    for (const directory of copies) {
+      if (await pathExists(directory)) {
+        await chmod(directory, 0o755);
+      }
     }
   });
   const { cwd, home } = await createHermeticEnvironment(t, `apply-${label}-`);
@@ -290,7 +303,26 @@ async function createHermeticScopes(t: TestContext, label: string): Promise<Herm
       denied.push(directory);
       await chmod(directory, 0o555);
     },
+    restoreWrites: (directory: string): void => {
+      copies.push(directory);
+    },
   };
+}
+
+/**
+ * The message a read of `filePath` fails with, its path cut to the basename as
+ * a redacted row shows it. Node 26 appends the path to an fs error message and
+ * Node 24 does not, so a case reads the wording back from the runtime.
+ */
+async function redactedReadErrorMessage(filePath: string): Promise<string> {
+  try {
+    await readFile(filePath, "utf8");
+  } catch (error) {
+    assert.ok(error instanceof Error);
+    return error.message.replaceAll(filePath, path.basename(filePath));
+  }
+
+  assert.fail(`${filePath} was readable`);
 }
 
 /** Write `bytes` at `filePath`, creating the parent directory first. */
@@ -2390,6 +2422,270 @@ describe("applyReconcile", () => {
     assert.equal(await recordFor(project, "mp", "hello"), undefined);
     assert.equal(await recordFor(project, "mp", "bar"), undefined);
     assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("MIM-03 / D-PL6-12: an install whose skills undo cannot finish reports the rollback phase, redacted", async (t) => {
+    // arrange
+    const { cwd, denyWrites, project, restoreWrites } = await createHermeticScopes(
+      t,
+      "install-rollback-partial",
+    );
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean" },
+    });
+    const readOnly = path.join(marketplaceRoot, "plugins", "hello", "skills", "tool", "read-only");
+    await writeUnder(path.join(readOnly, "data.txt"), "data\n");
+    await denyWrites(readOnly);
+    restoreWrites(
+      path.join(project.extensionRoot, "resources", "skills", "hello-tool", "read-only"),
+    );
+    await mkdir(project.mcpAdapterJsonPath, { recursive: true });
+    const adapterReadError = await redactedReadErrorMessage(project.mcpAdapterJsonPath);
+    const declaration = configBytes({
+      marketplaces: { mp: { source: marketplaceRoot } },
+      plugins: { "hello@mp": {} },
+    });
+    await writeUnder(project.baseConfigJsonPath, declaration);
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ hello (failed) {rollback partial}\n" +
+          `    cause: ${adapterReadError} -> ${adapterReadError}\n` +
+          "    leaked: hello-tool\n" +
+          "    [skills] (rollback failed)\n" +
+          "      cause: EACCES: permission denied, unlink 'data.txt'\n" +
+          "\n" +
+          "Reconcile: 1 failure",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await recordFor(project, "mp", "hello"), undefined);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("MIM-03 / D-PL6-12: a dependency whose skills undo cannot finish gets its own redacted row", async (t) => {
+    // arrange
+    const { cwd, denyWrites, project, restoreWrites } = await createHermeticScopes(
+      t,
+      "install-dependency-rollback-partial",
+    );
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", dependencies: ["bar"] },
+      bar: { skill: "clean" },
+    });
+    const readOnly = path.join(marketplaceRoot, "plugins", "bar", "skills", "tool", "read-only");
+    await writeUnder(path.join(readOnly, "data.txt"), "data\n");
+    await denyWrites(readOnly);
+    restoreWrites(path.join(project.extensionRoot, "resources", "skills", "bar-tool", "read-only"));
+    await mkdir(project.mcpAdapterJsonPath, { recursive: true });
+    const adapterReadError = await redactedReadErrorMessage(project.mcpAdapterJsonPath);
+    const declaration = configBytes({
+      marketplaces: { mp: { source: marketplaceRoot } },
+      plugins: { "hello@mp": {} },
+    });
+    await writeUnder(project.baseConfigJsonPath, declaration);
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some plugin operations have failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ bar (failed) {rollback partial}\n" +
+          `    cause: ${adapterReadError} -> ${adapterReadError}\n` +
+          "    leaked: bar-tool\n" +
+          "    [skills] (rollback failed)\n" +
+          "      cause: EACCES: permission denied, unlink 'data.txt'\n" +
+          "  ⊘ hello (failed) {dependency failed}\n" +
+          "\n" +
+          "Reconcile: 2 failures",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await recordFor(project, "mp", "hello"), undefined);
+    assert.equal(await recordFor(project, "mp", "bar"), undefined);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("MIM-03: a dependency two installs fail on with an unfinished undo gets one row", async (t) => {
+    // arrange
+    const { cwd, denyWrites, project, restoreWrites } = await createHermeticScopes(
+      t,
+      "install-shared-dependency-rollback-partial",
+    );
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", dependencies: ["bar"] },
+      world: { skill: "clean", dependencies: ["bar"] },
+      bar: { skill: "clean" },
+    });
+    const readOnly = path.join(marketplaceRoot, "plugins", "bar", "skills", "tool", "read-only");
+    await writeUnder(path.join(readOnly, "data.txt"), "data\n");
+    await denyWrites(readOnly);
+    restoreWrites(path.join(project.extensionRoot, "resources", "skills", "bar-tool", "read-only"));
+    await mkdir(project.mcpAdapterJsonPath, { recursive: true });
+    const adapterReadError = await redactedReadErrorMessage(project.mcpAdapterJsonPath);
+    const declaration = configBytes({
+      marketplaces: { mp: { source: marketplaceRoot } },
+      plugins: { "hello@mp": {}, "world@mp": {} },
+    });
+    await writeUnder(project.baseConfigJsonPath, declaration);
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+    // The second install's skills undo leaves its read-only copy in a staging
+    // directory whose name is random.
+    const stagingRoot = path.join(project.extensionRoot, "skills-staging");
+    for (const staging of await readdir(stagingRoot)) {
+      restoreWrites(path.join(stagingRoot, staging, "bar-tool", "read-only"));
+    }
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "Some plugin operations have failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ bar (failed) {rollback partial}\n" +
+          `    cause: ${adapterReadError} -> ${adapterReadError}\n` +
+          "    leaked: bar-tool\n" +
+          "    [skills] (rollback failed)\n" +
+          "      cause: EACCES: permission denied, unlink 'data.txt'\n" +
+          "  ⊘ hello (failed) {dependency failed}\n" +
+          "  ⊘ world (failed) {dependency failed}\n" +
+          "\n" +
+          "Reconcile: 3 failures",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await recordFor(project, "mp", "hello"), undefined);
+    assert.equal(await recordFor(project, "mp", "world"), undefined);
+    assert.equal(await recordFor(project, "mp", "bar"), undefined);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("MIM-03: the undo of an earlier member the cascade installed rides the requested plugin's row", async (t) => {
+    // arrange
+    const { cwd, denyWrites, project, restoreWrites } = await createHermeticScopes(
+      t,
+      "install-sibling-rollback-partial",
+    );
+    const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
+      hello: { skill: "clean", dependencies: ["alpha", "beta"] },
+      alpha: { skill: "clean" },
+      beta: { hooks: true },
+    });
+    const readOnly = path.join(marketplaceRoot, "plugins", "alpha", "skills", "tool", "read-only");
+    await writeUnder(path.join(readOnly, "data.txt"), "data\n");
+    await denyWrites(readOnly);
+    restoreWrites(
+      path.join(project.extensionRoot, "resources", "skills", "alpha-tool", "read-only"),
+    );
+    await writeUnder(project.hooksDir, "not a directory\n");
+    await writeUnder(
+      project.baseConfigJsonPath,
+      configBytes({
+        marketplaces: { mp: { source: marketplaceRoot } },
+        plugins: { "hello@mp": {} },
+      }),
+    );
+    await seedState(project, {
+      schemaVersion: 3,
+      marketplaces: {
+        mp: marketplaceRecord({
+          cwd,
+          scope: "project",
+          marketplace: "mp",
+          rawSource: marketplaceRoot,
+          manifestPath,
+          marketplaceRoot,
+        }),
+      },
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ hello (failed) {dependency failed}\n" +
+          "    [alpha@mp] (rollback failed)\n" +
+          "      cause: EACCES: permission denied, unlink 'data.txt'\n" +
+          "\n" +
+          "Reconcile: 1 failure",
+        severity: "error",
+      },
+    ]);
+    assert.equal(await recordFor(project, "mp", "hello"), undefined);
+    assert.equal(await recordFor(project, "mp", "beta"), undefined);
     verifyBoundary();
   });
 
@@ -8511,6 +8807,60 @@ describe("applyReconcile catalog convergence", () => {
     assert.equal((await recordFor(project, "mp", "demo"))?.version, "1.1.0");
     verifyBoundary();
   });
+
+  for (const { move, offered, row } of [
+    {
+      move: "growth",
+      offered: undefined,
+      row: "  ● demo v1.0.0 (installed) {components now supported}\n",
+    },
+    {
+      move: "revision",
+      offered: "1.1.0",
+      row: "  ● demo v1.0.0 → v1.1.0 (updated) {components now supported}\n",
+    },
+  ]) {
+    test(`PKD-02: a ${move} move whose package step leaves a note reports it as a post-install warning`, async (t) => {
+      // arrange
+      const { cwd, marketplaceRoot } = await seedConvergenceScope(t, `converge-${move}-packages`, {
+        trees: { demo: { skill: "clean", command: true } },
+        supported: { demo: ["skills"] },
+        ...(offered !== undefined && { offered: { demo: offered } }),
+      });
+      const pluginRoot = path.join(marketplaceRoot, "plugins", "demo");
+      await writeFile(
+        path.join(pluginRoot, "package.json"),
+        JSON.stringify({ name: "demo", dependencies: { "pkd-dep": "1.0.0" } }),
+      );
+      await writeFile(path.join(pluginRoot, "package-lock.json"), '{"lockfileVersion":3}');
+      const { ctx, notifications, verifyBoundary } = createNotificationBoundary(2);
+      const { gitOps } = createOfflineGitOps();
+
+      // act
+      await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+      // assert
+      assert.deepStrictEqual(notifications, [
+        {
+          message:
+            "● mp [project]\n" +
+            row +
+            "\n" +
+            "Reconcile: 1 success\n" +
+            "\n" +
+            "/reload to pick up changes",
+        },
+        {
+          message:
+            "1 post-install warning surfaced from reconcile installs.\n" +
+            "\n" +
+            'Skipped installing this plugin\'s dependencies: its folder in the marketplace "mp" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.',
+          severity: "warning",
+        },
+      ]);
+      verifyBoundary();
+    });
+  }
 
   test("D-12 / D-25: a partial record whose supported set grew stays partial and names the kinds it still lacks", async (t) => {
     // arrange

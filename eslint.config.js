@@ -28,6 +28,14 @@ const MARKETPLACE_LEDGERS = [
 ];
 
 /**
+ * D-PL9-10 / PKD-03: the only module that may import platform/package-manager.ts.
+ * It is the network seam of a plugin's own package install. NETWORK_SEAMS names
+ * the git surface and does not list it.
+ */
+const PACKAGE_INSTALL_SEAM =
+  "./extensions/pi-claude-marketplace/orchestrators/plugin/package-install.ts";
+
+/**
  * NFR-5 / PI-2 / PL-3 / PRL-07: the orchestrators/ and domain/ modules that
  * BLOCK F skips, because each one must name the git surface, or the hosted
  * catalog download (D-PL5-07), itself. BLOCK F is default-deny, so a new
@@ -400,11 +408,12 @@ export default tseslint.config(
     // BLOCK C (D-v1.0-01-11): Import-direction enforcement. The first eight zones map
     // each layer folder to the sibling folders that MUST NOT import from it
     // (i.e. they enforce the upward/inward direction of the dep graph). The
-    // last four keep the ledger modules apart, type-only and dynamic imports
+    // next four keep the ledger modules apart, type-only and dynamic imports
     // included: no orchestrators/marketplace/ file imports a plugin ledger, no
     // plugin ledger imports a marketplace ledger, and no ledger imports another
     // ledger of its own kind. Cycle detection reports a cycle only once the
-    // graph is already circular, so these zones stop the first edge.
+    // graph is already circular, so these zones stop the first edge. The final
+    // zone lets only PACKAGE_INSTALL_SEAM import platform/package-manager.ts.
     files: ["extensions/pi-claude-marketplace/**/*.ts"],
     rules: {
       "import-x/no-restricted-paths": [
@@ -517,6 +526,11 @@ export default tseslint.config(
               target: MARKETPLACE_LEDGERS,
               from: MARKETPLACE_LEDGERS,
               message: "D-v1.0-01-11: marketplace ledger modules must not import each other.",
+            },
+            {
+              target: "./extensions/pi-claude-marketplace/**/!(package-install).ts",
+              from: ["./extensions/pi-claude-marketplace/platform/package-manager.ts"],
+              message: `D-PL9-10: only ${PACKAGE_INSTALL_SEAM} imports platform/package-manager.ts, the spawn runner of a plugin's own package install.`,
             },
           ],
         },

@@ -62,6 +62,12 @@ export interface PlannedMarketplaceSource {
   readonly scope: Scope;
   readonly marketplace: string;
   readonly source: string;
+  /**
+   * IMP-05: the official marketplace, planned for an enabled plugin with
+   * Claude Code's built-in source (upstream `sourceIsFallback`). Import never
+   * adds it again over a recorded source (D-PL6-19).
+   */
+  readonly sourceIsFallback?: true;
 }
 
 export interface PlannedPluginImport {

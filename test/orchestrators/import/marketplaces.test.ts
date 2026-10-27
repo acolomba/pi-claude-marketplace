@@ -34,6 +34,7 @@ test("buildClaudeImportPlan builds a complete mixed user plan with ordered diagn
             scope: "user",
             marketplace: "claude-plugins-official",
             source: "anthropics/claude-plugins-official",
+            sourceIsFallback: true,
           },
         ],
         pluginsToInstall: [
@@ -204,6 +205,7 @@ test("buildClaudeImportPlan preserves user and project scope input order", () =>
             scope: "user",
             marketplace: "claude-plugins-official",
             source: "anthropics/claude-plugins-official",
+            sourceIsFallback: true,
           },
         ],
         pluginsToInstall: [
@@ -226,6 +228,7 @@ test("buildClaudeImportPlan preserves user and project scope input order", () =>
             scope: "project",
             marketplace: "claude-plugins-official",
             source: "anthropics/claude-plugins-official",
+            sourceIsFallback: true,
           },
         ],
         pluginsToInstall: [
@@ -279,7 +282,7 @@ test("buildClaudeImportPlan diagnoses malformed nested marketplace payloads", ()
           "delta@file": true,
           "epsilon@unknown": true,
         },
-        extraKnownMarketplaces: extraKnownMarketplaces,
+        extraKnownMarketplaces,
       },
     },
   ]);
@@ -432,7 +435,7 @@ test("buildClaudeImportPlan diagnoses nonobject and unsupported flat entries", (
           "zeta@bad-source": true,
           "eta@missing": true,
         },
-        extraKnownMarketplaces: extraKnownMarketplaces,
+        extraKnownMarketplaces,
       },
     },
   ]);
@@ -618,7 +621,7 @@ test("buildClaudeImportPlan maps flat directory and GitHub entries in ref order"
       scope: "project",
       settings: {
         enabledPlugins: { "alpha@private": true, "beta@team": true },
-        extraKnownMarketplaces: extraKnownMarketplaces,
+        extraKnownMarketplaces,
       },
     },
   ]);
@@ -681,7 +684,7 @@ test("buildClaudeImportPlan maps every nested source shape and optional ref", ()
           "delta@github-ref": true,
           "epsilon@directory": true,
         },
-        extraKnownMarketplaces: extraKnownMarketplaces,
+        extraKnownMarketplaces,
       },
     },
   ]);
@@ -768,6 +771,7 @@ test("buildClaudeImportPlan maps the official source and skips its duplicate", (
             scope: "user",
             marketplace: "claude-plugins-official",
             source: "anthropics/claude-plugins-official",
+            sourceIsFallback: true,
           },
         ],
         diagnostics: [],
@@ -794,4 +798,192 @@ test("buildClaudeImportPlan maps the official source and skips its duplicate", (
     ],
     diagnostics: [],
   });
+});
+
+test("MIM-02 / D-PL6-01: plans the referenced marketplaces first, then every other extra entry in settings order", () => {
+  // arrange
+  const extraKnownMarketplaces = {
+    beta: { directory: "../beta" },
+    alpha: { github: { repo: "acme/alpha" } },
+    gamma: { source: { source: "directory", path: "/opt/gamma" } },
+  };
+
+  // act
+  const plan = buildClaudeImportPlan([
+    {
+      scope: "user",
+      settings: {
+        enabledPlugins: { "tool@gamma": true },
+        extraKnownMarketplaces,
+      },
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    scopes: [
+      {
+        scope: "user",
+        marketplacesToEnsure: [
+          { scope: "user", marketplace: "gamma", source: "/opt/gamma" },
+          { scope: "user", marketplace: "beta", source: "../beta" },
+          { scope: "user", marketplace: "alpha", source: "acme/alpha" },
+        ],
+        pluginsToInstall: [
+          { scope: "user", ref: { marketplace: "gamma", plugin: "tool", raw: "tool@gamma" } },
+        ],
+        skippedPlugins: [],
+        diagnostics: [],
+      },
+    ],
+    diagnostics: [],
+  });
+});
+
+test("MIM-02 / D-PL6-01: diagnoses an extra entry no enabled plugin names when it has no supported source", () => {
+  // arrange
+  const diagnostic = {
+    code: "unmappable-marketplace-source",
+    marketplace: "remote",
+    message:
+      'Skipping Claude marketplace "remote" because it has no supported url, github, or directory source (nested file/remote-marketplace.json sources are not importable).',
+    scope: "project",
+    severity: "warning",
+  } as const;
+
+  // act
+  const plan = buildClaudeImportPlan([
+    {
+      scope: "project",
+      settings: {
+        enabledPlugins: {},
+        extraKnownMarketplaces: {
+          remote: { source: { source: "file", url: "https://example.test/marketplace.json" } },
+        },
+      },
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    scopes: [
+      {
+        scope: "project",
+        marketplacesToEnsure: [],
+        pluginsToInstall: [],
+        skippedPlugins: [],
+        diagnostics: [diagnostic],
+      },
+    ],
+    diagnostics: [diagnostic],
+  });
+});
+
+test("D-PL6-08: plans no official marketplace that only an extra entry names", () => {
+  // arrange
+  const extraKnownMarketplaces = {
+    "claude-plugins-official": { github: { repo: "someone/else" } },
+    team: { github: { repo: "acme/team" } },
+  };
+
+  // act
+  const plan = buildClaudeImportPlan([
+    {
+      scope: "user",
+      settings: { enabledPlugins: {}, extraKnownMarketplaces: extraKnownMarketplaces },
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    scopes: [
+      {
+        scope: "user",
+        marketplacesToEnsure: [{ scope: "user", marketplace: "team", source: "acme/team" }],
+        pluginsToInstall: [],
+        skippedPlugins: [],
+        diagnostics: [],
+      },
+    ],
+    diagnostics: [],
+  });
+});
+
+test("D-PL6-08: plans the official source for an official marketplace an enabled plugin names", () => {
+  // arrange
+  const extraKnownMarketplaces = {
+    "claude-plugins-official": { github: { repo: "someone/else" } },
+  };
+
+  // act
+  const plan = buildClaudeImportPlan([
+    {
+      scope: "user",
+      settings: {
+        enabledPlugins: { "alpha@claude-plugins-official": true },
+        extraKnownMarketplaces,
+      },
+    },
+  ]);
+
+  // assert
+  assert.deepStrictEqual(plan, {
+    scopes: [
+      {
+        scope: "user",
+        marketplacesToEnsure: [
+          {
+            scope: "user",
+            marketplace: "claude-plugins-official",
+            source: "anthropics/claude-plugins-official",
+            sourceIsFallback: true,
+          },
+        ],
+        pluginsToInstall: [
+          {
+            scope: "user",
+            ref: {
+              marketplace: "claude-plugins-official",
+              plugin: "alpha",
+              raw: "alpha@claude-plugins-official",
+            },
+          },
+        ],
+        skippedPlugins: [],
+        diagnostics: [],
+      },
+    ],
+    diagnostics: [],
+  });
+});
+
+test("IMP-05: marks only the official marketplace an enabled plugin names as the fallback source", () => {
+  // arrange
+  const inputs = [
+    {
+      scope: "user" as const,
+      settings: {
+        enabledPlugins: { "official@claude-plugins-official": true, "tool@team": true },
+        extraKnownMarketplaces: {
+          team: { source: { source: "github", repo: "acme/team" } },
+          extra: { source: { source: "directory", path: "./extra" } },
+        },
+      },
+    },
+  ];
+
+  // act
+  const plan = buildClaudeImportPlan(inputs);
+
+  // assert
+  assert.deepStrictEqual(plan.scopes[0]?.marketplacesToEnsure, [
+    {
+      scope: "user",
+      marketplace: "claude-plugins-official",
+      source: "anthropics/claude-plugins-official",
+      sourceIsFallback: true,
+    },
+    { scope: "user", marketplace: "team", source: "acme/team" },
+    { scope: "user", marketplace: "extra", source: "./extra" },
+  ]);
 });

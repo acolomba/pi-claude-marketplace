@@ -12,6 +12,7 @@ import { runCommand, runCommandPayloads } from "../../lib/pi-commands.ts";
 import {
   invalidateManifest,
   publishConventionalDecoy,
+  publishUnreadableCommandFile,
   publishUnreadableSkillFile,
   restoreUnreadableSkillFile,
   rewritePublishedManifest,
@@ -94,6 +95,21 @@ Given(
     const error = await unreadableSkillCopyError(published, plugin, scratch);
     assert.deepStrictEqual([error.code, error.syscall], ["EACCES", "copyfile"]);
     this.recordErrorMessage("{unreadable skill file copy error}", error.message);
+  },
+);
+
+// Pi reads a command with the same call, so the error it reports is the one
+// this read gets.
+Given(
+  "the published plugin {string} of the marketplace {string} has an unreadable command file",
+  async function (this: ScenarioWorld, plugin: string, name: string) {
+    const file = await publishUnreadableCommandFile(this.requirePublished(name), plugin);
+    const error = await readFile(file, "utf8").then(
+      () => assert.fail(`reading ${file} did not fail`),
+      (reason: unknown) => reason as NodeJS.ErrnoException,
+    );
+    assert.deepStrictEqual([error.code, error.syscall], ["EACCES", "open"]);
+    this.recordErrorMessage("{unreadable command file read error}", error.message);
   },
 );
 

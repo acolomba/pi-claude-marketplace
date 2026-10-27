@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import { UninstallRefusedError } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/uninstall.ts";
 import {
   carriedMcpConfigNotices,
+  carriedPackageNote,
   classifyOrchestratorThrow,
   installFailureReasonFields,
   classifyReadPassThrow,
@@ -359,9 +360,9 @@ void ({
   scope: "project",
   marketplace: "official",
   plugin: "formatter",
-  reason: "unreadable",
-  // @ts-expect-error install failure causes are DependencyCascadeError, not a bare Error
+  reason: "rollback partial",
   cause: new Error("boom"),
+  rollbackPartials: [{ phase: "skills", cause: new Error("skill rollback denied") }],
 } satisfies PluginInstallFailedOutcome);
 void ({
   kind: "plugin-uninstalled",
@@ -1175,7 +1176,7 @@ describe("dependencyDisabledOutcome", () => {
   test("T-06-05: prints the range the verdict already bounded verbatim", () => {
     // arrange -- the verdict bounds the declared ranges once, so a second
     // bound here would cut the text and replace its true overflow count.
-    const bounded = `>=${"1".repeat(198)}... (+12 chars)`;
+    const bounded = `>=${"1".repeat(198)}… (+12 chars)`;
     const held = {
       scope: "user",
       marketplace: "official",
@@ -1280,6 +1281,28 @@ describe("carriedMcpConfigNotices", () => {
 
     // act
     const carried = carriedMcpConfigNotices(outcome);
+
+    // assert
+    assert.deepStrictEqual(carried, {});
+  });
+});
+
+describe("carriedPackageNote", () => {
+  test("PKD-02: lifts the package note onto the post-install warnings", () => {
+    // act
+    const carried = carriedPackageNote({
+      packageNote: "Plugin dependency install failed (npm): E404",
+    });
+
+    // assert
+    assert.deepStrictEqual(carried, {
+      postCommitWarnings: ["Plugin dependency install failed (npm): E404"],
+    });
+  });
+
+  test("PKD-02: lifts nothing when the carrier has no package note", () => {
+    // act
+    const carried = carriedPackageNote({});
 
     // assert
     assert.deepStrictEqual(carried, {});

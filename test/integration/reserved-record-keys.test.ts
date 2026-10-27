@@ -420,8 +420,9 @@ test("D-08-07: a marketplace that declares __proto__ installs hello, lists __pro
         message:
           "A plugin operation has failed.\n\n● hostile [project]\n" +
           "  ⊘ __proto__ (failed) {invalid manifest}\n" +
-          '    cause: Plugin "__proto__@hostile" declares an unusable dependency ' +
-          "(root: expected <plugin>@<marketplace>).",
+          '    cause: Plugin "__proto__@hostile" cannot be installed, because its id is invalid: ' +
+          'Each part of a plugin id (plugin@marketplace) may use only the letters a-z and A-Z, digits, ".", "_" and "-", ' +
+          "and must start with a letter or digit. Here the plugin's name does not; the marketplace's maintainer can rename it.",
         severity: "error",
       },
     ]);

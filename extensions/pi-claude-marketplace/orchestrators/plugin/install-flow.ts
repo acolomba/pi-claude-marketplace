@@ -169,7 +169,7 @@ import type { Dependency } from "../../shared/concerns/soft-dep.ts";
 import type { NotificationRun } from "../../shared/notification-run.ts";
 import type { ContentReason, McpConfigNotice } from "../../shared/notification-types.ts";
 import type { Scope } from "../../shared/types.ts";
-import type { runPhases } from "../../transaction/phase-ledger.ts";
+import type { RollbackPartial, runPhases } from "../../transaction/phase-ledger.ts";
 import type {
   LockedStateTransaction,
   withLockedStateTransaction,
@@ -340,6 +340,11 @@ export interface InstallPluginOptions {
    * only what the plugin reaches without passing a move, and its moves list no
    * release tag (D-23), as the caller's plan and `pending` do. Only `apply`
    * sets it; the command and `import` install what each move needs before it.
+   * D-PL4-02: the plan still previews every fresh dependency, also one that
+   * only a moved dependency's new version needs and that the later step
+   * installs. So one that cannot install refuses the plugin before any move
+   * lands, as Claude Code's install of one plugin is all or nothing over its
+   * closure.
    */
   readonly dependencyInstallsFollow?: true;
   /**
@@ -985,11 +990,33 @@ async function sharedCascadeOptions(args: {
 }
 
 /**
+ * The commit a cascade member installs and the version it records, when the
+ * walk or the plan chose them. RESV-03 / GV-01: a member whose constraint
+ * selected a release tag installs that tag's commit and records the tag's
+ * semver as `resolvedVersion`. D-PL4-01: otherwise a member the plan
+ * previewed installs the commit its preview resolved. That commit carries no
+ * `resolvedVersion`, so the recorded version derives as an unpinned install
+ * of the same commit derives it; setting one here would record a tag-shaped
+ * version the plan never chose.
+ */
+function memberLedgerPin(member: ResolvedCascadeMember): {
+  readonly sourcePin?: string;
+  readonly resolvedVersion?: string;
+} {
+  if (member.pin !== undefined) {
+    return { sourcePin: member.pin.oid, resolvedVersion: member.pin.version };
+  }
+
+  return member.previewedCommit === undefined ? {} : { sourcePin: member.previewedCommit };
+}
+
+/**
  * D-04-01: the per-member ledger options of a cascade whose every member
  * exists to satisfy a declaration -- the reload's missing-dependency install
  * and an update's new closure (UPD-DEP-D1). RESV-03: a member whose
  * constraint selected a release tag installs that tag's commit and records
- * its semver as `resolvedVersion` (GV-01).
+ * its semver as `resolvedVersion` (GV-01). D-PL4-01: a member the plan
+ * previewed installs the commit its preview resolved.
  */
 function dependencyLedgerOptions(
   opts: InstallLedgerCallerOptions,
@@ -1002,10 +1029,7 @@ function dependencyLedgerOptions(
       cwd: core.cwd,
       marketplace: member.marketplace,
       plugin: member.name,
-      ...(member.pin !== undefined && {
-        sourcePin: member.pin.oid,
-        resolvedVersion: member.pin.version,
-      }),
+      ...memberLedgerPin(member),
       ...(member.directoryPin !== undefined && { directoryPin: member.directoryPin }),
       provenance: "dependency",
       marketplaceAdd: core.adds.marketplaceAdd,
@@ -1118,6 +1142,7 @@ function unwrapCascade<S extends Exclude<InstallCascadeResult, CascadeFailureArm
         key: cascade.key,
         error: cascade.error,
         rollbackPartials: capture.rollbackPartials,
+        unmaterialized: cascade.unmaterialized,
       };
     }
 
@@ -1775,8 +1800,9 @@ function handleCaughtInstallFailure(args: {
  * names the failing dependency as its subject and carries the requesting
  * plugin's own row beside it, instead of reporting the requested plugin alone
  * for something it did not do. The outcome contract is unchanged -- the typed
- * Error stays the dispatch surface and `cause` stays the formatted text -- so an
- * orchestrated caller sees exactly what it saw before.
+ * Error stays the dispatch surface and `cause` stays the formatted text -- and
+ * an orchestrated caller also gets the failed dependency's rollback partials,
+ * as the single-plugin outcome carries its own (REC-06, D-PL6-04).
  */
 function handleCascadeThrow(args: {
   readonly ctx: NotificationContext;
@@ -1797,9 +1823,16 @@ function handleCascadeThrow(args: {
   const error = cascadeFailureCause(subject, rootKey);
   const cause = formatOrchestratedCause(error);
   if (orchestrated) {
-    return { status: "failed", error, cause, ...movedMember(args.moved) };
+    return {
+      status: "failed",
+      error,
+      cause,
+      ...memberPartials(subject),
+      ...movedMember(args.moved),
+    };
   }
 
+  const moved = movedRows(args.moved);
   notifyWithContext(
     ctx,
     run,
@@ -1809,8 +1842,8 @@ function handleCascadeThrow(args: {
         name: marketplace,
         scope,
         plugins: [
-          ...composeCascadeFailureMessage({ scope, rootKey, rootName: plugin, subject }),
-          ...movedRows(args.moved),
+          ...composeCascadeFailureMessage({ scope, rootKey, rootName: plugin, subject, moved }),
+          ...moved,
         ],
       },
     ],
@@ -1818,6 +1851,19 @@ function handleCascadeThrow(args: {
     "single",
   );
   return { status: "failed", error, cause, ...movedMember(args.moved) };
+}
+
+/**
+ * MIM-03 / D-PL6-04: the rollback partials a failed dependency left, present
+ * only when its undo could not finish. The causes are raw; each consumer
+ * redacts them before a row (D-PL6-12).
+ */
+function memberPartials(
+  subject: CascadeFailureSubject,
+): Pick<Extract<InstallPluginOutcome, { readonly status: "failed" }>, "rollbackPartials"> {
+  return subject.kind === "member" && subject.rollbackPartials.length > 0
+    ? { rollbackPartials: subject.rollbackPartials }
+    : {};
 }
 
 /** UPD-DEP-D1: the rows of the dependencies an install moved into range. */
@@ -2315,9 +2361,10 @@ async function installPluginWithTransaction(
           })),
           // RESV-03: a member whose constraint selected a release tag carries the
           // commit that tag resolves to AND the semver that tag names, and this
-          // builder is where both enter that member's install. An unconstrained
-          // member carries neither and installs from the ref its marketplace
-          // entry names.
+          // builder is where both enter that member's install. D-PL4-01:
+          // otherwise a member the plan previewed installs the commit its
+          // preview resolved. An unconstrained member the plan never previewed
+          // installs from the ref its marketplace entry names.
           //
           // RESV-05 / GV-01: the tag's semver is recorded as `resolvedVersion`
           // beside the version Claude Code records there, which carries the
@@ -2341,10 +2388,7 @@ async function installPluginWithTransaction(
               cwd,
               marketplace: member.marketplace,
               plugin: member.name,
-              ...(member.pin !== undefined && {
-                sourcePin: member.pin.oid,
-                resolvedVersion: member.pin.version,
-              }),
+              ...memberLedgerPin(member),
               ...(member.directoryPin !== undefined && { directoryPin: member.directoryPin }),
               ...(pinVersion !== undefined && { pinVersion }),
               // D-04-01: the root is the one member the closure walk never
@@ -2967,6 +3011,12 @@ export type InstallMissingDependencyOutcome =
       readonly cause: string;
       readonly reason?: "cross-marketplace";
       /**
+       * REC-06: the undo steps the failed install's own ledger could not
+       * finish. `apply` does not render them yet (LCORCH-01). Omitted when
+       * every undo finished (NREG-01).
+       */
+      readonly rollbackPartials?: readonly RollbackPartial[];
+      /**
        * AFILE-04: the notices of the members that committed before a later
        * member failed; omitted when none (NREG-01).
        */
@@ -3579,7 +3629,8 @@ async function installAfterMoves(args: {
 
 /**
  * The plan of an install: the plugin the user named first, then the whole
- * graph. CR-N2: anything the plan throws -- an unreadable catalog only a
+ * graph. D-PL4-01: the plugin the user named installs the commit its preview
+ * resolved. CR-N2: anything the plan throws -- an unreadable catalog only a
  * moved dependency's new version reaches, say -- is the install's failure,
  * rendered at the catch site like the first run's.
  */
@@ -3593,7 +3644,7 @@ async function planInstallMoves(args: {
 }): Promise<InstallPlanResult> {
   const { owners, opts, target } = args;
   try {
-    await previewInstall(
+    const rootCommit = await previewInstall(
       await loadState(target.locations.extensionRoot),
       target.locations,
       buildInstallLedgerOptions(opts, owners.env, {
@@ -3607,7 +3658,10 @@ async function planInstallMoves(args: {
       }),
     );
     const ports = await planningPorts({ ...args, caller: opts });
-    const plan = await planDependencyGraph(ports, { deferMoveDependencies: args.defers });
+    const plan = await planDependencyGraph(ports, {
+      deferMoveDependencies: args.defers,
+      ...(rootCommit !== undefined && { rootCommit }),
+    });
     return plan.ok
       ? plan
       : {

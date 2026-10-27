@@ -22,7 +22,9 @@
 //  "updated", plugins: outcomes.map(outcomeToCascadePluginMessage) }] }`.
 //  The per-plugin cause chain rides on `PluginFailedMessage.cause`;
 //  `unchanged` renders as `⊘... (skipped) {up-to-date}`. Catalog UAT
-//  fixture `mixed-outcomes`.
+//  fixture `mixed-outcomes`. Each updated plugin's package note follows the
+//  rows as its own warning diagnostic, before the MCP config notices
+//  (D-PL9-21).
 //  - mp-level failure (clone/manifest unreachable): the failed marketplace
 //  header plus a synthetic `PluginFailedMessage` child carrying
 //  `cause: err` so the underlying MarketplaceUpdateError reaches the user
@@ -113,7 +115,6 @@ import {
   InvalidMarketplaceManifestError,
   MarketplaceBaselineUnreadableError,
   MarketplaceUpdateError,
-  PluginShapeError,
   ReservedMarketplaceNameError,
   StateLockHeldError,
   composeErrorWithCauseChain,
@@ -124,10 +125,8 @@ import {
 } from "../../shared/errors.ts";
 import { createRemovalOps, type RemovalOps } from "../../shared/fs-utils.ts";
 import {
-  classifyGitTransportFailure,
+  classifyGitFailure,
   hostedFetchFailureReason,
-  hostHttpFailureFrame,
-  hostHttpStatus,
 } from "../../shared/git-failure-classifiers.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
@@ -149,6 +148,7 @@ import {
   NO_STORED_CREDENTIAL_CAUSE,
   buildGitHubAuth,
 } from "../auth-host.ts";
+import { surfaceDiscoveryWarnings } from "../plugin/shared.ts";
 // WR-12 / WR-03: the `(updated)` row composer, imported from the LEAF module
 // that holds it rather than from the plugin-update ledger. The ledger stays
 // behind the injected `pluginUpdate` seam -- and now stays out of this module's
@@ -583,9 +583,18 @@ function refreshRemoteUrl(source: ParsedSource): string | undefined {
 }
 
 /**
+ * UPD-11: the 404 rule of a marketplace refresh (D-PL7-02). A refresh reads a
+ * repository the record already points at, so a 404 or 410 from the host is
+ * `network error`, not `source missing`.
+ */
+const MARKETPLACE_REFRESH_RULE: Parameters<typeof classifyGitFailure>[1] = {
+  notFound: "network error",
+};
+
+/**
  * UPD-11: the first frame of a refresh failure's cause line. When the git host
- * answered with an HTTP status, the frame names the status and the URL the
- * fetch sent (see `hostHttpFailureFrame`).
+ * answered with an HTTP status, `classifyGitFailure` frames it as the status on
+ * the URL the fetch sent. Without a remote URL there is no frame.
  */
 function refreshFailureMessage(
   name: string,
@@ -593,7 +602,7 @@ function refreshFailureMessage(
   remoteUrl: string | undefined,
   cloneAdvanced: boolean,
 ): string {
-  const frame = remoteUrl === undefined ? undefined : hostHttpFailureFrame(err, remoteUrl);
+  const frame = classifyGitFailure(err, MARKETPLACE_REFRESH_RULE, remoteUrl)?.frame;
   if (frame !== undefined) {
     return frame;
   }
@@ -680,17 +689,15 @@ async function cascadeAutoupdates(
       // renderer owns; the `outcome.cause` stamp below carries the raw `err`
       // for that path.
       //
-      // Pre-narrow the closed-set Reason via `reasonsFromCascadeError(err)`
-      // so the cascade row renders the precise cause class (`permission
-      // denied` / `source missing` / `no longer installable` / ...) instead
-      // of degrading to the permissive `not in manifest` fallback via the
-      // consumer's `narrowFailReasons` substring parse.
-      const typedReasons = reasonsFromCascadeError(err);
+      // PUP-9: the production `pluginUpdate` runs each plugin through
+      // `runCascadeTarget` (`orchestrators/plugin/update-flow.ts`), which
+      // returns every failure as a `failed` outcome with its reason and
+      // rethrows only GHB-03. This catch therefore sets no reason; the cascade
+      // mapper's notes fallback names the row's reason.
       outcomes.push({
         partition: "failed",
         name: plugin,
         notes: [composeErrorWithCauseChain(err)],
-        ...(typedReasons !== undefined && { reasons: typedReasons }),
         // CMC-13: required `boolean` on the outcome contract. `(failed)`
         // cascade rows do not render the soft-dep marker (MSG-SD-3), so the
         // value is deliberately `false`; explicit emission keeps every
@@ -713,84 +720,6 @@ async function cascadeAutoupdates(
 }
 
 /**
- * Typed-dispatch helper for the `cascadeAutoupdates` catch. Maps a thrown
- * error to a closed-set Reason[] using the same priority order as the cascade
- * narrowers in `orchestrators/plugin/{update,reinstall}.ts::reasonsFromTypedError`:
- * PluginShapeError variants first, then errno-bearing FS errors, then
- * `undefined` to defer to the consumer's substring fallback. The refresh
- * classification in `refreshFailureReasons` calls it as well, with the
- * `MarketplaceUpdateError` that wraps a refresh failure.
- */
-function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undefined {
-  if (err instanceof PluginShapeError) {
-    // Switch on `err.shape.kind` for compile-time exhaustiveness.
-    switch (err.shape.kind) {
-      case "no-longer-installable":
-      case "not-installable":
-        return ["no longer installable"] as const;
-      case "not-in-manifest":
-        return ["not in manifest"] as const;
-      case "already-installed":
-        // Cascade-path "already installed" is unexpected (we only
-        // cascade-update plugins already in the record); map to the
-        // permissive `not in manifest` fallback.
-        return ["not in manifest"] as const;
-    }
-  }
-
-  // ATTR-10 / D-48-B / MPA-02: a typed marketplace-manifest parse or
-  // validation failure maps to the token `list` and `info` use (D-11):
-  // malformed JSON reads `unparseable`, a schema-invalid manifest
-  // `invalid manifest`, for both path and github sources. The refresh
-  // classification sees the InvalidMarketplaceManifestError WRAPPED inside a
-  // MarketplaceUpdateError (refreshRecord rethrows with `{ cause }`), so unwrap
-  // ONE level of cause (mirrors add.ts::unwrapAddError); the cascadeAutoupdates
-  // catch passes the raw error. Placed before the errno checks so the typed
-  // class takes precedence over any incidental errno on the cause chain.
-  const manifestCause = err instanceof Error ? withoutCleanupLeaks(err.cause) : undefined;
-  const manifestError =
-    manifestCause instanceof InvalidMarketplaceManifestError ? manifestCause : err;
-  if (manifestError instanceof InvalidMarketplaceManifestError) {
-    return [narrowProbeError(manifestError)] as const;
-  }
-
-  if (err instanceof Error && err.cause instanceof MarketplaceBaselineUnreadableError) {
-    return ["unreadable"] as const;
-  }
-
-  const hostedReason = hostedDownloadReason(err);
-  if (hostedReason !== undefined) {
-    return [hostedReason] as const;
-  }
-
-  // Mirror the one-level cause unwrap above for code-bearing transport
-  // errors (errno + HttpError); the narrowing lives in `transportReason`.
-  if (err instanceof Error) {
-    const reason = transportReason(err);
-    if (reason !== undefined) {
-      return [reason] as const;
-    }
-  }
-
-  return undefined;
-}
-
-/**
- * D-PL5-10 / D-PL5-21: the reason of a hosted download that got no usable
- * answer, which the refresh wraps in a `MarketplaceUpdateError`. A connection
- * that failed or timed out is `network unreachable`; an answer the download
- * refuses is `unreadable`. A hosted HTTP status takes the git host ladder.
- */
-function hostedDownloadReason(err: unknown): ContentReason | undefined {
-  const cause = err instanceof Error ? withoutCleanupLeaks(err.cause) : undefined;
-  if (!(cause instanceof HostedManifestFetchError)) {
-    return undefined;
-  }
-
-  return hostedFetchFailureReason(cause.failure);
-}
-
-/**
  * Narrow a code-bearing transport failure to its closed-set Reason. The
  * refresh classification receives the transport error WRAPPED inside a
  * MarketplaceUpdateError (refreshRecord rethrows with `{ cause }`), so the
@@ -799,27 +728,17 @@ function hostedDownloadReason(err: unknown): ContentReason | undefined {
  * failure (NFR-5) and maps to `source missing` / `permission denied`.
  *
  * EACCES/EPERM/ENOENT/ENOTDIR classify first since the shared classifier
- * has no opinion on them (path-source failures never reach git). The
- * remaining ladder -- `StoredCredentialRejectedError` (a stored credential the
- * host refused), isomorphic-git `HttpError` 401/403, `UserCanceledError` (a
- * helper miss, a declined or failed Device Flow, or a device-flow credential
- * the host refused), and network errno --
- * delegates to `classifyGitTransportFailure` (`shared/git-failure-classifiers.ts`)
- * instead of a hand-rolled copy, so `update` cannot drift out of sync with
- * `install-outcome.ts`/`fetch.ts` (plugin), which already delegate to it.
+ * has no opinion on them (path-source failures never reach git). The rest of
+ * the ladder (authentication, network errno, and the host's HTTP status)
+ * goes to the shared `classifyGitFailure` with the refresh rule, so `update`
+ * cannot drift from the other git surfaces.
  */
-function transportReason(err: Error): ContentReason | undefined {
-  let bearer: NodeJS.ErrnoException | undefined;
-  if ((err as NodeJS.ErrnoException).code !== undefined) {
-    bearer = err;
-  } else if (err.cause instanceof Error) {
-    bearer = err.cause;
-  }
-
-  if (bearer === undefined) {
+function transportReason(err: MarketplaceUpdateError): ContentReason | undefined {
+  if (!(err.cause instanceof Error)) {
     return undefined;
   }
 
+  const bearer: NodeJS.ErrnoException = err.cause;
   if (bearer.code === "EACCES" || bearer.code === "EPERM") {
     return "permission denied";
   }
@@ -828,7 +747,7 @@ function transportReason(err: Error): ContentReason | undefined {
     return "source missing";
   }
 
-  return classifyGitTransportFailure(bearer);
+  return classifyGitFailure(bearer, MARKETPLACE_REFRESH_RULE)?.reason;
 }
 
 /**
@@ -837,8 +756,8 @@ function transportReason(err: Error): ContentReason | undefined {
  * `MarketplaceUpdateError`, is classified. A held state lock is `lock held`,
  * as in autoupdate. Any other error failed outside the refresh (the state
  * load, the state save, or the lock release), so no errno code on it is
- * mapped. A refresh failure that no rule names gets no reason; its cause chain
- * still prints.
+ * mapped. The git host's HTTP answer is `network error` (UPD-11). A refresh
+ * failure that no rule names gets no reason; its cause chain still prints.
  */
 function refreshFailureReasons(err: unknown): readonly ContentReason[] {
   if (err instanceof StateLockHeldError) {
@@ -849,12 +768,53 @@ function refreshFailureReasons(err: unknown): readonly ContentReason[] {
     return [];
   }
 
-  const typedReasons = reasonsFromCascadeError(err);
-  if (typedReasons !== undefined) {
-    return typedReasons;
+  // ATTR-10 / D-48-B / MPA-02: a typed marketplace-manifest parse or
+  // validation failure maps to the token `list` and `info` use (D-11):
+  // malformed JSON reads `unparseable`, a schema-invalid manifest
+  // `invalid manifest`, for both path and github sources. refreshRecord wraps
+  // it with `{ cause }`, so it is read one level down (as add.ts::unwrapAddError
+  // does), before the errno rules, so the typed class takes precedence over any
+  // incidental errno on the cause chain.
+  // MA-9: a cleanup leak the refresh appended to its error does not hide the
+  // cause behind it, so every typed cause is read through `withoutCleanupLeaks`.
+  const cause = withoutCleanupLeaks(err.cause);
+  if (cause instanceof InvalidMarketplaceManifestError) {
+    return [narrowProbeError(cause)];
   }
 
-  return hostHttpStatus(err.cause) === undefined ? [] : ["network error"];
+  if (cause instanceof MarketplaceBaselineUnreadableError) {
+    return ["unreadable"];
+  }
+
+  // D-PL5-10 / D-PL5-21: a hosted download that got no usable answer. A hosted
+  // HTTP status takes the git host ladder in `transportReason`.
+  if (cause instanceof HostedManifestFetchError) {
+    return [hostedFetchFailureReason(cause.failure)];
+  }
+
+  const reason = transportReason(err);
+  return reason === undefined ? [] : [reason];
+}
+
+/**
+ * PKD-02 / D-PL9-21: shows each updated plugin's package note after the
+ * cascade rows, as the direct plugin update shows it. The cascade's other
+ * notes follow WRN-02's shared placement rule, not this call.
+ */
+function surfaceCascadePackageNotes(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  outcomes: readonly PluginUpdateOutcome[],
+): void {
+  for (const outcome of outcomes) {
+    if (outcome.partition === "updated" && outcome.packageNote !== undefined) {
+      surfaceDiscoveryWarnings(ctx, run, {
+        plugin: outcome.name,
+        verb: "updated",
+        warnings: [outcome.packageNote],
+      });
+    }
+  }
 }
 
 async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
@@ -1023,6 +983,7 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
     },
   ];
   notifyWithContext(ctx, run, UPDATE_CONTEXT, cascadeRows, undefined, cardinality);
+  surfaceCascadePackageNotes(ctx, run, outcomes);
   // AFILE-04: the notices of the cascade's updates, shown after the rows they
   // explain. A failed update can carry them too: its MCP commit succeeded
   // before a later bridge or the finalize failed. The no-op paths above have

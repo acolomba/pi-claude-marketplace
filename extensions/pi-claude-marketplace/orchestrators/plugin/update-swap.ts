@@ -65,6 +65,7 @@ import path from "node:path";
 import {
   abortPreparedAgents,
   assertAgentCommitTargets,
+  assertAgentTargetsFree,
   commitPreparedAgents,
   prepareStagePluginAgents,
 } from "../../bridges/agents/index.ts";
@@ -609,6 +610,16 @@ const PHASE3_FAILURE_PHASES = [
 ] as const;
 type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
 
+// D-PL7-08: the stamp is strictly later than the one it replaces, even within
+// one millisecond, so a rival run that read the replaced stamp fails ST-9. A
+// stamp that does not parse, or that is the largest time a Date holds, is
+// replaced by the current time, which still differs from it.
+function nextUpdateStamp(previous: string): string {
+  const now = Date.now();
+  const later = new Date(Math.max(now, Date.parse(previous) + 1));
+  return (Number.isNaN(later.getTime()) ? new Date(now) : later).toISOString();
+}
+
 /**
  * TR-04: pre-commit intent-mark.
  *
@@ -633,10 +644,10 @@ type Phase3Phase = (typeof PHASE3_FAILURE_PHASES)[number];
  * rewrites them on the all-success branch.
  *
  * No mutation to `sRecord.version` or `sRecord.resolvedSource` -- those are
- * the finalize step's responsibility. `sRecord.updatedAt` is restamped here
- * so the ST-9 check sees an overlapping run even when the version and the sha
- * stay the same, and `sRecord.resources.workflows` is widened, as CR-02 below
- * says.
+ * the finalize step's responsibility. `sRecord.updatedAt` is restamped here,
+ * strictly later than the stamp it replaces, so the ST-9 check sees an
+ * overlapping run even when the version and the sha stay the same, and
+ * `sRecord.resources.workflows` is widened, as CR-02 below says.
  */
 async function markUpdateInProgress(
   args: ThreePhaseArgs,
@@ -674,7 +685,7 @@ async function markUpdateInProgress(
         });
       }
 
-      sRecord.updatedAt = new Date().toISOString();
+      sRecord.updatedAt = nextUpdateStamp(sRecord.updatedAt);
 
       sRecord.compatibility = {
         installable: false,
@@ -936,8 +947,9 @@ async function refreshHooksCacheAfterUpdate(
  *    `version` stays at `fromVersion`, and `resolvedSource` stays at
  *    the pre-update install path.
  *
- * `sRecord.updatedAt` is set on BOTH branches: even a failed finalize
- * is a truthful "we touched this record" stamp.
+ * `sRecord.updatedAt` is set on BOTH branches, strictly later than the
+ * intent mark's stamp: even a failed finalize is a truthful "we touched this
+ * record" stamp.
  *
  * LAYER-04 / D-MF-03: finalize changes the installation record only. An update
  * never writes a layer config, so a dependency it updates stays undeclared.
@@ -992,7 +1004,9 @@ async function finalizeUpdateRecord(
         applyAllSuccessRecordFields(sRecord, preflight);
       }
 
-      sRecord.updatedAt = new Date().toISOString();
+      // D-PL7-08: a run that read the record during this run's window checks
+      // ST-9 against this stamp, so it must differ from the mark's stamp.
+      sRecord.updatedAt = nextUpdateStamp(sRecord.updatedAt);
     },
     args.stateTransaction,
   );
@@ -1364,10 +1378,11 @@ function composePhase3FailureOutcome(
  * plugin of the scope already owns, checked against `preflight.state` without
  * the plugin's own record, so an update never conflicts with itself (a plugin
  * moving its skill names from {a,b} to {a,c} would otherwise conflict on
- * "a"). Writes nothing, so UPD-DEP-D1's plan runs it before any dependency
- * moves, and the swap runs it again over the scope the moves left.
+ * "a"). Writes nothing. The swap runs it over the scope the moves left;
+ * `assertUpdateNamesFree` runs it, with the agent-target check, before any
+ * dependency moves.
  */
-export async function assertUpdateNamesFree(
+async function assertNamesFree(
   args: Pick<ThreePhaseArgsBase, "marketplace" | "plugin" | "scope">,
   preflight: Pick<PreparedPluginUpdate, "installable" | "state">,
 ): Promise<Awaited<ReturnType<typeof discoverGeneratedNames>>> {
@@ -1378,6 +1393,21 @@ export async function assertUpdateNamesFree(
     removePluginRecord(preflight.state, args.marketplace, args.plugin),
   );
   return generatedNames;
+}
+
+/**
+ * PI-6, then D-PL4-04: the name check, then a refusal of a new agent target
+ * that holds a file the agents commit would not replace. It writes nothing.
+ * The move judge and the update's WR-C check run it, so an occupied target
+ * refuses before anything lands. It returns nothing, because only the swap
+ * reads the names, through `assertNamesFree`.
+ */
+export async function assertUpdateNamesFree(
+  args: Pick<ThreePhaseArgsBase, "marketplace" | "plugin" | "scope" | "locations">,
+  preflight: Pick<PreparedPluginUpdate, "installable" | "state">,
+): Promise<void> {
+  const names = await assertNamesFree(args, preflight);
+  await assertAgentTargetsFree(args.locations, args, names.agents);
 }
 
 // The three-phase update body sequences preflight, the D-UPD disabled-record
@@ -1404,7 +1434,10 @@ export async function swapPluginUpdate(
   // PI-6 cross-plugin guard: re-check generated names against the SAME-SCOPE
   // state EXCLUDING this plugin's currently-recorded resources.
 
-  const generatedNames = await assertUpdateNamesFree(args, preflight);
+  // The swap checks names only, so a forced reinstall (RINST-01, D-18-15) can
+  // overwrite a user-edited agent of its own. `assertAgentCommitTargets` below
+  // still refuses a file that appeared since the plan.
+  const generatedNames = await assertNamesFree(args, preflight);
   // D-08-12: this verb owns the swap lifecycle, so it constructs the removal
   // operations once and every prepare, commit, and abort step below performs its
   // cleanup through that one collaborator.

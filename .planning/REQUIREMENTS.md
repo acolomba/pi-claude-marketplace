@@ -50,14 +50,17 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 - [ ] **CAS-05**: A refusal for a non-root cascade member names every declarer that required it, and names and ranges in those refusals are truncated as Claude Code truncates them (PARITYGV-01 b2, b3)
 - [ ] **CAS-06**: The offline refusal of an install that would move a git dependency names the next step (UPDDEP-01 b2)
 - [ ] **CAS-07**: A hold row's cause never interpolates an unbounded catalog `version` string (VERSTR-01)
+- [ ] **CAS-08**: The routes D-PL3-15 left with one failed row (the root's own ledger failure, UPD-DEP-D1 plan-step failures, a catalog lookup that throws mid-walk) also give a row to each member that resolved but did not install (CLOSUREROW-01 residue)
+- [ ] **MIM-05**: A partial rollback of `apply`'s missing-dependency (MISS-01) install shows the per-phase detail `install` shows, like the other import and apply rows MIM-03 covers (D-PL6-05 residue; needs Phase 4's outcome type)
+- [ ] **XPH-01**: Wave-1 cross-phase residue is closed after the merge: the add-time MISS-01 step routes its post-commit hygiene warnings through the tagged warning channel (2.30); `import`'s own `<mp>@<mp>` row and the retired D-76-04 citation in `orchestrators/import/marketplaces.ts` are fixed (5.27, 5.28); and scenarios pin the git-revision post-move read (2.19), the reinstall `{status} on {url}` frame (7.16), and completion after `market` (7.15, with the completion harness it needs); `apply` and the load re-add a marketplace in place on a declared source change, as `import` does under D-PL6-19, the official marketplace's fallback source reads as up to date as upstream's `sourceIsFallback` does, and a local-layer declaration of an old source no longer outlives an import re-add; a pty-backed `tui` cucumber driver gives the background autoupdate pass, its wait cap, and its notice dedupe scenarios (D-PL8 follow-ups); and the package-install tree kill gets a scenario
 
 ### Dependency resolver (RSV)
 
-- [ ] **RSV-01**: A fresh unpinned git dependency installs the commit the plan previewed, with one network resolve (UPDDEP-01 b1)
-- [ ] **RSV-02**: Whether one bad dependency refuses the root under `apply` before its moves land is decided against Claude Code and implemented (UPDDEP-01 b4)
-- [ ] **RSV-03**: The greedy resolver's completeness is compared with Claude Code's resolver; it is made complete or its limit is recorded with an ID (UPDDEP-01 b5)
-- [ ] **RSV-04**: An agent-target refusal in an update is found before any move lands (UPDDEP-01 b6)
-- [ ] **RSV-05**: The `no-matching-tag` outcome's range field is read or removed, and the failed arm of `InstallMissingDependencyOutcome` declares `rollbackPartials` (LCCODE-01 b2, b3)
+- [x] **RSV-01**: A fresh unpinned git dependency installs the commit the plan previewed, with one network resolve (UPDDEP-01 b1)
+- [x] **RSV-02**: Whether one bad dependency refuses the root under `apply` before its moves land is decided against Claude Code and implemented (UPDDEP-01 b4)
+- [x] **RSV-03**: The greedy resolver's completeness is compared with Claude Code's resolver; it is made complete or its limit is recorded with an ID (UPDDEP-01 b5)
+- [x] **RSV-04**: An agent-target refusal in an update is found before any move lands (UPDDEP-01 b6)
+- [x] **RSV-05**: The `no-matching-tag` outcome's range field is read or removed, and the failed arm of `InstallMissingDependencyOutcome` declares `rollbackPartials` (LCCODE-01 b2, b3)
 
 ### Marketplace commands (MKT)
 
@@ -72,21 +75,21 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 ### Import (MIM)
 
-- [ ] **MIM-01**: `import` handles a settings marketplace whose source the scope records under another name as Claude Code does (IMPNAME-01)
-- [ ] **MIM-02**: `import` adds the `extraKnownMarketplaces` entries Claude Code adds, referenced or not (IMPEXTRA-01)
-- [ ] **MIM-03**: `import` and `apply` report a partial rollback with the detail `install` shows (LCORCH-01 b2)
-- [ ] **MIM-04**: The import enable outcome carries the companion facts once (LCCODE-01 b7)
+- [x] **MIM-01**: `import` handles a settings marketplace whose source the scope records under another name as Claude Code does (IMPNAME-01)
+- [x] **MIM-02**: `import` adds the `extraKnownMarketplaces` entries Claude Code adds, referenced or not (IMPEXTRA-01)
+- [x] **MIM-03**: `import` and `apply` report a partial rollback with the detail `install` shows (LCORCH-01 b2)
+- [x] **MIM-04**: The import enable outcome carries the companion facts once (LCCODE-01 b7)
 
 ### Git errors and lock discipline (GLK)
 
-- [ ] **GLK-01**: Every remote git access classifies a host's HTTP answer through one entry point with an explicit per-operation 404/410 rule, so plugin install, update, fetch, and info report it as marketplace add and update do (GITERR-01)
-- [ ] **GLK-02**: The autoupdate cascade classifies an unclassified error as the direct update path does, not as `{not in manifest}` (CASCREASON-01)
-- [ ] **GLK-03**: Clone cleanup runs under the state lock at every call site (CLONEGC-01)
-- [ ] **GLK-04**: A marketplace-tag-pinned update copies the marketplace git data under a lock (TAGCOPY-01)
-- [ ] **GLK-05**: `fetch` and `info --fetch` read their result row inside the lock (FETCHROW-01)
-- [ ] **GLK-06**: Two update intent marks in the same millisecond are told apart (INTENTMS-01)
-- [ ] **GLK-07**: `fetch`, tab completion, and `browse` show the version `list` and `info` show (ENTRYVER-01)
-- [ ] **GLK-08**: A tag-ref reinstall with a warm mirror resolves the tag offline (LCORCH-01 b5)
+- [x] **GLK-01**: Every remote git access classifies a host's HTTP answer through one entry point with an explicit per-operation 404/410 rule, so plugin install, update, fetch, and info report it as marketplace add and update do (GITERR-01)
+- [x] **GLK-02**: The autoupdate cascade classifies an unclassified error as the direct update path does, not as `{not in manifest}` (CASCREASON-01)
+- [x] **GLK-03**: Clone cleanup runs under the state lock at every call site (CLONEGC-01)
+- [x] **GLK-04**: A marketplace-tag-pinned update copies the marketplace git data under a lock (TAGCOPY-01)
+- [x] **GLK-05**: `fetch` and `info --fetch` read their result row inside the lock (FETCHROW-01)
+- [x] **GLK-06**: Two update intent marks in the same millisecond are told apart (INTENTMS-01)
+- [x] **GLK-07**: `fetch`, tab completion, and `browse` show the version `list` and `info` show (ENTRYVER-01)
+- [x] **GLK-08**: A tag-ref reinstall with a warm mirror resolves the tag offline (LCORCH-01 b5)
 
 ### Background autoupdate (AUP)
 
@@ -96,9 +99,9 @@ under `features/` that fails without it (AGENTS.md, Behavioral tests).
 
 ### Plugin package dependencies (PKD)
 
-- [ ] **PKD-01**: Installing or updating a plugin whose root ships `package.json` and a supported lockfile runs the same frozen, script-free, time-bounded install Claude Code runs, in the staged copy (PKGDEP-01)
-- [ ] **PKD-02**: A failed, timed-out, or skipped package install degrades the plugin with a warning and never blocks it (PKGDEP-01)
-- [ ] **PKD-03**: NFR-5 and the process-spawn rules are amended with a recorded ID for the package install (PKGDEP-01)
+- [x] **PKD-01**: Installing or updating a plugin whose root ships `package.json` and a supported lockfile runs the same frozen, script-free, time-bounded install Claude Code runs, in the staged copy (PKGDEP-01)
+- [x] **PKD-02**: A failed, timed-out, or skipped package install degrades the plugin with a warning and never blocks it (PKGDEP-01)
+- [x] **PKD-03**: NFR-5 and the process-spawn rules are amended with a recorded ID for the package install (PKGDEP-01)
 
 ### Tests and harness (TST)
 
@@ -155,11 +158,14 @@ None.
 | CAS-05 | Phase 3 | Pending |
 | CAS-06 | Phase 3 | Pending |
 | CAS-07 | Phase 3 | Pending |
-| RSV-01 | Phase 4 | Pending |
-| RSV-02 | Phase 4 | Pending |
-| RSV-03 | Phase 4 | Pending |
-| RSV-04 | Phase 4 | Pending |
-| RSV-05 | Phase 4 | Pending |
+| CAS-08 | Phase 10 | Pending |
+| MIM-05 | Phase 10 | Pending |
+| XPH-01 | Phase 10 | Pending |
+| RSV-01 | Phase 4 | Complete |
+| RSV-02 | Phase 4 | Complete |
+| RSV-03 | Phase 4 | Complete |
+| RSV-04 | Phase 4 | Complete |
+| RSV-05 | Phase 4 | Complete |
 | MKT-01 | Phase 5 | Complete |
 | MKT-02 | Phase 5 | Complete |
 | MKT-03 | Phase 5 | Complete |
@@ -168,24 +174,24 @@ None.
 | MKT-06 | Phase 5 | Complete |
 | MKT-07 | Phase 5 | Complete |
 | MKT-08 | Phase 5 | Complete |
-| MIM-01 | Phase 6 | Pending |
-| MIM-02 | Phase 6 | Pending |
-| MIM-03 | Phase 6 | Pending |
-| MIM-04 | Phase 6 | Pending |
-| GLK-01 | Phase 7 | Pending |
-| GLK-02 | Phase 7 | Pending |
-| GLK-03 | Phase 7 | Pending |
-| GLK-04 | Phase 7 | Pending |
-| GLK-05 | Phase 7 | Pending |
-| GLK-06 | Phase 7 | Pending |
-| GLK-07 | Phase 7 | Pending |
-| GLK-08 | Phase 7 | Pending |
+| MIM-01 | Phase 6 | Complete |
+| MIM-02 | Phase 6 | Complete |
+| MIM-03 | Phase 6 | Complete |
+| MIM-04 | Phase 6 | Complete |
+| GLK-01 | Phase 7 | Complete |
+| GLK-02 | Phase 7 | Complete |
+| GLK-03 | Phase 7 | Complete |
+| GLK-04 | Phase 7 | Complete |
+| GLK-05 | Phase 7 | Complete |
+| GLK-06 | Phase 7 | Complete |
+| GLK-07 | Phase 7 | Complete |
+| GLK-08 | Phase 7 | Complete |
 | AUP-01 | Phase 8 | Pending |
 | AUP-02 | Phase 8 | Pending |
 | AUP-03 | Phase 8 | Pending |
-| PKD-01 | Phase 9 | Pending |
-| PKD-02 | Phase 9 | Pending |
-| PKD-03 | Phase 9 | Pending |
+| PKD-01 | Phase 9 | Complete |
+| PKD-02 | Phase 9 | Complete |
+| PKD-03 | Phase 9 | Complete |
 | TST-01 | Phase 10 | Pending |
 | TST-02 | Phase 10 | Pending |
 | TST-03 | Phase 10 | Pending |

@@ -13,7 +13,7 @@
  */
 
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import {
@@ -25,6 +25,7 @@ import {
   World,
 } from "@cucumber/cucumber";
 
+import { npmConfigText, NpmRegistry } from "../lib/npm-registry.ts";
 import { readSession } from "../lib/pi-commands.ts";
 import { PiProcess } from "../lib/pi-process.ts";
 import { rowArrays } from "../lib/result-rows.ts";
@@ -33,6 +34,7 @@ import { currentRun } from "./pi-process.ts";
 
 import type { GitPluginRepository } from "../lib/git-plugin.ts";
 import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-git-host/server.ts";
+import type { NpmRegistryRequest } from "../lib/npm-registry.ts";
 import type { NotificationPayload, OfferedSkill, SessionReport } from "../lib/pi-commands.ts";
 import type { PublicationSites, PublishedMarketplace } from "../lib/published-marketplace.ts";
 import type { RunTokens } from "../lib/run-tokens.ts";
@@ -68,6 +70,10 @@ export class ScenarioWorld extends World {
   // step reads only that command's traffic. The `BeforeStep` hook in
   // `support/https-git-host.ts` sets it.
   requestWindow: RequestWindow | undefined = undefined;
+  // The npm registry this scenario started, which only a scenario that ships plugin packages needs.
+  npmRegistry: NpmRegistry | undefined = undefined;
+  // The npm registry's log length when the last `When` step started; `support/npm-registry.ts` sets it.
+  npmRequestWindow: number | undefined = undefined;
   private readonly published = new Map<string, PublishedMarketplace>();
   private readonly gitRepositories = new Map<string, GitPluginRepository>();
   private readonly errorMessages = new Map<string, string>();
@@ -244,6 +250,48 @@ export class ScenarioWorld extends World {
     }
 
     return this.gitHost.requestsSince(window);
+  }
+
+  /**
+   * Returns the npm registry of this scenario, starting it the first time.
+   * Starting it writes the sandbox `.npmrc` that points npm at it, before any
+   * plugin ships a package file, so no npm run reaches the public registry.
+   * The scenario's releases remove the `.npmrc` and close the registry.
+   */
+  async useNpmRegistry(): Promise<NpmRegistry> {
+    if (this.npmRegistry !== undefined) {
+      return this.npmRegistry;
+    }
+
+    const registry = await NpmRegistry.start();
+    this.onRelease(() => registry.close());
+    this.npmRegistry = registry;
+    const config = path.join(this.tokens.home, ".npmrc");
+    const text = npmConfigText(registry);
+    await writeFile(config, text, { flag: "wx" });
+    this.onRelease(() => rm(config, { force: true }));
+    assert.strictEqual(await readFile(config, "utf8"), text);
+    return registry;
+  }
+
+  /** Returns the npm registry of this scenario, failing when no step started one. */
+  requireNpmRegistry(): NpmRegistry {
+    if (this.npmRegistry === undefined) {
+      assert.fail("no step started the npm registry in this scenario");
+    }
+
+    return this.npmRegistry;
+  }
+
+  /** Returns the requests the npm registry received since the last `When` step started. */
+  npmRequestsOfLastCommand(): readonly NpmRegistryRequest[] {
+    const registry = this.requireNpmRegistry();
+    const window = this.npmRequestWindow;
+    if (window === undefined) {
+      throw new Error("no command has run in this scenario");
+    }
+
+    return registry.requestsSince(window);
   }
 
   /**

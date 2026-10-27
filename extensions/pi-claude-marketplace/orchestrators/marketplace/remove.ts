@@ -96,7 +96,7 @@ import {
   withLockedStateTransaction,
   type LockedStateTransactionDeps,
 } from "../../transaction/with-state-guard.ts";
-import { garbageCollectPluginClones } from "../plugin/clone-gc.ts";
+import { collectPluginClonesLocked } from "../plugin/clone-gc.ts";
 import { buildScopeDeclarationIndex, withoutDisabledHolders } from "../plugin/dependency-index.ts";
 import { applyPartialCascadeFold } from "../plugin/shared.ts";
 
@@ -1190,9 +1190,11 @@ async function removeMarketplaceFootprint(
  * reference. It runs post-commit, so it derives live clone keys from the
  * just-committed state -- the removed plugins' records are gone, so their
  * clones are unreferenced and swept, while a clone still referenced by a
- * surviving marketplace's plugin survives. The helper is fs-only, so no git
- * surface widens (NFR-5), and NFR-3 holds: a crash before this leaves an
- * orphan the next idempotent pass removes.
+ * surviving marketplace's plugin survives. D-PL7-05: the GC takes a fresh
+ * scope lock after the remove's own lock is released, and a held lock skips
+ * it (traced, D-19-01). It names no git surface, so none widens (NFR-5), and
+ * NFR-3 holds: a crash before this leaves an orphan the next idempotent pass
+ * removes.
  */
 async function runPostRemoveCleanup(args: {
   readonly locations: ScopedLocations;
@@ -1228,7 +1230,7 @@ async function runPostRemoveCleanup(args: {
   }
 
   try {
-    await garbageCollectPluginClones(locations);
+    await collectPluginClonesLocked(locations);
   } catch (err) {
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
     hookDebugLog(`post-remove plugin-clone GC failed: ${errorMessage(err)}`);

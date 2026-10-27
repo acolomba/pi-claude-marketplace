@@ -3599,9 +3599,77 @@ test("GHB-03: an enable whose ledger left a rollback partial reports it instead 
       reason: "rollback partial",
       error: invalidBase,
       cause: "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme.",
+      rollbackPartials: [{ msg: "skill rollback denied", phase: "skills" }],
     });
   });
 });
+
+const MIM03_MCP_FAILURE = new Error("mcp staging denied");
+
+for (const { title, rollbackPartials, typedFailure: expectedFailure } of [
+  {
+    title: "an orchestrated enable whose rollback could not finish carries the rollback partials",
+    rollbackPartials: [{ msg: "skill rollback denied", phase: "skills" }],
+    typedFailure: {
+      status: "failed",
+      reason: "rollback partial",
+      error: MIM03_MCP_FAILURE,
+      cause: "mcp staging denied",
+      rollbackPartials: [{ msg: "skill rollback denied", phase: "skills" }],
+    },
+  },
+  {
+    title: "an orchestrated enable whose rollback finished carries no rollback partials",
+    rollbackPartials: [],
+    typedFailure: {
+      status: "failed",
+      reason: "unreadable",
+      error: MIM03_MCP_FAILURE,
+      cause: "mcp staging denied",
+    },
+  },
+]) {
+  test(`MIM-03 / D-PL6-11: ${title}`, async () => {
+    await withHermeticHome(async ({ cwd, home }) => {
+      // arrange
+      await seedRealDisabledMarketplace(home, {
+        marketplaceName: "mp",
+        pluginName: "foo",
+        version: "1.2.3",
+      });
+      const transaction: EnableDisableTransaction = {
+        ...REAL_ENABLE_DISABLE_TRANSACTION,
+        runInstallLedger(_state, _locations, _options, capture) {
+          assert.ok(capture !== undefined);
+          capture.version = "1.2.3";
+          capture.rollbackPartials = rollbackPartials;
+          return rejectUnknown(MIM03_MCP_FAILURE);
+        },
+      };
+      const setPluginEnabledForOwner = createSetPluginEnabled(
+        transaction,
+        createHooksRouting(createHooksRuntime(), { readHooksJson }),
+      );
+      const { ctx, notifications } = makeCtx(cwd);
+
+      // act
+      const typedFailure = await setPluginEnabledForOwner({
+        ctx,
+        run: runWithNothingLoaded(),
+        cwd,
+        marketplace: "mp",
+        plugin: "foo",
+        enable: true,
+        scope: "user",
+        notifications: { mode: "orchestrated" },
+      });
+
+      // assert
+      assert.deepStrictEqual(typedFailure, expectedFailure);
+      assert.deepStrictEqual(notifications, []);
+    });
+  });
+}
 
 // ──────────────────────────────────────────────────────────────────────────
 // ENBL idempotency arm

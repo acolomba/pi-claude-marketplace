@@ -22,6 +22,7 @@ import {
   saveState,
 } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
 import { createCompletionCache } from "../../../extensions/pi-claude-marketplace/shared/completion-cache.ts";
+import { serializeCauseChain } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 import { createDeviceFlowFake } from "../../domain/device-flow-fake.ts";
 import { createCredentialOpsFake } from "../../platform/credential-ops-fake.ts";
 import { createHermeticEnvironment } from "../../platform/hermetic-environment.ts";
@@ -123,6 +124,9 @@ async function seedDependency(
     },
   };
 }
+
+const PACKAGE_NOTE =
+  'Skipped installing this plugin\'s dependencies: its folder in the marketplace "mp" is outside the folders this extension manages, so it was not changed. To install them, run "npm ci --ignore-scripts --workspaces=false --no-audit --no-fund" in that folder.';
 
 function request(overrides: Partial<DependencyMoveRequest> = {}): DependencyMoveRequest {
   return {
@@ -227,6 +231,27 @@ describe("judgeDependencyMove", () => {
     });
   });
 
+  test("D-PL3-16: a ruled-out version past 64 code units is cut in the refusal", async (t) => {
+    // arrange
+    const offered = `release-7-${"z".repeat(66)}`;
+    const { context } = await seedDependency(t, { recorded: "1.0.0", offered });
+
+    // act
+    const judgement = await judgeDependencyMove(
+      request({
+        requesters: [{ key: "widget@mp", ranges: [">=2.0.0"] }],
+        excludedVersions: [offered],
+      }),
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(judgement, {
+      ok: false,
+      cause: `version release-7-${"z".repeat(54)}\u2026 was ruled out by the plan`,
+    });
+  });
+
   test("refuses a move whose new version's names another plugin already owns", async (t) => {
     // arrange
     const { context, pluginRoot } = await seedDependency(t, {
@@ -246,6 +271,7 @@ describe("judgeDependencyMove", () => {
     assert.deepStrictEqual(judgement, {
       ok: false,
       cause: 'Cross-plugin name conflict:\n  - skill "zcore-tool" already owned by plugin "other"',
+      updateBlocked: true,
     });
   });
 
@@ -260,6 +286,27 @@ describe("judgeDependencyMove", () => {
     assert.deepStrictEqual(judgement, {
       ok: false,
       cause: "version 2.0.0 is the newest version it can move to",
+    });
+  });
+
+  test("D-PL3-16: a newest version past 64 code units is cut in the refusal", async (t) => {
+    // arrange
+    const version = `2.0.0-${"z".repeat(70)}`;
+    const { context } = await seedDependency(t, { recorded: version, offered: version });
+
+    // act
+    const judgement = await judgeDependencyMove(
+      request({
+        recordedVersion: version,
+        requesters: [{ key: "widget@mp", ranges: [">=2.0.0-0"] }],
+      }),
+      context,
+    );
+
+    // assert
+    assert.deepStrictEqual(judgement, {
+      ok: false,
+      cause: `version 2.0.0-${"z".repeat(58)}\u2026 is the newest version it can move to`,
     });
   });
 
@@ -359,9 +406,47 @@ describe("runDependencyMove", () => {
     const state = await loadState(context.locations.extensionRoot);
     assert.deepStrictEqual(state.marketplaces.mp?.plugins.zcore, {
       ...recordedPlugin("2.0.0", pluginRoot),
-      updatedAt: "2026-01-02T00:00:00.000Z",
+      updatedAt: "2026-01-02T00:00:00.001Z",
     });
   });
+
+  for (const { situation, requesters, cause } of [
+    {
+      situation: "after its range disclosure",
+      requesters: [{ key: "widget@mp", ranges: ["^2.0.0"] }],
+      cause: (): Error =>
+        new Error('constrained to the combined range (^2.0.0) -- required by "widget@mp"', {
+          cause: new Error(PACKAGE_NOTE),
+        }),
+    },
+    { situation: "alone", requesters: [], cause: (): Error => new Error(PACKAGE_NOTE) },
+  ]) {
+    test(`PKD-02: a moved dependency warns with its package note on the cause line ${situation}`, async (t) => {
+      // arrange
+      t.mock.timers.enable({ apis: ["Date"], now: new Date("2026-01-02T00:00:00.000Z") });
+      const { context, pluginRoot } = await seedDependency(t, {
+        recorded: "1.0.0",
+        offered: "2.0.0",
+      });
+      await writeFile(
+        path.join(pluginRoot, "package.json"),
+        JSON.stringify({ name: "zcore", dependencies: { "pkd-dep": "1.0.0" } }),
+      );
+      await writeFile(path.join(pluginRoot, "package-lock.json"), '{"lockfileVersion":3}');
+
+      // act
+      const run = await runDependencyMove(move("2.0.0", { requesters }), context);
+
+      // assert
+      const [row] = run.rows;
+      assert.deepStrictEqual(
+        [run.landed, run.rows.length, row?.status, row?.severity],
+        [true, 1, "updated", "warning"],
+      );
+      assert.ok(row?.status === "updated");
+      assert.deepStrictEqual(serializeCauseChain(row.cause), serializeCauseChain(cause()));
+    });
+  }
 
   test("fails a move whose candidate is not the version the plan chose and keeps the record", async (t) => {
     // arrange

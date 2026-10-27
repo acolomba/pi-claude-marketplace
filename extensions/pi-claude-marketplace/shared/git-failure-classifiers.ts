@@ -1,17 +1,19 @@
 // shared/git-failure-classifiers.ts
 //
-// Closed-set classifier for git transport failures. The clone/mirror
-// orchestrator surfaces (`install`, `update`, `fetch`, `info --fetch`) all
-// catch materialize/probe throws from the git seam and must map the SAME
-// underlying failure onto the SAME closed-set REASON, so the ladder lives
-// here once (sibling of `probe-classifiers.ts`, the sanctioned
-// cross-orchestrator import surface) instead of drifting per verb.
+// Closed-set classifier for git host failures (D-PL7-01). Every clone,
+// mirror, and marketplace surface catches materialize/probe throws from the
+// git seam and must map the SAME underlying failure onto the SAME closed-set
+// REASON, so the ladder lives here once in `classifyGitFailure`, the
+// module's one entry point. Each operation passes its own not-found rule
+// (D-PL7-02). Three fixed-rule wrappers bind a rule for their callers:
+// `classifyGitHostFailure` (the plugin-clone rule: install, import, apply),
+// and `classifyGitSourceAccessFailure` and `hostHttpFailureFrame` (the
+// `marketplace add` rule) (D-PL7-11).
 //
 // Duck-typed on the isomorphic-git error shapes (D-13: no isomorphic-git
 // import outside the platform tier); the project's own
 // `CrossOriginChallengeError` and `StoredCredentialRejectedError` are narrowed
-// by `instanceof`. Per-verb fallbacks (fetch's `source missing` fold) stay
-// thin wrappers at their call sites.
+// by `instanceof`.
 
 import {
   CrossOriginChallengeError,
@@ -61,8 +63,8 @@ function classifyNetworkErrno(code: string | undefined): GitTransportReason | un
 }
 
 /**
- * Classify a git clone/fetch/materialize throw into the EXISTING closed-set
- * `network unreachable` / `authentication required` REASONS -- no new token.
+ * The transport rung of `classifyGitFailure`'s ladder: the closed-set
+ * `network unreachable` / `authentication required` REASONS.
  *
  *   - `CrossOriginChallengeError` -> `authentication required`: a hop reached
  *     after a redirect to another origin asked for credentials (Q-02).
@@ -80,18 +82,10 @@ function classifyNetworkErrno(code: string | undefined): GitTransportReason | un
  *     an HttpError 401/403.
  *   - network errno ladder -> `network unreachable`.
  *
- * Returns undefined for any other throw so each caller keeps its own
- * fallthrough (e.g. info's `narrowProbeError` ladder). The error behind a
- * cleanup leak is the one classified (INR-02).
+ * Returns undefined for any other error, so the ladder moves on to the HTTP
+ * status. `classifyGitFailure` has already removed any cleanup leak (INR-02).
  */
-export function classifyGitTransportFailure(
-  thrown: unknown,
-): "network unreachable" | "authentication required" | undefined {
-  const error = withoutCleanupLeaks(thrown);
-  if (!(error instanceof Error)) {
-    return undefined;
-  }
-
+function classifyGitTransportFailure(error: Error): GitTransportReason | undefined {
   if (
     error instanceof CrossOriginChallengeError ||
     error instanceof StoredCredentialRejectedError
@@ -113,54 +107,97 @@ export function classifyGitTransportFailure(
 }
 
 /**
- * UPD-11 / ADD-10: the HTTP status of an isomorphic-git `HttpError` that the transport
- * ladder leaves unclassified, so the 401/403 auth challenge stays
- * `authentication required`. Returns undefined for any other error.
+ * UPD-11 / ADD-10: the numeric HTTP status of an isomorphic-git `HttpError`.
+ * `classifyGitFailure` reads it only after the transport ladder, so the
+ * 401/403 auth challenge stays `authentication required`.
  */
-export function hostHttpStatus(thrown: unknown): number | undefined {
-  const error = withoutCleanupLeaks(thrown);
-  if (!(error instanceof Error) || !isHttpStatusError(error)) {
+function httpStatus(error: Error): number | undefined {
+  if (!isHttpStatusError(error)) {
     return undefined;
   }
 
   const statusCode = error.data?.statusCode;
-  if (typeof statusCode !== "number" || classifyGitTransportFailure(error) !== undefined) {
-    return undefined;
-  }
-
-  return statusCode;
-}
-
-/**
- * UPD-11 / ADD-10: the first cause frame of a fetch the git host answered with an HTTP
- * status, `{status} on {url}`, because a reason token cannot carry either.
- * `remoteUrl` is rebuilt to the URL the fetch sent: the fetch already went
- * out, so the GitHub base override is valid here. Undefined when `error` has no
- * such status.
- */
-export function hostHttpFailureFrame(error: unknown, remoteUrl: string): string | undefined {
-  const status = hostHttpStatus(error);
-  return status === undefined ? undefined : `${status} on ${gitHubWireUrl(remoteUrl)}`;
+  return typeof statusCode === "number" ? statusCode : undefined;
 }
 
 /**
  * isomorphic-git's `NotFoundError`, which a clone throws when the remote does
  * not have the ref or object it asked for.
  */
-function isRemoteNotFound(error: unknown): boolean {
-  return error instanceof Error && (error as NodeJS.ErrnoException).code === "NotFoundError";
+function isRemoteNotFound(error: Error): boolean {
+  return (error as NodeJS.ErrnoException).code === "NotFoundError";
 }
 
 /**
- * Extend the shared transport ladder with the git host's own HTTP answer. A
- * 404 or 410 is `source missing` (ADD-09, INS-06). Any other status outside
- * the 401/403 auth challenge is `network error`, because the host was reached
- * and refused; `network unreachable` stays for the connection errno codes.
- * `install` uses this layer: a local read that finds no ref or object on a
- * clone already on disk stays unclassified there, so it is never reported as
- * a repository the host lacks. A pin that a fresh clone does not hold is
- * `source missing` too (INR-03). The error behind a cleanup leak is the one
- * classified (INR-02).
+ * D-PL7-01: classify a git clone, fetch, or materialize throw into the closed
+ * reason set. The ladder:
+ *
+ *   - a pin that the fresh clone does not hold -> `source missing` (INR-03);
+ *   - the transport ladder (`classifyGitTransportFailure`) ->
+ *     `authentication required` or `network unreachable`;
+ *   - an HTTP 404 or 410 from the git host -> `rule.notFound`, because what a
+ *     missing repository means depends on the operation (D-PL7-02): a fresh
+ *     clone reports `source missing` (ADD-09, INS-06), and a marketplace
+ *     refresh reports `network error` (UPD-11);
+ *   - any other HTTP status -> `network error`: the host was reached and
+ *     refused;
+ *   - a remote `NotFoundError` (a ref or object the remote does not have) ->
+ *     `rule.missingRef`. With no `missingRef`, it stays unclassified, so a
+ *     local read that finds no ref on a clone already on disk is never
+ *     reported as a repository the host lacks.
+ *
+ * `frame` is `{status} on {url}` for a classified non-auth HTTP status, set
+ * only when `remoteUrl` is passed, because a reason token cannot carry either
+ * (UPD-11, ADD-10). `remoteUrl` is rebuilt to the URL the fetch sent: the
+ * fetch already went out, so the GitHub base override is valid here. Returns
+ * undefined for any other throw, so each caller keeps its own fallthrough.
+ * The error behind a cleanup leak is the one classified (INR-02).
+ */
+export function classifyGitFailure(
+  thrown: unknown,
+  rule: {
+    readonly notFound: "source missing" | "network error";
+    readonly missingRef?: "source missing";
+  },
+  remoteUrl?: string,
+):
+  | {
+      readonly reason:
+        "network unreachable" | "authentication required" | "source missing" | "network error";
+      readonly frame?: string;
+    }
+  | undefined {
+  const error = withoutCleanupLeaks(thrown);
+  if (!(error instanceof Error)) {
+    return undefined;
+  }
+
+  if (error instanceof PinnedCommitMissingError) {
+    return { reason: "source missing" };
+  }
+
+  const transportReason = classifyGitTransportFailure(error);
+  if (transportReason !== undefined) {
+    return { reason: transportReason };
+  }
+
+  const status = httpStatus(error);
+  if (status !== undefined) {
+    return {
+      reason: SOURCE_MISSING_HTTP_STATUSES.has(status) ? rule.notFound : "network error",
+      ...(remoteUrl === undefined ? {} : { frame: `${status} on ${gitHubWireUrl(remoteUrl)}` }),
+    };
+  }
+
+  return isRemoteNotFound(error) && rule.missingRef !== undefined
+    ? { reason: rule.missingRef }
+    : undefined;
+}
+
+/**
+ * D-PL7-11: `classifyGitFailure` with the plugin-clone rule, where a 404 or
+ * 410 is `source missing` and a remote `NotFoundError` stays unclassified.
+ * Kept as a named wrapper for the install, import, and apply callers.
  */
 export function classifyGitHostFailure(
   error: unknown,
@@ -170,30 +207,13 @@ export function classifyGitHostFailure(
   | "source missing"
   | "network error"
   | undefined {
-  if (withoutCleanupLeaks(error) instanceof PinnedCommitMissingError) {
-    return "source missing";
-  }
-
-  const transportReason = classifyGitTransportFailure(error);
-  if (transportReason !== undefined) {
-    return transportReason;
-  }
-
-  const status = hostHttpStatus(error);
-  if (status === undefined) {
-    return undefined;
-  }
-
-  return SOURCE_MISSING_HTTP_STATUSES.has(status) ? "source missing" : "network error";
+  return classifyGitFailure(error, { notFound: "source missing" })?.reason;
 }
 
 /**
- * Extend the host ladder for a source-access operation such as `marketplace
- * add`, which always clones fresh: a ref or object the remote does not have,
- * like a repository the host does not have, is `source missing` too. The
- * opt-in layer keeps other callers' fallthroughs unchanged: the transport
- * and host ladders that update and the plugin verbs use leave a missing ref
- * unclassified.
+ * D-PL7-11: `classifyGitFailure` with the `marketplace add` rule (ADD-09).
+ * The add always clones fresh, so a ref or object the remote does not have is
+ * `source missing`, like a repository the host does not have.
  */
 export function classifyGitSourceAccessFailure(
   error: unknown,
@@ -203,7 +223,15 @@ export function classifyGitSourceAccessFailure(
   | "source missing"
   | "network error"
   | undefined {
-  return isRemoteNotFound(withoutCleanupLeaks(error))
-    ? "source missing"
-    : classifyGitHostFailure(error);
+  return classifyGitFailure(error, { notFound: "source missing", missingRef: "source missing" })
+    ?.reason;
+}
+
+/**
+ * D-PL7-11: the `{status} on {url}` frame of `classifyGitFailure`, kept as a
+ * named wrapper for `marketplace add`. The rule does not change whether a
+ * frame is set. Undefined when `error` has no classified HTTP status.
+ */
+export function hostHttpFailureFrame(error: unknown, remoteUrl: string): string | undefined {
+  return classifyGitFailure(error, { notFound: "source missing" }, remoteUrl)?.frame;
 }
