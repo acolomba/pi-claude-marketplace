@@ -29,7 +29,9 @@
 //  (`err.retryHint` remains on the error for programmatic inspection).
 //  - invalid GitHub base override: an `InvalidGitHubBaseUrlError` from the
 //  refresh or from a cascade plugin update fails the whole command; no row is
-//  rendered (GHB-03).
+//  rendered (GHB-03). A throw out of the missing-dependency step after the
+//  updates reaches the command only after the marketplace's update rows and
+//  notices are reported (D-PL2-21).
 //  - empty targets (no marketplaces configured): `{ marketplaces: [] }`
 //  renders the `(no marketplaces)` sentinel.
 //  - post-success cache cleanup: a `rm` runs to drop the stale completion
@@ -616,15 +618,19 @@ const NO_AUTOUPDATE_CASCADE: AutoupdateCascade = { outcomes: [], installs: NO_DE
 /**
  * The autoupdate cascade: each installed plugin's update, then (D-PL2-10) the
  * missing-dependency step, so the step sees the versions the updates landed
- * (E4 order).
+ * (E4 order). `report` gets the cascade before a throw out of the step leaves
+ * it, so the updates that committed are reported first (D-PL2-21). A throw
+ * out of a plugin update leaves without a report.
  */
 async function cascadeAutoupdates(
   snapshot: RefreshSnapshot,
   args: RefreshOneArgs,
-): Promise<AutoupdateCascade> {
+  report: (cascade: AutoupdateCascade) => void,
+): Promise<void> {
   const { name, scope, pluginUpdate } = args;
   if (!snapshot.autoupdate || pluginUpdate === undefined) {
-    return NO_AUTOUPDATE_CASCADE;
+    report(NO_AUTOUPDATE_CASCADE);
+    return;
   }
 
   const outcomes: PluginUpdateOutcome[] = [];
@@ -671,7 +677,12 @@ async function cascadeAutoupdates(
     }
   }
 
-  return { outcomes, installs: await installAutoupdateDependencies(args, outcomes) };
+  let installs = NO_DEPENDENCY_INSTALLS;
+  try {
+    installs = await installAutoupdateDependencies(args, outcomes);
+  } finally {
+    report({ outcomes, installs });
+  }
 }
 
 /**
@@ -681,7 +692,7 @@ async function cascadeAutoupdates(
  * marketplace has autoupdate on (E1). A dependency this command already
  * reported a row for, in an update of any cascade or in an earlier step, is
  * not tried again, so one command reports one row per dependency (D-PL2-01,
- * WR-04).
+ * D-PL2-19, WR-04).
  */
 async function installAutoupdateDependencies(
   args: RefreshOneArgs,
@@ -838,7 +849,7 @@ function refreshFailureReasons(err: unknown): readonly ContentReason[] {
 }
 
 async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
-  const { ctx, cardinality, name, scope, locations, pluginUpdate, run } = args;
+  const { ctx, cardinality, name, scope, locations, run } = args;
 
   let snapshot: RefreshSnapshot | undefined;
   try {
@@ -905,7 +916,19 @@ async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
 
   // CASCADE OUTSIDE the outer guard. Honors MU-4 literal
   // "persisted before any plugin cascade runs".
-  const { outcomes, installs } = await cascadeAutoupdates(snapshot, args);
+  await cascadeAutoupdates(snapshot, args, (cascade) => {
+    notifyRefreshed(args, snapshot, cascade);
+  });
+}
+
+/** The refreshed marketplace's notification and the MCP config notices of its cascade. */
+function notifyRefreshed(
+  args: RefreshOneArgs,
+  snapshot: RefreshSnapshot,
+  cascade: AutoupdateCascade,
+): void {
+  const { ctx, cardinality, name, scope, pluginUpdate, run } = args;
+  const { outcomes, installs } = cascade;
 
   // CMC-32 / UXG-05 binding: BOTH the autoupdate-OFF (manifest-only refresh)
   // and the autoupdate-ON (cascade) paths now DISTINGUISH a no-op from a

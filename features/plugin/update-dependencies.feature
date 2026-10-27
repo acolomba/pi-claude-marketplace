@@ -227,6 +227,41 @@ Feature: Plugin update dependencies
       | gadget@kits  | 1.0.0   | true    |
       | widget@tools | 1.0.0   | true    |
 
+  Scenario: An autoupdate that an invalid GitHub base address stops reports the plugin updates it made before stopping
+    Given pi runs with the github base address "http://example.invalid"
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | gadget | 1.0.0   |              |
+      | widget | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install gadget@tools --scope project"
+    Given the user has run "/claude:plugin install widget@tools --scope project"
+    Given the user has run "/claude:plugin marketplace autoupdate tools --scope project"
+    Given the git repository "zvault" holds these plugins:
+      | name   | version | path |
+      | zvault | 1.0.0   |      |
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name   | version | dependencies |
+      | gadget | 1.1.0   |              |
+      | widget | 1.0.0   | zvault       |
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name   | source kind | repository | pinned |
+      | zvault | github      | zvault     | false  |
+    When the user runs "/claude:plugin marketplace update tools --scope project"
+    Then the command reports these results:
+      | kind           | severity | needs reload | summary                      | cause chain                                                       | cause truncated |
+      | cascade        | info     | true         |                              |                                                                   |                 |
+      | internal-error | error    | true         | Command failed unexpectedly. | PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL must use the https scheme. | false           |
+    Then the results list these marketplaces and plugins:
+      | marketplace name | marketplace scope | marketplace status | id           | name   | status  | reasons    | scope   | from  | to    |
+      | tools            | project           | updated            | gadget@tools | gadget | updated |            | project | 1.0.0 | 1.1.0 |
+      | tools            | project           | updated            | widget@tools | widget | skipped | up-to-date | project |       |       |
+    Then the installation record of the project scope holds these plugins:
+      | id           | version | enabled |
+      | gadget@tools | 1.1.0   | true    |
+      | widget@tools | 1.0.0   | true    |
+
   Scenario: Updating a plugin whose new version needs a newer version of a git-source dependency moves the dependency first
     Given the git repository "lib" holds these plugins:
       | name | version | path |

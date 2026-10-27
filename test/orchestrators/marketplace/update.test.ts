@@ -6065,6 +6065,59 @@ test("D-PL2-10: the autoupdate cascade runs the missing-dependency step once, af
   });
 });
 
+test("D-PL2-21: a missing-dependency step that throws after the plugin updates reports their rows and notices before the error reaches the caller", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    await seedDependencyStepMarketplace(cwd, true);
+    const { ctx, run, notifications } = makeCtx();
+    const events: string[] = [];
+    const invalid = new InvalidGitHubBaseUrlError(
+      "PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL",
+      "scheme",
+    );
+    const installMissingDependencies: ScopeDependencyInstallFn = () => {
+      events.push("step");
+      return Promise.reject(invalid);
+    };
+
+    // act & assert
+    await assert.rejects(
+      () =>
+        updateMarketplace({
+          completionCache: createCompletionCache(),
+          ctx,
+          run,
+          name: "deps-mp",
+          scope: "project",
+          cwd,
+          pluginUpdate: recordingPluginUpdate("updated", events),
+          installMissingDependencies,
+        }),
+      (error: unknown) => {
+        assert.strictEqual(error, invalid);
+        return true;
+      },
+    );
+    assert.deepStrictEqual(events, ["update:alpha", "update:beta", "step"]);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● deps-mp [project] (updated)\n" +
+          "  ● alpha v0.0.1 → v0.0.2 (updated)\n" +
+          "  ● beta v0.0.1 → v0.0.2 (updated)\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+      {
+        message:
+          "MCP config comments removed.\n\n" +
+          "The project-scope mcp.json was rewritten to update plugin MCP servers; its JSONC comments were removed and everything else in it was kept.",
+        severity: "warning",
+      },
+    ]);
+  });
+});
+
 test("D-PL2-10: the step does not try again a dependency an update of the cascade already reported", async () => {
   await withHermeticHome(async ({ cwd }) => {
     // arrange
