@@ -4,6 +4,38 @@ Feature: Plugin list
   and install scope, and its filters keep only the rows they select. The scenarios run
   the real extension in a headless Pi, with local marketplaces and a loopback git host.
 
+  Scenario: Completion uses the installed git version
+    Given the git repository "ghp" holds these plugins:
+      | name | version | path |
+      | ghp  | 1.0.0   |      |
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins from git repositories:
+      | name | source kind | repository | pinned |
+      | ghp  | github      | ghp        | false  |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install ghp@tools --scope project"
+    Given the marketplace "tools" publishes this manifest:
+      """
+      {
+        "name": "tools",
+        "owner": { "name": "features" },
+        "plugins": [
+          {
+            "name": "ghp",
+            "source": { "source": "github", "repo": "acme/ghp" },
+            "version": "2.0.0"
+          }
+        ]
+      }
+      """
+    Given the user has run "/claude:plugin marketplace update tools --scope project"
+    When the user runs "/claude:plugin list --scope project"
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id        | name | status    | reasons | scope   | version |
+      | tools            | project           | ghp@tools | ghp  | installed |         | project | 1.0.0   |
+    When the user requests plugin completions for "update --partial --scope project "
+    Then the plugin completion set for "update --partial --scope project " is empty
+
   Scenario: The list shows each kind of plugin with its status and scope
     Given the git repository "ghp" holds these plugins:
       | name | version | path |
