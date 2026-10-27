@@ -4,12 +4,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, test, type TestContext } from "node:test";
 
+import lockfile from "proper-lockfile";
+
 import {
+  collectPluginClonesLocked,
   garbageCollectPluginClones,
   listUnreferencedPluginClones,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/clone-gc.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { StateLockHeldError } from "../../../extensions/pi-claude-marketplace/shared/errors.ts";
 
 import type { ScopedLocations } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import type { ExtensionState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
@@ -79,6 +83,20 @@ async function seedCloneDirectories(
     await mkdir(path.join(locations.pluginClonesDir, key), { recursive: true });
     await writeFile(path.join(locations.pluginClonesDir, key, "sentinel.txt"), key);
   }
+}
+
+function holdStateLock(locations: ScopedLocations): Promise<() => Promise<void>> {
+  return lockfile.lock(locations.extensionRoot, {
+    lockfilePath: locations.stateLockFile,
+    realpath: false,
+  });
+}
+
+function stateLockHeld(locations: ScopedLocations): Promise<boolean> {
+  return lockfile.check(locations.extensionRoot, {
+    lockfilePath: locations.stateLockFile,
+    realpath: false,
+  });
 }
 
 async function cloneEntries(locations: ScopedLocations): Promise<string[]> {
@@ -437,6 +455,68 @@ describe("garbageCollectPluginClones", () => {
 
     // act
     const leaks = await garbageCollectPluginClones(locations, new Set(["fetched-mirror"]));
+
+    // assert
+    assert.deepStrictEqual(leaks, []);
+    assert.deepStrictEqual(await cloneEntries(locations), ["fetched-mirror"]);
+  });
+});
+
+describe("collectPluginClonesLocked", () => {
+  test("GLK-03 / D-PL7-05: refuses while another holder has the scope lock and deletes nothing", async (t) => {
+    // arrange
+    const locations = await freshLocations(t);
+    await seedState(locations, {});
+    await seedCloneDirectories(locations, ["stale-clone"]);
+    const release = await holdStateLock(locations);
+    let caught: unknown;
+
+    // act
+    try {
+      await collectPluginClonesLocked(locations);
+    } catch (error) {
+      caught = error;
+    } finally {
+      await release();
+    }
+
+    // assert
+    assert.ok(caught instanceof StateLockHeldError);
+    assert.strictEqual(caught.scope, "project");
+    assert.strictEqual(caught.lockPath, locations.stateLockFile);
+    assert.deepStrictEqual(await cloneEntries(locations), ["stale-clone"]);
+  });
+
+  test("GLK-03 / D-PL7-05: deletes the unreferenced clone, keeps the referenced one, and releases the lock", async (t) => {
+    // arrange
+    const locations = await freshLocations(t);
+    await seedState(locations, {
+      alpha: marketplace(locations, "alpha", {
+        live: pluginRecord({
+          resolvedSource: path.join(locations.pluginClonesDir, "live-clone"),
+          resolvedSha: SHA_ALPHA,
+        }),
+      }),
+    });
+    await seedCloneDirectories(locations, ["live-clone", "stale-clone"]);
+
+    // act
+    const leaks = await collectPluginClonesLocked(locations);
+
+    // assert
+    assert.deepStrictEqual(leaks, []);
+    assert.deepStrictEqual(await cloneEntries(locations), ["live-clone"]);
+    assert.strictEqual(await stateLockHeld(locations), false);
+  });
+
+  test("GLK-03 / D-PL7-05: keeps an unreferenced clone the caller names", async (t) => {
+    // arrange
+    const locations = await freshLocations(t);
+    await seedState(locations, {});
+    await seedCloneDirectories(locations, ["fetched-mirror", "plan-stale"]);
+
+    // act
+    const leaks = await collectPluginClonesLocked(locations, new Set(["fetched-mirror"]));
 
     // assert
     assert.deepStrictEqual(leaks, []);

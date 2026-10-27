@@ -2,15 +2,18 @@
 //
 // PURL-05 / PURL-06 / D-78-01: the shared clone garbage-collection primitive.
 //
-// `garbageCollectPluginClones` derives the set of still-referenced clone keys
-// from the surviving git-source state records (derive-not-persist -- NO refcount
-// artifact) and deletes every `plugin-clones/<key>/` directory not in that live
-// set. `uninstall`, `update`, and `marketplace/remove` call it AFTER their state
-// mutation commits; a crash between state write and clone delete just leaves an
-// orphan that the next idempotent pass removes (NFR-3 fail-clean).
+// The GC derives the set of still-referenced clone keys from the surviving
+// git-source state records (derive-not-persist -- NO refcount artifact) and
+// deletes every `plugin-clones/<key>/` directory not in that live set.
+// `uninstall`, `update`, `marketplace/remove`, and the other lifecycle
+// operations call it AFTER their state mutation commits; a crash between state
+// write and clone delete just leaves an orphan that the next idempotent pass
+// removes (NFR-3 fail-clean).
 //
-// This helper is fs-only: it imports loadState + the locations chokepoint +
-// node:fs/promises rm/readdir ONLY. It never touches the git surface, so any
+// D-PL7-05: the GC runs under a fresh lock of the operation's scope, so it
+// cannot delete a clone that a locked `fetch` or update preflight is reading.
+// The module imports the transaction lock, loadState, the locations
+// chokepoint, and node:fs/promises rm/readdir. It names no git surface, so any
 // orchestrator -- even one that BLOCK F in `eslint.config.js` lints for git
 // imports and identifiers -- can import it without introducing a git token.
 // uninstall.ts is one such gated orchestrator.
@@ -20,6 +23,7 @@ import path from "node:path";
 
 import { loadState } from "../../persistence/state-io.ts";
 import { errorMessage } from "../../shared/errors.ts";
+import { withExistingScopeLock } from "../../transaction/with-state-guard.ts";
 
 import type { ScopedLocations } from "../../persistence/locations.ts";
 import type { ExtensionState } from "../../persistence/state-io.ts";
@@ -116,7 +120,7 @@ export async function garbageCollectPluginClones(
   locations: ScopedLocations,
   keep: ReadonlySet<string> = new Set(),
 ): Promise<string[]> {
-  const state = await loadState(locations.extensionRoot);
+  const state = await loadState(locations.extensionRoot, { persistMigration: false });
   const liveKeys = deriveLiveCloneKeys(state, locations.pluginClonesDir);
   const entries = await readCloneKeys(locations);
 
@@ -141,4 +145,21 @@ export async function garbageCollectPluginClones(
   }
 
   return leaks;
+}
+
+/**
+ * D-PL7-05: the clone GC under a fresh lock of `locations`' scope. Clones and
+ * records are per scope, so this scope's lock is the only one the GC needs.
+ * The caller must hold no state lock: the lock uses `retries: 0` and is not
+ * re-entrant. Never call it inside a `withStateGuard` closure either: that
+ * guard saves after the closure, so the GC would read the old
+ * `resolvedSource` and delete the clone the closure just recorded. While
+ * another holder has the lock it rejects with StateLockHeldError, which every
+ * caller traces and swallows (D-19-01); the next lifecycle operation retries.
+ */
+export function collectPluginClonesLocked(
+  locations: ScopedLocations,
+  keep?: ReadonlySet<string>,
+): Promise<string[]> {
+  return withExistingScopeLock(locations, () => garbageCollectPluginClones(locations, keep));
 }

@@ -95,7 +95,7 @@ import {
   mcpConfigNoticesMember,
 } from "../marketplace/shared.ts";
 
-import { garbageCollectPluginClones } from "./clone-gc.ts";
+import { collectPluginClonesLocked } from "./clone-gc.ts";
 import { buildScopeDeclarationIndex, withoutDisabledHolders } from "./dependency-index.ts";
 import {
   absentTargetReasons,
@@ -1100,8 +1100,11 @@ interface PostUninstallCleanupOptions {
  * record references it. The GC derives live keys from the just-committed
  * state, so a shared clone survives while any other plugin still references
  * it. NFR-3: a crash before this leaves an orphan the next idempotent pass
- * removes. `garbageCollectPluginClones` already folds per-dir rm leaks into a
- * returned string[] rather than throwing; the try/catch is belt and braces.
+ * removes. D-PL7-05: the GC runs under a fresh scope lock, taken after the
+ * uninstall's own lock is released. The GC folds per-dir rm leaks into a
+ * returned string[]; the try/catch traces what it throws, such as the
+ * StateLockHeldError of a held lock, which leaves the clone for the next
+ * lifecycle operation.
  *
  * WLIF-01: the workflow staging sweep runs last. Its trees live under the home
  * directory rather than under any scope root, so no other arm of this cleanup
@@ -1152,7 +1155,7 @@ async function runPostUninstallCleanup({
   }
 
   try {
-    await garbageCollectPluginClones(locations);
+    await collectPluginClonesLocked(locations);
   } catch (err) {
     // D-19-01: hygienic cleanup never becomes the primary user-facing path.
     hookDebugLog(`uninstall: clone GC failed for ${plugin}@${marketplace}: ${errorMessage(err)}`);
