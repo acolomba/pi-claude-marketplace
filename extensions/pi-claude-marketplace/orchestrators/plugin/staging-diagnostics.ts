@@ -1,6 +1,6 @@
 // orchestrators/plugin/staging-diagnostics.ts
 //
-// The staging-diagnostic renderer every staging verb and cascade calls after
+// The staging-diagnostic renderers every staging verb and cascade calls after
 // its rows (D-PL1-07). A LEAF module: it imports only the shared notify,
 // redaction and staging-warning vocabulary, so `marketplace/update.messaging.ts`
 // can reach it without pulling the `plugin/shared.ts` hub graph under a
@@ -32,13 +32,13 @@ export interface StagingDiagnostic {
 }
 
 /**
- * D-PL1-07: the one placement rule every staging verb and cascade calls after
- * its own rows and before its MCP config notices. Each entry renders as one
+ * D-PL1-07: the placement rule every standalone staging verb calls after its
+ * own rows and before its MCP config notices. Each entry renders as one
  * diagnostic, in entry order, and an entry with no discovery warning renders
  * nothing.
  *
- * D-PL1-08: it shows the discovery half only. The hygiene half stays on the
- * orchestrated payload (D-19-01).
+ * D-141-03 / D-19-01: it shows the discovery half only. The cascades render
+ * the hygiene half too, through `surfaceCascadeStagingDiagnostics` (D-PL1-25).
  */
 export function surfaceStagingDiagnostics(
   ctx: NotificationContext,
@@ -50,6 +50,27 @@ export function surfaceStagingDiagnostics(
       ...diagnostic,
       warnings: partitionStagingWarnings(diagnostic.warnings).discovery,
     });
+  }
+}
+
+/**
+ * D-PL1-25: the renderer of the cascades -- `marketplace update`, autoupdate
+ * and `apply` -- which show both halves, so a cleanup leak or an index
+ * corruption in a cascade reaches the user. Each entry with any staging
+ * warning renders as one diagnostic, in entry order (D-PL1-07): the discovery
+ * lines first, then the hygiene lines, each half in bridge order. Every line
+ * is redacted (NFR-9).
+ *
+ * WGATE-01: the header has one clause per half, so a hygiene line is never
+ * counted as a declared component's note.
+ */
+export function surfaceCascadeStagingDiagnostics(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  diagnostics: readonly StagingDiagnostic[],
+): void {
+  for (const diagnostic of diagnostics) {
+    notifyStagingHalves(ctx, run, diagnostic, partitionStagingWarnings(diagnostic.warnings));
   }
 }
 
@@ -85,15 +106,42 @@ export function surfaceDiscoveryWarnings(
   run: NotificationRun,
   args: Omit<StagingDiagnostic, "warnings"> & { readonly warnings: readonly DiscoveryWarning[] },
 ): void {
-  if (args.warnings.length === 0) {
+  notifyStagingHalves(ctx, run, args, { discovery: args.warnings, hygiene: [] });
+}
+
+function notifyStagingHalves(
+  ctx: NotificationContext,
+  run: NotificationRun,
+  subject: Omit<StagingDiagnostic, "warnings">,
+  halves: ReturnType<typeof partitionStagingWarnings>,
+): void {
+  const clauses = [
+    discoveryClause(halves.discovery.length),
+    hygieneClause(halves.hygiene.length),
+  ].filter((clause) => clause !== undefined);
+  if (clauses.length === 0) {
     return;
   }
 
-  const lines = args.warnings.map((w) => redactAbsolutePaths(w.message));
-  const subject = `Plugin "${args.plugin}" [${args.scope}] ${args.verb}`;
-  const header =
-    lines.length === 1
-      ? `${subject}; 1 declared component has a note.`
-      : `${subject}; ${lines.length.toString()} declared components have notes.`;
+  const lines = [...halves.discovery, ...halves.hygiene].map((w) => redactAbsolutePaths(w.message));
+  const header = `Plugin "${subject.plugin}" [${subject.scope}] ${subject.verb}; ${clauses.join("; ")}.`;
   notifyDiagnostic(ctx, run, header, lines);
+}
+
+function discoveryClause(count: number): string | undefined {
+  if (count === 0) {
+    return undefined;
+  }
+
+  return count === 1
+    ? "1 declared component has a note"
+    : `${count.toString()} declared components have notes`;
+}
+
+function hygieneClause(count: number): string | undefined {
+  if (count === 0) {
+    return undefined;
+  }
+
+  return count === 1 ? "1 staging warning" : `${count.toString()} staging warnings`;
 }

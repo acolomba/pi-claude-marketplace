@@ -134,6 +134,22 @@ Given(
   },
 );
 
+// A Pi agent has no color, so staging drops the field and says so in a
+// hygiene warning (D-PL1-02): a staging warning that skips nothing.
+Given(
+  "the published plugin {string} of the marketplace {string} has an agent {string} that sets a color",
+  async function (this: ScenarioWorld, plugin: string, name: string, agent: string) {
+    const text = `---\nname: ${agent}\ndescription: The ${agent} agent.\ncolor: blue\n---\n\nThe ${agent} agent.\n`;
+    const file = await writePublishedPluginFile(
+      this.requirePublished(name),
+      plugin,
+      path.join("agents", `${agent}.md`),
+      text,
+    );
+    assert.strictEqual(await readFile(file, "utf8"), text);
+  },
+);
+
 // The generated name of `skills/skill` is `<plugin>-skill`, the name of the
 // plugin's own skill, and `<plugin>-skill/` sorts first, so the install keeps
 // that one and skips the new one.

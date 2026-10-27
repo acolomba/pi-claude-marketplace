@@ -7,7 +7,7 @@ import {
   type PluginUpdatedMessage,
 } from "../../shared/notification-types.ts";
 import { skipSeverity } from "../../shared/notify-reasons.ts";
-import { surfaceStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
+import { surfaceCascadeStagingDiagnostics } from "../plugin/staging-diagnostics.ts";
 import {
   constraintCauseFor,
   revisionVersionSlot,
@@ -199,9 +199,10 @@ export function outcomeToCascadePluginMessage(
  * An `updated` outcome renders under `updated`, a `failed` one under
  * `update failed`; every other partition staged nothing.
  *
- * D-PL1-08: the discovery half only; the hygiene half stays on the outcome.
- * D-PL1-09: the autoupdate cascade is this same path, so this one call covers
- * both. `scope` is the cascade's marketplace scope, which every row shares.
+ * D-PL1-25: both halves, the discovery notes first, so a hygiene warning such
+ * as an index corruption reaches the user. D-PL1-09: the autoupdate cascade
+ * is this same path, so this one call covers both. `scope` is the cascade's
+ * marketplace scope, which every row shares.
  */
 export function surfaceCascadeStagingWarnings(
   ctx: NotificationContext,
@@ -209,7 +210,7 @@ export function surfaceCascadeStagingWarnings(
   outcomes: readonly PluginUpdateOutcome[],
   scope: Scope,
 ): void {
-  surfaceStagingDiagnostics(
+  surfaceCascadeStagingDiagnostics(
     ctx,
     run,
     outcomes.flatMap((outcome) => cascadeStagingDiagnostic(outcome, scope)),

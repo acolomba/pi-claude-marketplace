@@ -1281,7 +1281,7 @@ function recordingCtx(): {
   return { ctx, notifications };
 }
 
-test("D-PL1-07 / D-PL1-08: a cascade shows the discovery warnings of its updated and failed plugins in outcome order", () => {
+test("D-PL1-07 / D-PL1-25: a cascade shows the staging warnings of its updated and failed plugins in outcome order", () => {
   // arrange
   const { ctx, notifications } = recordingCtx();
   const outcomes: PluginUpdateOutcome[] = [
@@ -1347,15 +1347,16 @@ test("D-PL1-07 / D-PL1-08: a cascade shows the discovery warnings of its updated
     },
     {
       message:
-        'Plugin "delta" [project] updated; 2 declared components have notes.\n\n' +
+        'Plugin "delta" [project] updated; 2 declared components have notes; 1 staging warning.\n\n' +
         'command source "c" is duplicated; ignoring duplicate.\n' +
-        'skill source "d" is duplicated; ignoring duplicate.',
+        'skill source "d" is duplicated; ignoring duplicate.\n' +
+        "agents index was corrupt; rebuilt it",
       severity: "warning",
     },
   ]);
 });
 
-test("D-PL1-08: a cascade whose moved plugins carry no discovery warning shows nothing", () => {
+test("D-PL1-25: a cascade shows a moved plugin whose only staging warning is a hygiene warning", () => {
   // arrange
   const { ctx, notifications } = recordingCtx();
   const outcomes: PluginUpdateOutcome[] = [
@@ -1388,5 +1389,12 @@ test("D-PL1-08: a cascade whose moved plugins carry no discovery warning shows n
   surfaceCascadeStagingWarnings(ctx, runWithNothingLoaded(), outcomes, "user");
 
   // assert
-  assert.deepStrictEqual(notifications, []);
+  assert.deepStrictEqual(notifications, [
+    {
+      message:
+        'Plugin "alpha" [user] updated; 1 staging warning.\n\n' +
+        "agents index was corrupt; rebuilt it",
+      severity: "warning",
+    },
+  ]);
 });

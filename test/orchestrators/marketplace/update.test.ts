@@ -3215,8 +3215,8 @@ test("AFILE-04: a marketplace update whose autoupdate cascade rewrites a comment
 
 test("D-PL1-07 / D-PL1-09: an autoupdate cascade shows a moved plugin's staging warnings between its rows and its MCP notices", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    // arrange -- the moved plugin carries both halves; only the discovery half
-    // renders (D-PL1-08).
+    // arrange -- the moved plugin carries both halves, and both render
+    // (D-PL1-25).
     await seedGithubMarketplace({
       cwd,
       name: "official",
@@ -3270,8 +3270,9 @@ test("D-PL1-07 / D-PL1-09: an autoupdate cascade shows a moved plugin's staging 
       },
       {
         message:
-          'Plugin "alpha" [project] updated; 1 declared component has a note.\n\n' +
-          'skill source "dup" is duplicated; ignoring duplicate.',
+          'Plugin "alpha" [project] updated; 1 declared component has a note; 1 staging warning.\n\n' +
+          'skill source "dup" is duplicated; ignoring duplicate.\n' +
+          "agents index was corrupt; rebuilt it",
         severity: "warning",
       },
       {

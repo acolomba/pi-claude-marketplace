@@ -4,6 +4,7 @@ import { describe, test } from "node:test";
 import { mock, verify, when } from "strong-mock";
 
 import {
+  surfaceCascadeStagingDiagnostics,
   surfaceDiscoveryWarnings,
   surfaceStagingDiagnostics,
 } from "../../../extensions/pi-claude-marketplace/orchestrators/plugin/staging-diagnostics.ts";
@@ -204,7 +205,7 @@ const HYGIENE_DIAGNOSTIC = {
 void (HYGIENE_DIAGNOSTIC satisfies Parameters<typeof surfaceDiscoveryWarnings>[2]);
 
 describe("surfaceStagingDiagnostics", () => {
-  test("D-PL1-07 / D-PL1-08: renders one diagnostic per entry in entry order with only the discovery lines", () => {
+  test("D-PL1-07 / D-141-03: renders one diagnostic per entry in entry order with only the discovery lines", () => {
     // arrange
     const capture = createJsonCapture();
     const ctx = {
@@ -269,7 +270,7 @@ describe("surfaceStagingDiagnostics", () => {
   });
 
   // eslint-disable-next-line sonarjs/assertions-in-tests -- Explicit strong-mock verify calls assert the complete notification interaction.
-  test("D-PL1-08: an entry with only hygiene warnings renders nothing", () => {
+  test("D-19-01: an entry with only hygiene warnings renders nothing", () => {
     // arrange
     const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
 
@@ -287,6 +288,193 @@ describe("surfaceStagingDiagnostics", () => {
 
     // act
     surfaceStagingDiagnostics(ctx, runWithNothingLoaded(), []);
+
+    // assert
+    verify(ctx);
+  });
+});
+
+describe("surfaceCascadeStagingDiagnostics", () => {
+  test("D-PL1-25: renders one diagnostic per entry in entry order with the discovery lines before the hygiene lines", () => {
+    // arrange
+    const capture = createJsonCapture();
+    const ctx = {
+      mode: "json",
+      get ui() {
+        return capture.ui;
+      },
+    };
+    const run = { ...runWithNothingLoaded(), entrySink: capture.entrySink };
+
+    // act
+    surfaceCascadeStagingDiagnostics(ctx, run, [
+      {
+        plugin: "beta",
+        scope: "user",
+        verb: "updated",
+        warnings: [
+          hygieneWarning("agents index entry dropped"),
+          discoveryWarning("skill beta-one skipped"),
+        ],
+      },
+      {
+        plugin: "alpha",
+        scope: "project",
+        verb: "enabled",
+        warnings: [
+          discoveryWarning("c1"),
+          hygieneWarning("h1"),
+          discoveryWarning("c2"),
+          hygieneWarning("h2"),
+        ],
+      },
+    ]);
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+          kind: "diagnostic",
+          severity: "warning",
+          needsReload: false,
+          header:
+            'Plugin "beta" [user] updated; 1 declared component has a note; 1 staging warning.',
+          lines: ["skill beta-one skipped", "agents index entry dropped"],
+        },
+      },
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin: { kind: "command", commandId: "plugin", invocationId: "test-run" },
+          kind: "diagnostic",
+          severity: "warning",
+          needsReload: false,
+          header:
+            'Plugin "alpha" [project] enabled; 2 declared components have notes; 2 staging warnings.',
+          lines: ["c1", "c2", "h1", "h2"],
+        },
+      },
+    ]);
+    capture.assertValid();
+  });
+
+  for (const { label, warnings, message } of [
+    {
+      label: "one hygiene line",
+      warnings: [hygieneWarning("h1")],
+      message: 'Plugin "alpha" [project] updated; 1 staging warning.\n\nh1',
+    },
+    {
+      label: "two hygiene lines",
+      warnings: [hygieneWarning("h1"), hygieneWarning("h2")],
+      message: 'Plugin "alpha" [project] updated; 2 staging warnings.\n\nh1\nh2',
+    },
+    {
+      label: "one discovery line",
+      warnings: [discoveryWarning("c1")],
+      message: 'Plugin "alpha" [project] updated; 1 declared component has a note.\n\nc1',
+    },
+    {
+      label: "two discovery lines and three hygiene lines",
+      warnings: [
+        hygieneWarning("h1"),
+        discoveryWarning("c1"),
+        hygieneWarning("h2"),
+        discoveryWarning("c2"),
+        hygieneWarning("h3"),
+      ],
+      message:
+        'Plugin "alpha" [project] updated; 2 declared components have notes; 3 staging warnings.\n\nc1\nc2\nh1\nh2\nh3',
+    },
+  ]) {
+    // eslint-disable-next-line sonarjs/assertions-in-tests -- Explicit strong-mock verify calls assert the complete notification interaction.
+    test(`D-PL1-25: gives ${label} a header with one clause per half`, () => {
+      // arrange
+      const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+      const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+      when(() => ctx.mode)
+        .thenReturn("tui")
+        .once();
+      when(() => ctx.ui)
+        .thenReturn(ui)
+        .once();
+      when(() => {
+        ui.notify(message, "warning");
+      })
+        .thenReturn(undefined)
+        .once();
+
+      // act
+      surfaceCascadeStagingDiagnostics(ctx, runWithNothingLoaded(), [
+        { plugin: "alpha", scope: "project", verb: "updated", warnings },
+      ]);
+
+      // assert
+      verify(ctx);
+      verify(ui);
+    });
+  }
+
+  // eslint-disable-next-line sonarjs/assertions-in-tests -- Explicit strong-mock verify calls assert the complete notification interaction.
+  test("NFR-9: redacts an absolute path in a hygiene line", () => {
+    // arrange
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    const ui = mock<ExtensionContext["ui"]>({ exactParams: true, name: "extension UI" });
+    when(() => ctx.mode)
+      .thenReturn("tui")
+      .once();
+    when(() => ctx.ui)
+      .thenReturn(ui)
+      .once();
+    when(() => {
+      ui.notify(
+        'Plugin "alpha" [project] updated; 1 staging warning.\n\nskills staging cleanup leak: alpha-skill',
+        "warning",
+      );
+    })
+      .thenReturn(undefined)
+      .once();
+
+    // act
+    surfaceCascadeStagingDiagnostics(ctx, runWithNothingLoaded(), [
+      {
+        plugin: "alpha",
+        scope: "project",
+        verb: "updated",
+        warnings: [hygieneWarning("skills staging cleanup leak: /private/tmp/stage/alpha-skill")],
+      },
+    ]);
+
+    // assert
+    verify(ctx);
+    verify(ui);
+  });
+
+  // eslint-disable-next-line sonarjs/assertions-in-tests -- Explicit strong-mock verify calls assert the complete notification interaction.
+  test("D-PL1-25: an entry with no staging warning renders nothing", () => {
+    // arrange
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+
+    // act
+    surfaceCascadeStagingDiagnostics(ctx, runWithNothingLoaded(), [
+      { plugin: "alpha", scope: "project", verb: "updated", warnings: [] },
+    ]);
+
+    // assert
+    verify(ctx);
+  });
+
+  // eslint-disable-next-line sonarjs/assertions-in-tests -- Explicit strong-mock verify calls assert the complete notification interaction.
+  test("D-PL1-25: an empty list renders nothing", () => {
+    // arrange
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+
+    // act
+    surfaceCascadeStagingDiagnostics(ctx, runWithNothingLoaded(), []);
 
     // assert
     verify(ctx);
