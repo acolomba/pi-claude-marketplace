@@ -6,10 +6,10 @@ current_phase: 6
 current_phase_name: Import Marketplace Planning
 status: phase-complete
 stopped_at: "Phase 29 complete; next: milestone audit (`/gsd-audit-milestone`)"
-last_updated: "2026-10-27T11:25:58.084Z"
+last_updated: "2026-10-27T12:06:27.105Z"
 last_activity: 2026-10-27
 last_activity_desc: "Phase 6 verified (human_needed: uncertain choices for review)"
-state_head: fdd1959a5321d034d16954be44dfe4df424e900f
+state_head: 29d31b2b37f7bdb2b131f703bc948ee7f68b088b
 progress:
   total_phases: 11
   completed_phases: 1
@@ -189,6 +189,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
 | 261027-9e2 | Sort apply rollback row pair and narrow run-tokens path matching (D-PL6-15, D-PL6-16) | 2026-10-27 | fdd1959a | — | [261027-9e2-sort-apply-rollback-row-pair-and-narrow-](./quick/261027-9e2-sort-apply-rollback-row-pair-and-narrow-/) |
+| 261027-9jj | Follow Claude Code for renamed and changed marketplace sources in import (D-PL6-17/18/19) | 2026-10-27 | 29d31b2b | — | [261027-9jj-follow-claude-code-for-renamed-and-chang](./quick/261027-9jj-follow-claude-code-for-renamed-and-chang/) |
 
 ## Session Continuity
 
