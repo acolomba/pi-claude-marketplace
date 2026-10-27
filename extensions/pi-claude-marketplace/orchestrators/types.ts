@@ -466,9 +466,9 @@ export interface PluginUpdateUpdatedOutcome extends PluginUpdateBase, LedgerDegr
   /**
    * D-PL1-10: the bridge staging warnings this update's prepare produced, both
    * halves, tagged, in bridge order (skills, commands, agents, mcp,
-   * workflows). The direct update, reinstall and the cascades render the
-   * discovery half after their rows (D-PL1-07, D-PL1-08); the hygiene half
-   * stays on the payload for orchestrated readers (D-19-01).
+   * workflows). The direct update and reinstall render the discovery half
+   * after their rows (D-PL1-07, D-141-03); the cascades render both halves
+   * (D-PL1-25).
    *
    * The outcome is the carrier because the update path puts a boundary
    * between a warning and the row it qualifies: the warnings originate inside
@@ -593,8 +593,9 @@ export interface PluginUpdateFailedOutcome extends PluginUpdateBase {
   readonly mcpConfigNotices?: readonly McpConfigNotice[];
   /**
    * D-PL1-10 / D-PL1-14: the tagged staging warnings of the handles the
-   * failed update prepared, both halves, in bridge order. A consumer renders
-   * the discovery half after the failure row. Omitted when empty (NREG-01).
+   * failed update prepared, both halves, in bridge order. The direct update
+   * renders the discovery half after the failure row, and the cascades render
+   * both halves (D-PL1-25). Omitted when empty (NREG-01).
    */
   readonly stagingWarnings?: readonly StagingWarning[];
 }

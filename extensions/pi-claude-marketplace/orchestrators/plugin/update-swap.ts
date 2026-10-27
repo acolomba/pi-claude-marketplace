@@ -31,10 +31,11 @@
 //
 // D-141-03 / D-PL1-10: the five bridges' tagged staging warnings ride the
 // `updated` outcome's `stagingWarnings`, both halves, in bridge order, in
-// direct and cascade mode alike. Readers take the discovery half through
+// direct and cascade mode alike. Readers split the halves through
 // `partitionStagingWarnings`, the classifier install uses (D-PL1-03). The
-// direct path renders it AFTER the cascade, since the runner that produces a
-// warning finishes long before the row it qualifies exists.
+// direct path and reinstall render the discovery half AFTER the cascade,
+// since the runner that produces a warning finishes long before the row it
+// qualifies exists. The cascades render both halves (D-PL1-25).
 //
 // PUP-9 routing:
 //  updateSinglePlugin -- cascade path -- catches into partition='failed'

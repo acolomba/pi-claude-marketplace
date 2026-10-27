@@ -476,10 +476,10 @@ async function updatePluginsWith(
  * the cascade the rows live in -- the user reads the row, then the detail
  * that qualifies it. The header names the target's scope (D-PL1-05).
  *
- * `stagingWarnings` carries both halves (D-PL1-10). The list renderer shows
- * only the discovery half; the hygiene half rides the outcome for
- * orchestrated readers and is not shown (D-PL1-08), the same property
- * install's standalone arm relies on.
+ * `stagingWarnings` carries both halves (D-PL1-10). The direct update shows
+ * only the discovery half; the hygiene half rides the outcome and is not
+ * shown (D-141-03, D-19-01), the same property install's standalone arm
+ * relies on.
  *
  * D-PL1-14: a `failed` outcome the batch kept renders with `update failed`.
  *

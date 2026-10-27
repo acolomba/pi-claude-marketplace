@@ -199,8 +199,8 @@ export type EnableDisablePluginOutcome =
       readonly version?: string;
       /**
        * D-PL1-12: both halves of the enable root's staging warnings, for an
-       * orchestrated caller to render the discovery half (`apply`, D-PL1-09).
-       * Omitted when empty (NREG-01).
+       * orchestrated caller to render; `apply` renders both halves (D-PL1-09,
+       * D-PL1-25). Omitted when empty (NREG-01).
        */
       readonly stagingWarnings?: readonly StagingWarning[];
     } & EnableDisableSubject &

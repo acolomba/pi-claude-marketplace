@@ -189,7 +189,7 @@ export interface PluginBackfilledOutcome
   readonly version?: string;
   /**
    * D-PL1-09: the staging warnings of the materialization behind this row,
-   * both halves; `apply` renders the discovery half (D-PL1-08). Set only when
+   * both halves; `apply` renders both halves (D-PL1-25). Set only when
    * non-empty (NREG-01).
    */
   readonly stagingWarnings?: readonly StagingWarning[];
@@ -296,7 +296,7 @@ export interface PluginEnabledOutcome extends PluginOutcomeBase, EnableDegradati
   readonly version?: string;
   /**
    * D-PL1-09: the staging warnings of the materialization behind this row,
-   * both halves; `apply` renders the discovery half (D-PL1-08). Set only when
+   * both halves; `apply` renders both halves (D-PL1-25). Set only when
    * non-empty (NREG-01).
    */
   readonly stagingWarnings?: readonly StagingWarning[];
@@ -551,7 +551,7 @@ export interface PluginConvergedOutcome extends PluginOutcomeBase {
   readonly row: ReconcileAppliedMsg;
   /**
    * D-PL1-09: the staging warnings of the materialization behind this row,
-   * both halves; `apply` renders the discovery half (D-PL1-08). Set only when
+   * both halves; `apply` renders both halves (D-PL1-25). Set only when
    * non-empty (NREG-01).
    */
   readonly stagingWarnings?: readonly StagingWarning[];
