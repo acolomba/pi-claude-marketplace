@@ -23,6 +23,7 @@ import {
   writeMarketplace,
   writeMarketplaceDescription,
 } from "./path-marketplace.ts";
+import { cutQuotedPaths } from "./run-tokens.ts";
 
 import type { OfferedPlugin } from "./path-marketplace.ts";
 
@@ -421,7 +422,8 @@ export async function unreadableSkillCopyError(
     () => assert.fail(`copying ${skillDir} did not fail`),
     (reason: unknown) => reason as NodeJS.ErrnoException,
   );
-  return cutQuotedPaths(error);
+  error.message = cutQuotedPaths(error.message);
+  return error;
 }
 
 // Copies `skillDir` into `scratch` with the options Pi stages a skill with,
@@ -436,16 +438,6 @@ async function copySkill(skillDir: string, scratch: string): Promise<string> {
     force: false,
   });
   return copy;
-}
-
-// Cuts each quoted path in the message of `error` to its last segment, as Pi
-// shows a redacted cause.
-function cutQuotedPaths(error: NodeJS.ErrnoException): NodeJS.ErrnoException {
-  error.message = error.message.replaceAll(
-    /'([^']+)'/gu,
-    (_quoted, quotedPath: string) => `'${path.basename(quotedPath)}'`,
-  );
-  return error;
 }
 
 // The skill file of `plugin` that `publishUnreadableSkillFile` writes.
@@ -500,7 +492,8 @@ export async function readOnlySkillRemovalError(
     () => assert.fail(`removing ${copy} did not fail`),
     (reason: unknown) => reason as NodeJS.ErrnoException,
   );
-  return cutQuotedPaths(error);
+  error.message = cutQuotedPaths(error.message);
+  return error;
 }
 
 /**
