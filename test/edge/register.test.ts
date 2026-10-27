@@ -676,7 +676,7 @@ for (const mode of ["json", "rpc"]) {
             plugin: {
               status: "failed",
               name: "demo",
-              id: "demo@demo",
+              id: "demo",
               scope,
               reasons: ["unparseable"],
               componentsResolved: false,

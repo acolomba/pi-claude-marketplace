@@ -173,6 +173,7 @@ function buildManifestFailureMessage(
       scope: record.scope,
       reasons: [reason],
       componentsResolved: false,
+      marketplaceSubject: true,
     },
   };
 }

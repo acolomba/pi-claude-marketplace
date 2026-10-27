@@ -674,20 +674,20 @@ Each source has exactly one branch. Branch-specific fields are absent from the o
 
 <!-- fields: plugin-info-row -->
 
-| Field path           | Type                                              | Presence    | Meaning                                                                                                                                 |
-| -------------------- | ------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `status`             | PluginInfoStatus                                  | required    | Plugin information state.                                                                                                               |
-| `name`               | string                                            | required    | Plugin name.                                                                                                                            |
-| `id`                 | string                                            | required    | Qualified address, `<name>@<marketplaceName>`.                                                                                          |
-| `reasons`            | Reason[]                                          | required    | Resolved reasons. Empty means no reasons.                                                                                               |
-| `version`            | string                                            | optional    | Plugin version.                                                                                                                         |
-| `scope`              | Scope                                             | optional    | Plugin installation scope.                                                                                                              |
-| `description`        | string                                            | optional    | Plugin description.                                                                                                                     |
-| `notes`              | string[]                                          | optional    | Ordered advisory lines about component files.                                                                                           |
-| `dependencies`       | string[]                                          | optional    | Dependency addresses with any version or SHA constraints, sorted by dependency name.                                                    |
-| `componentsResolved` | boolean                                           | required    | Selects the resolved (`true`) or unresolved (`false`) branch.                                                                           |
-| `components`         | [Components](#components)                         | conditional | Required when `componentsResolved` is `true`. Absent when it is `false`.                                                                |
-| `requires`           | [Companion requirement](#companion-requirement)[] | optional    | Companion extensions the resolved components need, sorted by name. Absent when none is needed and when `componentsResolved` is `false`. |
+| Field path           | Type                                              | Presence    | Meaning                                                                                                                                             |
+| -------------------- | ------------------------------------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `status`             | PluginInfoStatus                                  | required    | Plugin information state.                                                                                                                           |
+| `name`               | string                                            | required    | Plugin name.                                                                                                                                        |
+| `id`                 | string                                            | required    | Qualified address, `<name>@<marketplaceName>`. A failed `marketplace info` row stands for the marketplace, so its id is the marketplace name alone. |
+| `reasons`            | Reason[]                                          | required    | Resolved reasons. Empty means no reasons.                                                                                                           |
+| `version`            | string                                            | optional    | Plugin version.                                                                                                                                     |
+| `scope`              | Scope                                             | optional    | Plugin installation scope.                                                                                                                          |
+| `description`        | string                                            | optional    | Plugin description.                                                                                                                                 |
+| `notes`              | string[]                                          | optional    | Ordered advisory lines about component files.                                                                                                       |
+| `dependencies`       | string[]                                          | optional    | Dependency addresses with any version or SHA constraints, sorted by dependency name.                                                                |
+| `componentsResolved` | boolean                                           | required    | Selects the resolved (`true`) or unresolved (`false`) branch.                                                                                       |
+| `components`         | [Components](#components)                         | conditional | Required when `componentsResolved` is `true`. Absent when it is `false`.                                                                            |
+| `requires`           | [Companion requirement](#companion-requirement)[] | optional    | Companion extensions the resolved components need, sorted by name. Absent when none is needed and when `componentsResolved` is `false`.             |
 
 <!-- /fields -->
 

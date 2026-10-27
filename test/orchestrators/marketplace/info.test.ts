@@ -14,6 +14,8 @@ import { getMarketplaceInfo } from "../../../extensions/pi-claude-marketplace/or
 import { saveConfig } from "../../../extensions/pi-claude-marketplace/persistence/config-io.ts";
 import { locationsFor } from "../../../extensions/pi-claude-marketplace/persistence/locations.ts";
 import { saveState } from "../../../extensions/pi-claude-marketplace/persistence/state-io.ts";
+import { openNotificationRun } from "../../../extensions/pi-claude-marketplace/shared/notification-run.ts";
+import { createJsonCapture } from "../../edge/json-capture.ts";
 import { withHermeticEnvironment } from "../../platform/hermetic-environment.ts";
 import { runWithNothingLoaded } from "../../shared/notification-run-seeds.ts";
 
@@ -982,6 +984,68 @@ test("malformed manifest JSON renders the complete unparseable failure envelope"
     // assert
     assert.deepStrictEqual(await snapshotEnvironment(home, cwd), before);
     boundary.verifyAll();
+  });
+});
+
+test("a manifest failure names the marketplace alone as its JSON row id", async () => {
+  await withHermeticHome(async ({ cwd }) => {
+    // arrange
+    const locations = locationsFor("user", cwd);
+    const manifestPath = path.join(locations.extensionRoot, "bad-mp.json");
+    await mkdir(path.dirname(manifestPath), { recursive: true });
+    await writeFile(manifestPath, "{ not valid json", "utf8");
+    await saveMarketplace(
+      locations,
+      marketplaceRecord({
+        addedFromCwd: cwd,
+        manifestPath,
+        marketplaceRoot: "/home/user/marketplaces/bad-mp",
+        name: "bad-mp",
+        scope: "user",
+        source: pathSource("/home/user/marketplaces/bad-mp"),
+      }),
+    );
+    const origin = { kind: "command", commandId: "marketplace info", invocationId: "run" } as const;
+    const capture = createJsonCapture();
+    const ctx = mock<ExtensionContext>({ exactParams: true, name: "extension context" });
+    when(() => ctx.mode)
+      .thenReturn("json")
+      .once();
+    const run = openNotificationRun(
+      { getAllTools: () => [], getCommands: () => [], appendEntry: capture.entrySink.appendEntry },
+      origin,
+    );
+
+    // act
+    await getMarketplaceInfo({ ctx, run, name: "bad-mp", scope: "user", cwd });
+
+    // assert
+    assert.deepStrictEqual(capture.entries, [
+      {
+        customType: "claude-plugin",
+        payload: {
+          schemaVersion: 1,
+          origin,
+          kind: "plugin-info",
+          severity: "error",
+          needsReload: false,
+          summary: "A plugin operation has failed.",
+          marketplaceName: "bad-mp",
+          marketplaceScope: "user",
+          marketplaceDetails: { autoupdate: false },
+          plugin: {
+            status: "failed",
+            name: "bad-mp",
+            id: "bad-mp",
+            scope: "user",
+            reasons: ["unparseable"],
+            componentsResolved: false,
+          },
+        },
+      },
+    ]);
+    capture.assertValid();
+    verify(ctx);
   });
 });
 

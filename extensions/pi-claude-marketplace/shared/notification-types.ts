@@ -1118,6 +1118,11 @@ export interface PluginInfoRowBase {
    * renderer does neither on its behalf.
    */
   readonly notes?: readonly string[];
+  /**
+   * D-PL5-12: the row's subject is a marketplace, not a plugin (a failed
+   * `marketplace info`), so its JSON id is its name alone.
+   */
+  readonly marketplaceSubject?: true;
 }
 
 /**

@@ -518,14 +518,18 @@ function wirePluginInfo(message: PluginInfoMessage) {
 
 /**
  * WIRE-04 / WIRE-06: one plugin-info row. `id` is the plugin name, `@`, and the
- * marketplace name. `componentsResolved` selects the arm; only a resolved row
- * carries `components`.
+ * marketplace name, except on a row whose subject is the marketplace
+ * (D-PL5-12), whose id is its name alone. `componentsResolved` selects the arm;
+ * only a resolved row carries `components`.
  */
 function wirePluginInfoRow(plugin: PluginInfoRow, message: PluginInfoMessage) {
   const fields = {
     status: plugin.status,
     name: plugin.name,
-    id: `${plugin.name}@${message.marketplaceName}`,
+    id:
+      plugin.marketplaceSubject === true
+        ? plugin.name
+        : `${plugin.name}@${message.marketplaceName}`,
     reasons: plugin.reasons === undefined ? [] : [...plugin.reasons],
     ...wireScope(plugin, message.marketplaceScope),
     ...versionField(plugin.version),
