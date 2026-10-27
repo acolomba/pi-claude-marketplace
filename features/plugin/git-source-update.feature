@@ -332,7 +332,7 @@ Feature: Plugin git source update
     Then the git-source plugin "ghp" installed in the project scope runs revision 1 of its repository
 
     Examples:
-      | refusal              | reason              | status  | cause chain                                                                  |
-      | answers 404          | source missing      | 404     | HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git           |
-      | drops the connection | network unreachable | dropped | socket hang up, fetched https://{git host}/acme/ghp.git                      |
-      | answers 503          | network error       | 503     | HTTP Error: 503 Service Unavailable, fetched https://{git host}/acme/ghp.git |
+      | refusal              | reason              | status  | cause chain                                                                                                          |
+      | answers 404          | source missing      | 404     | 404 on https://{git host}/acme/ghp.git, HTTP Error: 404 Not Found, fetched https://{git host}/acme/ghp.git           |
+      | drops the connection | network unreachable | dropped | socket hang up, fetched https://{git host}/acme/ghp.git                                                              |
+      | answers 503          | network error       | 503     | 503 on https://{git host}/acme/ghp.git, HTTP Error: 503 Service Unavailable, fetched https://{git host}/acme/ghp.git |

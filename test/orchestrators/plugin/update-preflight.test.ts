@@ -1816,6 +1816,8 @@ test("D-18-11: an enabled record at the same version under another root is prepa
 const offline = Object.assign(new Error("offline"), { code: "ENETUNREACH" });
 const refusedWith = (status: number, message: string): Error =>
   new git.Errors.HttpError(status, message, "");
+const notFound = refusedWith(404, "Not Found");
+const unavailable = refusedWith(503, "Service Unavailable");
 const challenge = refusedWith(401, "Unauthorized");
 const leakedChallenge = new CleanupLeakError(challenge, "clone tmp left at /tmp/x");
 
@@ -1827,16 +1829,16 @@ for (const { title, error, reasons, cause } of [
     cause: offline,
   },
   {
-    title: "a 404 fails as source missing",
-    error: refusedWith(404, "Not Found"),
+    title: "a 404 fails as source missing with a cause that names the status and URL",
+    error: notFound,
     reasons: ["source missing"],
-    cause: "same",
+    cause: new Error("404 on https://example.com/private", { cause: notFound }),
   },
   {
-    title: "a 503 fails as network error",
-    error: refusedWith(503, "Service Unavailable"),
+    title: "a 503 fails as network error with a cause that names the status and URL",
+    error: unavailable,
     reasons: ["network error"],
-    cause: "same",
+    cause: new Error("503 on https://example.com/private", { cause: unavailable }),
   },
   {
     title: "an authentication challenge fails bare as authentication required",
@@ -1864,7 +1866,6 @@ for (const { title, error, reasons, cause } of [
       materializeOrRefreshPluginMirror: () => Promise.reject(error),
       materializePluginCommitCopy: () => Promise.reject(new Error("unexpected commit copy")),
     };
-    const expectedCause = cause === "same" ? error : cause;
 
     // act
     const outcome = await prepare(seed, { cloneCacheSeam });
@@ -1876,7 +1877,7 @@ for (const { title, error, reasons, cause } of [
       fromVersion: "sha-000000000000",
       notes: [error.message],
       reasons,
-      ...(expectedCause !== undefined && { cause: expectedCause }),
+      ...(cause !== undefined && { cause }),
       declaresAgents: false,
       declaresMcp: false,
       declaresWorkflows: false,
