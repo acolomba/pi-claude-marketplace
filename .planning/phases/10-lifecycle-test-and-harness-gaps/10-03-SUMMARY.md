@@ -13,11 +13,11 @@ provides:
   - Presentation-time cause redaction for cascade failure rows
 affects: [phase-11-install-flow-split, plugin-lifecycle-verification]
 actuals:
-  tokens: 6164
+  tokens: 8312
   tasks: 3
-  commits: 1
+  commits: 3
 plan_head_before: 518289bc4412549f01b9a1904ac78167f066f6c7
-plan_head_after: 5c89ac8ca7ab12796597b118324db863db09b123
+plan_head_after: 37a0856599632aace94c38fd3b73c0341bc7a118
 tech-stack:
   added: []
   patterns:
@@ -30,12 +30,13 @@ key-files:
     - extensions/pi-claude-marketplace/orchestrators/plugin/install-cascade.messaging.ts
     - test/orchestrators/plugin/install-flow.test.ts
     - test/orchestrators/plugin/install-cascade.messaging.test.ts
+    - test/orchestrators/plugin/dependency-bindings.test.ts
     - features/plugin/install-dependencies.feature
 key-decisions:
   - "Carry member keys from the walk and dependency plan while those typed structures are still available; never re-walk a catalog or parse a rendered error in a catch path."
   - "Keep the original typed Error for outcome dispatch and redact a presentation copy when composing the user-visible cascade row."
 requirements-completed: [CAS-08, XPH-02]
-duration: 16min
+duration: 30min
 completed: 2026-10-27
 status: complete
 ---
@@ -46,10 +47,10 @@ status: complete
 
 ## Performance
 
-- **Duration:** 16 min
+- **Duration:** 30 min
 - **Completed:** 2026-10-27
 - **Tasks:** 3
-- **Files modified:** 5
+- **Files modified:** 6
 
 ## Accomplishments
 
@@ -62,6 +63,7 @@ status: complete
 ## Task Commits
 
 1. **Tasks 1-3: Carry and render closure failure members** - `5c89ac8c`
+2. **Integration: Assert the typed refusal and stable row fields** - `37a08565`
 
 The three tasks share the same discriminated carrier and row builder, so their implementation and complete-route proof landed as one cohesive commit.
 
@@ -71,10 +73,12 @@ The three tasks share the same discriminated carrier and row builder, so their i
 | --- | --- |
 | Three named CAS-08 Cucumber scenarios | 3 scenarios, 39 steps passed |
 | `node --test test/orchestrators/plugin/install-flow.test.ts` | 321/321 passed |
+| `node --test test/orchestrators/plugin/dependency-bindings.test.ts` | Passed |
 | Direct coverage: `install-flow.ts` | 100% passed |
 | Direct coverage: `install-cascade.ts` | 100% passed |
 | Direct coverage: `install-cascade.messaging.ts` | 100% passed |
 | Direct coverage: `update-cascade.ts` | 100% passed |
+| Direct coverage: `dependency-bindings.ts` | 100% passed |
 | `npm run check:features` | Passed |
 | `npm exec -- fallow audit --base 518289bc` | No issues in 5 changed files |
 | Commit hook (`npm run check:commit`) | Passed |
@@ -105,6 +109,14 @@ The three tasks share the same discriminated carrier and row builder, so their i
 - **Files modified:** `extensions/pi-claude-marketplace/orchestrators/plugin/install-flow.ts`
 - **Commit:** `5c89ac8c`
 
+**3. [Rule 1 - Bug] Replaced a brittle dependent Error object comparison**
+
+- **Found during:** Wave 2 full `npm run check`
+- **Issue:** The dependency-bindings owner test deep-compared one `DependencyCascadeError` instance as both the typed refusal cause and the presentation row cause. Presentation now deliberately receives a redacted `Error` copy, while the top-level refusal retains the typed discriminant.
+- **Fix:** Assert the complete row through stable public fields, and separately require the top-level cause to remain a `DependencyCascadeError` with the expected key and message.
+- **Files modified:** `test/orchestrators/plugin/dependency-bindings.test.ts`
+- **Commit:** `37a08565`
+
 ## Known Stubs
 
 None.
@@ -126,7 +138,7 @@ The planned mitigations are present: member identities come from typed walk/plan
 ## Self-Check: PASSED
 
 - All five modified files exist.
-- Commit `5c89ac8c` is an ancestor of `HEAD`.
+- Commits `5c89ac8c` and `37a08565` are ancestors of `HEAD`.
 - The three named scenarios and all four direct coverage pairs pass.
 
 ---
