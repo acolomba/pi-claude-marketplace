@@ -21,9 +21,9 @@
 //
 // D-PL9-04: the package manager runs in a fresh work dir under sources-staging
 // that holds only the rewritten package.json and lockfile, so the plugin's own
-// .npmrc or bunfig.toml is never read. On success its node_modules moves into the plugin
-// root by rename: sources-staging and both clone roots sit under the extension
-// root, on one filesystem. A node_modules it replaces waits inside the work
+// .npmrc or bunfig.toml is never read. On success its node_modules moves into
+// the plugin root by rename: sources-staging and both clone roots sit under the
+// extension root, on one filesystem. A node_modules it replaces waits inside the work
 // dir, is moved back when the new one cannot move in, and is deleted with the
 // work dir after a success. The work dir is removed afterwards.
 //
@@ -508,9 +508,9 @@ async function runInWorkDir(
     command: row.command,
     args: row.command === "npm" ? [gitDisabledArgument(workDir), ...row.args] : row.args,
     cwd: workDir,
-    ...(row.cacheDirVariable !== undefined && {
-      env: { [row.cacheDirVariable]: path.join(workDir, "bun-cache") },
-    }),
+    ...(row.cacheDirVariable === undefined
+      ? {}
+      : { env: { [row.cacheDirVariable]: path.join(workDir, "bun-cache") } }),
   });
   if (runFailed(run)) {
     return { note: failedNote(row.command, failureDetail(run)), createdNodeModules: false };

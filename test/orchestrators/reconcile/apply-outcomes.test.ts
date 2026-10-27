@@ -1288,19 +1288,23 @@ describe("carriedMcpConfigNotices", () => {
 });
 
 describe("carriedPackageNote", () => {
-  for (const { carrier, expected } of [
-    {
-      carrier: { packageNote: "Plugin dependency install failed (npm): E404" },
-      expected: { postCommitWarnings: ["Plugin dependency install failed (npm): E404"] },
-    },
-    { carrier: {}, expected: {} },
-  ]) {
-    test(`PKD-02: lifts ${carrier.packageNote === undefined ? "no" : "the"} package note onto the post-install warnings`, () => {
-      // act
-      const carried = carriedPackageNote(carrier);
-
-      // assert
-      assert.deepStrictEqual(carried, expected);
+  test("PKD-02: lifts the package note onto the post-install warnings", () => {
+    // act
+    const carried = carriedPackageNote({
+      packageNote: "Plugin dependency install failed (npm): E404",
     });
-  }
+
+    // assert
+    assert.deepStrictEqual(carried, {
+      postCommitWarnings: ["Plugin dependency install failed (npm): E404"],
+    });
+  });
+
+  test("PKD-02: lifts nothing when the carrier has no package note", () => {
+    // act
+    const carried = carriedPackageNote({});
+
+    // assert
+    assert.deepStrictEqual(carried, {});
+  });
 });

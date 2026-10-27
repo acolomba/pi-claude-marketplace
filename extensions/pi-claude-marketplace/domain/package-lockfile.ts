@@ -705,7 +705,7 @@ function sanitizeBun(input: LockfileInput): SanitizedLockfile {
     lockfileName: "bun.lock",
     lockfile: {
       lockfileVersion: lock.lockfileVersion,
-      ...(typeof lock.configVersion === "number" && { configVersion: lock.configVersion }),
+      ...(typeof lock.configVersion === "number" ? { configVersion: lock.configVersion } : {}),
       workspaces: { "": workspaceEntry },
       packages: entries,
     },

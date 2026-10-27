@@ -3221,7 +3221,8 @@ function updatedOutcome(
 
 test("D-PL9-21: a marketplace update shows an autoupdated plugin's package note between its cascade and the MCP notices", async () => {
   await withHermeticHome(async ({ cwd }) => {
-    // arrange -- alpha's notes also hold an unrelated note, which stays out.
+    // arrange
+    // alpha's notes also hold an unrelated note, which stays out.
     await seedGithubMarketplace({
       cwd,
       name: "official",

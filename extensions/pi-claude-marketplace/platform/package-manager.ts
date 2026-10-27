@@ -209,7 +209,7 @@ function watchProcess(
 
     settled = true;
     stopTimers();
-    resolve({ code, ...captured, ...(error !== undefined && { error }) });
+    resolve({ code, ...captured, ...(error === undefined ? {} : { error }) });
   }
 
   // Node also emits `error` for a signal it could not send to a running

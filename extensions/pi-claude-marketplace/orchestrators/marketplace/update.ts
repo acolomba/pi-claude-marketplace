@@ -750,7 +750,7 @@ function refreshFailureReasons(err: unknown): readonly ContentReason[] {
 /**
  * PKD-02 / D-PL9-21: shows each updated plugin's package note after the
  * cascade rows, as the direct plugin update shows it. The cascade's other
- * notes belong to WRN-02, whose shared placement replaces this call.
+ * notes follow WRN-02's shared placement rule, not this call.
  */
 function surfaceCascadePackageNotes(
   ctx: NotificationContext,
