@@ -9,14 +9,16 @@
  * fails when their rows go uncompared. A new session can also be setup, so a
  * scenario shows that what it set up survives the session. A session in
  * another project runs in a project directory of its own, so it shows what
- * the user scope alone offers.
+ * the user scope alone offers. A plain message is sent in the current
+ * session, and the results that follow it, such as a background update's
+ * notice, become the last results the same way.
  */
 
 import assert from "node:assert/strict";
 
 import { type DataTable, Given, Then, When } from "@cucumber/cucumber";
 
-import { startSession } from "../lib/pi-commands.ts";
+import { sendMessage, startSession } from "../lib/pi-commands.ts";
 import { resultsTable } from "../lib/result-rows.ts";
 
 import type { SessionReport } from "../lib/pi-commands.ts";
@@ -44,6 +46,12 @@ When("the user starts a new pi session", async function (this: ScenarioWorld) {
 
 When("the user starts a new pi session in another project", async function (this: ScenarioWorld) {
   keepSession(this, await this.startSessionInAnotherProject());
+});
+
+// D-PL8-02 / D-PL8-10: the results that follow a plain message are session
+// results, so the world fails a scenario whose fields or rows go uncompared.
+When("the user sends the message {string}", async function (this: ScenarioWorld, message: string) {
+  this.recordResults(await sendMessage(this.pi, message), "session");
 });
 
 Then("the session offers these skills:", function (this: ScenarioWorld, table: DataTable) {

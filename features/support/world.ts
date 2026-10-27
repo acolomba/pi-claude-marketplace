@@ -34,6 +34,7 @@ import { currentRun } from "./pi-process.ts";
 import type { GitPluginRepository } from "../lib/git-plugin.ts";
 import type { GitHostTraffic, HttpsGitHost, RequestWindow } from "../lib/https-git-host/server.ts";
 import type { NotificationPayload, OfferedSkill, SessionReport } from "../lib/pi-commands.ts";
+import type { RpcGitEnvironment } from "../lib/pi-process.ts";
 import type { PublicationSites, PublishedMarketplace } from "../lib/published-marketplace.ts";
 import type { RunTokens } from "../lib/run-tokens.ts";
 
@@ -78,8 +79,8 @@ export class ScenarioWorld extends World {
 
   /**
    * The Pi the steps talk to: the one this scenario started with
-   * `usePiWithGitHubBaseUrl()`, or else the run's Pi, which the `Before()`
-   * hook has reset for this scenario.
+   * `usePiWithGitHubBaseUrl()` or `usePiWithBackgroundUpdateDelay()`, or else
+   * the run's Pi, which the `Before()` hook has reset for this scenario.
    */
   get pi(): PiProcess {
     return this.scenarioPi ?? currentRun().pi;
@@ -364,13 +365,23 @@ export class ScenarioWorld extends World {
    * the scenario.
    */
   async usePiWithGitHubBaseUrl(value: string): Promise<void> {
-    const run = currentRun();
-    const pi = await PiProcess.start(run.sandbox, {
-      ...run.piEnvironment,
+    await this.usePiWith({
+      ...currentRun().piEnvironment,
       PI_CLAUDE_MARKETPLACE_GITHUB_BASE_URL: value,
     });
-    this.onRelease(() => pi.stop());
-    this.scenarioPi = pi;
+  }
+
+  /**
+   * Starts a second Pi as `usePiWithGitHubBaseUrl()` does, except that the
+   * maximum delay of the background update is `value` (D-PL8-09) instead of
+   * the GitHub base override. The run's Pi reads that variable once, at start,
+   * and never sets it, so its background update keeps the ten-minute maximum.
+   */
+  async usePiWithBackgroundUpdateDelay(value: string): Promise<void> {
+    await this.usePiWith({
+      ...currentRun().piEnvironment,
+      PI_CLAUDE_MARKETPLACE_AUTOUPDATE_DELAY_MS: value,
+    });
   }
 
   /** Registers `release` to run when the scenario ends, before anything registered earlier. */
@@ -392,6 +403,14 @@ export class ScenarioWorld extends World {
     if (errors.length > 0) {
       throw new AggregateError(errors, "scenario releases failed");
     }
+  }
+
+  // Starts a Pi in the run's sandbox with `environment`, stops it with the
+  // scenario, and makes it the Pi the steps talk to.
+  private async usePiWith(environment: RpcGitEnvironment): Promise<void> {
+    const pi = await PiProcess.start(currentRun().sandbox, environment);
+    this.onRelease(() => pi.stop());
+    this.scenarioPi = pi;
   }
 }
 
