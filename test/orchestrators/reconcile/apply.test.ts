@@ -8037,6 +8037,46 @@ async function seedMissingAfterMoves(
   return { cwd, project };
 }
 
+/**
+ * WR-06: `bapp` 2.0.0 needs alib ^2.0.0 and `alib` 2.0.0 needs `cdep`; both
+ * are recorded at 1.0.0, `alib` held down by the LOAD-02 marker, and `cdep`
+ * is neither recorded nor declared. `offerMissing` puts `cdep` in the
+ * marketplace; `dependentHeld` holds `bapp` down too.
+ */
+async function seedWaitingDependencyMoves(
+  t: TestContext,
+  label: string,
+  options: { readonly offerMissing: boolean; readonly dependentHeld?: boolean },
+): Promise<{ readonly cwd: string; readonly project: ScopedLocations }> {
+  const held = { enabled: false, dependencyDisabled: true } as const;
+  const { cwd, project } = await seedConvergenceScope(t, label, {
+    trees: {
+      bapp: { skill: "clean" },
+      alib: { skill: "clean" },
+      ...(options.offerMissing && { cdep: { skill: "clean" } }),
+    },
+    supported: { bapp: ["skills"], alib: ["skills"], cdep: ["skills"] },
+    offered: { bapp: "2.0.0", alib: "2.0.0" },
+    dependencies: {
+      bapp: [{ name: "alib", version: "^2.0.0" }],
+      alib: [{ name: "cdep", version: "*" }],
+    },
+    records: { alib: held, ...(options.dependentHeld === true && { bapp: held }) },
+  });
+  await withoutRecords(project, ["cdep"]);
+  await declareEnabled(project, cwd, ["bapp", "alib"]);
+  return { cwd, project };
+}
+
+/** The version, enabled flag and LOAD-02 marker of each of `plugins` in the project scope. */
+async function recordStates(
+  project: ScopedLocations,
+  plugins: readonly string[],
+): Promise<(readonly [string | undefined, boolean | undefined, boolean | undefined])[]> {
+  const records = await Promise.all(plugins.map((plugin) => recordFor(project, "mp", plugin)));
+  return records.map((record) => [record?.version, record?.enabled, record?.dependencyDisabled]);
+}
+
 describe("applyReconcile catalog convergence", () => {
   test("APPLY1-01: a plugin and the newer dependency it needs move in one apply, the dependency first", async (t) => {
     // arrange
@@ -8166,6 +8206,112 @@ describe("applyReconcile catalog convergence", () => {
       },
     ]);
     assert.equal(await recordFor(project, "mp", "newdep"), undefined);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-26: the move of a plugin that declares a record waiting on a missing dependency runs after that record's move", async (t) => {
+    // arrange
+    const { cwd, project } = await seedWaitingDependencyMoves(t, "waiting-dependent-move", {
+      offerMissing: true,
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● cdep v1.0.0 (installed) {dependency installed}\n" +
+          "  ● alib v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● bapp v1.0.0 → v2.0.0 (updated)\n" +
+          "\n" +
+          "Reconcile: 3 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual(await recordStates(project, ["alib", "bapp", "cdep"]), [
+      ["2.0.0", true, undefined],
+      ["2.0.0", true, undefined],
+      ["1.0.0", true, undefined],
+    ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-26: the move of a plugin that declares a record whose missing dependency fails to install does not run", async (t) => {
+    // arrange
+    const { cwd, project } = await seedWaitingDependencyMoves(t, "waiting-dependent-held", {
+      offerMissing: false,
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ cdep (failed) {not in manifest}\n" +
+          "  ◍ bapp v1.0.0 (disabled) {dependency unsatisfied}\n" +
+          '    cause: Enable "alib@mp" or uninstall "bapp@mp"\n' +
+          "\n" +
+          "Reconcile: 1 failure, 1 warning\n" +
+          "\n" +
+          "/reload to pick up changes",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await recordStates(project, ["alib", "bapp", "cdep"]), [
+      ["1.0.0", false, true],
+      ["1.0.0", false, true],
+      [undefined, undefined, undefined],
+    ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-26: a held-down plugin whose move declares a record waiting on a missing dependency moves and comes back after it", async (t) => {
+    // arrange
+    const { cwd, project } = await seedWaitingDependencyMoves(t, "waiting-held-dependent", {
+      offerMissing: true,
+      dependentHeld: true,
+    });
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "● mp [project]\n" +
+          "  ● cdep v1.0.0 (installed) {dependency installed}\n" +
+          "  ● alib v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● bapp v1.0.0 → v2.0.0 (updated)\n" +
+          "\n" +
+          "Reconcile: 3 successes\n" +
+          "\n" +
+          "/reload to pick up changes",
+      },
+    ]);
+    assert.deepStrictEqual(await recordStates(project, ["alib", "bapp", "cdep"]), [
+      ["2.0.0", true, undefined],
+      ["2.0.0", true, undefined],
+      ["1.0.0", true, undefined],
+    ]);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();
   });

@@ -1320,6 +1320,50 @@ Feature: Plugin apply
       | severity     | info                    |
       | needs reload | false                   |
 
+  Scenario: Apply moves a plugin after the held-down dependency it needs, once that dependency's missing dependency is installed
+    Given the marketplace "tools" is published as a dir source
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | alib | 1.0.0   |              |
+      | bapp | 1.0.0   |              |
+    Given the marketplace "tools" is added to the project scope
+    Given the user has run "/claude:plugin install alib@tools --scope project"
+    Given the user has run "/claude:plugin install bapp@tools --scope project"
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | alib | 1.0.0   | cdep         |
+      | bapp | 1.0.0   |              |
+    Given the user has run "/claude:plugin apply --scope project", which failed
+    Given the marketplace "tools" offers these plugins with dependencies:
+      | name | version | dependencies |
+      | alib | 2.0.0   | cdep         |
+      | bapp | 2.0.0   | alib@^2.0.0  |
+      | cdep | 1.0.0   |              |
+    When the user runs "/claude:plugin apply --scope project"
+    Then the result has these fields:
+      | kind                | reconcile-applied-cascade |
+      | severity            | info                      |
+      | needs reload        | true                      |
+      | tally label         | Reconcile                 |
+      | tally failures      | 0                         |
+      | tally warnings      | 0                         |
+      | tally success count | 3                         |
+    Then the result lists these plugins:
+      | marketplace name | marketplace scope | id         | name | status    | reasons              | scope   | version | from  | to    |
+      | tools            | project           | cdep@tools | cdep | installed | dependency installed | project | 1.0.0   |       |       |
+      | tools            | project           | alib@tools | alib | updated   |                      | project |         | 1.0.0 | 2.0.0 |
+      | tools            | project           | bapp@tools | bapp | updated   |                      | project |         | 1.0.0 | 2.0.0 |
+    Then the installation record of the project scope holds these plugins:
+      | id         | version | enabled |
+      | alib@tools | 2.0.0   | true    |
+      | bapp@tools | 2.0.0   | true    |
+      | cdep@tools | 1.0.0   | true    |
+    When the user runs "/claude:plugin pending --scope project"
+    Then the result has these fields:
+      | kind         | reconcile-pending-empty |
+      | severity     | info                    |
+      | needs reload | false                   |
+
   Scenario: Apply refuses a missing anthropic-plugin-directory dependency whose listed copy falls outside a plugin's range, naming that plugin
     Given the git repository "dirp" holds these plugins:
       | name | version | path |
