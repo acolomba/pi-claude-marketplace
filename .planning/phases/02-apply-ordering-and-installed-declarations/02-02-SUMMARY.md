@@ -239,8 +239,17 @@ T-02-03 is applied: the copy is read only through `readInstalledCopyDeclaration`
 
 1. **`update` and `apply` can judge one holder differently (RESEARCH A4).** Only the callers whose policy has `searchReleaseTags: true` reach `evaluateUpdateConstraint`: `update`, autoupdate, reinstall, and an install's dependency moves. `apply`'s converge path judges through `evaluateCatalogConstraint` with the catalog-first walk. So when a holder's installed copy and its catalog disagree, `update lib` can hold where `apply` would move, or the reverse. The alternative is to pass the installed walk into the converge path too, which changes the convergence and pending plan that D-PL2-06 keeps catalog-first.
 2. **The `absent` fallback is the whole catalog read, slightly broader than E2's "the entry stands in".** When the copy is gone or has no manifest, the reader runs `readRecordDeclarations`' branch: the catalog copy's own manifest first (the warm clone of the catalog's commit, for a git source), then the entry. Upstream uses the entry only. The alternative is to answer the entry alone, which would need a third read branch.
+
+   Resolved 2026-10-27 by user decision (D-PL2-22): the entry alone answers; the catalog copy's manifest is not read.
+
 3. **A delisted pinned record whose copy is absent** still ends as `not in manifest`. The fallback catalog read tries the copy again under both owner roots and finds nothing. That keeps the DLS-01 root exemption and the D-05-07 refusal as they were.
+
+   Resolved 2026-10-27 by user decision (D-PL2-22): kept; the read answers `not in manifest` directly, with no second copy read. Claude Code does not load a delisted plugin at all (E5).
+
 4. **Tag-pinned path-source dependencies also carry `resolvedSha`**, so they are read from their `resolvedSource` too. If that root is the marketplace clone rather than `plugin-clones/`, the NFR-10 check refuses it as `absent` and the catalog read answers, which is today's behavior. 02-04 (`installedCopyOwnerRoot`) owns widening the owner root.
+
+   Resolved 2026-10-27 by user decision (D-PL2-23): a record whose copy lies in its marketplace clone is owned by that clone and read in place; `plugin-clones/` owns a record only when it has `resolvedSha` and its copy lies there.
+
 5. **Both scenarios install the dependency explicitly** (deviation 1), so the dependency's provenance is `explicit`, not `dependency`. Neither assertion depends on provenance.
 
 ## Requirements status

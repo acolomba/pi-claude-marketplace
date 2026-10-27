@@ -47,6 +47,14 @@ Minified names: `bae` = resolveMissingDependencies, `lsn` = installResolvedPlugi
   dependency field; the catalog entry stands in only when plugin.json is
   missing. Enable (`smn`) and update's dependents scan (`r3s`, disabled holders
   included, `pinner_blocked`) read the loaded plugins' installed manifests.
+  E2 refined 2026-10-27 (same binary): when the copy at the install path has
+  no `plugin.json`, `VJ` returns a stub manifest with no `dependencies`, and
+  `q9n` then replaces that manifest with the marketplace entry, so the entry's
+  `dependencies` are the plugin's declarations. When a manifest is present, the
+  entry adds display fields only. A gone copy is not read as absent: `z9n`
+  downloads it again before it loads it, at the installed commit first, else
+  from the source the marketplace lists. A failed download pushes `Failed to
+  download/cache plugin`, and the plugin does not load.
 - **E3 Failure reporting** (high): inside `bae` only debug/warn log lines
   (`install of "<id>" did not complete (<reason>)`); `pOt` callers print
   `N dependencies still unresolved: X`; elsewhere the dependent just stays
@@ -162,6 +170,7 @@ Minified names: `bae` = resolveMissingDependencies, `lsn` = installResolvedPlugi
   judgement already reads catalog plus installed copy (D-12a), and moving the
   verdict would change locked APPLY1-D1 behavior (apply.feature "Apply disables a
   plugin whose marketplace now declares a newer version of its dependency").
+  **Amended 2026-10-27 (D-PL2-22):** a gone copy also answers from the entry alone.
 - **D-PL2-07 — Path sources keep the marketplace tree.** A path-source plugin's
   installed copy IS the marketplace tree (this extension translates artifacts
   and keeps no copy of `plugin.json`), so after the marketplace changes, its
@@ -235,6 +244,7 @@ Minified names: `bae` = resolveMissingDependencies, `lsn` = installResolvedPlugi
   caller: the delisted read fails `unreadable manifest`; the enable closure
   and the update preflight fail `{unreadable}` with no catalog read;
   convergence fails closed (D-PL2-25). A missing copy is still absent.
+  **Amended 2026-10-27 (D-PL2-23):** the owning root follows `resolvedSha` together with where `resolvedSource` lies.
 - **D-PL2-13 — Installed-copy manifest symlinks.** The installed-copy read also
   checks the manifest file itself with `assertPathInside(copyRoot, manifestPath)`,
   so a symlinked `plugin.json` is refused (project's NFR-10 convention). Claude
@@ -286,6 +296,57 @@ Minified names: `bae` = resolveMissingDependencies, `lsn` = installResolvedPlugi
   marketplace into its cache, so its boundary there is the plugin directory;
   this extension reads such a plugin in place, with the wider in-place
   boundary.
+- **D-PL2-22 — An installed copy with no manifest answers from its marketplace
+  entry alone.** (user decision 2026-10-27) When the installed-first read
+  (`readInstalledRecordDeclarations`) reads a record that has `resolvedSha`,
+  and the record's copy holds no manifest, the record declares what its
+  marketplace entry's `dependencies` say, and nothing else. The catalog copy's
+  own manifest is not read. The enable closure and the update preflight's
+  holder walk use this read. A delisted record has no entry, so it still fails
+  as `not in manifest` (D-05-07). A record without `resolvedSha` keeps the
+  catalog read (D-PL2-07). This is Claude Code's rule for a copy with no
+  `plugin.json` (E2 refined). A gone copy takes the same answer. Claude Code
+  downloads a gone copy again and reads its `plugin.json`, but this read is
+  offline (NFR-5) and cannot download, so the entry is the offline stand-in.
+  This amends the gone-copy clause of D-PL2-06. Proof: unit cases in
+  `dependency-index.test.ts` and the `enable.feature` scenario "Enabling a
+  git-source plugin whose installed copy has no manifest enables the
+  dependency its marketplace entry declares".
+- **D-PL2-23 — One owning root per record, chosen by where its copy lies.**
+  (user decision 2026-10-27; amends D-PL2-12) `installedCopyReadOptions` gives
+  `plugin-clones/` as the owning root only when the record has `resolvedSha`
+  and its `resolvedSource` lies under `plugin-clones/`. Such a copy is bounded
+  by its plugin directory. Every other record owns its marketplace clone and is
+  read in place, bounded by its plugin and marketplace directories (D-PL2-17).
+  Clone GC uses the same test to find live clones.
+  - The stale-sha path record: an older version could leave a path record with
+    a `resolvedSha` that names no clone, and its files in the marketplace clone
+    (the state that WR-01, WR-02 and WR-05 repair). It now reads its
+    marketplace clone again. Its scope's updates and enables no longer fail
+    `{unreadable}`, and an update repairs the record. This resolves 261027-a3r
+    uncertain choice 1.
+  - These still answer `unusable`: a copy under neither clone root, a
+    symlinked path segment below the owning root, a manifest link that leaves
+    the D-PL2-17 boundary, and a record without `resolvedSha` whose copy lies
+    under `plugin-clones/`.
+  - Rejected: the catalog entry's source kind. A delisted record has no entry,
+    and the entry describes the marketplace's current listing, not the
+    install, so a later change of source kind would move the owning root of an
+    unchanged record.
+  - Rejected: location alone, without `resolvedSha`. It would also admit a
+    record with no commit under `plugin-clones/`, a shape no install writes
+    (git sources and `resolvedSha` both arrived in 0.9.0, D-77-02).
+  - Accepted consequence: a git record whose `resolvedSource` was edited to
+    point into its own marketplace clone is now read there in place, still
+    bounded by that clone. Records carry no source kind, so this shape looks
+    the same as the legacy path record.
+  - Evidence: Claude Code checks a recorded install path textually against its
+    cache, seed and marketplace-source roots (E5), so a rule keyed on where the
+    copy lies matches it.
+  - Proof scope: unit cases only (`dependency-declaration-read.test.ts`,
+    `dependency-index.test.ts`, `convergence.test.ts`, `update-swap.test.ts`).
+    No supported command writes the legacy shape, and the cucumber harness has
+    no step that writes installation records.
 - **D-PL2-24 — Install-time manifest reads use the same containment.** (user
   decision 2026-10-27) One helper, `domain/manifest-containment.ts`
   (`locateManifestCandidate`), locates every plugin manifest candidate inside
