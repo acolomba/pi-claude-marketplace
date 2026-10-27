@@ -6,10 +6,10 @@ current_phase: 3
 current_phase_name: Dependency Cascade Rows and Status
 status: verifying
 stopped_at: Completed 03-06-PLAN.md
-last_updated: "2026-10-27T06:16:17.748Z"
+last_updated: "2026-10-27T10:17:12.125Z"
 last_activity: 2026-10-26
 last_activity_desc: Phase 3 execution started
-state_head: 0f6ebdb0bf677c312bc8f15d6f31691ac1f63c41
+state_head: 87a37b84cb2819f8e83ab434dd513db55c7baa58
 progress:
   total_phases: 11
   completed_phases: 0
@@ -34,7 +34,7 @@ component as a working Pi artifact.
 Phase: 3 (Dependency Cascade Rows and Status) — EXECUTING
 Plan: 6 of 6
 Status: Phase complete — ready for verification
-Last activity: 2026-10-26 — Phase 3 execution started
+Last activity: 2026-10-27 — Completed quick task 261027-8h9: Reverse D-PL3-10 (refusal ranges render as Claude Code does)
 
 
 ### mcp-4 closeout
@@ -188,6 +188,7 @@ hit the same wall; convert it rather than re-disclosing it.
 | 261026-gvt | GV-01: record plugins at a range-selected release tag as Claude Code does, the tag semver kept as resolvedVersion | 2026-10-26 | 2638b001 | complete | [261026-gvt-record-plugins-at-release-tags-as-claude-code](./quick/261026-gvt-record-plugins-at-release-tags-as-claude-code/) |
 | 261026-glv | GV-01: an update with no tag drops the tag commit from the record; plugin directory plugins pick no release tag and their listed copy answers the range | 2026-10-26 | 33c9ac69 | complete | [261026-glv-match-claude-code-on-untagged-updates-an](./quick/261026-glv-match-claude-code-on-untagged-updates-an/) |
 | 261026-dpt | GV-01: a pinned plugin directory plugin at its listed commit is up to date before the range check; its refusal names every requirer, MISS-01 included; list and completion compare the recorded version string | 2026-10-26 | ece42b45 | complete | [261026-dpt-match-claude-code-on-directory-pins-and](./quick/261026-dpt-match-claude-code-on-directory-pins-and/) |
+| 261027-8h9 | Reverse D-PL3-10: refusal ranges render as Claude Code does | 2026-10-27 | 87a37b84 | — | [261027-8h9-reverse-d-pl3-10-refusal-range-truncatio](./quick/261027-8h9-reverse-d-pl3-10-refusal-range-truncatio/) |
 
 ## Session Continuity
 

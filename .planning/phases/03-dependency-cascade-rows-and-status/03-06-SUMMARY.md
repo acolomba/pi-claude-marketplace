@@ -142,6 +142,7 @@ None of its own. The behavior lines live in plans 03-01..03-05.
 | Decision | Basis | Status |
 | --- | --- | --- |
 | **D-PL3-06 (plugin-lifecycle, uncertain): a dependency installed with some component kinds unsupported does not change its dependents' status on `list`, `info`, or install rows** -- only a missing, disabled, or out-of-range dependency does, which LOAD-01 (`{dependency unsatisfied}`) already reports at load | Claude Code has no partial state; a plugin whose components fail to load stays enabled and its dependents are unaffected (2.1.310, E3) | Recorded in `docs/dependency-resolution.md`; no code change, `info.ts` untouched. For user review: the backlog records an operator statement asking for propagation (alternative: a `{dependency partial}`-style reason) |
+| **D-PL3-10 (plugin-lifecycle, reversed 2026-10-27): every refusal other than the directory pin renders ranges as Claude Code does** -- a valid printable range as written, any other text in curly quotes cut to 64 code units, the joined list cut at 200 code units (never inside a quote) with `… (+N chars)` | Claude Code 2.1.310 `q`/`W` (E4) | Shipped by quick task 261027-8h9; supersedes the 03-04 row |
 | **D-PL3-07 (plugin-lifecycle, uncertain): git-source `list` rows keep `upgradable` / `partially-upgradable`** -- a recorded divergence licensed by PL-5 (GV-01, VER-01, VER-02) and the fetch work (RSTA-04..06, FTCH-01..06) | Claude Code's `list` shows no upgrade state for any source (2.1.310, E7), so PL-5 already diverges for every source | Recorded in `list-flow.ts`'s PL-5 comment and `docs/dependency-resolution.md`. For user review (alternative: drop the upgrade state for git sources only, or for all sources) |
 
 ## Backlog dispositions
@@ -155,7 +156,7 @@ None of its own. The behavior lines live in plans 03-01..03-05.
 2. **D-PL3-07** -- git-source `list` rows keep the upgrade state. Shipped: the PL-5 comment and the documentation record.
 3. **D-PL3-01/02** -- every resolved-but-uninstalled member gets `(failed) {dependency failed}` with no cause line. Shipped in 03-03 (walk and member ledger failures).
 4. **D-PL3-11** -- the version-in-range hint appears when the named plugin declares the dependency, for every source kind. Shipped in 03-05.
-5. **D-PL3-10** -- refusals other than the directory pin keep the 200-per-range bound with `... (+N chars)`. Shipped: unchanged.
+5. **D-PL3-10** -- resolved: the user reversed it on 2026-10-27. Refusals other than the directory pin now render ranges as Claude Code does (quick task 261027-8h9).
 6. **D-PL3-13** -- installed plugins outside the closure are not named on a member's directory pin refusal. Shipped in 03-04.
 7. **D-PL3-15** -- the named plugin's own ledger failure, a dependency-move step failure, and a catalog read that throws during the walk keep one failure row. Shipped in 03-03 as known gaps.
 

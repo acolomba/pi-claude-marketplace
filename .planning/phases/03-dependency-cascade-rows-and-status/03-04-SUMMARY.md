@@ -179,12 +179,12 @@ D-PL3-08 (as amended by D-PL3-13), D-PL3-09, and D-PL3-10 were applied as writte
 
 | **D-PL3-08 / D-PL3-13 (plugin-lifecycle, uncertain): a non-root plugin directory member's refusal names every cascade member that declared a range on it** -- nearest the requested plugin first (reverse closure post order); installed plugins outside the closure are not named; the root keeps `rootRequiredBy` | Claude Code names every range-declaring cascade member in the same order; it also names installed plugins outside the closure, but D-03-10 keeps their ranges out of the walk and the check, so naming them would print a requirer whose range is neither shown nor checked | Shipped; two unit rows and one `install-dependencies.feature` scenario. For user review (alternative: scan installed declarations and name them) |
 | **D-PL3-09 (plugin-lifecycle): the plugin directory pin refusal cuts the plugin name, the listed version, the joined ranges, and each requirer at 120 UTF-16 code units with `…`** -- no dangling high surrogate; requirer count uncapped; `MAX_DIRECTORY_PIN_FIELD_CHARS` | Claude Code cuts each field with `Mt(…, 120)` | Shipped; unit cases and one scenario |
-| **D-PL3-10 (plugin-lifecycle, uncertain): every other refusal keeps `MAX_RENDERED_RANGE_CHARS = 200` with `... (+N chars)`** | Upstream uses 64 per range and 200 for the joined list with `…`; aligning them is deferred | Kept. For user review |
+| **D-PL3-10 (plugin-lifecycle, reversed 2026-10-27): every other refusal renders ranges as Claude Code does -- a valid printable range as written, any other text in curly quotes cut to 64, the joined list cut at 200 (never inside a quote) with `… (+N chars)`** | Claude Code 2.1.310 `q`/`W` (E4); the user reversed the shipped divergence | Shipped by quick task 261027-8h9 |
 
 ## Backlog dispositions
 
 - `PARITYGV-01` b2 (every declarer): fixed for cascade members (CAS-05), with the D-PL3-13 divergence recorded.
-- `PARITYGV-01` b3 (truncation): fixed for the directory pin refusal (D-PL3-09). Other refusals keep their bounds (D-PL3-10).
+- `PARITYGV-01` b3 (truncation): fixed for the directory pin refusal (D-PL3-09). Other refusals now match Claude Code's range rendering (D-PL3-10, reversed by quick task 261027-8h9).
 
 ## Threat Flags
 
