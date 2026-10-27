@@ -20,6 +20,7 @@
 // Not a plugin ledger and names no git surface: the preflight and the shared
 // runner reach git through their own seams.
 
+import { MAX_REFUSAL_VERSION_CHARS, truncateForRefusal } from "../../domain/dependency-range.ts";
 import { errorMessage, rethrowInvalidGitHubBaseUrl } from "../../shared/errors.ts";
 import { companionSeverity } from "../../shared/notify-reasons.ts";
 import { redactCauseChain } from "../../shared/redact-absolute-paths.ts";
@@ -148,7 +149,8 @@ function refusalCause(
   verdict: Exclude<UpdateRunOutcome, { readonly partition: "updated" }>,
 ): string {
   if (verdict.partition === "unchanged") {
-    return `version ${verdict.toVersion} is the newest version it can move to`;
+    const newest = truncateForRefusal(verdict.toVersion, MAX_REFUSAL_VERSION_CHARS);
+    return `version ${newest} is the newest version it can move to`;
   }
 
   return verdict.notes.join(" ");
@@ -180,7 +182,8 @@ export async function judgeDependencyMove(
     // WR-1: a version with no semver form escapes the range that rules the
     // others out, so the plan's own list decides.
     if (request.excludedVersions?.includes(plannedRangeVersion(prepared)) === true) {
-      return { ok: false, cause: `version ${prepared.toVersion} was ruled out by the plan` };
+      const ruledOut = truncateForRefusal(prepared.toVersion, MAX_REFUSAL_VERSION_CHARS);
+      return { ok: false, cause: `version ${ruledOut} was ruled out by the plan` };
     }
 
     await assertUpdateNamesFree(args, prepared);
