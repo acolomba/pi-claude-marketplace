@@ -13,7 +13,6 @@ import {
   classifyGitSourceAccessFailure,
   classifyGitTransportFailure,
   hostHttpFailureFrame,
-  hostHttpStatus,
 } from "../../extensions/pi-claude-marketplace/shared/git-failure-classifiers.ts";
 
 function httpFailure(statusCode: unknown): Error {
@@ -207,6 +206,13 @@ describe("classifyGitFailure", () => {
       expected: { reason: "source missing", frame: "404 on https://git.example.com/acme/mp.git" },
     },
     {
+      title: "classifies a host HTTP 502 behind a cleanup leak as network error",
+      createFailure: () => appendLeakToError(httpFailure(502), "staging leaked"),
+      rule: MARKETPLACE_REFRESH_RULE,
+      remoteUrl: undefined,
+      expected: { reason: "network error" },
+    },
+    {
       title: "classifies a ref the remote does not have behind a cleanup leak",
       createFailure: () => appendLeakToError(remoteNotFound(), "staging leaked"),
       rule: MARKETPLACE_ADD_RULE,
@@ -247,6 +253,13 @@ describe("classifyGitFailure", () => {
       createFailure: () => undefined,
       rule: MARKETPLACE_ADD_RULE,
       remoteUrl: undefined,
+      expected: undefined,
+    },
+    {
+      title: "leaves a thrown non-Error with an HTTP shape unclassified",
+      createFailure: () => ({ code: "HttpError", data: { statusCode: 500 } }),
+      rule: MARKETPLACE_REFRESH_RULE,
+      remoteUrl: REMOTE_URL,
       expected: undefined,
     },
     {
@@ -576,68 +589,4 @@ describe("classifyGitTransportFailure", () => {
     // assert
     assert.strictEqual(reason, "network unreachable");
   });
-});
-
-describe("hostHttpStatus", () => {
-  test("reads the host HTTP status behind a cleanup leak", () => {
-    // arrange
-    const failure = appendLeakToError(
-      Object.assign(new Error("HTTP Error: 502"), { code: "HttpError", data: { statusCode: 502 } }),
-      "staging leaked",
-    );
-
-    // act
-    const status = hostHttpStatus(failure);
-
-    // assert
-    assert.strictEqual(status, 502);
-  });
-
-  for (const { title, createFailure, expectedStatus } of [
-    {
-      title: "reads the status of a host HTTP answer",
-      createFailure: () =>
-        Object.assign(new Error("HTTP Error: 502"), {
-          code: "HttpError",
-          data: { statusCode: 502 },
-        }),
-      expectedStatus: 502,
-    },
-    {
-      title: "leaves the 401/403 auth challenge to the transport ladder",
-      createFailure: () =>
-        Object.assign(new Error("HTTP Error: 403"), {
-          code: "HttpError",
-          data: { statusCode: 403 },
-        }),
-      expectedStatus: undefined,
-    },
-    {
-      title: "reads no status from an HTTP error that carries none",
-      createFailure: () =>
-        Object.assign(new Error("HTTP Error"), { code: "HttpError", data: { statusCode: "500" } }),
-      expectedStatus: undefined,
-    },
-    {
-      title: "reads no status from a connection failure",
-      createFailure: () => Object.assign(new Error("getaddrinfo"), { code: "ENOTFOUND" }),
-      expectedStatus: undefined,
-    },
-    {
-      title: "reads no status from a thrown non-Error",
-      createFailure: () => ({ code: "HttpError", data: { statusCode: 500 } }),
-      expectedStatus: undefined,
-    },
-  ] as const) {
-    test(title, () => {
-      // arrange
-      const failure = createFailure();
-
-      // act
-      const status = hostHttpStatus(failure);
-
-      // assert
-      assert.strictEqual(status, expectedStatus);
-    });
-  }
 });

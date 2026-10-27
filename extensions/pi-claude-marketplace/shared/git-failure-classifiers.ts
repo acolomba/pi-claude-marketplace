@@ -90,22 +90,17 @@ export function classifyGitTransportFailure(
 }
 
 /**
- * UPD-11 / ADD-10: the HTTP status of an isomorphic-git `HttpError` that the transport
- * ladder leaves unclassified, so the 401/403 auth challenge stays
- * `authentication required`. Returns undefined for any other error.
+ * UPD-11 / ADD-10: the numeric HTTP status of an isomorphic-git `HttpError`.
+ * `classifyGitFailure` reads it only after the transport ladder, so the
+ * 401/403 auth challenge stays `authentication required`.
  */
-export function hostHttpStatus(thrown: unknown): number | undefined {
-  const error = withoutCleanupLeaks(thrown);
-  if (!(error instanceof Error) || (error as NodeJS.ErrnoException).code !== "HttpError") {
+function httpStatus(error: Error): number | undefined {
+  if ((error as NodeJS.ErrnoException).code !== "HttpError") {
     return undefined;
   }
 
   const statusCode = (error as { data?: { statusCode?: unknown } }).data?.statusCode;
-  if (typeof statusCode !== "number" || classifyGitTransportFailure(error) !== undefined) {
-    return undefined;
-  }
-
-  return statusCode;
+  return typeof statusCode === "number" ? statusCode : undefined;
 }
 
 /**
@@ -169,7 +164,7 @@ export function classifyGitFailure(
     return { reason: transportReason };
   }
 
-  const status = hostHttpStatus(error);
+  const status = httpStatus(error);
   if (status !== undefined) {
     return {
       reason: SOURCE_MISSING_HTTP_STATUSES.has(status) ? rule.notFound : "network error",

@@ -114,11 +114,7 @@ import {
   isErrnoException,
   rethrowInvalidGitHubBaseUrl,
 } from "../../shared/errors.ts";
-import {
-  classifyGitTransportFailure,
-  hostHttpFailureFrame,
-  hostHttpStatus,
-} from "../../shared/git-failure-classifiers.ts";
+import { classifyGitFailure } from "../../shared/git-failure-classifiers.ts";
 import { notifyMcpConfigNotices } from "../../shared/notification-dispatch.ts";
 import { type ContentReason } from "../../shared/notification-types.ts";
 import { type PluginFailedMessage } from "../../shared/notification-types.ts";
@@ -491,9 +487,18 @@ async function refreshRecord(
 }
 
 /**
+ * UPD-11: the 404 rule of a marketplace refresh and its autoupdate cascade
+ * (D-PL7-02). A refresh reads a repository the record already points at, so a
+ * 404 or 410 from the host is `network error`, not `source missing`.
+ */
+const MARKETPLACE_REFRESH_RULE: Parameters<typeof classifyGitFailure>[1] = {
+  notFound: "network error",
+};
+
+/**
  * UPD-11: the first frame of a refresh failure's cause line. When the git host
- * answered with an HTTP status, the frame names the status and the URL the
- * fetch sent (see `hostHttpFailureFrame`).
+ * answered with an HTTP status, `classifyGitFailure` frames it as the status on
+ * the URL the fetch sent. Without a remote URL there is no frame.
  */
 function refreshFailureMessage(
   name: string,
@@ -501,7 +506,7 @@ function refreshFailureMessage(
   remoteUrl: string | undefined,
   cloneAdvanced: boolean,
 ): string {
-  const frame = remoteUrl === undefined ? undefined : hostHttpFailureFrame(err, remoteUrl);
+  const frame = classifyGitFailure(err, MARKETPLACE_REFRESH_RULE, remoteUrl)?.frame;
   if (frame !== undefined) {
     return frame;
   }
@@ -686,14 +691,10 @@ function reasonsFromCascadeError(err: unknown): readonly ContentReason[] | undef
  * failure (NFR-5) and maps to `source missing` / `permission denied`.
  *
  * EACCES/EPERM/ENOENT/ENOTDIR classify first since the shared classifier
- * has no opinion on them (path-source failures never reach git). The
- * remaining ladder -- `StoredCredentialRejectedError` (a stored credential the
- * host refused), isomorphic-git `HttpError` 401/403, `UserCanceledError` (a
- * helper miss, a declined or failed Device Flow, or a device-flow credential
- * the host refused), and network errno --
- * delegates to `classifyGitTransportFailure` (`shared/git-failure-classifiers.ts`)
- * instead of a hand-rolled copy, so `update` cannot drift out of sync with
- * `install-outcome.ts`/`fetch.ts` (plugin), which already delegate to it.
+ * has no opinion on them (path-source failures never reach git). The rest of
+ * the ladder (authentication, network errno, and the host's HTTP status)
+ * goes to the shared `classifyGitFailure` with the refresh rule, so `update`
+ * cannot drift from the other git surfaces.
  */
 function transportReason(err: Error): ContentReason | undefined {
   let bearer: NodeJS.ErrnoException | undefined;
@@ -715,7 +716,7 @@ function transportReason(err: Error): ContentReason | undefined {
     return "source missing";
   }
 
-  return classifyGitTransportFailure(bearer);
+  return classifyGitFailure(bearer, MARKETPLACE_REFRESH_RULE)?.reason;
 }
 
 /**
@@ -724,8 +725,9 @@ function transportReason(err: Error): ContentReason | undefined {
  * `MarketplaceUpdateError`, is classified. A held state lock is `lock held`,
  * as in autoupdate. Any other error failed outside the refresh (the state
  * load, the state save, or the lock release), so no errno code on it is
- * mapped. A refresh failure that no rule names gets no reason; its cause chain
- * still prints.
+ * mapped. The git host's HTTP answer is classified in `reasonsFromCascadeError`
+ * as `network error` (UPD-11). A refresh failure that no rule names gets no
+ * reason; its cause chain still prints.
  */
 function refreshFailureReasons(err: unknown): readonly ContentReason[] {
   if (err instanceof StateLockHeldError) {
@@ -736,12 +738,7 @@ function refreshFailureReasons(err: unknown): readonly ContentReason[] {
     return [];
   }
 
-  const typedReasons = reasonsFromCascadeError(err);
-  if (typedReasons !== undefined) {
-    return typedReasons;
-  }
-
-  return hostHttpStatus(err.cause) === undefined ? [] : ["network error"];
+  return reasonsFromCascadeError(err) ?? [];
 }
 
 async function refreshOneMarketplace(args: RefreshOneArgs): Promise<void> {
