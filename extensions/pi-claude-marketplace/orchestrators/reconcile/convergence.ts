@@ -778,10 +778,25 @@ export async function planConvergenceCascade(input: ConvergenceInput): Promise<C
   };
 }
 
-/** One step of a scope's cascade: a catalog move, a deferred enable, or both. */
+/**
+ * One step of a scope's cascade: a catalog move, a deferred enable, or both.
+ * `waiting` marks the move of a record whose enable waits on the
+ * missing-dependency install (D-PL2-16). Its move and its enable are two rows
+ * in both `pending` and `apply` (D-PL2-18).
+ */
 export type CascadeStep =
-  | { readonly key: string; readonly move: PlannedMove; readonly enable?: PlannedPluginEnable }
-  | { readonly key: string; readonly move?: undefined; readonly enable: PlannedPluginEnable };
+  | {
+      readonly key: string;
+      readonly move: PlannedMove;
+      readonly enable?: PlannedPluginEnable;
+      readonly waiting?: true;
+    }
+  | {
+      readonly key: string;
+      readonly move?: undefined;
+      readonly enable: PlannedPluginEnable;
+      readonly waiting?: undefined;
+    };
 
 /** What decides the steps after the missing-dependency install. */
 export interface AfterInstallsInput {
@@ -821,10 +836,12 @@ export function movesAfterInstalls(
 
 /**
  * D-PL2-16 / WR-06: the steps after the missing-dependency install,
- * dependencies first. A waiting record's own move runs with its enable, as a
- * deferred record's does in the cascade: one net row. Each other move that
- * waited runs with its record's deferred enable, if it has one. `apply` runs
- * these steps in this order, and `pending` lists them in it (D-PL2-02).
+ * dependencies first. A waiting record's move is a step whether or not its
+ * enable comes, marked `waiting`: `apply` runs the move and the enable back to
+ * back, and both commands give each its own row (D-PL2-18). Each other move
+ * that waited runs with its record's deferred enable, if it has one, and that
+ * move's row covers the enable (WR-02). `apply` runs these steps in this
+ * order, and `pending` lists them in it (D-PL2-02).
  */
 export function stepsAfterInstalls(
   cascade: ConvergenceCascade,
@@ -833,18 +850,24 @@ export function stepsAfterInstalls(
 ): readonly CascadeStep[] {
   const { afterInstalls, waiting } = input;
   const moves = new Map(cascade.plan.moves.map((move) => [moveKey(move), move]));
+  const enabled = new Set(enables.map((op) => `${op.plugin}@${op.marketplace}`));
   const deferred = new Map(input.deferred.map((op) => [`${op.plugin}@${op.marketplace}`, op]));
   const waited = cascade.plan.moves
-    .filter((move) => afterInstalls.has(moveKey(move)) && !waiting.has(moveKey(move)))
+    .filter((move) => afterInstalls.has(moveKey(move)) && !enabled.has(moveKey(move)))
     .map((move): CascadeStep => {
-      const enable = deferred.get(moveKey(move));
-      return { key: moveKey(move), move, ...(enable !== undefined && { enable }) };
+      const key = moveKey(move);
+      if (waiting.has(key)) {
+        return { key, move, waiting: true };
+      }
+
+      const enable = deferred.get(key);
+      return { key, move, ...(enable !== undefined && { enable }) };
     });
   const steps = [
     ...enables.map((enable): CascadeStep => {
       const key = `${enable.plugin}@${enable.marketplace}`;
       const move = moves.get(key);
-      return move === undefined ? { key, enable } : { key, move, enable };
+      return move === undefined ? { key, enable } : { key, move, enable, waiting: true };
     }),
     ...waited,
   ];

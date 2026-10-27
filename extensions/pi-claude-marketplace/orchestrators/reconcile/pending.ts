@@ -460,7 +460,7 @@ export async function composePendingReport(opts: {
     // WR-07 / D-PL2-02: the moves `apply` defers to after its
     // missing-dependency install are listed there, with the enables that wait
     // on it, in the order `apply` runs them. A waiting record that moves lists
-    // one row, as `apply` reports one.
+    // its move and then its enable, as `apply` reports them (D-PL2-18).
     const waiting = new Set(
       settled.enablesAfterInstalls.map((op) => `${op.plugin}@${op.marketplace}`),
     );

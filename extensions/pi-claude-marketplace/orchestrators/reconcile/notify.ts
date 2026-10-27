@@ -317,9 +317,11 @@ function pushConvergenceMoves(
 }
 
 /**
- * D-PL2-16 / WR-07: one row per step `apply` runs after its missing-dependency
- * installs, in its order: a step with a move is its `will update` row, which
- * covers the record's enable too, and an enable alone is `will enable`.
+ * D-PL2-16 / WR-07: the rows of the steps `apply` runs after its
+ * missing-dependency installs, in its order. A step with a move is its
+ * `will update` row. A step with an enable then lists `will enable` when it
+ * has no move or is a waiting record's (D-PL2-18); a deferred record's move
+ * row covers its enable (WR-02).
  */
 function pushStepsAfterInstalls(
   byMp: Map<string, MarketplaceBlock<PendingMsg>>,
@@ -327,9 +329,14 @@ function pushStepsAfterInstalls(
 ): void {
   for (const step of steps) {
     const { scope, marketplace, plugin } = step.move ?? step.enable;
-    ensureMarketplaceBlock(byMp, scope, marketplace).plugins.push(
-      step.move === undefined ? { status: "will enable", name: plugin } : willUpdateRow(step.move),
-    );
+    const rows = ensureMarketplaceBlock(byMp, scope, marketplace).plugins;
+    if (step.move !== undefined) {
+      rows.push(willUpdateRow(step.move));
+    }
+
+    if (step.enable !== undefined && (step.move === undefined || step.waiting === true)) {
+      rows.push({ status: "will enable", name: plugin });
+    }
   }
 }
 
@@ -503,7 +510,8 @@ export function convergedMoveOutcomes(
 
 /**
  * APPLY1-01: the net row of a held-down record `apply` moved and then enabled
- * in one cascade: the move's `(updated)` row, as `pending` lists it.
+ * in one cascade: the move's `(updated)` row, as `pending` lists it. It is
+ * also a waiting record's move row, ahead of its enable row (D-PL2-18).
  */
 export function enabledMoveOutcome(move: PlannedMove): PluginConvergedOutcome {
   const row: PluginUpdatedMessage = {
@@ -715,11 +723,12 @@ export async function resolvePendingForceInstalls(
  *                              move rows (MISS-01, D-09-12). It never carries
  *                              the partial modifier, so its row is the bare
  *                              token. It fills from the same verdict (D-21).
- *   - `afterInstalls`       -> after the dependency installs, one child row
- *                              per step `apply` runs after them, in its
+ *   - `afterInstalls`       -> after the dependency installs, the rows of
+ *                              each step `apply` runs after them, in its
  *                              order: { status: "will update" } for a step
- *                              with a move (WR-07), else { status:
- *                              "will enable" } (D-PL2-16).
+ *                              with a move (WR-07), then { status:
+ *                              "will enable" } for an enable alone
+ *                              (D-PL2-16) or a waiting record's (D-PL2-18).
  *
  * Ordering: blocks are sorted by `compareByNameThenScope` (name primary
  * case-insensitive, project-before-user secondary). D-PL2-02: plugin rows

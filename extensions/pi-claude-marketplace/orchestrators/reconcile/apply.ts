@@ -1306,8 +1306,10 @@ interface AfterMovesRun extends CascadeRun {
  * scope as the moves left it, so a dependency a moved version needs is
  * installed in this apply. When it installed or found anything, or an enable
  * waits on it, the scope is read again and each record the fresh plan
- * enables that waited on the install is enabled. A read that fails becomes
- * the `state.json` row and leaves the rest to the judgement.
+ * enables that waited on the install is enabled, right after its own catalog
+ * move. A waiting record's move whose enable did not come reports why it did
+ * not run (D-PL2-18). A read that fails becomes the `state.json` row and
+ * leaves the rest to the judgement.
  */
 async function installAfterMoves(
   reader: ReconcileStateReader,
@@ -1349,20 +1351,21 @@ async function installAfterMoves(
 
 /**
  * Runs the steps after the missing-dependency install, in the order
- * `stepsAfterInstalls` gives them. WR-06: a step that declares a waiting
- * record whose enable did not come, or a step that did not land, does not
- * run, as in the cascade, and reports what the cascade reports for it; the
- * judgement's `(disabled)` row replaces that row for an enabled record it
- * held.
+ * `stepsAfterInstalls` gives them. D-PL2-18: a waiting record's move whose
+ * enable did not come does not run and reports `(skipped) {dependency
+ * failed}`. WR-06: a step that declares such a move, or a step that did not
+ * land, does not run either, as in the cascade, and reports what the cascade
+ * reports for it; the judgement's `(disabled)` row replaces that row for an
+ * enabled record it held. A waiting record's step whose enable came is not
+ * held by its dependencies: the fresh plan already judged that enable.
  */
 async function runAfterInstallSteps(
   opts: ApplyReconcileOptions,
   steps: readonly CascadeStep[],
   run: AfterMovesRun,
 ): Promise<void> {
-  const planned = new Set(steps.map((step) => step.key));
-  const notLanded = new Set(
-    [...run.afterInstalls].filter((key) => run.waiting.has(key) && !planned.has(key)),
+  const unreleased = new Set(
+    steps.filter((step) => step.waiting === true && step.enable === undefined).map((s) => s.key),
   );
   // WR-08: a step that does not run reports what the cascade reports for it.
   await runSteps(
@@ -1370,10 +1373,11 @@ async function runAfterInstallSteps(
     steps,
     run,
     (step) =>
-      !run.waiting.has(step.key) &&
-      cascadeDependencies(run.cascade, step.key).some(
-        (dep) => notLanded.has(dep) || run.failed.all.has(dep),
-      ),
+      unreleased.has(step.key) ||
+      (!run.waiting.has(step.key) &&
+        cascadeDependencies(run.cascade, step.key).some(
+          (dep) => unreleased.has(dep) || run.failed.all.has(dep),
+        )),
   );
 }
 
@@ -1582,11 +1586,12 @@ async function runSteps(
 }
 
 /**
- * The `(skipped) {dependency failed}` row of an enabled record's move whose
- * dependency did not land.
+ * The `(skipped) {dependency failed}` row of a move whose dependency did not
+ * land: an enabled record's move, or a waiting record's whose enable did not
+ * come (D-PL2-18).
  */
 function dependencyFailedRows(step: CascadeStep): PerEntryOutcome[] {
-  // A deferred record stays disabled, as it was: no row (WR-B).
+  // A deferred enable that did not run leaves its record as it was: no row (WR-B).
   return step.move === undefined || step.enable !== undefined
     ? []
     : convergedMoveOutcomes(step.move, {
@@ -1621,7 +1626,7 @@ function failedMoveRows(move: PlannedMove, reasons: readonly ContentReason[]): P
  * record's move refreshes its pin and its enable then materializes the new
  * version, so a failed enable is a failed move: its pin goes back to what it
  * was (WR-C), and it reports the move's `(failed)` row. A landed one reports
- * the net `(updated)` row (WR-02).
+ * the rows `landedStepRows` gives.
  */
 async function runStep(
   opts: ApplyReconcileOptions,
@@ -1680,8 +1685,7 @@ async function runStep(
   }
 
   if (landed) {
-    // A growth-only move keeps the version, so its enable row is the net row.
-    run.reports.push({ key: step.key, rows: rematerialize ? enabled : [enabledMoveOutcome(move)] });
+    run.reports.push({ key: step.key, rows: landedStepRows(step, move, enabled) });
     return;
   }
 
@@ -1693,6 +1697,28 @@ async function runStep(
     .filter(isContentReason);
   run.failed.all.add(step.key);
   run.reports.push({ key: step.key, rows: failedMoveRows(move, reasons) });
+}
+
+/**
+ * The rows of a step whose move and enable both landed. A waiting record's
+ * step reports the move's row and then the enable's own rows (D-PL2-18). A
+ * deferred record's step reports one net row (WR-02): the enable's rows for a
+ * growth-only move, which keeps the version, else the move's `(updated)` row.
+ */
+function landedStepRows(
+  step: CascadeStep,
+  move: PlannedMove,
+  enabled: readonly PerEntryOutcome[],
+): readonly PerEntryOutcome[] {
+  if (step.waiting === true) {
+    return [enabledMoveOutcome(move), ...enabled];
+  }
+
+  if (!move.revisionChanged) {
+    return enabled;
+  }
+
+  return [enabledMoveOutcome(move)];
 }
 
 /**

@@ -4517,7 +4517,7 @@ describe("applyReconcile", () => {
     verifyBoundary();
   });
 
-  test("D-06-02: a record disabled before the pass is held down without being stamped or given a row", async (t) => {
+  test("D-06-02 / D-PL2-18: a record disabled before the pass is held down without being stamped, and its move reports why it did not run", async (t) => {
     // arrange
     const { cwd, project } = await createHermeticScopes(t, "dependency-already-disabled");
     const { manifestPath, marketplaceRoot } = await writeMarketplaceSource(cwd, "mp-src", "mp", {
@@ -4558,7 +4558,19 @@ describe("applyReconcile", () => {
     await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
 
     // assert
-    assert.deepStrictEqual(notifications, [SECRETS_VAULT_NOT_IN_MANIFEST]);
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ secrets-vault (failed) {not in manifest}\n" +
+          "  ⊘ deploy-kit v1.0.0 (skipped) {dependency failed}\n" +
+          "\n" +
+          "Reconcile: 1 failure, 1 warning",
+        severity: "error",
+      },
+    ]);
     const record = await recordFor(project, "mp", "deploy-kit");
     assert.equal(record?.enabled, false);
     assert.equal(Object.hasOwn(record ?? {}, "dependencyDisabled"), false);
@@ -5573,9 +5585,10 @@ describe("applyReconcile", () => {
         message:
           "● mp [project]\n" +
           "  ● secrets-vault v1.0.0 (installed) {dependency installed}\n" +
+          "  ● deploy-kit v1.0.0 → v1.0.0 (updated) {components now supported}\n" +
           "  ● deploy-kit v1.0.0 (installed)\n" +
           "\n" +
-          "Reconcile: 2 successes\n" +
+          "Reconcile: 3 successes\n" +
           "\n" +
           "/reload to pick up changes",
       },
@@ -5720,10 +5733,12 @@ describe("applyReconcile", () => {
         message:
           "● mp [project]\n" +
           "  ● core v1.0.0 (installed) {dependency installed}\n" +
+          "  ● lib v1.0.0 → v1.0.0 (updated) {components now supported}\n" +
           "  ● lib v1.0.0 (installed)\n" +
+          "  ● app v1.0.0 → v1.0.0 (updated) {components now supported}\n" +
           "  ● app v1.0.0 (installed)\n" +
           "\n" +
-          "Reconcile: 3 successes\n" +
+          "Reconcile: 5 successes\n" +
           "\n" +
           "/reload to pick up changes",
       },
@@ -8235,7 +8250,7 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
-  test("D-26: the move of a plugin that declares a record waiting on a missing dependency runs after that record's move", async (t) => {
+  test("D-26 / D-PL2-18: the move of a plugin that declares a record waiting on a missing dependency runs after that record's move and enable", async (t) => {
     // arrange
     const { cwd, project } = await seedWaitingDependencyMoves(t, "waiting-dependent-move", {
       offerMissing: true,
@@ -8253,9 +8268,10 @@ describe("applyReconcile catalog convergence", () => {
           "● mp [project]\n" +
           "  ● cdep v1.0.0 (installed) {dependency installed}\n" +
           "  ● alib v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● alib v2.0.0 (installed)\n" +
           "  ● bapp v1.0.0 → v2.0.0 (updated)\n" +
           "\n" +
-          "Reconcile: 3 successes\n" +
+          "Reconcile: 4 successes\n" +
           "\n" +
           "/reload to pick up changes",
       },
@@ -8269,7 +8285,7 @@ describe("applyReconcile catalog convergence", () => {
     verifyBoundary();
   });
 
-  test("D-26: the move of a plugin that declares a record whose missing dependency fails to install does not run", async (t) => {
+  test("D-26 / D-PL2-18: a record whose missing dependency fails to install reports its move as skipped, and the move that declares it does not run", async (t) => {
     // arrange
     const { cwd, project } = await seedWaitingDependencyMoves(t, "waiting-dependent-held", {
       offerMissing: false,
@@ -8288,10 +8304,11 @@ describe("applyReconcile catalog convergence", () => {
           "\n" +
           "● mp [project]\n" +
           "  ⊘ cdep (failed) {not in manifest}\n" +
-          "  ◍ bapp v1.0.0 (disabled) {dependency unsatisfied}\n" +
-          '    cause: Enable "alib@mp" or uninstall "bapp@mp"\n' +
+          "  ⊘ alib v1.0.0 (skipped) {dependency failed}\n" +
+          "  ◍ bapp v1.0.0 (disabled) {dependency failed}\n" +
+          '    cause: "alib@mp" did not update; run apply again once it can, or uninstall "bapp@mp"\n' +
           "\n" +
-          "Reconcile: 1 failure, 1 warning\n" +
+          "Reconcile: 1 failure, 2 warnings\n" +
           "\n" +
           "/reload to pick up changes",
         severity: "error",
@@ -8345,9 +8362,10 @@ describe("applyReconcile catalog convergence", () => {
           "  ⊘ ycore v1.0.0 → v2.0.0 (failed) {permission denied}\n" +
           "  ● cdep v1.0.0 (installed) {dependency installed}\n" +
           "  ● alib v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● alib v2.0.0 (installed)\n" +
           "  ⊘ xapp v1.0.0 (skipped) {dependency failed}\n" +
           "\n" +
-          "Reconcile: 1 failure, 1 warning, 2 successes\n" +
+          "Reconcile: 1 failure, 1 warning, 3 successes\n" +
           "\n" +
           "/reload to pick up changes",
         severity: "error",
@@ -8382,9 +8400,10 @@ describe("applyReconcile catalog convergence", () => {
           "● mp [project]\n" +
           "  ● cdep v1.0.0 (installed) {dependency installed}\n" +
           "  ● alib v1.0.0 → v2.0.0 (updated)\n" +
+          "  ● alib v2.0.0 (installed)\n" +
           "  ● bapp v1.0.0 → v2.0.0 (updated)\n" +
           "\n" +
-          "Reconcile: 3 successes\n" +
+          "Reconcile: 4 successes\n" +
           "\n" +
           "/reload to pick up changes",
       },
@@ -8393,6 +8412,50 @@ describe("applyReconcile catalog convergence", () => {
       ["2.0.0", true, undefined],
       ["2.0.0", true, undefined],
       ["1.0.0", true, undefined],
+    ]);
+    assert.deepStrictEqual(clonedUrls(), []);
+    verifyBoundary();
+  });
+
+  test("D-PL2-18: a held-down plugin whose missing dependency's install is refused reports its move as skipped after the refusal", async (t) => {
+    // arrange
+    const { cwd, project } = await seedConvergenceScope(t, "waiting-install-refused", {
+      trees: { alib: { skill: "clean" }, cdep: { skill: "clean" }, ycore: { skill: "clean" } },
+      supported: { alib: ["skills"], cdep: ["skills"], ycore: ["skills"] },
+      offered: { alib: "2.0.0" },
+      dependencies: {
+        alib: [{ name: "cdep", version: "*" }],
+        cdep: [{ name: "ycore", version: "^2.0.0" }],
+      },
+      records: { alib: { enabled: false, dependencyDisabled: true } },
+    });
+    await withoutRecords(project, ["cdep"]);
+    await declareEnabled(project, cwd, ["alib", "ycore"]);
+    const { ctx, notifications, verifyBoundary } = createNotificationBoundary(1);
+    const { gitOps, clonedUrls } = createOfflineGitOps();
+
+    // act
+    await applyReconcile({ ctx, run: runWithNothingLoaded(), cwd, scope: "project", gitOps });
+
+    // assert
+    assert.deepStrictEqual(notifications, [
+      {
+        message:
+          "A plugin operation has failed.\n" +
+          "\n" +
+          "● mp [project]\n" +
+          "  ⊘ cdep (failed) {dependency failed}\n" +
+          '    cause: Dependency "ycore@mp" is installed at version 1.0.0, which does not satisfy ^2.0.0.\n' +
+          "  ⊘ alib v1.0.0 (skipped) {dependency failed}\n" +
+          "\n" +
+          "Reconcile: 1 failure, 1 warning",
+        severity: "error",
+      },
+    ]);
+    assert.deepStrictEqual(await recordStates(project, ["alib", "ycore", "cdep"]), [
+      ["1.0.0", false, true],
+      ["1.0.0", true, undefined],
+      [undefined, undefined, undefined],
     ]);
     assert.deepStrictEqual(clonedUrls(), []);
     verifyBoundary();

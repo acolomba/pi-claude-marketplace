@@ -3151,7 +3151,7 @@ describe("buildReconcilePendingNotification", () => {
     });
   });
 
-  test("WR-07: lists a move that waits on a dependency install after it, as one row with its enable", () => {
+  test("D-PL2-18: lists a waiting record's move and its enable as two rows after the dependency install, and a deferred move with its enable as one", () => {
     // arrange
     const plans = [
       reconcilePlan("project", {
@@ -3186,8 +3186,14 @@ describe("buildReconcilePendingNotification", () => {
         key: "alib@mp",
         move: move("alib"),
         enable: { scope: "project", plugin: "alib", marketplace: "mp" },
+        waiting: true,
       },
       { key: "bapp@mp", move: move("bapp") },
+      {
+        key: "capp@mp",
+        move: move("capp"),
+        enable: { scope: "project", plugin: "capp", marketplace: "mp" },
+      },
     ]);
 
     // assert
@@ -3200,7 +3206,9 @@ describe("buildReconcilePendingNotification", () => {
             { status: "will update", name: "ready", from: "1.0.0", to: "2.0.0" },
             { status: "will install", name: "cdep" },
             { status: "will update", name: "alib", from: "1.0.0", to: "2.0.0" },
+            { status: "will enable", name: "alib" },
             { status: "will update", name: "bapp", from: "1.0.0", to: "2.0.0" },
+            { status: "will update", name: "capp", from: "1.0.0", to: "2.0.0" },
           ],
         },
       ],

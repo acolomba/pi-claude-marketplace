@@ -1272,7 +1272,7 @@ test("D-PL2-16: composePendingReport lists an enable that waits on a planned ins
   });
 });
 
-test("WR-07: composePendingReport lists a move that declares a record waiting on a planned install after that install", async (t) => {
+test("WR-07 / D-PL2-18: composePendingReport lists a waiting record's move, its enable, then a move that declares it, after the install it waits on", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "compose-after-install-moves");
   const offered = {
@@ -1305,6 +1305,7 @@ test("WR-07: composePendingReport lists a move that declares a record waiting on
         plugins: [
           { status: "will install", name: "cdep" },
           { status: "will update", name: "alib", from: "1.0.0", to: "2.0.0" },
+          { status: "will enable", name: "alib" },
           { status: "will update", name: "bapp", from: "1.0.0", to: "2.0.0" },
         ],
       },
@@ -1314,7 +1315,7 @@ test("WR-07: composePendingReport lists a move that declares a record waiting on
   });
 });
 
-test("WR-07: composePendingReport lists the move of a record a config enables after the install it waits on", async (t) => {
+test("WR-07 / D-PL2-18: composePendingReport lists the move and then the enable of a record a config enables after the install it waits on", async (t) => {
   // arrange
   const { cwd, project } = await createHermeticScopes(t, "compose-after-install-enable");
   const offered = {
@@ -1340,6 +1341,7 @@ test("WR-07: composePendingReport lists the move of a record a config enables af
         plugins: [
           { status: "will install", name: "vault" },
           { status: "will update", name: "app", from: "1.0.0", to: "1.1.0" },
+          { status: "will enable", name: "app" },
         ],
       },
     ],

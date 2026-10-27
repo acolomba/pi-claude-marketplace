@@ -2173,7 +2173,7 @@ test("WR-06: the moves after the installs are a waiting record's and, to a fixed
   assert.deepStrictEqual(after, new Set(["alib@tools", "bapp@tools", "dapp@tools"]));
 });
 
-test("WR-07: the steps after the installs pair each waiting enable with its move and run dependencies first", () => {
+test("WR-07 / D-PL2-18: the steps after the installs pair each waiting enable with its move, mark it waiting, and run dependencies first", () => {
   // arrange
   const cascade = cascadeOver(["bapp", "alib", "ready", "capp"], {
     went: ["bapp"],
@@ -2195,9 +2195,31 @@ test("WR-07: the steps after the installs pair each waiting enable with its move
 
   // assert
   assert.deepStrictEqual(steps, [
-    { key: "alib@tools", move: toolsMove("alib"), enable: enable("alib") },
+    { key: "alib@tools", move: toolsMove("alib"), enable: enable("alib"), waiting: true },
     { key: "bapp@tools", move: toolsMove("bapp") },
     { key: "went@tools", enable: enable("went") },
     { key: "capp@tools", move: toolsMove("capp"), enable: enable("capp") },
+  ]);
+});
+
+test("D-PL2-18: a waiting record's move whose enable did not come is still a step after the installs, marked waiting, without an enable", () => {
+  // arrange
+  const cascade = cascadeOver(["bapp", "alib"], { bapp: ["alib"] });
+
+  // act
+  const steps = stepsAfterInstalls(
+    cascade,
+    {
+      waiting: new Set(["alib@tools"]),
+      afterInstalls: new Set(["alib@tools", "bapp@tools"]),
+      deferred: [],
+    },
+    [],
+  );
+
+  // assert
+  assert.deepStrictEqual(steps, [
+    { key: "alib@tools", move: toolsMove("alib"), waiting: true },
+    { key: "bapp@tools", move: toolsMove("bapp") },
   ]);
 });
